@@ -115,6 +115,18 @@ public:
     // Routes one event per the three explicit routes; returns true if
     // something consumed it. Safe to call directly (e.g. from a test
     // driving a scripted event list) without going through step().
+    //
+    // Safe to remove or destroy the CURRENTLY focused or mouse-captured
+    // view (or any of its ancestors/descendants) from ANY handler —
+    // View's detach notification clears focused_/mouse_capture_
+    // immediately, so the NEXT dispatch() call never touches a freed
+    // view. Known residual gap: destroying an ANCESTOR of the view
+    // currently being walked, from WITHIN that same key/text
+    // ancestor-chain walk (i.e. mid-dispatch, not merely mid-handler),
+    // is not yet hardened — the walk was already holding raw parent()
+    // pointers into that subtree before the handler ran. A handler that
+    // needs to tear down its own ancestry should defer the actual
+    // removal via post() rather than doing it inline.
     bool dispatch(const term::TerminalEvent& event);
 
     // --- Cross-thread posting --------------------------------------------

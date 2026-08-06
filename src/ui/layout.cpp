@@ -18,12 +18,16 @@ std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutCh
     int fixed_total = 0;
     int flexible_preferred_total = 0;
     int expanding_weight_total = 0;
+    int expanding_count = 0;
     for (const auto& c : children) {
         if (c.policy == SizePolicy::Fixed) {
             fixed_total += c.preferred;
         } else {
             flexible_preferred_total += c.preferred;
-            if (c.policy == SizePolicy::Expanding) expanding_weight_total += c.weight;
+            if (c.policy == SizePolicy::Expanding) {
+                expanding_weight_total += c.weight;
+                ++expanding_count;
+            }
         }
     }
 
@@ -36,12 +40,19 @@ std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutCh
         // Slack to hand out: only Expanding children claim a share,
         // proportional to weight. Minimum children stay at preferred.
         const int extra = remaining_for_flexible - flexible_preferred_total;
-        if (expanding_weight_total > 0 && extra > 0) {
+        if (expanding_count > 0 && extra > 0) {
+            // A weight of 0 on every Expanding child is a legal but
+            // degenerate LayoutSpec (the default weight is 1) — fall
+            // back to an even split rather than silently dropping the
+            // leftover space, since "claims a share of any leftover
+            // space" is Expanding's whole contract regardless of weight.
+            const bool split_evenly = expanding_weight_total == 0;
             int distributed = 0;
             for (std::size_t i = 0; i < children.size(); ++i) {
                 if (children[i].policy != SizePolicy::Expanding) continue;
-                const int share = static_cast<int>(
-                    static_cast<long long>(extra) * children[i].weight / expanding_weight_total);
+                const int share = split_evenly ? extra / expanding_count
+                                                : static_cast<int>(static_cast<long long>(extra) *
+                                                                    children[i].weight / expanding_weight_total);
                 assigned[i] += share;
                 distributed += share;
             }

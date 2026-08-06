@@ -17,7 +17,16 @@ bool contains(const Rect& r, Point p) noexcept {
 }  // namespace
 
 Application::Application(term::Terminal& terminal, Clock& clock)
-    : terminal_(terminal), clock_(clock), root_(Rect{0, 0, terminal.size().width, terminal.size().height}) {}
+    : terminal_(terminal), clock_(clock), root_(Rect{0, 0, terminal.size().width, terminal.size().height}) {
+    // Never call back into `v` here: it may be mid-destructor (its
+    // derived-class members already torn down) when this fires. Just
+    // drop the raw pointers — no on_focus notification, nothing that
+    // would touch the (possibly half-destroyed) object.
+    root_.set_detach_sink([this](View& v) {
+        if (focused_ == &v) focused_ = nullptr;
+        if (mouse_capture_ == &v) mouse_capture_ = nullptr;
+    });
+}
 
 void Application::set_focus(View* view) {
     CKV_ASSERT(view == nullptr || view->focusable());

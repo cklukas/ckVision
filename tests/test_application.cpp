@@ -601,3 +601,102 @@ CK_TEST(f1_with_no_focused_view_at_all_is_unhandled_even_with_a_provider_install
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
     CK_CHECK(!called);
 }
+
+// --- Regression: dangling focused_/mouse_capture_ after a view is
+// removed and destroyed (found by review, fixed via View's detach-sink
+// notification) --------------------------------------------------------
+
+CK_TEST(destroying_the_focused_view_clears_focus_and_the_next_key_dispatch_is_a_safe_no_op) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* raw = app.root().add_child(std::make_unique<ProbeView>());
+    raw->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(raw);
+    CK_CHECK(app.focused() == raw);
+
+    // Detach and destroy the focused view without going through
+    // Application at all — this is exactly the use-after-free the
+    // review found: nothing in the removal path used to notify
+    // Application, leaving focused_ dangling.
+    std::unique_ptr<View> owned = app.root().remove_child(raw);
+    owned.reset();  // actually destroys it
+
+    CK_CHECK(app.focused() == nullptr);
+    // Would dereference a freed pointer if the fix regressed; ASan
+    // (the sanitizer build this suite also runs under) would abort.
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+}
+
+CK_TEST(destroying_an_ancestor_of_the_focused_view_also_clears_focus) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto container_owned = std::make_unique<View>();
+    View* container = app.root().add_child(std::move(container_owned));
+    View* leaf = container->add_child(std::make_unique<ProbeView>());
+    leaf->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(leaf);
+    CK_CHECK(app.focused() == leaf);
+
+    // Destroy the CONTAINER (leaf's parent), not leaf directly — the
+    // detach notification must cascade to every descendant, not just
+    // the immediate node that was removed.
+    std::unique_ptr<View> owned = app.root().remove_child(container);
+    owned.reset();
+
+    CK_CHECK(app.focused() == nullptr);
+}
+
+CK_TEST(destroying_the_mouse_captured_view_mid_drag_clears_capture_and_a_later_up_is_unhandled) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* raw = app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 5, 5}));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1},
+                                  std::nullopt, Modifier::None});  // raw now has mouse capture
+
+    std::unique_ptr<View> owned = app.root().remove_child(raw);
+    owned.reset();
+
+    // A later Up with no view under the (now-empty) point and no valid
+    // capture must be unhandled, not a use-after-free.
+    CK_CHECK(!app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{1, 1},
+                                            std::nullopt, Modifier::None}));
+}
+
+CK_TEST(removing_but_not_destroying_the_focused_view_also_clears_focus_immediately) {
+    // Even without destruction: a detached-but-still-alive view is no
+    // longer part of the attached tree, so it must stop being tracked
+    // as focused the moment it's removed, not only once it's freed.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* raw = app.root().add_child(std::make_unique<ProbeView>());
+    raw->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(raw);
+
+    std::unique_ptr<View> owned = app.root().remove_child(raw);
+    CK_CHECK(app.focused() == nullptr);
+    CK_CHECK(owned != nullptr);  // still alive, just detached and unfocused
+}
+
+CK_TEST(reattaching_a_previously_detached_view_and_refocusing_it_works_normally) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* raw = app.root().add_child(std::make_unique<ProbeView>());
+    raw->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(raw);
+
+    std::unique_ptr<View> owned = app.root().remove_child(raw);
+    CK_CHECK(app.focused() == nullptr);
+
+    View* reattached = app.root().add_child(std::move(owned));
+    app.set_focus(reattached);
+    CK_CHECK(app.focused() == reattached);
+    // The detach sink must have been re-armed on reattachment — verify
+    // by removing it again and confirming focus clears once more.
+    app.root().remove_child(reattached);
+    CK_CHECK(app.focused() == nullptr);
+}

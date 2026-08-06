@@ -44,7 +44,7 @@ enum class FocusPolicy {
 class View {
 public:
     explicit View(Rect bounds = {}) : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}) {}
-    virtual ~View() = default;
+    virtual ~View();
 
     View(const View&) = delete;
     View& operator=(const View&) = delete;
@@ -124,6 +124,19 @@ public:
     using DirtyRectSink = std::function<void(Rect)>;
     void set_dirty_rect_sink(DirtyRectSink sink);
 
+    // Installed by the owning Application (root only; propagates to
+    // every current and future descendant, mirroring DirtyRectSink).
+    // Fired for a view — and, as destruction cascades, for every one of
+    // its descendants in turn — at the earlier of: remove_child()
+    // detaching it (still alive, now owned by the caller), or its own
+    // destructor running. This is how Application clears raw View*
+    // members (focused_, mouse_capture_) instead of ever holding one
+    // past the view's removal or destruction — the observer must not
+    // call back into `view` (it may be mid-destructor: its own derived
+    // members are already gone by the time ~View() fires this).
+    using DetachSink = std::function<void(View&)>;
+    void set_detach_sink(DetachSink sink);
+
     // --- Events (ARCHITECTURE.md §5 "Events") ---------------------------
     // Each returns true if it consumed the event (stopping the route).
 
@@ -149,6 +162,8 @@ public:
 
 private:
     void propagate_dirty_rect_sink(const DirtyRectSink& sink);
+    void propagate_detach_sink(const DetachSink& sink);
+    void notify_detaching_recursive();  // fires detach_sink_ for `this` and every descendant, alive
 
     View* parent_ = nullptr;
     std::vector<std::unique_ptr<View>> children_;
@@ -159,6 +174,7 @@ private:
     FocusPolicy focus_policy_ = FocusPolicy::None;
     std::optional<std::string> help_context_key_;
     DirtyRectSink dirty_rect_sink_;
+    DetachSink detach_sink_;
 };
 
 }  // namespace ckv::ui

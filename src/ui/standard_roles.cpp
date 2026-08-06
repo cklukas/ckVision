@@ -7,6 +7,7 @@ namespace {
 // The classic blue-desktop palette (public, well-documented CUA-era
 // convention — cyan-on-blue dialogs, black-on-white default buttons —
 // not derived from any framework's source, per AGENTS.md).
+constexpr Color kBlue = Color::rgb(0, 0, 170);
 constexpr Color kCyan = Color::rgb(0, 170, 170);
 constexpr Color kWhite = Color::rgb(255, 255, 255);
 constexpr Color kBlack = Color::rgb(0, 0, 0);
@@ -29,6 +30,10 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.input_normal = registry.intern("ckv.input.normal", Style{kBlack, kWhite, Attr{}});
     r.input_focused = registry.intern("ckv.input.focused", Style{kBlack, kWhite, Attr::Underline});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
+    r.window_frame_active = registry.intern("ckv.window.frame.active", Style{kWhite, kGray, Attr::Bold});
+    r.window_frame_inactive = registry.intern("ckv.window.frame.inactive", Style{kBlack, kGray, Attr{}});
+    r.window_title_active = registry.intern("ckv.window.title.active", Style{kWhite, kBlue, Attr::Bold});
+    r.window_title_inactive = registry.intern("ckv.window.title.inactive", Style{kBlack, kGray, Attr{}});
     return r;
 }
 
@@ -45,6 +50,10 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.input_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.input_focused, Style{kBlack, kWhite, Attr::Underline});
     theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
+    theme.set(roles.window_frame_active, Style{kWhite, kGray, Attr::Bold});
+    theme.set(roles.window_frame_inactive, Style{kBlack, kGray, Attr{}});
+    theme.set(roles.window_title_active, Style{kWhite, kBlue, Attr::Bold});
+    theme.set(roles.window_title_inactive, Style{kBlack, kGray, Attr{}});
     return theme;
 }
 

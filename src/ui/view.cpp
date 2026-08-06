@@ -5,12 +5,21 @@
 
 namespace ckv::ui {
 
+View::~View() {
+    if (detach_sink_) detach_sink_(*this);
+    // Children destruct next (as children_ tears down after this body
+    // returns), each firing its own detach_sink_ in turn — a subtree
+    // torn down without ever going through remove_child() still
+    // notifies every descendant, not just its root.
+}
+
 View* View::add_child(std::unique_ptr<View> child) {
     CKV_ASSERT(child != nullptr);
     CKV_ASSERT(child->parent_ == nullptr);  // no view may have two owners
     View* observer = child.get();
     child->parent_ = this;
     child->propagate_dirty_rect_sink(dirty_rect_sink_);
+    child->propagate_detach_sink(detach_sink_);
     children_.push_back(std::move(child));
     return observer;
 }
@@ -21,7 +30,13 @@ std::unique_ptr<View> View::remove_child(View* child) {
             std::unique_ptr<View> owned = std::move(*it);
             children_.erase(it);
             owned->parent_ = nullptr;
+            // Still fully alive here (only detached, not destroyed) —
+            // notify while the sink is still installed, THEN clear it,
+            // so a later destruction of this same subtree does not
+            // fire a second, redundant notification.
+            owned->notify_detaching_recursive();
             owned->propagate_dirty_rect_sink(nullptr);
+            owned->propagate_detach_sink(nullptr);
             return owned;
         }
     }
@@ -79,5 +94,17 @@ void View::propagate_dirty_rect_sink(const DirtyRectSink& sink) {
 }
 
 void View::set_dirty_rect_sink(DirtyRectSink sink) { propagate_dirty_rect_sink(sink); }
+
+void View::propagate_detach_sink(const DetachSink& sink) {
+    detach_sink_ = sink;
+    for (auto& child : children_) child->propagate_detach_sink(sink);
+}
+
+void View::set_detach_sink(DetachSink sink) { propagate_detach_sink(sink); }
+
+void View::notify_detaching_recursive() {
+    if (detach_sink_) detach_sink_(*this);
+    for (auto& child : children_) child->notify_detaching_recursive();
+}
 
 }  // namespace ckv::ui

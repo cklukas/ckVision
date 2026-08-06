@@ -21,6 +21,12 @@ struct StandardRoles {
     RoleId input_normal;
     RoleId input_focused;
     RoleId input_invalid;  // a failed validator (ARCHITECTURE.md §5 dialog-accept veto)
+
+    // Window chrome (ARCHITECTURE.md §5 "Windows, popups, modality").
+    RoleId window_frame_active;
+    RoleId window_frame_inactive;
+    RoleId window_title_active;
+    RoleId window_title_inactive;
 };
 
 // Interns every standard role into `registry` with the built-in
