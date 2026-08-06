@@ -71,13 +71,28 @@ public:
     // partially visible, topmost window last (frontmost).
     void cascade();
 
+    // Popups (menu dropdowns, M5): appended after every window in
+    // z-order — always topmost regardless of window activation — with
+    // their own independent lifetime, not tied to any window. Multiple
+    // popups may be open at once (nested submenus, a future feature);
+    // each stays above every window and below no other popup opened
+    // after it. A window activate() happening while a popup is open
+    // re-raises every popup above the newly-activated window, so a
+    // popup never gets visually buried by window activation.
+    ui::View* add_popup(std::unique_ptr<ui::View> popup);
+    std::unique_ptr<ui::View> remove_popup(ui::View* popup);
+    const std::vector<ui::View*>& popups() const noexcept { return popups_; }
+
     void draw(scene::Painter& painter) override;
 
 private:
+    void reraise_popups();
+
     const ui::Theme& theme_;
     ui::RoleId background_role_;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     Window* active_ = nullptr;
+    std::vector<ui::View*> popups_;
 };
 
 }  // namespace ckv::widgets

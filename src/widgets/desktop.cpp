@@ -28,7 +28,17 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
 
     if (active_ == window) {
         active_ = nullptr;
-        if (!children().empty()) activate(static_cast<Window*>(children().back().get()));
+        // The new topmost WINDOW, not necessarily children().back() —
+        // a popup may currently be topmost, and children() holds both.
+        for (auto rit = children().rbegin(); rit != children().rend(); ++rit) {
+            ui::View* candidate = rit->get();
+            auto found = std::find_if(windows_.begin(), windows_.end(),
+                                       [candidate](Window* w) { return static_cast<ui::View*>(w) == candidate; });
+            if (found != windows_.end()) {
+                activate(*found);
+                break;
+            }
+        }
     }
     return std::unique_ptr<Window>(static_cast<Window*>(detached.release()));
 }
@@ -38,8 +48,27 @@ void Desktop::activate(Window* window) {
     if (window == active_) return;
     if (active_ != nullptr) active_->set_active(false);
     raise_to_front(window);
+    reraise_popups();  // keep every open popup above the window that just moved to front
     active_ = window;
     active_->set_active(true);
+}
+
+ui::View* Desktop::add_popup(std::unique_ptr<ui::View> popup) {
+    CKV_ASSERT(popup != nullptr);
+    ui::View* raw = add_child(std::move(popup));
+    popups_.push_back(raw);  // already topmost: add_child appends to the end of children_
+    return raw;
+}
+
+std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
+    auto it = std::find(popups_.begin(), popups_.end(), popup);
+    if (it == popups_.end()) return nullptr;
+    popups_.erase(it);
+    return remove_child(popup);
+}
+
+void Desktop::reraise_popups() {
+    for (ui::View* popup : popups_) raise_to_front(popup);
 }
 
 void Desktop::activate_next() {

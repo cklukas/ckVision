@@ -285,3 +285,64 @@ CK_TEST(draw_fills_the_background_without_crashing) {
     desktop.draw(painter);
     CK_CHECK(true);
 }
+
+// --- Popups ----------------------------------------------------------
+
+CK_TEST(a_popup_is_added_above_every_window_regardless_of_add_order) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
+    CK_CHECK(desktop.children().back().get() == popup);
+}
+
+CK_TEST(activating_a_window_while_a_popup_is_open_does_not_bury_the_popup) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
+    CK_CHECK(desktop.children().back().get() == popup);
+
+    desktop.activate(a);  // a moves to front, ahead of b
+    CK_CHECK(desktop.children().back().get() == popup);  // popup must still be topmost
+    (void)b;
+}
+
+CK_TEST(remove_popup_for_a_view_not_currently_a_popup_returns_null) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    ckv::ui::View stray;
+    CK_CHECK(desktop.remove_popup(&stray) == nullptr);
+}
+
+CK_TEST(removing_a_popup_returns_ownership_and_it_no_longer_appears_in_popups) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
+    auto owned = desktop.remove_popup(popup);
+    CK_CHECK(owned.get() == popup);
+    CK_CHECK(desktop.popups().empty());
+}
+
+CK_TEST(removing_the_active_window_while_a_popup_is_open_still_activates_the_next_window_not_the_popup) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));  // b is active
+    desktop.add_popup(std::make_unique<ckv::ui::View>());
+
+    desktop.remove_window(b);
+    CK_CHECK(desktop.active_window() == a);  // not a crash from mis-casting the popup as a Window
+}
+
+CK_TEST(multiple_popups_stack_in_the_order_they_were_added) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    desktop.add_window(make_window(f));
+    ckv::ui::View* first = desktop.add_popup(std::make_unique<ckv::ui::View>());
+    ckv::ui::View* second = desktop.add_popup(std::make_unique<ckv::ui::View>());
+    CK_CHECK(desktop.children().back().get() == second);
+    (void)first;
+}
