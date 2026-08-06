@@ -23,7 +23,8 @@ add_library(cvision
     src/term/sixel_encoder.cpp
     src/ui/command.cpp
     src/ui/standard_roles.cpp
-    src/ui/theme.cpp)
+    src/ui/theme.cpp
+    src/ui/view.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)

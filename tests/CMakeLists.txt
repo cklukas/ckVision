@@ -26,6 +26,7 @@ add_executable(cvision_tests
     test_theme.cpp
     test_utf8.cpp
     test_version.cpp
+    test_view.cpp
     main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 ckvision_strict(cvision_tests)

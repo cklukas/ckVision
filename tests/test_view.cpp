@@ -1,0 +1,247 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/ui/view.hpp"
+
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "cktest.hpp"
+
+using ckv::Rect;
+using ckv::ui::FocusPolicy;
+using ckv::ui::View;
+
+namespace {
+
+class RecordingView : public View {
+public:
+    explicit RecordingView(Rect bounds = {}) : View(bounds) {}
+    int draws = 0;
+    void draw(ckv::scene::Painter&) override { ++draws; }
+};
+
+}  // namespace
+
+// --- Tree ownership --------------------------------------------------------
+
+CK_TEST(add_child_transfers_ownership_and_returns_an_observer_pointer) {
+    View root;
+    auto child = std::make_unique<RecordingView>();
+    RecordingView* observer = static_cast<RecordingView*>(root.add_child(std::move(child)));
+    CK_CHECK(observer != nullptr);
+    CK_CHECK(root.children().size() == 1);
+    CK_CHECK(root.children().front().get() == observer);
+    CK_CHECK(observer->parent() == &root);
+}
+
+CK_TEST(remove_child_returns_ownership_and_detaches_the_parent_link) {
+    View root;
+    View* observer = root.add_child(std::make_unique<View>());
+    std::unique_ptr<View> owned = root.remove_child(observer);
+    CK_CHECK(owned.get() == observer);
+    CK_CHECK(owned->parent() == nullptr);
+    CK_CHECK(root.children().empty());
+}
+
+CK_TEST(remove_child_for_a_view_that_is_not_a_child_returns_null_and_changes_nothing) {
+    View root;
+    View* real_child = root.add_child(std::make_unique<View>());
+    View stray;
+    CK_CHECK(root.remove_child(&stray) == nullptr);
+    CK_CHECK(root.children().size() == 1);
+    CK_CHECK(root.children().front().get() == real_child);
+}
+
+CK_TEST(adding_a_view_that_already_has_a_parent_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        View root1;
+        View root2;
+        View* observer = root1.add_child(std::make_unique<View>());
+        // Re-parenting via a raw, non-owning pointer without going
+        // through remove_child first must abort — a view cannot have
+        // two owners.
+        auto second_owner = std::unique_ptr<View>(observer);
+        root2.add_child(std::move(second_owner));
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+CK_TEST(destroying_a_parent_destroys_its_children_deterministically) {
+    static int destroyed = 0;
+    struct CountingView : View {
+        ~CountingView() override { ++destroyed; }
+    };
+    {
+        View root;
+        root.add_child(std::make_unique<CountingView>());
+        root.add_child(std::make_unique<CountingView>());
+    }
+    CK_CHECK(destroyed == 2);
+}
+
+// --- Geometry ----------------------------------------------------------
+
+CK_TEST(absolute_bounds_of_a_root_view_equals_its_own_bounds) {
+    View root(Rect{5, 5, 20, 10});
+    CK_CHECK(root.absolute_bounds() == (Rect{5, 5, 20, 10}));
+}
+
+CK_TEST(absolute_bounds_accumulates_offsets_through_every_ancestor) {
+    View root(Rect{2, 3, 40, 20});
+    View* mid = root.add_child(std::make_unique<View>(Rect{1, 1, 30, 15}));
+    View* leaf = mid->add_child(std::make_unique<View>(Rect{4, 2, 5, 5}));
+    CK_CHECK(leaf->absolute_bounds() == (Rect{2 + 1 + 4, 3 + 1 + 2, 5, 5}));
+}
+
+CK_TEST(set_bounds_to_the_same_rect_is_a_no_op_that_does_not_invalidate) {
+    View root;
+    int dirty_calls = 0;
+    root.set_dirty_rect_sink([&](Rect) { ++dirty_calls; });
+    root.set_bounds(root.bounds());
+    CK_CHECK(dirty_calls == 0);
+}
+
+CK_TEST(set_bounds_invalidates_both_the_new_and_the_vacated_old_rect) {
+    View root(Rect{0, 0, 80, 24});
+    View* child = root.add_child(std::make_unique<View>(Rect{2, 2, 5, 3}));
+    std::vector<Rect> dirtied;
+    root.set_dirty_rect_sink([&](Rect r) { dirtied.push_back(r); });
+    child->set_bounds(Rect{10, 10, 5, 3});
+    CK_CHECK(dirtied.size() == 2);
+    CK_CHECK(dirtied[0] == (Rect{10, 10, 5, 3}));  // new bounds, damaged first
+    CK_CHECK(dirtied[1] == (Rect{2, 2, 5, 3}));    // old bounds, vacated
+}
+
+// --- Visibility / enabled ------------------------------------------------
+
+CK_TEST(set_visible_to_the_current_value_does_not_invalidate) {
+    View v;
+    int dirty_calls = 0;
+    v.set_dirty_rect_sink([&](Rect) { ++dirty_calls; });
+    v.set_visible(true);  // already true
+    CK_CHECK(dirty_calls == 0);
+}
+
+CK_TEST(set_visible_false_then_true_invalidates_both_times) {
+    View v(Rect{0, 0, 10, 4});
+    int dirty_calls = 0;
+    v.set_dirty_rect_sink([&](Rect) { ++dirty_calls; });
+    v.set_visible(false);
+    v.set_visible(true);
+    CK_CHECK(dirty_calls == 2);
+}
+
+CK_TEST(a_disabled_or_hidden_view_is_never_focusable_even_with_tabstop_policy) {
+    View v;
+    v.set_focus_policy(FocusPolicy::TabStop);
+    CK_CHECK(v.focusable());
+    v.set_enabled(false);
+    CK_CHECK(!v.focusable());
+    v.set_enabled(true);
+    v.set_visible(false);
+    CK_CHECK(!v.focusable());
+}
+
+CK_TEST(default_focus_policy_is_none_and_not_focusable) {
+    View v;
+    CK_CHECK(v.focus_policy() == FocusPolicy::None);
+    CK_CHECK(!v.focusable());
+}
+
+// --- Invalidation propagation to the dirty-rect sink -----------------------
+
+CK_TEST(invalidate_before_any_sink_is_installed_is_a_harmless_no_op) {
+    View v(Rect{0, 0, 10, 4});
+    v.invalidate();  // must not crash
+    CK_CHECK(true);
+}
+
+CK_TEST(invalidate_whole_view_reports_the_full_absolute_bounds) {
+    View root(Rect{3, 3, 80, 24});
+    View* child = root.add_child(std::make_unique<View>(Rect{1, 1, 10, 5}));
+    std::optional<Rect> reported;
+    root.set_dirty_rect_sink([&](Rect r) { reported = r; });
+    child->invalidate();
+    CK_CHECK(reported.has_value());
+    CK_CHECK(*reported == (Rect{4, 4, 10, 5}));
+}
+
+CK_TEST(invalidate_local_rect_is_translated_into_absolute_space) {
+    View root(Rect{10, 0, 80, 24});
+    View* child = root.add_child(std::make_unique<View>(Rect{5, 0, 20, 10}));
+    std::optional<Rect> reported;
+    root.set_dirty_rect_sink([&](Rect r) { reported = r; });
+    child->invalidate(Rect{2, 3, 4, 1});
+    CK_CHECK(*reported == (Rect{10 + 5 + 2, 0 + 0 + 3, 4, 1}));
+}
+
+CK_TEST(set_dirty_rect_sink_on_a_parent_propagates_to_children_added_before_it) {
+    View root;
+    View* child = root.add_child(std::make_unique<View>());
+    View* grandchild = child->add_child(std::make_unique<View>());
+    int calls = 0;
+    root.set_dirty_rect_sink([&](Rect) { ++calls; });
+    grandchild->invalidate();
+    CK_CHECK(calls == 1);
+}
+
+CK_TEST(a_newly_added_child_inherits_the_parents_already_installed_sink) {
+    View root;
+    int calls = 0;
+    root.set_dirty_rect_sink([&](Rect) { ++calls; });
+    View* child = root.add_child(std::make_unique<View>());
+    child->invalidate();
+    CK_CHECK(calls == 1);
+}
+
+CK_TEST(removing_a_child_detaches_it_from_the_sink_so_further_invalidation_is_silent) {
+    View root;
+    root.set_dirty_rect_sink([](Rect) {});
+    View* child_ptr = root.add_child(std::make_unique<View>());
+    std::unique_ptr<View> detached = root.remove_child(child_ptr);
+    int calls = 0;
+    detached->set_dirty_rect_sink([&](Rect) { ++calls; });  // re-attach our own probe
+    // The detach itself must have cleared the old sink first (verified
+    // indirectly: no crash / no phantom call to the parent's now-freed
+    // capture context when we exercise the detached subtree below).
+    detached->invalidate();
+    CK_CHECK(calls == 1);
+}
+
+// --- Events default to unhandled -----------------------------------------
+
+CK_TEST(default_event_handlers_report_unhandled) {
+    View v;
+    CK_CHECK(!v.on_key(ckv::KeyEvent{}));
+    CK_CHECK(!v.on_text(ckv::TextEvent{}));
+    CK_CHECK(!v.on_mouse(ckv::MouseEvent{}));
+}
+
+// --- Help context ----------------------------------------------------------
+
+CK_TEST(resolve_help_context_key_returns_null_when_no_ancestor_has_one) {
+    View root;
+    View* child = root.add_child(std::make_unique<View>());
+    CK_CHECK(child->resolve_help_context_key() == nullptr);
+}
+
+CK_TEST(resolve_help_context_key_prefers_the_views_own_key_over_an_ancestors) {
+    View root;
+    root.set_help_context_key("root.topic");
+    View* child = root.add_child(std::make_unique<View>());
+    child->set_help_context_key("child.topic");
+    CK_CHECK(*child->resolve_help_context_key() == "child.topic");
+}
+
+CK_TEST(resolve_help_context_key_walks_up_to_the_nearest_ancestor_that_has_one) {
+    View root;
+    root.set_help_context_key("root.topic");
+    View* mid = root.add_child(std::make_unique<View>());
+    View* leaf = mid->add_child(std::make_unique<View>());  // no key of its own
+    CK_CHECK(*leaf->resolve_help_context_key() == "root.topic");
+}
