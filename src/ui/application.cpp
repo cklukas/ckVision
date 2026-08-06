@@ -25,6 +25,7 @@ Application::Application(term::Terminal& terminal, Clock& clock)
     root_.set_detach_sink([this](View& v) {
         if (focused_ == &v) focused_ = nullptr;
         if (mouse_capture_ == &v) mouse_capture_ = nullptr;
+        if (input_capture_ == &v) input_capture_ = nullptr;
     });
 }
 
@@ -151,10 +152,11 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     if (v->on_text(e)) return true;
                 return false;
             } else if constexpr (std::is_same_v<T, MouseEvent>) {
-                View* target = mouse_capture_;
+                View* target = input_capture_;
+                if (target == nullptr) target = mouse_capture_;
                 if (target == nullptr) target = topmost_view_at(e.cell);
                 if (target == nullptr) return false;
-                if (e.action == MouseAction::Down) mouse_capture_ = target;
+                if (e.action == MouseAction::Down && input_capture_ == nullptr) mouse_capture_ = target;
                 const bool handled = target->on_mouse(e);
                 if (e.action == MouseAction::Up) mouse_capture_ = nullptr;
                 return handled;

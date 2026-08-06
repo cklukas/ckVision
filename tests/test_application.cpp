@@ -700,3 +700,78 @@ CK_TEST(reattaching_a_previously_detached_view_and_refocusing_it_works_normally)
     app.root().remove_child(reattached);
     CK_CHECK(app.focused() == nullptr);
 }
+
+// --- Mouse input capture ------------------------------------------------
+
+CK_TEST(input_capture_routes_every_mouse_event_to_the_captured_view_regardless_of_hit_test) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* under_cursor =
+        static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 80, 24})));
+    auto* captured = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{50, 20, 5, 2})));
+    app.set_input_capture(captured);
+
+    // Click lands squarely inside under_cursor's bounds, nowhere near
+    // captured's — capture must still win.
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 5}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);
+    CK_CHECK(captured->mouse_events == 1);
+    CK_CHECK(under_cursor->mouse_events == 0);
+}
+
+CK_TEST(input_capture_takes_priority_over_an_in_flight_drag_capture) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* draggable = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 10, 10})));
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);  // draggable now holds mouse_capture_
+    CK_CHECK(draggable->mouse_events == 1);
+
+    auto* popup = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{50, 50, 5, 5})));
+    app.set_input_capture(popup);
+
+    ckv::MouseEvent move{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{2, 2}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(move);
+    CK_CHECK(popup->mouse_events == 1);
+    CK_CHECK(draggable->mouse_events == 1);  // did NOT receive the move
+}
+
+CK_TEST(clear_input_capture_restores_ordinary_hit_testing) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* target = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 10, 10})));
+    auto* popup = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{50, 50, 5, 5})));
+    app.set_input_capture(popup);
+    app.clear_input_capture();
+
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);
+    CK_CHECK(target->mouse_events == 1);
+    CK_CHECK(popup->mouse_events == 0);
+}
+
+CK_TEST(destroying_the_input_captured_view_clears_capture_and_a_later_click_uses_ordinary_hit_testing) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* target = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 10, 10})));
+    View* popup_raw = app.root().add_child(std::make_unique<ProbeView>(Rect{50, 50, 5, 5}));
+    app.set_input_capture(popup_raw);
+    CK_CHECK(app.input_capture() == popup_raw);
+
+    std::unique_ptr<View> owned = app.root().remove_child(popup_raw);
+    owned.reset();
+    CK_CHECK(app.input_capture() == nullptr);
+
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);
+    CK_CHECK(target->mouse_events == 1);
+}

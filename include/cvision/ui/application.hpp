@@ -82,6 +82,20 @@ public:
     // unhandled, same as any other unbound key.
     void set_help_provider(std::function<void(const std::string&)> provider);
 
+    // --- Mouse input capture -------------------------------------------
+    //
+    // While set, EVERY MouseEvent routes directly to `view`, bypassing
+    // topmost_view_at() entirely (and taking priority even over an
+    // in-flight drag's mouse_capture_) — the mechanism a popup (a menu
+    // dropdown, M5) uses for light-dismiss: it captures on open, and its
+    // own on_mouse checks whether a click landed inside or outside its
+    // bounds, dismissing itself on the latter. Cleared automatically
+    // (like focused_/mouse_capture_) if `view` is removed or destroyed
+    // while captured.
+    void set_input_capture(View* view) noexcept { input_capture_ = view; }
+    void clear_input_capture() noexcept { input_capture_ = nullptr; }
+    View* input_capture() const noexcept { return input_capture_; }
+
     // --- Focus (ARCHITECTURE.md §5 "Focus and traversal") ---------------
 
     View* focused() const noexcept { return focused_; }
@@ -173,6 +187,7 @@ private:
     std::string clipboard_text_;
     View* focused_ = nullptr;
     View* mouse_capture_ = nullptr;
+    View* input_capture_ = nullptr;
 
     std::unordered_map<CommandId, std::function<void()>> command_handlers_;
     std::function<void(const std::string&)> help_provider_;
