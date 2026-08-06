@@ -1,5 +1,6 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 add_executable(cvision_tests
+    test_application.cpp
     test_box_drawing.cpp
     test_clock_diagnostics_error.cpp
     test_color_style_cell.cpp
