@@ -29,6 +29,7 @@ add_library(cvision
     src/ui/theme.cpp
     src/ui/view.cpp
     src/widgets/button.cpp
+    src/widgets/desktop.cpp
     src/widgets/dialog.cpp
     src/widgets/input_line.cpp
     src/widgets/label.cpp

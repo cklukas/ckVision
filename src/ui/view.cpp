@@ -43,6 +43,19 @@ std::unique_ptr<View> View::remove_child(View* child) {
     return nullptr;
 }
 
+void View::raise_to_front(View* child) {
+    for (auto it = children_.begin(); it != children_.end(); ++it) {
+        if (it->get() == child) {
+            if (it + 1 == children_.end()) return;  // already topmost
+            std::unique_ptr<View> owned = std::move(*it);
+            children_.erase(it);
+            children_.push_back(std::move(owned));
+            invalidate();
+            return;
+        }
+    }
+}
+
 void View::set_bounds(Rect bounds) {
     if (bounds == bounds_) return;
     const Rect old_absolute = absolute_bounds();

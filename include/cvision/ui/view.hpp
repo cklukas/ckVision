@@ -62,6 +62,17 @@ public:
     // View never silently destroys a view a caller is mid-inspecting.
     std::unique_ptr<View> remove_child(View* child);
 
+    // Moves `child` to the end of this view's child list — the topmost
+    // z-position, since hit-testing (Application::topmost_view_at) and
+    // painting both treat later children as on top of earlier ones.
+    // Pure in-place reorder: does NOT detach or re-attach, so ownership,
+    // the dirty-rect sink, and the detach sink are all left exactly as
+    // they were (unlike remove_child()+add_child(), which would fire a
+    // spurious detach notification for a window merely being raised to
+    // front). A harmless no-op if `child` is not currently a child of
+    // this view.
+    void raise_to_front(View* child);
+
     // --- Geometry -------------------------------------------------------
 
     Rect bounds() const noexcept { return bounds_; }  // parent-local
