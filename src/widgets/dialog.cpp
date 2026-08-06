@@ -116,15 +116,27 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 
     window.set_content(std::move(dialog.root));
 
-    window.accept_request = [&window, &app, inputs, &descriptor, default_button]() {
+    // Guards against the default button's OWN on_press closing the
+    // window itself (a natural pattern: "the OK button closes the
+    // dialog") — without this, accept_request's own window.close()
+    // afterward would double-fire on_closed (or, if the caller's
+    // on_press somehow destroyed the Window outright rather than just
+    // closing it, be a genuine use-after-free). on_closed already
+    // fires synchronously from close(), so by the time accept_request
+    // checks *alive after on_press returns, it correctly reflects
+    // whether on_press already closed the window.
+    auto alive = std::make_shared<bool>(true);
+
+    window.accept_request = [&window, &app, inputs, &descriptor, default_button, alive]() {
         if (!validate_inputs(inputs, descriptor, app)) return;  // veto: invalid field already took focus
         if (default_button != nullptr && default_button->on_press) default_button->on_press();
-        window.close();
+        if (*alive) window.close();
     };
     window.cancel_request = [&window]() { window.close(); };  // Esc bypasses validation by definition
 
     auto previous_on_closed = window.on_closed;
-    window.on_closed = [&app, restore_focus_to, previous_on_closed]() {
+    window.on_closed = [&app, restore_focus_to, previous_on_closed, alive]() {
+        *alive = false;
         if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
         if (previous_on_closed) previous_on_closed();
     };

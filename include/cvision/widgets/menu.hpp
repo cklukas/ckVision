@@ -10,13 +10,17 @@
 // Esc closes one level, and light-dismiss on an outside click via
 // Application's mouse input capture.
 //
+// show_context_menu() below reuses DropdownMenu directly as a
+// positional pop-up ("Context menu: positional pop-up with same
+// feature set" — plans/widgets.md M5 baseline) at a caller-chosen
+// screen position, e.g. from a right-click handler.
+//
 // Scope note (documented, not an oversight): nested submenus, right-
-// aligned accelerator-chord hints, checkable items, context-menu
-// keyboard invocation, and the status line are each a real, separate
-// increment — landing them here would roughly double this file without
-// a concrete consumer to test any of it against yet. This delivers one
-// complete, working menu bar + single-level dropdown, which is already
-// the whole "commands-driven menu" story end to end.
+// aligned accelerator-chord hints, checkable items, and context-menu
+// KEYBOARD invocation (Menu key / Shift-F10 at focus location — mouse
+// invocation via show_context_menu is covered) are each a real,
+// separate increment — landing them here would roughly double this
+// file without a concrete consumer to test any of it against yet.
 #pragma once
 
 #include <functional>
@@ -45,9 +49,18 @@ class DropdownMenu : public ui::View {
 public:
     DropdownMenu(std::vector<MenuItem> items, const ui::Theme& theme, ui::RoleId normal_role,
                  ui::RoleId highlighted_role, ui::RoleId disabled_role, ui::Application& app);
+    ~DropdownMenu() override;
 
-    // Fires exactly once: on Esc, on a click outside the dropdown's own
-    // bounds (light dismiss), or after a successful item activation.
+    // Fires on Esc, on a click outside the dropdown's own bounds (light
+    // dismiss), after a successful item activation, AND unconditionally
+    // from the destructor — so an owner (MenuBar) always learns the
+    // popup is going away regardless of WHO removed it (itself, or a
+    // caller bypassing it via Desktop::remove_popup directly), and can
+    // reliably clear its own bookkeeping instead of desyncing. May
+    // therefore fire more than once for the same dismissal (e.g. once
+    // from an explicit dismiss() and again from the destructor it
+    // triggers); handlers must be idempotent — MenuBar::close_dropdown()
+    // already is.
     std::function<void()> on_dismiss;
 
     const std::vector<MenuItem>& items() const noexcept { return items_; }
@@ -126,5 +139,19 @@ private:
     ui::Application& app_;
     Desktop& desktop_;
 };
+
+// Opens `items` as a positional pop-up context menu at `screen_position`
+// (Desktop-absolute coordinates — e.g. the mouse cell from a right-
+// click MouseEvent) with the same navigation/mnemonic/dismiss feature
+// set as MenuBar's dropdown: input capture for light-dismiss on an
+// outside click, Esc to close, Up/Down/Enter to navigate and activate.
+// Self-removing: the menu takes care of leaving `desktop`'s popup list
+// and clearing input capture when it dismisses, so the caller does not
+// need to track or explicitly close it. The returned pointer is only
+// valid until the menu dismisses (any activation, Esc, or an outside
+// click) — do not retain it past that point.
+DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position, const ui::Theme& theme,
+                                 ui::RoleId normal_role, ui::RoleId highlighted_role, ui::RoleId disabled_role,
+                                 ui::Application& app, Desktop& desktop);
 
 }  // namespace ckv::widgets

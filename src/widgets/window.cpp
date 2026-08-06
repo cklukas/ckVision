@@ -64,7 +64,7 @@ void Window::toggle_zoom(Rect available) {
         zoomed_ = false;
     } else {
         restored_bounds_ = bounds();
-        set_bounds(available);
+        set_bounds(clamp_size(available));  // zooming must still honor min/max, like every other resize path
         zoomed_ = true;
     }
 }
@@ -98,10 +98,16 @@ void Window::on_resized() {
 }
 
 bool Window::point_in_close_control(Point local) const noexcept {
+    // Must match draw()'s own "b.width > 6" gate — a control that
+    // isn't drawn must not be clickable, and at widths where only the
+    // close control is drawn, its region must not extend into where
+    // the (undrawn) zoom control's columns would otherwise be.
+    if (bounds().width <= 6) return false;
     return local.y == 0 && in_range(local.x, 1, 4);  // "[x]" at columns 1-3
 }
 
 bool Window::point_in_zoom_control(Point local) const noexcept {
+    if (bounds().width <= 8) return false;  // must match draw()'s own "b.width > 8" gate
     const int w = bounds().width;
     return local.y == 0 && in_range(local.x, w - 3, w - 1);  // "[]" at the last two columns before the corner
 }

@@ -43,6 +43,8 @@ DropdownMenu::DropdownMenu(std::vector<MenuItem> items, const ui::Theme& theme, 
     highlighted_ = step_selection(-1, +1);
 }
 
+DropdownMenu::~DropdownMenu() { dismiss(); }
+
 bool DropdownMenu::item_enabled(std::size_t index) const {
     const MenuItem& item = items_[index];
     if (item.separator) return false;
@@ -63,16 +65,25 @@ int DropdownMenu::step_selection(int from, int direction) const {
 
 void DropdownMenu::activate(int index) {
     if (index < 0 || !item_enabled(static_cast<std::size_t>(index))) return;
-    const MenuItem& item = items_[static_cast<std::size_t>(index)];
-    if (item.command != ui::kInvalidCommand)
-        app_.execute_command(item.command);
-    else if (item.on_activate)
-        item.on_activate();
+    // Copy what we need out of items_/app_ BEFORE dismiss(): on_dismiss
+    // may destroy `this` (e.g. MenuBar::close_dropdown() removes this
+    // popup from its owning Desktop) — nothing below may read a member
+    // of `this` after that point.
+    const ui::CommandId command = items_[static_cast<std::size_t>(index)].command;
+    const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].on_activate;
+    ui::Application& app = app_;
     dismiss();
+    if (command != ui::kInvalidCommand)
+        app.execute_command(command);
+    else if (on_activate)
+        on_activate();
 }
 
 void DropdownMenu::dismiss() {
-    if (on_dismiss) on_dismiss();
+    // Copy before invoking: the callback may destroy `this`, so
+    // `this->on_dismiss` must not be touched after it starts running.
+    const std::function<void()> callback = on_dismiss;
+    if (callback) callback();
 }
 
 SizeHint DropdownMenu::horizontal_size_hint() const {
@@ -301,6 +312,28 @@ void MenuBar::draw(scene::Painter& painter) {
         const Style style = (active_ && i == highlighted_) ? theme_.resolve(active_role_) : base;
         painter.draw_text(Point{x, 0}, parse_mnemonic(menus_[i].label).display, style);
     }
+}
+
+// --- show_context_menu ---------------------------------------------------
+
+DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position, const ui::Theme& theme,
+                                 ui::RoleId normal_role, ui::RoleId highlighted_role, ui::RoleId disabled_role,
+                                 ui::Application& app, Desktop& desktop) {
+    auto menu = std::make_unique<DropdownMenu>(std::move(items), theme, normal_role, highlighted_role,
+                                                disabled_role, app);
+    const Rect desktop_abs = desktop.absolute_bounds();
+    auto* raw = static_cast<DropdownMenu*>(desktop.add_popup(std::move(menu)));
+    const SizeHint w = raw->horizontal_size_hint();
+    const SizeHint h = raw->vertical_size_hint();
+    raw->set_bounds(Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred,
+                          h.preferred});
+
+    raw->on_dismiss = [&app, &desktop, raw]() {
+        if (app.input_capture() == raw) app.clear_input_capture();
+        desktop.remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
+    };
+    app.set_input_capture(raw);
+    return raw;
 }
 
 }  // namespace ckv::widgets

@@ -81,7 +81,13 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 // Moves dialog.root into `window`'s content, then wires:
 //  - accept_request: validate_dialog(); on success, runs the default
 //    button's on_press (if any) and closes the window; on veto, does
-//    nothing further (the invalid field already took focus).
+//    nothing further (the invalid field already took focus). Safe for
+//    the descriptor's own default-button on_press to call window.close()
+//    itself (a natural "the OK button closes the dialog" pattern) —
+//    accept_request detects that and does not close it a second time.
+//    NOT safe for on_press to destroy the Window object directly
+//    (rather than closing it) — only close() is tracked, not arbitrary
+//    destruction; doing so remains a use-after-free.
 //  - cancel_request: closes the window directly, bypassing validation.
 //  - on_closed (composed with any handler already set): restores
 //    focus to `restore_focus_to` if it is still focusable.
