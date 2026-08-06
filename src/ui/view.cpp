@@ -34,6 +34,7 @@ void View::set_bounds(Rect bounds) {
     bounds_ = bounds;
     invalidate();  // damage the new bounds
     if (dirty_rect_sink_) dirty_rect_sink_(old_absolute);  // and the vacated old bounds
+    on_resized();
 }
 
 Rect View::absolute_bounds() const noexcept {

@@ -15,6 +15,7 @@ add_executable(cvision_tests
     test_image.cpp
     test_input_decoder.cpp
     test_key_event.cpp
+    test_layout.cpp
     test_painter.cpp
     test_posix_terminal.cpp
     test_presenter.cpp

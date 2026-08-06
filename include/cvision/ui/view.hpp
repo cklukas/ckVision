@@ -43,7 +43,7 @@ enum class FocusPolicy {
 
 class View {
 public:
-    explicit View(Rect bounds = {}) : bounds_(bounds) {}
+    explicit View(Rect bounds = {}) : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}) {}
     virtual ~View() = default;
 
     View(const View&) = delete;
@@ -67,18 +67,38 @@ public:
     Rect bounds() const noexcept { return bounds_; }  // parent-local
     void set_bounds(Rect bounds);
 
+    // Hook for containers (Row/Column/Grid/Dock) that must relayout
+    // their children whenever their own bounds change size. Called
+    // after bounds_ is updated and this view's own invalidation has
+    // already been reported; the default does nothing.
+    virtual void on_resized() {}
+
     // Absolute (Desktop-root-relative) bounds, computed by walking
     // ancestors. O(depth); layout and hit-testing use this sparingly
     // and cache within a single pass rather than per-cell.
     Rect absolute_bounds() const noexcept;
 
-    virtual SizeHint horizontal_size_hint() const { return SizeHint{0, bounds_.width, kUnboundedExtent}; }
-    virtual SizeHint vertical_size_hint() const { return SizeHint{0, bounds_.height, kUnboundedExtent}; }
+    // Preferred size (ARCHITECTURE.md §5 layout): deliberately decoupled
+    // from the LIVE bounds_ (set once at construction, or explicitly via
+    // set_preferred_size) rather than reflecting wherever a layout
+    // container most recently placed this view — a hint that tracked
+    // live bounds would feed back into itself across repeated relayouts
+    // (a container resizes the view, which changes its own "preferred"
+    // size, which the container then reads on the next pass). Widgets
+    // with real intrinsic content (Label, Button) override these
+    // directly instead of relying on a stored preferred size at all.
+    virtual SizeHint horizontal_size_hint() const {
+        return SizeHint{0, preferred_size_.width, kUnboundedExtent};
+    }
+    virtual SizeHint vertical_size_hint() const {
+        return SizeHint{0, preferred_size_.height, kUnboundedExtent};
+    }
+    void set_preferred_size(Size size) { preferred_size_ = size; }
 
     // The one sanctioned second pass (ARCHITECTURE.md §5): a wrapped
     // view (static text, memo) reports the height it needs for a given
     // width. Default: height is independent of width.
-    virtual int height_for_width(int /*width*/) const { return bounds_.height; }
+    virtual int height_for_width(int /*width*/) const { return preferred_size_.height; }
 
     bool visible() const noexcept { return visible_; }
     void set_visible(bool visible);
@@ -133,6 +153,7 @@ private:
     View* parent_ = nullptr;
     std::vector<std::unique_ptr<View>> children_;
     Rect bounds_;
+    Size preferred_size_;
     bool visible_ = true;
     bool enabled_ = true;
     FocusPolicy focus_policy_ = FocusPolicy::None;
