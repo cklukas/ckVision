@@ -141,4 +141,3 @@ CK_TEST(error_reports_a_line_number) {
     CK_CHECK(!result.error.message.empty());
 }
 
-CKTEST_MAIN

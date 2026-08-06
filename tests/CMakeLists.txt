@@ -1,7 +1,16 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 add_executable(cvision_tests
+    test_clock_diagnostics_error.cpp
+    test_color_style_cell.cpp
+    test_geometry.cpp
     test_golden_format.cpp
-    test_version.cpp)
+    test_golden_hostile_content.cpp
+    test_image.cpp
+    test_key_event.cpp
+    test_text_width.cpp
+    test_utf8.cpp
+    test_version.cpp
+    main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 ckvision_strict(cvision_tests)
 

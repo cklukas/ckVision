@@ -5,7 +5,11 @@ project(ckvision VERSION 0.1.0 LANGUAGES CXX)
 include(cmake/CkVisionSettings.cmake)
 
 add_library(cvision
+    src/core/assert.cpp
+    src/core/cell.cpp
     src/core/golden.cpp
+    src/core/text.cpp
+    src/core/utf8.cpp
     src/core/version.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
