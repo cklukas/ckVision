@@ -6,6 +6,7 @@ add_executable(cvision_tests
     test_color_style_cell.cpp
     test_command.cpp
     test_compositor.cpp
+    test_dialog.cpp
     test_frame_view.cpp
     test_geometry.cpp
     test_golden_capture.cpp
