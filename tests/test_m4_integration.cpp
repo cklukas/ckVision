@@ -35,8 +35,8 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
 
     DialogDescriptor descriptor;
     descriptor.title = "Connect";
-    descriptor.fields.push_back(FieldDescriptor{"&Host:", ""});
-    descriptor.fields.push_back(FieldDescriptor{"&Port:", "8080"});
+    descriptor.fields.push_back(FieldDescriptor{"&Host:", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{"&Port:", "8080", nullptr});
     bool ok_pressed = false;
     bool cancel_pressed = false;
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_pressed = true; }});
@@ -91,7 +91,7 @@ CK_TEST(tab_traversal_wraps_all_the_way_around_a_full_dialog_and_back) {
     Theme theme = make_classic_theme(registry, roles);
 
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&A:", ""});
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
 
     auto dialog = materialize_dialog(descriptor, theme, roles);
@@ -113,8 +113,8 @@ CK_TEST(a_disabled_default_button_still_reports_default_but_a_disabled_input_is_
     Theme theme = make_classic_theme(registry, roles);
 
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&A:", ""});
-    descriptor.fields.push_back(FieldDescriptor{"&B:", ""});
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{"&B:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
 
     auto dialog = materialize_dialog(descriptor, theme, roles);

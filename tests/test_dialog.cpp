@@ -5,8 +5,16 @@
 #include <unistd.h>
 
 #include "cktest.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/window.hpp"
 
+using ckv::Key;
+using ckv::KeyChord;
+using ckv::ManualClock;
+using ckv::Modifier;
+using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
@@ -16,6 +24,9 @@ using ckv::widgets::ButtonDescriptor;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
 using ckv::widgets::materialize_dialog;
+using ckv::widgets::validate_dialog;
+using ckv::widgets::wire_dialog_window;
+using ckv::widgets::Window;
 
 namespace {
 struct Fixture {
@@ -60,7 +71,7 @@ CK_TEST(materializing_two_default_buttons_aborts) {
 CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
     Fixture f;
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&Name:", "initial"});
+    descriptor.fields.push_back(FieldDescriptor{"&Name:", "initial", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
     auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
 
@@ -76,7 +87,7 @@ CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
 CK_TEST(a_field_with_an_empty_label_produces_a_null_label_pointer_but_a_real_input) {
     Fixture f;
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"", "value"});
+    descriptor.fields.push_back(FieldDescriptor{"", "value", nullptr});
     auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
     CK_CHECK(dialog.labels.size() == 1);
     CK_CHECK(dialog.labels[0] == nullptr);
@@ -86,7 +97,7 @@ CK_TEST(a_field_with_an_empty_label_produces_a_null_label_pointer_but_a_real_inp
 CK_TEST(a_labeled_fields_mnemonic_buddy_is_wired_to_its_own_input) {
     Fixture f;
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&Path:", ""});
+    descriptor.fields.push_back(FieldDescriptor{"&Path:", "", nullptr});
     auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
     CK_CHECK(dialog.labels[0]->buddy() == dialog.inputs[0]);
 }
@@ -113,8 +124,8 @@ CK_TEST(no_button_marked_default_reports_a_null_default_button) {
 CK_TEST(initial_focus_is_the_first_input_when_the_dialog_has_fields) {
     Fixture f;
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&First:", ""});
-    descriptor.fields.push_back(FieldDescriptor{"&Second:", ""});
+    descriptor.fields.push_back(FieldDescriptor{"&First:", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{"&Second:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
     auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
     CK_CHECK(dialog.initial_focus == dialog.inputs[0]);
@@ -141,8 +152,8 @@ CK_TEST(a_button_press_handler_provided_in_the_descriptor_fires_through_the_mate
 CK_TEST(field_and_button_order_in_the_descriptor_is_preserved_in_the_materialized_arrays) {
     Fixture f;
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&A:", "a"});
-    descriptor.fields.push_back(FieldDescriptor{"&B:", "b"});
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "a", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{"&B:", "b", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"First", false, nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"Second", false, nullptr});
     auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
@@ -155,9 +166,177 @@ CK_TEST(field_and_button_order_in_the_descriptor_is_preserved_in_the_materialize
 CK_TEST(the_materialized_root_owns_the_entire_tree_and_destroying_it_is_safe) {
     Fixture f;
     DialogDescriptor descriptor;
-    descriptor.fields.push_back(FieldDescriptor{"&Name:", ""});
+    descriptor.fields.push_back(FieldDescriptor{"&Name:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
     auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
     dialog.root.reset();  // must not crash or leak (ASan build verifies the latter)
     CK_CHECK(true);
+}
+
+// --- validate_dialog / wire_dialog_window (accept veto, Esc-cancel,
+// focus restore) -----------------------------------------------------
+
+namespace {
+Window make_window(Fixture& f) {
+    return Window("Dialog", f.theme, f.roles.window_frame_active, f.roles.window_frame_inactive,
+                  f.roles.window_title_active, f.roles.window_title_inactive);
+}
+}  // namespace
+
+CK_TEST(validate_dialog_with_all_valid_fields_returns_true_and_touches_no_focus) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "ok", [](const std::string& s) { return !s.empty(); }});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    CK_CHECK(validate_dialog(dialog, descriptor, app));
+    CK_CHECK(dialog.inputs[0]->valid());
+}
+
+CK_TEST(validate_dialog_with_an_invalid_field_vetoes_marks_it_invalid_and_focuses_it) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    CK_CHECK(!validate_dialog(dialog, descriptor, app));
+    CK_CHECK(!dialog.inputs[0]->valid());
+    CK_CHECK(app.focused() == dialog.inputs[0]);
+}
+
+CK_TEST(validate_dialog_focuses_only_the_first_invalid_field_among_several) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    auto require_nonempty = [](const std::string& s) { return !s.empty(); };
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", require_nonempty});
+    descriptor.fields.push_back(FieldDescriptor{"&B:", "", require_nonempty});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    CK_CHECK(!validate_dialog(dialog, descriptor, app));
+    CK_CHECK(app.focused() == dialog.inputs[0]);
+    CK_CHECK(!dialog.inputs[0]->valid());
+    CK_CHECK(!dialog.inputs[1]->valid());  // still marked invalid even though focus went to the first
+}
+
+CK_TEST(revalidating_after_fixing_the_field_clears_the_invalid_marker) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    validate_dialog(dialog, descriptor, app);
+    CK_CHECK(!dialog.inputs[0]->valid());
+    dialog.inputs[0]->set_text("now filled in");
+    CK_CHECK(validate_dialog(dialog, descriptor, app));
+    CK_CHECK(dialog.inputs[0]->valid());
+}
+
+CK_TEST(accept_with_valid_fields_runs_the_default_buttons_handler_and_closes_the_window) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    bool ok_ran = false;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "ok", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_ran = true; }});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+
+    Window window = make_window(f);
+    bool closed = false;
+    window.on_closed = [&] { closed = true; };
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(ok_ran);
+    CK_CHECK(closed);
+}
+
+CK_TEST(accept_with_an_invalid_field_vetoes_the_close_and_never_runs_the_default_handler) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    bool ok_ran = false;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_ran = true; }});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto* input = dialog.inputs[0];
+
+    Window window = make_window(f);
+    bool closed = false;
+    window.on_closed = [&] { closed = true; };
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(!ok_ran);
+    CK_CHECK(!closed);
+    CK_CHECK(!input->valid());
+}
+
+CK_TEST(escape_closes_the_window_without_running_validation_at_all) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto* input = dialog.inputs[0];
+
+    Window window = make_window(f);
+    bool closed = false;
+    window.on_closed = [&] { closed = true; };
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}));
+    CK_CHECK(closed);
+    CK_CHECK(input->valid());  // never touched — Esc bypasses validation entirely
+}
+
+CK_TEST(closing_the_dialog_restores_focus_to_the_view_that_invoked_it) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    ckv::ui::View* invoker = app.root().add_child(std::make_unique<ckv::ui::View>());
+    invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "ok", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+
+    Window window = make_window(f);
+    wire_dialog_window(window, std::move(dialog), descriptor, app, invoker);
+
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(app.focused() == invoker);
+}
+
+CK_TEST(wire_dialog_window_composes_with_a_previously_installed_on_closed_handler) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+
+    Window window = make_window(f);
+    bool preexisting_ran = false;
+    window.on_closed = [&] { preexisting_ran = true; };
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(preexisting_ran);  // the original handler still runs, not overwritten
 }

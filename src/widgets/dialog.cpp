@@ -20,6 +20,27 @@ ui::View* find_first_focusable(ui::View& view) {
     return nullptr;
 }
 
+bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescriptor& descriptor,
+                      ui::Application& app) {
+    CKV_ASSERT(inputs.size() == descriptor.fields.size());
+    InputLine* first_invalid = nullptr;
+    bool all_valid = true;
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        const auto& validate = descriptor.fields[i].validate;
+        const bool valid = !validate || validate(inputs[i]->text());
+        inputs[i]->set_valid(valid);
+        if (!valid) {
+            all_valid = false;
+            if (first_invalid == nullptr) first_invalid = inputs[i];
+        }
+    }
+    if (!all_valid) {
+        app.set_focus(first_invalid);
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const ui::Theme& theme,
@@ -76,6 +97,37 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const 
     result.initial_focus = find_first_focusable(*column);
     result.root = std::move(column);
     return result;
+}
+
+bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app) {
+    return validate_inputs(dialog.inputs, descriptor, app);
+}
+
+void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
+                         ui::Application& app, ui::View* restore_focus_to) {
+    // Copy what accept_request needs before dialog.root (which owns
+    // these views) is moved into the window's content — the raw
+    // pointers stay valid afterward (set_content only reparents).
+    // Captured by value (plain vectors/pointers, all copyable) rather
+    // than the whole MaterializedDialog, which holds a unique_ptr and
+    // so cannot be captured into a std::function at all.
+    std::vector<InputLine*> inputs = dialog.inputs;
+    Button* default_button = dialog.default_button;
+
+    window.set_content(std::move(dialog.root));
+
+    window.accept_request = [&window, &app, inputs, &descriptor, default_button]() {
+        if (!validate_inputs(inputs, descriptor, app)) return;  // veto: invalid field already took focus
+        if (default_button != nullptr && default_button->on_press) default_button->on_press();
+        window.close();
+    };
+    window.cancel_request = [&window]() { window.close(); };  // Esc bypasses validation by definition
+
+    auto previous_on_closed = window.on_closed;
+    window.on_closed = [&app, restore_focus_to, previous_on_closed]() {
+        if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
+        if (previous_on_closed) previous_on_closed();
+    };
 }
 
 }  // namespace ckv::widgets

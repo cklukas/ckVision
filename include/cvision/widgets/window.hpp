@@ -61,6 +61,18 @@ public:
     std::function<void()> on_closed;
     bool close();
 
+    // Optional hooks, invoked by on_key when Enter/Escape is not
+    // already consumed by keyboard move/resize mode: accept_request
+    // for Enter, cancel_request for Escape. Unset by default (a plain
+    // Window doesn't treat Enter/Escape specially at all). This is how
+    // widgets/dialog.hpp wires "Dialog accept" (default button, Enter,
+    // accept-time validation veto) and "Esc cancels, bypassing
+    // validation" onto a Window hosting a materialized dialog, without
+    // Window itself knowing anything about dialogs, buttons, or
+    // validation.
+    std::function<void()> accept_request;
+    std::function<void()> cancel_request;
+
     // Zoom/restore. `available` is the bounds to zoom into (typically
     // Desktop's content area) — passed explicitly so Window never has
     // to know about Desktop.

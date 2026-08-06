@@ -11,12 +11,13 @@
 // are rejected at materialization via CKV_ASSERT rather than producing
 // a dialog with undefined behavior.
 //
-// Scope note: this produces CONTENT only — a Column of field rows plus
-// a button row. Window chrome (title bar, close control, shadow) and
-// the close/accept protocol (validation veto, Esc-cancel) are M5
-// concerns (Window doesn't exist yet); wiring a MaterializedDialog's
-// root into a Window's content view is a follow-on, not a redesign,
-// once Window lands.
+// wire_dialog_window() below adds window chrome integration: it hosts
+// a MaterializedDialog inside a Window's content, wiring Window's
+// accept_request (default button + accept-time validation veto — a
+// failing validator blocks the accept, marks its field invalid, and
+// takes focus, per ARCHITECTURE.md §5) and cancel_request (Esc closes,
+// bypassing validation by definition), plus focus restoration to
+// whatever view had focus before the dialog opened.
 #pragma once
 
 #include <functional>
@@ -24,18 +25,26 @@
 #include <string>
 #include <vector>
 
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
 
 struct FieldDescriptor {
     std::string label;         // may carry a '&' mnemonic; empty = unlabeled field
     std::string initial_text;
+
+    // Optional; empty means "always valid". Runs at accept time only
+    // (ARCHITECTURE.md §5 dialog-accept veto) — never on every
+    // keystroke, since a field mid-edit is expected to be transiently
+    // invalid.
+    std::function<bool(const std::string&)> validate;
 };
 
 struct ButtonDescriptor {
@@ -61,5 +70,26 @@ struct MaterializedDialog {
 
 MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const ui::Theme& theme,
                                        const ui::StandardRoles& roles);
+
+// Runs every field's validator against its CURRENT text, marking each
+// InputLine valid/invalid accordingly. On the first invalid field,
+// focuses it and returns false (the veto); if every field is valid,
+// returns true. `descriptor` must be the same one `dialog` was
+// materialized from (parallel arrays, by index).
+bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app);
+
+// Moves dialog.root into `window`'s content, then wires:
+//  - accept_request: validate_dialog(); on success, runs the default
+//    button's on_press (if any) and closes the window; on veto, does
+//    nothing further (the invalid field already took focus).
+//  - cancel_request: closes the window directly, bypassing validation.
+//  - on_closed (composed with any handler already set): restores
+//    focus to `restore_focus_to` if it is still focusable.
+// The installed closures capture `app`, `window`, and `descriptor` by
+// reference (and `restore_focus_to` by value) — all three must outlive
+// `window` itself; a typical caller keeps `descriptor` alive for the
+// window's whole lifetime (e.g. as a member) rather than a local.
+void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
+                         ui::Application& app, ui::View* restore_focus_to);
 
 }  // namespace ckv::widgets

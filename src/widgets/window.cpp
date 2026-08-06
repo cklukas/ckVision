@@ -131,7 +131,17 @@ void Window::draw(scene::Painter& painter) {
 }
 
 bool Window::on_key(const KeyEvent& event) {
-    if (keyboard_mode_ == KeyboardMode::None) return false;
+    if (keyboard_mode_ == KeyboardMode::None) {
+        if (event.chord.key == Key::Enter && accept_request) {
+            accept_request();
+            return true;
+        }
+        if (event.chord.key == Key::Escape && cancel_request) {
+            cancel_request();
+            return true;
+        }
+        return false;
+    }
 
     const bool is_resize = keyboard_mode_ == KeyboardMode::Resize;
     switch (event.chord.key) {
