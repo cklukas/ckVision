@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
 #include "cvision/core/style.hpp"
@@ -46,24 +47,17 @@ struct ShadowSpec {
 // unclipped to any frame bounds.
 std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 
-// A raster region's visible remainder after occlusion by higher
-// layers: zero or more axis-aligned slices of its full anchor
-// (ARCHITECTURE.md §3/§7).
+// Compositor produces ckv::RasterSlice (core/frame_view.hpp), zero or
+// more per logical raster region, as its occlusion-sliced output — the
+// core-typed hand-off to term::Presenter (ARCHITECTURE.md §1/§4).
 //
-// Scope note: unlike cells, a visible slice here carries no shadow-
-// dimming state. Cell-style shadow dimming (resolve_cell) is a style
-// transform on discrete text cells; dimming raster PIXEL content needs
-// image-level compositing math (or a policy decision to suppress the
-// image and fall back to text under a shadow), which is presenter/
-// term-layer territory once real image encoding exists — out of scope
-// for M2, which only establishes anchoring/occlusion-slicing/fallback.
-struct VisibleRaster {
-    int id;
-    Rect visible_rect;  // frame-absolute; a sub-rect of full_anchor
-    Rect full_anchor;   // frame-absolute; the region's complete anchor
-    std::shared_ptr<const Image> image;
-    bool fallback_active;
-};
+// Scope note: unlike cells, a slice here carries no shadow-dimming
+// state. Cell-style shadow dimming (resolve_cell) is a style transform
+// on discrete text cells; dimming raster PIXEL content needs image-
+// level compositing math (or a policy decision to suppress the image
+// and fall back to text under a shadow), which is presenter/term-layer
+// territory once real image encoding exists — out of scope for M2/M3,
+// which only establish anchoring/occlusion-slicing/fallback.
 
 class Compositor {
 public:
@@ -83,7 +77,7 @@ public:
 
     // Recomputed in full on every compose() call — occlusion slicing is
     // comparatively cheap and is not damage-gated in v1.
-    const std::vector<VisibleRaster>& visible_rasters() const noexcept { return visible_rasters_; }
+    const std::vector<RasterSlice>& visible_rasters() const noexcept { return visible_rasters_; }
 
     // Cells resolved during the most recent compose() call — the
     // concrete, machine-independent half of the compose-stage
@@ -108,7 +102,7 @@ private:
     Surface frame_;
     CursorState cursor_;
     std::vector<PreviousLayer> previous_layers_;
-    std::vector<VisibleRaster> visible_rasters_;
+    std::vector<RasterSlice> visible_rasters_;
     std::size_t cells_touched_ = 0;
 };
 

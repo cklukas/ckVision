@@ -1,0 +1,328 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/term/presenter.hpp"
+
+#include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cktest.hpp"
+
+using namespace ckv;
+using namespace ckv::term;
+using ckv::scene::Surface;
+
+namespace {
+
+Surface make_surface(int w, int h, std::string_view fill = " ") {
+    return Surface(Size{w, h}, Cell::from_grapheme(fill, Style{}));
+}
+
+}  // namespace
+
+// --- Cell diffing -------------------------------------------------------------
+
+CK_TEST(first_present_writes_every_cell) {
+    HeadlessTerminal term(Size{3, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, "x");
+    presenter.present(s.view(), CursorState{});
+    CK_CHECK(term.written_bytes().find("xxx") != std::string_view::npos);
+}
+
+CK_TEST(second_present_with_no_changes_writes_nothing_but_cursor_visibility) {
+    HeadlessTerminal term(Size{3, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, "x");
+    presenter.present(s.view(), CursorState{});
+    term.clear_written();
+
+    presenter.present(s.view(), CursorState{});
+    // No content changed: only the cursor-visibility toggle should be
+    // written, no cell content and no cursor-move escape for content.
+    CK_CHECK(term.written_bytes().find('x') == std::string_view::npos);
+}
+
+CK_TEST(only_the_changed_cell_is_rewritten) {
+    HeadlessTerminal term(Size{5, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(5, 1, ".");
+    presenter.present(s.view(), CursorState{});
+    term.clear_written();
+
+    s.set_cell(Point{2, 0}, Cell::from_grapheme("Z", Style{}));
+    presenter.present(s.view(), CursorState{});
+    CK_CHECK(term.written_bytes().find('Z') != std::string_view::npos);
+    // Cursor move to column 2 (0-based) -> "3" in 1-based CUP.
+    CK_CHECK(term.written_bytes().find("\x1B[1;3H") != std::string_view::npos);
+}
+
+CK_TEST(invalidate_forces_the_next_present_to_rewrite_everything) {
+    HeadlessTerminal term(Size{3, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, "x");
+    presenter.present(s.view(), CursorState{});
+    term.clear_written();
+
+    presenter.invalidate();
+    presenter.present(s.view(), CursorState{});
+    CK_CHECK(term.written_bytes().find("xxx") != std::string_view::npos);
+}
+
+CK_TEST(resize_between_presents_forces_a_full_repaint) {
+    HeadlessTerminal term(Size{3, 1});
+    Presenter presenter(term);
+    Surface s3 = make_surface(3, 1, "x");
+    presenter.present(s3.view(), CursorState{});
+    term.clear_written();
+
+    Surface s5 = make_surface(5, 1, "y");
+    presenter.present(s5.view(), CursorState{});
+    CK_CHECK(term.written_bytes().find("yyyyy") != std::string_view::npos);
+}
+
+// --- Continuation cells ---------------------------------------------------------
+
+CK_TEST(continuation_cells_contribute_no_text_of_their_own) {
+    HeadlessTerminal term(Size{4, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(4, 1, ".");
+    s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE4\xB8\xAD", Style{}));  // 中, width 2
+    s.set_cell(Point{1, 0}, Cell::continuation(Style{}));
+    presenter.present(s.view(), CursorState{});
+
+    // The wide glyph's 3-byte UTF-8 encoding must appear exactly once
+    // in the written output, not duplicated for its continuation cell.
+    const std::string_view glyph = "\xE4\xB8\xAD";
+    std::size_t count = 0;
+    std::size_t pos = 0;
+    while ((pos = term.written_bytes().find(glyph, pos)) != std::string_view::npos) {
+        ++count;
+        pos += glyph.size();
+    }
+    CK_CHECK(count == 1);
+}
+
+// --- Style batching and color-depth degradation -----------------------------
+
+CK_TEST(style_to_sgr_truecolor) {
+    const Style st{Color::rgb(10, 20, 30), Color::rgb(1, 2, 3), Attr::Bold};
+    const std::string sgr = style_to_sgr(st, ColorDepth::TrueColor);
+    CK_CHECK(sgr.find(";1") != std::string::npos);        // bold
+    CK_CHECK(sgr.find("38;2;10;20;30") != std::string::npos);
+    CK_CHECK(sgr.find("48;2;1;2;3") != std::string::npos);
+}
+
+CK_TEST(style_to_sgr_default_colors_emit_no_color_escape) {
+    const Style st{Color{}, Color{}, Attr{}};
+    const std::string sgr = style_to_sgr(st, ColorDepth::TrueColor);
+    CK_CHECK(sgr.find("38;") == std::string::npos);
+    CK_CHECK(sgr.find("48;") == std::string::npos);
+    CK_CHECK(sgr == "\x1B[0m");  // just a reset
+}
+
+CK_TEST(style_to_sgr_256_color_uses_indexed_form) {
+    const Style st{Color::rgb(255, 0, 0), Color{}, Attr{}};
+    const std::string sgr = style_to_sgr(st, ColorDepth::Color256);
+    CK_CHECK(sgr.find("38;5;") != std::string::npos);
+    CK_CHECK(sgr.find("38;2;") == std::string::npos);  // never truecolor form at this depth
+}
+
+CK_TEST(style_to_sgr_256_color_picks_a_plausible_red) {
+    // Pure red should map to a palette entry that is itself red-ish
+    // (high red channel index), not an arbitrary color — verified by
+    // checking it is NOT the palette's darkest/grayscale region.
+    const Style st{Color::rgb(255, 0, 0), Color{}, Attr{}};
+    const std::string sgr = style_to_sgr(st, ColorDepth::Color256);
+    const std::size_t pos = sgr.find("38;5;");
+    CK_CHECK(pos != std::string::npos);
+    const int index = std::stoi(sgr.substr(pos + 5));
+    CK_CHECK(index >= 16 && index <= 231);  // within the 6x6x6 cube, not grayscale/basic
+}
+
+CK_TEST(style_to_sgr_mono16_uses_basic_sgr_codes) {
+    const Style bright_red{Color::rgb(255, 0, 0), Color{}, Attr{}};
+    const std::string sgr = style_to_sgr(bright_red, ColorDepth::Mono16);
+    CK_CHECK(sgr.find("38;") == std::string::npos);  // no indexed/truecolor form at all
+    // Must contain a plain SGR foreground code (30-37 or 90-97).
+    bool found_basic_code = false;
+    for (int code = 30; code <= 37; ++code)
+        if (sgr.find(";" + std::to_string(code)) != std::string::npos) found_basic_code = true;
+    for (int code = 90; code <= 97; ++code)
+        if (sgr.find(";" + std::to_string(code)) != std::string::npos) found_basic_code = true;
+    CK_CHECK(found_basic_code);
+}
+
+CK_TEST(repeated_same_style_in_a_run_emits_the_style_escape_only_once) {
+    Capabilities caps = baseline_capabilities();
+    caps.color_depth = ColorDepth::TrueColor;  // baseline is Color256; force truecolor for this check
+    HeadlessTerminal term(Size{3, 1}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, " ");
+    const Style red{Color::rgb(255, 0, 0), Color{}, Attr{}};
+    s.set_cell(Point{0, 0}, Cell::from_grapheme("a", red));
+    s.set_cell(Point{1, 0}, Cell::from_grapheme("b", red));
+    s.set_cell(Point{2, 0}, Cell::from_grapheme("c", red));
+    presenter.present(s.view(), CursorState{});
+
+    std::size_t count = 0;
+    std::size_t pos = 0;
+    while ((pos = term.written_bytes().find("38;2;255;0;0", pos)) != std::string_view::npos) {
+        ++count;
+        pos += 1;
+    }
+    CK_CHECK(count == 1);  // one style escape covers all three same-styled cells
+}
+
+// --- Width-safe cursor addressing (D-019) -------------------------------------
+
+CK_TEST(width_unsafe_glyph_forces_readdress_even_for_a_genuinely_adjacent_next_cell) {
+    // The meaningful case: col0 (unsafe) and col1 (ordinary) are BOTH
+    // dirty and directly adjacent — with no gap, so nothing except the
+    // width-unsafe rule would ever force a second cursor-move escape
+    // here. If the presenter merged them into one run and trusted
+    // natural cursor advance, col1 would be written with no separate
+    // positioning escape between "\xE2\x80\x8D" and "Q". It must not.
+    HeadlessTerminal term(Size{6, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(6, 1, " ");
+    presenter.present(s.view(), CursorState{});  // stable baseline
+    term.clear_written();
+
+    s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE2\x80\x8D", Style{}));  // lone ZWJ, width 0
+    s.set_cell(Point{1, 0}, Cell::from_grapheme("Q", Style{}));
+    presenter.present(s.view(), CursorState{});
+
+    // Two explicit CUP escapes: one for column 0 (1-based col 1), one
+    // for column 1 (1-based col 2) — not one run written straight
+    // through.
+    CK_CHECK(term.written_bytes().find(";1H") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find(";2H") != std::string_view::npos);
+    // And the two glyphs must not appear back-to-back with no escape
+    // between them (which is what "merged into one run" would produce).
+    CK_CHECK(term.written_bytes().find("\xE2\x80\x8DQ") == std::string_view::npos);
+}
+
+CK_TEST(width_unsafe_run_still_correctly_stops_at_a_genuine_unchanged_gap) {
+    // A simpler case where the gap itself already forces a move,
+    // regardless of the unsafe rule — kept as a baseline sanity check.
+    HeadlessTerminal term(Size{6, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(6, 1, " ");
+    presenter.present(s.view(), CursorState{});
+    term.clear_written();
+
+    s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE2\x80\x8D", Style{}));
+    s.set_cell(Point{4, 0}, Cell::from_grapheme("Q", Style{}));
+    presenter.present(s.view(), CursorState{});
+    CK_CHECK(term.written_bytes().find(";5H") != std::string_view::npos);
+}
+
+// --- Cursor visibility ---------------------------------------------------------
+
+CK_TEST(visible_cursor_moves_there_and_shows_it) {
+    HeadlessTerminal term(Size{5, 5});
+    Presenter presenter(term);
+    Surface s = make_surface(5, 5);
+    presenter.present(s.view(), CursorState{true, Point{2, 3}, CursorShape::Block});
+    CK_CHECK(term.written_bytes().find("\x1B[4;3H") != std::string_view::npos);  // row3+1;col2+1
+    CK_CHECK(term.written_bytes().find("\x1B[?25h") != std::string_view::npos);
+}
+
+CK_TEST(hidden_cursor_is_explicitly_hidden) {
+    HeadlessTerminal term(Size{5, 5});
+    Presenter presenter(term);
+    Surface s = make_surface(5, 5);
+    presenter.present(s.view(), CursorState{false, Point{0, 0}, CursorShape::Block});
+    CK_CHECK(term.written_bytes().find("\x1B[?25l") != std::string_view::npos);
+}
+
+// --- Synchronized output --------------------------------------------------------
+
+CK_TEST(synchronized_output_wraps_the_frame_when_supported) {
+    Capabilities caps = baseline_capabilities();
+    caps.synchronized_output = true;
+    HeadlessTerminal term(Size{3, 1}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, "x");
+    presenter.present(s.view(), CursorState{});
+    CK_CHECK(term.written_bytes().substr(0, 8) == "\x1B[?2026h");
+    CK_CHECK(term.written_bytes().find("\x1B[?2026l") != std::string_view::npos);
+}
+
+CK_TEST(no_synchronized_output_wrapping_when_unsupported) {
+    HeadlessTerminal term(Size{3, 1});  // baseline: synchronized_output = false
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, "x");
+    presenter.present(s.view(), CursorState{});
+    CK_CHECK(term.written_bytes().find("?2026") == std::string_view::npos);
+}
+
+// --- Raster slice emission --------------------------------------------------------
+
+CK_TEST(raster_slices_are_not_emitted_without_graphics_capability) {
+    HeadlessTerminal term(Size{5, 5});  // baseline: sixel_graphics = false
+    Presenter presenter(term);
+    Surface s = make_surface(5, 5);
+    const auto image = std::make_shared<Image>(8, 8);
+    std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 2}, Rect{0, 0, 2, 2}, image, true}};
+    presenter.present(s.view(), CursorState{}, rasters);
+    CK_CHECK(term.written_bytes().find("\x1BPq") == std::string_view::npos);
+}
+
+CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {
+    Capabilities caps = baseline_capabilities();
+    caps.sixel_graphics = true;
+    HeadlessTerminal term(Size{5, 5}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(5, 5);
+    const auto image = std::make_shared<Image>(8, 8);
+    image->set_pixel(0, 0, Image::Rgba{200, 0, 0, 255});
+    // visible_rect == full_anchor: unoccluded, the whole image applies.
+    std::vector<RasterSlice> rasters{{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image, true}};
+    presenter.present(s.view(), CursorState{}, rasters);
+    CK_CHECK(term.written_bytes().find("\x1BPq") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("#0;2;78;0;0") != std::string_view::npos);  // 200/255 ~ 78%
+}
+
+CK_TEST(occluded_slice_crops_to_its_sub_rect_not_the_whole_image) {
+    Capabilities caps = baseline_capabilities();
+    caps.sixel_graphics = true;
+    HeadlessTerminal term(Size{10, 10}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(10, 10);
+    // A 4x4-cell anchor mapped onto an 8x8 image (2 px/cell). Left half
+    // (cols 0-1) is red, right half (cols 2-3) is blue.
+    auto image = std::make_shared<Image>(8, 8);
+    for (int y = 0; y < 8; ++y)
+        for (int x = 0; x < 8; ++x)
+            image->set_pixel(x, y, x < 4 ? Image::Rgba{255, 0, 0, 255} : Image::Rgba{0, 0, 255, 255});
+    // Occlusion left only the LEFT half of the anchor visible.
+    std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 4}, Rect{0, 0, 4, 4}, image, true}};
+    presenter.present(s.view(), CursorState{}, rasters);
+    CK_CHECK(term.written_bytes().find("#0;2;100;0;0") != std::string_view::npos);  // red present
+    CK_CHECK(term.written_bytes().find("0;0;100") == std::string_view::npos);        // blue absent: cropped out
+}
+
+CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
+    Capabilities caps = baseline_capabilities();
+    caps.sixel_graphics = true;
+    HeadlessTerminal term(Size{10, 10}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(10, 10);
+    const auto image = std::make_shared<Image>(4, 4);
+    std::vector<RasterSlice> rasters{{1, Rect{3, 2, 2, 2}, Rect{3, 2, 2, 2}, image, true}};
+    presenter.present(s.view(), CursorState{}, rasters);
+    // Cursor move to row2+1;col3+1 = "3;4H" must precede the sixel DCS.
+    const std::size_t move_pos = term.written_bytes().find(";4H");
+    const std::size_t dcs_pos = term.written_bytes().find("\x1BPq");
+    CK_CHECK(move_pos != std::string_view::npos);
+    CK_CHECK(dcs_pos != std::string_view::npos);
+    CK_CHECK(move_pos < dcs_pos);
+}
+
+// --- OSC safety ------------------------------------------------------------------
+
+CK_TEST(sanitize_osc_text_strips_embedded_terminator_bytes) {
+    CK_CHECK(sanitize_osc_text("hello") == "hello");
+    CK_CHECK(sanitize_osc_text(std::string_view("a\x1B" "b\x07" "c")) == "abc");
+}
+
+CK_TEST(sanitize_osc_text_empty_input) { CK_CHECK(sanitize_osc_text("").empty()); }

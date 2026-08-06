@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace ckv::utf8 {
@@ -18,5 +19,10 @@ char32_t decode(std::string_view text, std::size_t& pos) noexcept;
 // (1-4). Codepoints above U+10FFFF or in the surrogate range are
 // encoded as `replacement_char`'s length (3).
 int encoded_length(char32_t cp) noexcept;
+
+// Encodes `cp` as UTF-8, appended to `out`. Invalid scalars (above
+// U+10FFFF or a surrogate) are encoded as replacement_char instead —
+// this function never produces ill-formed UTF-8.
+void encode(char32_t cp, std::string& out);
 
 }  // namespace ckv::utf8

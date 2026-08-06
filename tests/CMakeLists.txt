@@ -4,14 +4,21 @@ add_executable(cvision_tests
     test_clock_diagnostics_error.cpp
     test_color_style_cell.cpp
     test_compositor.cpp
+    test_frame_view.cpp
     test_geometry.cpp
     test_golden_capture.cpp
     test_golden_format.cpp
     test_golden_hostile_content.cpp
+    test_headless_terminal.cpp
     test_image.cpp
+    test_input_decoder.cpp
     test_key_event.cpp
     test_painter.cpp
+    test_posix_terminal.cpp
+    test_presenter.cpp
+    test_record_replay_terminal.cpp
     test_rect_ops.cpp
+    test_sixel_encoder.cpp
     test_surface.cpp
     test_text_width.cpp
     test_utf8.cpp

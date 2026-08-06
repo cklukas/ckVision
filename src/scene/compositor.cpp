@@ -182,7 +182,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers) {
             for (std::size_t j = i + 1; j < layers.size(); ++j) occluders.push_back(layer_rect(layers[j]));
             for (const Rect& visible : subtract_rects(full_anchor, occluders))
                 visible_rasters_.push_back(
-                    VisibleRaster{region.id, visible, full_anchor, region.image, region.fallback_active});
+                    RasterSlice{region.id, visible, full_anchor, region.image, region.fallback_active});
         }
     }
 }

@@ -1,26 +1,16 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+//
+// CursorShape/CursorState live in core (core/cursor.hpp) so that
+// term::Presenter can consume them without depending on scene
+// (ARCHITECTURE.md §1/§4). This header just brings the names into
+// scene:: for existing scene-layer code and callers.
 #pragma once
 
-#include "cvision/core/geometry.hpp"
+#include "cvision/core/cursor.hpp"
 
 namespace ckv::scene {
 
-enum class CursorShape {
-    Block,
-    Bar,
-    Underline,
-};
-
-// Cursor position, visibility, and shape are scene outputs composed
-// like everything else (ARCHITECTURE.md §3). Which view's cursor wins
-// is a focus decision the ui layer makes (M4+); this type is just the
-// value that decision produces.
-struct CursorState {
-    bool visible = false;
-    Point position;
-    CursorShape shape = CursorShape::Block;
-
-    friend bool operator==(const CursorState&, const CursorState&) = default;
-};
+using ckv::CursorShape;
+using ckv::CursorState;
 
 }  // namespace ckv::scene

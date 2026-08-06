@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "cvision/core/cell.hpp"
+#include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
 
@@ -53,6 +54,12 @@ public:
     Size size() const noexcept { return size_; }
 
     const Cell& at(Point p) const noexcept;
+
+    // A non-owning core::FrameView over this surface's cells — the
+    // hand-off point to term::Presenter, which must not depend on
+    // scene (ARCHITECTURE.md §1/§4). Valid only while this Surface is
+    // alive and unmodified (no resize).
+    FrameView view() const noexcept { return FrameView(cells_.data(), size_); }
 
     // The sole mutation entry point: always keeps damage tracking
     // correct. There is no mutable at() — bypassing set_cell would

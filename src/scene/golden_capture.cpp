@@ -140,7 +140,7 @@ golden::Document capture_frame(const Compositor& compositor, CursorState cursor)
     capture_grid_and_styles(compositor.frame(), doc);
 
     int synthetic_id = 1;
-    for (const VisibleRaster& vr : compositor.visible_rasters()) {
+    for (const RasterSlice& vr : compositor.visible_rasters()) {
         golden::RasterRegion g;
         g.id = synthetic_id++;
         g.anchor_col = vr.visible_rect.x;

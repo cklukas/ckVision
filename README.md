@@ -20,18 +20,22 @@ The library name is `cvision` (CMake target `ckvision::cvision`).
 
 ## Status
 
-**M2 (scene) complete.** Beyond the M0 build skeleton and the M1 core
-primitives (geometry, Color/Style/Cell/Image, keys/events, and the
-Unicode grapheme/width services documented in
-[docs/text-width.md](docs/text-width.md)), the scene layer now provides:
-`Surface` with per-row damage tracking and cell-anchored raster regions;
-`Painter` (fills, clipped text with wide-glyph continuation cells, box
-drawing with automatic junction merging across Single/Double/Rounded/
-Heavy line styles, style transforms, mandatory-fallback raster
-placement); `Compositor` (z-order occlusion, damage-diffed
-recomposition, shadow casting/dimming/occlusion, raster occlusion
-slicing); and a golden-dump capture bridge for both single surfaces and
-composed frames. Implementation continues along the roadmap milestones.
+**M3 (term) complete**, on top of M0's build skeleton, M1's core
+primitives (geometry, Color/Style/Cell/Image, keys/events, the Unicode
+services in [docs/text-width.md](docs/text-width.md)), and M2's scene
+layer (`Surface`/`Painter`/`Compositor` with damage tracking, junction
+merging, shadow occlusion, and raster occlusion slicing). The term
+layer now provides: the `Terminal` interface and `Capabilities` model;
+an incremental input decoder (legacy/kitty/modifyOtherKeys keys, SGR
+and SGR-Pixels mouse, sanitized bracketed paste, focus events, OSC
+10/11 and DECRPM probe responses — coverage documented in
+[docs/input-decoder.md](docs/input-decoder.md)); a `Presenter` (cell
+diffing, D-019 width-safe cursor re-addressing, color-depth
+degradation, synchronized output, OSC-safe emission, cropped Sixel
+raster overlay); a correct public-protocol Sixel encoder; headless,
+POSIX (real termios/signals/session-registry, PTY-tested), and
+record/replay backends. Implementation continues along the roadmap
+milestones.
 
 ## Documents
 

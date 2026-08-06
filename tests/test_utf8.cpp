@@ -115,6 +115,33 @@ CK_TEST(decode_accepts_the_valid_codepoints_adjacent_to_the_surrogate_range) {
     CK_CHECK(decode_one("\xEE\x80\x80") == 0xE000u);  // first valid codepoint after surrogates
 }
 
+CK_TEST(encode_round_trips_through_decode) {
+    for (const char32_t cp : {U'A', char32_t{0x00A9}, char32_t{0x4E2D}, char32_t{0x1F600}}) {
+        std::string out;
+        ckv::utf8::encode(cp, out);
+        CK_CHECK(static_cast<int>(out.size()) == ckv::utf8::encoded_length(cp));
+        std::size_t pos = 0;
+        CK_CHECK(ckv::utf8::decode(out, pos) == cp);
+        CK_CHECK(pos == out.size());
+    }
+}
+
+CK_TEST(encode_appends_rather_than_overwrites) {
+    std::string out = "X";
+    ckv::utf8::encode(U'Y', out);
+    CK_CHECK(out == "XY");
+}
+
+CK_TEST(encode_replaces_invalid_scalars) {
+    std::string surrogate;
+    ckv::utf8::encode(0xD800, surrogate);
+    CK_CHECK(surrogate == "\xEF\xBF\xBD");  // U+FFFD
+
+    std::string too_large;
+    ckv::utf8::encode(0x110000, too_large);
+    CK_CHECK(too_large == "\xEF\xBF\xBD");
+}
+
 CK_TEST(encoded_length_matches_utf8_rules) {
     CK_CHECK(ckv::utf8::encoded_length(U'A') == 1);
     CK_CHECK(ckv::utf8::encoded_length(0x00A9) == 2);

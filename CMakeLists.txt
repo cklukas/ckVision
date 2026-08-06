@@ -16,11 +16,22 @@ add_library(cvision
     src/scene/golden_capture.cpp
     src/scene/painter.cpp
     src/scene/rect_ops.cpp
-    src/scene/surface.cpp)
+    src/scene/surface.cpp
+    src/term/headless_terminal.cpp
+    src/term/input_decoder.cpp
+    src/term/presenter.cpp
+    src/term/sixel_encoder.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 ckvision_strict(cvision)
+
+# The POSIX backend (termios/signal-based) only compiles on UNIX-like
+# systems; the Windows (ConPTY) backend is M7 scope (ROADMAP.md).
+if(UNIX)
+    target_sources(cvision PRIVATE src/term/posix_terminal.cpp)
+    target_compile_definitions(cvision PUBLIC CKVISION_HAS_POSIX_TERMINAL=1)
+endif()
 
 option(CKVISION_BUILD_TESTING
     "Build ckVision tests and benchmarks" ${PROJECT_IS_TOP_LEVEL})
