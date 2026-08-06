@@ -20,9 +20,13 @@ The library name is `cvision` (CMake target `ckvision::cvision`).
 
 ## Status
 
-**Planning.** This repository currently contains the project's vision,
-target architecture, and development roadmap. Implementation follows the
-roadmap milestones.
+**M0 bootstrap complete.** The repository contains the full planning set
+(vision, target architecture, roadmap, decisions) plus the milestone-M0
+skeleton: the strict CMake build, the CI matrix, the test and benchmark
+harnesses, the golden dump format version 1 (specified in
+[docs/golden-format.md](docs/golden-format.md) and implemented with
+byte-exact round-trip coverage), and the layer/include enforcement
+tooling. Implementation continues along the roadmap milestones.
 
 ## Documents
 

@@ -1,0 +1,16 @@
+ckvision-golden 1
+frame 12 3
+cursor 6 1 block
+styles 2
+0 fg #C0C0C0 bg #000080 attrs -
+1 fg #FFFFFF bg #000080 attrs bold
+grid
+|╔══════════╗|
+|║ Hello ck ║|
+|╚══════════╝|
+stylemap
+|000000000000|
+|011111111110|
+|000000000000|
+raster 1 anchor 2 1 span 4 2 pixels 64 32 hash a1b2c3d4 fallback active
+end

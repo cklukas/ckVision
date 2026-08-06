@@ -58,5 +58,8 @@ reference documentation is not done.
 - Keep every artifact self-contained: no references to other projects'
   private repositories, plans, or internals. Naming other projects is
   acceptable only for public, factual statements (e.g. adopters).
+- Every source, build, and tooling file begins with the copyright line
+  `Copyright (c) 2026 C. Klukas. All rights reserved.` in the file's
+  comment syntax. No SPDX license identifier until D-OPEN-1 is resolved.
 - Commit messages: one-line summary, then what and why, then verification
   evidence (test/benchmark counts). Never commit with failing gates.
