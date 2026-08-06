@@ -27,6 +27,13 @@ struct StandardRoles {
     RoleId window_frame_inactive;
     RoleId window_title_active;
     RoleId window_title_inactive;
+
+    // Menu system (ARCHITECTURE.md §5 "Menus").
+    RoleId menu_bar_normal;
+    RoleId menu_bar_active;         // the highlighted top-level menu title while the bar is active
+    RoleId menu_dropdown_normal;
+    RoleId menu_dropdown_highlighted;
+    RoleId menu_dropdown_disabled;
 };
 
 // Interns every standard role into `registry` with the built-in

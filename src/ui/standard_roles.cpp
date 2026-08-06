@@ -34,6 +34,12 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.window_frame_inactive = registry.intern("ckv.window.frame.inactive", Style{kBlack, kGray, Attr{}});
     r.window_title_active = registry.intern("ckv.window.title.active", Style{kWhite, kBlue, Attr::Bold});
     r.window_title_inactive = registry.intern("ckv.window.title.inactive", Style{kBlack, kGray, Attr{}});
+    r.menu_bar_normal = registry.intern("ckv.menu.bar.normal", Style{kBlack, kGray, Attr{}});
+    r.menu_bar_active = registry.intern("ckv.menu.bar.active", Style{kWhite, kBlack, Attr::Reverse});
+    r.menu_dropdown_normal = registry.intern("ckv.menu.dropdown.normal", Style{kBlack, kGray, Attr{}});
+    r.menu_dropdown_highlighted =
+        registry.intern("ckv.menu.dropdown.highlighted", Style{kWhite, kBlack, Attr::Reverse});
+    r.menu_dropdown_disabled = registry.intern("ckv.menu.dropdown.disabled", Style{kBlack, kGray, Attr::Dim});
     return r;
 }
 
@@ -54,6 +60,11 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.window_frame_inactive, Style{kBlack, kGray, Attr{}});
     theme.set(roles.window_title_active, Style{kWhite, kBlue, Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kBlack, kGray, Attr{}});
+    theme.set(roles.menu_bar_normal, Style{kBlack, kGray, Attr{}});
+    theme.set(roles.menu_bar_active, Style{kWhite, kBlack, Attr::Reverse});
+    theme.set(roles.menu_dropdown_normal, Style{kBlack, kGray, Attr{}});
+    theme.set(roles.menu_dropdown_highlighted, Style{kWhite, kBlack, Attr::Reverse});
+    theme.set(roles.menu_dropdown_disabled, Style{kBlack, kGray, Attr::Dim});
     return theme;
 }
 
