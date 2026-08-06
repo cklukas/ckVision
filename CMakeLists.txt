@@ -33,7 +33,8 @@ add_library(cvision
     src/widgets/input_line.cpp
     src/widgets/label.cpp
     src/widgets/mnemonic.cpp
-    src/widgets/static_text.cpp)
+    src/widgets/static_text.cpp
+    src/widgets/window.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)

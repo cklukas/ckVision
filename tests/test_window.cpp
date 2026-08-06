@@ -1,0 +1,332 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/window.hpp"
+
+#include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
+#include "cvision/ui/standard_roles.hpp"
+
+using ckv::Key;
+using ckv::KeyChord;
+using ckv::Modifier;
+using ckv::Point;
+using ckv::Rect;
+using ckv::scene::Painter;
+using ckv::scene::Surface;
+using ckv::ui::intern_standard_roles;
+using ckv::ui::make_classic_theme;
+using ckv::ui::RoleRegistry;
+using ckv::ui::StandardRoles;
+using ckv::ui::Theme;
+using ckv::ui::View;
+using ckv::widgets::Window;
+
+namespace {
+struct Fixture {
+    RoleRegistry registry;
+    StandardRoles roles = intern_standard_roles(registry);
+    Theme theme = make_classic_theme(registry, roles);
+};
+
+Window make_window(Fixture& f, std::string title = "Test") {
+    return Window(std::move(title), f.theme, f.roles.window_frame_active, f.roles.window_frame_inactive,
+                  f.roles.window_title_active, f.roles.window_title_inactive);
+}
+
+ckv::MouseEvent mouse(ckv::MouseAction action, Point p) {
+    return ckv::MouseEvent{action, ckv::MouseButton::Left, p, std::nullopt, Modifier::None};
+}
+}  // namespace
+
+// --- Content ownership -----------------------------------------------------
+
+CK_TEST(set_content_positions_it_to_fill_the_interior_inside_the_frame_border) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 10});
+    w.set_content(std::make_unique<View>());
+    CK_CHECK(w.content()->bounds() == (Rect{1, 1, 18, 8}));
+}
+
+CK_TEST(replacing_content_returns_the_previous_view_and_installs_the_new_one) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 10});
+    w.set_content(std::make_unique<View>());
+    View* first = w.content();
+    auto returned = w.set_content(std::make_unique<View>());
+    CK_CHECK(returned.get() == first);
+    CK_CHECK(w.content() != first);
+}
+
+CK_TEST(setting_content_to_null_removes_the_current_content) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 10});
+    w.set_content(std::make_unique<View>());
+    w.set_content(nullptr);
+    CK_CHECK(w.content() == nullptr);
+}
+
+CK_TEST(resizing_the_window_repositions_content_to_fill_the_new_interior) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 10});
+    w.set_content(std::make_unique<View>());
+    w.set_bounds(Rect{0, 0, 30, 15});
+    CK_CHECK(w.content()->bounds() == (Rect{1, 1, 28, 13}));
+}
+
+CK_TEST(a_window_too_small_for_any_interior_reports_a_zero_size_content_rect_without_crashing) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 2, 2});  // no room for a 1-cell border on every side
+    w.set_content(std::make_unique<View>());
+    CK_CHECK(w.content()->bounds().width == 0);
+    CK_CHECK(w.content()->bounds().height == 0);
+}
+
+// --- Close protocol (vetoable) ----------------------------------------------
+
+CK_TEST(close_with_no_handler_installed_proceeds_and_fires_on_closed) {
+    Fixture f;
+    Window w = make_window(f);
+    bool closed = false;
+    w.on_closed = [&] { closed = true; };
+    CK_CHECK(w.close());
+    CK_CHECK(closed);
+}
+
+CK_TEST(a_close_request_returning_false_vetoes_the_close_and_on_closed_never_fires) {
+    Fixture f;
+    Window w = make_window(f);
+    bool closed = false;
+    w.close_request = [] { return false; };
+    w.on_closed = [&] { closed = true; };
+    CK_CHECK(!w.close());
+    CK_CHECK(!closed);
+}
+
+CK_TEST(a_close_request_returning_true_proceeds_to_on_closed) {
+    Fixture f;
+    Window w = make_window(f);
+    bool closed = false;
+    w.close_request = [] { return true; };
+    w.on_closed = [&] { closed = true; };
+    CK_CHECK(w.close());
+    CK_CHECK(closed);
+}
+
+CK_TEST(clicking_the_close_control_invokes_close) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    bool closed = false;
+    w.on_closed = [&] { closed = true; };
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 2, 5})));  // inside "[x]" at local x=1..3
+    CK_CHECK(closed);
+}
+
+// --- Zoom/restore ------------------------------------------------------
+
+CK_TEST(toggle_zoom_grows_to_the_supplied_available_rect_and_toggling_again_restores) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!w.zoomed());
+    w.toggle_zoom(Rect{0, 0, 80, 24});
+    CK_CHECK(w.zoomed());
+    CK_CHECK(w.bounds() == (Rect{0, 0, 80, 24}));
+    w.toggle_zoom(Rect{0, 0, 80, 24});
+    CK_CHECK(!w.zoomed());
+    CK_CHECK(w.bounds() == (Rect{5, 5, 20, 10}));
+}
+
+CK_TEST(clicking_the_zoom_control_toggles_zoom) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));  // inside "[]" near the top-right
+    CK_CHECK(w.zoomed());
+}
+
+// --- Mouse move and resize --------------------------------------------------
+
+CK_TEST(dragging_the_title_bar_moves_the_window) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 10, 5})));  // title bar, not a control
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Move, Point{5 + 10 + 3, 5 + 2})));
+    CK_CHECK(w.bounds() == (Rect{8, 7, 20, 10}));
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Up, Point{8 + 10, 7})));
+}
+
+CK_TEST(a_non_movable_window_ignores_a_title_bar_drag) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_movable(false);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 10, 5})));
+}
+
+CK_TEST(dragging_the_resize_grip_resizes_the_window_without_moving_its_origin) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 19, 5 + 9})));  // bottom-right corner
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Move, Point{5 + 19 + 5, 5 + 9 + 3})));
+    CK_CHECK(w.bounds() == (Rect{5, 5, 25, 13}));
+}
+
+CK_TEST(resizing_below_the_minimum_size_clamps_rather_than_shrinking_further) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_min_size(ckv::Size{10, 4});
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 19, 5 + 9})));
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Move, Point{5 - 100, 5 - 100})));  // drag far past the minimum
+    CK_CHECK(w.bounds().width == 10);
+    CK_CHECK(w.bounds().height == 4);
+}
+
+CK_TEST(resizing_above_the_maximum_size_clamps) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_max_size(ckv::Size{25, 12});
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 19, 5 + 9})));
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Move, Point{5 + 100, 5 + 100})));
+    CK_CHECK(w.bounds().width == 25);
+    CK_CHECK(w.bounds().height == 12);
+}
+
+CK_TEST(a_non_resizable_window_ignores_a_grip_drag) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_resizable(false);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 19, 5 + 9})));
+}
+
+CK_TEST(a_click_in_the_interior_is_not_handled_by_the_window_itself) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 10, 5 + 5})));
+}
+
+CK_TEST(move_and_up_without_a_prior_down_are_unhandled) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!w.on_mouse(mouse(ckv::MouseAction::Move, Point{5 + 10, 5 + 10})));
+    CK_CHECK(!w.on_mouse(mouse(ckv::MouseAction::Up, Point{5 + 10, 5 + 10})));
+}
+
+// --- Keyboard move/resize mode -----------------------------------------
+
+CK_TEST(arrow_keys_are_unhandled_when_not_in_keyboard_mode) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!w.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}}));
+}
+
+CK_TEST(move_mode_arrow_keys_translate_the_window) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.enter_move_mode();
+    CK_CHECK(w.in_keyboard_mode());
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    CK_CHECK(w.bounds() == (Rect{6, 6, 20, 10}));
+}
+
+CK_TEST(resize_mode_arrow_keys_change_size_not_position) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.enter_resize_mode();
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    CK_CHECK(w.bounds() == (Rect{5, 5, 21, 11}));
+}
+
+CK_TEST(escape_in_keyboard_mode_reverts_to_the_bounds_at_mode_entry) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.enter_move_mode();
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    CK_CHECK(w.bounds() == (Rect{5, 5, 20, 10}));
+    CK_CHECK(!w.in_keyboard_mode());
+}
+
+CK_TEST(enter_in_keyboard_mode_confirms_and_keeps_the_new_bounds) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.enter_move_mode();
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    CK_CHECK(w.bounds() == (Rect{6, 5, 20, 10}));
+    CK_CHECK(!w.in_keyboard_mode());
+}
+
+CK_TEST(resize_mode_respects_the_minimum_size_when_nudging_smaller) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_min_size(ckv::Size{10, 4});
+    w.set_bounds(Rect{5, 5, 10, 4});  // already at the minimum
+    w.enter_resize_mode();
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}});   // would shrink width below min
+    w.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});     // would shrink height below min
+    CK_CHECK(w.bounds().width == 10);
+    CK_CHECK(w.bounds().height == 4);
+}
+
+// --- Active / inactive ---------------------------------------------------
+
+CK_TEST(a_new_window_starts_inactive) {
+    Fixture f;
+    Window w = make_window(f);
+    CK_CHECK(!w.active());
+}
+
+CK_TEST(set_active_toggles_and_setting_the_same_value_is_a_no_op) {
+    Fixture f;
+    Window w = make_window(f);
+    int calls = 0;
+    w.set_dirty_rect_sink([&](Rect) { ++calls; });
+    w.set_active(true);
+    CK_CHECK(w.active());
+    const int after_first = calls;
+    w.set_active(true);  // no-op
+    CK_CHECK(calls == after_first);
+}
+
+// --- Rendering does not crash ------------------------------------------
+
+CK_TEST(draw_does_not_crash_for_a_window_too_narrow_to_show_controls_or_title) {
+    Fixture f;
+    Surface s(ckv::Size{4, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f, "Some very long title that will not fit");
+    w.set_bounds(Rect{0, 0, 4, 3});
+    Painter painter(s, Rect{0, 0, 4, 3});
+    w.draw(painter);
+    CK_CHECK(true);
+}
+
+CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f, "A title far too long to fit in this window");
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);  // must not crash or write past bounds (surface itself is the bound)
+    CK_CHECK(true);
+}

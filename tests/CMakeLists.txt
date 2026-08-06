@@ -34,6 +34,7 @@ add_executable(cvision_tests
     test_version.cpp
     test_view.cpp
     test_widgets.cpp
+    test_window.cpp
     main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 ckvision_strict(cvision_tests)
