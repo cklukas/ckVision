@@ -446,3 +446,158 @@ CK_TEST(a_paste_event_still_reaches_the_focused_view_after_updating_the_clipboar
     CK_CHECK(a->text_events == 1);
     CK_CHECK(app.clipboard_text() == "pasted");
 }
+
+// --- Timers --------------------------------------------------------------
+
+CK_TEST(a_timer_does_not_fire_before_its_interval_elapses) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired = 0;
+    app.start_timer(1000, false, [&] { ++fired; });
+    app.step(0);
+    CK_CHECK(fired == 0);
+}
+
+CK_TEST(a_one_shot_timer_fires_once_at_its_deadline_and_does_not_fire_again) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired = 0;
+    app.start_timer(1000, false, [&] { ++fired; });
+    clock.advance(1000);
+    CK_CHECK(app.step(0));
+    CK_CHECK(fired == 1);
+    clock.advance(1000);
+    app.step(0);
+    CK_CHECK(fired == 1);  // one-shot: not rescheduled
+}
+
+CK_TEST(a_repeating_timer_fires_again_after_each_interval) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired = 0;
+    app.start_timer(500, true, [&] { ++fired; });
+    clock.advance(500);
+    app.step(0);
+    CK_CHECK(fired == 1);
+    clock.advance(500);
+    app.step(0);
+    CK_CHECK(fired == 2);
+}
+
+CK_TEST(cancel_timer_prevents_a_future_fire) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired = 0;
+    const auto id = app.start_timer(1000, false, [&] { ++fired; });
+    app.cancel_timer(id);
+    clock.advance(2000);
+    app.step(0);
+    CK_CHECK(fired == 0);
+}
+
+CK_TEST(cancel_timer_on_an_unknown_id_is_a_harmless_no_op) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.cancel_timer(9999);  // never issued
+    CK_CHECK(true);
+}
+
+CK_TEST(multiple_timers_fire_independently_at_their_own_deadlines) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired_a = 0, fired_b = 0;
+    app.start_timer(100, false, [&] { ++fired_a; });
+    app.start_timer(300, false, [&] { ++fired_b; });
+    clock.advance(100);
+    app.step(0);
+    CK_CHECK(fired_a == 1);
+    CK_CHECK(fired_b == 0);
+    clock.advance(200);
+    app.step(0);
+    CK_CHECK(fired_b == 1);
+}
+
+// --- F1 context help (D-027) -------------------------------------------
+
+CK_TEST(f1_with_no_provider_installed_is_unhandled) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    a->set_help_context_key("topic.a");
+    app.set_focus(a);
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+}
+
+CK_TEST(f1_resolves_the_focused_views_help_context_key_and_hands_it_to_the_provider) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    std::string reported;
+    app.set_help_provider([&](const std::string& key) { reported = key; });
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    a->set_help_context_key("topic.a");
+    app.set_focus(a);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(reported == "topic.a");
+}
+
+CK_TEST(f1_walks_ancestors_when_the_focused_view_has_no_help_context_key_of_its_own) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    std::string reported;
+    app.set_help_provider([&](const std::string& key) { reported = key; });
+    app.root().set_help_context_key("topic.root");
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);  // no key of its own
+    app.set_focus(a);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(reported == "topic.root");
+}
+
+CK_TEST(f1_with_a_provider_but_no_resolvable_help_context_key_anywhere_is_unhandled) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    bool called = false;
+    app.set_help_provider([&](const std::string&) { called = true; });
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);  // no key anywhere in the chain
+    app.set_focus(a);
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(!called);
+}
+
+CK_TEST(a_view_that_consumes_f1_itself_shadows_the_help_provider) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    bool called = false;
+    app.set_help_provider([&](const std::string&) { called = true; });
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->consume_keys = true;
+    a->set_focus_policy(FocusPolicy::TabStop);
+    a->set_help_context_key("topic.a");
+    app.set_focus(a);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(!called);
+}
+
+CK_TEST(f1_with_no_focused_view_at_all_is_unhandled_even_with_a_provider_installed) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    bool called = false;
+    app.set_help_provider([&](const std::string&) { called = true; });
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(!called);
+}

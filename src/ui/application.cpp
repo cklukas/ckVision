@@ -70,6 +70,28 @@ void Application::set_clipboard_text(std::string text) {
     terminal_.write_clipboard(clipboard_text_);
 }
 
+Application::TimerId Application::start_timer(std::int64_t interval_nanos, bool repeating,
+                                                std::function<void()> callback) {
+    CKV_ASSERT(interval_nanos > 0);
+    const TimerId id = next_timer_id_++;
+    timers_.push_back(Timer{id, clock_.now_nanos() + interval_nanos, interval_nanos, repeating,
+                             std::move(callback)});
+    return id;
+}
+
+void Application::cancel_timer(TimerId id) {
+    for (auto it = timers_.begin(); it != timers_.end(); ++it) {
+        if (it->id == id) {
+            timers_.erase(it);
+            return;
+        }
+    }
+}
+
+void Application::set_help_provider(std::function<void(const std::string&)> provider) {
+    help_provider_ = std::move(provider);
+}
+
 void Application::set_command_handler(CommandId id, std::function<void()> handler) {
     command_handlers_[id] = std::move(handler);
 }
@@ -106,6 +128,13 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 for (View* v = focused_; v != nullptr; v = v->parent())
                     if (v->on_key(e)) return true;
                 if (auto id = commands_.command_for_key(e.chord)) return execute_command(*id);
+                if (e.chord.key == Key::F1 && help_provider_ && focused_ != nullptr) {
+                    const std::string* key = focused_->resolve_help_context_key();
+                    if (key != nullptr) {
+                        help_provider_(*key);
+                        return true;
+                    }
+                }
                 return false;
             } else if constexpr (std::is_same_v<T, TextEvent>) {
                 if (e.from_paste) clipboard_text_ = e.text;  // system import mirrors into the internal clipboard
@@ -148,12 +177,33 @@ bool Application::step(std::int64_t deadline_nanos) {
         wake_now = wake_requested_;
         wake_requested_ = false;
     }
-    const std::int64_t effective_deadline = wake_now ? clock_.now_nanos() : deadline_nanos;
+    std::int64_t effective_deadline = wake_now ? clock_.now_nanos() : deadline_nanos;
+    for (const Timer& timer : timers_) effective_deadline = std::min(effective_deadline, timer.next_fire_nanos);
 
     bool did_work = false;
     for (const term::TerminalEvent& event : terminal_.poll(effective_deadline)) {
         did_work = true;
         dispatch(event);
+    }
+
+    const std::int64_t now = clock_.now_nanos();
+    std::vector<std::function<void()>> due_callbacks;
+    for (auto it = timers_.begin(); it != timers_.end();) {
+        if (it->next_fire_nanos > now) {
+            ++it;
+            continue;
+        }
+        due_callbacks.push_back(it->callback);
+        if (it->repeating) {
+            it->next_fire_nanos += it->interval_nanos;
+            ++it;
+        } else {
+            it = timers_.erase(it);
+        }
+    }
+    for (auto& fn : due_callbacks) {
+        did_work = true;
+        if (fn) fn();
     }
 
     std::vector<std::function<void()>> work;

@@ -62,6 +62,26 @@ public:
     void set_clipboard_text(std::string text);
     const std::string& clipboard_text() const noexcept { return clipboard_text_; }
 
+    // --- Timers (part of the loop's "drain input, dispatch, run due
+    // timers" batch, ARCHITECTURE.md §5) --------------------------------
+
+    using TimerId = std::uint64_t;
+
+    // Fires `callback` once `interval_nanos` (on the injected Clock,
+    // never wall-clock) has elapsed; if `repeating`, reschedules for
+    // `interval_nanos` after the fire time (not "after now" — so a
+    // late `step()` call does not accumulate drift across fires).
+    TimerId start_timer(std::int64_t interval_nanos, bool repeating, std::function<void()> callback);
+    void cancel_timer(TimerId id);
+
+    // --- Context help (ARCHITECTURE.md §5 "Commands and help", D-027) ---
+    //
+    // F1, when unconsumed by the focus chain and unbound in the command
+    // keymap, resolves the focused view's nearest help-context key and
+    // hands it to this provider. No provider installed: F1 is simply
+    // unhandled, same as any other unbound key.
+    void set_help_provider(std::function<void(const std::string&)> provider);
+
     // --- Focus (ARCHITECTURE.md §5 "Focus and traversal") ---------------
 
     View* focused() const noexcept { return focused_; }
@@ -106,12 +126,13 @@ public:
 
     // --- The embeddable loop (D-021) --------------------------------------
 
-    // Polls the terminal up to `deadline_nanos`, dispatches everything
-    // received, then drains posted work. Returns true if any event was
-    // dispatched or posted work ran (i.e. something may have
-    // invalidated the tree) — callers drive their own paint/present
-    // from that signal (M5's Window/Desktop wires paint; M4 has no
-    // backing surface yet to paint into).
+    // Polls the terminal up to `deadline_nanos` (clamped earlier if a
+    // timer is due sooner), dispatches everything received, runs every
+    // due timer, then drains posted work. Returns true if any event was
+    // dispatched, any timer fired, or posted work ran (i.e. something
+    // may have invalidated the tree) — callers drive their own paint/
+    // present from that signal (M5's Window/Desktop wires paint; M4 has
+    // no backing surface yet to paint into).
     bool step(std::int64_t deadline_nanos);
 
     // Best-effort: makes the NEXT step() call return promptly even if
@@ -142,6 +163,17 @@ private:
     View* mouse_capture_ = nullptr;
 
     std::unordered_map<CommandId, std::function<void()>> command_handlers_;
+    std::function<void(const std::string&)> help_provider_;
+
+    struct Timer {
+        TimerId id;
+        std::int64_t next_fire_nanos;
+        std::int64_t interval_nanos;
+        bool repeating;
+        std::function<void()> callback;
+    };
+    std::vector<Timer> timers_;
+    TimerId next_timer_id_ = 1;
 
     std::mutex post_mutex_;
     std::vector<std::function<void()>> posted_;
