@@ -23,6 +23,7 @@ add_executable(cvision_tests
     test_menu.cpp
     test_message_box.cpp
     test_mnemonic.cpp
+    test_option_group.cpp
     test_painter.cpp
     test_posix_terminal.cpp
     test_presenter.cpp
