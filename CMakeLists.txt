@@ -23,6 +23,7 @@ add_library(cvision
     src/term/sixel_encoder.cpp
     src/ui/application.cpp
     src/ui/command.cpp
+    src/ui/history.cpp
     src/ui/layout.cpp
     src/ui/standard_roles.cpp
     src/ui/theme.cpp

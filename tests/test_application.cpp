@@ -400,3 +400,49 @@ CK_TEST(wake_makes_the_next_step_return_promptly_even_with_a_far_future_deadline
     const std::int64_t far_future = 1'000'000'000'000LL;
     CK_CHECK(!app.step(far_future));
 }
+
+// --- Internal clipboard (D-022) ---------------------------------------------
+
+CK_TEST(clipboard_starts_empty) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    CK_CHECK(app.clipboard_text().empty());
+}
+
+CK_TEST(set_clipboard_text_updates_the_internal_clipboard_and_writes_through_to_the_terminal) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_clipboard_text("copied");
+    CK_CHECK(app.clipboard_text() == "copied");
+}
+
+CK_TEST(a_bracketed_paste_text_event_mirrors_into_the_internal_clipboard) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.dispatch(ckv::TextEvent{"pasted content", true});
+    CK_CHECK(app.clipboard_text() == "pasted content");
+}
+
+CK_TEST(a_non_paste_text_event_never_touches_the_clipboard) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_clipboard_text("original");
+    app.dispatch(ckv::TextEvent{"typed, not pasted", false});
+    CK_CHECK(app.clipboard_text() == "original");
+}
+
+CK_TEST(a_paste_event_still_reaches_the_focused_view_after_updating_the_clipboard) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(a);
+    app.dispatch(ckv::TextEvent{"pasted", true});
+    CK_CHECK(a->text_events == 1);
+    CK_CHECK(app.clipboard_text() == "pasted");
+}

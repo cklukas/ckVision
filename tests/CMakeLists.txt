@@ -12,6 +12,7 @@ add_executable(cvision_tests
     test_golden_format.cpp
     test_golden_hostile_content.cpp
     test_headless_terminal.cpp
+    test_history.cpp
     test_image.cpp
     test_input_decoder.cpp
     test_key_event.cpp

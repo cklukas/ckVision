@@ -27,6 +27,7 @@
 #include "cvision/core/clock.hpp"
 #include "cvision/term/terminal.hpp"
 #include "cvision/ui/command.hpp"
+#include "cvision/ui/history.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 
@@ -44,6 +45,22 @@ public:
 
     RoleRegistry& roles() noexcept { return roles_; }
     Theme& theme() noexcept { return theme_; }
+
+    HistoryRegistry& history() noexcept { return history_; }
+
+    // --- Internal clipboard (ARCHITECTURE.md §5, D-022) -------------------
+    //
+    // Always backs widget cut/copy/paste (in-app selection + export is
+    // the primary copy path — mouse reporting captures drags). Writes
+    // through to the terminal's system clipboard on a best-effort basis;
+    // Terminal::write_clipboard is documented as a no-op when the
+    // capability is absent, so this never branches on it itself. System
+    // *import* only ever arrives as a TerminalEvent's TextEvent with
+    // from_paste set, which dispatch() also mirrors into this clipboard
+    // before routing it onward — never OSC 52 read (D-022).
+
+    void set_clipboard_text(std::string text);
+    const std::string& clipboard_text() const noexcept { return clipboard_text_; }
 
     // --- Focus (ARCHITECTURE.md §5 "Focus and traversal") ---------------
 
@@ -119,6 +136,8 @@ private:
     CommandRegistry commands_;
     RoleRegistry roles_;
     Theme theme_{roles_};
+    HistoryRegistry history_;
+    std::string clipboard_text_;
     View* focused_ = nullptr;
     View* mouse_capture_ = nullptr;
 

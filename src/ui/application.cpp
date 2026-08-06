@@ -65,6 +65,11 @@ bool Application::focus_previous() {
     return true;
 }
 
+void Application::set_clipboard_text(std::string text) {
+    clipboard_text_ = std::move(text);
+    terminal_.write_clipboard(clipboard_text_);
+}
+
 void Application::set_command_handler(CommandId id, std::function<void()> handler) {
     command_handlers_[id] = std::move(handler);
 }
@@ -103,6 +108,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 if (auto id = commands_.command_for_key(e.chord)) return execute_command(*id);
                 return false;
             } else if constexpr (std::is_same_v<T, TextEvent>) {
+                if (e.from_paste) clipboard_text_ = e.text;  // system import mirrors into the internal clipboard
                 for (View* v = focused_; v != nullptr; v = v->parent())
                     if (v->on_text(e)) return true;
                 return false;
