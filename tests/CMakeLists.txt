@@ -28,6 +28,7 @@ add_executable(cvision_tests
     test_presenter.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
+    test_scroll_viewport.cpp
     test_scrollbar.cpp
     test_sixel_encoder.cpp
     test_standard_roles.cpp
