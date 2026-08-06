@@ -35,7 +35,7 @@ ckv::golden::Document make_document(int cols, int rows) {
 
 }  // namespace
 
-int main() {
+void run_golden_benchmarks() {
     const ckv::golden::Document doc = make_document(80, 25);
     std::size_t sink = 0;
 
@@ -50,5 +50,4 @@ int main() {
     });
 
     std::printf("checksum %zu\n", sink);
-    return 0;
 }

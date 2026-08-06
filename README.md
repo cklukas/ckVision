@@ -20,13 +20,18 @@ The library name is `cvision` (CMake target `ckvision::cvision`).
 
 ## Status
 
-**M0 bootstrap complete.** The repository contains the full planning set
-(vision, target architecture, roadmap, decisions) plus the milestone-M0
-skeleton: the strict CMake build, the CI matrix, the test and benchmark
-harnesses, the golden dump format version 1 (specified in
-[docs/golden-format.md](docs/golden-format.md) and implemented with
-byte-exact round-trip coverage), and the layer/include enforcement
-tooling. Implementation continues along the roadmap milestones.
+**M2 (scene) complete.** Beyond the M0 build skeleton and the M1 core
+primitives (geometry, Color/Style/Cell/Image, keys/events, and the
+Unicode grapheme/width services documented in
+[docs/text-width.md](docs/text-width.md)), the scene layer now provides:
+`Surface` with per-row damage tracking and cell-anchored raster regions;
+`Painter` (fills, clipped text with wide-glyph continuation cells, box
+drawing with automatic junction merging across Single/Double/Rounded/
+Heavy line styles, style transforms, mandatory-fallback raster
+placement); `Compositor` (z-order occlusion, damage-diffed
+recomposition, shadow casting/dimming/occlusion, raster occlusion
+slicing); and a golden-dump capture bridge for both single surfaces and
+composed frames. Implementation continues along the roadmap milestones.
 
 ## Documents
 

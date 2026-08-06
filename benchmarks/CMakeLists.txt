@@ -1,5 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
-add_executable(cvision_bench bench_smoke.cpp)
+add_executable(cvision_bench bench_scene.cpp bench_smoke.cpp main.cpp)
 target_link_libraries(cvision_bench PRIVATE ckvision::cvision)
 ckvision_strict(cvision_bench)
 

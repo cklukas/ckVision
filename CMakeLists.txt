@@ -10,7 +10,13 @@ add_library(cvision
     src/core/golden.cpp
     src/core/text.cpp
     src/core/utf8.cpp
-    src/core/version.cpp)
+    src/core/version.cpp
+    src/scene/box_drawing.cpp
+    src/scene/compositor.cpp
+    src/scene/golden_capture.cpp
+    src/scene/painter.cpp
+    src/scene/rect_ops.cpp
+    src/scene/surface.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)

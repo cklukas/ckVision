@@ -64,3 +64,17 @@ CK_TEST(cell_set_style) {
     CK_CHECK(cell.style().fg == ckv::Color::rgb(1, 2, 3));
 }
 
+CK_TEST(continuation_cell_is_distinguishable_from_a_lone_combining_mark) {
+    const ckv::Cell cont = ckv::Cell::continuation(ckv::Style{});
+    CK_CHECK(cont.is_continuation());
+    CK_CHECK(cont.width() == 0);
+    CK_CHECK(cont.grapheme().empty());
+
+    // A lone combining mark (no base) is also width 0, but is a real,
+    // non-empty glyph — must NOT be mistaken for a continuation cell.
+    const ckv::Cell lone_mark = ckv::Cell::from_grapheme("\xCC\x81", ckv::Style{});
+    CK_CHECK(lone_mark.width() == 0);
+    CK_CHECK(!lone_mark.grapheme().empty());
+    CK_CHECK(!lone_mark.is_continuation());
+}
+

@@ -1,0 +1,105 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/scene/surface.hpp"
+
+#include <algorithm>
+
+#include "cvision/core/assert.hpp"
+
+namespace ckv::scene {
+
+Surface::Surface(Size size, Cell fill)
+    : size_(size),
+      cells_(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height), fill),
+      row_damage_(static_cast<std::size_t>(size.height), DamageSpan{0, size.width}) {
+    CKV_ASSERT(size.width >= 0 && size.height >= 0);
+}
+
+const Cell& Surface::at(Point p) const noexcept {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    return cells_[index(p)];
+}
+
+void Surface::set_cell(Point p, Cell cell) {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    cells_[index(p)] = std::move(cell);
+    DamageSpan& span = row_damage_[static_cast<std::size_t>(p.y)];
+    if (span.empty()) {
+        span.lo = p.x;
+        span.hi = p.x + 1;
+    } else {
+        span.lo = std::min(span.lo, p.x);
+        span.hi = std::max(span.hi, p.x + 1);
+    }
+}
+
+void Surface::mark_damage(Rect region) noexcept {
+    const Rect clipped = region.intersected(Rect{0, 0, size_.width, size_.height});
+    if (clipped.empty()) return;
+    for (int y = clipped.top(); y < clipped.bottom(); ++y) {
+        DamageSpan& span = row_damage_[static_cast<std::size_t>(y)];
+        if (span.empty()) {
+            span.lo = clipped.left();
+            span.hi = clipped.right();
+        } else {
+            span.lo = std::min(span.lo, clipped.left());
+            span.hi = std::max(span.hi, clipped.right());
+        }
+    }
+}
+
+void Surface::clear_damage() noexcept {
+    for (DamageSpan& span : row_damage_) span = DamageSpan{};
+}
+
+DamageSpan Surface::row_damage(int row) const noexcept {
+    CKV_ASSERT(row >= 0 && row < size_.height);
+    return row_damage_[static_cast<std::size_t>(row)];
+}
+
+bool Surface::has_damage() const noexcept {
+    for (const DamageSpan& span : row_damage_)
+        if (!span.empty()) return true;
+    return false;
+}
+
+void Surface::resize(Size new_size, Cell fill) {
+    CKV_ASSERT(new_size.width >= 0 && new_size.height >= 0);
+    size_ = new_size;
+    cells_.assign(
+        static_cast<std::size_t>(new_size.width) * static_cast<std::size_t>(new_size.height),
+        fill);
+    row_damage_.assign(static_cast<std::size_t>(new_size.height), DamageSpan{0, new_size.width});
+    raster_regions_.clear();
+}
+
+void Surface::add_raster_region(RasterRegion region) {
+    CKV_ASSERT(region.id >= 1);
+    CKV_ASSERT(region.image != nullptr);
+    CKV_ASSERT(region.image->width() > 0 && region.image->height() > 0);
+    for (const RasterRegion& existing : raster_regions_) CKV_ASSERT(existing.id != region.id);
+    const Rect anchor = region.anchor;
+    raster_regions_.push_back(std::move(region));
+    mark_damage(anchor);
+}
+
+void Surface::remove_raster_region(int id) noexcept {
+    const auto it = std::find_if(raster_regions_.begin(), raster_regions_.end(),
+                                  [id](const RasterRegion& r) { return r.id == id; });
+    if (it == raster_regions_.end()) return;
+    const Rect anchor = it->anchor;
+    raster_regions_.erase(it);
+    mark_damage(anchor);
+}
+
+void Surface::set_raster_fallback_active(int id, bool active) noexcept {
+    for (RasterRegion& r : raster_regions_) {
+        if (r.id != id) continue;
+        if (r.fallback_active != active) {
+            r.fallback_active = active;
+            mark_damage(r.anchor);
+        }
+        return;
+    }
+}
+
+}  // namespace ckv::scene

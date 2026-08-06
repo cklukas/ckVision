@@ -21,6 +21,16 @@ public:
     // since a Cell holds exactly one.
     static Cell from_grapheme(std::string_view grapheme, Style style);
 
+    // A zero-width, empty-grapheme placeholder marking the second (and
+    // further) column of a wide grapheme drawn in the preceding column.
+    // Never drawn on its own — Surface/Painter/Compositor treat it as
+    // "covered by the predecessor", not as its own paintable cell.
+    // Distinguishable from a genuine zero-width glyph (e.g. a lone
+    // combining mark with no base, which has width 0 but a non-empty
+    // grapheme) by is_continuation().
+    static Cell continuation(Style style) noexcept { return Cell(std::string(), style, 0); }
+    bool is_continuation() const noexcept { return width_ == 0 && grapheme_.empty(); }
+
     std::string_view grapheme() const noexcept { return grapheme_; }
     const Style& style() const noexcept { return style_; }
     void set_style(Style style) noexcept { style_ = style; }
