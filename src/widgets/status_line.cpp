@@ -1,0 +1,76 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/status_line.hpp"
+
+#include "cvision/core/text.hpp"
+
+namespace ckv::widgets {
+
+namespace {
+constexpr int kSeparatorWidth = 3;  // " | "
+}  // namespace
+
+StatusLine::StatusLine(const ui::Theme& theme, ui::RoleId role, ui::Application& app)
+    : theme_(theme), role_(role), app_(app) {}
+
+void StatusLine::set_items(std::vector<StatusLineItem> items) {
+    items_ = std::move(items);
+    invalidate();
+}
+
+void StatusLine::set_hint_provider(std::function<std::string(const std::string&)> provider) {
+    hint_provider_ = std::move(provider);
+    invalidate();
+}
+
+std::string StatusLine::current_hint() const {
+    if (!hint_provider_) return {};
+    const ui::View* focused = app_.focused();
+    if (focused == nullptr) return {};
+    const std::string* key = focused->resolve_help_context_key();
+    if (key == nullptr) return {};
+    return hint_provider_(*key);
+}
+
+int StatusLine::item_start_column(std::size_t index) const {
+    const std::string hint = current_hint();
+    int x = text::text_width(hint);
+    if (!hint.empty() && !items_.empty()) x += 2;
+    for (std::size_t i = 0; i < index; ++i) x += text::text_width(items_[i].label) + kSeparatorWidth;
+    return x;
+}
+
+SizeHint StatusLine::horizontal_size_hint() const { return SizeHint{0, 0, ui::kUnboundedExtent}; }
+SizeHint StatusLine::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
+
+void StatusLine::draw(scene::Painter& painter) {
+    const Style style = theme_.resolve(role_);
+    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
+
+    const std::string hint = current_hint();
+    if (!hint.empty()) painter.draw_text(Point{0, 0}, hint, style);
+
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        const int x = item_start_column(i);
+        if (x >= bounds().width) break;
+        if (i > 0) painter.draw_text(Point{x - kSeparatorWidth, 0}, " | ", style);
+        painter.draw_text(Point{x, 0}, items_[i].label, style);
+    }
+}
+
+bool StatusLine::on_mouse(const MouseEvent& event) {
+    if (event.action != MouseAction::Down) return false;
+    const Rect abs = absolute_bounds();
+    const int local_x = event.cell.x - abs.x;
+    if (event.cell.y != abs.y) return false;
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        const int x = item_start_column(i);
+        const int w = text::text_width(items_[i].label);
+        if (local_x >= x && local_x < x + w) {
+            if (items_[i].command != ui::kInvalidCommand) app_.execute_command(items_[i].command);
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace ckv::widgets

@@ -37,6 +37,7 @@ add_library(cvision
     src/widgets/message_box.cpp
     src/widgets/mnemonic.cpp
     src/widgets/static_text.cpp
+    src/widgets/status_line.cpp
     src/widgets/window.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC

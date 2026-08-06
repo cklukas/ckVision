@@ -30,6 +30,7 @@ add_executable(cvision_tests
     test_rect_ops.cpp
     test_sixel_encoder.cpp
     test_standard_roles.cpp
+    test_status_line.cpp
     test_surface.cpp
     test_text_width.cpp
     test_theme.cpp
