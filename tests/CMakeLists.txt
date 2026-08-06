@@ -19,6 +19,7 @@ add_executable(cvision_tests
     test_input_decoder.cpp
     test_key_event.cpp
     test_layout.cpp
+    test_list_view.cpp
     test_m4_integration.cpp
     test_menu.cpp
     test_message_box.cpp

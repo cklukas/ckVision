@@ -33,6 +33,7 @@ add_library(cvision
     src/widgets/dialog.cpp
     src/widgets/input_line.cpp
     src/widgets/label.cpp
+    src/widgets/list_view.cpp
     src/widgets/menu.cpp
     src/widgets/message_box.cpp
     src/widgets/mnemonic.cpp
