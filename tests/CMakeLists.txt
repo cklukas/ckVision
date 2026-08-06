@@ -16,6 +16,7 @@ add_executable(cvision_tests
     test_input_decoder.cpp
     test_key_event.cpp
     test_layout.cpp
+    test_mnemonic.cpp
     test_painter.cpp
     test_posix_terminal.cpp
     test_presenter.cpp
@@ -29,6 +30,7 @@ add_executable(cvision_tests
     test_utf8.cpp
     test_version.cpp
     test_view.cpp
+    test_widgets.cpp
     main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 ckvision_strict(cvision_tests)

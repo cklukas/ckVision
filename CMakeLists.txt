@@ -26,7 +26,12 @@ add_library(cvision
     src/ui/layout.cpp
     src/ui/standard_roles.cpp
     src/ui/theme.cpp
-    src/ui/view.cpp)
+    src/ui/view.cpp
+    src/widgets/button.cpp
+    src/widgets/input_line.cpp
+    src/widgets/label.cpp
+    src/widgets/mnemonic.cpp
+    src/widgets/static_text.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
