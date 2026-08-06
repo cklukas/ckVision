@@ -23,18 +23,44 @@ namespace ckv::scene {
 // paths must not allocate, and every current use is stateless.
 using StyleTransform = Style (*)(Style) noexcept;
 
+// Every drawing method below takes coordinates in this Painter's own
+// LOCAL space (origin at its own top-left) — the view-relative
+// addressing every widget author actually wants (ARCHITECTURE.md §5:
+// "easy things easy"). `clip()` and internal bookkeeping are in
+// absolute Surface space; translated()/clipped() are how a parent
+// hands a child its own Painter.
 class Painter {
 public:
-    // `clip` is the absolute drawable region within `surface`; every
-    // draw call additionally clips to the surface's own bounds.
-    Painter(Surface& surface, Rect clip) : surface_(surface), clip_(clip) {}
+    // `clip` is the ABSOLUTE drawable region within `surface`; `origin`
+    // is this Painter's own top-left in absolute Surface coordinates
+    // (0,0 by default: a top-level Painter's local space already is
+    // absolute space). Every draw call additionally clips to the
+    // surface's own bounds.
+    Painter(Surface& surface, Rect clip, Point origin = {})
+        : surface_(surface), clip_(clip), origin_(origin) {}
 
+    // The absolute clip rect, still in Surface space (not translated).
     Rect clip() const noexcept { return clip_; }
 
-    // A Painter restricted to `sub_clip` (intersected with this
-    // Painter's own clip) over the same Surface — the mechanism
-    // draw_image uses to keep a fallback callback inside its anchor.
-    Painter clipped(Rect sub_clip) const noexcept { return Painter(surface_, clip_.intersected(sub_clip)); }
+    // A Painter restricted to `sub_clip` (given in THIS Painter's local
+    // space, intersected with its own clip) over the same Surface, same
+    // origin — the mechanism draw_image uses to keep a fallback
+    // callback inside its anchor.
+    Painter clipped(Rect sub_clip) const noexcept {
+        return Painter(surface_, clip_.intersected(to_absolute(sub_clip)), origin_);
+    }
+
+    // A Painter for a child view: `offset` (in this Painter's local
+    // space) becomes the child's new origin, and `local_clip` (also in
+    // this Painter's local space) becomes its clip, intersected with
+    // this Painter's own clip — a child can never paint outside its
+    // parent's allowed region no matter what clip it requests.
+    Painter translated(Point offset, Rect local_clip) const noexcept {
+        const Point new_origin{origin_.x + offset.x, origin_.y + offset.y};
+        const Rect absolute_clip = Rect{new_origin.x + local_clip.x, new_origin.y + local_clip.y,
+                                         local_clip.width, local_clip.height};
+        return Painter(surface_, clip_.intersected(absolute_clip), new_origin);
+    }
 
     // Fills `rect` with a repeated cell. `cell` must be width 1 (a
     // repeating wide- or zero-width pattern has no well-defined
@@ -80,12 +106,18 @@ public:
                      const std::function<void(Painter&)>& fallback);
 
 private:
+    Point to_absolute(Point local) const noexcept { return {local.x + origin_.x, local.y + origin_.y}; }
+    Rect to_absolute(Rect local) const noexcept {
+        return Rect{local.x + origin_.x, local.y + origin_.y, local.width, local.height};
+    }
+
     void merge_junction(Point p, Junction contribution, LineStyle style, Style cell_style);
     void draw_line_segment(Point pos, int length, bool horizontal, LineStyle style,
                             Style cell_style);
 
     Surface& surface_;
-    Rect clip_;
+    Rect clip_;      // absolute
+    Point origin_;   // this Painter's local (0,0) in absolute Surface space
 };
 
 }  // namespace ckv::scene

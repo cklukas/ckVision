@@ -3,6 +3,7 @@ add_executable(cvision_tests
     test_box_drawing.cpp
     test_clock_diagnostics_error.cpp
     test_color_style_cell.cpp
+    test_command.cpp
     test_compositor.cpp
     test_frame_view.cpp
     test_geometry.cpp
@@ -19,8 +20,10 @@ add_executable(cvision_tests
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
     test_sixel_encoder.cpp
+    test_standard_roles.cpp
     test_surface.cpp
     test_text_width.cpp
+    test_theme.cpp
     test_utf8.cpp
     test_version.cpp
     main.cpp)

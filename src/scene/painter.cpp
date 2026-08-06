@@ -1,4 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+//
+// Every public method translates its LOCAL-space parameters to
+// absolute Surface space once, at the boundary, via to_absolute(); the
+// private helpers (merge_junction, draw_line_segment) then operate
+// purely in absolute space, unchanged by the local/absolute split.
 #include "cvision/scene/painter.hpp"
 
 #include <algorithm>
@@ -10,20 +15,21 @@ namespace ckv::scene {
 
 void Painter::fill(Rect rect, Cell cell) {
     CKV_ASSERT(cell.width() == 1);
-    const Rect r =
-        rect.intersected(clip_).intersected(Rect{0, 0, surface_.size().width, surface_.size().height});
+    const Rect r = to_absolute(rect).intersected(clip_).intersected(
+        Rect{0, 0, surface_.size().width, surface_.size().height});
     for (int y = r.top(); y < r.bottom(); ++y)
         for (int x = r.left(); x < r.right(); ++x) surface_.set_cell(Point{x, y}, cell);
 }
 
 void Painter::draw_text(Point pos, std::string_view text, Style style) {
-    if (pos.y < 0 || pos.y >= surface_.size().height) return;
-    if (pos.y < clip_.top() || pos.y >= clip_.bottom()) return;
+    const Point abs_pos = to_absolute(pos);
+    if (abs_pos.y < 0 || abs_pos.y >= surface_.size().height) return;
+    if (abs_pos.y < clip_.top() || abs_pos.y >= clip_.bottom()) return;
 
     const std::string sanitized = text::sanitize_display_text(text);
     const int right_bound = std::min(clip_.right(), surface_.size().width);
     const int left_bound = std::max(clip_.left(), 0);
-    int x = pos.x;
+    int x = abs_pos.x;
     std::size_t byte_pos = 0;
 
     while (byte_pos < sanitized.size()) {
@@ -42,15 +48,16 @@ void Painter::draw_text(Point pos, std::string_view text, Style style) {
             // a bypass constructor: from_grapheme is the sole
             // sanctioned way to construct content-bearing cells
             // (D-023's "enforced by type" guarantee stays uniform).
-            surface_.set_cell(Point{x, pos.y}, Cell::from_grapheme(grapheme, style));
+            surface_.set_cell(Point{x, abs_pos.y}, Cell::from_grapheme(grapheme, style));
             for (int c = 1; c < width; ++c)
-                surface_.set_cell(Point{x + c, pos.y}, Cell::continuation(style));
+                surface_.set_cell(Point{x + c, abs_pos.y}, Cell::continuation(style));
         }
         x += width;
     }
 }
 
 void Painter::merge_junction(Point p, Junction contribution, LineStyle style, Style cell_style) {
+    // `p` is already absolute — every caller translates before calling.
     if (p.x < 0 || p.x >= surface_.size().width || p.y < 0 || p.y >= surface_.size().height) return;
     if (!clip_.contains(p)) return;
 
@@ -62,6 +69,7 @@ void Painter::merge_junction(Point p, Junction contribution, LineStyle style, St
 
 void Painter::draw_line_segment(Point pos, int length, bool horizontal, LineStyle style,
                                  Style cell_style) {
+    // `pos` is already absolute — every caller translates before calling.
     if (length <= 0) return;
     for (int i = 0; i < length; ++i) {
         const Point p = horizontal ? Point{pos.x + i, pos.y} : Point{pos.x, pos.y + i};
@@ -87,15 +95,16 @@ void Painter::draw_line_segment(Point pos, int length, bool horizontal, LineStyl
 }
 
 void Painter::hline(Point pos, int length, LineStyle style, Style cell_style) {
-    draw_line_segment(pos, length, /*horizontal=*/true, style, cell_style);
+    draw_line_segment(to_absolute(pos), length, /*horizontal=*/true, style, cell_style);
 }
 
 void Painter::vline(Point pos, int length, LineStyle style, Style cell_style) {
-    draw_line_segment(pos, length, /*horizontal=*/false, style, cell_style);
+    draw_line_segment(to_absolute(pos), length, /*horizontal=*/false, style, cell_style);
 }
 
-void Painter::draw_box(Rect rect, LineStyle style, Style cell_style) {
-    if (rect.width < 2 || rect.height < 2) return;
+void Painter::draw_box(Rect local_rect, LineStyle style, Style cell_style) {
+    if (local_rect.width < 2 || local_rect.height < 2) return;
+    const Rect rect = to_absolute(local_rect);
 
     merge_junction(Point{rect.left(), rect.top()}, Junction{false, true, false, true}, style,
                     cell_style);
@@ -121,8 +130,8 @@ void Painter::draw_box(Rect rect, LineStyle style, Style cell_style) {
 }
 
 void Painter::transform_style(Rect rect, StyleTransform transform) {
-    const Rect r =
-        rect.intersected(clip_).intersected(Rect{0, 0, surface_.size().width, surface_.size().height});
+    const Rect r = to_absolute(rect).intersected(clip_).intersected(
+        Rect{0, 0, surface_.size().width, surface_.size().height});
     for (int y = r.top(); y < r.bottom(); ++y) {
         for (int x = r.left(); x < r.right(); ++x) {
             const Point p{x, y};
@@ -137,9 +146,9 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
                           const std::function<void(Painter&)>& fallback) {
     CKV_ASSERT(image != nullptr);
     CKV_ASSERT(image->width() > 0 && image->height() > 0);
-    Painter fallback_painter = clipped(anchor);
+    Painter fallback_painter = clipped(anchor);  // clipped() already translates via to_absolute
     fallback(fallback_painter);
-    surface_.add_raster_region(RasterRegion{id, anchor, std::move(image), true});
+    surface_.add_raster_region(RasterRegion{id, to_absolute(anchor), std::move(image), true});
 }
 
 }  // namespace ckv::scene

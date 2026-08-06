@@ -1,0 +1,51 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/ui/standard_roles.hpp"
+
+namespace ckv::ui {
+namespace {
+
+// The classic blue-desktop palette (public, well-documented CUA-era
+// convention — cyan-on-blue dialogs, black-on-white default buttons —
+// not derived from any framework's source, per AGENTS.md).
+constexpr Color kCyan = Color::rgb(0, 170, 170);
+constexpr Color kWhite = Color::rgb(255, 255, 255);
+constexpr Color kBlack = Color::rgb(0, 0, 0);
+constexpr Color kGray = Color::rgb(170, 170, 170);
+constexpr Color kYellow = Color::rgb(255, 255, 85);
+constexpr Color kRed = Color::rgb(170, 0, 0);
+
+}  // namespace
+
+StandardRoles intern_standard_roles(RoleRegistry& registry) {
+    StandardRoles r;
+    r.dialog_frame = registry.intern("ckv.dialog.frame", Style{kWhite, kCyan, Attr{}});
+    r.dialog_background = registry.intern("ckv.dialog.background", Style{kBlack, kCyan, Attr{}});
+    r.label_text = registry.intern("ckv.label.text", Style{kBlack, kCyan, Attr{}});
+    r.label_mnemonic = registry.intern("ckv.label.mnemonic", Style{kYellow, kCyan, Attr::Underline});
+    r.static_text = registry.intern("ckv.static.text", Style{kBlack, kCyan, Attr{}});
+    r.button_normal = registry.intern("ckv.button.normal", Style{kBlack, kGray, Attr{}});
+    r.button_focused = registry.intern("ckv.button.focused", Style{kWhite, kGray, Attr::Reverse});
+    r.button_default = registry.intern("ckv.button.default", Style{kYellow, kBlack, Attr::Bold});
+    r.input_normal = registry.intern("ckv.input.normal", Style{kBlack, kWhite, Attr{}});
+    r.input_focused = registry.intern("ckv.input.focused", Style{kBlack, kWhite, Attr::Underline});
+    r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
+    return r;
+}
+
+Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles) {
+    Theme theme(registry);
+    theme.set(roles.dialog_frame, Style{kWhite, kCyan, Attr{}});
+    theme.set(roles.dialog_background, Style{kBlack, kCyan, Attr{}});
+    theme.set(roles.label_text, Style{kBlack, kCyan, Attr{}});
+    theme.set(roles.label_mnemonic, Style{kYellow, kCyan, Attr::Underline});
+    theme.set(roles.static_text, Style{kBlack, kCyan, Attr{}});
+    theme.set(roles.button_normal, Style{kBlack, kGray, Attr{}});
+    theme.set(roles.button_focused, Style{kWhite, kGray, Attr::Reverse});
+    theme.set(roles.button_default, Style{kYellow, kBlack, Attr::Bold});
+    theme.set(roles.input_normal, Style{kBlack, kWhite, Attr{}});
+    theme.set(roles.input_focused, Style{kBlack, kWhite, Attr::Underline});
+    theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
+    return theme;
+}
+
+}  // namespace ckv::ui

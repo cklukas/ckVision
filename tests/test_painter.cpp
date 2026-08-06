@@ -21,6 +21,58 @@ std::string row_text(const Surface& s, int y) {
 
 }  // namespace
 
+// --- View-relative (translated) painters --------------------------------------
+
+CK_TEST(translated_painter_draws_in_local_space_offset_into_the_parent) {
+    Surface s = make_surface(10, 5);
+    Painter root(s, ckv::Rect{0, 0, 10, 5});
+    Painter child = root.translated(ckv::Point{3, 2}, ckv::Rect{0, 0, 4, 2});
+    child.draw_text(ckv::Point{0, 0}, "Hi", ckv::Style{});  // child-local (0,0) -> absolute (3,2)
+    CK_CHECK(s.at(ckv::Point{3, 2}).grapheme() == "H");
+    CK_CHECK(s.at(ckv::Point{4, 2}).grapheme() == "i");
+    CK_CHECK(s.at(ckv::Point{0, 2}).grapheme() == ".");  // untouched, outside the child
+}
+
+CK_TEST(translated_painter_clip_is_intersected_with_the_parents_clip) {
+    Surface s = make_surface(10, 5);
+    Painter root(s, ckv::Rect{0, 0, 6, 5});  // parent only allows columns 0-5
+    // Child requests a clip that would extend to column 9 — must be
+    // capped by the parent's own clip regardless.
+    Painter child = root.translated(ckv::Point{3, 0}, ckv::Rect{0, 0, 10, 5});
+    child.fill(ckv::Rect{0, 0, 10, 1}, ckv::Cell::from_grapheme("#", ckv::Style{}));
+    CK_CHECK(row_text(s, 0) == "...###....");  // wait: width 10, cols 3-5 filled, 6-9 untouched
+}
+
+CK_TEST(nested_translation_composes_offsets) {
+    Surface s = make_surface(10, 5);
+    Painter root(s, ckv::Rect{0, 0, 10, 5});
+    Painter level1 = root.translated(ckv::Point{2, 1}, ckv::Rect{0, 0, 8, 4});
+    Painter level2 = level1.translated(ckv::Point{1, 1}, ckv::Rect{0, 0, 5, 2});
+    level2.draw_text(ckv::Point{0, 0}, "X", ckv::Style{});  // (2+1, 1+1) = absolute (3,2)
+    CK_CHECK(s.at(ckv::Point{3, 2}).grapheme() == "X");
+}
+
+CK_TEST(draw_box_and_lines_are_view_relative) {
+    Surface s = make_surface(10, 6);
+    Painter root(s, ckv::Rect{0, 0, 10, 6});
+    Painter child = root.translated(ckv::Point{2, 1}, ckv::Rect{0, 0, 5, 4});
+    child.draw_box(ckv::Rect{0, 0, 5, 4}, LineStyle::Single, ckv::Style{});
+    CK_CHECK(s.at(ckv::Point{2, 1}).grapheme() == "┌");   // top-left of the box, offset by (2,1)
+    CK_CHECK(s.at(ckv::Point{6, 4}).grapheme() == "┘");   // bottom-right: (2+4, 1+3)
+}
+
+CK_TEST(draw_image_anchor_is_view_relative_and_stored_absolute) {
+    Surface s = make_surface(10, 6);
+    Painter root(s, ckv::Rect{0, 0, 10, 6});
+    Painter child = root.translated(ckv::Point{3, 2}, ckv::Rect{0, 0, 4, 3});
+    const auto image = std::make_shared<ckv::Image>(8, 8);
+    child.draw_image(ckv::Rect{0, 0, 2, 2}, 5, image,
+                      [](Painter& fp) { fp.fill(ckv::Rect{0, 0, 2, 2}, ckv::Cell::from_grapheme("#", ckv::Style{})); });
+    CK_CHECK(s.raster_regions().size() == 1);
+    CK_CHECK(s.raster_regions()[0].anchor == (ckv::Rect{3, 2, 2, 2}));  // absolute, not local
+    CK_CHECK(s.at(ckv::Point{3, 2}).grapheme() == "#");
+}
+
 CK_TEST(fill_writes_the_cell_within_the_clip) {
     Surface s = make_surface(5, 3);
     Painter p(s, ckv::Rect{0, 0, 5, 3});
