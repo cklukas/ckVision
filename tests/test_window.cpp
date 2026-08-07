@@ -385,3 +385,86 @@ CK_TEST(reposition_within_leaves_a_window_alone_if_only_its_position_already_fit
     w.reposition_within(Rect{0, 0, 40, 24});
     CK_CHECK(w.bounds() == (Rect{5, 5, 15, 6}));
 }
+
+// --- Frame overlay (a second, non-content child on the border) ------------
+
+namespace {
+class FixedWidthView : public View {
+public:
+    explicit FixedWidthView(int preferred_width) : preferred_width_(preferred_width) {}
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return ckv::ui::SizeHint{0, preferred_width_, ckv::ui::kUnboundedExtent};
+    }
+
+private:
+    int preferred_width_;
+};
+}  // namespace
+
+CK_TEST(set_frame_overlay_positions_it_on_the_bottom_border_right_aligned) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    w.set_frame_overlay(std::make_unique<FixedWidthView>(6));
+    CK_CHECK(w.frame_overlay()->bounds() == (Rect{30 - 2 - 6, 9, 6, 1}));
+}
+
+CK_TEST(frame_overlay_repositions_on_window_resize) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    w.set_frame_overlay(std::make_unique<FixedWidthView>(4));
+    w.set_bounds(Rect{0, 0, 50, 20});
+    CK_CHECK(w.frame_overlay()->bounds() == (Rect{50 - 2 - 4, 19, 4, 1}));
+}
+
+CK_TEST(frame_overlay_width_is_clamped_to_fit_a_narrow_window) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 8, 5});  // interior margin leaves very little room
+    w.set_frame_overlay(std::make_unique<FixedWidthView>(20));  // wants far more than fits
+    CK_CHECK(w.frame_overlay()->bounds().width <= 8 - 4);
+    CK_CHECK(w.frame_overlay()->bounds().x >= 0);
+}
+
+CK_TEST(set_frame_overlay_replaces_the_previous_one_and_returns_its_ownership) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    auto first_owned = std::make_unique<FixedWidthView>(5);
+    View* first_raw = first_owned.get();
+    w.set_frame_overlay(std::move(first_owned));
+
+    auto returned = w.set_frame_overlay(std::make_unique<FixedWidthView>(3));
+    CK_CHECK(returned.get() == first_raw);
+    CK_CHECK(w.frame_overlay() != first_raw);
+}
+
+CK_TEST(set_frame_overlay_with_nullptr_after_one_was_set_clears_it) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    w.set_frame_overlay(std::make_unique<FixedWidthView>(5));
+    auto returned = w.set_frame_overlay(nullptr);
+    CK_CHECK(returned != nullptr);
+    CK_CHECK(w.frame_overlay() == nullptr);
+}
+
+CK_TEST(a_window_with_no_overlay_set_has_a_null_frame_overlay) {
+    Fixture f;
+    Window w = make_window(f);
+    CK_CHECK(w.frame_overlay() == nullptr);
+}
+
+CK_TEST(frame_overlay_and_content_coexist_as_independent_children) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    w.set_content(std::make_unique<View>());
+    w.set_frame_overlay(std::make_unique<FixedWidthView>(6));
+    CK_CHECK(w.content() != nullptr);
+    CK_CHECK(w.frame_overlay() != nullptr);
+    CK_CHECK(w.content() != w.frame_overlay());
+    // content() still fills the ordinary interior, untouched by the overlay.
+    CK_CHECK(w.content()->bounds() == (Rect{1, 1, 28, 8}));
+}

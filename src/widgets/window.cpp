@@ -42,6 +42,16 @@ std::unique_ptr<ui::View> Window::set_content(std::unique_ptr<ui::View> content)
     return previous;
 }
 
+std::unique_ptr<ui::View> Window::set_frame_overlay(std::unique_ptr<ui::View> overlay) {
+    std::unique_ptr<ui::View> previous = frame_overlay_ != nullptr ? remove_child(frame_overlay_) : nullptr;
+    frame_overlay_ = nullptr;
+    if (overlay != nullptr) {
+        frame_overlay_ = add_child(std::move(overlay));
+        frame_overlay_->set_bounds(frame_overlay_rect());
+    }
+    return previous;
+}
+
 void Window::set_min_size(Size min) noexcept {
     min_size_ = min;
     set_bounds(clamp_size(bounds()));
@@ -105,6 +115,19 @@ Rect Window::content_rect() const noexcept {
     return Rect{1, 1, b.width - 2, b.height - 2};
 }
 
+Rect Window::frame_overlay_rect() const noexcept {
+    if (frame_overlay_ == nullptr) return Rect{0, 0, 0, 0};
+    const Rect b = bounds();
+    if (b.height <= 2 || b.width <= 4) return Rect{0, 0, 0, 0};  // frame too small to host it at all
+    // Right-aligned on the bottom border, 2 cells in from each corner
+    // (leaving the resize grip's own corner cell untouched and mirroring
+    // the close/zoom controls' own inset on the top border) — never
+    // wider than fits between those margins.
+    const int max_width = std::max(1, b.width - 4);
+    const int width = std::min(std::max(1, frame_overlay_->horizontal_size_hint().preferred), max_width);
+    return Rect{b.width - 2 - width, b.height - 1, width, 1};
+}
+
 Rect Window::clamp_size(Rect b) const noexcept {
     int width = std::max(b.width, min_size_.width);
     int height = std::max(b.height, min_size_.height);
@@ -115,6 +138,7 @@ Rect Window::clamp_size(Rect b) const noexcept {
 
 void Window::on_resized() {
     if (content_ != nullptr) content_->set_bounds(content_rect());
+    if (frame_overlay_ != nullptr) frame_overlay_->set_bounds(frame_overlay_rect());
 }
 
 bool Window::point_in_close_control(Point local) const noexcept {

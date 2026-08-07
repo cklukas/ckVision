@@ -43,6 +43,22 @@ public:
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
+    // A SECOND, small child that lives ON the frame border itself
+    // rather than in the content interior — the classic "current
+    // line:col" indicator an editor shows in its own window's bottom
+    // border, or any other small at-a-glance readout that shouldn't
+    // cost a row of content space. Positioned at its own
+    // horizontal_size_hint().preferred width (height always 1), right-
+    // aligned along the bottom border with a 1-cell margin before the
+    // resize grip — repositioned automatically on every window resize,
+    // same as content(). At most one at a time: a second call replaces
+    // and returns ownership of the first (nullptr if there was none).
+    // Unlike content(), an unset overlay is the common case, so there
+    // is no "must call this" contract — a plain Window with no overlay
+    // behaves exactly as before this existed.
+    std::unique_ptr<ui::View> set_frame_overlay(std::unique_ptr<ui::View> overlay);
+    ui::View* frame_overlay() const noexcept { return frame_overlay_; }
+
     void set_min_size(Size min) noexcept;
     void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
 
@@ -109,6 +125,7 @@ private:
     enum class DragKind { None, Move, Resize };
 
     Rect content_rect() const noexcept;
+    Rect frame_overlay_rect() const noexcept;
     bool point_in_close_control(Point local) const noexcept;
     bool point_in_zoom_control(Point local) const noexcept;
     bool point_in_resize_grip(Point local) const noexcept;
@@ -122,6 +139,7 @@ private:
     ui::RoleId title_inactive_role_;
 
     ui::View* content_ = nullptr;
+    ui::View* frame_overlay_ = nullptr;
 
     bool active_ = false;
     bool movable_ = true;
