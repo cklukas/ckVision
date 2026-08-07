@@ -1,6 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// Same discipline as capture_gallery_screenshots.cpp, for TvHelloApp —
+// Same discipline as capture_gallery_screenshots.cpp, for HelloApp —
 // the screenshots docs/turbo-vision-conversion.md embeds.
 #include <cstdio>
 #include <filesystem>
@@ -8,7 +8,7 @@
 
 #include "cvision/term/headless_terminal.hpp"
 #include "frame_svg.hpp"
-#include "tvhello_app.hpp"
+#include "hello_app.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -37,14 +37,14 @@ int main(int argc, char** argv) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    ckv::tvhello::TvHelloApp tvhello(app);
+    ckv::hello::HelloApp hello(app);
 
     app.step(0);
-    write_svg(out_dir, "tvhello-initial", app.current_frame());
+    write_svg(out_dir, "hello-initial", app.current_frame());
 
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
     app.step(0);
-    write_svg(out_dir, "tvhello-greeting", app.current_frame());
+    write_svg(out_dir, "hello-greeting", app.current_frame());
 
     return 0;
 }

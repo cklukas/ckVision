@@ -23,13 +23,13 @@ CKWRITE_BIN="${CKWRITE_BIN:-$HOME/git/cworks_dir/cworks/build/bin/ckwrite}"
 echo "==> Building ckVision (screenshot capture tools)"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
-    --target capture_gallery_screenshots capture_filebrowser_screenshots capture_tvhello_screenshots
+    --target capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots
 
 echo "==> Capturing example-app screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_filebrowser_screenshots" "$SCREENSHOTS_DIR"
-"$BUILD_DIR/tools/docgen/capture_tvhello_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_hello_screenshots" "$SCREENSHOTS_DIR"
 
 # ckwrite's LaTeX/PDF path requires a PDF companion for every embedded
 # SVG (no TeX engine reads SVG directly) — the HTML path uses the SVGs

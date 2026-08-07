@@ -204,10 +204,23 @@ void Window::draw(scene::Painter& painter) {
         painter.draw_text(Point{b.width - 4, 0}, zoomed_ ? "[↕]" : "[↑]", frame_style);
     }
     if (b.width > 8) {
-        const int available = b.width - 8;
+        // Centered, with a one-cell padding space on each side — the
+        // convention's own title placement (verified against the
+        // reference implementation's frame-drawing source: title width
+        // is bounded, then `i = (width - l) >> 1` centers it and a
+        // blank is written at i-1 and i+l). Previously this drew the
+        // title left-aligned at a fixed column, immediately abutting
+        // the close control with no padding at all — visibly cramped
+        // and not what the convention actually does.
+        const int reserved_for_controls = (b.width > 6) ? 10 : 4;  // both controls flank ~2 cells of margin each
+        const int available = std::max(0, b.width - reserved_for_controls);
         std::string shown = title_;
         if (static_cast<int>(shown.size()) > available) shown.resize(static_cast<std::size_t>(available));
-        painter.draw_text(Point{4, 0}, shown, title_style);
+        const int shown_width = static_cast<int>(shown.size());
+        const int start = (b.width - shown_width) / 2;
+        if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
+        painter.draw_text(Point{start, 0}, shown, title_style);
+        if (start + shown_width < b.width) painter.draw_text(Point{start + shown_width, 0}, " ", frame_style);
     }
 }
 

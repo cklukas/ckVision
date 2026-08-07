@@ -32,12 +32,12 @@ if(TARGET filebrowser_app)
     ckvision_strict(capture_filebrowser_screenshots)
 endif()
 
-if(TARGET tvhello_app)
-    add_executable(generate_tvhello_golden generate_tvhello_golden.cpp)
-    target_link_libraries(generate_tvhello_golden PRIVATE tvhello_app ckvision::cvision)
-    target_include_directories(generate_tvhello_golden PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/tvhello)
-    ckvision_strict(generate_tvhello_golden)
+if(TARGET hello_app)
+    add_executable(generate_hello_golden generate_hello_golden.cpp)
+    target_link_libraries(generate_hello_golden PRIVATE hello_app ckvision::cvision)
+    target_include_directories(generate_hello_golden PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/hello)
+    ckvision_strict(generate_hello_golden)
 
     if(NOT TARGET docgen_frame_svg)
         add_library(docgen_frame_svg STATIC frame_svg.cpp)
@@ -45,10 +45,10 @@ if(TARGET tvhello_app)
         ckvision_strict(docgen_frame_svg)
     endif()
 
-    add_executable(capture_tvhello_screenshots capture_tvhello_screenshots.cpp)
-    target_link_libraries(capture_tvhello_screenshots PRIVATE docgen_frame_svg tvhello_app ckvision::cvision)
-    target_include_directories(capture_tvhello_screenshots PRIVATE
+    add_executable(capture_hello_screenshots capture_hello_screenshots.cpp)
+    target_link_libraries(capture_hello_screenshots PRIVATE docgen_frame_svg hello_app ckvision::cvision)
+    target_include_directories(capture_hello_screenshots PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/tvhello)
-    ckvision_strict(capture_tvhello_screenshots)
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/hello)
+    ckvision_strict(capture_hello_screenshots)
 endif()

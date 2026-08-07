@@ -331,6 +331,39 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
     CK_CHECK(true);
 }
 
+CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned) {
+    // Matches the windowed-desktop convention's own frame-drawing
+    // algorithm (verified against the reference implementation's
+    // source: title width bounded, then centered via
+    // `i = (width - l) >> 1`, with a blank written at i-1 and i+l) —
+    // previously the title was drawn left-aligned at a fixed column,
+    // immediately abutting the close control with no padding.
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f, "Test");  // 4 columns wide
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+
+    // width 20, title width 4: start = (20 - 4) / 2 = 8.
+    CK_CHECK(s.at(Point{7, 0}).grapheme() == " ");   // padding before
+    CK_CHECK(s.at(Point{8, 0}).grapheme() == "T");   // title starts here
+    CK_CHECK(s.at(Point{11, 0}).grapheme() == "t");  // title ends here ("Test"[3])
+    CK_CHECK(s.at(Point{12, 0}).grapheme() == " ");  // padding after
+}
+
+CK_TEST(a_short_title_never_abuts_the_close_control_directly) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f, "X");
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+    // Close control occupies columns 1-3 ("[■]"); the title, centered,
+    // must start well clear of it with its own padding cell besides.
+    CK_CHECK(s.at(Point{4, 0}).grapheme() != "X");
+}
+
 // --- Content interior fill (windowed-desktop fidelity) --------------------
 
 CK_TEST(the_content_interior_fills_with_the_frame_style_not_left_blank) {
@@ -376,7 +409,7 @@ CK_TEST(an_inactive_window_draws_with_single_line_box_glyphs) {
     w.draw(painter);
     CK_CHECK(s.at(Point{0, 0}).grapheme() == "┌");
     CK_CHECK(s.at(Point{19, 0}).grapheme() == "┐");
-    CK_CHECK(s.at(Point{10, 0}).grapheme() == "─");
+    CK_CHECK(s.at(Point{10, 4}).grapheme() == "─");
     CK_CHECK(s.at(Point{0, 2}).grapheme() == "│");
 }
 
@@ -393,7 +426,7 @@ CK_TEST(an_active_window_draws_with_double_line_box_glyphs) {
     w.draw(painter);
     CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");
     CK_CHECK(s.at(Point{19, 0}).grapheme() == "╗");
-    CK_CHECK(s.at(Point{10, 0}).grapheme() == "═");
+    CK_CHECK(s.at(Point{10, 4}).grapheme() == "═");
     CK_CHECK(s.at(Point{0, 2}).grapheme() == "║");
 }
 
@@ -406,11 +439,11 @@ CK_TEST(reactivating_and_deactivating_a_window_switches_its_frame_style_back_and
 
     w.set_active(true);
     w.draw(painter);
-    CK_CHECK(s.at(Point{10, 0}).grapheme() == "═");
+    CK_CHECK(s.at(Point{10, 4}).grapheme() == "═");
 
     w.set_active(false);
     w.draw(painter);
-    CK_CHECK(s.at(Point{10, 0}).grapheme() == "─");
+    CK_CHECK(s.at(Point{10, 4}).grapheme() == "─");
 }
 
 CK_TEST(the_close_control_draws_a_filled_square_glyph) {

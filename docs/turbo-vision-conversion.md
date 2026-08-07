@@ -11,10 +11,10 @@ description: A worked, line-by-line port of Turbo Vision's own canonical minimal
 This chapter is a worked example for anyone porting a Turbo Vision
 (or Turbo-Vision-family) application to ckVision: the SAME small
 application, built twice, compared construct by construct. The
-ckVision side is `examples/tvhello/` in this repository — a real,
+ckVision side is `examples/hello/` in this repository — a real,
 tested, buildable app, not a documentation-only snippet — and its
 rendered output is pinned by a golden regression test
-(`tests/test_tvhello_golden.cpp`) so this chapter cannot silently
+(`tests/test_hello_golden.cpp`) so this chapter cannot silently
 drift out of sync with what the code actually does.
 
 The source application is Turbo Vision's own tutorial example,
@@ -62,7 +62,7 @@ factory methods" protocol — `Application`/`Desktop`/`MenuBar`/
 constructor wires up in whatever order makes sense:
 
 ```cpp
-TvHelloApp::TvHelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
@@ -124,10 +124,10 @@ void THelloApp::greetingBox() {
 }
 ```
 
-ckVision's port (`examples/tvhello/tvhello_app.cpp`, `greeting_box()`):
+ckVision's port (`examples/hello/hello_app.cpp`, `greeting_box()`):
 
 ```cpp
-void TvHelloApp::greeting_box() {
+void HelloApp::greeting_box() {
     auto window = std::make_unique<widgets::Window>("Hello, World!", app_.theme(), roles_.window_frame_active,
                                                       roles_.window_frame_inactive, roles_.window_title_active,
                                                       roles_.window_title_inactive);
@@ -182,7 +182,7 @@ non-modal `Window` and gives each button its own `on_press` that
 closes it directly, rather than routing all four through one shared
 `cmCancel`-equivalent command. **Observable behavior is identical** —
 all four buttons dismiss the dialog, exactly as `hello.cpp`'s reader
-would expect (`tests/test_tvhello_golden.cpp`:
+would expect (`tests/test_hello_golden.cpp`:
 `every_greeting_button_dismisses_the_dialog_matching_the_originals_shared_cmcancel`
 drives all four and asserts the window closes each time) — but the
 *mechanism* differs because the two frameworks' event models differ at
@@ -195,19 +195,19 @@ status line's two items all carry over directly.
 ## Visual comparison — confirmed, not assumed
 
 Both screenshots below come from the SAME headless run
-`tests/test_tvhello_golden.cpp` pins byte-exactly (via
-`tools/docgen/capture_tvhello_screenshots`, driving the real render
+`tests/test_hello_golden.cpp` pins byte-exactly (via
+`tools/docgen/capture_hello_screenshots`, driving the real render
 pipeline — `scene::Compositor`/`term::Presenter` — not a mock).
 
 Initial screen — desktop, menu bar, status line:
 
-![TV-Hello: initial frame](generated/screenshots/tvhello-initial.svg)
+![ckVision Hello: initial frame](generated/screenshots/hello-initial.svg)
 
 The greeting dialog (Alt+G) — double-line active frame (this window
 has focus), the close/zoom glyphs, and a solid content-interior fill
 (the classic scheme's blue-on-light-gray desktop, blue window):
 
-![TV-Hello: greeting dialog](generated/screenshots/tvhello-greeting.svg)
+![ckVision Hello: greeting dialog](generated/screenshots/hello-greeting.svg)
 
 In the Classic theme this is, deliberately, meant to look like a
 faithful windowed-desktop application — not "inspired by," identical
@@ -228,8 +228,8 @@ example.
 
 | Claim | Test |
 |---|---|
-| The initial frame matches the pinned golden dump byte-exactly | `tvhello_initial_frame_matches_the_pinned_golden_dump` |
-| The greeting dialog matches the pinned golden dump byte-exactly | `tvhello_greeting_dialog_frame_matches_the_pinned_golden_dump` |
+| The initial frame matches the pinned golden dump byte-exactly | `hello_initial_frame_matches_the_pinned_golden_dump` |
+| The greeting dialog matches the pinned golden dump byte-exactly | `hello_greeting_dialog_frame_matches_the_pinned_golden_dump` |
 | Alt+G opens the dialog (matching the original's Alt-G mnemonic) | `alt_g_opens_the_greeting_dialog_matching_the_originals_alt_g_mnemonic` |
 | Every button dismisses the dialog (matching the original's shared cmCancel) | `every_greeting_button_dismisses_the_dialog_matching_the_originals_shared_cmcancel` |
 | Alt+X quits (matching the original's status-line shortcut) | `alt_x_quits_matching_the_originals_alt_x_status_line_shortcut` |
@@ -237,8 +237,8 @@ example.
 To regenerate the golden fixtures after a deliberate rendering change:
 
 ```bash
-cmake --build build --target generate_tvhello_golden
-build/tools/docgen/generate_tvhello_golden tests/golden
+cmake --build build --target generate_hello_golden
+build/tools/docgen/generate_hello_golden tests/golden
 ```
 
 Review the diff like any other source change before committing —

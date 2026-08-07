@@ -1,18 +1,18 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
-#include "tvhello_app.hpp"
+#include "hello_app.hpp"
 
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/window.hpp"
 
-namespace ckv::tvhello {
+namespace ckv::hello {
 
 namespace {
 constexpr ui::CommandId kCmdGreeting = 1;
 constexpr ui::CommandId kCmdQuit = 2;
 }  // namespace
 
-TvHelloApp::TvHelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
+HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
@@ -53,7 +53,7 @@ TvHelloApp::TvHelloApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 // closes it directly rather than routing through one shared command —
 // the one deliberate structural deviation from the original, discussed
 // in docs/turbo-vision-conversion.md.
-void TvHelloApp::greeting_box() {
+void HelloApp::greeting_box() {
     auto window = std::make_unique<widgets::Window>("Hello, World!", app_.theme(), roles_.window_frame_active,
                                                       roles_.window_frame_inactive, roles_.window_title_active,
                                                       roles_.window_title_inactive);
@@ -83,4 +83,4 @@ void TvHelloApp::greeting_box() {
     app_.set_focus(first_button);
 }
 
-}  // namespace ckv::tvhello
+}  // namespace ckv::hello

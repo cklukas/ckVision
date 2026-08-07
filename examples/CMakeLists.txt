@@ -36,16 +36,16 @@ if(UNIX)
     ckvision_strict(ckvision_filebrowser)
 endif()
 
-# TV-Hello: a faithful port of Turbo Vision's own canonical minimal
-# example, for a golden regression test (tests/test_tvhello_golden.cpp)
+# ckVision Hello: a faithful port of Turbo Vision's own canonical minimal
+# example, for a golden regression test (tests/test_hello_golden.cpp)
 # and docs/turbo-vision-conversion.md's worked comparison.
-add_library(tvhello_app STATIC tvhello/tvhello_app.cpp)
-target_link_libraries(tvhello_app PUBLIC ckvision::cvision)
-target_include_directories(tvhello_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/tvhello)
-ckvision_strict(tvhello_app)
+add_library(hello_app STATIC hello/hello_app.cpp)
+target_link_libraries(hello_app PUBLIC ckvision::cvision)
+target_include_directories(hello_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/hello)
+ckvision_strict(hello_app)
 
 if(UNIX)
-    add_executable(ckvision_tvhello tvhello/main.cpp)
-    target_link_libraries(ckvision_tvhello PRIVATE tvhello_app ckvision::cvision)
-    ckvision_strict(ckvision_tvhello)
+    add_executable(ckvision_hello hello/main.cpp)
+    target_link_libraries(ckvision_hello PRIVATE hello_app ckvision::cvision)
+    ckvision_strict(ckvision_hello)
 endif()

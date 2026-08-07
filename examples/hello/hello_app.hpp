@@ -20,11 +20,11 @@
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
 
-namespace ckv::tvhello {
+namespace ckv::hello {
 
-class TvHelloApp {
+class HelloApp {
 public:
-    explicit TvHelloApp(ui::Application& app);
+    explicit HelloApp(ui::Application& app);
 
     bool should_quit() const noexcept { return quit_; }
     widgets::Desktop& desktop() noexcept { return *desktop_; }
@@ -38,4 +38,4 @@ private:
     bool quit_ = false;
 };
 
-}  // namespace ckv::tvhello
+}  // namespace ckv::hello

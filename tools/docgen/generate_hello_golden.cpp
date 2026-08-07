@@ -1,8 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// One-shot generator for tests/golden/tvhello_*.dump — NOT run by the
+// One-shot generator for tests/golden/hello_*.dump — NOT run by the
 // test suite or CI; run by hand (and only by hand, deliberately, same
-// as any golden-fixture regeneration) whenever TvHelloApp's rendered
+// as any golden-fixture regeneration) whenever HelloApp's rendered
 // output is meant to change, then the new fixture is reviewed and
 // committed like any other source change.
 #include <cstdio>
@@ -12,7 +12,7 @@
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
-#include "tvhello_app.hpp"
+#include "hello_app.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -41,14 +41,14 @@ int main(int argc, char** argv) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    ckv::tvhello::TvHelloApp tvhello(app);
+    ckv::hello::HelloApp hello(app);
 
     app.step(0);
-    write_dump(out_dir, "tvhello_initial", app);
+    write_dump(out_dir, "hello_initial", app);
 
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
     app.step(0);
-    write_dump(out_dir, "tvhello_greeting", app);
+    write_dump(out_dir, "hello_greeting", app);
 
     return 0;
 }
