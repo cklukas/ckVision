@@ -74,9 +74,16 @@ void Window::toggle_zoom(Rect available) {
         zoomed_ = false;
     } else {
         restored_bounds_ = bounds();
-        set_bounds(clamp_size(available));  // zooming must still honor min/max, like every other resize path
+        fill(available);  // zooming must still honor min/max, like every other resize path
         zoomed_ = true;
     }
+}
+
+void Window::fill(Rect available) noexcept { set_bounds(clamp_size(available)); }
+
+void Window::refresh_zoom_area(Rect available) noexcept {
+    if (!zoomed_) return;
+    fill(available);
 }
 
 void Window::reposition_within(Rect available) noexcept {
@@ -277,7 +284,12 @@ bool Window::on_mouse(const MouseEvent& event) {
             return true;
         }
         if (point_in_zoom_control(local)) {
-            toggle_zoom(bounds());  // standalone default: no Desktop to supply a real "available" rect
+            // zoom_area_provider is unset only for a standalone Window
+            // with no owning Desktop (a test, or an app not using
+            // one) — bounds() as the target then makes zooming a
+            // harmless no-op rather than reaching for a rect Window
+            // has no way to know.
+            toggle_zoom(zoom_area_provider ? zoom_area_provider() : bounds());
             return true;
         }
         if (point_in_resize_grip(local)) {

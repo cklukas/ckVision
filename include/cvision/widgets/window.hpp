@@ -24,6 +24,15 @@
 
 namespace ckv::widgets {
 
+// How a window's bounds respond to its owning Desktop growing (M8
+// WP-4) — orthogonal to reposition_within()'s shrink-side clamping,
+// which every window gets regardless of policy.
+enum class DesktopGrowPolicy {
+    None,         // never resized by desktop growth (only ever clamped on shrink) — the default
+    KeepFilling,  // stays sized to exactly fill Desktop::content_area(), like a permanently zoomed window
+    AnchorEdges,  // keeps its current distance to the right/bottom edges as the desktop grows or shrinks
+};
+
 class Window : public ui::View {
 public:
     Window(std::string title, const ui::Theme& theme, ui::RoleId frame_active_role,
@@ -107,6 +116,38 @@ public:
     void toggle_zoom(Rect available);
     bool zoomed() const noexcept { return zoomed_; }
 
+    // Supplies the rect toggle_zoom() zooms into when the zoom control
+    // is clicked, so Window itself never has to know about Desktop.
+    // Desktop::add_window installs `[desktop]{ return
+    // desktop->content_area(); }` on every window it owns; unset (a
+    // standalone Window with no Desktop — a test, or an application
+    // not using one), the zoom control zooms into the window's own
+    // current bounds, which is a visual no-op — the ORIGINAL behavior
+    // this field replaces as the "we don't have a real target" case,
+    // never a broken one.
+    std::function<Rect()> zoom_area_provider;
+
+    // Resizes to exactly fill `available`, honoring min/max size
+    // limits (shrinking to fit a max_size smaller than `available`, or
+    // growing to min_size's floor if `available` is smaller) — reused
+    // by both refresh_zoom_area() and DesktopGrowPolicy::KeepFilling.
+    void fill(Rect available) noexcept;
+
+    // Re-applies the CURRENT zoom target — a no-op unless zoomed().
+    // Desktop::on_resized() calls this on every zoomed window so a
+    // maximized window keeps filling its content area as the desktop
+    // grows or shrinks, rather than staying pinned at whatever size it
+    // had when it was first zoomed. Does not touch restored_bounds_,
+    // so un-zooming later still restores to the size before zooming
+    // began, regardless of how many resizes happened while zoomed.
+    void refresh_zoom_area(Rect available) noexcept;
+
+    // How this window's bounds respond to Desktop growth (default
+    // None — see DesktopGrowPolicy). Desktop::on_resized() reads this
+    // on every owned window; irrelevant for a standalone Window.
+    void set_grow_policy(DesktopGrowPolicy policy) noexcept { grow_policy_ = policy; }
+    DesktopGrowPolicy grow_policy() const noexcept { return grow_policy_; }
+
     // Clamps this window's bounds to fit and remain reachable within
     // `available` (ARCHITECTURE.md §5 "Sizing policy": "On shrink,
     // windows are deterministically clamped and repositioned to remain
@@ -160,6 +201,7 @@ private:
 
     bool zoomed_ = false;
     Rect restored_bounds_;
+    DesktopGrowPolicy grow_policy_ = DesktopGrowPolicy::None;
 
     KeyboardMode keyboard_mode_ = KeyboardMode::None;
     Rect keyboard_mode_start_bounds_;

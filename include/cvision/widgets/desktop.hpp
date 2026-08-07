@@ -150,6 +150,13 @@ private:
     std::vector<ui::View*> popups_;
     ui::View* top_dock_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
+    // content_area() as of the end of the previous on_resized() pass —
+    // DesktopGrowPolicy::AnchorEdges needs the delta between the old
+    // and new area to preserve each such window's right/bottom margin
+    // (initialized in the constructor body, since content_area()
+    // depends on top_dock_/bottom_dock_, set after this member in
+    // declaration order).
+    Rect last_content_area_{};
 };
 
 }  // namespace ckv::widgets

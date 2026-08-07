@@ -9,12 +9,18 @@
 namespace ckv::widgets {
 
 Desktop::Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role)
-    : View(bounds), theme_(theme), background_role_(background_role) {}
+    : View(bounds), theme_(theme), background_role_(background_role) {
+    last_content_area_ = content_area();
+}
 
 Window* Desktop::add_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
     auto* raw = static_cast<Window*>(add_child(std::move(window)));
     windows_.push_back(raw);  // stable insertion order — cycling order, not z-order
+    // Window never depends on Desktop directly (it stays independently
+    // testable) — this is the one place that wiring happens, so the
+    // zoom control works for every window a real application adds.
+    raw->zoom_area_provider = [this] { return content_area(); };
     activate(raw);
     return raw;
 }
@@ -143,12 +149,38 @@ void Desktop::on_resized() {
         const int h = std::max(1, bottom_dock_->vertical_size_hint().preferred);
         bottom_dock_->set_bounds(Rect{0, bounds().height - h, bounds().width, h});
     }
+    const Rect area = content_area();
+
+    // Desktop growth tracking (M8 WP-4): a zoomed window keeps filling
+    // the (possibly now larger or smaller) content area rather than
+    // staying pinned at whatever size it had when it was first zoomed;
+    // KeepFilling behaves the same way permanently, without needing
+    // zoomed() at all; AnchorEdges keeps each such window's current
+    // distance to the right/bottom edges, using the area from the
+    // PREVIOUS pass to know what that distance was.
+    for (Window* w : windows_) {
+        if (w->zoomed()) {
+            w->refresh_zoom_area(area);
+        } else if (w->grow_policy() == DesktopGrowPolicy::KeepFilling) {
+            w->fill(area);
+        } else if (w->grow_policy() == DesktopGrowPolicy::AnchorEdges) {
+            const Rect b = w->bounds();
+            const int right_margin = (last_content_area_.x + last_content_area_.width) - (b.x + b.width);
+            const int bottom_margin = (last_content_area_.y + last_content_area_.height) - (b.y + b.height);
+            w->fill(Rect{b.x, b.y, (area.x + area.width) - right_margin - b.x,
+                         (area.y + area.height) - bottom_margin - b.y});
+        }
+    }
+
     // ARCHITECTURE.md §5 "Sizing policy": on shrink, windows are
     // deterministically clamped and repositioned to remain reachable —
     // every Desktop resize (which includes docking new chrome, since
-    // that shrinks the content area too) re-clamps every window.
-    const Rect area = content_area();
+    // that shrinks the content area too) re-clamps every window,
+    // regardless of grow policy: the policy above only decides
+    // whether/how a window grows, this still enforces the
+    // never-unreachable floor unconditionally.
     for (Window* w : windows_) w->reposition_within(area);
+    last_content_area_ = area;
 }
 
 void Desktop::tile() {

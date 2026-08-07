@@ -517,6 +517,69 @@ CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
     CK_CHECK(status->bounds() == (Rect{0, 39, 100, 1}));
 }
 
+// --- Desktop growth tracking (DesktopGrowPolicy, M8 WP-4) ---------------
+
+CK_TEST(add_window_installs_a_zoom_area_provider_that_returns_content_area) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(!!w->zoom_area_provider);
+    CK_CHECK(w->zoom_area_provider() == desktop.content_area());
+}
+
+CK_TEST(a_zoomed_window_refills_the_content_area_after_the_desktop_grows) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 5, 20, 10});
+    w->toggle_zoom(w->zoom_area_provider());
+    CK_CHECK(w->bounds() == desktop.content_area());
+
+    desktop.set_bounds(Rect{0, 0, 120, 50});
+
+    CK_CHECK(w->zoomed());
+    CK_CHECK(w->bounds() == desktop.content_area());  // tracked the growth, not stale at the old size
+}
+
+CK_TEST(a_keep_filling_window_tracks_desktop_growth_without_being_zoomed) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_grow_policy(ckv::widgets::DesktopGrowPolicy::KeepFilling);
+
+    desktop.set_bounds(Rect{0, 0, 120, 50});
+
+    CK_CHECK(!w->zoomed());
+    CK_CHECK(w->bounds() == desktop.content_area());
+}
+
+CK_TEST(an_anchor_edges_window_keeps_its_margin_to_the_right_and_bottom_edges_as_the_desktop_grows) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_grow_policy(ckv::widgets::DesktopGrowPolicy::AnchorEdges);
+    w->set_bounds(Rect{5, 5, 20, 10});  // right margin 80-25=55, bottom margin 24-15=9
+
+    desktop.set_bounds(Rect{0, 0, 120, 40});  // +40 width, +16 height
+
+    CK_CHECK(w->bounds().x == 5);  // top-left origin untouched
+    CK_CHECK(w->bounds().y == 5);
+    CK_CHECK(w->bounds().width == 60);   // 20 + 40: right margin (55) preserved
+    CK_CHECK(w->bounds().height == 26);  // 10 + 16: bottom margin (9) preserved
+}
+
+CK_TEST(a_none_policy_window_is_only_clamped_on_shrink_never_grown) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 5, 20, 10});  // default grow policy: None
+
+    desktop.set_bounds(Rect{0, 0, 200, 60});  // grow substantially
+
+    CK_CHECK(w->bounds() == (Rect{5, 5, 20, 10}));  // unchanged — still fits, so reposition_within is a no-op too
+}
+
 CK_TEST(shrinking_the_desktop_pulls_a_window_back_into_the_new_content_area) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);

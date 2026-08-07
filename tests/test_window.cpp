@@ -150,6 +150,69 @@ CK_TEST(clicking_the_zoom_control_toggles_zoom) {
     CK_CHECK(w.zoomed());
 }
 
+// Regression (M8/WP-4): before zoom_area_provider existed, clicking
+// the zoom control always zoomed into bounds() — a visual no-op for
+// every desktop-owned window, since Window has no other way to learn
+// a real target rect. With a provider installed (as Desktop::add_window
+// does for every window it owns), the click must zoom into WHATEVER
+// the provider returns, not the window's own current bounds.
+CK_TEST(clicking_the_zoom_control_zooms_into_whatever_the_provider_returns) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.zoom_area_provider = [] { return Rect{0, 1, 80, 22}; };  // e.g. Desktop::content_area()
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));
+    CK_CHECK(w.zoomed());
+    CK_CHECK(w.bounds() == (Rect{0, 1, 80, 22}));
+}
+
+CK_TEST(with_no_provider_the_zoom_control_zooms_into_its_own_current_bounds_a_no_op) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));
+    CK_CHECK(w.zoomed());
+    CK_CHECK(w.bounds() == (Rect{5, 5, 20, 10}));  // unchanged: no provider, nothing else to target
+}
+
+CK_TEST(fill_resizes_to_the_target_rect_honoring_min_and_max_size) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_min_size(ckv::Size{10, 4});
+    w.set_max_size(ckv::Size{50, 20});
+    w.set_bounds(Rect{5, 5, 20, 10});
+
+    w.fill(Rect{2, 3, 60, 25});  // exceeds max in both dimensions
+    CK_CHECK(w.bounds() == (Rect{2, 3, 50, 20}));
+
+    w.fill(Rect{1, 1, 5, 2});  // below min in both dimensions
+    CK_CHECK(w.bounds() == (Rect{1, 1, 10, 4}));
+}
+
+CK_TEST(refresh_zoom_area_is_a_no_op_unless_zoomed) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.refresh_zoom_area(Rect{0, 0, 80, 24});
+    CK_CHECK(w.bounds() == (Rect{5, 5, 20, 10}));  // untouched — never zoomed
+}
+
+CK_TEST(refresh_zoom_area_refills_the_new_target_and_leaves_restored_bounds_untouched) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    w.toggle_zoom(Rect{0, 0, 80, 24});
+    CK_CHECK(w.bounds() == (Rect{0, 0, 80, 24}));
+
+    w.refresh_zoom_area(Rect{0, 0, 120, 40});  // e.g. the desktop grew while zoomed
+    CK_CHECK(w.zoomed());
+    CK_CHECK(w.bounds() == (Rect{0, 0, 120, 40}));
+
+    w.toggle_zoom(Rect{0, 0, 120, 40});  // un-zoom: restores the ORIGINAL pre-zoom bounds
+    CK_CHECK(!w.zoomed());
+    CK_CHECK(w.bounds() == (Rect{5, 5, 20, 10}));
+}
+
 // --- Mouse move and resize --------------------------------------------------
 
 CK_TEST(dragging_the_title_bar_moves_the_window) {
