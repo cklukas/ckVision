@@ -24,6 +24,8 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::ui::View;
+using ckv::widgets::Edge;
+using ckv::widgets::FrameSlot;
 using ckv::widgets::Label;
 using ckv::widgets::Window;
 namespace ui = ckv::ui;
@@ -728,7 +730,8 @@ CK_TEST(reposition_within_leaves_a_window_alone_if_only_its_position_already_fit
     CK_CHECK(w->bounds() == (Rect{5, 5, 15, 6}));
 }
 
-// --- Frame overlay (a second, non-content child on the border) ------------
+// --- Frame overlays (M10/WP-20: plural, positioned, non-content children
+// living on the border itself) --------------------------------------------
 
 namespace {
 class FixedWidthView : public View {
@@ -747,59 +750,50 @@ private:
 };
 }  // namespace
 
-CK_TEST(set_frame_overlay_positions_it_on_the_bottom_border_right_aligned) {
+CK_TEST(the_default_slot_positions_an_overlay_on_the_bottom_border_right_aligned) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(6));
-    CK_CHECK(w->frame_overlay()->bounds() == (Rect{30 - 2 - 6, 9, 6, 1}));
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(6), FrameSlot{});
+    CK_CHECK(overlay->bounds() == (Rect{30 - 2 - 6, 9, 6, 1}));
 }
 
 CK_TEST(frame_overlay_repositions_on_window_resize) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(4));
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), FrameSlot{});
     w->set_bounds(Rect{0, 0, 50, 20});
-    CK_CHECK(w->frame_overlay()->bounds() == (Rect{50 - 2 - 4, 19, 4, 1}));
+    CK_CHECK(overlay->bounds() == (Rect{50 - 2 - 4, 19, 4, 1}));
 }
 
 CK_TEST(frame_overlay_width_is_clamped_to_fit_a_narrow_window) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 8, 5});  // interior margin leaves very little room
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(20));  // wants far more than fits
-    CK_CHECK(w->frame_overlay()->bounds().width <= 8 - 4);
-    CK_CHECK(w->frame_overlay()->bounds().x >= 0);
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(20), FrameSlot{});
+    CK_CHECK(overlay->bounds().width <= 8 - 4);
+    CK_CHECK(overlay->bounds().x >= 0);
 }
 
-CK_TEST(set_frame_overlay_replaces_the_previous_one_and_returns_its_ownership) {
+CK_TEST(remove_frame_overlay_returns_ownership_and_stops_tracking_it) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
-    auto first_owned = std::make_unique<FixedWidthView>(5);
-    View* first_raw = first_owned.get();
-    w->set_frame_overlay(std::move(first_owned));
+    ui::View* raw = w->add_frame_overlay(std::make_unique<FixedWidthView>(5), FrameSlot{});
 
-    auto returned = w->set_frame_overlay(std::make_unique<FixedWidthView>(3));
-    CK_CHECK(returned.get() == first_raw);
-    CK_CHECK(w->frame_overlay() != first_raw);
+    auto owned = w->remove_frame_overlay(raw);
+    CK_CHECK(owned != nullptr);
+    CK_CHECK(owned.get() == raw);
+
+    w->set_bounds(Rect{0, 0, 60, 20});  // must not crash touching a stale spec
 }
 
-CK_TEST(set_frame_overlay_with_nullptr_after_one_was_set_clears_it) {
+CK_TEST(remove_frame_overlay_for_a_view_not_owned_by_this_window_returns_null) {
     Fixture f;
     auto w = make_window(f);
-    w->set_bounds(Rect{0, 0, 30, 10});
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(5));
-    auto returned = w->set_frame_overlay(nullptr);
-    CK_CHECK(returned != nullptr);
-    CK_CHECK(w->frame_overlay() == nullptr);
-}
-
-CK_TEST(a_window_with_no_overlay_set_has_a_null_frame_overlay) {
-    Fixture f;
-    auto w = make_window(f);
-    CK_CHECK(w->frame_overlay() == nullptr);
+    View stray;
+    CK_CHECK(w->remove_frame_overlay(&stray) == nullptr);
 }
 
 CK_TEST(frame_overlay_and_content_coexist_as_independent_children) {
@@ -807,45 +801,163 @@ CK_TEST(frame_overlay_and_content_coexist_as_independent_children) {
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
     w->set_content(std::make_unique<View>());
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(6));
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(6), FrameSlot{});
     CK_CHECK(w->content() != nullptr);
-    CK_CHECK(w->frame_overlay() != nullptr);
-    CK_CHECK(w->content() != w->frame_overlay());
+    CK_CHECK(overlay != nullptr);
+    CK_CHECK(w->content() != overlay);
     // content() still fills the ordinary interior, untouched by the overlay.
     CK_CHECK(w->content()->bounds() == (Rect{1, 1, 28, 8}));
 }
 
-CK_TEST(the_overlay_repositions_automatically_when_its_own_preferred_width_changes) {
-    // A changed preferred size propagates through size_hint_changed()
-    // (M9/WP-16) — no manual relayout call needed, unlike the deleted
-    // relayout_frame_overlay() this replaces.
+// --- Multiple, positioned overlays (the acceptance scenario: a path
+// indicator bottom-left, a line:col readout bottom-right) -----------------
+
+CK_TEST(two_overlays_at_different_bottom_alignments_coexist_without_overlapping) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 40, 10});
+    const FrameSlot bottom_start{.edge = Edge::Bottom, .alignment = ui::Alignment::Start};
+    auto* path = w->add_frame_overlay(std::make_unique<FixedWidthView>(6), bottom_start);
+    // Default slot is Bottom/End.
+    auto* line_col = w->add_frame_overlay(std::make_unique<FixedWidthView>(5), FrameSlot{});
+
+    CK_CHECK(path->bounds() == (Rect{2, 9, 6, 1}));
+    CK_CHECK(line_col->bounds() == (Rect{40 - 2 - 5, 9, 5, 1}));
+    CK_CHECK(path->bounds().x + path->bounds().width <= line_col->bounds().x);  // no overlap
+}
+
+CK_TEST(a_top_start_overlay_sits_flush_after_the_close_control) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 30, 10});  // wide enough for the close control (b.width > 6)
+    const FrameSlot top_start{.edge = Edge::Top, .alignment = ui::Alignment::Start};
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), top_start);
+    CK_CHECK(overlay->bounds() == (Rect{4, 0, 4, 1}));  // close control occupies columns 1-3
+}
+
+CK_TEST(a_top_end_overlay_sits_flush_before_the_zoom_control) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 30, 10});  // wide enough for the zoom control (b.width > 8)
+    const FrameSlot top_end{.edge = Edge::Top, .alignment = ui::Alignment::End};
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), top_end);
+    // The zoom control occupies the last 3 columns.
+    CK_CHECK(overlay->bounds() == (Rect{30 - 3 - 4, 0, 4, 1}));
+}
+
+CK_TEST(a_top_start_overlay_on_a_narrow_window_only_clears_the_corner) {
+    Fixture f;
+    auto w = make_window(f);
+    // b.width == 6: too narrow for the close control to draw at all.
+    w->set_bounds(Rect{0, 0, 6, 5});
+    const FrameSlot top_start{.edge = Edge::Top, .alignment = ui::Alignment::Start};
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(2), top_start);
+    CK_CHECK(overlay->bounds().x == 1);
+}
+
+CK_TEST(an_offset_nudges_the_overlay_from_its_aligned_position) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(4));
-    CK_CHECK(w->frame_overlay()->bounds().width == 4);
-
-    static_cast<FixedWidthView*>(w->frame_overlay())->set_preferred_width(10);
-    CK_CHECK(w->frame_overlay()->bounds().width == 10);
-    CK_CHECK(w->frame_overlay()->bounds() == (Rect{30 - 2 - 10, 9, 10, 1}));
+    auto* overlay = w->add_frame_overlay(
+        std::make_unique<FixedWidthView>(4),
+        FrameSlot{.edge = Edge::Bottom, .alignment = ui::Alignment::Start, .offset = 3});
+    CK_CHECK(overlay->bounds().x == 2 + 3);  // the plain Start margin (2), pushed right by 3
 }
 
-CK_TEST(a_content_child_changing_its_own_size_hint_does_not_touch_the_overlay) {
+CK_TEST(an_offset_is_clamped_so_the_overlay_never_leaves_its_own_row) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 30, 10});
+    auto* overlay = w->add_frame_overlay(
+        std::make_unique<FixedWidthView>(4),
+        FrameSlot{.edge = Edge::Bottom, .alignment = ui::Alignment::Start, .offset = 1000});
+    // Right margin boundary: still inside it, never past it.
+    CK_CHECK(overlay->bounds().x + overlay->bounds().width <= 30 - 2);
+}
+
+CK_TEST(a_second_overlay_at_an_already_occupied_slot_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        Fixture f;
+        auto w = make_window(f);
+        w->set_bounds(Rect{0, 0, 30, 10});
+        w->add_frame_overlay(std::make_unique<FixedWidthView>(4), FrameSlot{});
+        // Same default slot again.
+        w->add_frame_overlay(std::make_unique<FixedWidthView>(3), FrameSlot{});
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+CK_TEST(a_top_centered_or_filled_overlay_aborts_since_the_title_owns_that_position) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        Fixture f;
+        auto w = make_window(f);
+        w->set_bounds(Rect{0, 0, 30, 10});
+        w->add_frame_overlay(std::make_unique<FixedWidthView>(4),
+                              FrameSlot{.edge = Edge::Top, .alignment = ui::Alignment::Center});
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+// --- Size-hint-change propagation (M9/WP-16), now per-overlay -------------
+
+CK_TEST(the_overlay_repositions_automatically_when_its_own_preferred_width_changes) {
+    // A changed preferred size propagates through size_hint_changed()
+    // (M9/WP-16) — no manual relayout call needed.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 30, 10});
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), FrameSlot{});
+    CK_CHECK(overlay->bounds().width == 4);
+
+    static_cast<FixedWidthView*>(overlay)->set_preferred_width(10);
+    CK_CHECK(overlay->bounds().width == 10);
+    CK_CHECK(overlay->bounds() == (Rect{30 - 2 - 10, 9, 10, 1}));
+}
+
+CK_TEST(a_content_child_changing_its_own_size_hint_does_not_touch_any_overlay) {
     // on_child_size_hint_changed() fires for ANY direct child — content()
     // is one too — but content_rect() depends only on Window's own
     // bounds(), never on content()'s hint, so this must be a no-op.
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
-    w->set_frame_overlay(std::make_unique<FixedWidthView>(4));
-    const Rect before = w->frame_overlay()->bounds();
+    auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), FrameSlot{});
+    const Rect before = overlay->bounds();
 
     auto content = std::make_unique<FixedWidthView>(6);
     FixedWidthView* content_ptr = content.get();
     w->set_content(std::move(content));
     content_ptr->set_preferred_width(20);
 
-    CK_CHECK(w->frame_overlay()->bounds() == before);
+    CK_CHECK(overlay->bounds() == before);
+}
+
+CK_TEST(one_overlays_hint_changing_does_not_reposition_a_different_overlay) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 40, 10});
+    const FrameSlot bottom_start{.edge = Edge::Bottom, .alignment = ui::Alignment::Start};
+    auto* start = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), bottom_start);
+    // Default slot is Bottom/End.
+    auto* end = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), FrameSlot{});
+    const Rect end_before = end->bounds();
+
+    static_cast<FixedWidthView*>(start)->set_preferred_width(10);
+
+    CK_CHECK(end->bounds() == end_before);
 }
 
 CK_TEST(a_growing_overlay_label_stays_right_aligned_live) {
@@ -855,11 +967,10 @@ CK_TEST(a_growing_overlay_label_stays_right_aligned_live) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 40, 10});
-    w->set_frame_overlay(std::make_unique<Label>("/a"));
-    auto* overlay = static_cast<Label*>(w->frame_overlay());
+    auto* overlay = w->add_frame_overlay(std::make_unique<Label>("/a"), FrameSlot{});
     const Rect narrow = overlay->bounds();
 
-    overlay->set_text("/a/much/longer/path");
+    static_cast<Label*>(overlay)->set_text("/a/much/longer/path");
 
     const Rect wide = overlay->bounds();
     CK_CHECK(wide.width > narrow.width);

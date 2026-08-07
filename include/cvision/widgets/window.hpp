@@ -18,12 +18,42 @@
 #include <memory>
 #include <string>
 
+#include <unordered_map>
+#include <vector>
+
 #include "cvision/ui/anchor_pane.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 
 namespace ckv::widgets {
+
+// Which border row a frame overlay lives on (M10/WP-20). Deliberately
+// just these two, not Dock's full Top/Bottom/Left/Right/Center set: a
+// window's side borders are one cell wide, with no room to host
+// meaningful content — every real frame-overlay use (a path indicator,
+// a "line:col" readout) is a short text run along the top or bottom.
+enum class Edge { Top, Bottom };
+
+// `alignment` is `ui::Alignment` (Start/Center/End/Fill) — the SAME
+// enum Row/Column/Grid already use, positioning the overlay within its
+// edge's own row exactly the way align_cross_axis positions a child
+// within its container. `offset` nudges the result right (positive) or
+// left (negative) from where `alignment` alone would place it, still
+// clamped to the row's own available span.
+//
+// Edge::Top only accepts Start/End: the title already owns Center, and
+// Window::add_frame_overlay CKV_ASSERTs against Top+Center or Top+Fill
+// rather than leaving an implicit "whoever draws last wins" collision
+// with the title — the "deterministic precedence" is "the title always
+// wins Center on Top," not a stacking order. Edge::Bottom accepts all
+// four; there is no title there to collide with.
+struct FrameSlot {
+    Edge edge = Edge::Bottom;
+    ui::Alignment alignment = ui::Alignment::End;  // the old hard-wired bottom-right default
+    int offset = 0;
+};
 
 // How a window's bounds respond to its owning Desktop growing (M8
 // WP-4) — orthogonal to reposition_within()'s shrink-side clamping,
@@ -89,21 +119,27 @@ public:
     // set_content() both claim the one content slot, not composable.
     ui::AnchorPane& content_pane();
 
-    // A SECOND, small child that lives ON the frame border itself
-    // rather than in the content interior — the classic "current
+    // Small children that live ON the frame border itself rather than
+    // in the content interior (M10/WP-20) — the classic "current
     // line:col" indicator an editor shows in its own window's bottom
-    // border, or any other small at-a-glance readout that shouldn't
-    // cost a row of content space. Positioned at its own
-    // horizontal_size_hint().preferred width (height always 1), right-
-    // aligned along the bottom border with a 1-cell margin before the
-    // resize grip — repositioned automatically on every window resize,
-    // same as content(). At most one at a time: a second call replaces
-    // and returns ownership of the first (nullptr if there was none).
-    // Unlike content(), an unset overlay is the common case, so there
-    // is no "must call this" contract — a plain Window with no overlay
-    // behaves exactly as before this existed.
-    std::unique_ptr<ui::View> set_frame_overlay(std::unique_ptr<ui::View> overlay);
-    ui::View* frame_overlay() const noexcept { return frame_overlay_; }
+    // border, or a path indicator in the opposite corner, or any other
+    // small at-a-glance readout that shouldn't cost a row of content
+    // space. Each positioned at its own horizontal_size_hint().preferred
+    // width (height always 1) per `slot` — repositioned automatically
+    // on every window resize and on its own size-hint change (M9/WP-16),
+    // same as content(). At most one overlay per (edge, alignment) pair
+    // — CKV_ASSERTs if that pair is already occupied; remove_frame_
+    // overlay first to replace one, or nest several views in a Row
+    // yourself if you need more than one at the same position (the same
+    // answer Row/Column/Grid/Dock give for anything beyond their own
+    // scope). Unlike content(), unset overlays are the common case, so
+    // there is no "must call this" contract — a plain Window with none
+    // behaves exactly as before this existed. Returns the observer
+    // pointer (matches add_child's own contract).
+    ui::View* add_frame_overlay(std::unique_ptr<ui::View> view, FrameSlot slot);
+    // Detaches a specific overlay, returning ownership (nullptr if
+    // `view` is not a currently-attached overlay of this window).
+    std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
 
     void set_min_size(Size min) noexcept;
     void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
@@ -196,7 +232,7 @@ public:
     void draw(scene::Painter& painter) override;
     void on_resized() override;
     void on_attached() override;
-    // Re-derives and reapplies the frame overlay's position/width
+    // Re-derives and reapplies ONE frame overlay's position/width
     // whenever ITS OWN preferred size changes (M9/WP-16) — e.g. a Label
     // overlay whose set_text() makes it longer or shorter — without the
     // caller having to trigger it by hand. content() needs no reaction
@@ -210,7 +246,8 @@ private:
     enum class KeyboardMode { None, Move, Resize };
     enum class DragKind { None, Move, Resize };
 
-    Rect frame_overlay_rect() const noexcept;
+    Rect frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept;
+    void relayout_frame_overlays() noexcept;
     bool point_in_close_control(Point local) const noexcept;
     bool point_in_zoom_control(Point local) const noexcept;
     bool point_in_resize_grip(Point local) const noexcept;
@@ -223,7 +260,7 @@ private:
     ui::RoleId title_inactive_role_ = ui::kInvalidRole;
 
     ui::View* content_ = nullptr;
-    ui::View* frame_overlay_ = nullptr;
+    std::unordered_map<ui::View*, FrameSlot> frame_overlays_;
 
     bool active_ = false;
     bool movable_ = true;

@@ -56,14 +56,28 @@ ui::AnchorPane& Window::content_pane() {
     return *pane;
 }
 
-std::unique_ptr<ui::View> Window::set_frame_overlay(std::unique_ptr<ui::View> overlay) {
-    std::unique_ptr<ui::View> previous = frame_overlay_ != nullptr ? remove_child(frame_overlay_) : nullptr;
-    frame_overlay_ = nullptr;
-    if (overlay != nullptr) {
-        frame_overlay_ = add_child(std::move(overlay));
-        frame_overlay_->set_bounds(frame_overlay_rect());
+ui::View* Window::add_frame_overlay(std::unique_ptr<ui::View> view, FrameSlot slot) {
+    CKV_ASSERT(view != nullptr);
+    // Top's Center/Fill are the title's own position — see FrameSlot's
+    // own doc comment for why this is a hard contract, not an implicit
+    // stacking order.
+    CKV_ASSERT(slot.edge != Edge::Top || slot.alignment == ui::Alignment::Start ||
+               slot.alignment == ui::Alignment::End);
+    for (const auto& [existing_view, existing_slot] : frame_overlays_) {
+        (void)existing_view;
+        CKV_ASSERT(!(existing_slot.edge == slot.edge && existing_slot.alignment == slot.alignment));
     }
-    return previous;
+
+    ui::View* observer = add_child(std::move(view));
+    frame_overlays_[observer] = slot;
+    observer->set_bounds(frame_overlay_rect(*observer, slot));
+    return observer;
+}
+
+std::unique_ptr<ui::View> Window::remove_frame_overlay(ui::View* view) {
+    std::unique_ptr<ui::View> owned = remove_child(view);
+    if (owned) frame_overlays_.erase(view);
+    return owned;
 }
 
 void Window::set_min_size(Size min) noexcept {
@@ -136,17 +150,32 @@ Rect Window::content_rect() const noexcept {
     return Rect{1, 1, b.width - 2, b.height - 2};
 }
 
-Rect Window::frame_overlay_rect() const noexcept {
-    if (frame_overlay_ == nullptr) return Rect{0, 0, 0, 0};
+Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
     const Rect b = bounds();
-    if (b.height <= 2 || b.width <= 4) return Rect{0, 0, 0, 0};  // frame too small to host it at all
-    // Right-aligned on the bottom border, 2 cells in from each corner
-    // (leaving the resize grip's own corner cell untouched and mirroring
-    // the close/zoom controls' own inset on the top border) — never
-    // wider than fits between those margins.
-    const int max_width = std::max(1, b.width - 4);
-    const int width = std::min(std::max(1, frame_overlay_->horizontal_size_hint().preferred), max_width);
-    return Rect{b.width - 2 - width, b.height - 1, width, 1};
+    // Bottom keeps the original single-overlay margin on BOTH sides (2
+    // cells in from each corner — leaving the resize grip's own corner
+    // cell untouched, and mirroring the close/zoom controls' own inset
+    // on the top border for visual symmetry, even though nothing sits
+    // in the bottom-left corner). Top's margins instead track whichever
+    // controls draw() actually draws (point_in_close_control/
+    // point_in_zoom_control's own gates), so a Start/End overlay never
+    // sits under a control that happens not to be there at this width.
+    const int left_margin = slot.edge == Edge::Top ? (b.width > 6 ? 4 : 1) : 2;
+    const int right_margin = slot.edge == Edge::Top ? (b.width > 8 ? 3 : 1) : 2;
+    const int y = slot.edge == Edge::Top ? 0 : std::max(0, b.height - 1);
+
+    const int preferred = view.horizontal_size_hint().preferred;
+    const auto [aligned_x, width] =
+        ui::align_cross_axis(b.width, preferred, slot.alignment, left_margin, right_margin);
+    const int max_x = std::max(left_margin, b.width - right_margin - width);
+    const int x = std::clamp(aligned_x + slot.offset, left_margin, max_x);
+    return Rect{x, y, width, 1};
+}
+
+void Window::relayout_frame_overlays() noexcept {
+    for (const auto& [view, slot] : frame_overlays_) {
+        view->set_bounds(frame_overlay_rect(*view, slot));
+    }
 }
 
 Rect Window::clamp_size(Rect b) const noexcept {
@@ -159,11 +188,12 @@ Rect Window::clamp_size(Rect b) const noexcept {
 
 void Window::on_resized() {
     if (content_ != nullptr) content_->set_bounds(content_rect());
-    if (frame_overlay_ != nullptr) frame_overlay_->set_bounds(frame_overlay_rect());
+    relayout_frame_overlays();
 }
 
 void Window::on_child_size_hint_changed(ui::View& child) {
-    if (&child == frame_overlay_) frame_overlay_->set_bounds(frame_overlay_rect());
+    auto it = frame_overlays_.find(&child);
+    if (it != frame_overlays_.end()) child.set_bounds(frame_overlay_rect(child, it->second));
 }
 
 bool Window::point_in_close_control(Point local) const noexcept {

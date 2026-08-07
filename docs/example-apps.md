@@ -115,27 +115,32 @@ not just when the application recomputes their bounds by hand — a live
 `ResizeEvent` propagates from `Application::root()` through
 `View::fills_root()`'s default down to the Desktop, whose own
 `on_resized()` repins both docks and reclamps every window; see
-`tests/test_m8_resize_integration.cpp`) and `Window::set_frame_overlay`
+`tests/test_m8_resize_integration.cpp`) and `Window::add_frame_overlay`
 (the selected directory's full path shown live on the window's own
 bottom border — the general mechanism a text editor would use for a
-"line: N, col: M" indicator).
+"line: N, col: M" indicator; M10/WP-20's plural, positioned overlays
+replace this app's original single-slot `set_frame_overlay` call with
+no change in the app's own observable behavior).
 
 - **Real disk access**: the interactive binary browses the actual
   filesystem via `term::PosixFileSystem` — previously the only
   `core::FileSystem` implementation anywhere in the repo was
   `MemoryFileSystem` (test-only), so no application could browse a
   real directory without writing that backend itself first.
-- **Two-pane layout**: `ui::Row` with two `Expanding` items, the same
-  layout container `make_directory_picker` already uses internally —
-  no manual `set_bounds` bookkeeping for either pane.
+- **Two-pane layout**: `widgets::Splitter` (M10/WP-19) holding the tree
+  and file-list panes, starting at an exact 50/50 split — the same
+  ratio the app's original `ui::Row` with two `Expanding` items gave,
+  now keyboard-adjustable (Tab to the Splitter, then Left/Right) rather
+  than fixed.
 - **Tree building**: `build_subtree()` in `filebrowser_app.cpp`
   recurses the injected `FileSystem` (directories only, depth-capped
   against symlink cycles on a real disk), the same pattern
   `make_directory_picker` uses — duplicated here deliberately so this
   example is copy-paste usable on its own, not dependent on that
   dialog's private helpers.
-- **Focus traversal**: Tab switches between the tree and file-list
-  panes — the library's own default keymap (DECISIONS.md D-029, M9/
+- **Focus traversal**: Tab cycles through the tree pane, the Splitter
+  (M10/WP-19 — Left/Right there adjusts the pane split), and the file-
+  list pane — the library's own default keymap (DECISIONS.md D-029, M9/
   WP-13), with nothing bound explicitly in `FileBrowserApp`'s own
   constructor. An application that wants Tab for something else (a
   text editor inserting a literal tab) keeps that freedom, because a
@@ -154,6 +159,9 @@ bottom border — the general mechanism a text editor would use for a
 | The frame overlay shows the currently selected directory's full path, and updates live | `the_frame_overlay_shows_the_currently_selected_directorys_full_path` |
 | Alt+X quits | `alt_x_quits` |
 | Tab moves focus from the tree pane to the file-list pane | `tab_moves_focus_from_the_tree_to_the_file_list_pane` |
+| The tree and file-list panes start at an even 50/50 split | `the_tree_and_file_list_panes_start_at_an_even_50_50_split` |
+| The panes are children of a Splitter positioned between them | `the_panes_are_children_of_a_splitter_positioned_between_them` |
+| Adjusting the Splitter resizes both panes and keeps them contiguous | `adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous` |
 
 ### Screenshots
 

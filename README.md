@@ -85,9 +85,10 @@ A first ergonomics/resize review added the Desktop-level mechanisms:
 `Desktop::dock_top`/`dock_bottom` + `content_area()` +
 `Window::reposition_within` (chrome pinning and window clamping when
 the *Desktop's* bounds change), `TreeView` selection/activation
-callbacks (the master-detail hook), and `Window::set_frame_overlay`
-(a widget on the window's own border, e.g. a "current line"
-indicator).
+callbacks (the master-detail hook), and a widget on the window's own
+border, e.g. a "current line" indicator (`Window::add_frame_overlay`
+as of the second review below — plural, positioned overlays replacing
+this first review's original single-slot `set_frame_overlay`).
 
 **A second, full API-ergonomics and integration review (2026-08-07,
 [plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md))

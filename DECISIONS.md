@@ -283,6 +283,33 @@ container render one frame with a stale layout before catching up.
 Retired `Window::relayout_frame_overlay()`, the explicit manual hook
 this replaces. Scheduled as M9/WP-16.
 
+**D-031 — Frame-overlay slots: two edges, `ui::Alignment` reused, one
+overlay per (edge, alignment).**
+`widgets::FrameSlot{Edge, ui::Alignment, offset}` positions a
+`Window::add_frame_overlay` child on the border itself. `Edge` is
+deliberately just `{Top, Bottom}`, NOT `ui::Dock`'s full `{Top, Bottom,
+Left, Right, Center}` set — a window's side borders are one cell wide,
+with no room to host meaningful overlay content, so a fifth/sixth value
+would have no real use. Alignment within an edge's own row reuses
+`ui::Alignment` (`Start`/`Center`/`End`/`Fill`) rather than a new
+enum — the same values Row/Column/Grid already position children with,
+now positioning an overlay within its row exactly the way
+`align_cross_axis` positions a child within its container (frame_
+overlay_rect literally calls it). At most one overlay per (edge,
+alignment) pair — `CKV_ASSERT`s on a second, mirroring `ui::Dock`'s own
+"at most one child per edge" contract; several overlays at the same
+position nest in a Row the caller builds, the same answer every WP-19
+container gives for anything beyond its own scope. `Edge::Top` further
+restricts alignment to `Start`/`End` only — `CKV_ASSERT`s against
+`Center`/`Fill` there, since the title already owns Top's center; this
+is the "deterministic precedence" WP-20's own acceptance text asks
+for, made an explicit contract violation rather than an implicit
+"whoever paints last wins" stacking rule. Retired the single hard-wired
+bottom-right `set_frame_overlay`/`frame_overlay()`; all three call
+sites (the implementation itself, `examples/filebrowser`, and
+`tests/test_window.cpp`) migrated in the same change, per this
+project's own no-shim policy. Scheduled as M10/WP-20.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**
