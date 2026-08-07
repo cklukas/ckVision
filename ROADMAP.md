@@ -199,6 +199,9 @@ enhanced input) tested; legacy console refusal path tested.
 
 ## M8 — Integration correctness: the unplugged seams (≈1–2 pw)
 
+**Status: complete** — WP-1…WP-6 all landed; see the status ledger in
+[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md).
+
 Repairs the review's findings F1–F7 — cases where a mechanism is
 implemented and unit-tested but the wiring that lets a real terminal
 session reach it was never made. Work packages WP-1…WP-6 in

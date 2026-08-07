@@ -27,18 +27,15 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 
     auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
     status->set_items({{"F10 Menu", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
-    status_ = status.get();
-    desktop_->add_child(std::move(status));
+    // dock_bottom (not add_child + a one-time set_bounds) keeps the
+    // status line pinned to the last row across every future terminal
+    // resize — Desktop::on_resized() re-derives its position from
+    // content_area() automatically; see tests/test_m8_integration.cpp.
+    status_ = static_cast<widgets::StatusLine*>(desktop_->dock_bottom(std::move(status)));
 
     build_menu_bar();
     build_controls_window();
     build_image_window();
-
-    // Layout: menu bar on row 0, status line on the last row, desktop
-    // content (windows) filling the space between.
-    const Rect root_bounds = app_.root().bounds();
-    menu_->set_bounds(Rect{0, 0, root_bounds.width, 1});
-    status_->set_bounds(Rect{0, root_bounds.height - 1, root_bounds.width, 1});
 
     app_.commands().register_command(kCmdActivateMenu, "Activate Menu Bar", "Window",
                                       KeyChord{Key::F10, Modifier::None, ""});
@@ -84,8 +81,7 @@ void GalleryApp::build_menu_bar() {
                                                      roles_.menu_bar_active, roles_.menu_dropdown_normal,
                                                      roles_.menu_dropdown_highlighted,
                                                      roles_.menu_dropdown_disabled, app_, *desktop_);
-    menu_ = menu.get();
-    desktop_->add_child(std::move(menu));
+    menu_ = static_cast<widgets::MenuBar*>(desktop_->dock_top(std::move(menu)));
 }
 
 void GalleryApp::build_controls_window() {
@@ -105,14 +101,12 @@ void GalleryApp::build_controls_window() {
     auto input = std::make_unique<widgets::InputLine>(app_.theme(), roles_.input_normal, roles_.input_focused,
                                                         roles_.input_invalid);
     input->set_bounds(Rect{10, 1, 20, 1});
-    input->set_focus_policy(ui::FocusPolicy::TabStop);
     name_input_ = input.get();
     content->add_child(std::move(input));
 
     auto greet = std::make_unique<widgets::Button>("&Greet", app_.theme(), roles_.button_normal,
                                                      roles_.button_focused, roles_.button_default, roles_.button_shadow);
     greet->set_bounds(Rect{1, 3, 12, 2});  // two rows: face + drop shadow
-    greet->set_focus_policy(ui::FocusPolicy::TabStop);
     greet->set_default(true);
     widgets::InputLine* name_input = name_input_;
     ui::Application* app_ptr = &app_;

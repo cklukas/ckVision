@@ -35,7 +35,8 @@ landing commit). A row with no note is still open.
 | WP-3 | **Done** | `View::on_descendant_mouse_down`; `Desktop` override; `tests/test_m8_integration.cpp`, `tests/test_desktop.cpp` |
 | WP-4 | **Done** | `Window::zoom_area_provider`/`fill`/`refresh_zoom_area`, `DesktopGrowPolicy`; `tests/test_window.cpp`, `tests/test_desktop.cpp` |
 | WP-5 | **Done** | Unified `widgets::WindowHandle` (retired 5 duplicate per-widget Handle structs); `Desktop::show_dialog`; gallery migrated (F6 fixed); `tests/test_message_box.cpp` |
-| WP-6…22 | Open | — |
+| WP-6 | **Done** (M8 complete) | Gallery on `dock_top`/`dock_bottom` (F7); redundant `set_focus_policy(TabStop)` removed from all 3 examples (E6); filebrowser window declares `KeepFilling`; `tests/test_gallery_smoke.cpp` resize regression |
+| WP-7…22 | Open | — |
 
 ---
 

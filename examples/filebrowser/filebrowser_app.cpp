@@ -92,13 +92,17 @@ void FileBrowserApp::build_window() {
                                                       roles_.window_title_inactive);
     window->set_bounds(desktop_->content_area());
     window->set_min_size(Size{40, 10});
+    // Keeps filling the content area as the terminal grows, rather
+    // than staying pinned at whatever size it happened to be created
+    // at (M8 WP-4) — the natural policy for a single-window,
+    // fills-the-desktop application like this one.
+    window->set_grow_policy(widgets::DesktopGrowPolicy::KeepFilling);
 
     auto content = std::make_unique<ui::Row>();
 
     auto tree = std::make_unique<widgets::TreeView>(app_.theme(), roles_.input_normal, roles_.input_focused,
                                                       roles_.dialog_frame, roles_.dialog_background);
     tree_ = tree.get();
-    tree_->set_focus_policy(ui::FocusPolicy::TabStop);
     std::vector<widgets::TreeNode> roots;
     roots.push_back(build_subtree(fs_, root_path_, root_path_, /*depth=*/8));
     roots.front().expanded = true;  // show the root's own subdirectories immediately, like a file
@@ -110,7 +114,6 @@ void FileBrowserApp::build_window() {
     auto file_list = std::make_unique<widgets::ListView>(app_.theme(), roles_.input_normal, roles_.input_focused,
                                                            roles_.dialog_frame, roles_.dialog_background);
     file_list_ = file_list.get();
-    file_list_->set_focus_policy(ui::FocusPolicy::TabStop);
 
     tree_->on_selection_changed = [this] { refresh_file_list_for_selected_node(); };
 

@@ -47,6 +47,27 @@ CK_TEST(the_menu_bar_and_status_line_both_render) {
     CK_CHECK(bytes.find("Quit") != std::string::npos);
 }
 
+// Regression (M8/WP-6, finding F7): the gallery used to hand-position
+// its menu bar and status line with a one-time set_bounds call instead
+// of Desktop::dock_top/dock_bottom — the exact stale-after-resize
+// pattern docking exists to eliminate. Now that it docks like the
+// other examples, a real terminal resize (through the same chain
+// tests/test_m8_integration.cpp exercises directly on Desktop) must
+// reach it end to end.
+CK_TEST(resizing_the_terminal_repins_the_menu_bar_and_status_line_to_the_new_edges) {
+    Fixture f;
+    f.app.step(0);
+    ckv::ui::View* menu_bar = f.gallery.desktop().top_dock();
+    ckv::ui::View* status_line = f.gallery.desktop().bottom_dock();
+    CK_CHECK(menu_bar != nullptr);
+    CK_CHECK(status_line != nullptr);
+
+    CK_CHECK(f.app.dispatch(ckv::ResizeEvent{ckv::Size{120, 40}}));
+
+    CK_CHECK(menu_bar->bounds() == (ckv::Rect{0, 0, 120, 1}));
+    CK_CHECK(status_line->bounds() == (ckv::Rect{0, 39, 120, 1}));
+}
+
 CK_TEST(typing_into_the_name_field_reaches_it_and_repaints) {
     Fixture f;
     f.app.step(0);
