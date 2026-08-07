@@ -30,6 +30,7 @@ add_library(cvision
     src/ui/grid.cpp
     src/ui/history.cpp
     src/ui/layout.cpp
+    src/ui/overlay.cpp
     src/ui/standard_roles.cpp
     src/ui/theme.cpp
     src/ui/view.cpp
