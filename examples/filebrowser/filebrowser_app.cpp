@@ -3,9 +3,9 @@
 
 #include <algorithm>
 
-#include "cvision/ui/layout.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/splitter.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::filebrowser {
@@ -56,8 +56,9 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
 
     // kQuit is already registered by Application's constructor (M9/
     // WP-12) — only its handler needs attaching here. Tab already
-    // switches focus between the tree and file-list panes out of the
-    // box (M9/WP-13, D-029) — nothing to wire for that at all.
+    // cycles focus through the tree, the Splitter (M10/WP-19 — Left/
+    // Right there adjusts the pane split), and the file-list pane out
+    // of the box (M9/WP-13, D-029) — nothing to wire for that at all.
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
 
     app_.set_focus(tree_);
@@ -91,8 +92,6 @@ void FileBrowserApp::build_window() {
     // fills-the-desktop application like this one.
     window->set_grow_policy(widgets::DesktopGrowPolicy::KeepFilling);
 
-    auto content = std::make_unique<ui::Row>();
-
     auto tree = std::make_unique<widgets::TreeView>();
     tree_ = tree.get();
     std::vector<widgets::TreeNode> roots;
@@ -108,9 +107,12 @@ void FileBrowserApp::build_window() {
 
     tree_->on_selection_changed = [this] { refresh_file_list_for_selected_node(); };
 
-    content->add_item(std::move(tree), ui::LayoutSpec{ui::SizePolicy::Expanding, 1});
-    content->add_item(std::move(file_list), ui::LayoutSpec{ui::SizePolicy::Expanding, 1});
-
+    // Splitter (M10/WP-19) replaces the old fixed 50/50 Row: the split
+    // starts at the same exact 50/50 ratio (Splitter's own default),
+    // and Left/Right now lets the user adjust it.
+    auto content = std::make_unique<widgets::Splitter>(window->content_rect(), std::move(tree),
+                                                         std::move(file_list));
+    splitter_ = content.get();
     window->set_content(std::move(content));
 
     // The selected directory's full path, shown live on the window's

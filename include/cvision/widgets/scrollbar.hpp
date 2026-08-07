@@ -10,10 +10,9 @@
 
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/orientation.hpp"
 
 namespace ckv::widgets {
-
-enum class Orientation { Horizontal, Vertical };
 
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.scrollbar.track"/"ckv.scrollbar.thumb".

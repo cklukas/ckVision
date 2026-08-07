@@ -47,6 +47,7 @@ add_executable(cvision_tests
     test_scroll_viewport.cpp
     test_scrollbar.cpp
     test_sixel_encoder.cpp
+    test_splitter.cpp
     test_standard_roles.cpp
     test_status_line.cpp
     test_surface.cpp

@@ -26,6 +26,7 @@ namespace ckv::widgets {
 class MenuBar;
 class Window;
 class Label;
+class Splitter;
 }  // namespace ckv::widgets
 
 namespace ckv::filebrowser {
@@ -43,6 +44,7 @@ public:
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::TreeView* tree() const noexcept { return tree_; }
     widgets::ListView* file_list() const noexcept { return file_list_; }
+    widgets::Splitter* splitter() const noexcept { return splitter_; }
     const std::string& selected_directory() const noexcept { return selected_directory_; }
 
 private:
@@ -60,6 +62,7 @@ private:
     widgets::Window* window_ = nullptr;
     widgets::TreeView* tree_ = nullptr;
     widgets::ListView* file_list_ = nullptr;
+    widgets::Splitter* splitter_ = nullptr;
     widgets::Label* path_label_ = nullptr;
 
     // TreeNode pointers are stable once built (see build_subtree's own

@@ -69,6 +69,8 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.canvas_fallback = registry.intern("ckv.canvas.fallback", Style{kBlack, kLightGray, Attr{}});
     r.text_view_text = registry.intern("ckv.textview.text", Style{kBlack, kLightGray, Attr{}});
     r.status_line_normal = registry.intern("ckv.statusline.normal", Style{kBlack, kLightGray, Attr{}});
+    r.splitter_normal = registry.intern("ckv.splitter.normal", Style{kWhite, kLightGray, Attr{}});
+    r.splitter_focused = registry.intern("ckv.splitter.focused", Style{kWhite, kGreen, Attr{}});
     return r;
 }
 
@@ -109,6 +111,8 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.canvas_fallback, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.text_view_text, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.status_line_normal, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.splitter_normal, Style{kWhite, kLightGray, Attr{}});
+    theme.set(roles.splitter_focused, Style{kWhite, kGreen, Attr{}});
     return theme;
 }
 
@@ -178,6 +182,8 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.canvas_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.text_view_text, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.status_line_normal, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.splitter_normal, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.splitter_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     return theme;
 }
 
@@ -218,6 +224,8 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.canvas_fallback, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.text_view_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.status_line_normal, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.splitter_normal, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.splitter_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     return theme;
 }
 
@@ -258,6 +266,8 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.canvas_fallback, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.text_view_text, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.status_line_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.splitter_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.splitter_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     return theme;
 }
 

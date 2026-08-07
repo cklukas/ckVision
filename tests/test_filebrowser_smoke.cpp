@@ -7,9 +7,12 @@
 // pattern (TreeView selection driving a ListView's contents) is
 // exercised through the real Application::dispatch/step pipeline, not
 // a simplified stand-in.
+#include <cstdlib>
+
 #include "cktest.hpp"
 #include "cvision/core/filesystem.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/widgets/splitter.hpp"
 #include "filebrowser_app.hpp"
 
 using ckv::Key;
@@ -17,6 +20,7 @@ using ckv::KeyChord;
 using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::MemoryFileSystem;
+using ckv::Rect;
 using ckv::ui::Application;
 
 namespace {
@@ -121,4 +125,35 @@ CK_TEST(tab_moves_focus_from_the_tree_to_the_file_list_pane) {
     CK_CHECK(f.app.focused() == f.browser.tree());
     f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}});
     CK_CHECK(f.app.focused() == f.browser.file_list());
+}
+
+// --- Splitter (M10/WP-19) ------------------------------------------------
+
+CK_TEST(the_tree_and_file_list_panes_start_at_an_even_50_50_split) {
+    Fixture f;
+    f.app.step(0);
+    const int tree_width = f.browser.tree()->bounds().width;
+    const int file_list_width = f.browser.file_list()->bounds().width;
+    CK_CHECK(std::abs(tree_width - file_list_width) <= 1);  // 50/50, off-by-one from odd widths
+}
+
+CK_TEST(the_panes_are_children_of_a_splitter_positioned_between_them) {
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(f.browser.splitter() != nullptr);
+    CK_CHECK(f.browser.splitter()->first() == f.browser.tree());
+    CK_CHECK(f.browser.splitter()->second() == f.browser.file_list());
+}
+
+CK_TEST(adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous) {
+    Fixture f;
+    f.app.step(0);
+    const int tree_width_before = f.browser.tree()->bounds().width;
+
+    f.browser.splitter()->on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+
+    CK_CHECK(f.browser.tree()->bounds().width == tree_width_before + 1);
+    const Rect tree_bounds = f.browser.tree()->bounds();
+    const Rect file_list_bounds = f.browser.file_list()->bounds();
+    CK_CHECK(file_list_bounds.x == tree_bounds.x + tree_bounds.width + 1);  // one divider cell
 }

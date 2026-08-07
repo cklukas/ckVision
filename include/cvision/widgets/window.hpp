@@ -67,6 +67,16 @@ public:
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
+    // The interior rect set_content() will resize whatever's passed to
+    // it into (inside the 1-cell frame border). Public so a caller can
+    // size a content view correctly BEFORE constructing it, when the
+    // view's own constructor needs a real Rect up front — e.g.
+    // ui::Grid's or widgets::Splitter's, both of which compute their
+    // initial layout (a Splitter's own starting 50/50 split) from
+    // whatever bounds they're given at construction, not a later
+    // resize.
+    Rect content_rect() const noexcept;
+
     // The free-placement, resize-aware alternative to hand-building a
     // set_content() call yourself (M10/WP-18): lazily installs a fresh
     // ui::AnchorPane as this window's content the first time it's
@@ -200,7 +210,6 @@ private:
     enum class KeyboardMode { None, Move, Resize };
     enum class DragKind { None, Move, Resize };
 
-    Rect content_rect() const noexcept;
     Rect frame_overlay_rect() const noexcept;
     bool point_in_close_control(Point local) const noexcept;
     bool point_in_zoom_control(Point local) const noexcept;
