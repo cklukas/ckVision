@@ -10,6 +10,7 @@
 // tracked as Desktop follow-ons, not folded in here.
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -20,14 +21,16 @@
 
 namespace ckv::widgets {
 
-// kClose/kQuit default handlers (M9/WP-15, D-029 completion): on_attached()
-// installs itself as each command's default handler — but ONLY if
-// nothing has claimed it yet (CommandRegistry::has_handler), same
-// guarded-install/guarded-cleanup pattern MenuBar's own kMenu default
-// established (M9/WP-13) — so an application that wires its own
-// kClose/kQuit handler before attaching a Desktop is never overridden,
-// and the destructor clears whichever of the two THIS instance
-// installed, never one it found already claimed.
+// Window-management default handlers (M9/WP-13, M10/WP-13 completion,
+// D-029): on_attached() installs itself as kClose/kQuit/kZoom/
+// kNextWindow/kPreviousWindow/kTile/kCascade's default handler — but
+// ONLY for whichever of those nothing has claimed yet
+// (CommandRegistry::has_handler), the same guarded-install/guarded-
+// cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
+// an application that wires its own handler for any of these before
+// attaching a Desktop is never overridden, and the destructor clears
+// only the ones THIS instance actually installed, never one it found
+// already claimed.
 class Desktop : public ui::View {
 public:
     Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role);
@@ -203,6 +206,12 @@ private:
     ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
     ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
+    // Installs `handler` as `id`'s default IFF nothing has claimed `id`
+    // yet, and records that this instance did so (installed_default_
+    // handlers_) — the shared guarded-install step on_attached() calls
+    // once per window-management command; the destructor walks that
+    // same list to clear only what it actually installed.
+    void install_default_handler(ui::CommandId id, std::function<void()> handler);
     // kClose's default handler: closes the active window (vetoable,
     // exactly what clicking its own close control already does) — a
     // no-op with no active window.
@@ -219,6 +228,10 @@ private:
     // Window::close()'s own doc comment — so this never mutates
     // windows_ while iterating it.
     void quit_sweep();
+    // kZoom's default handler: toggles the ACTIVE window's own zoom,
+    // the same call its own zoom-control click already makes — a
+    // no-op with no active window.
+    void zoom_active_window();
 
     const ui::Theme& theme_;
     ui::RoleId background_role_;
@@ -228,8 +241,7 @@ private:
     ui::View* top_dock_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
-    bool installed_default_close_handler_ = false;
-    bool installed_default_quit_handler_ = false;
+    std::vector<ui::CommandId> installed_default_handlers_;
     // content_area() as of the end of the previous on_resized() pass —
     // DesktopGrowPolicy::AnchorEdges needs the delta between the old
     // and new area to preserve each such window's right/bottom margin

@@ -15,26 +15,25 @@ Desktop::Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role
 
 Desktop::~Desktop() {
     if (app_ == nullptr) return;
-    if (installed_default_close_handler_) {
-        app_->commands().set_handler(ui::std_commands::kClose, nullptr);
-    }
-    if (installed_default_quit_handler_) {
-        app_->commands().set_handler(ui::std_commands::kQuit, nullptr);
-    }
+    for (ui::CommandId id : installed_default_handlers_) app_->commands().set_handler(id, nullptr);
+}
+
+void Desktop::install_default_handler(ui::CommandId id, std::function<void()> handler) {
+    if (app_->commands().has_handler(id)) return;
+    app_->commands().set_handler(id, std::move(handler));
+    installed_default_handlers_.push_back(id);
 }
 
 void Desktop::on_attached() {
     app_ = context().app;
     if (app_ == nullptr) return;
-    ui::CommandRegistry& commands = app_->commands();
-    if (!commands.has_handler(ui::std_commands::kClose)) {
-        commands.set_handler(ui::std_commands::kClose, [this] { close_active_window(); });
-        installed_default_close_handler_ = true;
-    }
-    if (!commands.has_handler(ui::std_commands::kQuit)) {
-        commands.set_handler(ui::std_commands::kQuit, [this] { quit_sweep(); });
-        installed_default_quit_handler_ = true;
-    }
+    install_default_handler(ui::std_commands::kClose, [this] { close_active_window(); });
+    install_default_handler(ui::std_commands::kQuit, [this] { quit_sweep(); });
+    install_default_handler(ui::std_commands::kZoom, [this] { zoom_active_window(); });
+    install_default_handler(ui::std_commands::kNextWindow, [this] { activate_next(); });
+    install_default_handler(ui::std_commands::kPreviousWindow, [this] { activate_previous(); });
+    install_default_handler(ui::std_commands::kTile, [this] { tile(); });
+    install_default_handler(ui::std_commands::kCascade, [this] { cascade(); });
 }
 
 void Desktop::on_child_size_hint_changed(ui::View& child) {
@@ -49,6 +48,10 @@ void Desktop::quit_sweep() {
     for (auto it = windows_.rbegin(); it != windows_.rend(); ++it)
         if (!(*it)->close()) return;  // vetoed: the sweep stops here, quit is cancelled
     if (app_ != nullptr) app_->request_quit();
+}
+
+void Desktop::zoom_active_window() {
+    if (active_ != nullptr) active_->toggle_zoom(content_area());
 }
 
 Window* Desktop::add_window(std::unique_ptr<Window> window) {

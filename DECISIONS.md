@@ -254,7 +254,10 @@ that stance made every application re-implement the same table stakes
 and left VISION non-negotiable #7 (click-to-focus) unmet. *Rejected:*
 defaults hard-coded outside the keymap (would make the grammar
 non-rebindable, contradicting VISION #4). Scheduled as M8/WP-1…WP-4
-and M9/WP-12…WP-14.
+and M9/WP-12…WP-14; the window-management chords' own Desktop-side
+wiring (`kZoom`/`kNextWindow`/`kPreviousWindow`/`kTile`/`kCascade` —
+`kClose`/`kQuit` landed with WP-15) completed later, once the
+modality stack it needed had landed.
 
 **D-030 — Size-hint changes propagate one hop, synchronously.**
 A widget whose own preferred size changes after construction (Label/
