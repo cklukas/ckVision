@@ -34,9 +34,8 @@ namespace ckv::widgets {
 // no closure keeps a live reference afterward, unlike file_dialog.hpp).
 // Desktop::show_dialog (M8 WP-5) attaches the returned handle and
 // focuses its initial_focus in one call.
-WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::Theme& theme,
-                                    const ui::StandardRoles& roles, ui::Application& app,
-                                    ui::View* restore_focus_to,
+WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::StandardRoles& roles,
+                                    ui::Application& app, ui::View* restore_focus_to,
                                     std::function<void(bool accepted, std::string path)> on_result);
 
 }  // namespace ckv::widgets

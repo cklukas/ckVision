@@ -5,9 +5,12 @@
 
 namespace ckv::widgets {
 
-Scrollbar::Scrollbar(Orientation orientation, const ui::Theme& theme, ui::RoleId track_role,
-                      ui::RoleId thumb_role)
-    : orientation_(orientation), theme_(theme), track_role_(track_role), thumb_role_(thumb_role) {}
+Scrollbar::Scrollbar(Orientation orientation) : orientation_(orientation) {}
+
+void Scrollbar::on_attached() {
+    if (track_role_ == ui::kInvalidRole) track_role_ = context().roles->find("ckv.scrollbar.track");
+    if (thumb_role_ == ui::kInvalidRole) thumb_role_ = context().roles->find("ckv.scrollbar.thumb");
+}
 
 int Scrollbar::main_axis_extent(Point local) const noexcept {
     return orientation_ == Orientation::Horizontal ? local.x : local.y;
@@ -134,8 +137,8 @@ bool Scrollbar::on_mouse(const MouseEvent& event) {
 }
 
 void Scrollbar::draw(scene::Painter& painter) {
-    const Style track_style = theme_.resolve(track_role_);
-    const Style thumb_style = theme_.resolve(thumb_role_);
+    const Style track_style = context().theme->resolve(track_role_);
+    const Style thumb_style = context().theme->resolve(thumb_role_);
     const int total = orientation_ == Orientation::Horizontal ? bounds().width : bounds().height;
     if (total <= 0) return;
 

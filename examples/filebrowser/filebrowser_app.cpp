@@ -98,8 +98,7 @@ void FileBrowserApp::build_window() {
 
     auto content = std::make_unique<ui::Row>();
 
-    auto tree = std::make_unique<widgets::TreeView>(app_.theme(), roles_.input_normal, roles_.input_focused,
-                                                      roles_.dialog_frame, roles_.dialog_background);
+    auto tree = std::make_unique<widgets::TreeView>();
     tree_ = tree.get();
     std::vector<widgets::TreeNode> roots;
     roots.push_back(build_subtree(fs_, root_path_, root_path_, /*depth=*/8));
@@ -109,8 +108,7 @@ void FileBrowserApp::build_window() {
     record_paths(fs_, roots.front(), root_path_, path_of_);
     tree_->set_roots(std::move(roots));
 
-    auto file_list = std::make_unique<widgets::ListView>(app_.theme(), roles_.input_normal, roles_.input_focused,
-                                                           roles_.dialog_frame, roles_.dialog_background);
+    auto file_list = std::make_unique<widgets::ListView>();
     file_list_ = file_list.get();
 
     tree_->on_selection_changed = [this] { refresh_file_list_for_selected_node(); };

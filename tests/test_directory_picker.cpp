@@ -43,7 +43,7 @@ CK_TEST(the_picker_builds_successfully_for_an_existing_root) {
     Application app(term, clock);
     Fixture f;
     auto fs = sample_fs();
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -54,7 +54,7 @@ CK_TEST(construction_for_a_nonexistent_root_does_not_crash) {
     Application app(term, clock);
     Fixture f;
     MemoryFileSystem fs;  // "/nowhere" was never added
-    auto handle = make_directory_picker(fs, "/nowhere", f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_directory_picker(fs, "/nowhere", f.roles, app, nullptr, nullptr);
     CK_CHECK(handle.window != nullptr);
 }
 
@@ -66,7 +66,7 @@ CK_TEST(accepting_the_root_without_navigating_returns_the_root_path) {
     auto fs = sample_fs();
     bool accepted = false;
     std::string chosen;
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, nullptr,
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
                                          [&](bool ok, std::string path) {
                                              accepted = ok;
                                              chosen = path;
@@ -87,7 +87,7 @@ CK_TEST(navigating_into_a_subdirectory_and_accepting_returns_its_full_path) {
     auto fs = sample_fs();
     bool accepted = false;
     std::string chosen;
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, nullptr,
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
                                          [&](bool ok, std::string path) {
                                              accepted = ok;
                                              chosen = path;
@@ -116,7 +116,7 @@ CK_TEST(navigating_two_levels_deep_still_returns_the_correct_full_path) {
     Fixture f;
     auto fs = sample_fs();
     std::string chosen;
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, nullptr,
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
                                          [&](bool, std::string path) { chosen = path; });
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -138,7 +138,7 @@ CK_TEST(cancel_reports_accepted_false_with_an_empty_path) {
     auto fs = sample_fs();
     bool accepted = true;
     std::string chosen = "unset";
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, nullptr,
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
                                          [&](bool ok, std::string path) {
                                              accepted = ok;
                                              chosen = path;
@@ -158,7 +158,7 @@ CK_TEST(files_are_excluded_from_the_tree_only_subdirectories_appear) {
     Fixture f;
     auto fs = sample_fs();  // "/a" also contains a file, notadir.txt
     std::string chosen;
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, nullptr,
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
                                          [&](bool, std::string path) { chosen = path; });
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -179,7 +179,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_picker) {
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
 
     auto fs = sample_fs();
-    auto handle = make_directory_picker(fs, "/a", f.theme, f.roles, app, invoker, nullptr);
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, invoker, nullptr);
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
 

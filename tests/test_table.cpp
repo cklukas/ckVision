@@ -7,6 +7,7 @@
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
@@ -28,12 +29,10 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 
-Table make_table(Fixture& f) {
-    return Table(f.theme, f.roles.dialog_frame, f.roles.input_normal, f.roles.input_focused, f.roles.dialog_frame,
-                 f.roles.dialog_background);
-}
+Table make_table(Fixture&) { return Table(); }
 
 ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
 
@@ -163,6 +162,7 @@ CK_TEST(sorting_preserves_selection_identity_not_just_the_display_index) {
 CK_TEST(cell_style_hook_receives_the_underlying_row_index_not_the_display_index) {
     Fixture f;
     auto table = make_table(f);
+    table.set_context(f.ctx());
     table.set_columns({TableColumn{"Name", 10, 3}});
     table.set_rows({{"Charlie"}, {"Alice"}, {"Bob"}});
     table.sort_by(0, true);  // display order: Alice(1), Bob(2), Charlie(0)
@@ -255,6 +255,7 @@ CK_TEST(move_without_a_prior_resize_down_is_unhandled) {
 CK_TEST(draw_does_not_crash_for_an_empty_table) {
     Fixture f;
     auto table = make_table(f);
+    table.set_context(f.ctx());
     table.set_columns({TableColumn{"A", 5, 3}});
     table.set_bounds(Rect{0, 0, 20, 5});
     Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));

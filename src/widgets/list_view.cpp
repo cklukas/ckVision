@@ -6,12 +6,15 @@
 
 namespace ckv::widgets {
 
-ListView::ListView(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId selected_role,
-                    ui::RoleId track_role, ui::RoleId thumb_role, bool multi_select)
-    : multi_select_(multi_select), theme_(theme), normal_role_(normal_role), selected_role_(selected_role) {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role, thumb_role);
+ListView::ListView(bool multi_select) : multi_select_(multi_select) {
+    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
     scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+void ListView::on_attached() {
+    if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
+    if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
 }
 
 void ListView::set_items(std::vector<std::string> items) {
@@ -159,8 +162,8 @@ void ListView::draw(scene::Painter& painter) {
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     for (int row = 0; row < bounds().height; ++row) {
         const std::size_t index = static_cast<std::size_t>(top + row);
-        const Style style = (index < items_.size() && is_selected(index)) ? theme_.resolve(selected_role_)
-                                                                            : theme_.resolve(normal_role_);
+        const Style style = (index < items_.size() && is_selected(index)) ? context().theme->resolve(selected_role_)
+                                                                            : context().theme->resolve(normal_role_);
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
         if (index < items_.size()) painter.draw_text(Point{0, row}, items_[index], style);
     }

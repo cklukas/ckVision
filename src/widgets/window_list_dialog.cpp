@@ -14,8 +14,8 @@ using ui::Row;
 using ui::SizePolicy;
 }  // namespace
 
-WindowHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, const ui::StandardRoles& roles,
-                                      ui::Application& app, ui::View* restore_focus_to) {
+WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
+                                      ui::View* restore_focus_to) {
     auto window = std::make_unique<Window>("Window List");
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
@@ -24,8 +24,7 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, c
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
 
-    auto list = std::make_unique<ListView>(theme, roles.input_normal, roles.input_focused, roles.dialog_frame,
-                                            roles.dialog_background, /*multi_select=*/false);
+    auto list = std::make_unique<ListView>(/*multi_select=*/false);
     std::vector<std::string> titles;
     for (Window* w : desktop.windows()) titles.push_back(w->title());
     list->set_items(titles);

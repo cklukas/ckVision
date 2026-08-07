@@ -5,11 +5,14 @@
 
 namespace ckv::widgets {
 
-TextView::TextView(const ui::Theme& theme, ui::RoleId text_role, ui::RoleId track_role, ui::RoleId thumb_role)
-    : theme_(theme), text_role_(text_role) {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role, thumb_role);
+TextView::TextView() {
+    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
     scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+void TextView::on_attached() {
+    if (text_role_ == ui::kInvalidRole) text_role_ = context().roles->find("ckv.textview.text");
 }
 
 void TextView::split_lines() {
@@ -81,7 +84,7 @@ bool TextView::on_mouse(const MouseEvent& event) {
 }
 
 void TextView::draw(scene::Painter& painter) {
-    const Style style = theme_.resolve(text_role_);
+    const Style style = context().theme->resolve(text_role_);
     const int visible_width = std::max(0, bounds().width - 1);
     const int top = top_line();
     for (int row = 0; row < bounds().height; ++row) {

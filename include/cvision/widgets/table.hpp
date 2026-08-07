@@ -32,10 +32,19 @@ struct TableColumn {
     int min_width = 3;
 };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.table.header"/"ckv.list.normal"/
+// "ckv.list.selected" (the latter two shared with ListView/TreeView);
+// its embedded Scrollbar resolves its own roles independently.
 class Table : public ui::View {
 public:
-    Table(const ui::Theme& theme, ui::RoleId header_role, ui::RoleId normal_role, ui::RoleId selected_role,
-          ui::RoleId track_role, ui::RoleId thumb_role);
+    Table();
+
+    void set_role_override(ui::RoleId header_role, ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        header_role_ = header_role;
+        normal_role_ = normal_role;
+        selected_role_ = selected_role;
+    }
 
     void set_columns(std::vector<TableColumn> columns);
     const std::vector<TableColumn>& columns() const noexcept { return columns_; }
@@ -62,6 +71,7 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     void rebuild_order();
@@ -83,10 +93,9 @@ private:
     Scrollbar* scrollbar_ = nullptr;
     std::function<Style(std::size_t, std::size_t, Style)> cell_style_hook_;
 
-    const ui::Theme& theme_;
-    ui::RoleId header_role_;
-    ui::RoleId normal_role_;
-    ui::RoleId selected_role_;
+    ui::RoleId header_role_ = ui::kInvalidRole;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId selected_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

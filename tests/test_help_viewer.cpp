@@ -61,7 +61,7 @@ CK_TEST(the_viewer_builds_successfully_for_an_existing_topic) {
     Application app(term, clock);
     Fixture f;
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.theme, f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "intro", f.roles, app, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -72,7 +72,7 @@ CK_TEST(construction_for_an_unknown_initial_topic_shows_not_found_without_crashi
     Application app(term, clock);
     Fixture f;
     MemoryHelpProvider provider;  // empty
-    auto handle = make_help_viewer(provider, "missing", f.theme, f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "missing", f.roles, app, nullptr);
     CK_CHECK(handle.window != nullptr);
 }
 
@@ -82,7 +82,7 @@ CK_TEST(back_with_empty_history_is_a_harmless_no_op) {
     Application app(term, clock);
     Fixture f;
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.theme, f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "intro", f.roles, app, nullptr);
     // Exercise Back before any cross-link navigation happened; must
     // not crash, and Close (the default button) must still work
     // afterward, proving the dialog is still in a valid state.
@@ -104,7 +104,7 @@ CK_TEST(activating_a_cross_link_navigates_to_the_linked_topic_and_back_returns) 
     Application app(term, clock);
     Fixture f;
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.theme, f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "intro", f.roles, app, nullptr);
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
 
@@ -135,7 +135,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_viewer) {
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
 
     auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.theme, f.roles, app, invoker);
+    auto handle = make_help_viewer(provider, "intro", f.roles, app, invoker);
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
 
@@ -150,7 +150,7 @@ CK_TEST(a_topic_with_no_links_produces_an_empty_link_list_without_crashing) {
     Fixture f;
     MemoryHelpProvider provider;
     provider.add_topic("solo", HelpTopic{"Solo", "No links here.", {}});
-    auto handle = make_help_viewer(provider, "solo", f.theme, f.roles, app, nullptr);
+    auto handle = make_help_viewer(provider, "solo", f.roles, app, nullptr);
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);

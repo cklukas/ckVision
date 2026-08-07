@@ -18,8 +18,8 @@ using ui::SizePolicy;
 }  // namespace
 
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result) {
+                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
+                               std::function<void(FileDialogResult)> on_result) {
     auto window = std::make_unique<Window>(mode == FileDialogMode::Open ? "Open File" : "Save File");
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
@@ -32,8 +32,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     auto* path_field_ptr =
         static_cast<InputLine*>(column->add_item(std::move(path_field), LayoutSpec{SizePolicy::Fixed, 1}));
 
-    auto list = std::make_unique<ListView>(theme, roles.input_normal, roles.input_focused, roles.dialog_frame,
-                                            roles.dialog_background, /*multi_select=*/false);
+    auto list = std::make_unique<ListView>(/*multi_select=*/false);
     auto* list_ptr =
         static_cast<ListView*>(column->add_item(std::move(list), LayoutSpec{SizePolicy::Expanding, 1}));
 

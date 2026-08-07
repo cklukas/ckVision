@@ -24,7 +24,7 @@ HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
 }
 
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
+                               const ui::StandardRoles& roles, ui::Application& app,
                                ui::View* restore_focus_to) {
     auto window = std::make_unique<Window>("Help");
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
@@ -34,13 +34,11 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
 
-    auto text_view = std::make_unique<TextView>(theme, roles.static_text, roles.dialog_frame,
-                                                 roles.dialog_background);
+    auto text_view = std::make_unique<TextView>();
     auto* text_view_ptr =
         static_cast<TextView*>(column->add_item(std::move(text_view), LayoutSpec{SizePolicy::Expanding, 1}));
 
-    auto links_list = std::make_unique<ListView>(theme, roles.input_normal, roles.input_focused, roles.dialog_frame,
-                                                  roles.dialog_background, /*multi_select=*/false);
+    auto links_list = std::make_unique<ListView>(/*multi_select=*/false);
     links_list->set_preferred_size(Size{0, 4});
     auto* links_list_ptr =
         static_cast<ListView*>(column->add_item(std::move(links_list), LayoutSpec{SizePolicy::Fixed, 1}));

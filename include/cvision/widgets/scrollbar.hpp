@@ -15,9 +15,16 @@ namespace ckv::widgets {
 
 enum class Orientation { Horizontal, Vertical };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.scrollbar.track"/"ckv.scrollbar.thumb".
 class Scrollbar : public ui::View {
 public:
-    Scrollbar(Orientation orientation, const ui::Theme& theme, ui::RoleId track_role, ui::RoleId thumb_role);
+    explicit Scrollbar(Orientation orientation);
+
+    void set_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
+        track_role_ = track_role;
+        thumb_role_ = thumb_role;
+    }
 
     // `content_size` is the total scrollable extent; `viewport_size` is
     // how much of it is visible at once. Both clamped to >= 0 / >= 1
@@ -38,6 +45,7 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     int track_length() const noexcept;  // cells available for the thumb, excluding the two arrow cells
@@ -54,9 +62,8 @@ private:
     int drag_start_cell_ = 0;
     int drag_start_position_ = 0;
 
-    const ui::Theme& theme_;
-    ui::RoleId track_role_;
-    ui::RoleId thumb_role_;
+    ui::RoleId track_role_ = ui::kInvalidRole;
+    ui::RoleId thumb_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

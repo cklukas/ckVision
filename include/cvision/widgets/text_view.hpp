@@ -21,9 +21,14 @@
 
 namespace ckv::widgets {
 
+// Resolves its own theme role from context() once attached (M9
+// WP-7, D-028): "ckv.textview.text"; its embedded Scrollbar resolves
+// its own roles independently.
 class TextView : public ui::View {
 public:
-    TextView(const ui::Theme& theme, ui::RoleId text_role, ui::RoleId track_role, ui::RoleId thumb_role);
+    TextView();
+
+    void set_role_override(ui::RoleId text_role) noexcept { text_role_ = text_role; }
 
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
@@ -35,6 +40,7 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     void split_lines();
@@ -43,8 +49,7 @@ private:
     std::vector<std::string> lines_;
     Scrollbar* scrollbar_ = nullptr;
 
-    const ui::Theme& theme_;
-    ui::RoleId text_role_;
+    ui::RoleId text_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

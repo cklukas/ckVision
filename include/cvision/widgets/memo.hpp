@@ -33,10 +33,17 @@ struct MemoPosition {
     friend bool operator==(const MemoPosition&, const MemoPosition&) = default;
 };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.memo.normal"/"ckv.memo.focused"; its embedded
+// Scrollbar resolves its own roles independently.
 class Memo : public ui::View {
 public:
-    Memo(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId track_role,
-         ui::RoleId thumb_role);
+    Memo();
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        normal_role_ = normal_role;
+        focused_role_ = focused_role;
+    }
 
     void set_text(std::string text);
     std::string text() const;
@@ -52,6 +59,7 @@ public:
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_attached() override;
 
 private:
     void insert_text_at_cursor(std::string_view text);
@@ -67,9 +75,8 @@ private:
     bool has_focus_ = false;
 
     Scrollbar* scrollbar_ = nullptr;
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId focused_role_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

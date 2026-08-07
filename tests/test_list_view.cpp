@@ -22,10 +22,7 @@ struct Fixture {
     Theme theme = make_classic_theme(registry, roles);
 };
 
-ListView make_list(Fixture& f, bool multi = false) {
-    return ListView(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.dialog_frame,
-                    f.roles.dialog_background, multi);
-}
+ListView make_list(Fixture&, bool multi = false) { return ListView(multi); }
 
 ckv::KeyEvent key(ckv::Key k, std::string text = "") {
     return ckv::KeyEvent{KeyChord{k, Modifier::None, std::move(text)}};

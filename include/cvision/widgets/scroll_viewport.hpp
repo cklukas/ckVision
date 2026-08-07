@@ -27,9 +27,12 @@
 
 namespace ckv::widgets {
 
+// Never draws anything itself — its two Scrollbar children resolve
+// their own theme roles independently (M9 WP-7, D-028) once attached,
+// same as if constructed standalone.
 class ScrollViewport : public ui::View {
 public:
-    ScrollViewport(const ui::Theme& theme, ui::RoleId track_role, ui::RoleId thumb_role);
+    ScrollViewport();
 
     // Content's OWN preferred size (via its size hints) is treated as
     // its full scrollable extent; installs vertical and horizontal
@@ -56,10 +59,6 @@ private:
     Scrollbar* h_scrollbar_ = nullptr;
     int scroll_x_ = 0;
     int scroll_y_ = 0;
-
-    const ui::Theme& theme_;
-    ui::RoleId track_role_;
-    ui::RoleId thumb_role_;
 };
 
 }  // namespace ckv::widgets

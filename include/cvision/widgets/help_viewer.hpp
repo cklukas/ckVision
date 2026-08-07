@@ -62,7 +62,6 @@ private:
 // contract). Desktop::show_dialog (M8 WP-5) attaches the returned
 // handle and focuses its initial_focus in one call.
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to);
+                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to);
 
 }  // namespace ckv::widgets

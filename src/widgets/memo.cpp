@@ -13,13 +13,16 @@ bool position_less(const MemoPosition& a, const MemoPosition& b) noexcept {
 }
 }  // namespace
 
-Memo::Memo(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId track_role,
-           ui::RoleId thumb_role)
-    : theme_(theme), normal_role_(normal_role), focused_role_(focused_role) {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role, thumb_role);
+Memo::Memo() {
+    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
     scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
     set_focus_policy(ui::FocusPolicy::TabStop);
     lines_.emplace_back();
+}
+
+void Memo::on_attached() {
+    if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.memo.normal");
+    if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.memo.focused");
 }
 
 void Memo::set_text(std::string text) {
@@ -277,7 +280,7 @@ void Memo::on_focus(const FocusEvent& event) {
 }
 
 void Memo::draw(scene::Painter& painter) {
-    const Style base = theme_.resolve(has_focus_ ? focused_role_ : normal_role_);
+    const Style base = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
     const int visible_width = std::max(0, bounds().width - 1);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const auto [sel_begin, sel_end] = selection_range();

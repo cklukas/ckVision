@@ -44,9 +44,8 @@ void record_paths(const FileSystem& fs, TreeNode& node, const std::string& path,
 
 }  // namespace
 
-WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::Theme& theme,
-                                    const ui::StandardRoles& roles, ui::Application& app,
-                                    ui::View* restore_focus_to,
+WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::StandardRoles& roles,
+                                    ui::Application& app, ui::View* restore_focus_to,
                                     std::function<void(bool, std::string)> on_result) {
     auto window = std::make_unique<Window>("Select Directory");
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
@@ -66,8 +65,7 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
 
-    auto tree = std::make_unique<TreeView>(theme, roles.input_normal, roles.input_focused, roles.dialog_frame,
-                                            roles.dialog_background);
+    auto tree = std::make_unique<TreeView>();
     tree->set_roots(std::move(roots));
     auto* tree_ptr = static_cast<TreeView*>(column->add_item(std::move(tree), LayoutSpec{SizePolicy::Expanding, 1}));
 

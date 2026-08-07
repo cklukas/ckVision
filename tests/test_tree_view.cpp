@@ -23,10 +23,7 @@ struct Fixture {
     Theme theme = make_classic_theme(registry, roles);
 };
 
-TreeView make_tree(Fixture& f) {
-    return TreeView(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.dialog_frame,
-                    f.roles.dialog_background);
-}
+TreeView make_tree(Fixture&) { return TreeView(); }
 
 ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
 

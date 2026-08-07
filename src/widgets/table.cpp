@@ -9,12 +9,16 @@
 
 namespace ckv::widgets {
 
-Table::Table(const ui::Theme& theme, ui::RoleId header_role, ui::RoleId normal_role, ui::RoleId selected_role,
-             ui::RoleId track_role, ui::RoleId thumb_role)
-    : theme_(theme), header_role_(header_role), normal_role_(normal_role), selected_role_(selected_role) {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role, thumb_role);
+Table::Table() {
+    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
     scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+void Table::on_attached() {
+    if (header_role_ == ui::kInvalidRole) header_role_ = context().roles->find("ckv.table.header");
+    if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
+    if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
 }
 
 void Table::set_columns(std::vector<TableColumn> columns) {
@@ -192,7 +196,7 @@ bool Table::on_mouse(const MouseEvent& event) {
 }
 
 void Table::draw(scene::Painter& painter) {
-    const Style header_style = theme_.resolve(header_role_);
+    const Style header_style = context().theme->resolve(header_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", header_style));
     for (std::size_t c = 0; c < columns_.size(); ++c) {
         const int x = column_start_x(c);
@@ -206,8 +210,8 @@ void Table::draw(scene::Painter& painter) {
     const int data_height = std::max(0, bounds().height - 1);
     for (int row_i = 0; row_i < data_height; ++row_i) {
         const int display_index = top + row_i;
-        const Style row_style = (display_index == cursor_row_) ? theme_.resolve(selected_role_)
-                                                                 : theme_.resolve(normal_role_);
+        const Style row_style = (display_index == cursor_row_) ? context().theme->resolve(selected_role_)
+                                                                 : context().theme->resolve(normal_role_);
         painter.fill(Rect{0, row_i + 1, std::max(0, bounds().width - 1), 1}, Cell::from_grapheme(" ", row_style));
         if (display_index < 0 || static_cast<std::size_t>(display_index) >= order_.size()) continue;
         const std::size_t underlying = order_[static_cast<std::size_t>(display_index)];

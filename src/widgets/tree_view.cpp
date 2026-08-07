@@ -5,12 +5,15 @@
 
 namespace ckv::widgets {
 
-TreeView::TreeView(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId selected_role,
-                    ui::RoleId track_role, ui::RoleId thumb_role)
-    : theme_(theme), normal_role_(normal_role), selected_role_(selected_role) {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role, thumb_role);
+TreeView::TreeView() {
+    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
     scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+void TreeView::on_attached() {
+    if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
+    if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
 }
 
 void TreeView::set_roots(std::vector<TreeNode> roots) {
@@ -165,8 +168,8 @@ void TreeView::draw(scene::Painter& painter) {
         const int index = top + row;
         const Style style = (index >= 0 && static_cast<std::size_t>(index) < entries.size() &&
                               entries[static_cast<std::size_t>(index)].node == cursor_node_)
-                                 ? theme_.resolve(selected_role_)
-                                 : theme_.resolve(normal_role_);
+                                 ? context().theme->resolve(selected_role_)
+                                 : context().theme->resolve(normal_role_);
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
         if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) continue;
 

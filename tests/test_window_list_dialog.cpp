@@ -41,7 +41,7 @@ CK_TEST(the_dialogs_list_contains_every_windows_current_title_in_order) {
     desktop.add_window(make_window("Alpha"));
     desktop.add_window(make_window("Beta"));
 
-    auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -56,7 +56,7 @@ CK_TEST(activating_a_row_switches_the_desktops_active_window_and_closes_the_dial
     desktop.add_window(make_window("Beta"));  // Beta is active after being added second
     CK_CHECK(desktop.active_window() != alpha);
 
-    auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
     bool closed = false;
     handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
         closed = true;
@@ -79,7 +79,7 @@ CK_TEST(the_close_button_dismisses_without_changing_the_active_window) {
     desktop.add_window(make_window("Alpha"));
     Window* beta = desktop.add_window(make_window("Beta"));
 
-    auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
     bool closed = false;
     handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
         closed = true;
@@ -104,7 +104,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
     desktop.add_window(make_window("Alpha"));
 
-    auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, invoker);
+    auto handle = make_window_list_dialog(desktop, f.roles, app, invoker);
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
 
@@ -119,7 +119,7 @@ CK_TEST(a_desktop_with_no_windows_produces_a_dialog_that_does_not_crash_on_enter
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
 
-    auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
+    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     app.dispatch(key(Key::Enter));

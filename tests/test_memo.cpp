@@ -4,6 +4,7 @@
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
@@ -23,12 +24,10 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 
-Memo make_memo(Fixture& f) {
-    return Memo(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.dialog_frame,
-                f.roles.dialog_background);
-}
+Memo make_memo(Fixture&) { return Memo(); }
 
 ckv::KeyEvent key(ckv::Key k, ckv::Modifier m = Modifier::None) { return ckv::KeyEvent{KeyChord{k, m, ""}}; }
 }  // namespace
@@ -233,6 +232,7 @@ CK_TEST(click_outside_the_memos_bounds_is_ignored) {
 CK_TEST(draw_does_not_crash_for_an_empty_focused_memo) {
     Fixture f;
     auto memo = make_memo(f);
+    memo.set_context(f.ctx());
     memo.set_bounds(Rect{0, 0, 20, 5});
     memo.on_focus(ckv::FocusEvent{true});
     ckv::scene::Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));

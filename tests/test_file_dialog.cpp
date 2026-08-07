@@ -46,7 +46,7 @@ CK_TEST(the_dialog_builds_successfully_for_an_existing_directory) {
     Application app(term, clock);
     Fixture f;
     auto fs = sample_fs();
-    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -57,7 +57,7 @@ CK_TEST(construction_for_a_nonexistent_directory_does_not_crash) {
     Application app(term, clock);
     Fixture f;
     MemoryFileSystem fs;  // "/does/not/exist" was never added
-    auto handle = make_file_dialog(FileDialogMode::Open, "/does/not/exist", fs, f.theme, f.roles, app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Open, "/does/not/exist", fs, f.roles, app, nullptr,
                                     nullptr);
     CK_CHECK(handle.window != nullptr);
 }
@@ -71,7 +71,7 @@ CK_TEST(activating_a_directory_entry_navigates_into_it_and_activating_dotdot_nav
     Fixture f;
     auto fs = sample_fs();
     std::vector<FileDialogResult> results;
-    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.theme, f.roles, app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
                                     [&](FileDialogResult r) { results.push_back(r); });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);  // the list has focus
@@ -90,7 +90,7 @@ CK_TEST(activating_a_file_entry_fills_the_path_field_rather_than_navigating) {
     Fixture f;
     auto fs = sample_fs();
     int result_calls = 0;
-    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.theme, f.roles, app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
                                     [&](FileDialogResult) { ++result_calls; });
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -117,7 +117,7 @@ CK_TEST(clicking_ok_with_a_typed_absolute_path_accepts_it_verbatim) {
     Fixture f;
     auto fs = sample_fs();
     FileDialogResult result;
-    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", fs, f.theme, f.roles, app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", fs, f.roles, app, nullptr,
                                     [&](FileDialogResult r) { result = r; });
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -136,7 +136,7 @@ CK_TEST(a_relative_typed_path_is_joined_with_the_current_directory) {
     Fixture f;
     auto fs = sample_fs();
     FileDialogResult result;
-    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", fs, f.theme, f.roles, app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", fs, f.roles, app, nullptr,
                                     [&](FileDialogResult r) { result = r; });
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -163,7 +163,7 @@ CK_TEST(cancel_fires_on_result_with_accepted_false_and_an_empty_path) {
     auto fs = sample_fs();
     FileDialogResult result;
     result.accepted = true;  // ensure Cancel actually flips it
-    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.theme, f.roles, app, nullptr,
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
                                     [&](FileDialogResult r) { result = r; });
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -182,7 +182,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
 
     auto fs = sample_fs();
-    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.theme, f.roles, app, invoker, nullptr);
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, invoker, nullptr);
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
 

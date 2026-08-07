@@ -5,16 +5,15 @@
 
 namespace ckv::widgets {
 
-ScrollViewport::ScrollViewport(const ui::Theme& theme, ui::RoleId track_role, ui::RoleId thumb_role)
-    : theme_(theme), track_role_(track_role), thumb_role_(thumb_role) {
-    auto v = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role_, thumb_role_);
+ScrollViewport::ScrollViewport() {
+    auto v = std::make_unique<Scrollbar>(Orientation::Vertical);
     v_scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(v)));
     v_scrollbar_->on_position_changed = [this](int p) {
         scroll_y_ = p;
         reposition_content();
     };
 
-    auto h = std::make_unique<Scrollbar>(Orientation::Horizontal, theme_, track_role_, thumb_role_);
+    auto h = std::make_unique<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(h)));
     h_scrollbar_->on_position_changed = [this](int p) {
         scroll_x_ = p;

@@ -29,10 +29,17 @@ namespace ckv::widgets {
 
 using ui::SizeHint;
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.list.normal"/"ckv.list.selected"; its embedded
+// Scrollbar resolves its own roles the same way, independently.
 class ListView : public ui::View {
 public:
-    ListView(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId selected_role,
-             ui::RoleId track_role, ui::RoleId thumb_role, bool multi_select = false);
+    explicit ListView(bool multi_select = false);
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        normal_role_ = normal_role;
+        selected_role_ = selected_role;
+    }
 
     void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
@@ -52,6 +59,7 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     void move_cursor(int new_cursor, bool extend_or_replace_selection);
@@ -66,9 +74,8 @@ private:
 
     Scrollbar* scrollbar_ = nullptr;
 
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId selected_role_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId selected_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

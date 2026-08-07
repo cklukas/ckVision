@@ -41,7 +41,7 @@ struct FileDialogResult {
 // reference). Desktop::show_dialog (M8 WP-5) attaches the returned
 // handle and focuses its initial_focus in one call.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
+                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
+                               std::function<void(FileDialogResult)> on_result);
 
 }  // namespace ckv::widgets

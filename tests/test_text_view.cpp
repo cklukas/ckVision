@@ -4,6 +4,7 @@
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
@@ -24,11 +25,10 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 
-TextView make_view(Fixture& f) {
-    return TextView(f.theme, f.roles.static_text, f.roles.dialog_frame, f.roles.dialog_background);
-}
+TextView make_view(Fixture&) { return TextView(); }
 
 ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
 
@@ -148,6 +148,7 @@ CK_TEST(mouse_wheel_scrolls_and_a_non_wheel_event_is_unhandled) {
 CK_TEST(draw_renders_the_lines_starting_at_the_current_scroll_position) {
     Fixture f;
     auto view = make_view(f);
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 20, 3});
     view.set_text("first\nsecond\nthird\nfourth");
     view.on_key(key(Key::Down));  // scroll to line 1 ("second")
@@ -162,6 +163,7 @@ CK_TEST(draw_renders_the_lines_starting_at_the_current_scroll_position) {
 CK_TEST(draw_leaves_rows_past_the_end_of_content_blank_without_crashing) {
     Fixture f;
     auto view = make_view(f);
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 20, 10});  // far more rows than content
     view.set_text("only line");
 
@@ -175,6 +177,7 @@ CK_TEST(draw_leaves_rows_past_the_end_of_content_blank_without_crashing) {
 CK_TEST(a_zero_size_view_does_not_crash_on_draw_or_input) {
     Fixture f;
     auto view = make_view(f);
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 0, 0});
     view.set_text("hello");
     view.on_key(key(Key::Down));

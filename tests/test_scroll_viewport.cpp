@@ -33,7 +33,7 @@ std::unique_ptr<View> make_content(int w, int h) {
 
 CK_TEST(content_smaller_than_the_viewport_is_not_scrollable) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 40, 20});
     viewport.set_content(make_content(10, 5));
     viewport.set_scroll(100, 100);  // attempt to scroll far past the (empty) scrollable range
@@ -43,7 +43,7 @@ CK_TEST(content_smaller_than_the_viewport_is_not_scrollable) {
 
 CK_TEST(content_larger_than_the_viewport_positions_at_a_negative_offset_when_scrolled) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     viewport.set_scroll(10, 5);
@@ -55,7 +55,7 @@ CK_TEST(content_larger_than_the_viewport_positions_at_a_negative_offset_when_scr
 
 CK_TEST(set_scroll_clamps_to_the_maximum_reachable_offset) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});  // content area: 19x9
     viewport.set_content(make_content(100, 50));  // max scroll: (100-19, 50-9) = (81, 41)
     viewport.set_scroll(1000, 1000);
@@ -65,7 +65,7 @@ CK_TEST(set_scroll_clamps_to_the_maximum_reachable_offset) {
 
 CK_TEST(replacing_content_resets_scroll_to_the_origin) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     viewport.set_scroll(30, 20);
@@ -77,7 +77,7 @@ CK_TEST(replacing_content_resets_scroll_to_the_origin) {
 
 CK_TEST(replacing_content_returns_ownership_of_the_previous_content) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     View* first = viewport.content();
@@ -88,7 +88,7 @@ CK_TEST(replacing_content_returns_ownership_of_the_previous_content) {
 
 CK_TEST(resizing_the_viewport_shrinks_the_reachable_scroll_range) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     viewport.set_scroll(81, 41);  // at the maximum for the 20x10 viewport
@@ -99,7 +99,7 @@ CK_TEST(resizing_the_viewport_shrinks_the_reachable_scroll_range) {
 
 CK_TEST(down_arrow_scrolls_vertically_by_one) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     CK_CHECK(viewport.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
@@ -108,7 +108,7 @@ CK_TEST(down_arrow_scrolls_vertically_by_one) {
 
 CK_TEST(right_arrow_scrolls_horizontally_by_one) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     CK_CHECK(viewport.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}}));
@@ -117,7 +117,7 @@ CK_TEST(right_arrow_scrolls_horizontally_by_one) {
 
 CK_TEST(page_down_scrolls_by_the_viewports_visible_height) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});  // content area height: 9
     viewport.set_content(make_content(100, 50));
     viewport.on_key(ckv::KeyEvent{KeyChord{Key::PageDown, Modifier::None, ""}});
@@ -126,7 +126,7 @@ CK_TEST(page_down_scrolls_by_the_viewports_visible_height) {
 
 CK_TEST(mouse_wheel_scrolls_vertically) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     CK_CHECK(viewport.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
@@ -139,7 +139,7 @@ CK_TEST(mouse_wheel_scrolls_vertically) {
 
 CK_TEST(a_non_wheel_mouse_event_is_unhandled_by_the_viewport_itself) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.set_content(make_content(100, 50));
     CK_CHECK(!viewport.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 5},
@@ -153,7 +153,7 @@ CK_TEST(no_content_installed_does_not_crash_on_key_mouse_or_resize) {
     // stays clamped at 0. The assertion here is "does not crash";
     // scroll position staying at 0 is checked explicitly.
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 20, 10});
     viewport.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
     CK_CHECK(viewport.scroll_y() == 0);
@@ -166,7 +166,7 @@ CK_TEST(no_content_installed_does_not_crash_on_key_mouse_or_resize) {
 
 CK_TEST(a_degenerate_one_cell_viewport_does_not_crash) {
     Fixture f;
-    ScrollViewport viewport(f.theme, f.roles.dialog_frame, f.roles.dialog_background);
+    ScrollViewport viewport;
     viewport.set_bounds(Rect{0, 0, 1, 1});
     viewport.set_content(make_content(100, 50));
     CK_CHECK(true);
