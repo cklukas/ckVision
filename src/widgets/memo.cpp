@@ -1,0 +1,318 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/memo.hpp"
+
+#include <algorithm>
+
+#include "cvision/core/text.hpp"
+
+namespace ckv::widgets {
+
+namespace {
+bool position_less(const MemoPosition& a, const MemoPosition& b) noexcept {
+    return a.line != b.line ? a.line < b.line : a.column < b.column;
+}
+}  // namespace
+
+Memo::Memo(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId track_role,
+           ui::RoleId thumb_role)
+    : theme_(theme), normal_role_(normal_role), focused_role_(focused_role) {
+    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical, theme_, track_role, thumb_role);
+    scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
+    set_focus_policy(ui::FocusPolicy::TabStop);
+    lines_.emplace_back();
+}
+
+void Memo::set_text(std::string text) {
+    lines_.clear();
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t nl = text.find('\n', start);
+        const std::string_view segment =
+            nl == std::string::npos ? std::string_view(text).substr(start) : std::string_view(text).substr(start, nl - start);
+        std::vector<std::string> line;
+        for (std::string_view g : text::split_graphemes(segment)) line.emplace_back(g);
+        lines_.push_back(std::move(line));
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+    cursor_ = {0, 0};
+    selection_anchor_.reset();
+    on_resized();
+    ensure_cursor_visible();
+    invalidate();
+}
+
+std::string Memo::text() const {
+    std::string out;
+    for (std::size_t i = 0; i < lines_.size(); ++i) {
+        for (const auto& g : lines_[i]) out += g;
+        if (i + 1 < lines_.size()) out += '\n';
+    }
+    return out;
+}
+
+int Memo::line_length(int line) const noexcept {
+    if (line < 0 || static_cast<std::size_t>(line) >= lines_.size()) return 0;
+    return static_cast<int>(lines_[static_cast<std::size_t>(line)].size());
+}
+
+MemoPosition Memo::clamp_position(MemoPosition p) const noexcept {
+    p.line = std::clamp(p.line, 0, static_cast<int>(lines_.size()) - 1);
+    p.column = std::clamp(p.column, 0, line_length(p.line));
+    return p;
+}
+
+std::pair<MemoPosition, MemoPosition> Memo::selection_range() const noexcept {
+    if (!selection_anchor_) return {cursor_, cursor_};
+    return position_less(*selection_anchor_, cursor_) ? std::make_pair(*selection_anchor_, cursor_)
+                                                        : std::make_pair(cursor_, *selection_anchor_);
+}
+
+void Memo::move_cursor(MemoPosition target, bool extend_selection) {
+    target = clamp_position(target);
+    if (extend_selection) {
+        if (!selection_anchor_) selection_anchor_ = cursor_;
+    } else {
+        selection_anchor_.reset();
+    }
+    cursor_ = target;
+    ensure_cursor_visible();
+    invalidate();
+}
+
+void Memo::erase_selection() {
+    if (!selection_anchor_) return;
+    const auto [begin, end] = selection_range();
+    if (begin.line == end.line) {
+        auto& line = lines_[static_cast<std::size_t>(begin.line)];
+        line.erase(line.begin() + begin.column, line.begin() + end.column);
+    } else {
+        std::vector<std::string> tail(lines_[static_cast<std::size_t>(end.line)].begin() + end.column,
+                                       lines_[static_cast<std::size_t>(end.line)].end());
+        lines_[static_cast<std::size_t>(begin.line)].erase(
+            lines_[static_cast<std::size_t>(begin.line)].begin() + begin.column,
+            lines_[static_cast<std::size_t>(begin.line)].end());
+        for (auto& g : tail) lines_[static_cast<std::size_t>(begin.line)].push_back(std::move(g));
+        lines_.erase(lines_.begin() + begin.line + 1, lines_.begin() + end.line + 1);
+    }
+    cursor_ = begin;
+    selection_anchor_.reset();
+}
+
+void Memo::insert_text_at_cursor(std::string_view text) {
+    if (selection_anchor_) erase_selection();
+
+    std::vector<std::string> segments;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t nl = text.find('\n', start);
+        if (nl == std::string_view::npos) {
+            segments.emplace_back(text.substr(start));
+            break;
+        }
+        segments.emplace_back(text.substr(start, nl - start));
+        start = nl + 1;
+    }
+
+    auto& current = lines_[static_cast<std::size_t>(cursor_.line)];
+    std::vector<std::string> tail(current.begin() + cursor_.column, current.end());
+    current.erase(current.begin() + cursor_.column, current.end());
+    for (std::string_view g : text::split_graphemes(segments[0])) current.push_back(std::string(g));
+
+    int new_line_index = cursor_.line;
+    for (std::size_t i = 1; i < segments.size(); ++i) {
+        std::vector<std::string> new_line;
+        for (std::string_view g : text::split_graphemes(segments[i])) new_line.push_back(std::string(g));
+        lines_.insert(lines_.begin() + new_line_index + 1, std::move(new_line));
+        ++new_line_index;
+    }
+    const int new_column = static_cast<int>(lines_[static_cast<std::size_t>(new_line_index)].size());
+    for (auto& g : tail) lines_[static_cast<std::size_t>(new_line_index)].push_back(std::move(g));
+
+    cursor_ = {new_line_index, new_column};
+    selection_anchor_.reset();
+    on_resized();
+    ensure_cursor_visible();
+    invalidate();
+}
+
+void Memo::ensure_cursor_visible() {
+    if (scrollbar_ == nullptr) return;
+    if (cursor_.line < scrollbar_->position()) {
+        scrollbar_->set_position(cursor_.line);
+    } else if (cursor_.line >= scrollbar_->position() + scrollbar_->viewport_size()) {
+        scrollbar_->set_position(cursor_.line - scrollbar_->viewport_size() + 1);
+    }
+}
+
+void Memo::on_resized() {
+    if (scrollbar_ == nullptr) return;
+    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+    scrollbar_->set_range(static_cast<int>(lines_.size()), std::max(1, bounds().height));
+}
+
+bool Memo::on_key(const KeyEvent& event) {
+    const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    switch (event.chord.key) {
+        case Key::Left: {
+            MemoPosition p = cursor_;
+            if (p.column > 0)
+                --p.column;
+            else if (p.line > 0) {
+                --p.line;
+                p.column = line_length(p.line);
+            }
+            move_cursor(p, shift);
+            return true;
+        }
+        case Key::Right: {
+            MemoPosition p = cursor_;
+            if (p.column < line_length(p.line))
+                ++p.column;
+            else if (p.line < static_cast<int>(lines_.size()) - 1) {
+                ++p.line;
+                p.column = 0;
+            }
+            move_cursor(p, shift);
+            return true;
+        }
+        case Key::Up: {
+            MemoPosition p = cursor_;
+            if (p.line > 0) {
+                --p.line;
+                p.column = std::min(p.column, line_length(p.line));
+            }
+            move_cursor(p, shift);
+            return true;
+        }
+        case Key::Down: {
+            MemoPosition p = cursor_;
+            if (p.line < static_cast<int>(lines_.size()) - 1) {
+                ++p.line;
+                p.column = std::min(p.column, line_length(p.line));
+            }
+            move_cursor(p, shift);
+            return true;
+        }
+        case Key::Home:
+            move_cursor(MemoPosition{cursor_.line, 0}, shift);
+            return true;
+        case Key::End:
+            move_cursor(MemoPosition{cursor_.line, line_length(cursor_.line)}, shift);
+            return true;
+        case Key::PageUp: {
+            MemoPosition p = cursor_;
+            p.line = std::max(0, p.line - std::max(1, bounds().height));
+            p.column = std::min(p.column, line_length(p.line));
+            move_cursor(p, shift);
+            return true;
+        }
+        case Key::PageDown: {
+            MemoPosition p = cursor_;
+            p.line = std::min(static_cast<int>(lines_.size()) - 1, p.line + std::max(1, bounds().height));
+            p.column = std::min(p.column, line_length(p.line));
+            move_cursor(p, shift);
+            return true;
+        }
+        case Key::Enter:
+            insert_text_at_cursor("\n");
+            return true;
+        case Key::Backspace:
+            if (selection_anchor_) {
+                erase_selection();
+            } else if (cursor_.column > 0) {
+                lines_[static_cast<std::size_t>(cursor_.line)].erase(
+                    lines_[static_cast<std::size_t>(cursor_.line)].begin() + cursor_.column - 1);
+                --cursor_.column;
+            } else if (cursor_.line > 0) {
+                const int prev_len = line_length(cursor_.line - 1);
+                for (auto& g : lines_[static_cast<std::size_t>(cursor_.line)])
+                    lines_[static_cast<std::size_t>(cursor_.line - 1)].push_back(std::move(g));
+                lines_.erase(lines_.begin() + cursor_.line);
+                --cursor_.line;
+                cursor_.column = prev_len;
+            }
+            on_resized();
+            ensure_cursor_visible();
+            invalidate();
+            return true;
+        case Key::Delete:
+            if (selection_anchor_) {
+                erase_selection();
+            } else if (cursor_.column < line_length(cursor_.line)) {
+                lines_[static_cast<std::size_t>(cursor_.line)].erase(
+                    lines_[static_cast<std::size_t>(cursor_.line)].begin() + cursor_.column);
+            } else if (cursor_.line < static_cast<int>(lines_.size()) - 1) {
+                for (auto& g : lines_[static_cast<std::size_t>(cursor_.line + 1)])
+                    lines_[static_cast<std::size_t>(cursor_.line)].push_back(std::move(g));
+                lines_.erase(lines_.begin() + cursor_.line + 1);
+            }
+            on_resized();
+            invalidate();
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool Memo::on_text(const TextEvent& event) {
+    insert_text_at_cursor(event.text);
+    return true;
+}
+
+bool Memo::on_mouse(const MouseEvent& event) {
+    if (event.action != MouseAction::Down || scrollbar_ == nullptr) return false;
+    const Rect abs = absolute_bounds();
+    const int row = event.cell.y - abs.y;
+    if (row < 0 || row >= bounds().height) return false;
+    const int line = std::clamp(scrollbar_->position() + row, 0, static_cast<int>(lines_.size()) - 1);
+    const int column = std::clamp(event.cell.x - abs.x, 0, line_length(line));
+    move_cursor(MemoPosition{line, column}, false);
+    return true;
+}
+
+void Memo::on_focus(const FocusEvent& event) {
+    has_focus_ = event.gained;
+    invalidate();
+}
+
+void Memo::draw(scene::Painter& painter) {
+    const Style base = theme_.resolve(has_focus_ ? focused_role_ : normal_role_);
+    const int visible_width = std::max(0, bounds().width - 1);
+    const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const auto [sel_begin, sel_end] = selection_range();
+
+    for (int row = 0; row < bounds().height; ++row) {
+        const int line_index = top + row;
+        painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", base));
+        if (line_index < 0 || static_cast<std::size_t>(line_index) >= lines_.size()) continue;
+        const auto& line = lines_[static_cast<std::size_t>(line_index)];
+        int x = 0;
+        for (std::size_t i = 0; i < line.size() && x < visible_width; ++i) {
+            Style style = base;
+            const MemoPosition p{line_index, static_cast<int>(i)};
+            if (selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
+                style.attrs |= Attr::Reverse;
+            painter.draw_text(Point{x, row}, line[i], style);
+            x += text::grapheme_width(line[i]);
+        }
+        if (has_focus_ && line_index == cursor_.line) {
+            const int cursor_x = [&] {
+                int cx = 0;
+                for (int i = 0; i < cursor_.column && static_cast<std::size_t>(i) < line.size(); ++i)
+                    cx += text::grapheme_width(line[static_cast<std::size_t>(i)]);
+                return cx;
+            }();
+            if (cursor_x < visible_width) {
+                Style cursor_style = base;
+                cursor_style.attrs |= Attr::Reverse;
+                const std::string glyph = static_cast<std::size_t>(cursor_.column) < line.size()
+                                               ? line[static_cast<std::size_t>(cursor_.column)]
+                                               : std::string(" ");
+                painter.draw_text(Point{cursor_x, row}, glyph, cursor_style);
+            }
+        }
+    }
+}
+
+}  // namespace ckv::widgets

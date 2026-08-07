@@ -22,6 +22,7 @@ add_executable(cvision_tests
     test_list_view.cpp
     test_m4_integration.cpp
     test_menu.cpp
+    test_memo.cpp
     test_message_box.cpp
     test_mnemonic.cpp
     test_option_group.cpp

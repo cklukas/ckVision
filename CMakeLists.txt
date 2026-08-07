@@ -35,6 +35,7 @@ add_library(cvision
     src/widgets/label.cpp
     src/widgets/list_view.cpp
     src/widgets/menu.cpp
+    src/widgets/memo.cpp
     src/widgets/message_box.cpp
     src/widgets/mnemonic.cpp
     src/widgets/option_group.cpp
