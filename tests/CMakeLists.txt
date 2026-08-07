@@ -40,6 +40,7 @@ add_executable(cvision_tests
     test_text_view.cpp
     test_text_width.cpp
     test_theme.cpp
+    test_tree_view.cpp
     test_utf8.cpp
     test_version.cpp
     test_view.cpp
