@@ -68,4 +68,108 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     return theme;
 }
 
+namespace {
+
+// Dark: near-black backgrounds, light text, a muted blue accent.
+constexpr Color kDarkBg = Color::rgb(30, 30, 30);
+constexpr Color kDarkPanel = Color::rgb(45, 45, 48);
+constexpr Color kDarkFg = Color::rgb(220, 220, 220);
+constexpr Color kDarkAccent = Color::rgb(0, 90, 158);
+constexpr Color kDarkFocus = Color::rgb(70, 70, 76);
+constexpr Color kDarkYellow = Color::rgb(220, 200, 80);
+constexpr Color kDarkRed = Color::rgb(200, 70, 70);
+
+// Light: light backgrounds, near-black text, a pale blue accent.
+constexpr Color kLightBg = Color::rgb(245, 245, 245);
+constexpr Color kLightPanel = Color::rgb(225, 225, 225);
+constexpr Color kLightFg = Color::rgb(20, 20, 20);
+constexpr Color kLightAccent = Color::rgb(190, 215, 245);
+constexpr Color kLightFocus = Color::rgb(205, 205, 205);
+constexpr Color kLightYellow = Color::rgb(255, 235, 140);
+constexpr Color kLightRed = Color::rgb(220, 90, 90);
+
+// Mono: black/white/gray only — every distinction Classic/Dark/Light
+// express through hue is carried by Attr here instead, so the scheme
+// stays legible after quantization to a genuinely monochrome terminal.
+constexpr Color kMonoBg = Color::rgb(0, 0, 0);
+constexpr Color kMonoFg = Color::rgb(255, 255, 255);
+constexpr Color kMonoGray = Color::rgb(160, 160, 160);
+
+}  // namespace
+
+Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) {
+    Theme theme(registry);
+    theme.set(roles.dialog_frame, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.dialog_background, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.label_text, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.label_mnemonic, Style{kDarkYellow, kDarkPanel, Attr::Underline});
+    theme.set(roles.static_text, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.button_normal, Style{kDarkFg, kDarkFocus, Attr{}});
+    theme.set(roles.button_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
+    theme.set(roles.button_default, Style{kDarkYellow, kDarkBg, Attr::Bold});
+    theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
+    theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
+    theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
+    theme.set(roles.window_frame_active, Style{kMonoFg, kDarkFocus, Attr::Bold});
+    theme.set(roles.window_frame_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.window_title_active, Style{kMonoFg, kDarkAccent, Attr::Bold});
+    theme.set(roles.window_title_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.menu_bar_normal, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.menu_bar_active, Style{kMonoFg, kDarkAccent, Attr::Reverse});
+    theme.set(roles.menu_dropdown_normal, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.menu_dropdown_highlighted, Style{kMonoFg, kDarkAccent, Attr::Reverse});
+    theme.set(roles.menu_dropdown_disabled, Style{kDarkFg, kDarkPanel, Attr::Dim});
+    return theme;
+}
+
+Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles) {
+    Theme theme(registry);
+    theme.set(roles.dialog_frame, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.dialog_background, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.label_text, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.label_mnemonic, Style{kLightFg, kLightPanel, Attr::Underline | Attr::Bold});
+    theme.set(roles.static_text, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.button_normal, Style{kLightFg, kLightFocus, Attr{}});
+    theme.set(roles.button_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
+    theme.set(roles.button_default, Style{kMonoBg, kLightYellow, Attr::Bold});
+    theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
+    theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr::Underline});
+    theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
+    theme.set(roles.window_frame_active, Style{kLightFg, kLightFocus, Attr::Bold});
+    theme.set(roles.window_frame_inactive, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.window_title_active, Style{kLightFg, kLightAccent, Attr::Bold});
+    theme.set(roles.window_title_inactive, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.menu_bar_normal, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.menu_bar_active, Style{kLightFg, kLightAccent, Attr::Reverse});
+    theme.set(roles.menu_dropdown_normal, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.menu_dropdown_highlighted, Style{kLightFg, kLightAccent, Attr::Reverse});
+    theme.set(roles.menu_dropdown_disabled, Style{kLightFg, kLightPanel, Attr::Dim});
+    return theme;
+}
+
+Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) {
+    Theme theme(registry);
+    theme.set(roles.dialog_frame, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.dialog_background, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.label_text, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.label_mnemonic, Style{kMonoFg, kMonoBg, Attr::Underline | Attr::Bold});
+    theme.set(roles.static_text, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.button_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.button_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.button_default, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.input_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.input_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
+    theme.set(roles.input_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
+    theme.set(roles.window_frame_active, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.window_frame_inactive, Style{kMonoGray, kMonoBg, Attr{}});
+    theme.set(roles.window_title_active, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
+    theme.set(roles.window_title_inactive, Style{kMonoGray, kMonoBg, Attr{}});
+    theme.set(roles.menu_bar_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.menu_bar_active, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.menu_dropdown_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.menu_dropdown_highlighted, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.menu_dropdown_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    return theme;
+}
+
 }  // namespace ckv::ui

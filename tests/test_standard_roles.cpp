@@ -2,6 +2,7 @@
 #include "cvision/ui/standard_roles.hpp"
 
 #include <set>
+#include <vector>
 
 #include "cktest.hpp"
 
@@ -77,4 +78,81 @@ CK_TEST(classic_theme_still_falls_back_correctly_for_a_role_it_did_not_explicitl
     const auto theme = make_classic_theme(reg, r);
     CK_CHECK(theme.resolve(extra) == ckv::Style{});  // untouched by make_classic_theme
     (void)r;
+}
+
+// --- Dark / Light / Mono schemes ----------------------------------------
+
+CK_TEST(dark_light_and_mono_themes_each_style_every_standard_role_distinctly_from_default) {
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    for (const auto& theme : {ckv::ui::make_dark_theme(reg, r), ckv::ui::make_light_theme(reg, r),
+                               ckv::ui::make_mono_theme(reg, r)}) {
+        CK_CHECK(!(theme.resolve(r.button_default) == ckv::Style{}));
+        CK_CHECK(!(theme.resolve(r.input_invalid) == ckv::Style{}));
+        CK_CHECK(!(theme.resolve(r.window_title_active) == ckv::Style{}));
+    }
+}
+
+CK_TEST(each_scheme_distinguishes_default_from_normal_buttons) {
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    for (const auto& theme : {ckv::ui::make_dark_theme(reg, r), ckv::ui::make_light_theme(reg, r),
+                               ckv::ui::make_mono_theme(reg, r)}) {
+        CK_CHECK(!(theme.resolve(r.button_default) == theme.resolve(r.button_normal)));
+    }
+}
+
+CK_TEST(each_scheme_distinguishes_active_from_inactive_window_frames) {
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    for (const auto& theme : {ckv::ui::make_dark_theme(reg, r), ckv::ui::make_light_theme(reg, r),
+                               ckv::ui::make_mono_theme(reg, r)}) {
+        CK_CHECK(!(theme.resolve(r.window_frame_active) == theme.resolve(r.window_frame_inactive)));
+    }
+}
+
+CK_TEST(each_scheme_distinguishes_invalid_input_from_normal_input) {
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    for (const auto& theme : {ckv::ui::make_dark_theme(reg, r), ckv::ui::make_light_theme(reg, r),
+                               ckv::ui::make_mono_theme(reg, r)}) {
+        CK_CHECK(!(theme.resolve(r.input_invalid) == theme.resolve(r.input_normal)));
+    }
+}
+
+CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    const auto theme = ckv::ui::make_mono_theme(reg, r);
+    const std::vector<ckv::ui::RoleId> all{
+        r.dialog_frame,          r.dialog_background,       r.label_text,
+        r.label_mnemonic,        r.static_text,              r.button_normal,
+        r.button_focused,        r.button_default,           r.input_normal,
+        r.input_focused,         r.input_invalid,            r.window_frame_active,
+        r.window_frame_inactive, r.window_title_active,      r.window_title_inactive,
+        r.menu_bar_normal,       r.menu_bar_active,          r.menu_dropdown_normal,
+        r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
+    for (auto role : all) {
+        const ckv::Style style = theme.resolve(role);
+        for (const ckv::Color& c : {style.fg, style.bg}) {
+            // Monochrome-safe: every channel equal (a true gray, including
+            // pure black/white as the degenerate cases).
+            CK_CHECK(c.r() == c.g() && c.g() == c.b());
+        }
+    }
+}
+
+CK_TEST(each_built_in_scheme_produces_a_different_style_for_the_same_role) {
+    // Not a rigorous design check, just a sanity guard against a
+    // copy-paste mistake that left two "different" schemes identical.
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    const auto classic = make_classic_theme(reg, r);
+    const auto dark = ckv::ui::make_dark_theme(reg, r);
+    const auto light = ckv::ui::make_light_theme(reg, r);
+    const auto mono = ckv::ui::make_mono_theme(reg, r);
+    CK_CHECK(!(classic.resolve(r.dialog_background) == dark.resolve(r.dialog_background)));
+    CK_CHECK(!(classic.resolve(r.dialog_background) == light.resolve(r.dialog_background)));
+    CK_CHECK(!(dark.resolve(r.dialog_background) == light.resolve(r.dialog_background)));
+    CK_CHECK(!(dark.resolve(r.dialog_background) == mono.resolve(r.dialog_background)));
 }

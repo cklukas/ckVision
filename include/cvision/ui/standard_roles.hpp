@@ -44,7 +44,22 @@ StandardRoles intern_standard_roles(RoleRegistry& registry);
 // The faithful '90s blue-desktop look, built from `roles`' own
 // fallbacks — provided as an explicit Theme (not just relying on
 // fallbacks) so it round-trips through Theme::resolve identically to
-// any other named scheme (Dark/Light/Mono arrive in M8).
+// any other named scheme.
 Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles);
+
+// First versions of the remaining three built-in schemes
+// (ARCHITECTURE.md §5 "Themes and schemes"; ROADMAP.md M6c — "the exit
+// exercises every scheme"). Dark and Light are ordinary truecolor
+// palettes; Mono is deliberately restricted to black/white/gray with
+// Attr::Bold/Reverse/Underline carrying every visual distinction that
+// Classic/Dark/Light express through hue — the actual "16-color-safe"
+// property, verified by degrading correctly under a reduced-color
+// terminal capability at the term layer, not by this module picking
+// values from a 16-color palette itself (core carries truecolor
+// requests only, per Color's own contract; quantization is a term-
+// layer presentation concern).
+Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles);
+Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles);
+Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 }  // namespace ckv::ui
