@@ -337,3 +337,38 @@ CK_TEST(wire_dialog_window_composes_with_a_previously_installed_on_closed_handle
     CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
     CK_CHECK(preexisting_ran);  // the original handler still runs, not overwritten
 }
+
+// --- Resizable defaults (M10/WP-21) --------------------------------------
+
+CK_TEST(wire_dialog_window_makes_the_window_non_resizable_by_default) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;  // resizable defaults to false
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    Window window = make_window(f);
+    CK_CHECK(window.resizable());  // a plain Window defaults to resizable
+
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(!window.resizable());
+}
+
+CK_TEST(wire_dialog_window_honors_an_explicit_resizable_opt_in) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.resizable = true;
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    Window window = make_window(f);
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(window.resizable());
+}

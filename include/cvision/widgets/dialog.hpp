@@ -15,9 +15,10 @@
 // a MaterializedDialog inside a Window's content, wiring Window's
 // accept_request (default button + accept-time validation veto — a
 // failing validator blocks the accept, marks its field invalid, and
-// takes focus, per ARCHITECTURE.md §5) and cancel_request (Esc closes,
-// bypassing validation by definition), plus focus restoration to
-// whatever view had focus before the dialog opened.
+// takes focus, per ARCHITECTURE.md §5), cancel_request (Esc closes,
+// bypassing validation by definition), resizable() per the descriptor's
+// own `resizable` field (M10/WP-21 — false unless opted in), plus focus
+// restoration to whatever view had focus before the dialog opened.
 #pragma once
 
 #include <functional>
@@ -57,6 +58,18 @@ struct DialogDescriptor {
     std::string title;  // not yet rendered anywhere (no window chrome until M5) — carried for that wiring
     std::vector<FieldDescriptor> fields;
     std::vector<ButtonDescriptor> buttons;
+
+    // Whether wire_dialog_window() lets the user resize the hosting
+    // window (M10/WP-21; plans/widgets.md's "resizable dialogs with
+    // layout" beyond-baseline row). Defaults to false: most dialogs
+    // are a fixed-size prompt, and a resize grip on one invites a user
+    // to make it a size its content was never designed for. Safe to
+    // opt in — materialize_dialog() already builds every dialog's
+    // content from ui::Column/Row (SizePolicy::Expanding on each
+    // InputLine), so it already reflows correctly if the window
+    // resizes; this flag only controls whether the USER is offered
+    // that resize at all, not whether the layout could support it.
+    bool resizable = false;
 };
 
 struct MaterializedDialog {
@@ -90,6 +103,9 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 //  - cancel_request: closes the window directly, bypassing validation.
 //  - on_closed (composed with any handler already set): restores
 //    focus to `restore_focus_to` if it is still focusable.
+// Also calls window.set_resizable(descriptor.resizable) — false unless
+// the descriptor opts in (see DialogDescriptor::resizable's own doc
+// comment).
 // The installed closures capture `app`, `window`, and `descriptor` by
 // reference (and `restore_focus_to` by value) — all three must outlive
 // `window` itself; a typical caller keeps `descriptor` alive for the

@@ -111,6 +111,7 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     Button* default_button = dialog.default_button;
 
     window.set_content(std::move(dialog.root));
+    window.set_resizable(descriptor.resizable);
 
     // Guards against the default button's OWN on_press closing the
     // window itself (a natural pattern: "the OK button closes the
