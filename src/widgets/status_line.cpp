@@ -9,8 +9,11 @@ namespace {
 constexpr int kSeparatorWidth = 3;  // " | "
 }  // namespace
 
-StatusLine::StatusLine(const ui::Theme& theme, ui::RoleId role, ui::Application& app)
-    : theme_(theme), role_(role), app_(app) {}
+StatusLine::StatusLine() = default;
+
+void StatusLine::on_attached() {
+    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
+}
 
 void StatusLine::set_items(std::vector<StatusLineItem> items) {
     items_ = std::move(items);
@@ -24,7 +27,7 @@ void StatusLine::set_hint_provider(std::function<std::string(const std::string&)
 
 std::string StatusLine::current_hint() const {
     if (!hint_provider_) return {};
-    const ui::View* focused = app_.focused();
+    const ui::View* focused = context().app->focused();
     if (focused == nullptr) return {};
     const std::string* key = focused->resolve_help_context_key();
     if (key == nullptr) return {};
@@ -43,7 +46,7 @@ SizeHint StatusLine::horizontal_size_hint() const { return SizeHint{0, 0, ui::kU
 SizeHint StatusLine::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
 
 void StatusLine::draw(scene::Painter& painter) {
-    const Style style = theme_.resolve(role_);
+    const Style style = context().theme->resolve(role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
 
     const std::string hint = current_hint();
@@ -66,7 +69,8 @@ bool StatusLine::on_mouse(const MouseEvent& event) {
         const int x = item_start_column(i);
         const int w = text::text_width(items_[i].label);
         if (local_x >= x && local_x < x + w) {
-            if (items_[i].command != ui::kInvalidCommand) app_.execute_command(items_[i].command);
+            if (items_[i].command != ui::kInvalidCommand)
+                context().app->execute_command(items_[i].command);
             return true;
         }
     }

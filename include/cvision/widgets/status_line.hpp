@@ -33,9 +33,16 @@ struct StatusLineItem {
     ui::CommandId command = ui::kInvalidCommand;
 };
 
+// Resolves its own theme role from context() once attached (M9
+// WP-7, D-028): "ckv.statusline.normal". Also reads context().app for
+// the focused view's help-context key (current_hint()) and to
+// execute an item's command (on_mouse()) — see the file comment on
+// why the status line is one of the few widgets that needs it.
 class StatusLine : public ui::View {
 public:
-    StatusLine(const ui::Theme& theme, ui::RoleId role, ui::Application& app);
+    StatusLine();
+
+    void set_role_override(ui::RoleId role) noexcept { role_ = role; }
 
     void set_items(std::vector<StatusLineItem> items);
     const std::vector<StatusLineItem>& items() const noexcept { return items_; }
@@ -54,15 +61,14 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     int item_start_column(std::size_t index) const;
 
     std::vector<StatusLineItem> items_;
     std::function<std::string(const std::string&)> hint_provider_;
-    const ui::Theme& theme_;
-    ui::RoleId role_;
-    ui::Application& app_;
+    ui::RoleId role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

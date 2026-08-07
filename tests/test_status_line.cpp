@@ -5,6 +5,7 @@
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::ManualClock;
@@ -47,7 +48,8 @@ CK_TEST(no_hint_provider_reports_an_empty_current_hint) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     CK_CHECK(status.current_hint().empty());
 }
 
@@ -56,7 +58,8 @@ CK_TEST(no_focused_view_reports_an_empty_hint_even_with_a_provider_installed) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_hint_provider([](const std::string&) { return "should not appear"; });
     CK_CHECK(status.current_hint().empty());
 }
@@ -66,7 +69,8 @@ CK_TEST(focused_view_with_no_help_context_key_reports_an_empty_hint) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_hint_provider([](const std::string&) { return "should not appear"; });
     auto* view = app.root().add_child(std::make_unique<View>());
     view->set_focus_policy(FocusPolicy::TabStop);
@@ -79,7 +83,8 @@ CK_TEST(hint_resolves_through_the_focused_views_help_context_key) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_hint_provider([](const std::string& key) { return "Hint for " + key; });
     auto* view = app.root().add_child(std::make_unique<View>());
     view->set_focus_policy(FocusPolicy::TabStop);
@@ -93,7 +98,8 @@ CK_TEST(hint_updates_when_focus_moves_to_a_different_view) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_hint_provider([](const std::string& key) { return key; });
     auto* a = app.root().add_child(std::make_unique<View>());
     a->set_focus_policy(FocusPolicy::TabStop);
@@ -115,7 +121,8 @@ CK_TEST(clicking_an_items_label_fires_its_command) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     constexpr CommandId kHelp = 1;
     app.commands().register_command(kHelp, "Help");
@@ -133,7 +140,8 @@ CK_TEST(clicking_outside_any_item_is_unhandled) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     status.set_items({StatusLineItem{"Help", ui::kInvalidCommand}});
     CK_CHECK(!status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{30, 0},
@@ -149,7 +157,8 @@ CK_TEST(a_disabled_commands_item_still_fires_execute_command_which_itself_declin
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     constexpr CommandId kHelp = 1;
     app.commands().register_command(kHelp, "Help");
@@ -168,7 +177,8 @@ CK_TEST(second_item_is_positioned_after_the_first_with_a_separator_between) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     constexpr CommandId kFirst = 1;
     constexpr CommandId kSecond = 2;
@@ -189,7 +199,8 @@ CK_TEST(draw_renders_the_hint_and_items_without_crashing) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     status.set_hint_provider([](const std::string& key) { return key; });
     auto* view = app.root().add_child(std::make_unique<View>());
@@ -209,7 +220,8 @@ CK_TEST(draw_stops_placing_items_that_would_start_past_the_available_width_witho
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    StatusLine status(f.theme, f.roles.dialog_background, app);
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 5, 1});  // very narrow
     status.set_items({StatusLineItem{"This label is far too long to fit", ui::kInvalidCommand}});
 

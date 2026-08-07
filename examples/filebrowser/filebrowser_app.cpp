@@ -75,13 +75,11 @@ void FileBrowserApp::build_menu_bar() {
     file_menu.items.push_back(widgets::MenuItem{"E&xit", kCmdQuit, nullptr, false});
     menus.push_back(std::move(file_menu));
 
-    auto menu = std::make_unique<widgets::MenuBar>(std::move(menus), app_.theme(), roles_.menu_bar_normal,
-                                                     roles_.menu_bar_active, roles_.menu_dropdown_normal,
-                                                     roles_.menu_dropdown_highlighted,
-                                                     roles_.menu_dropdown_disabled, app_, *desktop_);
+    auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
     menu_ = static_cast<widgets::MenuBar*>(desktop_->dock_top(std::move(menu)));
 
-    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
+    auto status = std::make_unique<widgets::StatusLine>();
+    status->set_role_override(roles_.menu_bar_normal);
     status->set_items({{"Tab Switch Pane", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
     desktop_->dock_bottom(std::move(status));
 }

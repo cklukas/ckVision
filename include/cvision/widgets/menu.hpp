@@ -45,11 +45,21 @@ struct MenuItem {
     bool separator = false;                // a divider: never highlighted, navigated to, or activated
 };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.menu.dropdown.normal"/"highlighted"/"disabled".
+// Also reads context().app for command enablement — see the file
+// comment on why menus are one of the few widgets that need it.
 class DropdownMenu : public ui::View {
 public:
-    DropdownMenu(std::vector<MenuItem> items, const ui::Theme& theme, ui::RoleId normal_role,
-                 ui::RoleId highlighted_role, ui::RoleId disabled_role, ui::Application& app);
+    explicit DropdownMenu(std::vector<MenuItem> items);
     ~DropdownMenu() override;
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId highlighted_role,
+                            ui::RoleId disabled_role) noexcept {
+        normal_role_ = normal_role;
+        highlighted_role_ = highlighted_role;
+        disabled_role_ = disabled_role;
+    }
 
     // Fires on Esc, on a click outside the dropdown's own bounds (light
     // dismiss), after a successful item activation, AND unconditionally
@@ -74,6 +84,7 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     bool item_enabled(std::size_t index) const;
@@ -83,11 +94,9 @@ private:
 
     std::vector<MenuItem> items_;
     int highlighted_ = -1;
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId highlighted_role_;
-    ui::RoleId disabled_role_;
-    ui::Application& app_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId highlighted_role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 struct MenuBarItem {
@@ -95,12 +104,23 @@ struct MenuBarItem {
     std::vector<MenuItem> items;
 };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.menu.bar.normal"/"ckv.menu.bar.active" — its
+// dropdowns resolve their own "ckv.menu.dropdown.*" roles the same
+// way, so MenuBar no longer needs to hold or thread them through.
+// Also reads context().app for focus save/restore, and finds its
+// owning Desktop with a parent-chain walk at attach (real usage
+// always docks a MenuBar directly onto the Desktop it controls, via
+// Desktop::dock_top — see gallery_app.cpp).
 class MenuBar : public ui::View {
 public:
-    MenuBar(std::vector<MenuBarItem> menus, const ui::Theme& theme, ui::RoleId normal_role,
-            ui::RoleId active_role, ui::RoleId dropdown_normal_role, ui::RoleId dropdown_highlighted_role,
-            ui::RoleId dropdown_disabled_role, ui::Application& app, Desktop& desktop);
+    explicit MenuBar(std::vector<MenuBarItem> menus);
     ~MenuBar() override;
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId active_role) noexcept {
+        normal_role_ = normal_role;
+        active_role_ = active_role;
+    }
 
     // Gives the bar focus (saving whatever was previously focused, for
     // deactivate()/Esc to restore) and highlights the first menu. A
@@ -119,6 +139,7 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_attached() override;
 
 private:
     void open_dropdown(std::size_t menu_index);
@@ -130,14 +151,10 @@ private:
     ui::View* previously_focused_ = nullptr;
     DropdownMenu* open_dropdown_ = nullptr;  // observer into desktop_'s popup list
 
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId active_role_;
-    ui::RoleId dropdown_normal_role_;
-    ui::RoleId dropdown_highlighted_role_;
-    ui::RoleId dropdown_disabled_role_;
-    ui::Application& app_;
-    Desktop& desktop_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId active_role_ = ui::kInvalidRole;
+    ui::Application* app_ = nullptr;
+    Desktop* desktop_ = nullptr;
 };
 
 // Opens `items` as a positional pop-up context menu at `screen_position`
@@ -145,13 +162,16 @@ private:
 // click MouseEvent) with the same navigation/mnemonic/dismiss feature
 // set as MenuBar's dropdown: input capture for light-dismiss on an
 // outside click, Esc to close, Up/Down/Enter to navigate and activate.
+// The returned DropdownMenu resolves its own roles from `desktop`'s
+// context, same as one opened by a MenuBar; call set_role_override on
+// it before returning control to the caller's event loop if it needs
+// to look different from the standard menu-dropdown roles.
 // Self-removing: the menu takes care of leaving `desktop`'s popup list
 // and clearing input capture when it dismisses, so the caller does not
 // need to track or explicitly close it. The returned pointer is only
 // valid until the menu dismisses (any activation, Esc, or an outside
 // click) — do not retain it past that point.
-DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position, const ui::Theme& theme,
-                                 ui::RoleId normal_role, ui::RoleId highlighted_role, ui::RoleId disabled_role,
+DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop);
 
 }  // namespace ckv::widgets

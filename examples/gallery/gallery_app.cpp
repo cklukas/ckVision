@@ -25,7 +25,8 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
-    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
+    auto status = std::make_unique<widgets::StatusLine>();
+    status->set_role_override(roles_.menu_bar_normal);
     status->set_items({{"F10 Menu", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
     // dock_bottom (not add_child + a one-time set_bounds) keeps the
     // status line pinned to the last row across every future terminal
@@ -76,10 +77,7 @@ void GalleryApp::build_menu_bar() {
     window_menu.items.push_back(widgets::MenuItem{"&Cascade", kCmdCascade, nullptr, false});
     menus.push_back(std::move(window_menu));
 
-    auto menu = std::make_unique<widgets::MenuBar>(std::move(menus), app_.theme(), roles_.menu_bar_normal,
-                                                     roles_.menu_bar_active, roles_.menu_dropdown_normal,
-                                                     roles_.menu_dropdown_highlighted,
-                                                     roles_.menu_dropdown_disabled, app_, *desktop_);
+    auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
     menu_ = static_cast<widgets::MenuBar*>(desktop_->dock_top(std::move(menu)));
 }
 

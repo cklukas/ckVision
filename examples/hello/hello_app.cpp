@@ -25,13 +25,11 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     hello_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
     hello_menu.items.push_back(widgets::MenuItem{"E&xit", kCmdQuit, nullptr, false});
     menus.push_back(std::move(hello_menu));
-    auto menu_bar = std::make_unique<widgets::MenuBar>(std::move(menus), app_.theme(), roles_.menu_bar_normal,
-                                                         roles_.menu_bar_active, roles_.menu_dropdown_normal,
-                                                         roles_.menu_dropdown_highlighted,
-                                                         roles_.menu_dropdown_disabled, app_, *desktop_);
+    auto menu_bar = std::make_unique<widgets::MenuBar>(std::move(menus));
     desktop_->dock_top(std::move(menu_bar));
 
-    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
+    auto status = std::make_unique<widgets::StatusLine>();
+    status->set_role_override(roles_.menu_bar_normal);
     status->set_items({{"Alt-X Exit", kCmdQuit}, {"F10 Menu", ui::kInvalidCommand}});
     desktop_->dock_bottom(std::move(status));
 

@@ -32,23 +32,27 @@ int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index
 
 // --- DropdownMenu ------------------------------------------------------
 
-DropdownMenu::DropdownMenu(std::vector<MenuItem> items, const ui::Theme& theme, ui::RoleId normal_role,
-                            ui::RoleId highlighted_role, ui::RoleId disabled_role, ui::Application& app)
-    : items_(std::move(items)),
-      theme_(theme),
-      normal_role_(normal_role),
-      highlighted_role_(highlighted_role),
-      disabled_role_(disabled_role),
-      app_(app) {
-    highlighted_ = step_selection(-1, +1);
-}
+DropdownMenu::DropdownMenu(std::vector<MenuItem> items) : items_(std::move(items)) {}
 
 DropdownMenu::~DropdownMenu() { dismiss(); }
+
+void DropdownMenu::on_attached() {
+    if (normal_role_ == ui::kInvalidRole)
+        normal_role_ = context().roles->find("ckv.menu.dropdown.normal");
+    if (highlighted_role_ == ui::kInvalidRole)
+        highlighted_role_ = context().roles->find("ckv.menu.dropdown.highlighted");
+    if (disabled_role_ == ui::kInvalidRole)
+        disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
+    // Deferred from construction: item_enabled() below needs
+    // context().app, which is only valid from here on.
+    highlighted_ = step_selection(-1, +1);
+}
 
 bool DropdownMenu::item_enabled(std::size_t index) const {
     const MenuItem& item = items_[index];
     if (item.separator) return false;
-    if (item.command != ui::kInvalidCommand) return app_.commands().is_enabled(item.command);
+    if (item.command != ui::kInvalidCommand)
+        return context().app->commands().is_enabled(item.command);
     return true;
 }
 
@@ -65,13 +69,13 @@ int DropdownMenu::step_selection(int from, int direction) const {
 
 void DropdownMenu::activate(int index) {
     if (index < 0 || !item_enabled(static_cast<std::size_t>(index))) return;
-    // Copy what we need out of items_/app_ BEFORE dismiss(): on_dismiss
+    // Copy what we need out of items_/context() BEFORE dismiss(): on_dismiss
     // may destroy `this` (e.g. MenuBar::close_dropdown() removes this
     // popup from its owning Desktop) — nothing below may read a member
-    // of `this` after that point.
+    // (or call context()) on `this` after that point.
     const ui::CommandId command = items_[static_cast<std::size_t>(index)].command;
     const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].on_activate;
-    ui::Application& app = app_;
+    ui::Application& app = *context().app;
     dismiss();
     if (command != ui::kInvalidCommand)
         app.execute_command(command);
@@ -159,11 +163,12 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
 }
 
 void DropdownMenu::draw(scene::Painter& painter) {
+    const ui::Theme& theme = *context().theme;
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
         const bool enabled = item_enabled(static_cast<std::size_t>(i));
-        const Style style = !enabled ? theme_.resolve(disabled_role_)
-                             : (i == highlighted_) ? theme_.resolve(highlighted_role_)
-                                                    : theme_.resolve(normal_role_);
+        const Style style = !enabled ? theme.resolve(disabled_role_)
+                             : (i == highlighted_) ? theme.resolve(highlighted_role_)
+                                                    : theme.resolve(normal_role_);
         painter.fill(Rect{0, i, bounds().width, 1}, Cell::from_grapheme(" ", style));
         if (items_[static_cast<std::size_t>(i)].separator) {
             painter.hline(Point{0, i}, bounds().width, scene::LineStyle::Single, style);
@@ -176,27 +181,30 @@ void DropdownMenu::draw(scene::Painter& painter) {
 
 // --- MenuBar ---------------------------------------------------------
 
-MenuBar::MenuBar(std::vector<MenuBarItem> menus, const ui::Theme& theme, ui::RoleId normal_role,
-                  ui::RoleId active_role, ui::RoleId dropdown_normal_role, ui::RoleId dropdown_highlighted_role,
-                  ui::RoleId dropdown_disabled_role, ui::Application& app, Desktop& desktop)
-    : menus_(std::move(menus)),
-      theme_(theme),
-      normal_role_(normal_role),
-      active_role_(active_role),
-      dropdown_normal_role_(dropdown_normal_role),
-      dropdown_highlighted_role_(dropdown_highlighted_role),
-      dropdown_disabled_role_(dropdown_disabled_role),
-      app_(app),
-      desktop_(desktop) {
+MenuBar::MenuBar(std::vector<MenuBarItem> menus) : menus_(std::move(menus)) {
     set_focus_policy(ui::FocusPolicy::TabStop);
 }
 
 MenuBar::~MenuBar() { close_dropdown(); }
 
+void MenuBar::on_attached() {
+    if (normal_role_ == ui::kInvalidRole)
+        normal_role_ = context().roles->find("ckv.menu.bar.normal");
+    if (active_role_ == ui::kInvalidRole)
+        active_role_ = context().roles->find("ckv.menu.bar.active");
+    app_ = context().app;
+    for (ui::View* p = parent(); p != nullptr; p = p->parent()) {
+        if (auto* d = dynamic_cast<Desktop*>(p)) {
+            desktop_ = d;
+            break;
+        }
+    }
+}
+
 void MenuBar::activate() {
     if (active_) return;
-    previously_focused_ = app_.focused();
-    app_.set_focus(this);  // on_focus(true) below flips active_
+    previously_focused_ = app_->focused();
+    app_->set_focus(this);  // on_focus(true) below flips active_
 }
 
 void MenuBar::deactivate() {
@@ -205,9 +213,9 @@ void MenuBar::deactivate() {
     ui::View* restore = previously_focused_;
     previously_focused_ = nullptr;
     if (restore != nullptr && restore->focusable())
-        app_.set_focus(restore);
+        app_->set_focus(restore);
     else
-        app_.set_focus(nullptr);
+        app_->set_focus(nullptr);
 }
 
 void MenuBar::on_focus(const FocusEvent& event) {
@@ -224,28 +232,27 @@ void MenuBar::open_dropdown(std::size_t menu_index) {
     close_dropdown();
     highlighted_ = menu_index;
 
-    auto dropdown = std::make_unique<DropdownMenu>(menus_[menu_index].items, theme_, dropdown_normal_role_,
-                                                     dropdown_highlighted_role_, dropdown_disabled_role_, app_);
+    auto dropdown = std::make_unique<DropdownMenu>(menus_[menu_index].items);
     const Rect abs = absolute_bounds();
-    const Rect desktop_abs = desktop_.absolute_bounds();
+    const Rect desktop_abs = desktop_->absolute_bounds();
     const int local_x = abs.x + menu_bar_offset_for(menus_, menu_index) - desktop_abs.x;
     const int local_y = abs.y + 1 - desktop_abs.y;
 
-    auto* raw = static_cast<DropdownMenu*>(desktop_.add_popup(std::move(dropdown)));
+    auto* raw = static_cast<DropdownMenu*>(desktop_->add_popup(std::move(dropdown)));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
     raw->set_bounds(Rect{local_x, local_y, w.preferred, h.preferred});
     raw->on_dismiss = [this]() { close_dropdown(); };
 
     open_dropdown_ = raw;
-    app_.set_input_capture(raw);
+    app_->set_input_capture(raw);
     invalidate();
 }
 
 void MenuBar::close_dropdown() {
     if (open_dropdown_ == nullptr) return;
-    if (app_.input_capture() == open_dropdown_) app_.clear_input_capture();
-    desktop_.remove_popup(open_dropdown_);
+    if (app_->input_capture() == open_dropdown_) app_->clear_input_capture();
+    desktop_->remove_popup(open_dropdown_);
     open_dropdown_ = nullptr;
     invalidate();
 }
@@ -305,22 +312,21 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
 }
 
 void MenuBar::draw(scene::Painter& painter) {
-    const Style base = theme_.resolve(normal_role_);
+    const ui::Theme& theme = *context().theme;
+    const Style base = theme.resolve(normal_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
     for (std::size_t i = 0; i < menus_.size(); ++i) {
         const int x = menu_bar_offset_for(menus_, i);
-        const Style style = (active_ && i == highlighted_) ? theme_.resolve(active_role_) : base;
+        const Style style = (active_ && i == highlighted_) ? theme.resolve(active_role_) : base;
         painter.draw_text(Point{x, 0}, parse_mnemonic(menus_[i].label).display, style);
     }
 }
 
 // --- show_context_menu ---------------------------------------------------
 
-DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position, const ui::Theme& theme,
-                                 ui::RoleId normal_role, ui::RoleId highlighted_role, ui::RoleId disabled_role,
+DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop) {
-    auto menu = std::make_unique<DropdownMenu>(std::move(items), theme, normal_role, highlighted_role,
-                                                disabled_role, app);
+    auto menu = std::make_unique<DropdownMenu>(std::move(items));
     const Rect desktop_abs = desktop.absolute_bounds();
     auto* raw = static_cast<DropdownMenu*>(desktop.add_popup(std::move(menu)));
     const SizeHint w = raw->horizontal_size_hint();
