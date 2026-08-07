@@ -80,7 +80,7 @@ With the menu bar activated (F10):
 
 ![Gallery: menu open](generated/screenshots/gallery-menu-open.svg)
 
-## Running it yourself
+### Running it yourself
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -94,6 +94,78 @@ terminal (iTerm2 with Sixel enabled, or a recent xterm build). On an
 unsupported terminal, `ImageView`'s mandatory fallback (D-017) still
 renders equivalent cell content in place of the image — never a blank
 or broken region.
+
+## File Browser (`examples/filebrowser`)
+
+File Browser is the master-detail example: a folder-hierarchy
+`TreeView` in one pane drives a `ListView` showing the selected
+folder's contents in a second pane — a `TreeView::on_selection_changed`
+callback is the entire wiring between them. It also demonstrates
+`Desktop::dock_top`/`dock_bottom` (the menu bar and status line
+reposition themselves automatically across a terminal resize, rather
+than the application recomputing their bounds by hand) and
+`Window::set_frame_overlay` (the selected directory's full path shown
+live on the window's own bottom border — the general mechanism a text
+editor would use for a "line: N, col: M" indicator).
+
+- **Real disk access**: the interactive binary browses the actual
+  filesystem via `term::PosixFileSystem` — previously the only
+  `core::FileSystem` implementation anywhere in the repo was
+  `MemoryFileSystem` (test-only), so no application could browse a
+  real directory without writing that backend itself first.
+- **Two-pane layout**: `ui::Row` with two `Expanding` items, the same
+  layout container `make_directory_picker` already uses internally —
+  no manual `set_bounds` bookkeeping for either pane.
+- **Tree building**: `build_subtree()` in `filebrowser_app.cpp`
+  recurses the injected `FileSystem` (directories only, depth-capped
+  against symlink cycles on a real disk), the same pattern
+  `make_directory_picker` uses — duplicated here deliberately so this
+  example is copy-paste usable on its own, not dependent on that
+  dialog's private helpers.
+- **Focus traversal**: Tab switches between the tree and file-list
+  panes — bound explicitly to a command in `FileBrowserApp`'s own
+  constructor, since (by design) nothing in the library auto-binds Tab
+  to focus traversal; an application that wants Tab for something else
+  (a text editor inserting a literal tab) must be free to do that
+  instead.
+
+### What's verified, and how
+
+| Behavior | Test |
+|---|---|
+| The tree starts with the root expanded and the file list showing its direct children | `test_filebrowser_smoke.cpp`: `the_tree_starts_with_root_selected_and_the_file_list_showing_its_direct_children` |
+| Directories in the file list are suffixed with `/` | `directories_in_the_file_list_are_suffixed_with_a_trailing_slash` |
+| Navigating the tree to a different folder updates the file list | `navigating_the_tree_to_a_different_folder_updates_the_file_list` |
+| A nested subdirectory shows up suffixed too | `navigating_to_a_folder_with_a_nested_subdirectory_shows_it_suffixed` |
+| Both panes, the menu bar, and the status line all render | `the_first_frame_renders_both_panes_and_the_menu_status_chrome` |
+| The frame overlay shows the currently selected directory's full path, and updates live | `the_frame_overlay_shows_the_currently_selected_directorys_full_path` |
+| Alt+X quits | `alt_x_quits` |
+| Tab moves focus from the tree pane to the file-list pane | `tab_moves_focus_from_the_tree_to_the_file_list_pane` |
+
+### Screenshots
+
+Initial frame — the root folder expanded, its files and subfolders in
+the right-hand pane, the current path shown on the window's own bottom
+border:
+
+![File Browser: initial frame](generated/screenshots/filebrowser-initial.svg)
+
+After navigating to the `src` folder:
+
+![File Browser: src folder selected](generated/screenshots/filebrowser-src-selected.svg)
+
+After navigating to the `include` folder — the file list and the
+border's path indicator both updated:
+
+![File Browser: include folder selected](generated/screenshots/filebrowser-include-selected.svg)
+
+### Running it yourself
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j8
+./build/examples/ckvision_filebrowser [path]   # defaults to the current directory
+```
 
 ## Adding another example
 

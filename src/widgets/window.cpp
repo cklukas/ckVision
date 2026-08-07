@@ -141,6 +141,10 @@ void Window::on_resized() {
     if (frame_overlay_ != nullptr) frame_overlay_->set_bounds(frame_overlay_rect());
 }
 
+void Window::relayout_frame_overlay() noexcept {
+    if (frame_overlay_ != nullptr) frame_overlay_->set_bounds(frame_overlay_rect());
+}
+
 bool Window::point_in_close_control(Point local) const noexcept {
     // Must match draw()'s own "b.width > 6" gate — a control that
     // isn't drawn must not be clickable, and at widths where only the

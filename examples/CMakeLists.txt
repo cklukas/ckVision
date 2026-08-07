@@ -19,3 +19,19 @@ if(UNIX)
     target_link_libraries(ckvision_gallery PRIVATE gallery_app ckvision::cvision)
     ckvision_strict(ckvision_gallery)
 endif()
+
+# File Browser: a master-detail example (TreeView drives a ListView) —
+# same split as gallery_app above: the object graph is a plain static
+# library, always built and always headlessly testable; only the
+# interactive binary (which needs PosixFileSystem to browse the real
+# disk) is POSIX-only.
+add_library(filebrowser_app STATIC filebrowser/filebrowser_app.cpp)
+target_link_libraries(filebrowser_app PUBLIC ckvision::cvision)
+target_include_directories(filebrowser_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/filebrowser)
+ckvision_strict(filebrowser_app)
+
+if(UNIX)
+    add_executable(ckvision_filebrowser filebrowser/main.cpp)
+    target_link_libraries(ckvision_filebrowser PRIVATE filebrowser_app ckvision::cvision)
+    ckvision_strict(ckvision_filebrowser)
+endif()

@@ -392,6 +392,7 @@ namespace {
 class FixedWidthView : public View {
 public:
     explicit FixedWidthView(int preferred_width) : preferred_width_(preferred_width) {}
+    void set_preferred_width(int width) { preferred_width_ = width; }
     ckv::ui::SizeHint horizontal_size_hint() const override {
         return ckv::ui::SizeHint{0, preferred_width_, ckv::ui::kUnboundedExtent};
     }
@@ -467,4 +468,31 @@ CK_TEST(frame_overlay_and_content_coexist_as_independent_children) {
     CK_CHECK(w.content() != w.frame_overlay());
     // content() still fills the ordinary interior, untouched by the overlay.
     CK_CHECK(w.content()->bounds() == (Rect{1, 1, 28, 8}));
+}
+
+CK_TEST(relayout_frame_overlay_picks_up_a_changed_preferred_width_without_a_window_resize) {
+    // Window has no way to learn on its own that an already-installed
+    // overlay's own content changed size — relayout_frame_overlay() is
+    // the explicit hook a caller uses after that happens (e.g. a Label
+    // whose set_text() made it longer), exactly as documented.
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    w.set_frame_overlay(std::make_unique<FixedWidthView>(4));
+    CK_CHECK(w.frame_overlay()->bounds().width == 4);
+
+    static_cast<FixedWidthView*>(w.frame_overlay())->set_preferred_width(10);
+    CK_CHECK(w.frame_overlay()->bounds().width == 4);  // unchanged: nothing told Window yet
+
+    w.relayout_frame_overlay();
+    CK_CHECK(w.frame_overlay()->bounds().width == 10);
+    CK_CHECK(w.frame_overlay()->bounds() == (Rect{30 - 2 - 10, 9, 10, 1}));
+}
+
+CK_TEST(relayout_frame_overlay_with_no_overlay_set_is_a_harmless_no_op) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 30, 10});
+    w.relayout_frame_overlay();  // must not crash
+    CK_CHECK(w.frame_overlay() == nullptr);
 }

@@ -71,6 +71,11 @@ if(TARGET gallery_app)
     target_link_libraries(cvision_tests PRIVATE gallery_app)
 endif()
 
+if(TARGET filebrowser_app)
+    target_sources(cvision_tests PRIVATE test_filebrowser_smoke.cpp)
+    target_link_libraries(cvision_tests PRIVATE filebrowser_app)
+endif()
+
 if(TARGET docgen_frame_svg)
     target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
     target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)

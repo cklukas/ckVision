@@ -16,3 +16,18 @@ if(TARGET gallery_app)
         ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/gallery)
     ckvision_strict(capture_gallery_screenshots)
 endif()
+
+if(TARGET filebrowser_app)
+    if(NOT TARGET docgen_frame_svg)
+        add_library(docgen_frame_svg STATIC frame_svg.cpp)
+        target_link_libraries(docgen_frame_svg PUBLIC ckvision::cvision)
+        ckvision_strict(docgen_frame_svg)
+    endif()
+
+    add_executable(capture_filebrowser_screenshots capture_filebrowser_screenshots.cpp)
+    target_link_libraries(capture_filebrowser_screenshots PRIVATE docgen_frame_svg filebrowser_app ckvision::cvision)
+    target_include_directories(capture_filebrowser_screenshots PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/filebrowser)
+    ckvision_strict(capture_filebrowser_screenshots)
+endif()
