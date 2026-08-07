@@ -432,3 +432,85 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
     const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
     CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == ckv::scene::default_dim(background_style)));
 }
+
+// --- Docked chrome (dock_top/dock_bottom) and resize reflow ---------------
+
+CK_TEST(dock_top_positions_the_view_at_row_zero_full_width) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    auto* bar = desktop.dock_top(std::make_unique<ckv::ui::View>());
+    CK_CHECK(bar->bounds() == (Rect{0, 0, 60, 1}));
+    CK_CHECK(desktop.top_dock() == bar);
+}
+
+CK_TEST(dock_bottom_positions_the_view_at_the_last_row_full_width) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    auto* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    CK_CHECK(status->bounds() == (Rect{0, 23, 60, 1}));
+    CK_CHECK(desktop.bottom_dock() == status);
+}
+
+CK_TEST(content_area_excludes_both_docks) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    desktop.dock_top(std::make_unique<ckv::ui::View>());
+    desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 60, 22}));
+}
+
+CK_TEST(content_area_is_the_full_bounds_when_nothing_is_docked) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    CK_CHECK(desktop.content_area() == (Rect{0, 0, 60, 24}));
+}
+
+CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    auto* bar = desktop.dock_top(std::make_unique<ckv::ui::View>());
+    auto* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    desktop.set_bounds(Rect{0, 0, 100, 40});
+    CK_CHECK(bar->bounds() == (Rect{0, 0, 100, 1}));
+    CK_CHECK(status->bounds() == (Rect{0, 39, 100, 1}));
+}
+
+CK_TEST(shrinking_the_desktop_pulls_a_window_back_into_the_new_content_area) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{60, 15, 15, 6});  // reachable in the original 80x24 desktop
+    desktop.set_bounds(Rect{0, 0, 40, 24});
+    CK_CHECK(w->bounds().x + w->bounds().width <= 40);
+}
+
+CK_TEST(docking_a_status_line_shrinks_the_content_area_and_clamps_windows_out_of_it) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 20, 15, 4});  // bottom edge at row 24, the very last row
+    desktop.dock_bottom(std::make_unique<ckv::ui::View>());  // now occupies row 23
+    CK_CHECK(w->bounds().y + w->bounds().height <= 23);
+}
+
+CK_TEST(tile_places_windows_within_the_content_area_not_under_the_docked_chrome) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    desktop.dock_top(std::make_unique<ckv::ui::View>());
+    desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    desktop.tile();
+    CK_CHECK(a->bounds().y == 1);
+    CK_CHECK(b->bounds().y == 1);
+    CK_CHECK(a->bounds().height == 22);
+}
+
+CK_TEST(cascade_places_windows_within_the_content_area_not_under_the_docked_chrome) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    desktop.dock_top(std::make_unique<ckv::ui::View>());
+    Window* w = desktop.add_window(make_window(f));
+    desktop.cascade();
+    CK_CHECK(w->bounds().y >= 1);
+}

@@ -59,10 +59,20 @@ and green under both Release and ASan/UBSan builds.
   save dialog and directory picker (both on the injected
   `FileSystem`), and the Help viewer.
 
-Independent review passes across M4 and M5 found and fixed seven real
-bugs (three use-after-frees, three correctness issues, one z-order/
+Independent review passes across M4, M5, and M6 found and fixed eleven
+real bugs (five use-after-frees, five correctness issues, one z-order/
 lifecycle desync), each landed with a regression test verified under
 ASan/UBSan.
+
+**M8 in progress** (M7 — the Windows/ConPTY backend — is deferred to a
+Windows host per ROADMAP.md): the render pipeline is now real — the
+gap where `Application::step()` dispatched input but nothing ever
+painted anything is closed (`View::paint_children`, reusing
+`scene::Compositor`/`term::Presenter`); window shadows actually
+composite (`widgets::Desktop::paint_children`); the `examples/gallery`
+example app exercises rendering, keyboard/mouse navigation, and Sixel
+images end to end, with a matching documentation page and generated
+screenshots — see [docs/example-apps.md](docs/example-apps.md).
 
 ## Documents
 
@@ -73,6 +83,7 @@ ASan/UBSan.
 | [ROADMAP.md](ROADMAP.md) | Development milestones with exit criteria |
 | [DECISIONS.md](DECISIONS.md) | Architecture decision records (settled and open) |
 | [plans/widgets.md](plans/widgets.md) | Widget catalog: capability baseline and beyond-baseline features |
+| [docs/example-apps.md](docs/example-apps.md) | Example applications: what each one demonstrates, how it's tested, generated screenshots |
 | [AGENTS.md](AGENTS.md) | Engineering standard for working in this repository |
 
 ## Copyright

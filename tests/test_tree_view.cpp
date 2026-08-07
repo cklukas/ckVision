@@ -210,3 +210,139 @@ CK_TEST(navigation_clamps_at_the_top_and_bottom_of_the_visible_list) {
     tree.on_key(key(Key::Down));  // one past "leaf", the last visible entry
     CK_CHECK(tree.selected()->label == "leaf");
 }
+
+// --- on_selection_changed / on_activate (master-detail hooks) ------------
+
+CK_TEST(down_arrow_to_a_new_entry_fires_selection_changed_exactly_once) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+    int fires = 0;
+    tree.on_selection_changed = [&] { ++fires; };
+    tree.on_key(key(Key::Down));
+    CK_CHECK(fires == 1);
+    CK_CHECK(tree.selected()->label == "leaf");
+}
+
+CK_TEST(a_no_op_move_at_the_top_of_the_list_does_not_fire_selection_changed) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+    int fires = 0;
+    tree.on_selection_changed = [&] { ++fires; };
+    tree.on_key(key(Key::Up));  // already at the top: no-op move
+    CK_CHECK(fires == 0);
+}
+
+CK_TEST(a_no_op_move_at_the_bottom_of_the_list_does_not_fire_selection_changed) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+    tree.on_key(key(Key::Down));  // now on "leaf", the last entry
+    int fires = 0;
+    tree.on_selection_changed = [&] { ++fires; };
+    tree.on_key(key(Key::Down));  // no further entry to move to
+    CK_CHECK(fires == 0);
+}
+
+CK_TEST(expanding_a_node_without_moving_the_cursor_does_not_fire_selection_changed) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());  // cursor on "parent", collapsed
+    int fires = 0;
+    tree.on_selection_changed = [&] { ++fires; };
+    tree.on_key(key(Key::Right));  // expands "parent" in place, cursor stays put
+    CK_CHECK(fires == 0);
+    CK_CHECK(tree.selected()->label == "parent");
+}
+
+CK_TEST(set_roots_fires_selection_changed_even_though_the_first_entrys_label_is_unchanged) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+    int fires = 0;
+    tree.on_selection_changed = [&] { ++fires; };
+    tree.set_roots(sample_forest());  // a fresh forest: the OLD TreeNode* is gone regardless
+    CK_CHECK(fires == 1);
+}
+
+CK_TEST(mouse_click_on_a_different_entry_fires_selection_changed_not_activate) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_bounds(Rect{0, 0, 20, 5});
+    tree.set_roots(sample_forest());  // cursor starts on "parent" (row 0)
+    int selection_fires = 0;
+    int activate_fires = 0;
+    tree.on_selection_changed = [&] { ++selection_fires; };
+    tree.on_activate = [&] { ++activate_fires; };
+    // Row 1 is "leaf" (parent is collapsed) — clicking it selects, does not activate.
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
+                                   Modifier::None});
+    CK_CHECK(selection_fires == 1);
+    CK_CHECK(activate_fires == 0);
+    CK_CHECK(tree.selected()->label == "leaf");
+}
+
+CK_TEST(a_second_click_on_the_already_selected_entry_fires_activate_not_selection_changed) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_bounds(Rect{0, 0, 20, 5});
+    tree.set_roots(sample_forest());
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
+                                   Modifier::None});  // first click: selects "leaf"
+    int selection_fires = 0;
+    int activate_fires = 0;
+    tree.on_selection_changed = [&] { ++selection_fires; };
+    tree.on_activate = [&] { ++activate_fires; };
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
+                                   Modifier::None});  // second click: activates
+    CK_CHECK(selection_fires == 0);
+    CK_CHECK(activate_fires == 1);
+}
+
+CK_TEST(clicking_the_twisty_of_the_selected_node_toggles_expansion_and_does_not_activate) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_bounds(Rect{0, 0, 20, 5});
+    tree.set_roots(sample_forest());  // cursor already on "parent" at row 0
+    int activate_fires = 0;
+    tree.on_activate = [&] { ++activate_fires; };
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, 0}, std::nullopt,
+                                   Modifier::None});  // clicks the twisty, not just the row
+    CK_CHECK(activate_fires == 0);
+    CK_CHECK(tree.selected()->expanded);
+}
+
+CK_TEST(enter_fires_activate_on_a_leaf_that_has_no_expand_state_at_all) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+    tree.on_key(key(Key::Down));  // move to "leaf" (no children)
+    int activate_fires = 0;
+    tree.on_activate = [&] { ++activate_fires; };
+    tree.on_key(key(Key::Enter));
+    CK_CHECK(activate_fires == 1);
+}
+
+CK_TEST(enter_on_a_branch_node_both_toggles_expansion_and_fires_activate) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());  // cursor on "parent", collapsed
+    int activate_fires = 0;
+    tree.on_activate = [&] { ++activate_fires; };
+    tree.on_key(key(Key::Enter));
+    CK_CHECK(activate_fires == 1);
+    CK_CHECK(tree.selected()->expanded);
+}
+
+CK_TEST(no_callbacks_installed_is_a_harmless_no_op) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_bounds(Rect{0, 0, 20, 5});
+    tree.set_roots(sample_forest());
+    tree.on_key(key(Key::Down));
+    tree.on_key(key(Key::Enter));
+    tree.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 1}, std::nullopt,
+                                   Modifier::None});
+    CK_CHECK(true);  // must not crash with unset std::function callbacks
+}

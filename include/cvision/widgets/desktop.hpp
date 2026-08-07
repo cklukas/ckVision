@@ -43,6 +43,35 @@ public:
 
     Window* active_window() const noexcept { return active_; }
 
+    // --- Docked chrome (menu bar / status line) --------------------
+    //
+    // Takes ownership of `view` (like add_window/add_popup), adds it as
+    // a child, and docks it to the top or bottom edge, full width, at
+    // its own vertical_size_hint().preferred height — kept there across
+    // every subsequent Desktop resize via on_resized(), so an
+    // application never has to recompute a menu bar's or status line's
+    // bounds by hand in its own resize handler (the gap that left
+    // examples/gallery's chrome stale after a resize before this
+    // existed). Returns a non-owning observer, same convention as
+    // add_window. Docking a second view to the same edge replaces the
+    // first as far as auto-positioning goes, but does NOT remove it —
+    // the caller still owns that decision (mirrors set_content()'s
+    // "replaces and returns ownership" for the rare case an application
+    // wants to swap a status line at runtime, but most never will).
+    ui::View* dock_top(std::unique_ptr<ui::View> view);
+    ui::View* dock_bottom(std::unique_ptr<ui::View> view);
+    ui::View* top_dock() const noexcept { return top_dock_; }
+    ui::View* bottom_dock() const noexcept { return bottom_dock_; }
+
+    // The area available for windows: this Desktop's own bounds minus
+    // whatever is currently docked top/bottom. tile()/cascade() and
+    // reposition_within() (called on every window from on_resized())
+    // all place windows within this rect, never under the docked
+    // chrome.
+    Rect content_area() const noexcept;
+
+    void on_resized() override;
+
     // Raises `window` to the front and marks it active, deactivating
     // whichever window was active before (a no-op if `window` is
     // already the active one). CKV_ASSERT if `window` is not owned by
@@ -103,6 +132,8 @@ private:
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     Window* active_ = nullptr;
     std::vector<ui::View*> popups_;
+    ui::View* top_dock_ = nullptr;
+    ui::View* bottom_dock_ = nullptr;
 };
 
 }  // namespace ckv::widgets

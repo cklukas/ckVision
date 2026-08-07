@@ -69,6 +69,26 @@ void Window::toggle_zoom(Rect available) {
     }
 }
 
+void Window::reposition_within(Rect available) noexcept {
+    const Rect b = bounds();
+    // Shrink to fit `available` — but never below min_size_: a window
+    // smaller than its own declared minimum isn't usefully reachable
+    // either, so min_size_ wins over "fits available" when the two
+    // conflict (a desktop shrunk smaller than a window's own minimum).
+    const int width = std::min(b.width, std::max(available.width, min_size_.width));
+    const int height = std::min(b.height, std::max(available.height, min_size_.height));
+    const Rect sized = clamp_size(Rect{b.x, b.y, width, height});
+
+    // Reposition so no edge falls outside `available` when the window
+    // does fit; when it doesn't (min_size_ > available), pin to
+    // available's own origin so the title bar/close control stay at a
+    // predictable, reachable spot rather than wherever a prior larger
+    // desktop happened to leave it.
+    const int x = std::clamp(sized.x, available.x, available.x + std::max(0, available.width - sized.width));
+    const int y = std::clamp(sized.y, available.y, available.y + std::max(0, available.height - sized.height));
+    set_bounds(Rect{x, y, sized.width, sized.height});
+}
+
 void Window::enter_move_mode() {
     keyboard_mode_ = KeyboardMode::Move;
     keyboard_mode_start_bounds_ = bounds();

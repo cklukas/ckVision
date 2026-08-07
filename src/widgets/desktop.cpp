@@ -93,29 +93,69 @@ void Desktop::select_by_number(int n) {
     activate(windows_[static_cast<std::size_t>(n - 1)]);
 }
 
+ui::View* Desktop::dock_top(std::unique_ptr<ui::View> view) {
+    CKV_ASSERT(view != nullptr);
+    ui::View* raw = add_child(std::move(view));
+    top_dock_ = raw;
+    on_resized();  // position it immediately, not just on the next Desktop resize
+    return raw;
+}
+
+ui::View* Desktop::dock_bottom(std::unique_ptr<ui::View> view) {
+    CKV_ASSERT(view != nullptr);
+    ui::View* raw = add_child(std::move(view));
+    bottom_dock_ = raw;
+    on_resized();
+    return raw;
+}
+
+Rect Desktop::content_area() const noexcept {
+    const int top = top_dock_ != nullptr ? std::max(1, top_dock_->vertical_size_hint().preferred) : 0;
+    const int bottom = bottom_dock_ != nullptr ? std::max(1, bottom_dock_->vertical_size_hint().preferred) : 0;
+    return Rect{0, top, bounds().width, std::max(0, bounds().height - top - bottom)};
+}
+
+void Desktop::on_resized() {
+    if (top_dock_ != nullptr) {
+        const int h = std::max(1, top_dock_->vertical_size_hint().preferred);
+        top_dock_->set_bounds(Rect{0, 0, bounds().width, h});
+    }
+    if (bottom_dock_ != nullptr) {
+        const int h = std::max(1, bottom_dock_->vertical_size_hint().preferred);
+        bottom_dock_->set_bounds(Rect{0, bounds().height - h, bounds().width, h});
+    }
+    // ARCHITECTURE.md §5 "Sizing policy": on shrink, windows are
+    // deterministically clamped and repositioned to remain reachable —
+    // every Desktop resize (which includes docking new chrome, since
+    // that shrinks the content area too) re-clamps every window.
+    const Rect area = content_area();
+    for (Window* w : windows_) w->reposition_within(area);
+}
+
 void Desktop::tile() {
     if (windows_.empty()) return;
+    const Rect area = content_area();
     const int n = static_cast<int>(windows_.size());
-    const int total_width = bounds().width;
-    const int slice = total_width / n;
-    int x = 0;
+    const int slice = area.width / n;
+    int x = area.x;
     for (int i = 0; i < n; ++i) {
-        const int width = (i == n - 1) ? (total_width - x) : slice;  // last slice absorbs any remainder
-        windows_[static_cast<std::size_t>(i)]->set_bounds(Rect{x, 0, width, bounds().height});
+        const int width = (i == n - 1) ? (area.x + area.width - x) : slice;  // last slice absorbs any remainder
+        windows_[static_cast<std::size_t>(i)]->set_bounds(Rect{x, area.y, width, area.height});
         x += width;
     }
 }
 
 void Desktop::cascade() {
     if (windows_.empty()) return;
-    const int width = std::max(10, bounds().width * 2 / 3);
-    const int height = std::max(4, bounds().height * 2 / 3);
-    const int max_x = std::max(0, bounds().width - width);
-    const int max_y = std::max(0, bounds().height - height);
+    const Rect area = content_area();
+    const int width = std::max(10, area.width * 2 / 3);
+    const int height = std::max(4, area.height * 2 / 3);
+    const int max_x = std::max(0, area.width - width);
+    const int max_y = std::max(0, area.height - height);
     for (std::size_t i = 0; i < windows_.size(); ++i) {
         const int offset = static_cast<int>(i);
-        const int x = max_x == 0 ? 0 : (offset * 2) % (max_x + 1);
-        const int y = max_y == 0 ? 0 : (offset * 1) % (max_y + 1);
+        const int x = area.x + (max_x == 0 ? 0 : (offset * 2) % (max_x + 1));
+        const int y = area.y + (max_y == 0 ? 0 : (offset * 1) % (max_y + 1));
         windows_[i]->set_bounds(Rect{x, y, width, height});
     }
     // Cascade order should also become z-order: last window frontmost.

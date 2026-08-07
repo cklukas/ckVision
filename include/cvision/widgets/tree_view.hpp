@@ -20,6 +20,7 @@
 // hiding a design flaw today.
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,20 @@ public:
 
     void set_roots(std::vector<TreeNode> roots);
     TreeNode* selected() const noexcept { return cursor_node_; }
+
+    // Fires whenever the cursor moves to a DIFFERENT node (navigation,
+    // mouse click, or a set_roots() call that changes which node ends
+    // up selected) — never on a no-op move (e.g. Down at the last
+    // entry) or on a pure expand/collapse of the already-selected node.
+    // This is the hook a master-detail pane (e.g. a file list showing
+    // the selected folder's contents) subscribes to, mirroring
+    // ListView::on_selection_changed.
+    std::function<void()> on_selection_changed;
+
+    // Fires on Enter, or a second click on the already-selected node —
+    // "act on this node" distinct from merely browsing to it, mirroring
+    // ListView::on_activate.
+    std::function<void()> on_activate;
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;

@@ -19,6 +19,11 @@ void TreeView::set_roots(std::vector<TreeNode> roots) {
     cursor_node_ = entries.empty() ? nullptr : entries.front().node;
     on_resized();
     invalidate();
+    // Always fires (even if a same-labeled node ends up selected again)
+    // — the OLD TreeNode this pointed to is gone the moment roots_ was
+    // replaced, so a master-detail pane must re-resolve against the
+    // new tree regardless of whether the label looks unchanged.
+    if (on_selection_changed) on_selection_changed();
 }
 
 void TreeView::flatten_into(std::vector<TreeNode>& nodes, int depth, std::vector<VisibleEntry>& out) {
@@ -62,10 +67,16 @@ void TreeView::move_cursor(int delta) {
             break;
         }
     index = std::clamp(index + delta, 0, static_cast<int>(entries.size()) - 1);
+    TreeNode* const previous = cursor_node_;
     cursor_node_ = entries[static_cast<std::size_t>(index)].node;
     on_resized();  // the visible set may have changed size (expand/collapse) since the last layout
     ensure_cursor_visible(index);
     invalidate();
+    // A no-op move (Up at the top entry, Down at the bottom) must NOT
+    // fire — a master-detail pane subscribed to this would otherwise
+    // reload identical detail content on every extra keypress at an
+    // edge.
+    if (cursor_node_ != previous && on_selection_changed) on_selection_changed();
 }
 
 bool TreeView::on_key(const KeyEvent& event) {
@@ -102,6 +113,12 @@ bool TreeView::on_key(const KeyEvent& event) {
                 on_resized();
                 invalidate();
             }
+            // Enter/Space is "act on the current node" regardless of
+            // whether it also happened to have children to toggle — a
+            // leaf (e.g. a file, in a file-browser TreeView) has no
+            // expand/collapse state at all, and Enter on it must still
+            // reach the application.
+            if (cursor_node_ != nullptr && on_activate) on_activate();
             return true;
         default:
             return false;
@@ -118,14 +135,24 @@ bool TreeView::on_mouse(const MouseEvent& event) {
     if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) return false;
 
     VisibleEntry entry = entries[static_cast<std::size_t>(index)];
+    const bool clicking_already_selected = entry.node == cursor_node_;
     cursor_node_ = entry.node;
     const int local_x = event.cell.x - abs.x;
     const int twisty_x = entry.depth * 2;
-    if (!entry.node->children.empty() && local_x >= twisty_x && local_x < twisty_x + 2) {
+    const bool clicked_twisty = !entry.node->children.empty() && local_x >= twisty_x && local_x < twisty_x + 2;
+    if (clicked_twisty) {
         entry.node->expanded = !entry.node->expanded;
         on_resized();
     }
     invalidate();
+    // A second click on the ALREADY-selected node (outside the twisty)
+    // is "activate", mirroring ListView::on_mouse's identical
+    // convention — the first click only ever selects.
+    if (!clicked_twisty && clicking_already_selected) {
+        if (on_activate) on_activate();
+    } else if (!clicking_already_selected && on_selection_changed) {
+        on_selection_changed();
+    }
     return true;
 }
 

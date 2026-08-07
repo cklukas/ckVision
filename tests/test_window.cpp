@@ -330,3 +330,58 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
     w.draw(painter);  // must not crash or write past bounds (surface itself is the bound)
     CK_CHECK(true);
 }
+
+// --- reposition_within (ARCHITECTURE.md §5 "Sizing policy") ---------------
+
+CK_TEST(reposition_within_is_a_no_op_when_the_window_already_fits) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{2, 2, 20, 10});
+    w.reposition_within(Rect{0, 0, 80, 24});
+    CK_CHECK(w.bounds() == (Rect{2, 2, 20, 10}));
+}
+
+CK_TEST(reposition_within_shrinks_a_window_wider_than_the_available_area) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 60, 10});
+    w.reposition_within(Rect{0, 0, 40, 24});
+    CK_CHECK(w.bounds().width == 40);
+}
+
+CK_TEST(reposition_within_never_shrinks_below_min_size) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_min_size(ckv::Size{15, 6});
+    w.set_bounds(Rect{0, 0, 20, 10});
+    w.reposition_within(Rect{0, 0, 10, 4});  // smaller than min_size in both dimensions
+    CK_CHECK(w.bounds().width == 15);
+    CK_CHECK(w.bounds().height == 6);
+}
+
+CK_TEST(reposition_within_pins_to_the_available_areas_origin_when_the_window_cannot_fully_fit) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_min_size(ckv::Size{15, 6});
+    w.set_bounds(Rect{50, 50, 20, 10});
+    w.reposition_within(Rect{2, 3, 10, 4});  // available is smaller than min_size
+    CK_CHECK(w.bounds().x == 2);
+    CK_CHECK(w.bounds().y == 3);
+}
+
+CK_TEST(reposition_within_pulls_a_window_back_that_moved_off_the_shrunk_area) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{70, 20, 15, 6});  // was reachable in an 80x24 desktop
+    w.reposition_within(Rect{0, 0, 40, 24});  // desktop shrunk to 40 wide
+    CK_CHECK(w.bounds().x + w.bounds().width <= 40);
+    CK_CHECK(w.bounds().x >= 0);
+}
+
+CK_TEST(reposition_within_leaves_a_window_alone_if_only_its_position_already_fits) {
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 15, 6});
+    w.reposition_within(Rect{0, 0, 40, 24});
+    CK_CHECK(w.bounds() == (Rect{5, 5, 15, 6}));
+}

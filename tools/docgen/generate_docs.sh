@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+#
+# Regenerates everything under docs/generated/: the example-app
+# screenshots (SVG, from the real virtual-terminal render — see
+# frame_svg.hpp) and the HTML/PDF renders of the Markdown documentation
+# pages, via CK Office Write's `ckwrite` CLI. Nothing under
+# docs/generated/ is committed (see .gitignore) — this script is the
+# single source of truth for producing it.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BUILD_DIR="${CKVISION_BUILD_DIR:-$REPO_ROOT/build}"
+DOCS_DIR="$REPO_ROOT/docs"
+GEN_DIR="$DOCS_DIR/generated"
+SCREENSHOTS_DIR="$GEN_DIR/screenshots"
+
+# ckwrite lives in the separate cworks monorepo (CK Office Write), not
+# in this repo — point CKWRITE_BIN at its built binary if it's not at
+# this default location.
+CKWRITE_BIN="${CKWRITE_BIN:-$HOME/git/cworks_dir/cworks/build/bin/ckwrite}"
+
+echo "==> Building ckVision (capture_gallery_screenshots)"
+cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
+cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
+    --target capture_gallery_screenshots
+
+echo "==> Capturing Gallery screenshots"
+mkdir -p "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
+
+# ckwrite's LaTeX/PDF path requires a PDF companion for every embedded
+# SVG (no TeX engine reads SVG directly) — the HTML path uses the SVGs
+# as-is. rsvg-convert is doc-tooling-only (never a cvision dependency,
+# consistent with ckVision's own zero-dependency rule for the library
+# itself); if it's absent, PDF rendering below degrades to a clear
+# warning per file rather than a hard failure.
+if command -v rsvg-convert >/dev/null 2>&1; then
+    for svg in "$SCREENSHOTS_DIR"/*.svg; do
+        rsvg-convert --format=pdf -o "${svg%.svg}.pdf" "$svg"
+    done
+else
+    echo "warning: rsvg-convert not found (brew install librsvg) — PDF export of pages" >&2
+    echo "         with embedded screenshots will fail; HTML export is unaffected." >&2
+fi
+
+if [[ ! -x "$CKWRITE_BIN" ]]; then
+    echo "warning: ckwrite not found at $CKWRITE_BIN" >&2
+    echo "         set CKWRITE_BIN to its build/bin/ckwrite path to also render HTML/PDF." >&2
+    echo "         screenshots were still generated under $SCREENSHOTS_DIR." >&2
+    exit 0
+fi
+
+echo "==> Rendering docs/*.md -> HTML via ckwrite"
+mkdir -p "$GEN_DIR/html"
+for md in "$DOCS_DIR"/*.md; do
+    name="$(basename "$md" .md)"
+    "$CKWRITE_BIN" export "$md" --to html -o "$GEN_DIR/html/$name.html" --copy-assets
+done
+
+echo "==> Rendering docs/*.md -> LaTeX -> PDF via ckwrite + pdflatex"
+mkdir -p "$GEN_DIR/pdf"
+for md in "$DOCS_DIR"/*.md; do
+    name="$(basename "$md" .md)"
+    "$CKWRITE_BIN" export "$md" --to latex -o "$GEN_DIR/pdf/$name.tex" --copy-assets
+    if command -v pdflatex >/dev/null 2>&1; then
+        (cd "$GEN_DIR/pdf" && pdflatex -interaction=nonstopmode -output-directory="$GEN_DIR/pdf" "$name.tex" >/dev/null)
+        echo "    wrote $GEN_DIR/pdf/$name.pdf"
+    else
+        echo "    warning: pdflatex not found; wrote LaTeX only ($GEN_DIR/pdf/$name.tex)" >&2
+    fi
+done
+
+echo "==> Done. See $GEN_DIR/"

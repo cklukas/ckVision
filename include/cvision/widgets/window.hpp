@@ -80,6 +80,16 @@ public:
     void toggle_zoom(Rect available);
     bool zoomed() const noexcept { return zoomed_; }
 
+    // Clamps this window's bounds to fit and remain reachable within
+    // `available` (ARCHITECTURE.md §5 "Sizing policy": "On shrink,
+    // windows are deterministically clamped and repositioned to remain
+    // reachable"). Shrinks (honoring min/max_size) if the window is
+    // currently wider/taller than `available`, then repositions so no
+    // edge falls outside `available` — never just clips silently. A
+    // no-op if the window already fits. Desktop calls this on every
+    // owned window from its own on_resized().
+    void reposition_within(Rect available) noexcept;
+
     // Keyboard move/resize mode: while active, arrow keys nudge one
     // cell per press; Enter confirms (keeps the new bounds); Esc
     // reverts to the bounds captured when the mode was entered.
