@@ -36,7 +36,8 @@ landing commit). A row with no note is still open.
 | WP-4 | **Done** | `Window::zoom_area_provider`/`fill`/`refresh_zoom_area`, `DesktopGrowPolicy`; `tests/test_window.cpp`, `tests/test_desktop.cpp` |
 | WP-5 | **Done** | Unified `widgets::WindowHandle` (retired 5 duplicate per-widget Handle structs); `Desktop::show_dialog`; gallery migrated (F6 fixed); `tests/test_message_box.cpp` |
 | WP-6 | **Done** (M8 complete) | Gallery on `dock_top`/`dock_bottom` (F7); redundant `set_focus_policy(TabStop)` removed from all 3 examples (E6); filebrowser window declares `KeepFilling`; `tests/test_gallery_smoke.cpp` resize regression |
-| WP-7…22 | Open | — |
+| WP-7 | **In progress** | Core `ui::Context`/`on_attached()` mechanism done (own commit). M4 widgets migrated: Label, StaticText, Button, InputLine — all with `set_role_override`; `materialize_dialog` dropped its now-unused theme/roles parameters. Remaining: Window, MenuBar/DropdownMenu, StatusLine (M5); ListView, TreeView, Memo, Table, Scrollbar, ScrollViewport, OptionGroup, ImageView, Canvas, HelpViewer (M6); Desktop stays theme-holding (background_role_ has no natural "attach" moment independent of construction, revisit if that changes) |
+| WP-8…22 | Open | — |
 
 ---
 

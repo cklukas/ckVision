@@ -10,7 +10,6 @@
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
-#include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/dialog.hpp"
 
 using ckv::Key;
@@ -18,21 +17,12 @@ using ckv::KeyChord;
 using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::ui::Application;
-using ckv::ui::intern_standard_roles;
-using ckv::ui::make_classic_theme;
-using ckv::ui::RoleRegistry;
-using ckv::ui::StandardRoles;
-using ckv::ui::Theme;
 using ckv::widgets::ButtonDescriptor;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
 using ckv::widgets::materialize_dialog;
 
 CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
-    RoleRegistry registry;
-    StandardRoles roles = intern_standard_roles(registry);
-    Theme theme = make_classic_theme(registry, roles);
-
     DialogDescriptor descriptor;
     descriptor.title = "Connect";
     descriptor.fields.push_back(FieldDescriptor{"&Host:", "", nullptr});
@@ -42,7 +32,7 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_pressed = true; }});
     descriptor.buttons.push_back(ButtonDescriptor{"Cancel", false, [&] { cancel_pressed = true; }});
 
-    auto dialog = materialize_dialog(descriptor, theme, roles);
+    auto dialog = materialize_dialog(descriptor);
 
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -86,15 +76,11 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
 }
 
 CK_TEST(tab_traversal_wraps_all_the_way_around_a_full_dialog_and_back) {
-    RoleRegistry registry;
-    StandardRoles roles = intern_standard_roles(registry);
-    Theme theme = make_classic_theme(registry, roles);
-
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
 
-    auto dialog = materialize_dialog(descriptor, theme, roles);
+    auto dialog = materialize_dialog(descriptor);
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -108,16 +94,12 @@ CK_TEST(tab_traversal_wraps_all_the_way_around_a_full_dialog_and_back) {
 }
 
 CK_TEST(a_disabled_default_button_still_reports_default_but_a_disabled_input_is_skipped_by_tab) {
-    RoleRegistry registry;
-    StandardRoles roles = intern_standard_roles(registry);
-    Theme theme = make_classic_theme(registry, roles);
-
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", nullptr});
     descriptor.fields.push_back(FieldDescriptor{"&B:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
 
-    auto dialog = materialize_dialog(descriptor, theme, roles);
+    auto dialog = materialize_dialog(descriptor);
     dialog.inputs[1]->set_enabled(false);
 
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});

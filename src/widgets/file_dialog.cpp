@@ -29,8 +29,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
 
-    auto path_field = std::make_unique<InputLine>(theme, roles.input_normal, roles.input_focused,
-                                                    roles.input_invalid);
+    auto path_field = std::make_unique<InputLine>();
     auto* path_field_ptr =
         static_cast<InputLine*>(column->add_item(std::move(path_field), LayoutSpec{SizePolicy::Fixed, 1}));
 
@@ -41,13 +40,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
-    auto ok_button = std::make_unique<Button>(mode == FileDialogMode::Open ? "Open" : "Save", theme,
-                                               roles.button_normal, roles.button_focused, roles.button_default, roles.button_shadow);
+    auto ok_button = std::make_unique<Button>(mode == FileDialogMode::Open ? "Open" : "Save");
     ok_button->set_default(true);
     auto* ok_ptr =
         static_cast<Button*>(button_row->add_item(std::move(ok_button), LayoutSpec{SizePolicy::Fixed, 1}));
-    auto cancel_button =
-        std::make_unique<Button>("Cancel", theme, roles.button_normal, roles.button_focused, roles.button_default, roles.button_shadow);
+    auto cancel_button = std::make_unique<Button>("Cancel");
     auto* cancel_ptr =
         static_cast<Button*>(button_row->add_item(std::move(cancel_button), LayoutSpec{SizePolicy::Fixed, 1}));
     column->add_item(std::move(button_row), LayoutSpec{SizePolicy::Fixed, 1});

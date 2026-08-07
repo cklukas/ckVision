@@ -14,15 +14,16 @@ bool contains(const Rect& r, Point p) noexcept {
 }
 }  // namespace
 
-Button::Button(std::string text, const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role,
-               ui::RoleId default_role, ui::RoleId shadow_role)
-    : theme_(theme),
-      normal_role_(normal_role),
-      focused_role_(focused_role),
-      default_role_(default_role),
-      shadow_role_(shadow_role) {
+Button::Button(std::string text) {
     set_focus_policy(ui::FocusPolicy::TabStop);
     set_text(std::move(text));
+}
+
+void Button::on_attached() {
+    if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.button.normal");
+    if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.button.focused");
+    if (default_role_ == ui::kInvalidRole) default_role_ = context().roles->find("ckv.button.default");
+    if (shadow_role_ == ui::kInvalidRole) shadow_role_ = context().roles->find("ckv.button.shadow");
 }
 
 void Button::set_text(std::string text) {
@@ -57,8 +58,9 @@ void Button::draw(scene::Painter& painter) {
     const int s = w - 1;  // the shadow column (right edge)
 
     const ui::RoleId face_role = has_focus_ ? focused_role_ : (is_default_ ? default_role_ : normal_role_);
-    const Style face = theme_.resolve(face_role);
-    const Style shadow = theme_.resolve(shadow_role_);
+    const ui::Theme& theme = *context().theme;
+    const Style face = theme.resolve(face_role);
+    const Style shadow = theme.resolve(shadow_role_);
 
     const int face_rows = std::max(1, h - 1);
     const int label_indent = pressed_ ? 2 : 1;

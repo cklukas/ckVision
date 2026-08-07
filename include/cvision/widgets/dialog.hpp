@@ -68,8 +68,7 @@ struct MaterializedDialog {
     Button* default_button = nullptr;
 };
 
-MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const ui::Theme& theme,
-                                       const ui::StandardRoles& roles);
+MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
 
 // Runs every field's validator against its CURRENT text, marking each
 // InputLine valid/invalid accordingly. On the first invalid field,

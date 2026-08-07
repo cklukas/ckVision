@@ -7,9 +7,10 @@
 
 namespace ckv::widgets {
 
-StaticText::StaticText(std::string text, const ui::Theme& theme, ui::RoleId role)
-    : theme_(theme), role_(role) {
-    set_text(std::move(text));
+StaticText::StaticText(std::string text) { set_text(std::move(text)); }
+
+void StaticText::on_attached() {
+    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.static.text");
 }
 
 void StaticText::set_text(std::string text) {
@@ -87,7 +88,7 @@ int StaticText::height_for_width(int width) const { return static_cast<int>(wrap
 
 void StaticText::draw(scene::Painter& painter) {
     const std::vector<std::string> lines = wrap(bounds().width);
-    const Style style = theme_.resolve(role_);
+    const Style style = context().theme->resolve(role_);
     for (std::size_t row = 0; row < lines.size() && static_cast<int>(row) < bounds().height; ++row)
         painter.draw_text(Point{0, static_cast<int>(row)}, lines[row], style);
 }

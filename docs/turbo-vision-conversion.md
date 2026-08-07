@@ -135,15 +135,14 @@ void HelloApp::greeting_box() {
     widgets::Window* window_ptr = window.get();
 
     auto content = std::make_unique<ui::View>();
-    auto text = std::make_unique<widgets::StaticText>("How are you?", app_.theme(), roles_.static_text);
+    auto text = std::make_unique<widgets::StaticText>("How are you?");
     text->set_bounds(Rect{2, 4, 14, 1});
     content->add_child(std::move(text));
 
     const std::pair<const char*, int> labels[] = {{"Terrific", 0}, {"Ok", 2}, {"Lousy", 4}, {"Cancel", 6}};
     widgets::Button* first_button = nullptr;
     for (const auto& [label, y] : labels) {
-        auto button = std::make_unique<widgets::Button>(label, app_.theme(), roles_.button_normal,
-                                                          roles_.button_focused, roles_.button_default);
+        auto button = std::make_unique<widgets::Button>(label);
         button->set_bounds(Rect{15, y, 12, 2});
         widgets::Button* raw = static_cast<widgets::Button*>(content->add_child(std::move(button)));
         if (first_button == nullptr) first_button = raw;

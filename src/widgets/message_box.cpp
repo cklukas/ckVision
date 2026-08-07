@@ -63,15 +63,13 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
 
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
-    column->add_item(std::make_unique<StaticText>(descriptor.message, theme, roles.static_text),
-                      LayoutSpec{SizePolicy::Expanding, 1});
+    column->add_item(std::make_unique<StaticText>(descriptor.message), LayoutSpec{SizePolicy::Expanding, 1});
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
     Button* default_button = nullptr;
     for (const auto& [result, label] : button_specs(descriptor.buttons)) {
-        auto button = std::make_unique<Button>(label, theme, roles.button_normal, roles.button_focused,
-                                                 roles.button_default, roles.button_shadow);
+        auto button = std::make_unique<Button>(label);
         const bool is_default = default_button == nullptr;  // the first button in the set
         button->set_default(is_default);
         auto* raw = static_cast<Button*>(button_row->add_item(std::move(button), LayoutSpec{SizePolicy::Fixed, 1}));

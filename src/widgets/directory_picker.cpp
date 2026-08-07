@@ -73,13 +73,11 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
-    auto select_button = std::make_unique<Button>("Select", theme, roles.button_normal, roles.button_focused,
-                                                   roles.button_default, roles.button_shadow);
+    auto select_button = std::make_unique<Button>("Select");
     select_button->set_default(true);
     auto* select_ptr =
         static_cast<Button*>(button_row->add_item(std::move(select_button), LayoutSpec{SizePolicy::Fixed, 1}));
-    auto cancel_button =
-        std::make_unique<Button>("Cancel", theme, roles.button_normal, roles.button_focused, roles.button_default, roles.button_shadow);
+    auto cancel_button = std::make_unique<Button>("Cancel");
     auto* cancel_ptr =
         static_cast<Button*>(button_row->add_item(std::move(cancel_button), LayoutSpec{SizePolicy::Fixed, 1}));
     column->add_item(std::move(button_row), LayoutSpec{SizePolicy::Fixed, 1});

@@ -47,12 +47,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
-    auto back_button = std::make_unique<Button>("Back", theme, roles.button_normal, roles.button_focused,
-                                                 roles.button_default, roles.button_shadow);
+    auto back_button = std::make_unique<Button>("Back");
     auto* back_ptr =
         static_cast<Button*>(button_row->add_item(std::move(back_button), LayoutSpec{SizePolicy::Fixed, 1}));
-    auto close_button = std::make_unique<Button>("Close", theme, roles.button_normal, roles.button_focused,
-                                                  roles.button_default, roles.button_shadow);
+    auto close_button = std::make_unique<Button>("Close");
     close_button->set_default(true);
     auto* close_ptr =
         static_cast<Button*>(button_row->add_item(std::move(close_button), LayoutSpec{SizePolicy::Fixed, 1}));

@@ -126,8 +126,8 @@ void FileBrowserApp::build_window() {
     // own bottom border via Window::set_frame_overlay — exactly the
     // "current line in a text input window" pattern the overlay slot
     // exists for, applied here to "current directory" instead.
-    auto path_label = std::make_unique<widgets::Label>(root_path_, app_.theme(), roles_.static_text,
-                                                         roles_.label_mnemonic);
+    auto path_label = std::make_unique<widgets::Label>(root_path_);
+    path_label->set_role_override(roles_.static_text, roles_.label_mnemonic);  // static-text styling, not a form label
     window->set_frame_overlay(std::move(path_label));
     path_label_ = static_cast<widgets::Label*>(window->frame_overlay());
 

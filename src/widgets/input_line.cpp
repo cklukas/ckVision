@@ -14,11 +14,15 @@ bool contains(const Rect& r, Point p) noexcept {
 }
 }  // namespace
 
-InputLine::InputLine(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role,
-                      ui::RoleId invalid_role)
-    : theme_(theme), normal_role_(normal_role), focused_role_(focused_role), invalid_role_(invalid_role) {
+InputLine::InputLine() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     set_preferred_size(Size{10, 1});
+}
+
+void InputLine::on_attached() {
+    if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
+    if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
+    if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
 }
 
 void InputLine::set_text(std::string text) {
@@ -380,7 +384,7 @@ int InputLine::scroll_offset_for_display() const {
 
 void InputLine::draw(scene::Painter& painter) {
     const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus_ ? focused_role_ : normal_role_);
-    const Style base = theme_.resolve(role);
+    const Style base = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
 
     std::vector<int> col_of(graphemes_.size() + 1, 0);

@@ -29,16 +29,30 @@ using ui::View;
 // the button sits on (a dialog's background, typically): the shadow
 // glyphs' foreground paints the dark halves, and their background
 // fills the rest of those cells.
+//
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.button.normal/focused/default/shadow". Already
+// defaults to FocusPolicy::TabStop — a caller never needs to set that
+// itself. set_role_override lets a caller redirect all four roles at
+// once (e.g. a distinct "danger" button family); takes effect
+// immediately whether called before or after attachment.
 class Button : public View {
 public:
-    Button(std::string text, const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role,
-           ui::RoleId default_role, ui::RoleId shadow_role);
+    explicit Button(std::string text);
 
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
     void set_default(bool is_default) noexcept { is_default_ = is_default; }
     bool is_default() const noexcept { return is_default_; }
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId default_role,
+                            ui::RoleId shadow_role) noexcept {
+        normal_role_ = normal_role;
+        focused_role_ = focused_role;
+        default_role_ = default_role;
+        shadow_role_ = shadow_role;
+    }
 
     std::function<void()> on_press;
 
@@ -48,17 +62,17 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_attached() override;
 
 private:
     void fire_press();
 
     std::string raw_text_;
     std::string display_text_;
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId focused_role_;
-    ui::RoleId default_role_;
-    ui::RoleId shadow_role_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId default_role_ = ui::kInvalidRole;
+    ui::RoleId shadow_role_ = ui::kInvalidRole;
     bool is_default_ = false;
     bool has_focus_ = false;
     bool pressed_ = false;

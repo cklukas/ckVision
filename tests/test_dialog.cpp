@@ -42,7 +42,7 @@ CK_TEST(materializing_an_empty_descriptor_aborts) {
     if (pid == 0) {
         Fixture f;
         DialogDescriptor descriptor;  // no fields, no buttons
-        materialize_dialog(descriptor, f.theme, f.roles);
+        materialize_dialog(descriptor);
         ::_exit(1);
     }
     int status = 0;
@@ -59,7 +59,7 @@ CK_TEST(materializing_two_default_buttons_aborts) {
         DialogDescriptor descriptor;
         descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
         descriptor.buttons.push_back(ButtonDescriptor{"Apply", true, nullptr});  // second default
-        materialize_dialog(descriptor, f.theme, f.roles);
+        materialize_dialog(descriptor);
         ::_exit(1);
     }
     int status = 0;
@@ -73,7 +73,7 @@ CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "initial", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
 
     CK_CHECK(dialog.root != nullptr);
     CK_CHECK(dialog.labels.size() == 1);
@@ -88,7 +88,7 @@ CK_TEST(a_field_with_an_empty_label_produces_a_null_label_pointer_but_a_real_inp
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"", "value", nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.labels.size() == 1);
     CK_CHECK(dialog.labels[0] == nullptr);
     CK_CHECK(dialog.inputs[0]->text() == "value");
@@ -98,7 +98,7 @@ CK_TEST(a_labeled_fields_mnemonic_buddy_is_wired_to_its_own_input) {
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&Path:", "", nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.labels[0]->buddy() == dialog.inputs[0]);
 }
 
@@ -107,7 +107,7 @@ CK_TEST(the_button_marked_default_is_reported_as_the_default_button) {
     DialogDescriptor descriptor;
     descriptor.buttons.push_back(ButtonDescriptor{"Cancel", false, nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.default_button == dialog.buttons[1]);
     CK_CHECK(dialog.buttons[1]->is_default());
     CK_CHECK(!dialog.buttons[0]->is_default());
@@ -117,7 +117,7 @@ CK_TEST(no_button_marked_default_reports_a_null_default_button) {
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.buttons.push_back(ButtonDescriptor{"Close", false, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.default_button == nullptr);
 }
 
@@ -127,7 +127,7 @@ CK_TEST(initial_focus_is_the_first_input_when_the_dialog_has_fields) {
     descriptor.fields.push_back(FieldDescriptor{"&First:", "", nullptr});
     descriptor.fields.push_back(FieldDescriptor{"&Second:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.initial_focus == dialog.inputs[0]);
 }
 
@@ -135,7 +135,7 @@ CK_TEST(initial_focus_falls_back_to_the_first_button_when_the_dialog_has_no_fiel
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.buttons.push_back(ButtonDescriptor{"Close", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.initial_focus == dialog.buttons[0]);
 }
 
@@ -144,7 +144,7 @@ CK_TEST(a_button_press_handler_provided_in_the_descriptor_fires_through_the_mate
     DialogDescriptor descriptor;
     bool pressed = false;
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { pressed = true; }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     dialog.buttons[0]->on_press();
     CK_CHECK(pressed);
 }
@@ -156,7 +156,7 @@ CK_TEST(field_and_button_order_in_the_descriptor_is_preserved_in_the_materialize
     descriptor.fields.push_back(FieldDescriptor{"&B:", "b", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"First", false, nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"Second", false, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(dialog.inputs[0]->text() == "a");
     CK_CHECK(dialog.inputs[1]->text() == "b");
     CK_CHECK(dialog.buttons[0]->text() == "First");
@@ -168,7 +168,7 @@ CK_TEST(the_materialized_root_owns_the_entire_tree_and_destroying_it_is_safe) {
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     dialog.root.reset();  // must not crash or leak (ASan build verifies the latter)
     CK_CHECK(true);
 }
@@ -190,7 +190,7 @@ CK_TEST(validate_dialog_with_all_valid_fields_returns_true_and_touches_no_focus)
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "ok", [](const std::string& s) { return !s.empty(); }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(validate_dialog(dialog, descriptor, app));
     CK_CHECK(dialog.inputs[0]->valid());
 }
@@ -202,7 +202,7 @@ CK_TEST(validate_dialog_with_an_invalid_field_vetoes_marks_it_invalid_and_focuse
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(!validate_dialog(dialog, descriptor, app));
     CK_CHECK(!dialog.inputs[0]->valid());
     CK_CHECK(app.focused() == dialog.inputs[0]);
@@ -217,7 +217,7 @@ CK_TEST(validate_dialog_focuses_only_the_first_invalid_field_among_several) {
     auto require_nonempty = [](const std::string& s) { return !s.empty(); };
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", require_nonempty});
     descriptor.fields.push_back(FieldDescriptor{"&B:", "", require_nonempty});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     CK_CHECK(!validate_dialog(dialog, descriptor, app));
     CK_CHECK(app.focused() == dialog.inputs[0]);
     CK_CHECK(!dialog.inputs[0]->valid());
@@ -231,7 +231,7 @@ CK_TEST(revalidating_after_fixing_the_field_clears_the_invalid_marker) {
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     validate_dialog(dialog, descriptor, app);
     CK_CHECK(!dialog.inputs[0]->valid());
     dialog.inputs[0]->set_text("now filled in");
@@ -248,7 +248,7 @@ CK_TEST(accept_with_valid_fields_runs_the_default_buttons_handler_and_closes_the
     bool ok_ran = false;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "ok", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_ran = true; }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
 
     Window window = make_window(f);
     bool closed = false;
@@ -269,7 +269,7 @@ CK_TEST(accept_with_an_invalid_field_vetoes_the_close_and_never_runs_the_default
     bool ok_ran = false;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_ran = true; }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     auto* input = dialog.inputs[0];
 
     Window window = make_window(f);
@@ -290,7 +290,7 @@ CK_TEST(escape_closes_the_window_without_running_validation_at_all) {
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", [](const std::string& s) { return !s.empty(); }});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
     auto* input = dialog.inputs[0];
 
     Window window = make_window(f);
@@ -314,7 +314,7 @@ CK_TEST(closing_the_dialog_restores_focus_to_the_view_that_invoked_it) {
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "ok", nullptr});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
 
     Window window = make_window(f);
     wire_dialog_window(window, std::move(dialog), descriptor, app, invoker);
@@ -330,7 +330,7 @@ CK_TEST(wire_dialog_window_composes_with_a_previously_installed_on_closed_handle
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
-    auto dialog = materialize_dialog(descriptor, f.theme, f.roles);
+    auto dialog = materialize_dialog(descriptor);
 
     Window window = make_window(f);
     bool preexisting_ran = false;

@@ -37,10 +37,18 @@ namespace ckv::widgets {
 using ui::SizeHint;
 using ui::View;
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.input.normal/focused/invalid". Already defaults
+// to FocusPolicy::TabStop.
 class InputLine : public View {
 public:
-    InputLine(const ui::Theme& theme, ui::RoleId normal_role, ui::RoleId focused_role,
-              ui::RoleId invalid_role);
+    InputLine();
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId invalid_role) noexcept {
+        normal_role_ = normal_role;
+        focused_role_ = focused_role;
+        invalid_role_ = invalid_role;
+    }
 
     void set_text(std::string text);  // resets cursor to end, clears selection
     std::string text() const;
@@ -94,6 +102,7 @@ public:
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_attached() override;
 
 private:
     void insert_graphemes(const std::vector<std::string>& graphemes);
@@ -132,10 +141,9 @@ private:
     int history_index_ = -1;  // -1 = showing live text, not browsing
     std::string history_saved_text_;
 
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId focused_role_;
-    ui::RoleId invalid_role_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId invalid_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

@@ -94,18 +94,16 @@ void GalleryApp::build_controls_window() {
     window->set_bounds(Rect{2, 2, 40, 10});
 
     auto content = std::make_unique<ui::View>();
-    auto label = std::make_unique<widgets::Label>("&Name:", app_.theme(), roles_.label_text, roles_.label_mnemonic);
+    auto label = std::make_unique<widgets::Label>("&Name:");
     label->set_bounds(Rect{1, 1, 8, 1});
     content->add_child(std::move(label));
 
-    auto input = std::make_unique<widgets::InputLine>(app_.theme(), roles_.input_normal, roles_.input_focused,
-                                                        roles_.input_invalid);
+    auto input = std::make_unique<widgets::InputLine>();
     input->set_bounds(Rect{10, 1, 20, 1});
     name_input_ = input.get();
     content->add_child(std::move(input));
 
-    auto greet = std::make_unique<widgets::Button>("&Greet", app_.theme(), roles_.button_normal,
-                                                     roles_.button_focused, roles_.button_default, roles_.button_shadow);
+    auto greet = std::make_unique<widgets::Button>("&Greet");
     greet->set_bounds(Rect{1, 3, 12, 2});  // two rows: face + drop shadow
     greet->set_default(true);
     widgets::InputLine* name_input = name_input_;

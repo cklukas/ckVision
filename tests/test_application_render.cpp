@@ -50,7 +50,7 @@ CK_TEST(a_second_step_with_nothing_invalidated_writes_no_further_bytes) {
 
 CK_TEST(a_label_actually_renders_its_text_into_the_presented_frame) {
     Fixture f;
-    auto label = std::make_unique<Label>("Hello", f.app.theme(), f.roles.label_text, f.roles.label_mnemonic);
+    auto label = std::make_unique<Label>("Hello");
     label->set_bounds(Rect{2, 2, 10, 1});
     f.app.root().add_child(std::move(label));
 
@@ -60,7 +60,7 @@ CK_TEST(a_label_actually_renders_its_text_into_the_presented_frame) {
 
 CK_TEST(setting_new_text_repaints_so_the_old_text_no_longer_appears_in_the_next_frame) {
     Fixture f;
-    auto owned = std::make_unique<Label>("Old", f.app.theme(), f.roles.label_text, f.roles.label_mnemonic);
+    auto owned = std::make_unique<Label>("Old");
     Label* label = owned.get();
     label->set_bounds(Rect{2, 2, 10, 1});
     f.app.root().add_child(std::move(owned));
@@ -77,7 +77,7 @@ CK_TEST(setting_new_text_repaints_so_the_old_text_no_longer_appears_in_the_next_
 
 CK_TEST(a_hidden_view_never_reaches_the_presented_frame) {
     Fixture f;
-    auto label = std::make_unique<Label>("Secret", f.app.theme(), f.roles.label_text, f.roles.label_mnemonic);
+    auto label = std::make_unique<Label>("Secret");
     label->set_bounds(Rect{2, 2, 10, 1});
     label->set_visible(false);
     f.app.root().add_child(std::move(label));
@@ -88,7 +88,7 @@ CK_TEST(a_hidden_view_never_reaches_the_presented_frame) {
 
 CK_TEST(a_resize_event_grows_the_backing_surface_and_forces_a_full_repaint) {
     Fixture f;
-    auto label = std::make_unique<Label>("Grow", f.app.theme(), f.roles.label_text, f.roles.label_mnemonic);
+    auto label = std::make_unique<Label>("Grow");
     label->set_bounds(Rect{2, 2, 10, 1});
     f.app.root().add_child(std::move(label));
     f.app.step(0);

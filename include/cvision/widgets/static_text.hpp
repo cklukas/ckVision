@@ -20,20 +20,22 @@ using ui::View;
 // how tall it needs to be for a given width.
 class StaticText : public View {
 public:
-    StaticText(std::string text, const ui::Theme& theme, ui::RoleId role);
+    explicit StaticText(std::string text);
 
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
+    void set_role_override(ui::RoleId role) noexcept { role_ = role; }
+
     void draw(scene::Painter& painter) override;
     int height_for_width(int width) const override;
+    void on_attached() override;
 
 private:
     std::vector<std::string> wrap(int width) const;
 
     std::string raw_text_;
-    const ui::Theme& theme_;
-    ui::RoleId role_;
+    ui::RoleId role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

@@ -43,8 +43,7 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescript
 
 }  // namespace
 
-MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const ui::Theme& theme,
-                                       const ui::StandardRoles& roles) {
+MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
     CKV_ASSERT(!descriptor.fields.empty() || !descriptor.buttons.empty());
 
     MaterializedDialog result;
@@ -57,12 +56,11 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const 
 
         Label* label_ptr = nullptr;
         if (!field.label.empty()) {
-            auto label = std::make_unique<Label>(field.label, theme, roles.label_text, roles.label_mnemonic);
+            auto label = std::make_unique<Label>(field.label);
             label_ptr = static_cast<Label*>(row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
         }
 
-        auto input = std::make_unique<InputLine>(theme, roles.input_normal, roles.input_focused,
-                                                   roles.input_invalid);
+        auto input = std::make_unique<InputLine>();
         input->set_text(field.initial_text);
         auto* input_ptr =
             static_cast<InputLine*>(row->add_item(std::move(input), LayoutSpec{SizePolicy::Expanding, 1}));
@@ -78,9 +76,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const 
         auto button_row = std::make_unique<Row>();
         button_row->set_spacing(2);
         for (const ButtonDescriptor& bd : descriptor.buttons) {
-            auto button =
-                std::make_unique<Button>(bd.label, theme, roles.button_normal, roles.button_focused,
-                                          roles.button_default, roles.button_shadow);
+            auto button = std::make_unique<Button>(bd.label);
             button->set_default(bd.is_default);
             button->on_press = bd.on_press;
             auto* button_ptr =
