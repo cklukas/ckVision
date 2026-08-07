@@ -15,7 +15,6 @@
 #include "cvision/widgets/status_line.hpp"
 
 namespace ckv::widgets {
-class MenuBar;
 class Window;
 class InputLine;
 class ImageView;
@@ -45,7 +44,6 @@ private:
 
     widgets::Desktop* desktop_ = nullptr;
     widgets::StatusLine* status_ = nullptr;
-    widgets::MenuBar* menu_ = nullptr;
     widgets::Window* controls_window_ = nullptr;
     widgets::Window* image_window_ = nullptr;
     widgets::InputLine* name_input_ = nullptr;

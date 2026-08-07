@@ -42,8 +42,11 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 
     // Every one of these ids is already registered by Application's
     // constructor (M9/WP-12) — only handlers need attaching here.
+    // kMenu already has a handler: MenuBar::on_attached() installs
+    // itself as kMenu's default the moment it attaches (M9/WP-13,
+    // D-029), and build_menu_bar() above already docked ours before
+    // this point.
     auto& commands = app_.commands();
-    commands.set_handler(ui::std_commands::kMenu, [this] { menu_->activate(); });
     commands.set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
     commands.set_handler(ui::std_commands::kTile, [this] { desktop_->tile(); });
     commands.set_handler(ui::std_commands::kCascade, [this] { desktop_->cascade(); });
@@ -76,7 +79,7 @@ void GalleryApp::build_menu_bar() {
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
-    menu_ = desktop_->dock_top(std::move(menu));
+    desktop_->dock_top(std::move(menu));
 }
 
 void GalleryApp::build_controls_window() {
