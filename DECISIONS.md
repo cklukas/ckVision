@@ -310,6 +310,29 @@ sites (the implementation itself, `examples/filebrowser`, and
 `tests/test_window.cpp`) migrated in the same change, per this
 project's own no-shim policy. Scheduled as M10/WP-20.
 
+**D-032 — "Terminal too small" is a framework-level render substitution,
+not a widget.**
+ARCHITECTURE.md §5's sizing policy names three zones: full chrome
+(≥`kMinFullChromeSize`, 80×24), degraded chrome down to a hard floor,
+and a "terminal too small" state below it. Only the third zone needed
+new code: `Window::reposition_within` (M8 WP-1/WP-4) already clamps
+every window to fit and stay reachable as `root()` shrinks, and that
+existing clamped rendering IS "degraded chrome" — there is no separate
+degraded visual mode for any widget to implement. `kHardFloorSize`
+(20×6) is the one new threshold: `Application::paint_and_present()`
+checks it directly and, below it, paints a fixed two-line message
+("Terminal too small" / "Resize to at least 80x24") instead of walking
+the normal `View` tree at all — a fixed `Style` NOT resolved through
+`theme()`/`roles()`, since this is a last-resort fallback that must
+render sanely even for an application that never configured a theme.
+Recovery is automatic: the next frame `root()` is back at or above
+`kHardFloorSize`, `paint_and_present()` resumes the normal
+`root_.paint_children()` call — nothing is undone or reset on either
+side, since nothing besides which branch runs was ever touched.
+Boundary is strict-less-than (`kHardFloorSize` itself still renders) —
+consistent with `Window::min_size_`'s own "the minimum is itself a
+valid, attainable size" convention. Scheduled as M10/WP-21.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

@@ -44,6 +44,21 @@ namespace ckv::ui {
 // existed.
 inline constexpr std::int64_t kDefaultFrameIntervalNanos = 200'000'000;
 
+// ARCHITECTURE.md §5 "Sizing policy" (M10/WP-21). Below kMinFullChromeSize,
+// nothing new triggers — Window::reposition_within (M8 WP-1/WP-4) already
+// clamps every window to fit and stay reachable as root() shrinks, and
+// that existing clamped rendering IS the "degraded chrome" the policy
+// names; there is no separate degraded visual mode to build. Below
+// kHardFloorSize, Application::paint_and_present() instead shows a
+// deterministic "terminal too small" message in place of the normal
+// View tree — a partial, garbled render (a window frame's own
+// box-drawing corners alone need at least 2x2) is worse than a clear,
+// honest refusal to render. Recovery is automatic and needs nothing
+// undone on either side: the very next frame root() is at least
+// kHardFloorSize again, painting resumes normally.
+inline constexpr Size kMinFullChromeSize{80, 24};
+inline constexpr Size kHardFloorSize{20, 6};
+
 class Application {
 public:
     Application(term::Terminal& terminal, Clock& clock);
@@ -59,6 +74,13 @@ public:
     // HeadlessTerminal): NOT part of the interactive rendering path,
     // which goes through Presenter/Terminal exclusively.
     FrameView current_frame() const noexcept { return compositor_.frame().view(); }
+
+    // Whether root()'s CURRENT size is strictly below kHardFloorSize on
+    // either axis — the same condition paint_and_present() itself
+    // checks to decide whether to show the "terminal too small" state
+    // instead of the normal View tree (see kHardFloorSize's own doc
+    // comment). kHardFloorSize itself is still large enough to render.
+    bool terminal_too_small() const noexcept;
 
     // The full composed Surface (raster regions included) and cursor
     // state behind current_frame() — for golden-dump testing
@@ -310,6 +332,7 @@ private:
         return modal_stack_.empty() ? nullptr : modal_stack_.back();
     }
     void paint_and_present();
+    void paint_too_small_state(scene::Painter& painter, Size current_size) const;
 
     term::Terminal& terminal_;
     Clock& clock_;

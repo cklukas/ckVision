@@ -102,3 +102,77 @@ CK_TEST(a_resize_event_grows_the_backing_surface_and_forces_a_full_repaint) {
     CK_CHECK(f.app.root().bounds().width == 60);
     CK_CHECK(f.app.root().bounds().height == 20);
 }
+
+// --- Terminal too small (ARCHITECTURE.md §5 "Sizing policy", M10/WP-21) ---
+
+CK_TEST(terminal_too_small_is_false_at_a_normal_size) {
+    Fixture f;
+    CK_CHECK(!f.app.terminal_too_small());
+}
+
+CK_TEST(terminal_too_small_is_false_exactly_at_the_hard_floor) {
+    Fixture f;
+    f.term.resize(ckv::Size{20, 6});  // kHardFloorSize itself: still large enough to render
+    f.app.step(0);
+    CK_CHECK(!f.app.terminal_too_small());
+}
+
+CK_TEST(terminal_too_small_is_true_one_cell_below_the_floor_on_either_axis) {
+    Fixture f;
+    f.term.resize(ckv::Size{19, 6});
+    f.app.step(0);
+    CK_CHECK(f.app.terminal_too_small());
+
+    f.term.resize(ckv::Size{20, 5});
+    f.app.step(0);
+    CK_CHECK(f.app.terminal_too_small());
+}
+
+CK_TEST(shrinking_below_the_floor_shows_the_too_small_message_instead_of_corrupted_output) {
+    Fixture f;
+    // 19 wide: below the hard floor (kHardFloorSize.width == 20) but
+    // still wide enough for the full "Terminal too small" message
+    // (18 chars) to render unclipped, so the exact text is checkable.
+    f.term.resize(ckv::Size{19, 5});
+    f.app.step(0);
+    CK_CHECK(f.term.written_bytes().find("Terminal too small") != std::string::npos);
+}
+
+CK_TEST(a_terminal_narrower_than_the_message_still_shows_a_clipped_prefix_not_garbage) {
+    Fixture f;
+    f.term.resize(ckv::Size{8, 5});  // narrower than "Terminal too small" itself
+    f.app.step(0);
+    CK_CHECK(f.term.written_bytes().find("Terminal") != std::string::npos);
+}
+
+CK_TEST(the_too_small_state_hides_the_normal_view_tree_entirely) {
+    Fixture f;
+    auto label = std::make_unique<Label>("Hidden");
+    label->set_bounds(Rect{0, 0, 6, 1});
+    f.app.root().add_child(std::move(label));
+    f.app.step(0);
+    CK_CHECK(f.term.written_bytes().find("Hidden") != std::string::npos);  // renders normally first
+    f.term.clear_written();  // written_bytes() is cumulative — isolate the NEXT step's own output
+
+    f.term.resize(ckv::Size{15, 5});
+    f.app.step(0);
+
+    CK_CHECK(f.term.written_bytes().find("Hidden") == std::string::npos);
+}
+
+CK_TEST(growing_back_above_the_floor_recovers_normal_rendering_automatically) {
+    Fixture f;
+    auto label = std::make_unique<Label>("Back");
+    label->set_bounds(Rect{0, 0, 4, 1});
+    f.app.root().add_child(std::move(label));
+
+    f.term.resize(ckv::Size{15, 5});
+    f.app.step(0);
+    CK_CHECK(f.app.terminal_too_small());
+
+    f.term.resize(ckv::Size{40, 12});
+    f.app.step(0);
+
+    CK_CHECK(!f.app.terminal_too_small());
+    CK_CHECK(f.term.written_bytes().find("Back") != std::string::npos);
+}

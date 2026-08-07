@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <csignal>
+#include <string>
 #include <type_traits>
 
 #include "cvision/core/assert.hpp"
@@ -15,6 +16,14 @@ namespace {
 bool contains(const Rect& r, Point p) noexcept {
     return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
 }
+
+// The "terminal too small" state's own fixed style (M10/WP-21) — NOT
+// resolved through theme()/roles(): this is a last-resort framework
+// fallback that must render sanely even for an application that never
+// configured a theme at all, so it cannot depend on that configuration
+// having happened correctly.
+constexpr Color kTooSmallFg = Color::rgb(255, 255, 255);
+constexpr Color kTooSmallBg = Color::rgb(170, 0, 0);
 
 // run()'s SIGINT handling (M9/WP-14): a signal handler cannot capture
 // `this`, so the currently-run()-ning Application (if any) lives here
@@ -372,7 +381,11 @@ void Application::paint_and_present() {
         surface_.remove_raster_region(region.id);
 
     scene::Painter root_painter(surface_, Rect{0, 0, current_size.width, current_size.height});
-    root_.paint_children(root_painter);
+    if (terminal_too_small()) {
+        paint_too_small_state(root_painter, current_size);
+    } else {
+        root_.paint_children(root_painter);
+    }
     dirty_ = false;
 
     // surface_ is the sole layer, covering the whole frame — Compositor
@@ -383,6 +396,21 @@ void Application::paint_and_present() {
     const std::vector<scene::Layer> layers{scene::Layer{0, &surface_, Point{0, 0}, false}};
     compositor_.compose(layers, background_layer_);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(), compositor_.visible_rasters());
+}
+
+bool Application::terminal_too_small() const noexcept {
+    return root_.bounds().width < kHardFloorSize.width ||
+           root_.bounds().height < kHardFloorSize.height;
+}
+
+void Application::paint_too_small_state(scene::Painter& painter, Size current_size) const {
+    const Style style{kTooSmallFg, kTooSmallBg, Attr{}};
+    const Rect whole{0, 0, current_size.width, current_size.height};
+    painter.fill(whole, Cell::from_grapheme(" ", style));
+    painter.draw_text(Point{0, 0}, "Terminal too small", style);
+    const std::string need = "Resize to at least " + std::to_string(kMinFullChromeSize.width) +
+                              "x" + std::to_string(kMinFullChromeSize.height);
+    painter.draw_text(Point{0, 1}, need, style);
 }
 
 void Application::wake() noexcept {
