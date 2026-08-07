@@ -9,6 +9,7 @@ add_executable(cvision_tests
     test_filesystem.cpp
     test_desktop.cpp
     test_dialog.cpp
+    test_directory_picker.cpp
     test_file_dialog.cpp
     test_frame_view.cpp
     test_geometry.cpp
