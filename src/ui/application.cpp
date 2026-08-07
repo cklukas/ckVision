@@ -2,6 +2,8 @@
 #include "cvision/ui/application.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <csignal>
 #include <type_traits>
 
 #include "cvision/core/assert.hpp"
@@ -12,6 +14,19 @@ namespace {
 
 bool contains(const Rect& r, Point p) noexcept {
     return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
+}
+
+// run()'s SIGINT handling (M9/WP-14): a signal handler cannot capture
+// `this`, so the currently-run()-ning Application (if any) lives here
+// instead — swapped in/out around the loop, restoring whatever was
+// there before (nullptr for the common single-Application case, but
+// this also does the right thing for a nested/sequential run() call).
+// request_quit() is just a bool store, safe to call from a signal
+// handler; nothing else here touches Application state.
+std::atomic<Application*> g_run_instance{nullptr};
+
+void handle_run_sigint(int) {
+    if (Application* app = g_run_instance.load(std::memory_order_relaxed)) app->request_quit();
 }
 
 }  // namespace
@@ -352,6 +367,14 @@ void Application::paint_and_present() {
 void Application::wake() noexcept {
     std::lock_guard<std::mutex> lock(post_mutex_);
     wake_requested_ = true;
+}
+
+void Application::run() {
+    Application* previous_instance = g_run_instance.exchange(this, std::memory_order_relaxed);
+    void (*previous_handler)(int) = std::signal(SIGINT, handle_run_sigint);
+    while (!quit_requested()) step(clock_.now_nanos() + kDefaultFrameIntervalNanos);
+    std::signal(SIGINT, previous_handler);
+    g_run_instance.store(previous_instance, std::memory_order_relaxed);
 }
 
 }  // namespace ckv::ui

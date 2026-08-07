@@ -644,6 +644,41 @@ CK_TEST(multiple_timers_fire_independently_at_their_own_deadlines) {
     CK_CHECK(fired_b == 1);
 }
 
+// --- run() / request_quit() (M9/WP-14, E8/D-021's convenience) ------------
+//
+// run()'s own loop isn't exercised here beyond the immediate-return
+// case: it steps a real Terminal/Clock in a genuine loop until
+// request_quit(), which is exactly the "just run it" behavior a
+// headless, deterministic unit test can't safely drive further
+// without either blocking or installing a real SIGINT — that behavior
+// is verified through the examples instead (each one now IS this
+// exact call). What's tested here is the request_quit()/
+// quit_requested() contract run()'s loop condition depends on.
+
+CK_TEST(quit_requested_is_false_by_default) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    CK_CHECK(!app.quit_requested());
+}
+
+CK_TEST(request_quit_sets_quit_requested) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.request_quit();
+    CK_CHECK(app.quit_requested());
+}
+
+CK_TEST(run_returns_immediately_without_stepping_if_quit_was_already_requested) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.request_quit();
+    app.run();  // must not block, poll, or touch signal disposition beyond install/restore
+    CK_CHECK(true);  // reaching this line at all is the assertion
+}
+
 // --- F1 context help (D-027) -------------------------------------------
 
 // F1 is std_commands::kHelp's default chord (M9/WP-12): it now always

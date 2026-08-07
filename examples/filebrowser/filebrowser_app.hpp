@@ -40,8 +40,6 @@ public:
     // pathological symlink cycles on a real filesystem.
     FileBrowserApp(ui::Application& app, FileSystem& fs, std::string root_path);
 
-    bool should_quit() const noexcept { return quit_; }
-
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::TreeView* tree() const noexcept { return tree_; }
     widgets::ListView* file_list() const noexcept { return file_list_; }
@@ -74,7 +72,6 @@ private:
     std::unordered_map<const widgets::TreeNode*, std::string> path_of_;
 
     std::string selected_directory_;
-    bool quit_ = false;
 };
 
 }  // namespace ckv::filebrowser

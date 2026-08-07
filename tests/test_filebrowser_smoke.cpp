@@ -110,9 +110,9 @@ CK_TEST(the_frame_overlay_shows_the_currently_selected_directorys_full_path) {
 CK_TEST(alt_x_quits) {
     Fixture f;
     f.app.step(0);
-    CK_CHECK(!f.browser.should_quit());
+    CK_CHECK(!f.app.quit_requested());
     f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}});
-    CK_CHECK(f.browser.should_quit());
+    CK_CHECK(f.app.quit_requested());
 }
 
 CK_TEST(tab_moves_focus_from_the_tree_to_the_file_list_pane) {

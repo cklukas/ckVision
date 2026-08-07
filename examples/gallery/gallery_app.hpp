@@ -27,8 +27,6 @@ class GalleryApp {
 public:
     explicit GalleryApp(ui::Application& app);
 
-    bool should_quit() const noexcept { return quit_; }
-
     // Exposed for the smoke test to drive/inspect specific windows
     // without re-deriving the wiring.
     widgets::Desktop& desktop() noexcept { return *desktop_; }
@@ -51,8 +49,6 @@ private:
     widgets::Window* controls_window_ = nullptr;
     widgets::Window* image_window_ = nullptr;
     widgets::InputLine* name_input_ = nullptr;
-
-    bool quit_ = false;
 };
 
 }  // namespace ckv::gallery

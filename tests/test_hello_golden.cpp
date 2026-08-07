@@ -110,7 +110,7 @@ CK_TEST(alt_x_quits_matching_the_originals_alt_x_status_line_shortcut) {
     Application app(term, clock);
     ckv::hello::HelloApp hello(app);
     app.step(0);
-    CK_CHECK(!hello.should_quit());
+    CK_CHECK(!app.quit_requested());
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}});
-    CK_CHECK(hello.should_quit());
+    CK_CHECK(app.quit_requested());
 }

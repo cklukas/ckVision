@@ -58,7 +58,7 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     // WP-12) — only its handler needs attaching here. Tab already
     // switches focus between the tree and file-list panes out of the
     // box (M9/WP-13, D-029) — nothing to wire for that at all.
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { quit_ = true; });
+    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
 
     app_.set_focus(tree_);
 }

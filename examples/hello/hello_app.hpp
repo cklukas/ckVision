@@ -26,7 +26,6 @@ class HelloApp {
 public:
     explicit HelloApp(ui::Application& app);
 
-    bool should_quit() const noexcept { return quit_; }
     widgets::Desktop& desktop() noexcept { return *desktop_; }
 
 private:
@@ -36,7 +35,6 @@ private:
     ui::StandardRoles roles_;
     widgets::Desktop* desktop_ = nullptr;
     widgets::MenuBar* menu_ = nullptr;
-    bool quit_ = false;
 };
 
 }  // namespace ckv::hello

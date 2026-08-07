@@ -99,9 +99,9 @@ CK_TEST(escape_after_f10_returns_focus_to_where_it_was) {
 CK_TEST(alt_x_quits_via_the_status_lines_documented_shortcut) {
     Fixture f;
     f.app.step(0);
-    CK_CHECK(!f.gallery.should_quit());
+    CK_CHECK(!f.app.quit_requested());
     f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}});
-    CK_CHECK(f.gallery.should_quit());
+    CK_CHECK(f.app.quit_requested());
 }
 
 CK_TEST(clicking_greet_opens_a_message_box_that_renders_the_typed_name) {

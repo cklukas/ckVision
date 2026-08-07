@@ -44,7 +44,7 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // constructor (M9/WP-12) — only handlers need attaching here.
     auto& commands = app_.commands();
     commands.set_handler(ui::std_commands::kMenu, [this] { menu_->activate(); });
-    commands.set_handler(ui::std_commands::kQuit, [this] { quit_ = true; });
+    commands.set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
     commands.set_handler(ui::std_commands::kTile, [this] { desktop_->tile(); });
     commands.set_handler(ui::std_commands::kCascade, [this] { desktop_->cascade(); });
 

@@ -58,7 +58,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                   .title = "E&xit",
                   .category = "Hello",
                   .chord = "Alt+X",
-                  .handler = [this] { quit_ = true; }});
+                  .handler = [this] { app_.request_quit(); }});
 }
 
 // Turbo Vision's greetingBox() builds a MODAL TDialog (deskTop->execView

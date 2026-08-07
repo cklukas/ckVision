@@ -19,6 +19,7 @@
 // keymap), and Application::post() are implemented and tested here.
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <unordered_map>
@@ -37,6 +38,11 @@
 #include "cvision/ui/view.hpp"
 
 namespace ckv::ui {
+
+// run()'s default per-frame deadline (M9/WP-14) — the same 200ms
+// every example's own hand-rolled step() loop used before run()
+// existed.
+inline constexpr std::int64_t kDefaultFrameIntervalNanos = 200'000'000;
 
 class Application {
 public:
@@ -214,6 +220,35 @@ public:
     // is bounded by that deadline, never unbounded.
     void wake() noexcept;
 
+    // --- Standalone run loop (E8, D-021's convenience, M9/WP-14) ---------
+
+    // The "just run this as a terminal program" convenience: steps
+    // repeatedly, each call's deadline kDefaultFrameIntervalNanos out
+    // (via the injected Clock), until request_quit() has been called.
+    // Installs its own SIGINT handler for the duration — restoring
+    // whatever was previously installed when it returns — so Ctrl+C
+    // requests a clean quit and main() returns normally, letting
+    // Terminal's destructor restore the terminal's original mode,
+    // rather than the process dying mid-raw-mode under SIGINT's
+    // default disposition. An application embedding ckVision in its
+    // own event loop uses step()/wake() directly instead — those stay
+    // exactly as they are, with no signal-handling side effect; run()
+    // is a separate, optional entry point layered on top of them, not
+    // a replacement.
+    void run();
+
+    // Makes run()'s next loop check return promptly. Also callable
+    // directly regardless of whether run() is in use at all — e.g.
+    // from a Quit command's own handler — it is a plain flag, not
+    // coupled to run() having been called. Backed by std::atomic
+    // (relaxed ordering — the flag needs no synchronization with any
+    // other state) because run()'s SIGINT handler calls this on the
+    // signal-handler stack: writing/reading a plain bool there
+    // concurrently with the rest of the program is undefined
+    // behavior, atomic<bool> is the standard-sanctioned way to do it.
+    void request_quit() noexcept { quit_requested_.store(true, std::memory_order_relaxed); }
+    bool quit_requested() const noexcept { return quit_requested_.load(std::memory_order_relaxed); }
+
 private:
     View* topmost_view_at(Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
@@ -252,6 +287,7 @@ private:
     scene::Compositor compositor_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
+    std::atomic<bool> quit_requested_{false};
     HistoryRegistry history_;
     std::string clipboard_text_;
     View* focused_ = nullptr;
