@@ -53,6 +53,22 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.menu_dropdown_highlighted =
         registry.intern("ckv.menu.dropdown.highlighted", Style{kBlack, kGreen, Attr{}});
     r.menu_dropdown_disabled = registry.intern("ckv.menu.dropdown.disabled", Style{kGray, kLightGray, Attr::Dim});
+    // M6 widgets (fallbacks match exactly what each widget rendered
+    // while still borrowing input_*/dialog_*/button_* — see the
+    // struct's own comment).
+    r.list_normal = registry.intern("ckv.list.normal", Style{kBlack, kWhite, Attr{}});
+    r.list_selected = registry.intern("ckv.list.selected", Style{kBlack, kWhite, Attr::Underline});
+    r.table_header = registry.intern("ckv.table.header", Style{kWhite, kLightGray, Attr{}});
+    r.memo_normal = registry.intern("ckv.memo.normal", Style{kBlack, kWhite, Attr{}});
+    r.memo_focused = registry.intern("ckv.memo.focused", Style{kBlack, kWhite, Attr::Underline});
+    r.option_normal = registry.intern("ckv.option.normal", Style{kBlack, kGreen, Attr{}});
+    r.option_focused = registry.intern("ckv.option.focused", Style{kWhite, kGreen, Attr{}});
+    r.scrollbar_track = registry.intern("ckv.scrollbar.track", Style{kWhite, kLightGray, Attr{}});
+    r.scrollbar_thumb = registry.intern("ckv.scrollbar.thumb", Style{kBlack, kLightGray, Attr{}});
+    r.image_fallback = registry.intern("ckv.image.fallback", Style{kBlack, kLightGray, Attr{}});
+    r.canvas_fallback = registry.intern("ckv.canvas.fallback", Style{kBlack, kLightGray, Attr{}});
+    r.text_view_text = registry.intern("ckv.textview.text", Style{kBlack, kLightGray, Attr{}});
+    r.status_line_normal = registry.intern("ckv.statusline.normal", Style{kBlack, kLightGray, Attr{}});
     return r;
 }
 
@@ -80,6 +96,19 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.menu_dropdown_normal, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.menu_dropdown_highlighted, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.menu_dropdown_disabled, Style{kGray, kLightGray, Attr::Dim});
+    theme.set(roles.list_normal, Style{kBlack, kWhite, Attr{}});
+    theme.set(roles.list_selected, Style{kBlack, kWhite, Attr::Underline});
+    theme.set(roles.table_header, Style{kWhite, kLightGray, Attr{}});
+    theme.set(roles.memo_normal, Style{kBlack, kWhite, Attr{}});
+    theme.set(roles.memo_focused, Style{kBlack, kWhite, Attr::Underline});
+    theme.set(roles.option_normal, Style{kBlack, kGreen, Attr{}});
+    theme.set(roles.option_focused, Style{kWhite, kGreen, Attr{}});
+    theme.set(roles.scrollbar_track, Style{kWhite, kLightGray, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.image_fallback, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.canvas_fallback, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.text_view_text, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.status_line_normal, Style{kBlack, kLightGray, Attr{}});
     return theme;
 }
 
@@ -136,6 +165,19 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.menu_dropdown_normal, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.menu_dropdown_highlighted, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_disabled, Style{kDarkFg, kDarkPanel, Attr::Dim});
+    theme.set(roles.list_normal, Style{kDarkFg, kDarkBg, Attr{}});
+    theme.set(roles.list_selected, Style{kDarkFg, kDarkBg, Attr::Underline});
+    theme.set(roles.table_header, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.memo_normal, Style{kDarkFg, kDarkBg, Attr{}});
+    theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
+    theme.set(roles.option_normal, Style{kDarkFg, kDarkFocus, Attr{}});
+    theme.set(roles.option_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
+    theme.set(roles.scrollbar_track, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.image_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.canvas_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.text_view_text, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.status_line_normal, Style{kDarkFg, kDarkPanel, Attr{}});
     return theme;
 }
 
@@ -163,6 +205,19 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.menu_dropdown_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.menu_dropdown_highlighted, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_disabled, Style{kLightFg, kLightPanel, Attr::Dim});
+    theme.set(roles.list_normal, Style{kLightFg, kLightBg, Attr{}});
+    theme.set(roles.list_selected, Style{kLightFg, kLightBg, Attr::Underline});
+    theme.set(roles.table_header, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.memo_normal, Style{kLightFg, kLightBg, Attr{}});
+    theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
+    theme.set(roles.option_normal, Style{kLightFg, kLightFocus, Attr{}});
+    theme.set(roles.option_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
+    theme.set(roles.scrollbar_track, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.image_fallback, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.canvas_fallback, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.text_view_text, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.status_line_normal, Style{kLightFg, kLightPanel, Attr{}});
     return theme;
 }
 
@@ -190,6 +245,19 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.menu_dropdown_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.menu_dropdown_highlighted, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.menu_dropdown_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.list_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.list_selected, Style{kMonoFg, kMonoBg, Attr::Underline});
+    theme.set(roles.table_header, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.memo_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
+    theme.set(roles.option_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.option_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.scrollbar_track, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kMonoGray, kMonoBg, Attr{}});
+    theme.set(roles.image_fallback, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.canvas_fallback, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.text_view_text, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.status_line_normal, Style{kMonoFg, kMonoBg, Attr{}});
     return theme;
 }
 

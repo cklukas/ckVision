@@ -12,7 +12,7 @@ using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 
-CK_TEST(intern_standard_roles_produces_twentytwo_distinct_role_ids) {
+CK_TEST(intern_standard_roles_produces_thirtyfive_distinct_role_ids) {
     RoleRegistry reg;
     const StandardRoles r = intern_standard_roles(reg);
     const std::set<ckv::ui::RoleId> ids{
@@ -23,10 +23,15 @@ CK_TEST(intern_standard_roles_produces_twentytwo_distinct_role_ids) {
         r.input_invalid,
         r.window_frame_active,  r.window_frame_inactive,   r.window_title_active,
         r.window_title_inactive, r.menu_bar_normal,        r.menu_bar_active,
-        r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
-    CK_CHECK(ids.size() == 22);
+        r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
+        r.list_normal,          r.list_selected,           r.table_header,
+        r.memo_normal,          r.memo_focused,            r.option_normal,
+        r.option_focused,       r.scrollbar_track,         r.scrollbar_thumb,
+        r.image_fallback,       r.canvas_fallback,         r.text_view_text,
+        r.status_line_normal};
+    CK_CHECK(ids.size() == 35);
     for (auto id : ids) CK_CHECK(id != kInvalidRole);
-    CK_CHECK(reg.size() == 22);
+    CK_CHECK(reg.size() == 35);
 }
 
 CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_registry) {
@@ -35,7 +40,7 @@ CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_re
     const StandardRoles second = intern_standard_roles(reg);
     CK_CHECK(first.dialog_frame == second.dialog_frame);
     CK_CHECK(first.button_default == second.button_default);
-    CK_CHECK(reg.size() == 22);  // no duplicates from the second call
+    CK_CHECK(reg.size() == 35);  // no duplicates from the second call
 }
 
 CK_TEST(standard_role_names_are_namespaced_under_ckv_prefix) {
@@ -148,7 +153,12 @@ CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
         r.input_invalid,
         r.window_frame_active,   r.window_frame_inactive,    r.window_title_active,
         r.window_title_inactive, r.menu_bar_normal,          r.menu_bar_active,
-        r.menu_dropdown_normal,  r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
+        r.menu_dropdown_normal,  r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
+        r.list_normal,           r.list_selected,            r.table_header,
+        r.memo_normal,           r.memo_focused,             r.option_normal,
+        r.option_focused,        r.scrollbar_track,          r.scrollbar_thumb,
+        r.image_fallback,        r.canvas_fallback,          r.text_view_text,
+        r.status_line_normal};
     for (auto role : all) {
         const ckv::Style style = theme.resolve(role);
         for (const ckv::Color& c : {style.fg, style.bg}) {

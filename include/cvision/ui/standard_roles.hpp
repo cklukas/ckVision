@@ -42,6 +42,27 @@ struct StandardRoles {
     RoleId menu_dropdown_normal;
     RoleId menu_dropdown_highlighted;
     RoleId menu_dropdown_disabled;
+
+    // M6 data/scrolling widgets (plans/widgets.md M6a/M6b) — each of
+    // these previously had no role family of its own and borrowed
+    // input_*/dialog_*/button_* instead (review finding E2: "M6
+    // widgets borrow foreign roles"), which meant restyling an input
+    // field silently restyled every list/tree/table too. Fallback
+    // values match exactly what each widget rendered before this
+    // split, so no widget's appearance changes — only the indirection.
+    RoleId list_normal;      // ListView / TreeView: an unselected row
+    RoleId list_selected;    // ListView / TreeView: the cursor row
+    RoleId table_header;     // Table: the column-header row
+    RoleId memo_normal;
+    RoleId memo_focused;
+    RoleId option_normal;    // CheckGroup / RadioGroup
+    RoleId option_focused;
+    RoleId scrollbar_track;  // shared by every widget with a built-in Scrollbar
+    RoleId scrollbar_thumb;
+    RoleId image_fallback;   // ImageView's no-graphics-capability text fallback
+    RoleId canvas_fallback;  // Canvas's no-graphics-capability text fallback
+    RoleId text_view_text;
+    RoleId status_line_normal;
 };
 
 // Interns every standard role into `registry` with the built-in
