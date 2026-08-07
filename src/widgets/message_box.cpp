@@ -53,9 +53,9 @@ MessageBoxResult escape_result(MessageBoxButtons buttons) {
 
 }  // namespace
 
-MessageBoxHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
-                                   const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result) {
+WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
+                               const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result) {
     auto window = std::make_unique<Window>(descriptor.title, theme, roles.dialog_frame,
                                             roles.dialog_background, roles.dialog_frame,
                                             roles.dialog_background);
@@ -104,7 +104,7 @@ MessageBoxHandle make_message_box(const MessageBoxDescriptor& descriptor, const 
         schedule_self_detach(*window_ptr, app);
     };
 
-    return MessageBoxHandle{std::move(window), default_button};
+    return WindowHandle{std::move(window), default_button};
 }
 
 }  // namespace ckv::widgets

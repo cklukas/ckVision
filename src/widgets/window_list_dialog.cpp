@@ -14,8 +14,8 @@ using ui::Row;
 using ui::SizePolicy;
 }  // namespace
 
-WindowListHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, const ui::StandardRoles& roles,
-                                          ui::Application& app, ui::View* restore_focus_to) {
+WindowHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, const ui::StandardRoles& roles,
+                                      ui::Application& app, ui::View* restore_focus_to) {
     auto window = std::make_unique<Window>("Window List", theme, roles.dialog_frame,
                                             roles.dialog_background, roles.dialog_frame,
                                             roles.dialog_background);
@@ -65,7 +65,7 @@ WindowListHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& them
         schedule_self_detach(*window_ptr, app);
     };
 
-    return WindowListHandle{std::move(window), list_ptr};
+    return WindowHandle{std::move(window), list_ptr};
 }
 
 }  // namespace ckv::widgets

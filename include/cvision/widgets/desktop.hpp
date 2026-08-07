@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/window.hpp"
@@ -26,6 +27,19 @@ public:
     // Adds `window`, activating it (raising to front, deactivating any
     // previously active window) and returning a non-owning observer.
     Window* add_window(std::unique_ptr<Window> window);
+
+    // The one sanctioned way to present a standard-dialog handle
+    // (message box, file/save dialog, directory picker, window list,
+    // help viewer — anything returned as a widgets::WindowHandle) on
+    // this desktop (M8 WP-5): attaches handle.window via add_window
+    // (activation + z-order included, unlike attaching it through
+    // plain add_child, which skips activation entirely — a dialog
+    // attached that way renders with inactive-frame styling while
+    // still holding focus, and sits outside window cycling) and
+    // focuses handle.initial_focus. add_window itself remains the
+    // right call for an application's OWN windows, which don't come
+    // with a pre-computed initial_focus to hand to set_focus.
+    Window* show_dialog(WindowHandle handle, ui::Application& app);
 
     // Detaches and returns ownership (nullptr if `window` is not one of
     // this desktop's windows). If it was the active window, activates

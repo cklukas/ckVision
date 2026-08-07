@@ -7,11 +7,13 @@
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
 using ckv::ManualClock;
 using ckv::Modifier;
+using ckv::Rect;
 using ckv::ui::Application;
 using ckv::ui::FocusPolicy;
 using ckv::ui::intern_standard_roles;
@@ -20,6 +22,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::ui::View;
+using ckv::widgets::Desktop;
 using ckv::widgets::make_message_box;
 using ckv::widgets::Window;
 using ckv::widgets::MessageBoxButtons;
@@ -263,4 +266,38 @@ CK_TEST(closing_the_box_schedules_its_own_removal_from_whatever_parented_it) {
     app.step(0);                                  // drains the posted removal
     CK_CHECK(app.root().children().empty());
     (void)window_ptr;
+}
+
+// --- Desktop::show_dialog (M8/WP-5) ----------------------------------------
+//
+// Regression guard for finding F6: attaching a message box's handle
+// via plain add_child (as examples/gallery used to) skips Desktop's
+// own activation entirely, so the box rendered with INACTIVE frame
+// styling while still holding focus and sat outside window cycling.
+// show_dialog is the one sanctioned path and must not have that gap.
+
+CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_window) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* background =
+        desktop.add_window(std::make_unique<Window>("Background", f.theme, f.roles.window_frame_active,
+                                                      f.roles.window_frame_inactive, f.roles.window_title_active,
+                                                      f.roles.window_title_inactive));
+    CK_CHECK(background->active());
+
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
+    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr, nullptr);
+    Window* box_ptr = handle.window.get();
+    View* default_button = handle.initial_focus;
+    Window* attached = desktop.show_dialog(std::move(handle), app);
+
+    CK_CHECK(attached == box_ptr);
+    CK_CHECK(box_ptr->active());           // NOT the inactive frame add_child alone would leave it with
+    CK_CHECK(!background->active());       // the window underneath deactivated
+    CK_CHECK(app.focused() == default_button);
+    CK_CHECK(desktop.active_window() == box_ptr);
+    CK_CHECK(desktop.windows().back() == box_ptr);  // participates in cycling/z-order, not a bare orphan child
 }

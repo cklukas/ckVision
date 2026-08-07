@@ -38,11 +38,6 @@ struct MessageBoxDescriptor {
     MessageBoxButtons buttons = MessageBoxButtons::Ok;
 };
 
-struct MessageBoxHandle {
-    std::unique_ptr<Window> window;
-    ui::View* initial_focus = nullptr;  // the default button; focus it AFTER attaching window to a Desktop
-};
-
 // Builds (but does not attach to any Desktop) a Window presenting the
 // message and the requested standard button set. The FIRST button in
 // each set (Ok for Ok/OkCancel, Yes for YesNo/YesNoCancel) is the
@@ -56,10 +51,11 @@ struct MessageBoxHandle {
 // materialize_dialog, which reports initial_focus the same way): doing
 // so before the caller attaches `window` under the app's tree would
 // steal focus to a still-detached view, silently swallowing input
-// meant for whatever UI is currently on screen. The caller focuses
-// `initial_focus` once the window is actually attached.
-MessageBoxHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
-                                   const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result);
+// meant for whatever UI is currently on screen. Desktop::show_dialog
+// (M8 WP-5) is the sanctioned way to attach the returned handle and
+// focus its initial_focus (the default button) in one call.
+WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
+                               const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result);
 
 }  // namespace ckv::widgets

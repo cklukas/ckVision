@@ -44,10 +44,10 @@ void record_paths(const FileSystem& fs, TreeNode& node, const std::string& path,
 
 }  // namespace
 
-DirectoryPickerHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::Theme& theme,
-                                             const ui::StandardRoles& roles, ui::Application& app,
-                                             ui::View* restore_focus_to,
-                                             std::function<void(bool, std::string)> on_result) {
+WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::Theme& theme,
+                                    const ui::StandardRoles& roles, ui::Application& app,
+                                    ui::View* restore_focus_to,
+                                    std::function<void(bool, std::string)> on_result) {
     auto window = std::make_unique<Window>("Select Directory", theme, roles.dialog_frame,
                                             roles.dialog_background, roles.dialog_frame,
                                             roles.dialog_background);
@@ -110,7 +110,7 @@ DirectoryPickerHandle make_directory_picker(const FileSystem& fs, std::string ro
         schedule_self_detach(*window_ptr, app);
     };
 
-    return DirectoryPickerHandle{std::move(window), tree_ptr};
+    return WindowHandle{std::move(window), tree_ptr};
 }
 
 }  // namespace ckv::widgets

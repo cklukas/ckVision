@@ -17,9 +17,9 @@ using ui::Row;
 using ui::SizePolicy;
 }  // namespace
 
-FileDialogHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                   const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result) {
+WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result) {
     auto window = std::make_unique<Window>(mode == FileDialogMode::Open ? "Open File" : "Save File", theme,
                                             roles.dialog_frame,
                                             roles.dialog_background, roles.dialog_frame,
@@ -114,7 +114,7 @@ FileDialogHandle make_file_dialog(FileDialogMode mode, std::string initial_direc
         schedule_self_detach(*window_ptr, app);
     };
 
-    return FileDialogHandle{std::move(window), list_ptr};
+    return WindowHandle{std::move(window), list_ptr};
 }
 
 }  // namespace ckv::widgets

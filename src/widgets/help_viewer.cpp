@@ -23,9 +23,9 @@ HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
     return HelpTopic{"Not Found", "No help is available for this topic.", {}};
 }
 
-HelpViewerHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                                   const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to) {
+WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
+                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to) {
     auto window = std::make_unique<Window>("Help", theme, roles.dialog_frame,
                                             roles.dialog_background, roles.dialog_frame,
                                             roles.dialog_background);
@@ -102,7 +102,7 @@ HelpViewerHandle make_help_viewer(const HelpProvider& provider, std::string init
         schedule_self_detach(*window_ptr, app);
     };
 
-    return HelpViewerHandle{std::move(window), text_view_ptr};
+    return WindowHandle{std::move(window), text_view_ptr};
 }
 
 }  // namespace ckv::widgets

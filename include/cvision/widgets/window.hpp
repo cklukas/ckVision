@@ -211,6 +211,21 @@ private:
     Rect drag_start_bounds_;
 };
 
+// A built-but-not-yet-attached Window paired with the control that
+// should receive focus once it IS attached (M8 WP-5) — the shared
+// return type for every standard-dialog factory (make_message_box,
+// make_file_dialog, make_directory_picker, make_window_list_dialog,
+// make_help_viewer). `initial_focus` is deliberately not focused by
+// the factory itself: doing so before the caller attaches `window`
+// under the Application's tree would steal focus to a still-detached
+// view, silently swallowing input meant for whatever UI is currently
+// on screen (see Desktop::show_dialog, the sanctioned way to both
+// attach and focus in one call).
+struct WindowHandle {
+    std::unique_ptr<Window> window;
+    ui::View* initial_focus = nullptr;
+};
+
 // Schedules (via Application::post — never inline, since close() is
 // typically still executing several stack frames deep inside a
 // Button::on_press or similar that lives INSIDE `window`; destroying

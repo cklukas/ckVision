@@ -25,6 +25,12 @@ Window* Desktop::add_window(std::unique_ptr<Window> window) {
     return raw;
 }
 
+Window* Desktop::show_dialog(WindowHandle handle, ui::Application& app) {
+    Window* window = add_window(std::move(handle.window));
+    app.set_focus(handle.initial_focus);
+    return window;
+}
+
 std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     auto it = std::find(windows_.begin(), windows_.end(), window);
     if (it == windows_.end()) return nullptr;

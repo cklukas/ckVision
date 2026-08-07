@@ -32,20 +32,16 @@ struct FileDialogResult {
     std::string path;  // full path; meaningful only when accepted
 };
 
-struct FileDialogHandle {
-    std::unique_ptr<Window> window;
-    ui::View* initial_focus = nullptr;  // focus AFTER attaching window to a Desktop
-};
-
 // `initial_directory` must exist as a directory in `fs` (a dialog
 // opened on a stale/nonexistent path degrades to an empty listing
 // rather than crashing — see FileSystem::list_directory's own
 // contract). `on_result` fires exactly once: with accepted=true and
 // the chosen path on OK, or accepted=false on Cancel/Esc. `fs` must
 // outlive the returned Window (the installed closures capture it by
-// reference).
-FileDialogHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                   const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
+// reference). Desktop::show_dialog (M8 WP-5) attaches the returned
+// handle and focuses its initial_focus in one call.
+WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result);
 
 }  // namespace ckv::widgets

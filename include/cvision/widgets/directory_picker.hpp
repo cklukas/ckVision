@@ -25,11 +25,6 @@
 
 namespace ckv::widgets {
 
-struct DirectoryPickerHandle {
-    std::unique_ptr<Window> window;
-    ui::View* initial_focus = nullptr;  // focus AFTER attaching window to a Desktop
-};
-
 // `root_path` must be an existing directory in `fs` (degrades to a
 // picker with just the root node and no children otherwise, same
 // "empty rather than an error" contract as FileSystem::list_directory
@@ -37,9 +32,11 @@ struct DirectoryPickerHandle {
 // OK, false and an empty path on Cancel/Esc. `fs` must outlive the
 // returned Window (the tree is built once from it at construction —
 // no closure keeps a live reference afterward, unlike file_dialog.hpp).
-DirectoryPickerHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::Theme& theme,
-                                             const ui::StandardRoles& roles, ui::Application& app,
-                                             ui::View* restore_focus_to,
-                                             std::function<void(bool accepted, std::string path)> on_result);
+// Desktop::show_dialog (M8 WP-5) attaches the returned handle and
+// focuses its initial_focus in one call.
+WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::Theme& theme,
+                                    const ui::StandardRoles& roles, ui::Application& app,
+                                    ui::View* restore_focus_to,
+                                    std::function<void(bool accepted, std::string path)> on_result);
 
 }  // namespace ckv::widgets

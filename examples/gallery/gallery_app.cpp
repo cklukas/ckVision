@@ -68,8 +68,7 @@ void GalleryApp::build_menu_bar() {
                                                       auto handle = widgets::make_message_box(
                                                           descriptor, app_.theme(), roles_, app_, app_.focused(),
                                                           nullptr);
-                                                      desktop_->add_child(std::move(handle.window));
-                                                      app_.set_focus(handle.initial_focus);
+                                                      desktop_->show_dialog(std::move(handle), app_);
                                                   },
                                                   false});
     file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
@@ -125,8 +124,7 @@ void GalleryApp::build_controls_window() {
             widgets::MessageBoxButtons::Ok};
         auto handle = widgets::make_message_box(descriptor, app_ptr->theme(), roles_, *app_ptr, app_ptr->focused(),
                                                   nullptr);
-        desktop->add_child(std::move(handle.window));
-        app_ptr->set_focus(handle.initial_focus);
+        desktop->show_dialog(std::move(handle), *app_ptr);
     };
     content->add_child(std::move(greet));
 

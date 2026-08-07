@@ -21,18 +21,15 @@
 
 namespace ckv::widgets {
 
-struct WindowListHandle {
-    std::unique_ptr<Window> window;
-    ui::View* initial_focus = nullptr;  // focus AFTER attaching window to a Desktop (see message_box.hpp's own note)
-};
-
 // Lists `desktop`'s windows() (stable insertion/cycling order, the
 // same order Desktop::select_by_number uses) with each window's
 // current title. Enter or double-click activates the highlighted
 // window (via desktop.activate()) and closes the dialog; Esc closes
 // without activating anything. `desktop` must outlive the returned
 // Window (the installed closures capture it by reference).
-WindowListHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, const ui::StandardRoles& roles,
-                                          ui::Application& app, ui::View* restore_focus_to);
+// Desktop::show_dialog (M8 WP-5) attaches the returned handle and
+// focuses its initial_focus in one call.
+WindowHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, const ui::StandardRoles& roles,
+                                      ui::Application& app, ui::View* restore_focus_to);
 
 }  // namespace ckv::widgets

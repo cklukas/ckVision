@@ -57,16 +57,12 @@ private:
     std::unordered_map<std::string, HelpTopic> topics_;
 };
 
-struct HelpViewerHandle {
-    std::unique_ptr<Window> window;
-    ui::View* initial_focus = nullptr;  // focus AFTER attaching window to a Desktop
-};
-
 // `provider` must outlive the returned Window (the installed closures
 // capture it by reference, matching file_dialog's own FileSystem
-// contract).
-HelpViewerHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                                   const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
-                                   ui::View* restore_focus_to);
+// contract). Desktop::show_dialog (M8 WP-5) attaches the returned
+// handle and focuses its initial_focus in one call.
+WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
+                               const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to);
 
 }  // namespace ckv::widgets
