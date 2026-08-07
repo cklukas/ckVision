@@ -262,6 +262,9 @@ theme override golden-tested across all four schemes.
 
 ## M10 — Layout and widget-model completion (≈2–3 pw)
 
+**Status: complete** — WP-18…WP-22 all landed; see the status ledger in
+[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md).
+
 Completes D-006's decided container set and the data-widget model
 (review packages WP-18…WP-22): `Anchors` for fixed-geometry children
 (the modern per-view grow flags) with `AnchorPane`, honored by window

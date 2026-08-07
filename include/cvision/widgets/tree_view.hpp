@@ -12,14 +12,11 @@
 // Scope note (documented, not an oversight): no virtualized model
 // (explicitly beyond-baseline) — the whole forest is flattened to its
 // visible entries on every navigation/draw, fine for the tree sizes a
-// TUI actually shows. Left collapses the current node (or does
-// nothing if already collapsed/a leaf) rather than also jumping to the
-// parent — TreeNode carries no parent pointer in v1, so "jump to
-// parent" isn't reachable without a separate parent-tracking pass; a
-// real, later increment if a concrete use case needs it, not a gap
-// hiding a design flaw today.
+// TUI actually shows.
 #pragma once
 
+#include <any>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -34,6 +31,37 @@ struct TreeNode {
     std::string label;
     std::vector<TreeNode> children;
     bool expanded = false;
+
+    // Lazy population (M10/WP-22): false means "children not yet
+    // listed" — a node in this state still shows an expander (twisty)
+    // even though children is currently empty, since whether it HAS
+    // children simply isn't known yet. TreeView::on_expand_request
+    // fires the first time such a node is asked to expand, giving the
+    // application one synchronous chance to populate `children` in
+    // place; TreeView sets this true immediately afterward regardless
+    // of whether anything was actually added — a genuinely empty
+    // directory is thereafter indistinguishable from any other leaf,
+    // which is the correct end state, not one that keeps re-asking on
+    // every later expand attempt.
+    bool children_known = true;
+
+    // User payload (M10/WP-22), non-template so TreeNode itself stays
+    // a plain, ABI-stable value type that doesn't need to know an
+    // application's own payload type at TreeNode's own definition
+    // site. `id` is for a caller that just wants a stable numeric
+    // handle (a database row id, a file descriptor, an index into its
+    // own side array); `user_data` is the general escape hatch for
+    // anything else — e.g. the file browser stores each node's own
+    // full path here, replacing what used to be a separate sidecar
+    // std::unordered_map<const TreeNode*, std::string>.
+    std::uint64_t id = 0;
+    std::any user_data;
+
+    // Whether this node should show an expander at all — true either
+    // because it already has known children, or because whether it
+    // has any is simply not known yet (children_known == false).
+    // False only for a genuine, confirmed leaf.
+    bool might_have_children() const noexcept { return !children.empty() || !children_known; }
 };
 
 // Resolves its own theme roles from context() once attached (M9
@@ -54,18 +82,33 @@ public:
     TreeNode* selected() const noexcept { return cursor_node_; }
 
     // Fires whenever the cursor moves to a DIFFERENT node (navigation,
-    // mouse click, or a set_roots() call that changes which node ends
-    // up selected) — never on a no-op move (e.g. Down at the last
-    // entry) or on a pure expand/collapse of the already-selected node.
-    // This is the hook a master-detail pane (e.g. a file list showing
-    // the selected folder's contents) subscribes to, mirroring
+    // mouse click, Left-to-parent, or a set_roots() call whose
+    // resulting selection is non-null) — never on a no-op move (e.g.
+    // Down at the last entry), a pure expand/collapse of the already-
+    // selected node, or a set_roots() call that leaves the tree empty
+    // (nothing to pass a TreeNode& reference to). This is the hook a
+    // master-detail pane (e.g. a file list showing the selected
+    // folder's contents) subscribes to, mirroring
     // ListView::on_selection_changed.
-    std::function<void()> on_selection_changed;
+    std::function<void(TreeNode&)> on_selection_changed;
 
     // Fires on Enter, or a second click on the already-selected node —
     // "act on this node" distinct from merely browsing to it, mirroring
-    // ListView::on_activate.
-    std::function<void()> on_activate;
+    // ListView::on_activate. Fires regardless of whether the node also
+    // has an expand/collapse state to toggle (a leaf's Enter must still
+    // reach the application).
+    std::function<void(TreeNode&)> on_activate;
+
+    // Lazy population (M10/WP-22): fires the first (and only the
+    // first) time a node whose children_known is false is asked to
+    // expand — via Right, Enter/Space, or a twisty click. The
+    // callback should populate `node.children` in place before
+    // returning (synchronous — this framework has no async/threading
+    // model for widgets to await); TreeView sets children_known true
+    // itself immediately afterward regardless of what the callback
+    // did. Unset by default: a node built with children_known left at
+    // its own true default never triggers this at all.
+    std::function<void(TreeNode&)> on_expand_request;
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;
@@ -77,11 +120,21 @@ private:
     struct VisibleEntry {
         TreeNode* node;
         int depth;
+        TreeNode* parent;  // nullptr for a root — the parent-tracking pass Left-to-parent needs
     };
 
-    void flatten_into(std::vector<TreeNode>& nodes, int depth, std::vector<VisibleEntry>& out);
+    void flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,
+                       std::vector<VisibleEntry>& out);
     std::vector<VisibleEntry> visible_entries();
     void move_cursor(int delta);
+    // Jumps the cursor directly to `node` (Left-to-parent) — the
+    // absolute-target counterpart to move_cursor's relative delta.
+    void select_node(TreeNode* node);
+    // Shared expand/collapse core: gates lazy population (see
+    // on_expand_request) behind the false->true transition only, so
+    // every expand call site (Right, Enter/Space, a twisty click)
+    // gets the same lazy-population behavior from one place.
+    void set_expanded(TreeNode& node, bool expanded);
     void ensure_cursor_visible(int cursor_index);
 
     std::vector<TreeNode> roots_;

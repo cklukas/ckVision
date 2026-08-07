@@ -2,6 +2,7 @@
 #include "filebrowser_app.hpp"
 
 #include <algorithm>
+#include <any>
 
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -17,29 +18,30 @@ namespace {
 // std_commands::kFocusNext's own default behavior (D-029) — so this
 // app has no application-space command ids of its own.
 
-// Directories only, sorted, depth-capped against a real filesystem's
-// symlink cycles (a real, bounded disk still could be arbitrarily
-// deep; a demo browser has no business hanging on one).
-widgets::TreeNode build_subtree(const FileSystem& fs, const std::string& path, std::string label, int depth) {
-    widgets::TreeNode node;
-    node.label = std::move(label);
-    if (depth <= 0) return node;
+// Lists `node`'s own one level of direct subdirectories (M10/WP-22),
+// sorted, storing each child's full path in TreeNode::user_data — the
+// lazy-population body TreeView::on_expand_request calls the first
+// time a node is expanded, also reused directly (once) for the root
+// itself so it can start expanded. Files are skipped: this tree is a
+// folder hierarchy only, the same "directories only" scope
+// make_directory_picker's own build_subtree already documents.
+// children_known is set true unconditionally at the end, whether or
+// not any subdirectory was found — a genuinely empty directory is
+// thereafter indistinguishable from any other leaf.
+void populate_children(const FileSystem& fs, widgets::TreeNode& node) {
+    const auto& path = std::any_cast<const std::string&>(node.user_data);
     auto entries = fs.list_directory(path);
     std::sort(entries.begin(), entries.end(),
               [](const FileEntry& a, const FileEntry& b) { return a.name < b.name; });
     for (const auto& e : entries) {
         if (!e.is_directory) continue;
-        node.children.push_back(build_subtree(fs, fs.join(path, e.name), e.name, depth - 1));
+        widgets::TreeNode child;
+        child.label = e.name;
+        child.user_data = fs.join(path, e.name);
+        child.children_known = false;
+        node.children.push_back(std::move(child));
     }
-    return node;
-}
-
-// Recorded AFTER the whole subtree is in its final resting place —
-// see filebrowser_app.hpp's own doc comment on path_of_ for why.
-void record_paths(const FileSystem& fs, widgets::TreeNode& node, const std::string& path,
-                   std::unordered_map<const widgets::TreeNode*, std::string>& out) {
-    out[&node] = path;
-    for (auto& child : node.children) record_paths(fs, child, fs.join(path, child.label), out);
+    node.children_known = true;
 }
 }  // namespace
 
@@ -94,18 +96,25 @@ void FileBrowserApp::build_window() {
 
     auto tree = std::make_unique<widgets::TreeView>();
     tree_ = tree.get();
+
+    widgets::TreeNode root;
+    root.label = root_path_;
+    root.user_data = root_path_;
+    populate_children(fs_, root);  // eager for the root only, so it can start expanded
+    root.expanded = true;
     std::vector<widgets::TreeNode> roots;
-    roots.push_back(build_subtree(fs_, root_path_, root_path_, /*depth=*/8));
-    roots.front().expanded = true;  // show the root's own subdirectories immediately, like a file
-                                     // manager's initial view — a collapsed root would hide
-                                     // everything behind one extra Right/Enter keypress.
-    record_paths(fs_, roots.front(), root_path_, path_of_);
+    roots.push_back(std::move(root));
     tree_->set_roots(std::move(roots));
 
     auto file_list = std::make_unique<widgets::ListView>();
     file_list_ = file_list.get();
 
-    tree_->on_selection_changed = [this] { refresh_file_list_for_selected_node(); };
+    tree_->on_selection_changed = [this](widgets::TreeNode&) {
+        refresh_file_list_for_selected_node();
+    };
+    // Lazy population (M10/WP-22): fires the first time the user
+    // expands a node whose children were never listed.
+    tree_->on_expand_request = [this](widgets::TreeNode& node) { populate_children(fs_, node); };
 
     // Splitter (M10/WP-19) replaces the old fixed 50/50 Row: the split
     // starts at the same exact 50/50 ratio (Splitter's own default),
@@ -131,8 +140,7 @@ void FileBrowserApp::build_window() {
 void FileBrowserApp::refresh_file_list_for_selected_node() {
     widgets::TreeNode* selected = tree_->selected();
     if (selected == nullptr) return;
-    auto it = path_of_.find(selected);
-    selected_directory_ = it != path_of_.end() ? it->second : root_path_;
+    selected_directory_ = std::any_cast<std::string>(selected->user_data);
 
     if (path_label_ != nullptr) {
         // set_text() propagates its own changed preferred width up to

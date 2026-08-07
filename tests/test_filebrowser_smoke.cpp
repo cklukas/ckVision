@@ -22,6 +22,7 @@ using ckv::Modifier;
 using ckv::MemoryFileSystem;
 using ckv::Rect;
 using ckv::ui::Application;
+using ckv::widgets::TreeNode;
 
 namespace {
 MemoryFileSystem make_scripted_tree() {
@@ -156,4 +157,50 @@ CK_TEST(adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous) {
     const Rect tree_bounds = f.browser.tree()->bounds();
     const Rect file_list_bounds = f.browser.file_list()->bounds();
     CK_CHECK(file_list_bounds.x == tree_bounds.x + tree_bounds.width + 1);  // one divider cell
+}
+
+// --- Lazy tree expansion (M10/WP-22) --------------------------------------
+
+CK_TEST(a_directory_never_expanded_starts_with_unknown_unpopulated_tree_children) {
+    Fixture f;
+    f.app.step(0);
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});  // root -> alpha
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});  // alpha -> beta
+
+    TreeNode* beta = f.browser.tree()->selected();
+    CK_CHECK(beta->label == "beta");
+    // Only the root's own direct children were ever eagerly listed
+    // (M10/WP-22) — beta's own subdirectory ("nested") has never been
+    // asked for, so the tree node itself carries nothing yet.
+    CK_CHECK(!beta->children_known);
+    CK_CHECK(beta->children.empty());
+}
+
+CK_TEST(expanding_a_never_listed_directory_populates_it_on_demand_through_the_filesystem) {
+    Fixture f;
+    f.app.step(0);
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});  // root -> alpha
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});  // alpha -> beta
+
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});  // expand beta
+
+    TreeNode* beta = f.browser.tree()->selected();
+    CK_CHECK(beta->children_known);
+    CK_CHECK(beta->expanded);
+    CK_CHECK(beta->children.size() == 1);
+    CK_CHECK(beta->children[0].label == "nested");
+}
+
+CK_TEST(a_lazily_populated_child_is_itself_still_lazy_until_expanded) {
+    Fixture f;
+    f.app.step(0);
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});   // alpha
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});   // beta
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});  // expand beta
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});   // beta -> nested
+
+    TreeNode* nested = f.browser.tree()->selected();
+    CK_CHECK(nested->label == "nested");
+    CK_CHECK(!nested->children_known);
+    CK_CHECK(nested->children.empty());
 }

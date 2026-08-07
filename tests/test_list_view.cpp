@@ -81,6 +81,18 @@ CK_TEST(single_select_selecting_a_different_item_deselects_the_previous_one) {
     CK_CHECK(list.is_selected(2));
 }
 
+CK_TEST(on_selection_changed_reports_the_index_that_was_selected) {
+    // M10/WP-22: the index argument, mirroring TreeView's own node
+    // argument on the same hook.
+    Fixture f;
+    auto list = make_list(f, false);
+    list.set_items({"a", "b", "c"});
+    std::size_t reported = 999;
+    list.on_selection_changed = [&](std::size_t i) { reported = i; };
+    list.set_selected(2, true);
+    CK_CHECK(reported == 2);
+}
+
 // --- Multi select ---------------------------------------------------
 
 CK_TEST(multi_select_moving_the_cursor_does_not_change_selection) {
@@ -104,6 +116,16 @@ CK_TEST(multi_select_space_toggles_independently) {
     CK_CHECK(list.is_selected(0));
     CK_CHECK(list.is_selected(1));
     CK_CHECK(list.selected_indices().size() == 2);
+}
+
+CK_TEST(multi_select_on_selection_changed_reports_the_toggled_index) {
+    Fixture f;
+    auto list = make_list(f, true);
+    list.set_items({"a", "b", "c"});
+    std::size_t reported = 999;
+    list.on_selection_changed = [&](std::size_t i) { reported = i; };
+    list.set_selected(1, true);
+    CK_CHECK(reported == 1);
 }
 
 // --- Navigation -------------------------------------------------------

@@ -12,7 +12,6 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 #include "cvision/core/filesystem.hpp"
 #include "cvision/ui/application.hpp"
@@ -33,12 +32,14 @@ namespace ckv::filebrowser {
 
 class FileBrowserApp {
 public:
-    // `root_path` is where the folder tree starts; the tree is built
-    // eagerly (directories only, like widgets::make_directory_picker's
-    // own build_subtree — this is the documented, generally-useful
-    // idiom for a "small enough to browse interactively" tree, not a
-    // virtualized/lazy model) with a depth cap guarding against
-    // pathological symlink cycles on a real filesystem.
+    // `root_path` is where the folder tree starts. Populated lazily
+    // (M10/WP-22): only the root's own direct children are listed
+    // eagerly, so it can start expanded (a collapsed root would hide
+    // everything behind one extra Right/Enter keypress); every deeper
+    // level is listed on demand the first time the user expands it,
+    // via TreeView::on_expand_request — no depth cap needed, since
+    // nothing is ever recursed into ahead of the user actually asking
+    // to see it.
     FileBrowserApp(ui::Application& app, FileSystem& fs, std::string root_path);
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
@@ -64,15 +65,6 @@ private:
     widgets::ListView* file_list_ = nullptr;
     widgets::Splitter* splitter_ = nullptr;
     widgets::Label* path_label_ = nullptr;
-
-    // TreeNode pointers are stable once built (see build_subtree's own
-    // discipline in directory_picker.cpp: never record addresses until
-    // the whole subtree is in its final resting place) — this maps
-    // each node back to its full path, the same pattern
-    // make_directory_picker uses, duplicated here deliberately so this
-    // example is self-contained and copy-paste-usable rather than
-    // depending on that dialog's private helpers.
-    std::unordered_map<const widgets::TreeNode*, std::string> path_of_;
 
     std::string selected_directory_;
 };

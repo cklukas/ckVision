@@ -53,7 +53,9 @@ public:
     int cursor() const noexcept { return cursor_; }  // -1 if the list is empty
 
     std::function<void(std::size_t)> on_activate;  // Enter, or a second click on the cursor row
-    std::function<void()> on_selection_changed;
+    // Fires with the index whose selection just changed (M10/WP-22 —
+    // mirrors TreeView::on_selection_changed passing its own node).
+    std::function<void(std::size_t)> on_selection_changed;
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;

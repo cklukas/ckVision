@@ -333,6 +333,45 @@ Boundary is strict-less-than (`kHardFloorSize` itself still renders) —
 consistent with `Window::min_size_`'s own "the minimum is itself a
 valid, attainable size" convention. Scheduled as M10/WP-21.
 
+**D-033 — TreeNode payload is non-template; parent-tracking is a
+per-flatten transient, not a stored field.**
+`TreeNode` gains `std::uint64_t id` plus `std::any user_data` rather
+than a template parameter — `TreeNode` stays a plain, ABI-stable value
+type usable without a widget header knowing an application's own
+payload type; `ckv::filebrowser` stores each node's own full path in
+`user_data`, retiring a separate sidecar
+`std::unordered_map<const TreeNode*, std::string>`. Lazy population:
+`bool children_known` (default `true`, so every existing tree stays
+unaffected) — a node built with it `false` still shows an expander
+(`TreeNode::might_have_children()`) even though `children` is
+currently empty, since whether it HAS children simply isn't known yet.
+`TreeView::on_expand_request(TreeNode&)` fires the first time such a
+node is asked to expand (`Right`, `Enter`/`Space`, or a twisty click —
+all three now route through one shared `TreeView::set_expanded`
+helper so the gate lives in exactly one place); `children_known`
+becomes `true` immediately afterward regardless of what the callback
+did, so a genuinely empty directory reads as an ordinary leaf from
+then on rather than re-asking on every later expand attempt.
+
+Parent-tracking for `Left`-jumps-to-parent is deliberately NOT a
+stored `TreeNode* parent` field: `TreeView::flatten_into`'s own
+existing recursive walk already knows each node's parent the moment it
+recurses into `children`, so `VisibleEntry` gained a third field
+(`TreeNode* parent`, `nullptr` for a root) computed fresh on every
+flatten pass instead. A stored field would need its own bookkeeping to
+stay valid across `set_roots()` rebuilding the whole forest, and reuses
+zero of the walk flatten_into already performs; a transient, always-
+fresh value has nothing to go stale. `on_selection_changed`/
+`on_activate` (`TreeView`) become `std::function<void(TreeNode&)>` —
+passing the node directly, mirroring `ListView::on_activate`'s own
+existing index-carrying shape; `ListView::on_selection_changed` gains
+the matching `std::size_t` index argument it previously lacked, for
+the same "the callback gets what it needs without re-querying the
+widget" reason. `TreeView::set_roots()` with an empty forest no longer
+fires `on_selection_changed` at all (a real, small contract change
+from "always fires, even to nothing" — there is no `TreeNode&` to pass
+a reference to when nothing is selected). Scheduled as M10/WP-22.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

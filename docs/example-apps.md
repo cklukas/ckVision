@@ -108,7 +108,8 @@ or broken region.
 File Browser is the master-detail example: a folder-hierarchy
 `TreeView` in one pane drives a `ListView` showing the selected
 folder's contents in a second pane — a `TreeView::on_selection_changed`
-callback is the entire wiring between them. It also demonstrates
+callback (receiving the newly-selected `TreeNode&` directly, M10/
+WP-22) is the entire wiring between them. It also demonstrates
 `Desktop::dock_top`/`dock_bottom` (the menu bar and status line
 reposition themselves automatically across a real terminal resize,
 not just when the application recomputes their bounds by hand — a live
@@ -132,12 +133,17 @@ no change in the app's own observable behavior).
   ratio the app's original `ui::Row` with two `Expanding` items gave,
   now keyboard-adjustable (Tab to the Splitter, then Left/Right) rather
   than fixed.
-- **Tree building**: `build_subtree()` in `filebrowser_app.cpp`
-  recurses the injected `FileSystem` (directories only, depth-capped
-  against symlink cycles on a real disk), the same pattern
-  `make_directory_picker` uses — duplicated here deliberately so this
-  example is copy-paste usable on its own, not dependent on that
-  dialog's private helpers.
+- **Lazy tree population** (M10/WP-22): only the root's own direct
+  subdirectories are listed eagerly, so it can start expanded; every
+  deeper level is listed on demand the first time the user expands it,
+  via `TreeView::on_expand_request`. `populate_children()` in
+  `filebrowser_app.cpp` is the one function both the root's initial
+  listing and every later lazy expansion call — no depth cap needed,
+  since nothing is ever recursed into ahead of the user actually
+  asking to see it. Each node's own full path lives in
+  `TreeNode::user_data` (a `std::any` holding a `std::string`),
+  replacing what used to be a separate sidecar
+  `std::unordered_map<const TreeNode*, std::string>`.
 - **Focus traversal**: Tab cycles through the tree pane, the Splitter
   (M10/WP-19 — Left/Right there adjusts the pane split), and the file-
   list pane — the library's own default keymap (DECISIONS.md D-029, M9/
@@ -162,6 +168,9 @@ no change in the app's own observable behavior).
 | The tree and file-list panes start at an even 50/50 split | `the_tree_and_file_list_panes_start_at_an_even_50_50_split` |
 | The panes are children of a Splitter positioned between them | `the_panes_are_children_of_a_splitter_positioned_between_them` |
 | Adjusting the Splitter resizes both panes and keeps them contiguous | `adjusting_the_splitter_resizes_both_panes_and_keeps_them_contiguous` |
+| A directory never expanded starts with unknown, unpopulated tree children | `a_directory_never_expanded_starts_with_unknown_unpopulated_tree_children` |
+| Expanding a never-listed directory populates it on demand through the filesystem | `expanding_a_never_listed_directory_populates_it_on_demand_through_the_filesystem` |
+| A lazily populated child is itself still lazy until expanded | `a_lazily_populated_child_is_itself_still_lazy_until_expanded` |
 
 ### Screenshots
 

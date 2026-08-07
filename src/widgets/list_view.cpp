@@ -41,7 +41,7 @@ void ListView::select_only(std::size_t index) {
         }
     }
     invalidate();
-    if (changed && on_selection_changed) on_selection_changed();
+    if (changed && on_selection_changed) on_selection_changed(index);
 }
 
 void ListView::toggle_selected(std::size_t index) { set_selected(index, !is_selected(index)); }
@@ -55,7 +55,7 @@ void ListView::set_selected(std::size_t index, bool selected) {
     if (selected_[index] == selected) return;
     selected_[index] = selected;
     invalidate();
-    if (on_selection_changed) on_selection_changed();
+    if (on_selection_changed) on_selection_changed(index);
 }
 
 std::vector<std::size_t> ListView::selected_indices() const {

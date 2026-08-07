@@ -21,23 +21,26 @@ void TreeView::set_roots(std::vector<TreeNode> roots) {
     cursor_node_ = entries.empty() ? nullptr : entries.front().node;
     on_resized();
     invalidate();
-    // Always fires (even if a same-labeled node ends up selected again)
-    // — the OLD TreeNode this pointed to is gone the moment roots_ was
+    // Fires only when there IS a selection — an empty forest has no
+    // TreeNode to pass a reference to. A non-empty forest always
+    // fires, even if a same-labeled node ends up selected again: the
+    // OLD TreeNode this pointed to is gone the moment roots_ was
     // replaced, so a master-detail pane must re-resolve against the
     // new tree regardless of whether the label looks unchanged.
-    if (on_selection_changed) on_selection_changed();
+    if (cursor_node_ != nullptr && on_selection_changed) on_selection_changed(*cursor_node_);
 }
 
-void TreeView::flatten_into(std::vector<TreeNode>& nodes, int depth, std::vector<VisibleEntry>& out) {
+void TreeView::flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,
+                             std::vector<VisibleEntry>& out) {
     for (auto& n : nodes) {
-        out.push_back(VisibleEntry{&n, depth});
-        if (n.expanded && !n.children.empty()) flatten_into(n.children, depth + 1, out);
+        out.push_back(VisibleEntry{&n, depth, parent});
+        if (n.expanded && !n.children.empty()) flatten_into(n.children, depth + 1, &n, out);
     }
 }
 
 std::vector<TreeView::VisibleEntry> TreeView::visible_entries() {
     std::vector<VisibleEntry> out;
-    flatten_into(roots_, 0, out);
+    flatten_into(roots_, 0, nullptr, out);
     return out;
 }
 
@@ -78,7 +81,33 @@ void TreeView::move_cursor(int delta) {
     // fire — a master-detail pane subscribed to this would otherwise
     // reload identical detail content on every extra keypress at an
     // edge.
-    if (cursor_node_ != previous && on_selection_changed) on_selection_changed();
+    if (cursor_node_ != previous && on_selection_changed) on_selection_changed(*cursor_node_);
+}
+
+void TreeView::select_node(TreeNode* node) {
+    if (node == nullptr || node == cursor_node_) return;
+    TreeNode* const previous = cursor_node_;
+    cursor_node_ = node;
+    on_resized();
+    auto entries = visible_entries();
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i].node == node) {
+            ensure_cursor_visible(static_cast<int>(i));
+            break;
+        }
+    }
+    invalidate();
+    if (cursor_node_ != previous && on_selection_changed) on_selection_changed(*cursor_node_);
+}
+
+void TreeView::set_expanded(TreeNode& node, bool expanded) {
+    if (expanded && !node.children_known) {
+        if (on_expand_request) on_expand_request(node);
+        node.children_known = true;
+    }
+    node.expanded = expanded;
+    on_resized();
+    invalidate();
 }
 
 bool TreeView::on_key(const KeyEvent& event) {
@@ -90,18 +119,25 @@ bool TreeView::on_key(const KeyEvent& event) {
             move_cursor(+1);
             return true;
         case Key::Left:
-            if (cursor_node_ != nullptr && cursor_node_->expanded) {
-                cursor_node_->expanded = false;
-                on_resized();
-                invalidate();
+            if (cursor_node_ != nullptr) {
+                if (cursor_node_->expanded) {
+                    set_expanded(*cursor_node_, false);
+                } else {
+                    // Already collapsed (or a leaf): jump to the
+                    // parent instead, if there is one (M10/WP-22).
+                    for (const VisibleEntry& e : visible_entries()) {
+                        if (e.node == cursor_node_) {
+                            select_node(e.parent);
+                            break;
+                        }
+                    }
+                }
             }
             return true;
         case Key::Right:
-            if (cursor_node_ != nullptr && !cursor_node_->children.empty()) {
+            if (cursor_node_ != nullptr && cursor_node_->might_have_children()) {
                 if (!cursor_node_->expanded) {
-                    cursor_node_->expanded = true;
-                    on_resized();
-                    invalidate();
+                    set_expanded(*cursor_node_, true);
                 } else {
                     move_cursor(+1);  // already expanded: step into the first child
                 }
@@ -110,17 +146,15 @@ bool TreeView::on_key(const KeyEvent& event) {
         case Key::Enter:
         case Key::Char:
             if (event.chord.key == Key::Char && event.chord.text != " ") return false;
-            if (cursor_node_ != nullptr && !cursor_node_->children.empty()) {
-                cursor_node_->expanded = !cursor_node_->expanded;
-                on_resized();
-                invalidate();
+            if (cursor_node_ != nullptr && cursor_node_->might_have_children()) {
+                set_expanded(*cursor_node_, !cursor_node_->expanded);
             }
             // Enter/Space is "act on the current node" regardless of
             // whether it also happened to have children to toggle — a
             // leaf (e.g. a file, in a file-browser TreeView) has no
             // expand/collapse state at all, and Enter on it must still
             // reach the application.
-            if (cursor_node_ != nullptr && on_activate) on_activate();
+            if (cursor_node_ != nullptr && on_activate) on_activate(*cursor_node_);
             return true;
         default:
             return false;
@@ -141,19 +175,17 @@ bool TreeView::on_mouse(const MouseEvent& event) {
     cursor_node_ = entry.node;
     const int local_x = event.cell.x - abs.x;
     const int twisty_x = entry.depth * 2;
-    const bool clicked_twisty = !entry.node->children.empty() && local_x >= twisty_x && local_x < twisty_x + 2;
-    if (clicked_twisty) {
-        entry.node->expanded = !entry.node->expanded;
-        on_resized();
-    }
+    const bool clicked_twisty =
+        entry.node->might_have_children() && local_x >= twisty_x && local_x < twisty_x + 2;
+    if (clicked_twisty) set_expanded(*entry.node, !entry.node->expanded);
     invalidate();
     // A second click on the ALREADY-selected node (outside the twisty)
     // is "activate", mirroring ListView::on_mouse's identical
     // convention — the first click only ever selects.
     if (!clicked_twisty && clicking_already_selected) {
-        if (on_activate) on_activate();
+        if (on_activate) on_activate(*entry.node);
     } else if (!clicking_already_selected && on_selection_changed) {
-        on_selection_changed();
+        on_selection_changed(*entry.node);
     }
     return true;
 }
@@ -174,7 +206,8 @@ void TreeView::draw(scene::Painter& painter) {
 
         const VisibleEntry& entry = entries[static_cast<std::size_t>(index)];
         const int indent = entry.depth * 2;
-        const std::string twisty = entry.node->children.empty() ? "  " : (entry.node->expanded ? "- " : "+ ");
+        const std::string twisty =
+            !entry.node->might_have_children() ? "  " : (entry.node->expanded ? "- " : "+ ");
         painter.draw_text(Point{indent, row}, twisty, style);
         painter.draw_text(Point{indent + 2, row}, entry.node->label, style);
     }
