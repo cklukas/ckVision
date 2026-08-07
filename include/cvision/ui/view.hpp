@@ -200,6 +200,21 @@ public:
     virtual bool on_mouse(const MouseEvent&) { return false; }
     virtual void on_focus(const FocusEvent&) {}
 
+    // Capture-phase notification (M8 WP-3): fired on every ancestor of
+    // `target` — NOT on target itself — when target is about to
+    // receive a MouseAction::Down, before that delivery happens.
+    // Default: does nothing. This exists because ordinary event
+    // delivery only reaches the single deepest hit-tested view: a
+    // click on a Button inside a Window's content is delivered
+    // directly to the Button, and Window::on_mouse (which only knows
+    // about clicks on its OWN frame chrome — title bar, close/zoom,
+    // resize grip) never runs for it at all. Desktop overrides this to
+    // activate+raise whichever of its owned windows is `target` or an
+    // ancestor of it, regardless of how deep the actual click landed —
+    // the mechanism behind "clicking anywhere in a background window
+    // brings it to front," not just its title bar.
+    virtual void on_descendant_mouse_down(View& target) { (void)target; }
+
     // --- Focus ------------------------------------------------------
 
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }

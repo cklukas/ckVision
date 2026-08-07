@@ -1,14 +1,13 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// End-to-end M8/WP-1 regression: a real terminal resize, dispatched
-// through Application exactly as the POSIX/headless backends deliver
-// it, must reach a Desktop attached under root() and repin its docked
-// chrome / reclamp its windows — not just Desktop::on_resized() called
-// directly (test_desktop.cpp covers that mechanism in isolation
-// already). Before this landed, ResizeEvent stopped at
-// Application::root(); nothing propagated further, so this exact
-// scenario went stale interactively while every unit-level piece
-// stayed green (see plans/api-ergonomics-review-2.md, finding F1).
+// End-to-end M8 regressions for seams whose mechanisms are built and
+// unit-tested elsewhere but were never wired to a real terminal
+// session (see plans/api-ergonomics-review-2.md, findings F1-F7). Each
+// scenario here is driven entirely through Application's public event
+// dispatch — the same path the POSIX/headless backends use — not by
+// poking the affected widget's own methods directly, since that is
+// exactly the gap that let each finding stay green under unit tests
+// while broken interactively.
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
@@ -36,7 +35,15 @@ struct Fixture {
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
 };
+
+std::unique_ptr<Window> make_window(Fixture& f, std::string title = "W") {
+    return std::make_unique<Window>(std::move(title), f.theme, f.roles.window_frame_active,
+                                     f.roles.window_frame_inactive, f.roles.window_title_active,
+                                     f.roles.window_title_inactive);
+}
 }  // namespace
+
+// --- WP-1: the resize chain -------------------------------------------
 
 CK_TEST(an_application_level_resize_event_repins_docked_desktop_chrome_and_reclamps_windows) {
     Fixture fx;
@@ -51,9 +58,7 @@ CK_TEST(an_application_level_resize_event_repins_docked_desktop_chrome_and_recla
     View* top = desktop_ptr->dock_top(std::make_unique<View>());
     View* bottom = desktop_ptr->dock_bottom(std::make_unique<View>());
 
-    auto window = std::make_unique<Window>("W", fx.theme, fx.roles.window_frame_active,
-                                            fx.roles.window_frame_inactive, fx.roles.window_title_active,
-                                            fx.roles.window_title_inactive);
+    auto window = make_window(fx);
     window->set_bounds(Rect{60, 15, 15, 6});  // reachable in the original 80x24 desktop
     Window* window_ptr = desktop_ptr->add_window(std::move(window));
 
@@ -122,4 +127,72 @@ CK_TEST(on_bounds_changed_fires_with_the_new_bounds_only_when_bounds_actually_ch
 
     v.set_bounds(Rect{2, 2, 8, 8});  // identical — set_bounds no-ops, hook must not refire
     CK_CHECK(fire_count == 1);
+}
+
+// --- WP-3: click-to-activate/raise, end to end -------------------------
+
+CK_TEST(clicking_deep_content_in_a_background_window_raises_and_activates_it_through_dispatch) {
+    Fixture fx;
+    ckv::term::HeadlessTerminal term(Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+
+    auto desktop = std::make_unique<Desktop>(app.root().bounds(), fx.theme, fx.roles.desktop_background);
+    Desktop* desktop_ptr = desktop.get();
+    app.root().add_child(std::move(desktop));
+
+    auto back_window = make_window(fx, "Back");
+    back_window->set_bounds(Rect{0, 0, 30, 10});
+    auto back_content = std::make_unique<View>();
+    auto* deep_leaf = back_content->add_child(std::make_unique<View>(Rect{2, 2, 4, 1}));
+    back_window->set_content(std::move(back_content));
+    Window* back = desktop_ptr->add_window(std::move(back_window));
+
+    auto front_window = make_window(fx, "Front");
+    front_window->set_bounds(Rect{40, 0, 30, 10});  // does not overlap `back`'s content point
+    desktop_ptr->add_window(std::move(front_window));
+
+    // `front` was added last, so it is active/topmost; `back` is
+    // inactive and behind it — exactly the scenario a click on `back`
+    // should fix.
+    CK_CHECK(!back->active());
+
+    // Click lands inside back_window's content, on deep_leaf — several
+    // levels below Window itself. Window::on_mouse never runs for
+    // this; only Desktop's ancestor-walk hook can raise/activate it.
+    // A plain View's on_mouse is unhandled by default (returns false) —
+    // click-to-activate is a side-channel notification independent of
+    // that return value, so this deliberately does not assert it.
+    const Rect leaf_abs = deep_leaf->absolute_bounds();
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                          ckv::Point{leaf_abs.x, leaf_abs.y}, std::nullopt, ckv::Modifier::None};
+    app.dispatch(down);
+
+    CK_CHECK(back->active());
+    CK_CHECK(desktop_ptr->active_window() == back);
+    // Raised to the top of z-order (children() convention: last = topmost).
+    CK_CHECK(desktop_ptr->children().back().get() == static_cast<ckv::ui::View*>(back));
+}
+
+CK_TEST(clicking_the_desktops_own_background_does_not_change_which_window_is_active) {
+    Fixture fx;
+    ckv::term::HeadlessTerminal term(Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+
+    auto desktop = std::make_unique<Desktop>(app.root().bounds(), fx.theme, fx.roles.desktop_background);
+    Desktop* desktop_ptr = desktop.get();
+    app.root().add_child(std::move(desktop));
+
+    auto window = make_window(fx);
+    window->set_bounds(Rect{0, 0, 10, 5});
+    Window* w = desktop_ptr->add_window(std::move(window));
+    CK_CHECK(w->active());
+
+    // Click far outside any window, on bare desktop background.
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{60, 20}, std::nullopt,
+                          ckv::Modifier::None};
+    app.dispatch(down);
+
+    CK_CHECK(w->active());  // unchanged — no window claims a desktop-background click
 }

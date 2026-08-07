@@ -44,6 +44,17 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     return std::unique_ptr<Window>(static_cast<Window*>(detached.release()));
 }
 
+void Desktop::on_descendant_mouse_down(ui::View& target) {
+    for (ui::View* v = &target; v != nullptr; v = v->parent()) {
+        auto it = std::find_if(windows_.begin(), windows_.end(),
+                                [v](Window* w) { return static_cast<ui::View*>(w) == v; });
+        if (it != windows_.end()) {
+            activate(*it);
+            return;
+        }
+    }
+}
+
 void Desktop::activate(Window* window) {
     CKV_ASSERT(std::find(windows_.begin(), windows_.end(), window) != windows_.end());
     if (window == active_) return;

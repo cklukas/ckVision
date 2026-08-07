@@ -32,7 +32,8 @@ landing commit). A row with no note is still open.
 |---|---|---|
 | WP-1 | **Done** | `View::fills_root()`/`on_bounds_changed`; `tests/test_m8_resize_integration.cpp` |
 | WP-2 | **Done** | Click-to-focus in `Application::dispatch`, applied after delivery (not before — see the MenuBar note below) |
-| WP-3…22 | Open | — |
+| WP-3 | **Done** | `View::on_descendant_mouse_down`; `Desktop` override; `tests/test_m8_integration.cpp`, `tests/test_desktop.cpp` |
+| WP-4…22 | Open | — |
 
 ---
 

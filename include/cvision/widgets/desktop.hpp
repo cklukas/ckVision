@@ -112,6 +112,13 @@ public:
     std::unique_ptr<ui::View> remove_popup(ui::View* popup);
     const std::vector<ui::View*>& popups() const noexcept { return popups_; }
 
+    // Activates+raises whichever of windows_ is `target` or an
+    // ancestor of it (M8 WP-3) — the mechanism behind click-to-raise
+    // for clicks anywhere inside a window, not just its title bar. A
+    // no-op if `target` is not inside any owned window (a click on a
+    // popup, or on the desktop's own background).
+    void on_descendant_mouse_down(ui::View& target) override;
+
     void draw(scene::Painter& painter) override;
 
     // Routes to remove_window()/remove_popup() when `child` is one of

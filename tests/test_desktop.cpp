@@ -66,6 +66,48 @@ CK_TEST(a_newly_added_window_becomes_the_topmost_child) {
     (void)a;
 }
 
+// --- Click-to-activate/raise (on_descendant_mouse_down, M8 WP-3) -------
+
+CK_TEST(on_descendant_mouse_down_activates_and_raises_the_owning_window_for_a_deep_descendant) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* back = desktop.add_window(make_window(f, "Back"));
+    auto content = std::make_unique<ckv::ui::View>();
+    ckv::ui::View* deep_leaf = content->add_child(std::make_unique<ckv::ui::View>());
+    back->set_content(std::move(content));
+    Window* front = desktop.add_window(make_window(f, "Front"));  // now active/topmost
+
+    CK_CHECK(!back->active());
+    CK_CHECK(desktop.children().back().get() == static_cast<ckv::ui::View*>(front));
+
+    desktop.on_descendant_mouse_down(*deep_leaf);  // several levels below Window itself
+
+    CK_CHECK(back->active());
+    CK_CHECK(!front->active());
+    CK_CHECK(desktop.children().back().get() == static_cast<ckv::ui::View*>(back));
+}
+
+CK_TEST(on_descendant_mouse_down_activates_the_window_itself_when_target_is_the_window) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* back = desktop.add_window(make_window(f, "Back"));
+    desktop.add_window(make_window(f, "Front"));
+
+    CK_CHECK(!back->active());
+    desktop.on_descendant_mouse_down(*back);  // e.g. a click on the window's own frame chrome
+    CK_CHECK(back->active());
+}
+
+CK_TEST(on_descendant_mouse_down_is_a_no_op_for_a_view_outside_any_owned_window) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+
+    ckv::ui::View stray;  // detached: not inside the desktop's tree at all
+    desktop.on_descendant_mouse_down(stray);
+    CK_CHECK(w->active());  // unchanged, no crash walking a detached view's parent chain
+}
+
 CK_TEST(remove_window_for_a_window_not_owned_by_this_desktop_returns_null) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);

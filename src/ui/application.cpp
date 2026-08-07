@@ -186,6 +186,20 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 if (target == nullptr) target = topmost_view_at(e.cell);
                 if (target == nullptr) return false;
                 if (e.action == MouseAction::Down && input_capture_ == nullptr) mouse_capture_ = target;
+                // Click-to-activate/raise (M8 WP-3): notify every
+                // ancestor of target BEFORE delivery, so a container
+                // like Desktop can raise/activate whichever of its
+                // owned windows contains the click — including clicks
+                // deep inside content, which never reach the Window
+                // itself through ordinary on_mouse delivery. A no-op
+                // for any tree with no such container (View's default
+                // is empty), and naturally scoped away from popups:
+                // popups are Desktop's siblings, never descendants of
+                // a window, so this walk never finds one for them.
+                if (e.action == MouseAction::Down) {
+                    for (View* v = target->parent(); v != nullptr; v = v->parent())
+                        v->on_descendant_mouse_down(*target);
+                }
                 const bool handled = target->on_mouse(e);
                 if (e.action == MouseAction::Up) mouse_capture_ = nullptr;
                 // Click-to-focus (VISION #7): a press outside any
