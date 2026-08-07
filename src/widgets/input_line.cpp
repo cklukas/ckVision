@@ -2,6 +2,7 @@
 #include "cvision/widgets/input_line.hpp"
 
 #include <algorithm>
+#include <cctype>
 
 #include "cvision/core/text.hpp"
 
@@ -26,6 +27,7 @@ void InputLine::set_text(std::string text) {
     cursor_ = graphemes_.size();
     selection_anchor_.reset();
     invalidate();
+    revalidate();
 }
 
 std::string InputLine::text() const {
@@ -43,6 +45,175 @@ void InputLine::set_valid(bool valid) noexcept {
     if (valid == valid_) return;
     valid_ = valid;
     invalidate();
+}
+
+void InputLine::set_validator(std::function<bool(const std::string&)> validator) {
+    validator_ = std::move(validator);
+    revalidate();
+}
+
+void InputLine::revalidate() {
+    if (!validator_) return;
+    set_valid(validator_(text()));
+}
+
+void InputLine::set_password_echo(bool enabled, char echo_char) {
+    password_echo_ = enabled;
+    echo_char_ = echo_char;
+    invalidate();
+}
+
+void InputLine::set_history(ui::HistoryRegistry* registry, std::string key) {
+    history_registry_ = registry;
+    history_key_ = std::move(key);
+    history_index_ = -1;
+}
+
+void InputLine::commit_to_history() {
+    if (history_registry_ == nullptr) return;
+    history_registry_->record(history_key_, text());
+    history_index_ = -1;
+}
+
+void InputLine::history_show(int index) {
+    if (history_registry_ == nullptr) return;
+    const auto& entries = history_registry_->entries(history_key_);
+    if (history_index_ == -1 && index != -1) history_saved_text_ = text();
+    history_index_ = index;
+    if (index == -1) {
+        set_text(history_saved_text_);
+    } else if (static_cast<std::size_t>(index) < entries.size()) {
+        set_text(entries[static_cast<std::size_t>(index)]);
+    }
+}
+
+// --- Input masks ---------------------------------------------------------
+
+void InputLine::set_mask(std::string mask, char placeholder) {
+    mask_ = std::move(mask);
+    mask_placeholder_ = placeholder;
+    if (mask_.empty()) {
+        // Disabling the mask: the current (masked) buffer becomes the
+        // free-form text as-is — no reinterpretation, no reset.
+        cursor_ = std::min(cursor_, graphemes_.size());
+        selection_anchor_.reset();
+        invalidate();
+        revalidate();
+        return;
+    }
+    graphemes_.assign(mask_.size(), std::string());
+    for (std::size_t i = 0; i < mask_.size(); ++i)
+        graphemes_[i] = mask_position_editable(i) ? std::string(1, mask_placeholder_) : std::string(1, mask_[i]);
+    const std::size_t first = mask_next_editable(0);
+    cursor_ = first < graphemes_.size() ? first : 0;
+    selection_anchor_.reset();
+    invalidate();
+    revalidate();
+}
+
+bool InputLine::mask_position_editable(std::size_t index) const noexcept {
+    if (index >= mask_.size()) return false;
+    return mask_[index] == '9' || mask_[index] == 'A' || mask_[index] == '*';
+}
+
+bool InputLine::mask_char_accepts(char mask_char, std::string_view grapheme) const noexcept {
+    if (grapheme.empty()) return false;
+    switch (mask_char) {
+        case '9':
+            return grapheme.size() == 1 && std::isdigit(static_cast<unsigned char>(grapheme[0])) != 0;
+        case 'A':
+            return grapheme.size() == 1 && std::isalpha(static_cast<unsigned char>(grapheme[0])) != 0;
+        case '*':
+            return true;
+        default:
+            return false;
+    }
+}
+
+std::size_t InputLine::mask_next_editable(std::size_t from) const noexcept {
+    for (std::size_t i = from; i < mask_.size(); ++i)
+        if (mask_position_editable(i)) return i;
+    return graphemes_.size();
+}
+
+std::size_t InputLine::mask_previous_editable(std::size_t from) const noexcept {
+    for (std::size_t i = from; i-- > 0;)
+        if (mask_position_editable(i)) return i;
+    return graphemes_.size();
+}
+
+bool InputLine::on_key_masked(const KeyEvent& event) {
+    switch (event.chord.key) {
+        case Key::Left: {
+            const std::size_t prev = mask_previous_editable(cursor_);
+            if (prev < graphemes_.size()) {
+                cursor_ = prev;
+                invalidate();
+            }
+            return true;
+        }
+        case Key::Right: {
+            const std::size_t next = mask_next_editable(cursor_ + 1);
+            cursor_ = next;
+            invalidate();
+            return true;
+        }
+        case Key::Home: {
+            const std::size_t first = mask_next_editable(0);
+            cursor_ = first < graphemes_.size() ? first : 0;
+            invalidate();
+            return true;
+        }
+        case Key::End: {
+            std::size_t last = graphemes_.size();
+            for (std::size_t i = mask_.size(); i-- > 0;) {
+                if (mask_position_editable(i)) {
+                    last = i;
+                    break;
+                }
+            }
+            cursor_ = last < graphemes_.size() ? last : 0;
+            invalidate();
+            return true;
+        }
+        case Key::Backspace: {
+            const std::size_t prev = mask_previous_editable(cursor_);
+            if (prev < graphemes_.size()) {
+                graphemes_[prev] = std::string(1, mask_placeholder_);
+                cursor_ = prev;
+                invalidate();
+                revalidate();
+            }
+            return true;
+        }
+        case Key::Delete: {
+            if (cursor_ < graphemes_.size() && mask_position_editable(cursor_)) {
+                graphemes_[cursor_] = std::string(1, mask_placeholder_);
+                invalidate();
+                revalidate();
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+bool InputLine::on_text_masked(const TextEvent& event) {
+    bool changed = false;
+    for (std::string_view g : text::split_graphemes(event.text)) {
+        const std::size_t pos = mask_next_editable(cursor_);
+        if (pos >= graphemes_.size()) break;
+        if (!mask_char_accepts(mask_[pos], g)) continue;
+        graphemes_[pos] = std::string(g);
+        cursor_ = mask_next_editable(pos + 1);
+        changed = true;
+    }
+    if (changed) {
+        invalidate();
+        revalidate();
+    }
+    return true;
 }
 
 void InputLine::insert_graphemes(const std::vector<std::string>& graphemes) {
@@ -63,6 +234,7 @@ void InputLine::insert_graphemes(const std::vector<std::string>& graphemes) {
     }
     selection_anchor_.reset();
     invalidate();
+    revalidate();
 }
 
 void InputLine::erase_selection() {
@@ -72,6 +244,7 @@ void InputLine::erase_selection() {
                       graphemes_.begin() + static_cast<std::ptrdiff_t>(end));
     cursor_ = begin;
     selection_anchor_.reset();
+    revalidate();
 }
 
 void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
@@ -86,6 +259,17 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    if (history_registry_ != nullptr && event.chord.key == Key::Up) {
+        const auto& entries = history_registry_->entries(history_key_);
+        if (!entries.empty()) history_show(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));
+        return true;
+    }
+    if (history_registry_ != nullptr && event.chord.key == Key::Down) {
+        if (history_index_ >= 0) history_show(history_index_ - 1);
+        return true;
+    }
+    if (has_mask()) return on_key_masked(event);
+
     const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
     switch (event.chord.key) {
         case Key::Left:
@@ -108,6 +292,7 @@ bool InputLine::on_key(const KeyEvent& event) {
                 graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_ - 1));
                 --cursor_;
                 invalidate();
+                revalidate();
             }
             return true;
         case Key::Delete:
@@ -117,6 +302,7 @@ bool InputLine::on_key(const KeyEvent& event) {
             } else if (cursor_ < graphemes_.size()) {
                 graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_));
                 invalidate();
+                revalidate();
             }
             return true;
         case Key::Insert:
@@ -129,6 +315,7 @@ bool InputLine::on_key(const KeyEvent& event) {
 }
 
 bool InputLine::on_text(const TextEvent& event) {
+    if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;
     for (std::string_view g : text::split_graphemes(event.text)) graphemes.emplace_back(g);
     insert_graphemes(graphemes);
@@ -159,12 +346,22 @@ void InputLine::on_focus(const FocusEvent& event) {
 }
 
 SizeHint InputLine::horizontal_size_hint() const {
+    if (has_mask()) {
+        const int width = static_cast<int>(mask_.size());
+        return SizeHint{width, width, width};
+    }
     return SizeHint{4, std::max(10, text::text_width(text()) + 1), ui::kUnboundedExtent};
 }
 
 int InputLine::scroll_offset_for_display() const {
+    // Password echo always draws one column per grapheme (the echo
+    // glyph is a single ASCII char) regardless of the real grapheme's
+    // width, so column math must follow the SAME rule here as in
+    // draw() — using real widths for one and echo widths for the other
+    // would desync the cursor's displayed column from its scroll math.
     std::vector<int> col_of(graphemes_.size() + 1, 0);
-    for (std::size_t i = 0; i < graphemes_.size(); ++i) col_of[i + 1] = col_of[i] + text::grapheme_width(graphemes_[i]);
+    for (std::size_t i = 0; i < graphemes_.size(); ++i)
+        col_of[i + 1] = col_of[i] + (password_echo_ ? 1 : text::grapheme_width(graphemes_[i]));
 
     const int width = std::max(bounds().width, 1);
     if (col_of[cursor_] < width) return 0;
@@ -180,7 +377,8 @@ void InputLine::draw(scene::Painter& painter) {
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
 
     std::vector<int> col_of(graphemes_.size() + 1, 0);
-    for (std::size_t i = 0; i < graphemes_.size(); ++i) col_of[i + 1] = col_of[i] + text::grapheme_width(graphemes_[i]);
+    for (std::size_t i = 0; i < graphemes_.size(); ++i)
+        col_of[i + 1] = col_of[i] + (password_echo_ ? 1 : text::grapheme_width(graphemes_[i]));
 
     const int scroll = scroll_offset_for_display();
     const auto [sel_begin, sel_end] = selection_range();
@@ -190,7 +388,8 @@ void InputLine::draw(scene::Painter& painter) {
         if (x >= bounds().width) break;
         Style style = base;
         if (i >= sel_begin && i < sel_end) style.attrs |= Attr::Reverse;
-        painter.draw_text(Point{x, 0}, graphemes_[i], style);
+        const std::string glyph = password_echo_ ? std::string(1, echo_char_) : graphemes_[i];
+        painter.draw_text(Point{x, 0}, glyph, style);
     }
 
     if (has_focus_) {
@@ -198,7 +397,8 @@ void InputLine::draw(scene::Painter& painter) {
         if (cursor_x >= 0 && cursor_x < bounds().width) {
             Style cursor_style = base;
             cursor_style.attrs |= Attr::Reverse;
-            const std::string glyph = cursor_ < graphemes_.size() ? graphemes_[cursor_] : std::string(" ");
+            std::string glyph = cursor_ < graphemes_.size() ? graphemes_[cursor_] : std::string(" ");
+            if (password_echo_ && cursor_ < graphemes_.size()) glyph = std::string(1, echo_char_);
             painter.draw_text(Point{cursor_x, 0}, glyph, cursor_style);
         }
     }

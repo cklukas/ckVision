@@ -15,9 +15,11 @@ using ckv::Point;
 using ckv::Rect;
 using ckv::scene::Painter;
 using ckv::scene::Surface;
+using ckv::ui::HistoryRegistry;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
+namespace ui = ckv::ui;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::Button;
@@ -365,4 +367,175 @@ CK_TEST(long_text_scrolls_so_the_cursor_stays_visible) {
     input.draw(root);
     // The tail of the text (near the cursor) must be visible, not the head.
     CK_CHECK(row_text(s, 0).find('j') != std::string::npos);
+}
+
+// --- InputLine completion: validator, mask, password echo, history ---
+
+CK_TEST(validator_runs_automatically_after_every_edit) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_validator([](const std::string& s) { return s.size() >= 3; });
+    CK_CHECK(!input.valid());  // empty text fails immediately (validator runs on install)
+    input.on_text(ckv::TextEvent{"abc", false});
+    CK_CHECK(input.valid());
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Backspace, Modifier::None, ""}});
+    CK_CHECK(!input.valid());  // "ab" — edit re-runs the validator, overriding the prior verdict
+}
+
+CK_TEST(external_set_valid_is_overridden_by_the_next_edit_when_a_validator_is_installed) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_validator([](const std::string& s) { return !s.empty(); });
+    input.set_text("x");
+    input.set_valid(false);  // external override (e.g. a dialog-accept veto)
+    CK_CHECK(!input.valid());
+    input.on_text(ckv::TextEvent{"y", false});
+    CK_CHECK(input.valid());  // the edit re-validates and supersedes the stale external verdict
+}
+
+CK_TEST(with_no_validator_installed_set_valid_behaves_exactly_as_before) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_valid(false);
+    input.on_text(ckv::TextEvent{"x", false});
+    CK_CHECK(!input.valid());  // no validator installed: editing does not touch valid()
+}
+
+CK_TEST(mask_prefills_literals_and_placeholders) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("999-999");
+    CK_CHECK(input.text() == "___-___");
+    CK_CHECK(input.cursor() == 0);  // the first editable position
+}
+
+CK_TEST(typing_into_a_mask_only_accepts_matching_characters_and_auto_advances) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("999-999");
+    input.on_text(ckv::TextEvent{"1", false});
+    input.on_text(ckv::TextEvent{"a", false});  // rejected: '9' requires a digit
+    input.on_text(ckv::TextEvent{"2", false});
+    CK_CHECK(input.text() == "12_-___");
+    CK_CHECK(input.cursor() == 2);  // still waiting on the third digit
+}
+
+CK_TEST(typing_skips_over_literal_positions_automatically) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("999-999");
+    input.on_text(ckv::TextEvent{"1", false});
+    input.on_text(ckv::TextEvent{"2", false});
+    input.on_text(ckv::TextEvent{"3", false});  // fills the last digit before the literal '-'
+    CK_CHECK(input.text() == "123-___");
+    CK_CHECK(input.cursor() == 4);  // skipped straight past the literal to the next editable slot
+}
+
+CK_TEST(mask_letter_class_rejects_digits) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("AAA");
+    input.on_text(ckv::TextEvent{"5", false});
+    CK_CHECK(input.text() == "___");  // rejected
+    input.on_text(ckv::TextEvent{"x", false});
+    CK_CHECK(input.text() == "x__");
+}
+
+CK_TEST(mask_backspace_clears_the_previous_editable_position_and_moves_there) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("999");
+    input.on_text(ckv::TextEvent{"1", false});
+    input.on_text(ckv::TextEvent{"2", false});
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Backspace, Modifier::None, ""}});
+    CK_CHECK(input.text() == "1__");
+    CK_CHECK(input.cursor() == 1);
+}
+
+CK_TEST(mask_fully_filled_stops_accepting_further_input) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("99");
+    input.on_text(ckv::TextEvent{"1", false});
+    input.on_text(ckv::TextEvent{"2", false});
+    input.on_text(ckv::TextEvent{"3", false});  // no editable slot left
+    CK_CHECK(input.text() == "12");
+}
+
+CK_TEST(disabling_the_mask_preserves_the_current_masked_text_as_free_form) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_mask("99");
+    input.on_text(ckv::TextEvent{"1", false});
+    input.on_text(ckv::TextEvent{"2", false});
+    input.set_mask("");
+    CK_CHECK(!input.has_mask());
+    CK_CHECK(input.text() == "12");
+    input.on_text(ckv::TextEvent{"x", false});  // free-form editing now applies
+    CK_CHECK(input.text() == "12x");
+}
+
+CK_TEST(password_echo_hides_content_but_editing_still_affects_the_real_text) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_password_echo(true);
+    input.set_text("secret");
+    CK_CHECK(input.text() == "secret");  // the real underlying text is untouched
+
+    Surface s = make_surface(20, 1);
+    Painter painter(s, Rect{0, 0, 20, 1});
+    input.set_bounds(Rect{0, 0, 20, 1});
+    input.draw(painter);
+    CK_CHECK(row_text(s, 0).substr(0, 6) == "******");
+    CK_CHECK(row_text(s, 0).find('s') == std::string::npos);  // no real character leaks into the display
+}
+
+CK_TEST(history_up_cycles_to_the_most_recent_entry_and_down_restores_the_live_text) {
+    Fixture f;
+    ui::HistoryRegistry history;
+    history.record("k", "first");
+    history.record("k", "second");  // "second" is now most-recent (front)
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_history(&history, "k");
+    input.set_text("typing...");
+
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
+    CK_CHECK(input.text() == "second");
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
+    CK_CHECK(input.text() == "first");
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
+    CK_CHECK(input.text() == "first");  // already at the oldest entry — stays put
+
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    CK_CHECK(input.text() == "second");
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    CK_CHECK(input.text() == "typing...");  // restored the pre-browsing live text
+}
+
+CK_TEST(history_up_with_an_empty_registry_is_a_harmless_no_op) {
+    Fixture f;
+    ui::HistoryRegistry history;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_history(&history, "unused-key");
+    input.set_text("still here");
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
+    CK_CHECK(input.text() == "still here");
+}
+
+CK_TEST(commit_to_history_records_the_current_text_under_the_configured_key) {
+    Fixture f;
+    ui::HistoryRegistry history;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_history(&history, "k");
+    input.set_text("committed value");
+    input.commit_to_history();
+    CK_CHECK(history.entries("k").size() == 1);
+    CK_CHECK(history.entries("k")[0] == "committed value");
+}
+
+CK_TEST(without_a_history_registry_up_and_down_are_unhandled_as_before) {
+    Fixture f;
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}}));
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
 }
