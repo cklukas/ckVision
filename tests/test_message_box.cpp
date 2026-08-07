@@ -23,6 +23,7 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::ui::View;
 using ckv::widgets::Desktop;
+using ckv::widgets::exec_message_box;
 using ckv::widgets::make_message_box;
 using ckv::widgets::Window;
 using ckv::widgets::MessageBoxButtons;
@@ -297,4 +298,78 @@ CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_w
     CK_CHECK(app.focused() == default_button);
     CK_CHECK(desktop.active_window() == box_ptr);
     CK_CHECK(desktop.windows().back() == box_ptr);  // participates in cycling/z-order, not a bare orphan child
+}
+
+// --- exec_message_box (M9/WP-15, D-021's blocking convenience) -------------
+//
+// Unlike the tests above, these need `app`'s OWN theme/roles actually
+// styled (not a separate Fixture's) — exec_message_box's pump calls
+// step(), which paints the box for real, and a real paint resolves
+// roles through context().theme — the theme that propagated from
+// `app.root()` when the box attached, not whatever Fixture happens to
+// sit alongside it unconnected. Every real application does this same
+// `app.theme() = make_classic_theme(app.roles(), roles)` dance in its
+// own constructor; these tests just do it inline.
+
+CK_TEST(exec_message_box_returns_the_pressed_result_in_a_headless_script) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
+                                     MessageBoxButtons::Ok};
+    // exec_message_box blocks until the box closes — nothing can inject
+    // the dismissing key from outside a single-threaded call, so it's
+    // queued via post() ahead of time and drains during the pump's own
+    // first step() call, exactly like a headless script would arrange.
+    app.post([&app] { app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}); });
+
+    const MessageBoxResult result = exec_message_box(app, *desktop, roles, descriptor);
+    CK_CHECK(result == MessageBoxResult::Ok);
+    CK_CHECK(desktop->windows().empty());  // closed and self-detached, not left lingering
+}
+
+CK_TEST(exec_message_box_returns_the_escape_result_when_dismissed_via_esc) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Confirm", "Proceed?",
+                                     MessageBoxButtons::OkCancel};
+    app.post([&app] { app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}); });
+
+    const MessageBoxResult result = exec_message_box(app, *desktop, roles, descriptor);
+    CK_CHECK(result == MessageBoxResult::Cancel);
+}
+
+CK_TEST(exec_message_box_restores_focus_to_whatever_was_focused_before_the_call) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    auto* invoker = app.root().add_child(std::make_unique<View>());
+    invoker->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(invoker);
+
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
+                                     MessageBoxButtons::Ok};
+    app.post([&app] { app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}); });
+
+    exec_message_box(app, *desktop, roles, descriptor);
+    CK_CHECK(app.focused() == invoker);
 }

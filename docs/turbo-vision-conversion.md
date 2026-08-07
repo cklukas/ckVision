@@ -164,27 +164,46 @@ the content interior's own local origin (ckVision's content coordinate
 space starts at the window's interior, not the desktop — see
 `Window::content_rect()`).
 
-## The one deliberate deviation — and why
+## The one remaining structural difference — and why it isn't a gap
 
 Turbo Vision's `deskTop->execView(d)` **blocks the calling thread**
 until the dialog is dismissed: it runs a nested event loop right there
 in `greetingBox()`. ckVision's loop is embeddable by construction
 (`step()`/`wake()`, D-021 in `DECISIONS.md`) specifically so a host
-application can drive it from its own poll loop — which rules out a
-constructor-time blocking call by design, not by oversight. Modality
-in ckVision is loop *state* (a future modal stack, not yet built past
-M6's non-modal windows), not a nested native loop.
+application can drive it from its own poll loop — nested native loops
+are explicitly rejected by that decision, not merely deferred, since
+they're hostile to embedding and create re-entrancy hazards with
+`post()` and mid-modal destruction. Modality in ckVision is loop
+*state* instead (`Application::push_modal`/`pop_modal`, M9/WP-15): a
+modal push scopes event routing (mouse hit-testing, focus traversal,
+and the keyboard-accelerator keymap fallback) to the modal's own
+subtree until it closes — nothing outside a modal dialog is reachable
+while one is open, exactly like `execView` — but that scoping is
+decoupled from *blocking the caller*. `widgets::exec_message_box`/
+`Desktop::exec_window` layer a blocking convenience on top of the same
+mechanism for callers that need a result back synchronously (see
+`docs/standard-commands.md` and `plans/api-ergonomics-review-2.md`'s
+WP-15 entry); `greeting_box()` doesn't need one, since it has no result
+to consume, so it uses `push_modal`/`show_dialog` directly and returns
+immediately with the dialog open.
 
-The port's `greeting_box()` therefore opens the dialog as an ordinary,
-non-modal `Window` and gives each button its own `on_press` that
+The port's `greeting_box()` therefore pushes a real modal scope around
+an ordinary `Window` and gives each button its own `on_press` that
 closes it directly, rather than routing all four through one shared
-`cmCancel`-equivalent command. **Observable behavior is identical** —
-all four buttons dismiss the dialog, exactly as `hello.cpp`'s reader
-would expect (`tests/test_hello_golden.cpp`:
+`cmCancel`-equivalent command. **Observable behavior is now identical**
+for anyone interacting with the dialog: all four buttons dismiss it,
+exactly as `hello.cpp`'s reader would expect
+(`tests/test_hello_golden.cpp`:
 `every_greeting_button_dismisses_the_dialog_matching_the_originals_shared_cmcancel`
-drives all four and asserts the window closes each time) — but the
-*mechanism* differs because the two frameworks' event models differ at
-the root, not because ckVision's dialog code is somehow less capable.
+drives all four and asserts the window closes each time); Esc also
+dismisses it (`cancel_request`, wired as part of WP-15 — a real gap in
+an earlier, non-modal version of this port, not present here); and
+nothing outside the dialog responds while it's open
+(`while_the_greeting_dialog_is_open_background_accelerators_are_scoped_out`
+confirms Alt+X is inert until the dialog closes). The only remaining
+difference is non-observable: whether `greeting_box()` itself returns
+before or after dismissal, which nothing in this app — or a user
+watching the terminal — can tell apart.
 
 No other deviation was necessary. Layout, mnemonics (`&Greeting...` /
 `~G~reeting...`), the Alt-G/Alt-X chords, the menu separator, and the

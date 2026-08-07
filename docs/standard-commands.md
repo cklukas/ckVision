@@ -99,3 +99,14 @@ application should hard-code.
   is observable through the provider callback, not through
   `Application::dispatch`'s return value — the same way every other
   standard chord already works.
+- **`kClose`/`kQuit`'s default handlers** (M9/WP-15) are installed by
+  `Desktop::on_attached()` — but only if nothing has claimed the id
+  yet (`CommandRegistry::has_handler`), the same guarded pattern
+  `kMenu`'s own default follows. `kClose` closes the desktop's active
+  window (vetoable, `Window::close_request`); `kQuit` sweeps every
+  window through that same vetoable protocol, front-to-back, and only
+  calls `Application::request_quit()` if none of them veto
+  (`ARCHITECTURE.md` §5 "application quit sweeps all windows through
+  the same protocol"). Modal scoping (`Application::push_modal`)
+  suppresses both while a modal dialog is open, the same as any other
+  standard chord.

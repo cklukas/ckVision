@@ -10,12 +10,15 @@
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
+using ckv::ManualClock;
 using ckv::Rect;
 using ckv::scene::Painter;
 using ckv::scene::Surface;
+using ckv::ui::Application;
 using ckv::ui::Context;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
@@ -23,7 +26,10 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::Desktop;
+using ckv::widgets::schedule_self_detach;
 using ckv::widgets::Window;
+using ckv::widgets::WindowHandle;
+namespace ui = ckv::ui;
 
 namespace {
 struct Fixture {
@@ -729,4 +735,219 @@ CK_TEST(detach_child_on_a_window_added_via_plain_add_child_does_not_touch_window
     auto owned = desktop.detach_child(w);
     CK_CHECK(owned != nullptr);
     CK_CHECK(desktop.children().empty());
+}
+
+// --- kClose/kQuit default handlers + exec_window (M9/WP-15, D-021) --------
+//
+// Unlike every test above, these need a REAL Application with the
+// Desktop actually attached via add_child (not a standalone Desktop
+// with set_context() called by hand) — on_attached() only fires
+// through the real attach path, and that's what installs these
+// defaults, exactly like MenuBar's own kMenu default (see
+// test_menu.cpp's "F10 default activation" section, the same pattern).
+
+namespace {
+struct AttachedFixture {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    Fixture f;  // unused for styling here — only to match make_window()'s signature
+    StandardRoles roles = intern_standard_roles(app.roles());
+    Desktop* desktop = nullptr;
+
+    // Styles `app`'s OWN theme/roles (not `f`'s standalone ones) — real
+    // attachment propagates THIS context to every descendant (see
+    // View::add_child), so a Window attached here that later gets
+    // painted (exec_window's pump calls step(), which paints) must
+    // resolve real roles through it, exactly like every example's own
+    // `app_.theme() = make_classic_theme(app_.roles(), roles_);`.
+    AttachedFixture() {
+        app.theme() = make_classic_theme(app.roles(), roles);
+        auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
+                                                roles.dialog_background);
+        desktop = static_cast<Desktop*>(app.root().add_child(std::move(owned)));
+    }
+};
+}  // namespace
+
+CK_TEST(attaching_a_desktop_installs_itself_as_kclose_and_kquits_default_handler) {
+    AttachedFixture af;
+    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kClose));
+    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kQuit));
+}
+
+CK_TEST(a_pre_existing_kclose_handler_is_not_overridden_by_attaching_a_desktop) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    bool custom_ran = false;
+    app.commands().set_handler(ui::std_commands::kClose, [&] { custom_ran = true; });
+
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
+                                            roles.dialog_background);
+    app.root().add_child(std::move(owned));
+
+    app.commands().execute(ui::std_commands::kClose);
+    CK_CHECK(custom_ran);
+}
+
+CK_TEST(a_pre_existing_kquit_handler_is_not_overridden_by_attaching_a_desktop) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    bool custom_ran = false;
+    app.commands().set_handler(ui::std_commands::kQuit, [&] { custom_ran = true; });
+
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
+                                            roles.dialog_background);
+    app.root().add_child(std::move(owned));
+
+    app.commands().execute(ui::std_commands::kQuit);
+    CK_CHECK(custom_ran);
+    CK_CHECK(!app.quit_requested());  // the default sweep never ran, so it never requested quit
+}
+
+CK_TEST(destroying_the_desktop_clears_only_the_default_handlers_it_installed) {
+    AttachedFixture af;
+    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kClose));
+    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kQuit));
+
+    af.app.root().detach_child(af.desktop).reset();  // destroys the Desktop
+
+    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kClose));
+    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kQuit));
+}
+
+CK_TEST(kclose_default_closes_the_active_window) {
+    AttachedFixture af;
+    Window* w = af.desktop->add_window(make_window(af.f));
+    bool closed = false;
+    w->on_closed = [&] { closed = true; };
+
+    af.app.commands().execute(ui::std_commands::kClose);
+    CK_CHECK(closed);
+}
+
+CK_TEST(kclose_default_is_a_no_op_with_no_active_window) {
+    AttachedFixture af;
+    CK_CHECK(af.app.commands().execute(ui::std_commands::kClose));  // the handler ran, harmlessly
+}
+
+CK_TEST(kquit_default_sweeps_every_window_and_requests_quit_when_none_veto) {
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f));
+    Window* b = af.desktop->add_window(make_window(af.f));
+    int closed_count = 0;
+    a->on_closed = [&] { ++closed_count; };
+    b->on_closed = [&] { ++closed_count; };
+
+    af.app.commands().execute(ui::std_commands::kQuit);
+    CK_CHECK(closed_count == 2);
+    CK_CHECK(af.app.quit_requested());
+}
+
+CK_TEST(kquit_default_stops_at_the_first_veto_and_does_not_request_quit) {
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f));
+    Window* b = af.desktop->add_window(make_window(af.f));
+    int closed_count = 0;
+    // b is topmost (added last) — the sweep goes front-to-back (topmost
+    // first), so b is asked before a; vetoing it must stop the sweep
+    // before a is ever asked, not just before quit is requested.
+    b->close_request = [] { return false; };
+    a->on_closed = [&] { ++closed_count; };
+    b->on_closed = [&] { ++closed_count; };
+
+    af.app.commands().execute(ui::std_commands::kQuit);
+    CK_CHECK(closed_count == 0);
+    CK_CHECK(!af.app.quit_requested());
+}
+
+CK_TEST(exec_window_blocks_until_the_window_closes) {
+    AttachedFixture af;
+    auto modal = make_window(af.f);
+    Window* modal_ptr = modal.get();
+    modal->on_closed = [modal_ptr, &af] { schedule_self_detach(*modal_ptr, af.app); };
+
+    bool still_modal_mid_pump = false;
+    af.app.post([&] {
+        still_modal_mid_pump = af.app.is_modal();
+        modal_ptr->close();
+    });
+
+    CK_CHECK(af.desktop->windows().empty());
+    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+
+    CK_CHECK(still_modal_mid_pump);           // scoped for the duration of the pump...
+    CK_CHECK(!af.app.is_modal());             // ...and unscoped again once it returns
+    CK_CHECK(af.desktop->windows().empty());  // the modal window is gone
+}
+
+CK_TEST(exec_window_runs_posted_work_during_the_pump) {
+    // The "post during modal" re-entrancy case (D-021, WP-15's own
+    // acceptance criterion): posted work follows the ordinary
+    // single-loop rules regardless of modality, since step() itself has
+    // no notion of modal state at all — only dispatch() does.
+    AttachedFixture af;
+    auto modal = make_window(af.f);
+    Window* modal_ptr = modal.get();
+    modal->on_closed = [modal_ptr, &af] { schedule_self_detach(*modal_ptr, af.app); };
+
+    bool unrelated_work_ran = false;
+    af.app.post([&] { unrelated_work_ran = true; });  // ahead of the dismiss, same drain batch
+    af.app.post([&] { modal_ptr->close(); });
+
+    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+    CK_CHECK(unrelated_work_ran);
+}
+
+CK_TEST(exec_window_is_not_disrupted_by_an_unrelated_windows_close_during_the_pump) {
+    // The "close during modal" re-entrancy case: closing some OTHER
+    // window while exec_window's pump is running for THIS one must not
+    // end the pump early — it watches this specific window, not
+    // "windows() changed."
+    AttachedFixture af;
+    Window* other = af.desktop->add_window(make_window(af.f));
+    other->on_closed = [other, &af] { schedule_self_detach(*other, af.app); };
+
+    auto modal = make_window(af.f);
+    Window* modal_ptr = modal.get();
+    modal->on_closed = [modal_ptr, &af] { schedule_self_detach(*modal_ptr, af.app); };
+
+    bool modal_still_open_after_other_closed = false;
+    af.app.post([&] { other->close(); });
+    af.app.post([&] {
+        modal_still_open_after_other_closed = af.app.is_modal();
+        modal_ptr->close();
+    });
+
+    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+    CK_CHECK(modal_still_open_after_other_closed);
+    CK_CHECK(af.desktop->windows().empty());  // `other` and the modal both ended up closed
+}
+
+CK_TEST(exec_window_returns_promptly_if_quit_is_requested_before_the_window_closes) {
+    // Without this, a SIGINT delivered while an exec_* call is blocked
+    // (run()'s own SIGINT handler just sets the atomic flag, M9/WP-14)
+    // would leave the process stuck forever inside the pump — nothing
+    // would ever satisfy "the window closed," and step()/wake() alone
+    // have no way to interrupt a poll() that's waiting on terminal
+    // input which will never arrive. run_until()'s own
+    // quit_requested() check is what prevents this hang.
+    AttachedFixture af;
+    auto modal = make_window(af.f);
+    Window* modal_ptr = modal.get();
+    modal->on_closed = [modal_ptr, &af] { schedule_self_detach(*modal_ptr, af.app); };
+
+    af.app.post([&] { af.app.request_quit(); });  // never actually dismisses the modal
+
+    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+
+    CK_CHECK(af.app.quit_requested());
+    CK_CHECK(!af.app.is_modal());  // pop_modal still ran even though the window never closed
+    CK_CHECK(af.desktop->windows().size() == 1);  // the modal is still attached — never dismissed
 }

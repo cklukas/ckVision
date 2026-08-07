@@ -23,6 +23,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -57,5 +58,20 @@ struct MessageBoxDescriptor {
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
                                ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(MessageBoxResult)> on_result);
+
+// The blocking convenience (M9/WP-15, D-021's "blocking wrapper for
+// applications that own the loop"): builds and shows the box exactly
+// like make_message_box + Desktop::show_dialog, scopes input to it for
+// the duration (Desktop::exec_window), and returns the button's (or
+// Esc's) result once it closes — no nested native loop, built entirely
+// over Application::step(). Focus restores to whatever was focused
+// before the call, matching make_message_box's own restore_focus_to
+// contract. The non-blocking one-liner (make_message_box +
+// Desktop::show_dialog, fire-and-forget with a callback or no callback
+// at all) is unaffected and remains the right call for anything that
+// doesn't need to block.
+MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
+                                   const ui::StandardRoles& roles,
+                                   const MessageBoxDescriptor& descriptor);
 
 }  // namespace ckv::widgets

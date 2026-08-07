@@ -106,7 +106,8 @@ void Application::collect_focusable(View& view, std::vector<View*>& out) {
 
 std::vector<View*> Application::focusable_views() const {
     std::vector<View*> out;
-    collect_focusable(const_cast<View&>(root_), out);
+    View& start = modal_stack_.empty() ? const_cast<View&>(root_) : *modal_stack_.back();
+    collect_focusable(start, out);
     return out;
 }
 
@@ -182,7 +183,15 @@ View* Application::topmost_view_at(Point absolute_point) noexcept {
             if (View* hit = visit(**it)) return hit;
         return &v;
     };
-    return visit(root_);
+    // Modal scoping (M9/WP-15): while a modal is active, the search
+    // starts AT it rather than at root_ — a click that lands outside
+    // its own bounds (or on a sibling window entirely) simply never
+    // matches anything here, rather than falling through to whatever
+    // is underneath. No separate check needed anywhere downstream:
+    // every mouse-routing decision in dispatch() keys off this
+    // function's result.
+    View* const scope_root = modal_root();
+    return visit(scope_root != nullptr ? *scope_root : root_);
 }
 
 bool Application::dispatch(const term::TerminalEvent& event) {
@@ -190,8 +199,20 @@ bool Application::dispatch(const term::TerminalEvent& event) {
         [this](const auto& e) -> bool {
             using T = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<T, KeyEvent>) {
-                for (View* v = focused_; v != nullptr; v = v->parent())
+                // Modal scoping (M9/WP-15): the ancestor walk never
+                // continues past the active modal's own root (Window::
+                // on_key itself — accept_request/cancel_request — still
+                // fires; whatever it's nested inside, e.g. Desktop, does
+                // not), and the global accelerator fallback below is
+                // skipped entirely — a background window's own chords
+                // (including std_commands like kMenu/kQuit) must not
+                // fire while a modal owns the scope.
+                View* const scope_root = modal_root();
+                for (View* v = focused_; v != nullptr; v = v->parent()) {
                     if (v->on_key(e)) return true;
+                    if (v == scope_root) break;
+                }
+                if (scope_root != nullptr) return false;
                 // F1 context help (D-027) routes through std_commands::
                 // kHelp like any other standard chord (M9/WP-12) — its
                 // default handler (installed below, in the constructor)
@@ -372,9 +393,29 @@ void Application::wake() noexcept {
 void Application::run() {
     Application* previous_instance = g_run_instance.exchange(this, std::memory_order_relaxed);
     void (*previous_handler)(int) = std::signal(SIGINT, handle_run_sigint);
-    while (!quit_requested()) step(clock_.now_nanos() + kDefaultFrameIntervalNanos);
+    run_until([] { return false; });
     std::signal(SIGINT, previous_handler);
     g_run_instance.store(previous_instance, std::memory_order_relaxed);
+}
+
+bool Application::run_until(const std::function<bool()>& done) {
+    // Calls done() exactly once per check (never a redundant extra call
+    // after the loop exits) — done() may carry real side effects (a
+    // step counter, a captured optional) that a spurious re-evaluation
+    // would visibly duplicate.
+    bool finished = done();
+    while (!finished && !quit_requested()) {
+        step(clock_.now_nanos() + kDefaultFrameIntervalNanos);
+        finished = done();
+    }
+    return finished;
+}
+
+void Application::push_modal(View& modal_root) { modal_stack_.push_back(&modal_root); }
+
+void Application::pop_modal() {
+    CKV_ASSERT(!modal_stack_.empty());
+    modal_stack_.pop_back();
 }
 
 }  // namespace ckv::ui

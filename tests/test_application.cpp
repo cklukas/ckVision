@@ -679,6 +679,160 @@ CK_TEST(run_returns_immediately_without_stepping_if_quit_was_already_requested) 
     CK_CHECK(true);  // reaching this line at all is the assertion
 }
 
+CK_TEST(run_until_stops_and_returns_true_once_the_predicate_holds) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int checks = 0;
+    const bool finished = app.run_until([&] { return ++checks >= 3; });
+    CK_CHECK(finished);
+    CK_CHECK(checks == 3);  // exactly one check per loop iteration, no extra spurious call
+}
+
+CK_TEST(run_until_returns_false_if_interrupted_by_a_quit_request) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int checks = 0;
+    const bool finished = app.run_until([&] {
+        if (++checks == 2) app.request_quit();
+        return false;  // never satisfied on its own
+    });
+    CK_CHECK(!finished);
+    CK_CHECK(app.quit_requested());
+}
+
+// --- Modality (M9/WP-15, D-021) --------------------------------------------
+
+CK_TEST(push_modal_confines_focus_traversal_to_the_modal_subtree) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    auto* modal_root = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* inner_a = static_cast<ProbeView*>(modal_root->add_child(std::make_unique<ProbeView>()));
+    auto* inner_b = static_cast<ProbeView*>(modal_root->add_child(std::make_unique<ProbeView>()));
+    inner_a->set_focus_policy(FocusPolicy::TabStop);
+    inner_b->set_focus_policy(FocusPolicy::TabStop);
+
+    app.push_modal(*modal_root);
+    CK_CHECK(app.focus_next());
+    CK_CHECK(app.focused() == inner_a);
+    CK_CHECK(app.focus_next());
+    CK_CHECK(app.focused() == inner_b);
+    CK_CHECK(app.focus_next());  // wraps within the modal subtree, never reaching `background`
+    CK_CHECK(app.focused() == inner_a);
+}
+
+CK_TEST(push_modal_confines_mouse_hit_testing_to_the_modal_subtree) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto background_owned = std::make_unique<ProbeView>(Rect{0, 0, 10, 10});
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::move(background_owned)));
+    auto modal_owned = std::make_unique<ProbeView>(Rect{20, 0, 10, 10});
+    auto* modal_root = static_cast<ProbeView*>(app.root().add_child(std::move(modal_owned)));
+
+    auto down_at = [](ckv::Point p) {
+        return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, p, std::nullopt,
+                                Modifier::None};
+    };
+
+    app.push_modal(*modal_root);
+    CK_CHECK(!app.dispatch(down_at(ckv::Point{2, 2})));
+    CK_CHECK(background->mouse_events == 0);  // scoped out entirely — never even hit-tested
+
+    CK_CHECK(app.dispatch(down_at(ckv::Point{22, 2})));
+    CK_CHECK(modal_root->mouse_events == 1);
+}
+
+CK_TEST(push_modal_suppresses_the_global_accelerator_fallback) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    constexpr ckv::ui::CommandId kSomeCommand = ckv::ui::kFirstApplicationCommandId;
+    const KeyChord escape{Key::Escape, Modifier::None, ""};
+    app.commands().register_command(kSomeCommand, "Something", "App", escape);
+    bool ran = false;
+    app.set_command_handler(kSomeCommand, [&] { ran = true; });
+
+    auto* modal_root = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    app.push_modal(*modal_root);
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}));
+    CK_CHECK(!ran);  // a background accelerator must not fire while a modal owns the scope
+
+    app.pop_modal();
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}));
+    CK_CHECK(ran);  // restored once popped
+}
+
+CK_TEST(push_modal_delivers_on_key_up_through_the_modal_root_but_never_past_it) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* outer = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* modal_root = static_cast<ProbeView*>(outer->add_child(std::make_unique<ProbeView>()));
+    auto* inner = static_cast<ProbeView*>(modal_root->add_child(std::make_unique<ProbeView>()));
+    inner->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(inner);
+
+    app.push_modal(*modal_root);
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}));
+    CK_CHECK(inner->key_events == 1);
+    CK_CHECK(modal_root->key_events == 1);  // the walk reaches the modal root itself...
+    CK_CHECK(outer->key_events == 0);       // ...but never continues past it
+}
+
+CK_TEST(nested_modals_scope_to_the_innermost_and_popping_restores_each_level) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* outer_view = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    outer_view->set_focus_policy(FocusPolicy::TabStop);
+    auto* modal_a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* inside_a = static_cast<ProbeView*>(modal_a->add_child(std::make_unique<ProbeView>()));
+    inside_a->set_focus_policy(FocusPolicy::TabStop);
+    auto* modal_b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* inside_b = static_cast<ProbeView*>(modal_b->add_child(std::make_unique<ProbeView>()));
+    inside_b->set_focus_policy(FocusPolicy::TabStop);
+
+    app.push_modal(*modal_a);
+    CK_CHECK(app.is_modal());
+    CK_CHECK(app.focus_next());
+    CK_CHECK(app.focused() == inside_a);
+
+    app.push_modal(*modal_b);  // a modal on top of a modal (VISION.md's nested modality)
+    CK_CHECK(app.focus_next());
+    CK_CHECK(app.focused() == inside_b);  // the innermost modal wins, oblivious to modal_a
+
+    app.pop_modal();
+    CK_CHECK(app.focus_next());
+    CK_CHECK(app.focused() == inside_a);  // back to scoping against modal_a alone
+
+    app.pop_modal();
+    CK_CHECK(!app.is_modal());
+    app.set_focus(nullptr);
+    CK_CHECK(app.focus_next());
+    CK_CHECK(app.focused() == outer_view);  // fully unscoped again
+}
+
+CK_TEST(pop_modal_on_an_empty_stack_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+        ManualClock clock;
+        Application app(term, clock);
+        app.pop_modal();  // nothing was ever pushed — must abort
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
 // --- F1 context help (D-027) -------------------------------------------
 
 // F1 is std_commands::kHelp's default chord (M9/WP-12): it now always

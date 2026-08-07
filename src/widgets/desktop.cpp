@@ -13,6 +13,40 @@ Desktop::Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role
     last_content_area_ = content_area();
 }
 
+Desktop::~Desktop() {
+    if (app_ == nullptr) return;
+    if (installed_default_close_handler_) {
+        app_->commands().set_handler(ui::std_commands::kClose, nullptr);
+    }
+    if (installed_default_quit_handler_) {
+        app_->commands().set_handler(ui::std_commands::kQuit, nullptr);
+    }
+}
+
+void Desktop::on_attached() {
+    app_ = context().app;
+    if (app_ == nullptr) return;
+    ui::CommandRegistry& commands = app_->commands();
+    if (!commands.has_handler(ui::std_commands::kClose)) {
+        commands.set_handler(ui::std_commands::kClose, [this] { close_active_window(); });
+        installed_default_close_handler_ = true;
+    }
+    if (!commands.has_handler(ui::std_commands::kQuit)) {
+        commands.set_handler(ui::std_commands::kQuit, [this] { quit_sweep(); });
+        installed_default_quit_handler_ = true;
+    }
+}
+
+void Desktop::close_active_window() {
+    if (active_ != nullptr) active_->close();
+}
+
+void Desktop::quit_sweep() {
+    for (auto it = windows_.rbegin(); it != windows_.rend(); ++it)
+        if (!(*it)->close()) return;  // vetoed: the sweep stops here, quit is cancelled
+    if (app_ != nullptr) app_->request_quit();
+}
+
 Window* Desktop::add_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
     auto* raw = add(std::move(window));
@@ -29,6 +63,15 @@ Window* Desktop::show_dialog(WindowHandle handle, ui::Application& app) {
     Window* window = add_window(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     return window;
+}
+
+void Desktop::exec_window(ui::Application& app, WindowHandle handle) {
+    Window* window = show_dialog(std::move(handle), app);
+    app.push_modal(*window);
+    app.run_until([this, window] {
+        return std::find(windows_.begin(), windows_.end(), window) == windows_.end();
+    });
+    app.pop_modal();
 }
 
 std::unique_ptr<Window> Desktop::remove_window(Window* window) {

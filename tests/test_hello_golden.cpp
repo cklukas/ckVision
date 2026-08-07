@@ -81,6 +81,31 @@ CK_TEST(alt_g_opens_the_greeting_dialog_matching_the_originals_alt_g_mnemonic) {
     CK_CHECK(hello.desktop().windows().front()->title() == "Hello, World!");
 }
 
+CK_TEST(while_the_greeting_dialog_is_open_background_accelerators_are_scoped_out) {
+    // The greeting box is a real modal now (M9/WP-15, D-021) — Alt+X
+    // (kQuit) is a BACKGROUND accelerator while it's open, and Esc now
+    // dismisses the box (a real gap the prior non-modal Window left
+    // unwired — see hello_app.cpp's greeting_box() doc comment).
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::hello::HelloApp hello(app);
+    app.step(0);
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
+    CK_CHECK(hello.desktop().windows().size() == 1);
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}});
+    CK_CHECK(!app.quit_requested());  // scoped out while the dialog is modal
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    app.step(0);  // drains the deferred self-detach
+    CK_CHECK(hello.desktop().windows().empty());
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}});
+    CK_CHECK(app.quit_requested());  // restored once the modal closes
+}
+
 CK_TEST(every_greeting_button_dismisses_the_dialog_matching_the_originals_shared_cmcancel) {
     // The original wires all four buttons to the SAME command
     // (cmCancel) — every button means "dismiss," none is individually

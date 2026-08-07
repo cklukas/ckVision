@@ -64,14 +64,19 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 // Turbo Vision's greetingBox() builds a MODAL TDialog (deskTop->execView
 // blocks until a button fires cmCancel) with four buttons that all
 // carry the SAME command (cmCancel) — every button means "dismiss,"
-// none is individually distinguishable by the handler. ckVision has no
-// modal-blocking primitive in v1 (D-021: modality is loop state, a
-// push onto a modality stack that completes via callback — not a
-// nested native loop a constructor can just block inside), so this is
-// built as a non-modal Window instead, and each button's on_press
-// closes it directly rather than routing through one shared command —
-// the one deliberate structural deviation from the original, discussed
-// in docs/turbo-vision-conversion.md.
+// none is individually distinguishable by the handler. ckVision's own
+// modal push (Application::push_modal, M9/WP-15, D-021) reproduces the
+// SAME input scoping — nothing outside the box is reachable while it's
+// open — but D-021 deliberately separates modality (loop state) from
+// blocking (an opt-in convenience, Desktop::exec_window/
+// exec_message_box, for callers that need a result back synchronously):
+// greeting_box() has no result to consume, so it stays non-blocking —
+// push_modal here, pop_modal from on_closed — rather than reaching for
+// exec_window. Observable behavior IS now identical to the original for
+// anyone interacting with the box (every button AND Esc dismiss it,
+// nothing outside it responds while it's open); the only remaining
+// difference is non-observable (whether greeting_box() itself returns
+// before or after dismissal, which nothing in this app depends on).
 void HelloApp::greeting_box() {
     // Dialog-gray chrome, not the blue document-window roles — the
     // original's greeting box is a dialog, and dialogs are the gray
@@ -99,9 +104,19 @@ void HelloApp::greeting_box() {
     }
 
     window->set_content(std::move(content));
-    window->on_closed = [window_ptr, this] { schedule_self_detach(*window_ptr, app_); };
-    desktop_->add_window(std::move(window));
-    app_.set_focus(first_button);
+    // Esc dismisses too, exactly like every button — the ORIGINAL's
+    // own cmCancel-for-everything behavior, left unwired by the prior
+    // non-modal version of this box (a real gap, fixed here:
+    // docs/turbo-vision-conversion.md's deviation note shrinks
+    // accordingly now that this is a genuine modal).
+    window->cancel_request = [window_ptr] { window_ptr->close(); };
+    window->on_closed = [window_ptr, this] {
+        app_.pop_modal();
+        schedule_self_detach(*window_ptr, app_);
+    };
+    widgets::Window* attached =
+        desktop_->show_dialog(widgets::WindowHandle{std::move(window), first_button}, app_);
+    app_.push_modal(*attached);
 }
 
 }  // namespace ckv::hello

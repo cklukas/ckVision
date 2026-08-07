@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/message_box.hpp"
 
+#include <optional>
 #include <vector>
 
 #include "cvision/core/assert.hpp"
@@ -103,6 +104,22 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     };
 
     return WindowHandle{std::move(window), default_button};
+}
+
+MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
+                                   const ui::StandardRoles& roles,
+                                   const MessageBoxDescriptor& descriptor) {
+    std::optional<MessageBoxResult> result;
+    auto on_result = [&result](MessageBoxResult r) { result = r; };
+    auto handle = make_message_box(descriptor, roles, app, app.focused(), on_result);
+    desktop.exec_window(app, std::move(handle));
+    // on_result always fires before the box's own close() call, on
+    // every dismissal path (every button, and cancel_request/Esc) — the
+    // only way exec_window's wait ends without a result already
+    // captured is a quit request arriving mid-modal (e.g. Ctrl+C);
+    // escape_result is the same "the user walked away" fallback Esc
+    // itself already maps to.
+    return result.value_or(escape_result(descriptor.buttons));
 }
 
 }  // namespace ckv::widgets

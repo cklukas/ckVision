@@ -20,9 +20,18 @@
 
 namespace ckv::widgets {
 
+// kClose/kQuit default handlers (M9/WP-15, D-029 completion): on_attached()
+// installs itself as each command's default handler — but ONLY if
+// nothing has claimed it yet (CommandRegistry::has_handler), same
+// guarded-install/guarded-cleanup pattern MenuBar's own kMenu default
+// established (M9/WP-13) — so an application that wires its own
+// kClose/kQuit handler before attaching a Desktop is never overridden,
+// and the destructor clears whichever of the two THIS instance
+// installed, never one it found already claimed.
 class Desktop : public ui::View {
 public:
     Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role);
+    ~Desktop() override;
 
     // Adds `window`, activating it (raising to front, deactivating any
     // previously active window) and returning a non-owning observer.
@@ -40,6 +49,20 @@ public:
     // right call for an application's OWN windows, which don't come
     // with a pre-computed initial_focus to hand to set_focus.
     Window* show_dialog(WindowHandle handle, ui::Application& app);
+
+    // The blocking sibling of show_dialog (M9/WP-15, D-021's "blocking
+    // convenience for applications that own the loop"): attaches and
+    // focuses `handle` exactly like show_dialog, then scopes event
+    // routing to it (Application::push_modal) and pumps
+    // Application::step() — never a nested native loop — until the
+    // window is no longer among windows() (it has closed and self-
+    // detached), popping the modal scope before returning. Doesn't
+    // interpret WHAT closed the window or produce any result of its
+    // own: exec_message_box (and any future exec_dialog/
+    // exec_file_dialog) captures its own typed result through the SAME
+    // on_result-style callback its factory already accepts — into a
+    // local read back after this call returns.
+    void exec_window(ui::Application& app, WindowHandle handle);
 
     // Detaches and returns ownership (nullptr if `window` is not one of
     // this desktop's windows). If it was the active window, activates
@@ -93,6 +116,7 @@ public:
     Rect content_area() const noexcept;
 
     void on_resized() override;
+    void on_attached() override;
 
     // Raises `window` to the front and marks it active, deactivating
     // whichever window was active before (a no-op if `window` is
@@ -172,6 +196,22 @@ private:
     ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
     ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
+    // kClose's default handler: closes the active window (vetoable,
+    // exactly what clicking its own close control already does) — a
+    // no-op with no active window.
+    void close_active_window();
+    // kQuit's default handler: sweeps every window through the same
+    // vetoable close() protocol clicking each one's own close control
+    // would (ARCHITECTURE.md §5 "application quit sweeps all windows
+    // through the same protocol"), front-to-back so a topmost "are you
+    // sure" dialog a window's own close_request opens gets seen first;
+    // the FIRST veto stops the sweep entirely (quit is cancelled — not
+    // "close everything that didn't veto, then quit anyway"). Only
+    // calls Application::request_quit() if every window's close()
+    // returned true. close() never itself detaches a window — see
+    // Window::close()'s own doc comment — so this never mutates
+    // windows_ while iterating it.
+    void quit_sweep();
 
     const ui::Theme& theme_;
     ui::RoleId background_role_;
@@ -180,6 +220,9 @@ private:
     std::vector<ui::View*> popups_;
     ui::View* top_dock_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
+    ui::Application* app_ = nullptr;
+    bool installed_default_close_handler_ = false;
+    bool installed_default_quit_handler_ = false;
     // content_area() as of the end of the previous on_resized() pass —
     // DesktopGrowPolicy::AnchorEdges needs the delta between the old
     // and new area to preserve each such window's right/bottom margin

@@ -234,8 +234,58 @@ public:
     // own event loop uses step()/wake() directly instead — those stay
     // exactly as they are, with no signal-handling side effect; run()
     // is a separate, optional entry point layered on top of them, not
-    // a replacement.
+    // a replacement. Defined in terms of run_until() below (a constant-
+    // false predicate — only quit_requested() ever ends it).
     void run();
+
+    // Steps repeatedly, at run()'s own cadence, until either `done()`
+    // returns true or quit_requested() does — whichever comes first —
+    // and returns done()'s own final value, so a caller can tell
+    // "completed normally" from "interrupted by a quit request" (e.g.
+    // Ctrl+C arriving while blocked). This is the shared primitive
+    // run() itself is built on (done = []{ return false; }, so only
+    // quit_requested() ends it) and that every widgets::exec_* modal
+    // convenience (M9/WP-15, D-021) uses to block without a nested
+    // native loop — neither duplicates run()'s own step-cadence logic,
+    // and neither hangs forever if a quit is requested while blocked.
+    // Nothing stops an application from calling this directly for its
+    // own blocking-wait needs.
+    bool run_until(const std::function<bool()>& done);
+
+    // --- Modality (M9/WP-15, D-021) --------------------------------------
+    //
+    // A modal push scopes event routing to `modal_root`'s own subtree
+    // until the matching pop_modal(): mouse hit-testing (topmost_view_at)
+    // searches only within it — a click outside is simply not delivered,
+    // never falls through to whatever is underneath; Tab/Shift-Tab
+    // traversal only cycles views within it; and the keyboard-
+    // accelerator command-keymap fallback is suppressed entirely (only
+    // the focus chain's own on_key delivery still runs, and only up
+    // through modal_root itself — e.g. Window::on_key's accept_request/
+    // cancel_request wiring — never past it to whatever it's nested
+    // inside). A stack, not a single slot, so a modal opening a second
+    // modal on top of it (VISION.md's "nested modality") scopes
+    // correctly to the innermost one without either side needing to
+    // know about the other.
+    //
+    // widgets::exec_window (and every exec_* built on it) is the
+    // sanctioned way most applications reach this — push/pop is public
+    // because D-021 makes the modal push itself, not just its blocking
+    // wrapper, part of the decided design; an application with its own
+    // non-blocking modal need (scoping input without wanting to block
+    // the calling code) can call it directly.
+    void push_modal(View& modal_root);
+
+    // Pops the most recently pushed modal. Takes no argument and never
+    // dereferences the popped View: by the time an exec_* wrapper is
+    // ready to pop, the modal's own Window may already be destroyed —
+    // a dialog's standard "close, then self-detach via post()" sequence
+    // runs to completion inside the very step() call that produces the
+    // result exec_window was waiting on — so popping is by stack
+    // position, never by identity. CKV_ASSERT if the stack is empty.
+    void pop_modal();
+
+    bool is_modal() const noexcept { return !modal_stack_.empty(); }
 
     // Makes run()'s next loop check return promptly. Also callable
     // directly regardless of whether run() is in use at all — e.g.
@@ -253,6 +303,12 @@ private:
     View* topmost_view_at(Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
     std::vector<View*> focusable_views() const;
+    // The innermost active modal, or nullptr if none — the single spot
+    // dispatch()/topmost_view_at()/focusable_views() all consult to
+    // scope routing (see push_modal's own doc comment above).
+    View* modal_root() const noexcept {
+        return modal_stack_.empty() ? nullptr : modal_stack_.back();
+    }
     void paint_and_present();
 
     term::Terminal& terminal_;
@@ -293,6 +349,7 @@ private:
     View* focused_ = nullptr;
     View* mouse_capture_ = nullptr;
     View* input_capture_ = nullptr;
+    std::vector<View*> modal_stack_;
 
     std::function<void(const std::string&)> help_provider_;
 

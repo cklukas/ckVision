@@ -11,7 +11,8 @@
 //
 // This is a PORT — the same behavior expressed in ckVision's own
 // idiom, not a transliteration. See the doc comment on greeting_box()
-// for the one deliberate structural deviation from the original.
+// for the one remaining (non-observable) structural difference from
+// the original.
 #pragma once
 
 #include "cvision/ui/application.hpp"
