@@ -69,10 +69,28 @@ Windows host per ROADMAP.md): the render pipeline is now real — the
 gap where `Application::step()` dispatched input but nothing ever
 painted anything is closed (`View::paint_children`, reusing
 `scene::Compositor`/`term::Presenter`); window shadows actually
-composite (`widgets::Desktop::paint_children`); the `examples/gallery`
-example app exercises rendering, keyboard/mouse navigation, and Sixel
-images end to end, with a matching documentation page and generated
-screenshots — see [docs/example-apps.md](docs/example-apps.md).
+composite (`widgets::Desktop::paint_children`). Two example apps —
+`examples/gallery` (rendering, keyboard/mouse navigation, Sixel images)
+and `examples/filebrowser` (a `TreeView`-drives-`ListView` master-
+detail folder browser over the real disk, via the new
+`term::PosixFileSystem`) — with a matching documentation page and
+generated screenshots, rendered to HTML/PDF via CK Office Write's
+`ckwrite` (see [docs/example-apps.md](docs/example-apps.md) and
+`tools/docgen/generate_docs.sh`).
+
+A follow-up ergonomics/resize review asked pointed questions (does a
+resize keep chrome pinned, can widgets dock to edges, can extra
+widgets live on a window's own frame, is a tree-driven master-detail
+pattern actually supported) and found — then closed — three real
+gaps: `widgets::Desktop` had no resize reflow at all (menu bars/status
+lines went stale after a terminal resize, and windows could end up
+unreachable outside the shrunk area) — fixed with
+`Desktop::dock_top`/`dock_bottom` + `content_area()` +
+`Window::reposition_within`; `TreeView` had no selection/activation
+callback (the exact hook a master-detail pane needs) — added,
+mirroring `ListView`'s own; and there was no way to attach a second
+widget to a window's own border (e.g. a "current line" indicator) —
+added via `Window::set_frame_overlay`.
 
 ## Documents
 
