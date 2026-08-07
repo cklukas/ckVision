@@ -15,7 +15,7 @@ Desktop::Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role
 
 Window* Desktop::add_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
-    auto* raw = static_cast<Window*>(add_child(std::move(window)));
+    auto* raw = add(std::move(window));
     windows_.push_back(raw);  // stable insertion order — cycling order, not z-order
     // Window never depends on Desktop directly (it stays independently
     // testable) — this is the one place that wiring happens, so the
@@ -77,7 +77,7 @@ void Desktop::activate(Window* window) {
     active_->set_active(true);
 }
 
-ui::View* Desktop::add_popup(std::unique_ptr<ui::View> popup) {
+ui::View* Desktop::add_popup_impl(std::unique_ptr<ui::View> popup) {
     CKV_ASSERT(popup != nullptr);
     ui::View* raw = add_child(std::move(popup));
     popups_.push_back(raw);  // already topmost: add_child appends to the end of children_
@@ -124,7 +124,7 @@ void Desktop::select_by_number(int n) {
     activate(windows_[static_cast<std::size_t>(n - 1)]);
 }
 
-ui::View* Desktop::dock_top(std::unique_ptr<ui::View> view) {
+ui::View* Desktop::dock_top_impl(std::unique_ptr<ui::View> view) {
     CKV_ASSERT(view != nullptr);
     ui::View* raw = add_child(std::move(view));
     top_dock_ = raw;
@@ -132,7 +132,7 @@ ui::View* Desktop::dock_top(std::unique_ptr<ui::View> view) {
     return raw;
 }
 
-ui::View* Desktop::dock_bottom(std::unique_ptr<ui::View> view) {
+ui::View* Desktop::dock_bottom_impl(std::unique_ptr<ui::View> view) {
     CKV_ASSERT(view != nullptr);
     ui::View* raw = add_child(std::move(view));
     bottom_dock_ = raw;

@@ -32,7 +32,7 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // status line pinned to the last row across every future terminal
     // resize — Desktop::on_resized() re-derives its position from
     // content_area() automatically; see tests/test_m8_integration.cpp.
-    status_ = static_cast<widgets::StatusLine*>(desktop_->dock_bottom(std::move(status)));
+    status_ = desktop_->dock_bottom(std::move(status));
 
     build_menu_bar();
     build_controls_window();
@@ -78,7 +78,7 @@ void GalleryApp::build_menu_bar() {
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
-    menu_ = static_cast<widgets::MenuBar*>(desktop_->dock_top(std::move(menu)));
+    menu_ = desktop_->dock_top(std::move(menu));
 }
 
 void GalleryApp::build_controls_window() {

@@ -72,7 +72,7 @@ void HelloApp::greeting_box() {
     for (const auto& [label, y] : labels) {
         auto button = std::make_unique<widgets::Button>(label);
         button->set_bounds(Rect{15, y, 12, 2});
-        widgets::Button* raw = static_cast<widgets::Button*>(content->add_child(std::move(button)));
+        widgets::Button* raw = content->add(std::move(button));
         if (first_button == nullptr) first_button = raw;
         raw->on_press = [window_ptr] { window_ptr->close(); };
     }

@@ -6,15 +6,13 @@
 namespace ckv::widgets {
 
 ScrollViewport::ScrollViewport() {
-    auto v = std::make_unique<Scrollbar>(Orientation::Vertical);
-    v_scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(v)));
+    v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->on_position_changed = [this](int p) {
         scroll_y_ = p;
         reposition_content();
     };
 
-    auto h = std::make_unique<Scrollbar>(Orientation::Horizontal);
-    h_scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(h)));
+    h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->on_position_changed = [this](int p) {
         scroll_x_ = p;
         reposition_content();

@@ -238,7 +238,7 @@ void MenuBar::open_dropdown(std::size_t menu_index) {
     const int local_x = abs.x + menu_bar_offset_for(menus_, menu_index) - desktop_abs.x;
     const int local_y = abs.y + 1 - desktop_abs.y;
 
-    auto* raw = static_cast<DropdownMenu*>(desktop_->add_popup(std::move(dropdown)));
+    auto* raw = desktop_->add_popup(std::move(dropdown));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
     raw->set_bounds(Rect{local_x, local_y, w.preferred, h.preferred});
@@ -328,7 +328,7 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
                                  ui::Application& app, Desktop& desktop) {
     auto menu = std::make_unique<DropdownMenu>(std::move(items));
     const Rect desktop_abs = desktop.absolute_bounds();
-    auto* raw = static_cast<DropdownMenu*>(desktop.add_popup(std::move(menu)));
+    auto* raw = desktop.add_popup(std::move(menu));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
     raw->set_bounds(Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred,

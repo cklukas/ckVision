@@ -14,8 +14,7 @@ bool position_less(const MemoPosition& a, const MemoPosition& b) noexcept {
 }  // namespace
 
 Memo::Memo() {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
-    scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
+    scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     set_focus_policy(ui::FocusPolicy::TabStop);
     lines_.emplace_back();
 }

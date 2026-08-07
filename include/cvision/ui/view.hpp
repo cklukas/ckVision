@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "cvision/core/event.hpp"
@@ -56,7 +57,27 @@ public:
     const std::vector<std::unique_ptr<View>>& children() const noexcept { return children_; }
 
     // Returns a non-owning observer pointer to the child just added.
+    // The type-erased primitive every other insertion form below is
+    // built on.
     View* add_child(std::unique_ptr<View> child);
+
+    // Typed insertion (M9/WP-9): adds `child` and returns it back as
+    // T*, not View* — no static_cast at the call site. `add_child`
+    // itself stays the type-erased primitive library internals reach
+    // for when they only have a View&/View*; add<T>/make<T> are what
+    // application code and library composition should reach for
+    // instead whenever the concrete type is known up front.
+    template <class T>
+    T* add(std::unique_ptr<T> child) {
+        static_assert(std::is_base_of_v<View, T>, "T must derive from ui::View");
+        return static_cast<T*>(add_child(std::move(child)));
+    }
+
+    // Emplace form of add<T>: constructs T in place and attaches it.
+    template <class T, class... Args>
+    T* make(Args&&... args) {
+        return add(std::make_unique<T>(std::forward<Args>(args)...));
+    }
 
     // Detaches and returns ownership of `child` (nullptr if `child` is
     // not one of this view's children). The caller decides its fate —

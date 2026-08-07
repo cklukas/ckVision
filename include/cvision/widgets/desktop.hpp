@@ -72,8 +72,16 @@ public:
     // the caller still owns that decision (mirrors set_content()'s
     // "replaces and returns ownership" for the rare case an application
     // wants to swap a status line at runtime, but most never will).
-    ui::View* dock_top(std::unique_ptr<ui::View> view);
-    ui::View* dock_bottom(std::unique_ptr<ui::View> view);
+    // Typed insertion (M9/WP-9): returns the docked view back as T*,
+    // not ui::View* — no static_cast at the call site.
+    template <class T>
+    T* dock_top(std::unique_ptr<T> view) {
+        return static_cast<T*>(dock_top_impl(std::move(view)));
+    }
+    template <class T>
+    T* dock_bottom(std::unique_ptr<T> view) {
+        return static_cast<T*>(dock_bottom_impl(std::move(view)));
+    }
     ui::View* top_dock() const noexcept { return top_dock_; }
     ui::View* bottom_dock() const noexcept { return bottom_dock_; }
 
@@ -122,7 +130,12 @@ public:
     // after it. A window activate() happening while a popup is open
     // re-raises every popup above the newly-activated window, so a
     // popup never gets visually buried by window activation.
-    ui::View* add_popup(std::unique_ptr<ui::View> popup);
+    // Typed insertion (M9/WP-9): returns the popup back as T*, not
+    // ui::View* — no static_cast at the call site.
+    template <class T>
+    T* add_popup(std::unique_ptr<T> popup) {
+        return static_cast<T*>(add_popup_impl(std::move(popup)));
+    }
     std::unique_ptr<ui::View> remove_popup(ui::View* popup);
     const std::vector<ui::View*>& popups() const noexcept { return popups_; }
 
@@ -155,6 +168,9 @@ public:
     void paint_children(const scene::Painter& own_painter) override;
 
 private:
+    ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
+    ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
+    ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
 
     const ui::Theme& theme_;

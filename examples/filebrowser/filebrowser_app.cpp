@@ -76,7 +76,7 @@ void FileBrowserApp::build_menu_bar() {
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
-    menu_ = static_cast<widgets::MenuBar*>(desktop_->dock_top(std::move(menu)));
+    menu_ = desktop_->dock_top(std::move(menu));
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);

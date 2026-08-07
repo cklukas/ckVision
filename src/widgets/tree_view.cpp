@@ -6,8 +6,7 @@
 namespace ckv::widgets {
 
 TreeView::TreeView() {
-    auto scrollbar = std::make_unique<Scrollbar>(Orientation::Vertical);
-    scrollbar_ = static_cast<Scrollbar*>(add_child(std::move(scrollbar)));
+    scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     set_focus_policy(ui::FocusPolicy::TabStop);
 }
 
