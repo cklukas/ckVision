@@ -1,0 +1,185 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/text_view.hpp"
+
+#include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
+#include "cvision/ui/standard_roles.hpp"
+
+using ckv::Key;
+using ckv::KeyChord;
+using ckv::Modifier;
+using ckv::Rect;
+using ckv::scene::Painter;
+using ckv::scene::Surface;
+using ckv::ui::intern_standard_roles;
+using ckv::ui::make_classic_theme;
+using ckv::ui::RoleRegistry;
+using ckv::ui::StandardRoles;
+using ckv::ui::Theme;
+using ckv::widgets::TextView;
+
+namespace {
+struct Fixture {
+    RoleRegistry registry;
+    StandardRoles roles = intern_standard_roles(registry);
+    Theme theme = make_classic_theme(registry, roles);
+};
+
+TextView make_view(Fixture& f) {
+    return TextView(f.theme, f.roles.static_text, f.roles.dialog_frame, f.roles.dialog_background);
+}
+
+ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
+
+std::string row_text(const Surface& s, int y) {
+    std::string out;
+    for (int x = 0; x < s.size().width; ++x) out += s.at(ckv::Point{x, y}).grapheme();
+    return out;
+}
+}  // namespace
+
+// --- Line splitting -----------------------------------------------------
+
+CK_TEST(empty_text_is_a_single_empty_line) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_text("");
+    CK_CHECK(view.line_count() == 1);
+}
+
+CK_TEST(text_with_no_newlines_is_a_single_line) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_text("hello world");
+    CK_CHECK(view.line_count() == 1);
+}
+
+CK_TEST(newlines_split_into_separate_lines_including_a_trailing_empty_one) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_text("a\nb\nc\n");
+    CK_CHECK(view.line_count() == 4);  // "a", "b", "c", ""
+}
+
+// --- Scrolling: keyboard -------------------------------------------------
+
+CK_TEST(down_arrow_scrolls_by_one_line) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 5});
+    std::string text;
+    for (int i = 0; i < 20; ++i) text += std::to_string(i) + "\n";
+    view.set_text(text);
+    view.on_key(key(Key::Down));
+    CK_CHECK(view.top_line() == 1);
+}
+
+CK_TEST(up_arrow_at_the_top_does_not_go_negative) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 5});
+    view.set_text("a\nb\nc");
+    view.on_key(key(Key::Up));
+    CK_CHECK(view.top_line() == 0);
+}
+
+CK_TEST(page_down_scrolls_by_the_visible_height) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 5});
+    std::string text;
+    for (int i = 0; i < 20; ++i) text += std::to_string(i) + "\n";
+    view.set_text(text);
+    view.on_key(key(Key::PageDown));
+    CK_CHECK(view.top_line() == 5);
+}
+
+CK_TEST(end_scrolls_to_the_maximum_reachable_top_line) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 5});
+    std::string text;
+    for (int i = 0; i < 20; ++i) text += std::to_string(i) + "\n";
+    view.set_text(text);
+    view.on_key(key(Key::End));
+    CK_CHECK(view.top_line() == view.line_count() - 5);
+}
+
+CK_TEST(home_returns_to_the_top) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 5});
+    std::string text;
+    for (int i = 0; i < 20; ++i) text += std::to_string(i) + "\n";
+    view.set_text(text);
+    view.on_key(key(Key::End));
+    view.on_key(key(Key::Home));
+    CK_CHECK(view.top_line() == 0);
+}
+
+CK_TEST(content_shorter_than_the_viewport_cannot_scroll_at_all) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 10});
+    view.set_text("a\nb");
+    view.on_key(key(Key::Down));
+    CK_CHECK(view.top_line() == 0);
+}
+
+// --- Scrolling: mouse wheel -----------------------------------------
+
+CK_TEST(mouse_wheel_scrolls_and_a_non_wheel_event_is_unhandled) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 5});
+    std::string text;
+    for (int i = 0; i < 20; ++i) text += std::to_string(i) + "\n";
+    view.set_text(text);
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown, ckv::Point{0, 0},
+                                            std::nullopt, Modifier::None}));
+    CK_CHECK(view.top_line() == 1);
+    CK_CHECK(!view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, 0},
+                                             std::nullopt, Modifier::None}));
+}
+
+// --- Rendering -----------------------------------------------------------
+
+CK_TEST(draw_renders_the_lines_starting_at_the_current_scroll_position) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 3});
+    view.set_text("first\nsecond\nthird\nfourth");
+    view.on_key(key(Key::Down));  // scroll to line 1 ("second")
+
+    Surface s(ckv::Size{20, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 3});
+    view.draw(painter);
+    CK_CHECK(row_text(s, 0).substr(0, 6) == "second");
+    CK_CHECK(row_text(s, 1).substr(0, 5) == "third");
+}
+
+CK_TEST(draw_leaves_rows_past_the_end_of_content_blank_without_crashing) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 10});  // far more rows than content
+    view.set_text("only line");
+
+    Surface s(ckv::Size{20, 10}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 10});
+    view.draw(painter);
+    CK_CHECK(row_text(s, 0).substr(0, 9) == "only line");
+    CK_CHECK(row_text(s, 5)[0] == ' ');  // cleared, not left as the surface's prior fill character
+}
+
+CK_TEST(a_zero_size_view_does_not_crash_on_draw_or_input) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 0, 0});
+    view.set_text("hello");
+    view.on_key(key(Key::Down));
+    Surface s(ckv::Size{1, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 1, 1});
+    view.draw(painter);
+    CK_CHECK(true);
+}
