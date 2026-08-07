@@ -211,13 +211,58 @@ Text view) ships in the library; status-line hints key off the same
 context mechanism. Help *content* and its storage format belong to the
 application.
 
+**D-028 — Ergonomic construction: constructors take content, not
+plumbing.** Widget constructors carry what the widget *is* (text,
+items, mode) — never `Theme&`, `RoleId`s, `Application&`, or `Desktop&`.
+The Application installs a ui context (theme, role registry,
+application) on its root, propagated to every current and future
+descendant exactly like the dirty-rect and detach sinks; widgets
+resolve their documented standard roles lazily at attach/first paint
+(interning is idempotent per D-007), with `set_role(...)` per-instance
+overrides and per-window theme scope (`Window` override, nearest-scope
+resolution, materialized at scope change — the ARCHITECTURE §5 shape).
+A `View::on_attached()` notification marks context arrival. Typed
+insertion (`add<T>`/`make<T>` returning `T*`) replaces
+downcast-after-`add_child`. This preserves D-007 (flat tables,
+per-widget role sets — the *sets* move from call sites into the
+widgets that own them) and D-008 (the context is instance state on the
+root, not a global). *Rejected:* status quo (role parameters at every
+construction site — the review measured ~40% plumbing per expression,
+and M6 widgets borrowing `input_*`/`dialog_*` roles because
+`StandardRoles` never grew); a process-global theme (violates D-008);
+passing a context parameter to every constructor (still one plumbing
+argument everywhere, and it leaks into every signature forever).
+Scheduled as M9/WP-7…WP-9 (plans/api-ergonomics-review-2.md).
+
+**D-029 — Framework-supplied interaction defaults, all overridable.**
+The framework itself wires the interaction grammar users assume:
+click-to-focus (mouse Down focuses the nearest focusable view before
+delivery), click-to-activate (a capture-phase mouse-descent hook lets
+Desktop raise/activate the window containing any clicked descendant),
+a working zoom control (Desktop supplies the zoom area), terminal
+resize propagation to root children (fill-the-root default), a default
+keymap (Tab/Shift-Tab traversal, F10 menu, window-management chords)
+over the standard command set (ids below 4096, D-013 — registered by
+`Application` at construction), and `run()`/`request_quit()` over
+`step()`/`wake()`. Every default is an ordinary rebindable binding or
+a documented opt-out — an application can clear or replace any of it;
+a focused view consuming a key already preempts the keymap by routing
+order, so "Tab means something else here" needs no configuration at
+all. *Supersedes* the previous stance that the library deliberately
+binds nothing (recorded in example comments and docs/example-apps.md):
+that stance made every application re-implement the same table stakes
+and left VISION non-negotiable #7 (click-to-focus) unmet. *Rejected:*
+defaults hard-coded outside the keymap (would make the grammar
+non-rebindable, contradicting VISION #4). Scheduled as M8/WP-1…WP-4
+and M9/WP-12…WP-14.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**
 Sole copyright rests with the project owner, so every option stays
 available until release. Candidates: permissive (MIT or Apache-2.0) for
 maximum adoption; GPL-3.0-only; or dual licensing. Decide no later than
-the 0.1 release gate (ROADMAP M8).
+the 0.1 release gate (ROADMAP M11).
 
 **D-OPEN-2 — Resolved (superseded by D-017).**
 Graphics are mainline 0.1 scope, first-class in every layer, not an

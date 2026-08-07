@@ -6,6 +6,10 @@ windowed TUI offered. "Beyond" is where ckVision must exceed it. Every
 widget: keyboard-complete, mouse-complete, theme-role documented, golden
 appearance tests, scripted interaction tests, reference docs.
 
+Implementation status against this inventory is tracked in the ledger
+at the end of this file — the catalog rows stay aspirationally
+complete; the ledger says what is still open and where it lands.
+
 ## Desktop and window chrome (M5)
 
 | Element | Baseline | Beyond baseline |
@@ -66,7 +70,7 @@ widgets and dialogs, never per-widget state.
 | File open/save | Path input with completion, file list, directory navigation, filters | Recent locations via the history registry, hidden-file toggle, cross-platform path semantics; enumerates through the injected filesystem (headless-testable) |
 | Directory picker | Tree-based selection | — |
 | Window list | Select/activate/close from list | Type-ahead filter |
-| Theme editor | — | Enumerates theme roles from the flat tables, edits styles with live preview, produces a theme value the application persists (M8) |
+| Theme editor | — | Enumerates theme roles from the flat tables, edits styles with live preview, produces a theme value the application persists (M11) |
 
 ## Explicitly not widgets
 
@@ -86,3 +90,29 @@ widgets and dialogs, never per-widget state.
   fallback rendering verified under a no-graphics capability profile,
   dual-space mouse verified under a pixel-mouse profile.
 - Documented behavior contract: keys, mouse, notifications, theme roles.
+
+## Open-items ledger (2026-08-07 review; see plans/api-ergonomics-review-2.md)
+
+Catalog rows not yet implemented, with where each now lands. An item
+leaves this ledger by landing or by a recorded DECISIONS.md re-scope —
+never silently.
+
+| Open item | Catalog row | Lands in |
+|---|---|---|
+| Modality stack; blocking `exec_*` conveniences | Dialog (modal) / D-021 | M9 (WP-15) |
+| Menus/status lines rendering title, chord, enablement from the registry; accelerator-hint column; Key→name table | Drop-down menu beyond-baseline; Status line baseline | M9 (WP-11) |
+| Resizable dialogs with layout; Esc-cancel and non-resizable defaults for fixed dialogs | Dialog beyond-baseline | M10 (WP-21) |
+| Splitter | Splitter | M10 (WP-19) |
+| Tree payload/lazy model, callback arguments, Left-to-parent | Tree beyond-baseline (virtualized model direction) | M10 (WP-22) |
+| Minimum-size degraded chrome and "terminal too small" state | Cross-cutting shrink acceptance (end state) | M10 (WP-21) |
+| Nested submenus; checkable menu items; context-menu keyboard invocation | Drop-down / context menu baseline | M11 entry gate |
+| Combo box | Combo box | M11 entry gate |
+| Tab control | Tab control | M11 entry gate |
+| Progress | Progress | M11 entry gate |
+| Window backing store; damage-scoped painting; composition-only move benchmark | Window beyond-baseline; performance charter | M11 entry gate |
+| Message-box severity accents; localizable string table | Message boxes beyond-baseline; §5 Localization | M11 entry gate |
+| Desktop typed snapshot/restore | Desktop beyond-baseline | M11 entry gate |
+| List virtualized model; incremental search; columned mode | List view beyond-baseline | post-0.1 unless an adopter needs it sooner |
+| Table virtualized rows; sort indicators; column resize | Table beyond-baseline | post-0.1 unless an adopter needs it sooner |
+| Scrollbar auto-hide; smooth scroll-region diffs | Scrollbar/viewport beyond-baseline | post-0.1 unless an adopter needs it sooner |
+| Status-line priority layout; menu-bar overflow on narrow terminals | Status line / menu bar beyond-baseline | post-0.1 unless an adopter needs it sooner |

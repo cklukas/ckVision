@@ -3,14 +3,29 @@
 Milestones are sequential; each has binding exit criteria. No dates —
 sequence and criteria only. Effort figures are coarse planning aids
 (focused person-weeks, one senior developer driving agent tooling);
-the full sequence totals roughly 20–26 pw.
+the full sequence totals roughly 26–34 pw.
+
+M8–M10 were inserted by the 2026-08-07 API-ergonomics and integration
+review ([plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md),
+"the review" below): M8 repairs seams whose mechanisms are built and
+unit-tested but never wired end to end; M9 delivers the decided-but-
+unbuilt ergonomics layer down to the enforced 60-line hello; M10
+completes the decided layout system. The former M8 (release) is now
+M11, unchanged in content. M7 (Windows) is deferred until a Windows
+host is available and does not block M8–M10. Historical milestone
+texts (M5/M6) are left as written; where one of their exit items is
+still open — the enforced 60-line hello, the modality stack, backing
+stores, the menu-system remainder, and peers — the
+[plans/widgets.md](plans/widgets.md) open-items ledger records it with
+its new landing milestone, so the sequence stays honest without
+rewriting history.
 
 A milestone is done when its exit criteria hold **and** the global gates
 hold: clean build with zero warnings on all target platforms, all tests
 green, sanitizers green, machine-independent benchmark gates green (the
 wall-clock budgets are checked on the pinned reference machine —
 ARCHITECTURE §8), and reference documentation written for everything the
-milestone added. The documentation site (M8) assembles per-milestone
+milestone added. The documentation site (M11) assembles per-milestone
 docs; it does not backfill them.
 
 ## M0 — Bootstrap (≈1 pw)
@@ -170,7 +185,7 @@ reference documentation; file-dialog goldens run against the scripted
 in-memory filesystem; the gallery exercises every widget in every
 built-in scheme.
 
-## M7 — Windows platform + full matrix (≈2 pw)
+## M7 — Windows platform + full matrix (≈2 pw; deferred until a Windows host is available — M8–M10 proceed first)
 
 Windows backend (ConPTY VT output, VT-first input per D-020 with
 console-API supplements, native clipboard read/write, per-host degraded
@@ -182,13 +197,109 @@ the three-platform matrix including PTY/ConPTY smokes; byte-identical
 goldens across platforms; degraded-host rows (plain-VT ConPTY without
 enhanced input) tested; legacy console refusal path tested.
 
-## M8 — graphics polish, themes, docs, release (≈2 pw)
+## M8 — Integration correctness: the unplugged seams (≈1–2 pw)
+
+Repairs the review's findings F1–F7 — cases where a mechanism is
+implemented and unit-tested but the wiring that lets a real terminal
+session reach it was never made. Work packages WP-1…WP-6 in
+[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md):
+the resize chain from `ResizeEvent` through root to the Desktop
+(fill-the-root policy plus a settable bounds observer on `View`);
+click-to-focus in dispatch; click-to-activate/raise via a capture-phase
+mouse-descent hook Desktop implements; a working zoom control
+(`zoom_area_provider`), zoomed windows tracking desktop growth, and the
+per-window `DesktopGrowPolicy`; one sanctioned dialog-attach path
+(`Desktop::show_dialog`) used by every standard-dialog handle; example
+hygiene (gallery on docking and `show_dialog`, redundant
+focus-policy calls removed).
+
+**Exit:** end-to-end headless resize script through
+`Application::step` — grow and shrink — asserting chrome re-pins to the
+new edges, windows stay reachable, zoomed/`KeepFilling` windows track,
+and no stale cells remain, with goldens per step; interaction scripts
+for click-to-focus (typing follows the click) and click-to-activate
+(buried window raises, frames restyle, WP-2 composes with WP-3); a
+message box presented over a desktop shows the active frame and
+participates in cycling; the zoom glyph works by mouse on a
+desktop-owned window; `docs/example-apps.md`'s resize claims are true
+and carry test references; every M8 behavior change is a library fix,
+with examples only consuming public API.
+
+## M9 — API ergonomics: the 60-line hello (≈2–3 pw)
+
+Delivers the decided-but-unbuilt convenience layer (review findings
+E1–E10, F8, F9; work packages WP-7…WP-17; decisions D-028/D-029):
+widgets resolve their own theme roles through a root-installed ui
+context with per-widget overrides and per-window theme scope
+(constructors take content, not plumbing); `StandardRoles` completed
+for the M6 widget set; typed `add<T>`/`make<T>` insertion; the
+one-call command registration from ARCHITECTURE §5 (metadata + handler
++ chord + menu item + status item from one descriptor); the
+Key→display-name table with `KeyChord` parse/format, and menus/status
+lines rendering title, chord, and enablement live from the registry;
+the standard command set below id 4096 registered by `Application`;
+the default keymap (Tab/Shift-Tab traversal, F10 menu, window
+management) over rebindable bindings; `Application::run()` and
+`request_quit()`; the modality stack with event scoping and the
+blocking `exec_*` conveniences (completing D-021), plus non-blocking
+`show_*` one-liners; size-hint-change propagation replacing
+`Window::relayout_frame_overlay`; `examples/hello` rewritten to the
+target shape.
+
+**Exit:** hello (app + main combined) within an enforced 60-line
+non-comment budget checked in CI, with golden coverage — the M5 exit
+criterion finally wired; every command in the examples declared exactly
+once; no hand-encoded chord text and no `static_cast<widgets::` in
+`examples/`; modal scoping, blocking `exec_message_box`, quit-sweep
+integration, and runtime rebinding re-rendering menus/status lines all
+covered by scripts; `docs/turbo-vision-conversion.md` regenerated from
+the new hello with its Part-III corrections applied, its side-by-side
+now favoring ckVision without caveats; theme switching and per-window
+theme override golden-tested across all four schemes.
+
+## M10 — Layout and widget-model completion (≈2–3 pw)
+
+Completes D-006's decided container set and the data-widget model
+(review packages WP-18…WP-22): `Anchors` for fixed-geometry children
+(the modern per-view grow flags) with `AnchorPane`, honored by window
+content; `Grid` (spans), `Dock` (four edges + center), `Overlay`,
+per-child cross-axis alignment and margins for Row/Column, `Splitter`;
+frame overlays plural and positioned (`add_frame_overlay` with
+edge/alignment slots); dialog defaults — descriptor-built dialogs
+non-resizable unless opting into resizable-with-layout, Esc-cancel by
+default — and the minimum-terminal-size policy's degraded-chrome /
+"terminal too small" end state; `TreeNode` user payload (id +
+`std::any`), lazy population via `on_expand_request`, node/index
+arguments on selection callbacks, Left-to-parent navigation; the file
+browser rebuilt on lazy expansion, a Splitter, and payloads instead of
+the sidecar path map.
+
+**Exit:** anchor/grid/dock/overlay/alignment suites in the established
+layout-test style (pure distribution math unit-tested, scripts for
+behavior, goldens for appearance); a resized dialog keeps
+bottom-right-anchored children in the corner and stretches
+anchored-all-edges children; two frame overlays coexist and track
+resize and size-hint changes; shrink-storm script reaches the
+"terminal too small" state and recovers; filebrowser lazily populates
+through the injected filesystem with unchanged observable behavior
+plus new lazy/split coverage; every new container and model feature
+reference-documented.
+
+## M11 — graphics polish, themes, docs, release (≈2 pw)
 
 Graphics polish (kitty-graphics secondary encoder, Sixel palette
 optimization); scheme polish; the theme-editor standard dialog; the
 documentation site assembled from per-milestone reference docs plus
 tutorial and extension guides (worked examples for every §14 extension
 point); examples finalized; fuzz/bench hardening pass.
+
+Entry gate — the catalog remainder ledger in
+[plans/widgets.md](plans/widgets.md) (window backing stores and
+damage-scoped painting per the performance charter, nested submenus
+and checkable menu items, combo box, tab control, progress, the
+localization string table, desktop snapshot/restore) is worked off
+here or explicitly re-scoped by a recorded decision; the release does
+not ship with the ledger silently open.
 
 **Exit — 0.1 release criteria:** every VISION.md non-negotiable
 demonstrably works in the gallery on all three platforms; documentation

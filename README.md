@@ -20,9 +20,13 @@ The library name is `cvision` (CMake target `ckvision::cvision`).
 
 ## Status
 
-**M0 through M6 complete** — every layer through the widget catalog is
+**M0 through M6 delivered** — every layer through the widget catalog is
 implemented and adversarially tested (not just happy paths), reviewed,
-and green under both Release and ASan/UBSan builds.
+and green under both Release and ASan/UBSan builds. Catalog rows still
+open (modality stack, backing stores, nested submenus, combo box, tab
+control, progress, splitter, and peers) are tracked explicitly in the
+[plans/widgets.md](plans/widgets.md) open-items ledger — nothing is
+silently deferred.
 
 - **M0-M2**: build skeleton; core primitives (geometry, Color/Style/
   Cell/Image, keys/events, the Unicode services in
@@ -64,10 +68,9 @@ real bugs (five use-after-frees, five correctness issues, one z-order/
 lifecycle desync), each landed with a regression test verified under
 ASan/UBSan.
 
-**M8 in progress** (M7 — the Windows/ConPTY backend — is deferred to a
-Windows host per ROADMAP.md): the render pipeline is now real — the
-gap where `Application::step()` dispatched input but nothing ever
-painted anything is closed (`View::paint_children`, reusing
+**Post-M6, the render pipeline and example apps landed**: the gap
+where `Application::step()` dispatched input but nothing ever painted
+anything is closed (`View::paint_children`, reusing
 `scene::Compositor`/`term::Presenter`); window shadows actually
 composite (`widgets::Desktop::paint_children`). Two example apps —
 `examples/gallery` (rendering, keyboard/mouse navigation, Sixel images)
@@ -78,19 +81,32 @@ generated screenshots, rendered to HTML/PDF via CK Office Write's
 `ckwrite` (see [docs/example-apps.md](docs/example-apps.md) and
 `tools/docgen/generate_docs.sh`).
 
-A follow-up ergonomics/resize review asked pointed questions (does a
-resize keep chrome pinned, can widgets dock to edges, can extra
-widgets live on a window's own frame, is a tree-driven master-detail
-pattern actually supported) and found — then closed — three real
-gaps: `widgets::Desktop` had no resize reflow at all (menu bars/status
-lines went stale after a terminal resize, and windows could end up
-unreachable outside the shrunk area) — fixed with
+A first ergonomics/resize review added the Desktop-level mechanisms:
 `Desktop::dock_top`/`dock_bottom` + `content_area()` +
-`Window::reposition_within`; `TreeView` had no selection/activation
-callback (the exact hook a master-detail pane needs) — added,
-mirroring `ListView`'s own; and there was no way to attach a second
-widget to a window's own border (e.g. a "current line" indicator) —
-added via `Window::set_frame_overlay`.
+`Window::reposition_within` (chrome pinning and window clamping when
+the *Desktop's* bounds change), `TreeView` selection/activation
+callbacks (the master-detail hook), and `Window::set_frame_overlay`
+(a widget on the window's own border, e.g. a "current line"
+indicator).
+
+**A second, full API-ergonomics and integration review (2026-08-07,
+[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md))
+is now the active plan.** It found that three integration seams remain
+broken end to end even though their mechanisms are individually green
+under test — terminal resize never actually reaches the Desktop
+(`ResizeEvent` stops at the root view), there is no click-to-focus or
+click-to-activate, and the zoom glyph is inert when clicked — and that
+the API carries avoidable noise (theme/role parameters on every
+constructor, commands declared in triplicate, a five-step message box)
+against VISION's own "one screen of readable code" bar. The roadmap
+now sequences that work as **M8** (integration correctness), **M9**
+(API ergonomics, down to an enforced 60-line `examples/hello`), and
+**M10** (layout completion: anchors, Grid/Dock/Overlay, splitter,
+lazy tree model); the release milestone is now **M11**, and M7 — the
+Windows/ConPTY backend — remains deferred to a Windows host per
+ROADMAP.md. Decisions D-028 (constructors take content, not plumbing)
+and D-029 (framework-supplied interaction defaults, all overridable)
+record the two policy changes.
 
 ## Documents
 
@@ -100,7 +116,8 @@ added via `Window::set_frame_overlay`.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Target architecture: layers, rendering pipeline, event/command system, backends |
 | [ROADMAP.md](ROADMAP.md) | Development milestones with exit criteria |
 | [DECISIONS.md](DECISIONS.md) | Architecture decision records (settled and open) |
-| [plans/widgets.md](plans/widgets.md) | Widget catalog: capability baseline and beyond-baseline features |
+| [plans/widgets.md](plans/widgets.md) | Widget catalog: capability baseline and beyond-baseline features, plus the open-items ledger |
+| [plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md) | The 2026-08-07 API-ergonomics and integration review: findings F1–F10/E1–E10 and work packages WP-1…WP-22 for M8–M10 |
 | [docs/example-apps.md](docs/example-apps.md) | Example applications: what each one demonstrates, how it's tested, generated screenshots |
 | [AGENTS.md](AGENTS.md) | Engineering standard for working in this repository |
 
