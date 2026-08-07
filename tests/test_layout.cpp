@@ -4,6 +4,8 @@
 #include "cktest.hpp"
 
 using ckv::Rect;
+using ckv::ui::align_cross_axis;
+using ckv::ui::Alignment;
 using ckv::ui::Column;
 using ckv::ui::distribute_main_axis;
 using ckv::ui::LayoutChild;
@@ -265,4 +267,126 @@ CK_TEST(a_childs_changed_size_hint_triggers_exactly_one_relayout_pass) {
     grower->set_width(20);  // one notification must produce one relayout, not a storm of repeats
 
     CK_CHECK(spy->resizes == before + 1);
+}
+
+// --- align_cross_axis: pure function (M10/WP-19) -----------------------
+
+CK_TEST(fill_alignment_takes_the_whole_available_extent_minus_margins) {
+    const auto [offset, extent] = align_cross_axis(20, 6, Alignment::Fill, 0, 0);
+    CK_CHECK(offset == 0);
+    CK_CHECK(extent == 20);
+}
+
+CK_TEST(fill_alignment_with_margins_shrinks_and_shifts_by_the_before_margin) {
+    const auto [offset, extent] = align_cross_axis(20, 6, Alignment::Fill, 2, 3);
+    CK_CHECK(offset == 2);
+    CK_CHECK(extent == 15);  // 20 - 2 - 3
+}
+
+CK_TEST(start_alignment_sits_at_the_near_edge_sized_to_its_own_preferred_extent) {
+    const auto [offset, extent] = align_cross_axis(20, 6, Alignment::Start, 0, 0);
+    CK_CHECK(offset == 0);
+    CK_CHECK(extent == 6);
+}
+
+CK_TEST(end_alignment_sits_flush_against_the_far_edge) {
+    const auto [offset, extent] = align_cross_axis(20, 6, Alignment::End, 0, 0);
+    CK_CHECK(offset == 14);  // 20 - 6
+    CK_CHECK(extent == 6);
+}
+
+CK_TEST(center_alignment_splits_the_leftover_space_evenly_on_both_sides) {
+    const auto [offset, extent] = align_cross_axis(20, 6, Alignment::Center, 0, 0);
+    CK_CHECK(offset == 7);  // (20 - 6) / 2
+    CK_CHECK(extent == 6);
+}
+
+CK_TEST(start_center_and_end_all_respect_margins_too) {
+    CK_CHECK(align_cross_axis(20, 6, Alignment::Start, 2, 3) == (std::pair{2, 6}));
+    CK_CHECK(align_cross_axis(20, 6, Alignment::End, 2, 3) == (std::pair{11, 6}));  // 2 + 15 - 6
+    const auto centered = align_cross_axis(20, 6, Alignment::Center, 2, 3);
+    CK_CHECK(centered == (std::pair{6, 6}));  // 2 + (15-6)/2
+}
+
+CK_TEST(a_preferred_extent_larger_than_available_is_clamped_never_overflows) {
+    const auto [offset, extent] = align_cross_axis(10, 50, Alignment::Start, 0, 0);
+    CK_CHECK(offset == 0);
+    CK_CHECK(extent == 10);
+}
+
+CK_TEST(margins_that_consume_all_available_space_clamp_to_zero_never_negative) {
+    const auto [offset, extent] = align_cross_axis(5, 6, Alignment::Fill, 3, 4);
+    CK_CHECK(extent == 0);
+    (void)offset;  // still well-defined (margin_before), just zero width to show
+}
+
+// --- Row/Column cross-axis alignment and margins (M10/WP-19) -----------
+
+CK_TEST(a_start_aligned_child_keeps_its_own_height_at_the_top_of_the_row) {
+    Row row(Rect{0, 0, 40, 10});
+    const LayoutSpec spec{SizePolicy::Fixed, 1, Alignment::Start};
+    auto* child = static_cast<HintedView*>(row.add_item(std::make_unique<HintedView>(10, 3), spec));
+    CK_CHECK(child->bounds() == (Rect{0, 0, 10, 3}));
+}
+
+CK_TEST(an_end_aligned_child_sits_flush_against_the_bottom_of_the_row) {
+    Row row(Rect{0, 0, 40, 10});
+    const LayoutSpec spec{SizePolicy::Fixed, 1, Alignment::End};
+    auto* child = static_cast<HintedView*>(row.add_item(std::make_unique<HintedView>(10, 3), spec));
+    CK_CHECK(child->bounds() == (Rect{0, 7, 10, 3}));
+}
+
+CK_TEST(a_center_aligned_child_is_vertically_centered_in_the_row) {
+    Row row(Rect{0, 0, 40, 10});
+    auto* child = static_cast<HintedView*>(row.add_item(
+        std::make_unique<HintedView>(10, 4), LayoutSpec{SizePolicy::Fixed, 1, Alignment::Center}));
+    CK_CHECK(child->bounds() == (Rect{0, 3, 10, 4}));  // (10 - 4) / 2 == 3
+}
+
+CK_TEST(margins_shrink_a_fill_aligned_row_child_on_the_cross_axis) {
+    Row row(Rect{0, 0, 40, 10});
+    LayoutSpec spec{SizePolicy::Fixed, 1, Alignment::Fill};
+    spec.margin_before = 1;
+    spec.margin_after = 2;
+    auto* child = static_cast<HintedView*>(row.add_item(std::make_unique<HintedView>(10, 4), spec));
+    CK_CHECK(child->bounds() == (Rect{0, 1, 10, 7}));  // height 10 - 1 - 2
+}
+
+CK_TEST(default_alignment_still_fills_the_row_exactly_as_before_wp_19) {
+    // Regression guard: LayoutSpec{}'s default alignment must remain
+    // Fill so every Row/Column built before this landed keeps behaving
+    // identically with no call-site changes. Main-axis width (10) comes
+    // from the Fixed policy's own preferred size, untouched by this WP;
+    // what's under test here is only the cross-axis height still
+    // filling the row's own full height (10) with no alignment given.
+    Row row(Rect{0, 0, 40, 10});
+    auto* child = static_cast<HintedView*>(
+        row.add_item(std::make_unique<HintedView>(10, 3), LayoutSpec{SizePolicy::Fixed, 1}));
+    CK_CHECK(child->bounds() == (Rect{0, 0, 10, 10}));
+}
+
+CK_TEST(a_start_aligned_column_child_keeps_its_own_width_at_the_left) {
+    Column column(Rect{0, 0, 20, 30});
+    const LayoutSpec spec{SizePolicy::Fixed, 1, Alignment::Start};
+    auto* child = static_cast<HintedView*>(
+        column.add_item(std::make_unique<HintedView>(6, 10), spec));
+    CK_CHECK(child->bounds() == (Rect{0, 0, 6, 10}));
+}
+
+CK_TEST(an_end_aligned_column_child_sits_flush_against_the_right_edge) {
+    Column column(Rect{0, 0, 20, 30});
+    const LayoutSpec spec{SizePolicy::Fixed, 1, Alignment::End};
+    auto* child = static_cast<HintedView*>(
+        column.add_item(std::make_unique<HintedView>(6, 10), spec));
+    CK_CHECK(child->bounds() == (Rect{14, 0, 6, 10}));  // 20 - 6
+}
+
+CK_TEST(a_row_can_mix_fill_and_non_fill_aligned_children_independently) {
+    Row row(Rect{0, 0, 40, 10});
+    auto* filled = static_cast<HintedView*>(row.add_item(std::make_unique<HintedView>(10, 3)));
+    const LayoutSpec spec{SizePolicy::Fixed, 1, Alignment::Start};
+    auto* started = static_cast<HintedView*>(
+        row.add_item(std::make_unique<HintedView>(10, 3), spec));
+    CK_CHECK(filled->bounds() == (Rect{0, 0, 10, 10}));   // default Fill: full row height
+    CK_CHECK(started->bounds() == (Rect{10, 0, 10, 3}));  // Start: its own preferred height
 }

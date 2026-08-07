@@ -112,6 +112,23 @@ std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutCh
     return sizes;
 }
 
+std::pair<int, int> align_cross_axis(int available, int preferred, Alignment alignment,
+                                      int margin_before, int margin_after) noexcept {
+    const int usable = std::max(0, available - margin_before - margin_after);
+    if (alignment == Alignment::Fill) return {margin_before, usable};
+    const int extent = std::clamp(preferred, 0, usable);
+    switch (alignment) {
+        case Alignment::Start:
+            return {margin_before, extent};
+        case Alignment::Center:
+            return {margin_before + (usable - extent) / 2, extent};
+        case Alignment::End:
+            return {margin_before + usable - extent, extent};
+        default:
+            return {margin_before, usable};
+    }
+}
+
 namespace {
 
 template <typename SelfMap>
@@ -120,6 +137,12 @@ LayoutChild child_layout(View& child, const SelfMap& specs, bool horizontal) {
     auto it = specs.find(&child);
     const LayoutSpec spec = (it == specs.end()) ? LayoutSpec{} : it->second;
     return LayoutChild{hint.min, hint.preferred, spec.policy, spec.weight};
+}
+
+template <typename SelfMap>
+LayoutSpec spec_for(View& child, const SelfMap& specs) {
+    auto it = specs.find(&child);
+    return (it == specs.end()) ? LayoutSpec{} : it->second;
 }
 
 }  // namespace
@@ -156,7 +179,11 @@ void Row::relayout() {
     const auto sizes = distribute_main_axis(layout_children, bounds().width, spacing_);
     for (std::size_t i = 0; i < children().size(); ++i) {
         View& child = *children()[i];
-        child.set_bounds(Rect{sizes[i].first, 0, sizes[i].second, bounds().height});
+        const LayoutSpec spec = spec_for(child, specs_);
+        const int preferred = child.vertical_size_hint().preferred;
+        const auto [cross_offset, cross_extent] = align_cross_axis(
+            bounds().height, preferred, spec.alignment, spec.margin_before, spec.margin_after);
+        child.set_bounds(Rect{sizes[i].first, cross_offset, sizes[i].second, cross_extent});
     }
 }
 
@@ -192,7 +219,11 @@ void Column::relayout() {
     const auto sizes = distribute_main_axis(layout_children, bounds().height, spacing_);
     for (std::size_t i = 0; i < children().size(); ++i) {
         View& child = *children()[i];
-        child.set_bounds(Rect{0, sizes[i].first, bounds().width, sizes[i].second});
+        const LayoutSpec spec = spec_for(child, specs_);
+        const int preferred = child.horizontal_size_hint().preferred;
+        const auto [cross_offset, cross_extent] = align_cross_axis(
+            bounds().width, preferred, spec.alignment, spec.margin_before, spec.margin_after);
+        child.set_bounds(Rect{cross_offset, sizes[i].first, cross_extent, sizes[i].second});
     }
 }
 

@@ -3,16 +3,18 @@
 // Row and Column: explicit linear-container layouts computed in one
 // top-down, non-iterative pass over each container's direct children
 // (ARCHITECTURE.md §5 "Layout and dialog construction" — "computed in
-// one top-down pass over dirty subtrees"). Grid/Dock/Overlay are a
-// natural follow-on once a widget exists that actually needs them;
-// Row/Column alone already cover every M4 exit-criteria form (a
-// labeled input line stacked in a dialog).
+// one top-down pass over dirty subtrees"). Grid/Dock/Overlay (D-006's
+// remaining container-set members, M10/WP-19) live in their own files
+// — ui/grid.hpp, ui/dock.hpp, ui/overlay.hpp — since each has its own
+// distinct layout algorithm; this file stays scoped to the linear,
+// main-axis-plus-cross-axis case.
 //
-// v1 scope (documented, not an oversight): cross-axis sizing always
-// fills the container's cross extent — a Row's children are all as
-// tall as the Row, a Column's children are all as wide as the Column.
-// Per-child cross-axis alignment/sizing is a straightforward future
-// extension once a widget wants to be narrower than its row.
+// Cross-axis sizing (M10/WP-19): a child's own cross-axis extent
+// defaults to filling the container (Alignment::Fill, matching every
+// Row/Column built before this landed) — LayoutSpec::alignment opts a
+// child OUT into Start/Center/End, sized to its own cross-axis
+// preferred hint instead, clamped to fit within whatever margins
+// leave available.
 #pragma once
 
 #include <unordered_map>
@@ -29,12 +31,39 @@ enum class SizePolicy {
     Expanding,   // like Minimum, but also claims a share of any leftover space
 };
 
+// Cross-axis positioning within whatever space margins leave available
+// (M10/WP-19) — orthogonal to SizePolicy, which is main-axis only.
+// Shared with Grid, whose own per-cell alignment uses the same values.
+enum class Alignment {
+    Fill,    // the container's own default: takes the whole cross extent
+    Start,   // top (Row) / left (Column), sized to its own preferred hint
+    Center,
+    End,     // bottom (Row) / right (Column)
+};
+
 struct LayoutSpec {
     SizePolicy policy = SizePolicy::Minimum;
     int weight = 1;  // relative share of leftover space among Expanding siblings
+    Alignment alignment = Alignment::Fill;
+    // Reserved space before/after the child on the CROSS axis only —
+    // top/bottom for a Row, left/right for a Column. The main axis
+    // already has `Row::spacing()`/`Column::spacing()` for the
+    // between-children case; margins are the per-child, cross-axis
+    // equivalent (e.g. a Fill-aligned child that should not quite
+    // touch the container's own top/bottom edge).
+    int margin_before = 0;
+    int margin_after = 0;
 
     friend bool operator==(const LayoutSpec&, const LayoutSpec&) = default;
 };
+
+// Computes ONE child's cross-axis [offset, extent] within `available`
+// cross-axis space, given its own cross-axis preferred size hint,
+// alignment, and margins. Pure function, no View dependency — the
+// cross-axis analogue of distribute_main_axis, and exhaustively
+// testable in isolation the same way.
+std::pair<int, int> align_cross_axis(int available, int preferred, Alignment alignment,
+                                      int margin_before, int margin_after) noexcept;
 
 // Shared main-axis distribution math (declared here so it is directly
 // unit-testable without a View tree; Row/Column call it).
