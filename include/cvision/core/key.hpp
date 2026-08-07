@@ -2,7 +2,9 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace ckv {
 
@@ -52,6 +54,36 @@ struct KeyChord {
     std::string text;
 
     friend bool operator==(const KeyChord&, const KeyChord&) = default;
+
+    // Parses a canonical chord spelling (M9/WP-11), e.g. "Alt+G",
+    // "Ctrl+Shift+F10", "Esc", "Enter" — modifier names (any of
+    // "Ctrl"/"Alt"/"Shift"/"Super", case-insensitive, in any order,
+    // one "+"-joined prefix each) followed by either a name from
+    // key_name()'s table or a single printable character, which
+    // becomes a Key::Char chord (lowercased, matching how printable
+    // chords are represented everywhere else in the library). Returns
+    // nullopt for anything that doesn't parse — an unknown modifier
+    // token, an empty or multi-character trailing segment that isn't
+    // a known key name, or an empty string.
+    static std::optional<KeyChord> parse(std::string_view text);
 };
+
+// The inverse of KeyChord::parse: renders `chord` back to its
+// canonical spelling ("Alt+G", "Esc", "F10"). A single-letter
+// Key::Char chord is upper-cased for display ("Alt+G", not
+// "Alt+g") — purely cosmetic, parse() still accepts either case.
+// CKV_ASSERT if chord.key is Key::None (never a real, displayable
+// binding) — callers render a chord hint only when one exists.
+std::string format(const KeyChord& chord);
+
+// The canonical display name for a named key ("Enter", "Esc", "F10",
+// "PageUp", ...). CKV_ASSERT if key is Key::Char or Key::None —
+// Key::Char has no fixed name (see KeyChord::text) and Key::None
+// never denotes a real key.
+std::string_view key_name(Key key) noexcept;
+
+// The inverse of key_name(): case-insensitive lookup of a named key by
+// its canonical spelling. nullopt if `name` doesn't match any Key.
+std::optional<Key> key_from_name(std::string_view name) noexcept;
 
 }  // namespace ckv

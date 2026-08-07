@@ -9,6 +9,7 @@ add_library(cvision
     src/core/cell.cpp
     src/core/filesystem.cpp
     src/core/golden.cpp
+    src/core/key.cpp
     src/core/text.cpp
     src/core/utf8.cpp
     src/core/version.cpp
