@@ -1,3 +1,11 @@
+---
+title: ckVision Example Applications
+author: C. Klukas
+date: 2026-08-07
+format: report
+description: Gallery and File Browser — ckVision's tested, screenshot-documented example applications.
+---
+
 # Example applications
 
 ckVision ships example applications the way tvision-sixel does —
