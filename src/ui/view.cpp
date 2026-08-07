@@ -20,6 +20,7 @@ View* View::add_child(std::unique_ptr<View> child) {
     child->parent_ = this;
     child->propagate_dirty_rect_sink(dirty_rect_sink_);
     child->propagate_detach_sink(detach_sink_);
+    child->propagate_context(context_);
     children_.push_back(std::move(child));
     return observer;
 }
@@ -129,6 +130,15 @@ void View::propagate_detach_sink(const DetachSink& sink) {
 }
 
 void View::set_detach_sink(DetachSink sink) { propagate_detach_sink(sink); }
+
+void View::propagate_context(const Context& context) {
+    const bool newly_valid = !context_.valid() && context.valid();
+    context_ = context;
+    if (newly_valid) on_attached();
+    for (auto& child : children_) child->propagate_context(context);
+}
+
+void View::set_context(const Context& context) { propagate_context(context); }
 
 void View::notify_detaching_recursive() {
     if (detach_sink_) detach_sink_(*this);

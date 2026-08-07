@@ -5,9 +5,13 @@
 #include <unistd.h>
 
 #include "cktest.hpp"
+#include "cvision/ui/context.hpp"
 
 using ckv::Rect;
+using ckv::ui::Context;
 using ckv::ui::FocusPolicy;
+using ckv::ui::RoleRegistry;
+using ckv::ui::Theme;
 using ckv::ui::View;
 
 namespace {
@@ -16,7 +20,9 @@ class RecordingView : public View {
 public:
     explicit RecordingView(Rect bounds = {}) : View(bounds) {}
     int draws = 0;
+    int attach_count = 0;
     void draw(ckv::scene::Painter&) override { ++draws; }
+    void on_attached() override { ++attach_count; }
 };
 
 }  // namespace
@@ -244,4 +250,79 @@ CK_TEST(resolve_help_context_key_walks_up_to_the_nearest_ancestor_that_has_one) 
     View* mid = root.add_child(std::make_unique<View>());
     View* leaf = mid->add_child(std::make_unique<View>());  // no key of its own
     CK_CHECK(*leaf->resolve_help_context_key() == "root.topic");
+}
+
+// --- Context propagation and on_attached() (M9 WP-7, D-028) ----------------
+
+namespace {
+struct ContextFixture {
+    RoleRegistry registry;
+    Theme theme{registry};
+    Context ctx{&theme, &registry, nullptr};
+};
+}  // namespace
+
+CK_TEST(a_fresh_view_has_no_valid_context) {
+    View v;
+    CK_CHECK(!v.context().valid());
+}
+
+CK_TEST(set_context_directly_makes_it_valid_and_fires_on_attached_once) {
+    ContextFixture f;
+    RecordingView v;
+    v.set_context(f.ctx);
+    CK_CHECK(v.context().valid());
+    CK_CHECK(v.context().theme == &f.theme);
+    CK_CHECK(v.context().roles == &f.registry);
+    CK_CHECK(v.attach_count == 1);
+}
+
+CK_TEST(add_child_propagates_the_parents_existing_context_to_the_new_child) {
+    ContextFixture f;
+    View root;
+    root.set_context(f.ctx);
+    auto* child = static_cast<RecordingView*>(root.add_child(std::make_unique<RecordingView>()));
+    CK_CHECK(child->context().valid());
+    CK_CHECK(child->attach_count == 1);
+}
+
+CK_TEST(add_child_before_the_parent_has_a_context_leaves_the_child_unattached) {
+    View root;  // no context installed
+    auto* child = static_cast<RecordingView*>(root.add_child(std::make_unique<RecordingView>()));
+    CK_CHECK(!child->context().valid());
+    CK_CHECK(child->attach_count == 0);
+}
+
+CK_TEST(a_subtree_built_while_detached_resolves_entirely_when_attached_in_one_shot) {
+    ContextFixture f;
+    // Build a small tree with NO context anywhere yet — the common
+    // pattern: construct content, THEN attach it under a live parent.
+    auto mid = std::make_unique<RecordingView>();
+    auto* mid_raw = mid.get();
+    auto* leaf_raw = static_cast<RecordingView*>(mid->add_child(std::make_unique<RecordingView>()));
+    CK_CHECK(!mid_raw->context().valid());
+    CK_CHECK(!leaf_raw->context().valid());
+
+    View root;
+    root.set_context(f.ctx);
+    root.add_child(std::move(mid));  // one shot: both mid and leaf resolve now
+
+    CK_CHECK(mid_raw->context().valid());
+    CK_CHECK(mid_raw->attach_count == 1);
+    CK_CHECK(leaf_raw->context().valid());
+    CK_CHECK(leaf_raw->attach_count == 1);
+}
+
+CK_TEST(re_setting_context_updates_it_but_does_not_refire_on_attached) {
+    ContextFixture f;
+    RecordingView v;
+    v.set_context(f.ctx);
+    CK_CHECK(v.attach_count == 1);
+
+    RoleRegistry other_registry;
+    Theme other_theme{other_registry};
+    v.set_context(Context{&other_theme, &other_registry, nullptr});  // e.g. per-window theme override
+
+    CK_CHECK(v.context().theme == &other_theme);  // the new context DOES take effect
+    CK_CHECK(v.attach_count == 1);                // but on_attached fires only on the first transition
 }

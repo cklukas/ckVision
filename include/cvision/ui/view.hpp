@@ -16,6 +16,7 @@
 #include "cvision/core/event.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/scene/painter.hpp"
+#include "cvision/ui/context.hpp"
 
 namespace ckv::ui {
 
@@ -192,6 +193,28 @@ public:
     using DetachSink = std::function<void(View&)>;
     void set_detach_sink(DetachSink sink);
 
+    // --- Context (theme/roles/application access, D-028) ----------------
+    //
+    // Propagates exactly like DirtyRectSink/DetachSink above: Application
+    // installs one on root() once; add_child propagates whatever context
+    // THIS view already has down to a newly attached subtree, so a
+    // widget tree built in memory and attached in one shot resolves
+    // correctly the moment it lands under a live context. Also settable
+    // directly on any (possibly never-attached) view for headless unit
+    // testing without a full Application — see context.hpp.
+    const Context& context() const noexcept { return context_; }
+    void set_context(const Context& context);
+
+    // Fired exactly once, the first time this view's context() becomes
+    // valid() — either via attachment under a context-bearing parent or
+    // a direct set_context() call. This is where a widget interns its
+    // own standard role names (RoleRegistry::intern is idempotent, so
+    // calling it again after Application's own intern_standard_roles
+    // pass is always safe) and caches the resolved RoleIds; the default
+    // does nothing, for views (plain containers, most of the tree) that
+    // carry no theming of their own.
+    virtual void on_attached() {}
+
     // --- Events (ARCHITECTURE.md §5 "Events") ---------------------------
     // Each returns true if it consumed the event (stopping the route).
 
@@ -245,6 +268,7 @@ protected:
 private:
     void propagate_dirty_rect_sink(const DirtyRectSink& sink);
     void propagate_detach_sink(const DetachSink& sink);
+    void propagate_context(const Context& context);
     void notify_detaching_recursive();  // fires detach_sink_ for `this` and every descendant, alive
 
     View* parent_ = nullptr;
@@ -258,6 +282,7 @@ private:
     std::optional<std::string> help_context_key_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;
+    Context context_;
 };
 
 }  // namespace ckv::ui

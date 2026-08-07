@@ -49,6 +49,10 @@ Application::Application(term::Terminal& terminal, Clock& clock)
         for (const auto& child : root_.children())
             if (child->fills_root()) child->set_bounds(Rect{0, 0, bounds.width, bounds.height});
     };
+    // The context every widget resolves its own theme roles through
+    // (M9 WP-7, D-028) — installed once, propagates to every current
+    // and future descendant exactly like the two sinks above.
+    root_.set_context(Context{&theme_, &roles_, this});
 }
 
 void Application::set_focus(View* view) {
