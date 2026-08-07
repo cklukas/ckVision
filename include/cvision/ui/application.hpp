@@ -135,15 +135,16 @@ public:
 
     // --- Commands --------------------------------------------------------
 
-    // Registers the handler a bound key or menu item (M5) invokes.
-    // `id` need not be pre-registered in commands() — a handler may be
-    // attached before or after register_command() — but execute_command
-    // on an id with neither a handler nor a registration is a no-op
-    // (nothing to run, nothing to check enablement against).
+    // Forwards to commands().set_handler()/execute() (M9/WP-10 moved
+    // handler storage into CommandRegistry itself, so
+    // CommandRegistry::add()'s .handler field has somewhere to land
+    // without giving the registry an Application dependency) — kept
+    // here because callers already have an Application& in scope
+    // everywhere dispatch happens. `id` need not be pre-registered —
+    // a handler may be attached before or after register_command()/
+    // add() — but execute_command on an id with neither a handler nor
+    // a registration is a no-op.
     void set_command_handler(CommandId id, std::function<void()> handler);
-
-    // Invokes id's handler if one is registered AND commands().is_enabled(id).
-    // Returns true if the handler ran.
     bool execute_command(CommandId id);
 
     // --- Dispatch (ARCHITECTURE.md §5 "Events") --------------------------
@@ -242,7 +243,6 @@ private:
     View* mouse_capture_ = nullptr;
     View* input_capture_ = nullptr;
 
-    std::unordered_map<CommandId, std::function<void()>> command_handlers_;
     std::function<void(const std::string&)> help_provider_;
 
     struct Timer {

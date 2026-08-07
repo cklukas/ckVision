@@ -129,16 +129,10 @@ void Application::set_help_provider(std::function<void(const std::string&)> prov
 }
 
 void Application::set_command_handler(CommandId id, std::function<void()> handler) {
-    command_handlers_[id] = std::move(handler);
+    commands_.set_handler(id, std::move(handler));
 }
 
-bool Application::execute_command(CommandId id) {
-    auto it = command_handlers_.find(id);
-    if (it == command_handlers_.end() || !it->second) return false;
-    if (!commands_.is_enabled(id)) return false;
-    it->second();
-    return true;
-}
+bool Application::execute_command(CommandId id) { return commands_.execute(id); }
 
 View* Application::topmost_view_at(Point absolute_point) noexcept {
     // Depth-first, last-added-on-top (children later in declaration

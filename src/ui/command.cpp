@@ -13,6 +13,17 @@ void CommandRegistry::register_command(CommandId id, std::string title, std::str
     if (default_chord) bind_key(*default_chord, id);
 }
 
+void CommandRegistry::add(CommandDescriptor descriptor) {
+    std::optional<KeyChord> chord;
+    if (!descriptor.chord.empty()) {
+        chord = KeyChord::parse(descriptor.chord);
+        CKV_ASSERT(chord.has_value());
+    }
+    const CommandId id = descriptor.id;
+    register_command(id, std::move(descriptor.title), std::move(descriptor.category), chord);
+    if (descriptor.handler) set_handler(id, std::move(descriptor.handler));
+}
+
 const CommandInfo* CommandRegistry::find(CommandId id) const noexcept {
     auto it = commands_.find(id);
     return it == commands_.end() ? nullptr : &it->second;
@@ -58,6 +69,18 @@ std::optional<KeyChord> CommandRegistry::chord_for_command(CommandId id) const {
     for (const auto& [chord, existing_id] : keymap_)
         if (existing_id == id) return chord;
     return std::nullopt;
+}
+
+void CommandRegistry::set_handler(CommandId id, std::function<void()> handler) {
+    handlers_[id] = std::move(handler);
+}
+
+bool CommandRegistry::execute(CommandId id) {
+    auto it = handlers_.find(id);
+    if (it == handlers_.end() || !it->second) return false;
+    if (!is_enabled(id)) return false;
+    it->second();
+    return true;
 }
 
 }  // namespace ckv::ui

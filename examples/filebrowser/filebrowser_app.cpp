@@ -51,9 +51,14 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     build_menu_bar();
     build_window();
 
-    app_.commands().register_command(kCmdQuit, "&Quit", "File",
-                                      KeyChord{Key::Char, Modifier::Alt, "x"});
-    app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
+    // One call each (M9/WP-10) — metadata, chord, and handler together,
+    // instead of a register_command()+set_command_handler() pair.
+    auto& commands = app_.commands();
+    commands.add({.id = kCmdQuit,
+                  .title = "&Quit",
+                  .category = "File",
+                  .chord = "Alt+X",
+                  .handler = [this] { quit_ = true; }});
 
     // Tab isn't wired to focus traversal anywhere in the library by
     // default (Application::focus_next()/previous() are callable
@@ -63,9 +68,11 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     // through a Tab keystroke). Two panes with no OTHER use for Tab
     // (unlike, say, a text editor that wants Tab to insert a literal
     // tab) makes this the obvious default here.
-    app_.commands().register_command(kCmdFocusNextPane, "Next Pane", "Window",
-                                      KeyChord{Key::Tab, Modifier::None, ""});
-    app_.set_command_handler(kCmdFocusNextPane, [this] { app_.focus_next(); });
+    commands.add({.id = kCmdFocusNextPane,
+                  .title = "Next Pane",
+                  .category = "Window",
+                  .chord = "Tab",
+                  .handler = [this] { app_.focus_next(); }});
 
     app_.set_focus(tree_);
 }

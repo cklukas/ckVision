@@ -41,17 +41,27 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     build_controls_window();
     build_image_window();
 
-    app_.commands().register_command(kCmdActivateMenu, "Menu", "Window",
-                                      KeyChord{Key::F10, Modifier::None, ""});
-    app_.commands().register_command(kCmdQuit, "&Quit", "File",
-                                      KeyChord{Key::Char, Modifier::Alt, "x"});
-    app_.commands().register_command(kCmdTile, "&Tile Windows", "Window");
-    app_.commands().register_command(kCmdCascade, "&Cascade Windows", "Window");
-
-    app_.set_command_handler(kCmdActivateMenu, [this] { menu_->activate(); });
-    app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
-    app_.set_command_handler(kCmdTile, [this] { desktop_->tile(); });
-    app_.set_command_handler(kCmdCascade, [this] { desktop_->cascade(); });
+    // One call each (M9/WP-10) — metadata, chord, and handler together,
+    // instead of a register_command()+set_command_handler() pair.
+    auto& commands = app_.commands();
+    commands.add({.id = kCmdActivateMenu,
+                  .title = "Menu",
+                  .category = "Window",
+                  .chord = "F10",
+                  .handler = [this] { menu_->activate(); }});
+    commands.add({.id = kCmdQuit,
+                  .title = "&Quit",
+                  .category = "File",
+                  .chord = "Alt+X",
+                  .handler = [this] { quit_ = true; }});
+    commands.add({.id = kCmdTile,
+                  .title = "&Tile Windows",
+                  .category = "Window",
+                  .handler = [this] { desktop_->tile(); }});
+    commands.add({.id = kCmdCascade,
+                  .title = "&Cascade Windows",
+                  .category = "Window",
+                  .handler = [this] { desktop_->cascade(); }});
 
     app_.set_focus(name_input_);
 }

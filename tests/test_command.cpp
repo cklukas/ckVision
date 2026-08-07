@@ -9,6 +9,7 @@
 using ckv::Key;
 using ckv::KeyChord;
 using ckv::Modifier;
+using ckv::ui::CommandDescriptor;
 using ckv::ui::CommandRegistry;
 using ckv::ui::kFirstApplicationCommandId;
 using ckv::ui::kInvalidCommand;
@@ -189,6 +190,93 @@ CK_TEST(registering_a_command_with_kinvalidcommand_id_aborts) {
     if (pid == 0) {
         CommandRegistry reg;
         reg.register_command(kInvalidCommand, "Bogus");  // must abort
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+// --- set_handler / execute (M9/WP-10, moved here from Application) --------
+
+CK_TEST(execute_runs_the_handler_and_reports_it_ran) {
+    CommandRegistry reg;
+    reg.register_command(kFileOpen, "Open");
+    bool ran = false;
+    reg.set_handler(kFileOpen, [&] { ran = true; });
+    CK_CHECK(reg.execute(kFileOpen));
+    CK_CHECK(ran);
+}
+
+CK_TEST(execute_on_an_id_with_no_handler_is_a_harmless_no_op) {
+    CommandRegistry reg;
+    reg.register_command(kFileOpen, "Open");
+    CK_CHECK(!reg.execute(kFileOpen));
+}
+
+CK_TEST(execute_on_a_disabled_command_does_not_run_its_handler) {
+    CommandRegistry reg;
+    reg.register_command(kFileOpen, "Open");
+    reg.set_enabled_predicate(kFileOpen, [] { return false; });
+    bool ran = false;
+    reg.set_handler(kFileOpen, [&] { ran = true; });
+    CK_CHECK(!reg.execute(kFileOpen));
+    CK_CHECK(!ran);
+}
+
+CK_TEST(a_handler_may_be_attached_before_the_command_is_ever_registered) {
+    CommandRegistry reg;
+    bool ran = false;
+    reg.set_handler(kFileOpen, [&] { ran = true; });
+    reg.register_command(kFileOpen, "Open");
+    CK_CHECK(reg.execute(kFileOpen));
+    CK_CHECK(ran);
+}
+
+// --- add() (M9/WP-10 one-call registration) --------------------------------
+
+CK_TEST(add_registers_metadata_and_installs_the_handler_from_one_descriptor) {
+    CommandRegistry reg;
+    bool ran = false;
+    reg.add(CommandDescriptor{
+        .id = kFileOpen, .title = "&Open...", .category = "File", .handler = [&] { ran = true; }});
+    const auto* info = reg.find(kFileOpen);
+    CK_CHECK(info != nullptr);
+    CK_CHECK(info->title == "&Open...");
+    CK_CHECK(info->category == "File");
+    CK_CHECK(reg.execute(kFileOpen));
+    CK_CHECK(ran);
+}
+
+CK_TEST(add_parses_a_nonempty_chord_string_and_binds_it) {
+    CommandRegistry reg;
+    reg.add(CommandDescriptor{.id = kFileOpen, .title = "Open", .chord = "Ctrl+O"});
+    const auto* info = reg.find(kFileOpen);
+    CK_CHECK(info->default_chord.has_value());
+    CK_CHECK(*info->default_chord == ctrl_o());
+    CK_CHECK(reg.command_for_key(ctrl_o()) == kFileOpen);
+}
+
+CK_TEST(add_with_an_empty_chord_string_registers_no_default_chord) {
+    CommandRegistry reg;
+    reg.add(CommandDescriptor{.id = kFileOpen, .title = "Open"});
+    CK_CHECK(!reg.find(kFileOpen)->default_chord.has_value());
+}
+
+CK_TEST(add_with_no_handler_leaves_execute_a_no_op) {
+    CommandRegistry reg;
+    reg.add(CommandDescriptor{.id = kFileOpen, .title = "Open"});
+    CK_CHECK(!reg.execute(kFileOpen));
+}
+
+CK_TEST(add_with_an_unparseable_chord_string_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        CommandRegistry reg;
+        // must abort
+        reg.add(CommandDescriptor{.id = kFileOpen, .title = "Open", .chord = "NotAChord"});
         ::_exit(1);
     }
     int status = 0;

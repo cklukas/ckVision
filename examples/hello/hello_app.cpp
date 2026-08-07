@@ -37,15 +37,24 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     status->set_items({{"", kCmdQuit}, {"", kCmdActivateMenu}});
     desktop_->dock_bottom(std::move(status));
 
-    app_.commands().register_command(kCmdActivateMenu, "Menu", "Window",
-                                      KeyChord{Key::F10, Modifier::None, ""});
-    app_.commands().register_command(kCmdGreeting, "&Greeting...", "Hello",
-                                      KeyChord{Key::Char, Modifier::Alt, "g"});
-    app_.commands().register_command(kCmdQuit, "E&xit", "Hello",
-                                      KeyChord{Key::Char, Modifier::Alt, "x"});
-    app_.set_command_handler(kCmdActivateMenu, [this] { menu_->activate(); });
-    app_.set_command_handler(kCmdGreeting, [this] { greeting_box(); });
-    app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
+    // One call each (M9/WP-10) — metadata, chord, and handler together,
+    // instead of a register_command()+set_command_handler() pair.
+    auto& commands = app_.commands();
+    commands.add({.id = kCmdActivateMenu,
+                  .title = "Menu",
+                  .category = "Window",
+                  .chord = "F10",
+                  .handler = [this] { menu_->activate(); }});
+    commands.add({.id = kCmdGreeting,
+                  .title = "&Greeting...",
+                  .category = "Hello",
+                  .chord = "Alt+G",
+                  .handler = [this] { greeting_box(); }});
+    commands.add({.id = kCmdQuit,
+                  .title = "E&xit",
+                  .category = "Hello",
+                  .chord = "Alt+X",
+                  .handler = [this] { quit_ = true; }});
 }
 
 // Turbo Vision's greetingBox() builds a MODAL TDialog (deskTop->execView
