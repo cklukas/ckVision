@@ -59,6 +59,10 @@ add_executable(cvision_tests
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 ckvision_strict(cvision_tests)
 
+if(UNIX)
+    target_sources(cvision_tests PRIVATE test_posix_filesystem.cpp)
+endif()
+
 # gallery_app only exists when CKVISION_BUILD_EXAMPLES is on (default,
 # but a build config could disable it) — the gallery smoke test is
 # additive, not required for the rest of the suite to be meaningful.

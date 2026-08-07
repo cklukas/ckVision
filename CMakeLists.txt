@@ -62,7 +62,8 @@ ckvision_strict(cvision)
 # The POSIX backend (termios/signal-based) only compiles on UNIX-like
 # systems; the Windows (ConPTY) backend is M7 scope (ROADMAP.md).
 if(UNIX)
-    target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_clock.cpp)
+    target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_clock.cpp
+        src/term/posix_filesystem.cpp)
     target_compile_definitions(cvision PUBLIC CKVISION_HAS_POSIX_TERMINAL=1)
 endif()
 
