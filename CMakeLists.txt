@@ -23,6 +23,7 @@ add_library(cvision
     src/term/input_decoder.cpp
     src/term/presenter.cpp
     src/term/sixel_encoder.cpp
+    src/ui/anchor_pane.cpp
     src/ui/application.cpp
     src/ui/command.cpp
     src/ui/history.cpp

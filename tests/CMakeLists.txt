@@ -1,5 +1,6 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 add_executable(cvision_tests
+    test_anchor_pane.cpp
     test_application.cpp
     test_application_render.cpp
     test_box_drawing.cpp

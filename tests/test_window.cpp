@@ -1,6 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/window.hpp"
 
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -23,6 +26,7 @@ using ckv::ui::Theme;
 using ckv::ui::View;
 using ckv::widgets::Label;
 using ckv::widgets::Window;
+namespace ui = ckv::ui;
 
 namespace {
 struct Fixture {
@@ -89,6 +93,55 @@ CK_TEST(a_window_too_small_for_any_interior_reports_a_zero_size_content_rect_wit
     w->set_content(std::make_unique<View>());
     CK_CHECK(w->content()->bounds().width == 0);
     CK_CHECK(w->content()->bounds().height == 0);
+}
+
+// --- content_pane(): the free-placement, resize-aware content (M10/WP-18) --
+
+CK_TEST(content_pane_lazily_creates_an_anchor_pane_sized_to_the_interior) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 10});
+    ui::AnchorPane& pane = w->content_pane();
+    CK_CHECK(w->content() == &pane);
+    CK_CHECK(pane.bounds() == (Rect{1, 1, 18, 8}));
+}
+
+CK_TEST(content_pane_returns_the_same_pane_on_repeated_calls) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 10});
+    CK_CHECK(&w->content_pane() == &w->content_pane());
+}
+
+CK_TEST(an_anchored_child_added_through_content_pane_keeps_its_corner_on_window_resize) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 10});
+    auto* label = w->content_pane().add_item(std::make_unique<View>(Rect{14, 6, 4, 1}),
+                                              ui::Anchors{.right = true, .bottom = true});
+
+    w->set_bounds(Rect{0, 0, 30, 15});
+
+    // Interior grew from {18,8} to {28,13} (10 more wide, 5 more
+    // tall); the label stays flush with the interior's right edge and
+    // 1 row above its bottom edge, exactly as it was before.
+    CK_CHECK(label->bounds() == (Rect{24, 11, 4, 1}));
+}
+
+CK_TEST(content_pane_on_a_window_whose_content_is_something_else_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        Fixture f;
+        auto w = make_window(f);
+        w->set_content(std::make_unique<View>());  // NOT an AnchorPane
+        w->content_pane();
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
 }
 
 // --- Close protocol (vetoable) ----------------------------------------------

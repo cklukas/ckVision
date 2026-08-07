@@ -44,6 +44,18 @@ std::unique_ptr<ui::View> Window::set_content(std::unique_ptr<ui::View> content)
     return previous;
 }
 
+ui::AnchorPane& Window::content_pane() {
+    if (content_ == nullptr) {
+        auto pane = std::make_unique<ui::AnchorPane>();
+        ui::AnchorPane* raw = pane.get();
+        set_content(std::move(pane));
+        return *raw;
+    }
+    auto* pane = dynamic_cast<ui::AnchorPane*>(content_);
+    CKV_ASSERT(pane != nullptr);
+    return *pane;
+}
+
 std::unique_ptr<ui::View> Window::set_frame_overlay(std::unique_ptr<ui::View> overlay) {
     std::unique_ptr<ui::View> previous = frame_overlay_ != nullptr ? remove_child(frame_overlay_) : nullptr;
     frame_overlay_ = nullptr;

@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 
+#include "cvision/ui/anchor_pane.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
@@ -65,6 +66,18 @@ public:
     // previous content (nullptr if there was none).
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
+
+    // The free-placement, resize-aware alternative to hand-building a
+    // set_content() call yourself (M10/WP-18): lazily installs a fresh
+    // ui::AnchorPane as this window's content the first time it's
+    // called, so children added to it (ui::AnchorPane::add_item) keep
+    // their own explicit bounds AND a sane position/size as the window
+    // resizes, per each child's own ui::Anchors — a bottom-right status
+    // label keeps its corner distance; an all-anchored child stretches
+    // with the dialog. CKV_ASSERT if content() is already set to
+    // something this method didn't itself install — content_pane() and
+    // set_content() both claim the one content slot, not composable.
+    ui::AnchorPane& content_pane();
 
     // A SECOND, small child that lives ON the frame border itself
     // rather than in the content interior — the classic "current
