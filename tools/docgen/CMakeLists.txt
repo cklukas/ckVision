@@ -31,3 +31,24 @@ if(TARGET filebrowser_app)
         ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/filebrowser)
     ckvision_strict(capture_filebrowser_screenshots)
 endif()
+
+if(TARGET tvhello_app)
+    add_executable(generate_tvhello_golden generate_tvhello_golden.cpp)
+    target_link_libraries(generate_tvhello_golden PRIVATE tvhello_app ckvision::cvision)
+    target_include_directories(generate_tvhello_golden PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/tvhello)
+    ckvision_strict(generate_tvhello_golden)
+
+    if(NOT TARGET docgen_frame_svg)
+        add_library(docgen_frame_svg STATIC frame_svg.cpp)
+        target_link_libraries(docgen_frame_svg PUBLIC ckvision::cvision)
+        ckvision_strict(docgen_frame_svg)
+    endif()
+
+    add_executable(capture_tvhello_screenshots capture_tvhello_screenshots.cpp)
+    target_link_libraries(capture_tvhello_screenshots PRIVATE docgen_frame_svg tvhello_app ckvision::cvision)
+    target_include_directories(capture_tvhello_screenshots PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/tvhello)
+    ckvision_strict(capture_tvhello_screenshots)
+endif()

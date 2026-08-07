@@ -559,3 +559,59 @@ CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_
     for (const Rect& fp : footprints)
         CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == ckv::scene::default_dim(background_style));
 }
+
+// --- detach_child (the polymorphic entry point for schedule_self_detach) --
+
+CK_TEST(detach_child_on_a_window_added_via_add_window_also_removes_it_from_windows) {
+    // Regression: widgets::schedule_self_detach used to call plain
+    // View::remove_child, which only ever touches the child list —
+    // for a window added via add_window() (tracked separately in
+    // Desktop::windows_), that silently left a DANGLING pointer in
+    // windows_ forever once the Window itself was destroyed.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    CK_CHECK(desktop.windows().size() == 1);
+
+    auto owned = desktop.detach_child(w);
+    CK_CHECK(owned != nullptr);
+    CK_CHECK(desktop.windows().empty());
+}
+
+CK_TEST(detach_child_on_a_popup_added_via_add_popup_also_removes_it_from_popups) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
+    CK_CHECK(desktop.popups().size() == 1);
+
+    auto owned = desktop.detach_child(popup);
+    CK_CHECK(owned != nullptr);
+    CK_CHECK(desktop.popups().empty());
+}
+
+CK_TEST(detach_child_on_a_plain_child_falls_back_to_ordinary_removal) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    ckv::ui::View* plain = desktop.add_child(std::make_unique<ckv::ui::View>());
+    CK_CHECK(desktop.children().size() == 1);
+
+    auto owned = desktop.detach_child(plain);
+    CK_CHECK(owned != nullptr);
+    CK_CHECK(desktop.children().empty());
+}
+
+CK_TEST(detach_child_on_a_window_added_via_plain_add_child_does_not_touch_windows) {
+    // A window attached via add_child() directly (the convention the
+    // library's own dialog factories use for throwaway, non-cycling
+    // windows — see the M6 review's message_box.cpp fix) was never in
+    // windows_ to begin with; detach_child must still remove it via
+    // the plain-child path without crashing on the "not found" case.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Window* w = static_cast<Window*>(desktop.add_child(make_window(f)));
+    CK_CHECK(desktop.windows().empty());
+
+    auto owned = desktop.detach_child(w);
+    CK_CHECK(owned != nullptr);
+    CK_CHECK(desktop.children().empty());
+}

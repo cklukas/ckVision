@@ -54,6 +54,14 @@ public:
     // which goes through Presenter/Terminal exclusively.
     FrameView current_frame() const noexcept { return compositor_.frame().view(); }
 
+    // The full composed Surface (raster regions included) and cursor
+    // state behind current_frame() — for golden-dump testing
+    // (scene::capture() needs a Surface, not just a FrameView) and the
+    // same documentation-tooling use case current_frame() itself
+    // exists for. Not part of the interactive rendering path.
+    const scene::Surface& composed_surface() const noexcept { return compositor_.frame(); }
+    CursorState current_cursor() const noexcept { return compositor_.cursor(); }
+
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
 

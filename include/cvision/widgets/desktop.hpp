@@ -114,6 +114,15 @@ public:
 
     void draw(scene::Painter& painter) override;
 
+    // Routes to remove_window()/remove_popup() when `child` is one of
+    // those (keeping windows_/popups_/active_ consistent — plain
+    // View::remove_child would silently desync them, leaving a
+    // dangling pointer in windows_ or popups_), falling back to plain
+    // child removal for anything else (docked chrome, or a window/
+    // popup attached via add_child() directly rather than add_window/
+    // add_popup, both of which remain fully supported).
+    std::unique_ptr<ui::View> detach_child(ui::View* child) override;
+
     // Overridden (not just the default per-child walk) so a window's
     // shadow can be composited immediately after that window paints,
     // in the SAME z-order pass — the only place "dim exactly what's

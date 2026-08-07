@@ -171,6 +171,16 @@ void Window::draw(scene::Painter& painter) {
     const Style frame_style = theme_.resolve(frame_role);
     const Style title_style = theme_.resolve(title_role);
 
+    // The interior fills with the SAME style as the frame — matching
+    // the convention's own "the window's palette is uniform across
+    // frame and content unless a child widget paints over it," not
+    // just the border. Without this, any content cell a child widget
+    // doesn't happen to cover shows raw, unstyled Surface fill — a
+    // window with sparse content (a couple of labels and buttons, not
+    // a full-bleed panel) previously showed a visibly blank patch
+    // instead of reading as one solid window.
+    painter.fill(content_rect(), Cell::from_grapheme(" ", frame_style));
+
     // Active windows get a DOUBLE-line frame, inactive ones single —
     // the classic windowed-desktop convention for "this is the one
     // that has focus," and (unlike relying on color alone) still
@@ -295,7 +305,13 @@ bool Window::on_mouse(const MouseEvent& event) {
 
 void schedule_self_detach(Window& window, ui::Application& app) {
     app.post([&window]() {
-        if (ui::View* parent = window.parent()) parent->remove_child(&window);
+        // detach_child(), not remove_child(): if `parent` is a Desktop
+        // and `window` was added via add_window(), plain remove_child
+        // would silently leave a dangling pointer in Desktop's own
+        // windows_ bookkeeping — detach_child() is the polymorphic
+        // entry point that gets this right regardless of what kind of
+        // View actually parents this window.
+        if (ui::View* parent = window.parent()) parent->detach_child(&window);
     });
 }
 

@@ -68,6 +68,14 @@ std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
     return remove_child(popup);
 }
 
+std::unique_ptr<ui::View> Desktop::detach_child(ui::View* child) {
+    if (auto* window = dynamic_cast<Window*>(child);
+        window != nullptr && std::find(windows_.begin(), windows_.end(), window) != windows_.end())
+        return remove_window(window);
+    if (std::find(popups_.begin(), popups_.end(), child) != popups_.end()) return remove_popup(child);
+    return remove_child(child);
+}
+
 void Desktop::reraise_popups() {
     for (ui::View* popup : popups_) raise_to_front(popup);
 }

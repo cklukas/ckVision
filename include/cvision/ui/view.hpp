@@ -62,6 +62,16 @@ public:
     // View never silently destroys a view a caller is mid-inspecting.
     std::unique_ptr<View> remove_child(View* child);
 
+    // The polymorphic entry point for "detach whatever this child is,
+    // correctly" — for a caller that only knows it has a View* and a
+    // parent View*, with no way to know whether the parent needs MORE
+    // than plain child-list removal to stay internally consistent
+    // (Desktop overrides this to also drop the child from windows_/
+    // popups_ when applicable; the default here is exactly
+    // remove_child()). widgets::schedule_self_detach is the motivating
+    // caller: a Window doesn't know what kind of View parents it.
+    virtual std::unique_ptr<View> detach_child(View* child) { return remove_child(child); }
+
     // Moves `child` to the end of this view's child list — the topmost
     // z-position, since hit-testing (Application::topmost_view_at) and
     // painting both treat later children as on top of earlier ones.

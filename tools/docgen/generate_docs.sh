@@ -23,12 +23,13 @@ CKWRITE_BIN="${CKWRITE_BIN:-$HOME/git/cworks_dir/cworks/build/bin/ckwrite}"
 echo "==> Building ckVision (screenshot capture tools)"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
-    --target capture_gallery_screenshots capture_filebrowser_screenshots
+    --target capture_gallery_screenshots capture_filebrowser_screenshots capture_tvhello_screenshots
 
 echo "==> Capturing example-app screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_filebrowser_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_tvhello_screenshots" "$SCREENSHOTS_DIR"
 
 # ckwrite's LaTeX/PDF path requires a PDF companion for every embedded
 # SVG (no TeX engine reads SVG directly) — the HTML path uses the SVGs
@@ -65,8 +66,18 @@ for md in "$DOCS_DIR"/*.md; do
     name="$(basename "$md" .md)"
     "$CKWRITE_BIN" export "$md" --to latex -o "$GEN_DIR/pdf/$name.tex" --copy-assets
     if command -v pdflatex >/dev/null 2>&1; then
-        (cd "$GEN_DIR/pdf" && pdflatex -interaction=nonstopmode -output-directory="$GEN_DIR/pdf" "$name.tex" >/dev/null)
-        echo "    wrote $GEN_DIR/pdf/$name.pdf"
+        # One page's LaTeX content (e.g. a code block with raw box-
+        # drawing glyphs pdflatex's default font can't set) must not
+        # abort the whole run — pdflatex often still emits a usable
+        # PDF alongside a nonzero exit in -interaction=nonstopmode, so
+        # this warns and moves on rather than losing every OTHER page.
+        if (cd "$GEN_DIR/pdf" && pdflatex -interaction=nonstopmode -output-directory="$GEN_DIR/pdf" "$name.tex" \
+                >"$GEN_DIR/pdf/$name.pdflatex.log" 2>&1); then
+            echo "    wrote $GEN_DIR/pdf/$name.pdf"
+        else
+            echo "    warning: pdflatex reported errors for $name.tex — see $GEN_DIR/pdf/$name.pdflatex.log" >&2
+            echo "             ($GEN_DIR/pdf/$name.pdf may still exist and be usable)" >&2
+        fi
     else
         echo "    warning: pdflatex not found; wrote LaTeX only ($GEN_DIR/pdf/$name.tex)" >&2
     fi

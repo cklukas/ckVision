@@ -331,6 +331,40 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
     CK_CHECK(true);
 }
 
+// --- Content interior fill (windowed-desktop fidelity) --------------------
+
+CK_TEST(the_content_interior_fills_with_the_frame_style_not_left_blank) {
+    // Regression: a window with sparse content (content covering only
+    // some cells, not a full-bleed panel) used to show raw, unstyled
+    // Surface fill anywhere a child widget didn't happen to paint —
+    // reading as a visibly broken patch rather than one solid window.
+    Fixture f;
+    Surface s(ckv::Size{20, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 10});
+    // set_content() is not even called — an entirely childless window
+    // must still fill its whole interior.
+    Painter painter(s, Rect{0, 0, 20, 10});
+    w.draw(painter);
+
+    const ckv::Style expected = f.theme.resolve(f.roles.window_frame_inactive);
+    for (int y = 1; y < 9; ++y)
+        for (int x = 1; x < 19; ++x) CK_CHECK(s.at(Point{x, y}).style() == expected);
+}
+
+CK_TEST(the_content_fill_uses_the_active_frame_style_when_the_window_is_active) {
+    Fixture f;
+    Surface s(ckv::Size{20, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 10});
+    w.set_active(true);
+    Painter painter(s, Rect{0, 0, 20, 10});
+    w.draw(painter);
+
+    const ckv::Style expected = f.theme.resolve(f.roles.window_frame_active);
+    CK_CHECK(s.at(Point{10, 5}).style() == expected);
+}
+
 // --- Frame style and control glyphs (windowed-desktop fidelity) ----------
 
 CK_TEST(an_inactive_window_draws_with_single_line_box_glyphs) {

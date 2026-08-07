@@ -76,6 +76,11 @@ if(TARGET filebrowser_app)
     target_link_libraries(cvision_tests PRIVATE filebrowser_app)
 endif()
 
+if(TARGET tvhello_app)
+    target_sources(cvision_tests PRIVATE test_tvhello_golden.cpp)
+    target_link_libraries(cvision_tests PRIVATE tvhello_app)
+endif()
+
 if(TARGET docgen_frame_svg)
     target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
     target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
