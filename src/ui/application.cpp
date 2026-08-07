@@ -174,6 +174,13 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     if (v->on_text(e)) return true;
                 return false;
             } else if constexpr (std::is_same_v<T, MouseEvent>) {
+                // Captured BEFORE target resolution: a popup (menu
+                // dropdown light-dismiss) already owning input capture
+                // means clicks are that popup's own business end to
+                // end — click-to-focus below must never fire for them,
+                // regardless of what delivery does to input_capture_
+                // as a side effect (e.g. opening ANOTHER dropdown).
+                const bool had_input_capture = input_capture_ != nullptr;
                 View* target = input_capture_;
                 if (target == nullptr) target = mouse_capture_;
                 if (target == nullptr) target = topmost_view_at(e.cell);
@@ -181,6 +188,26 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 if (e.action == MouseAction::Down && input_capture_ == nullptr) mouse_capture_ = target;
                 const bool handled = target->on_mouse(e);
                 if (e.action == MouseAction::Up) mouse_capture_ = nullptr;
+                // Click-to-focus (VISION #7): a press outside any
+                // popup capture moves focus to the nearest focusable
+                // view at or above the click target. Deliberately
+                // AFTER delivery, not before: a widget that manages
+                // its own focus-on-click transition (MenuBar opening
+                // its dropdown on first click, which records "what was
+                // focused before" via its own bookkeeping) must see
+                // the TRUE prior focus, not one this dispatch already
+                // reassigned out from under it. set_focus is a no-op
+                // when the widget already focused itself during
+                // delivery, so this never fights a widget's own
+                // choice — it only fills in when nothing did.
+                if (e.action == MouseAction::Down && !had_input_capture) {
+                    for (View* v = target; v != nullptr; v = v->parent()) {
+                        if (v->focusable()) {
+                            set_focus(v);
+                            break;
+                        }
+                    }
+                }
                 return handled;
             } else if constexpr (std::is_same_v<T, FocusEvent>) {
                 if (focused_ == nullptr) return false;

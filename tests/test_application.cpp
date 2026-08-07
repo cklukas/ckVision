@@ -330,6 +330,69 @@ CK_TEST(after_mouse_up_capture_releases_and_hit_testing_resumes) {
     CK_CHECK(right->mouse_events == 1);
 }
 
+// --- Mouse: click-to-focus (M8/WP-2) ----------------------------------------
+
+CK_TEST(clicking_an_unfocused_focusable_view_gives_it_focus) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* target = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 5, 5})));
+    target->set_focus_policy(FocusPolicy::TabStop);
+    CK_CHECK(app.focused() == nullptr);
+
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 2}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);
+    CK_CHECK(app.focused() == target);
+}
+
+CK_TEST(clicking_a_non_focusable_view_leaves_focus_unchanged) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* focusable =
+        static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{20, 0, 5, 5})));
+    focusable->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(focusable);
+
+    auto* label = static_cast<ProbeView*>(
+        app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 5, 5})));  // FocusPolicy::None
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 2}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);
+    CK_CHECK(label->mouse_events == 1);   // the click was still delivered
+    CK_CHECK(app.focused() == focusable);  // but focus did not move
+}
+
+CK_TEST(clicking_a_non_focusable_child_inside_a_focusable_container_focuses_the_container) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* container =
+        static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 20, 20})));
+    container->set_focus_policy(FocusPolicy::TabStop);
+    auto* inner = container->add_child(std::make_unique<ProbeView>(Rect{2, 2, 5, 5}));  // e.g. a scrollbar
+
+    ckv::MouseEvent down{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 3}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(down);
+    CK_CHECK(app.focused() == container);
+    CK_CHECK(static_cast<ProbeView*>(inner)->mouse_events == 1);  // the leaf still received the click
+}
+
+CK_TEST(click_to_focus_does_not_fire_on_move_or_up_only_on_down) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* target = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 5, 5})));
+    target->set_focus_policy(FocusPolicy::TabStop);
+
+    ckv::MouseEvent move{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{2, 2}, std::nullopt,
+                          Modifier::None};
+    app.dispatch(move);
+    CK_CHECK(app.focused() == nullptr);  // a bare hover/move never steals focus
+}
+
 // --- Resize ------------------------------------------------------------
 
 CK_TEST(resize_event_updates_the_roots_bounds) {

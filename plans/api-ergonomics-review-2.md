@@ -31,7 +31,8 @@ landing commit). A row with no note is still open.
 | WP | Status | Note |
 |---|---|---|
 | WP-1 | **Done** | `View::fills_root()`/`on_bounds_changed`; `tests/test_m8_resize_integration.cpp` |
-| WP-2…22 | Open | — |
+| WP-2 | **Done** | Click-to-focus in `Application::dispatch`, applied after delivery (not before — see the MenuBar note below) |
+| WP-3…22 | Open | — |
 
 ---
 
@@ -272,15 +273,35 @@ previously outside the shrunk area is reachable, and no stale cells
 remain (golden per step). The false sentence in
 `docs/example-apps.md` becomes true and gains a test reference.
 
-**WP-2 — Click-to-focus.** On `MouseAction::Down`,
-`Application::dispatch` walks from the hit view upward to the nearest
-`focusable()` view and calls `set_focus(...)` before delivering the
-event. Views that must not take click focus (scrollbars mid-drag are
-already non-focusable; a future search-overlay case) opt out via a
-`focus_on_click()` predicate defaulting to `focusable()`.
+**WP-2 — Click-to-focus. Landed AFTER delivery, not before (design
+correction found during implementation).** On `MouseAction::Down`
+outside any active popup input-capture, `Application::dispatch` walks
+from the hit view upward to the nearest `focusable()` view and calls
+`set_focus(...)`. The original plan below said "before delivering the
+event"; implementing it turned up a real conflict: `MenuBar::on_mouse`
+opens its dropdown via `activate()`, which reads `app.focused()` to
+remember "what was focused before" for `deactivate()`'s restore. If
+click-to-focus ran first, `activate()` would read the click's own new
+focus (the bar itself) as "the prior focus," and Esc would restore to
+the bar instead of whatever was truly focused before the click. Landed
+shape: click-to-focus runs AFTER `target->on_mouse(event)` returns,
+using the SAME `target` resolved before delivery, and is skipped
+entirely when a popup already held input capture at the start of the
+event (popups manage their own focus). `set_focus` is idempotent, so a
+widget that already focused itself during delivery (as `activate()`
+does) is unaffected — this is confirmed by
+`tests/test_menu.cpp`:`clicking_the_bar_to_open_it_still_restores_the_true_prior_focus_on_escape`.
+No `focus_on_click()` opt-out predicate was added: no current widget
+needs one (a widget that must not take click focus already achieves
+that by not setting `FocusPolicy::TabStop`), and the review's own
+engineering standard is to not add abstractions beyond what a concrete
+caller requires — add the predicate if and when a real widget needs a
+focusable-but-not-click-focusable state.
 *Acceptance:* script — click an unfocused InputLine in another window:
 focus moves, subsequent typing lands there; click a Label: focus
-unchanged.
+unchanged; click a non-focusable child inside a focusable container:
+the container focuses (the leaf still receives the click); Move/Up
+events never move focus, only Down.
 
 **WP-3 — Click-to-activate/raise.** Mouse Down dispatch gains a
 capture-phase notification: before delivery, ancestors are walked

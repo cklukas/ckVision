@@ -246,6 +246,37 @@ CK_TEST(activate_gives_the_bar_focus_and_deactivate_restores_the_previous_focus)
     CK_CHECK(mf.app.focused() == other);
 }
 
+// Regression (M8/WP-2): Application::dispatch's new click-to-focus must
+// not corrupt MenuBar's own previously_focused_ bookkeeping. A mouse
+// click on the bar (not a direct activate() call) drives MenuBar's
+// on_mouse -> activate() through the SAME dispatch call that also runs
+// click-to-focus; if click-to-focus ran BEFORE delivery it would
+// already have set focused_ to the bar itself by the time activate()
+// reads app.focused() to remember "what was focused before", and
+// Escape would then restore focus to the bar instead of `other`.
+CK_TEST(clicking_the_bar_to_open_it_still_restores_the_true_prior_focus_on_escape) {
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false}}}}, mf.f.theme,
+        mf.f.roles.menu_bar_normal, mf.f.roles.menu_bar_active, mf.f.roles.menu_dropdown_normal,
+        mf.f.roles.menu_dropdown_highlighted, mf.f.roles.menu_dropdown_disabled, mf.app, mf.desktop);
+    MenuBar* bar = static_cast<MenuBar*>(mf.app.root().add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 80, 1});
+
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 0},
+                                     std::nullopt, Modifier::None});
+    CK_CHECK(bar->active());
+    CK_CHECK(mf.app.focused() == bar);
+
+    mf.app.dispatch(key(Key::Escape));
+    CK_CHECK(!bar->active());
+    CK_CHECK(mf.app.focused() == other);  // NOT the bar — the true prior focus survived
+}
+
 CK_TEST(enter_opens_a_dropdown_as_a_desktop_popup) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
