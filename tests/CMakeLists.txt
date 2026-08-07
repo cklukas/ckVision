@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 add_executable(cvision_tests
     test_application.cpp
+    test_application_render.cpp
     test_box_drawing.cpp
     test_canvas.cpp
     test_clock_diagnostics_error.cpp
@@ -57,6 +58,14 @@ add_executable(cvision_tests
     main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 ckvision_strict(cvision_tests)
+
+# gallery_app only exists when CKVISION_BUILD_EXAMPLES is on (default,
+# but a build config could disable it) — the gallery smoke test is
+# additive, not required for the rest of the suite to be meaningful.
+if(TARGET gallery_app)
+    target_sources(cvision_tests PRIVATE test_gallery_smoke.cpp)
+    target_link_libraries(cvision_tests PRIVATE gallery_app)
+endif()
 
 add_test(NAME cvision_tests
     COMMAND cvision_tests

@@ -25,6 +25,10 @@
 #include <vector>
 
 #include "cvision/core/clock.hpp"
+#include "cvision/scene/compositor.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
+#include "cvision/term/presenter.hpp"
 #include "cvision/term/terminal.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/history.hpp"
@@ -154,12 +158,27 @@ public:
 
     // Polls the terminal up to `deadline_nanos` (clamped earlier if a
     // timer is due sooner), dispatches everything received, runs every
-    // due timer, then drains posted work. Returns true if any event was
-    // dispatched, any timer fired, or posted work ran (i.e. something
-    // may have invalidated the tree) — callers drive their own paint/
-    // present from that signal (M5's Window/Desktop wires paint; M4 has
-    // no backing surface yet to paint into).
+    // due timer, drains posted work, and — only if any of that
+    // invalidated the tree — paints the whole tree into an off-screen
+    // Surface and presents it (ARCHITECTURE.md §5's "one frame per
+    // batch"). Returns true if any event was dispatched, any timer
+    // fired, or posted work ran.
+    //
+    // v1 scope note: painting is whole-tree, not damage-rect-limited —
+    // every View under an invalidated subtree redraws every frame that
+    // has ANY damage anywhere. Presenter's own cell-by-cell diff still
+    // guarantees the terminal only ever receives bytes for cells that
+    // actually changed, so this does not cost extra terminal I/O; it
+    // costs extra Painter calls into the off-screen Surface, which is
+    // measured (ckvision_bench) rather than assumed acceptable.
+    // Damage-rect-scoped painting is a real follow-on, not a
+    // correctness gap.
     bool step(std::int64_t deadline_nanos);
+
+    // Forces the next paint to redraw and re-present the whole frame
+    // (e.g. after a runtime theme switch, which invalidates every
+    // cell's style without any single View's bounds changing).
+    void invalidate_all();
 
     // Best-effort: makes the NEXT step() call return promptly even if
     // its deadline has not elapsed, by clamping that call's effective
@@ -176,10 +195,27 @@ private:
     View* topmost_view_at(Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
     std::vector<View*> focusable_views() const;
+    void paint_view(View& view, const scene::Painter& parent_painter);
+    void paint_and_present();
 
     term::Terminal& terminal_;
     Clock& clock_;
     View root_;
+    scene::Surface surface_;
+    // v1 renders through ONE shared Surface (Window baseline draws
+    // through the ordinary View/Painter tree, no per-window backing
+    // store yet — see widgets/window.hpp's own scope note), but
+    // Compositor is still what turns a Surface's raster regions
+    // (Sixel/kitty image content) into the RasterSlices Presenter
+    // needs — its occlusion slicing is trivial with a single "layer"
+    // covering the whole frame, but reusing the real, tested Compositor
+    // path is strictly better than re-deriving that math ad hoc here.
+    // `background_layer_` exists only because compose() requires a
+    // background distinct from its layers; it is never drawn into.
+    scene::Surface background_layer_;
+    scene::Compositor compositor_;
+    term::Presenter presenter_;
+    bool dirty_ = true;  // forces the very first frame to paint+present
     CommandRegistry commands_;
     RoleRegistry roles_;
     Theme theme_{roles_};

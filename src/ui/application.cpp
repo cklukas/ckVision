@@ -17,7 +17,13 @@ bool contains(const Rect& r, Point p) noexcept {
 }  // namespace
 
 Application::Application(term::Terminal& terminal, Clock& clock)
-    : terminal_(terminal), clock_(clock), root_(Rect{0, 0, terminal.size().width, terminal.size().height}) {
+    : terminal_(terminal),
+      clock_(clock),
+      root_(Rect{0, 0, terminal.size().width, terminal.size().height}),
+      surface_(terminal.size()),
+      background_layer_(terminal.size()),
+      compositor_(terminal.size()),
+      presenter_(terminal) {
     // Never call back into `v` here: it may be mid-destructor (its
     // derived-class members already torn down) when this fires. Just
     // drop the raw pointers — no on_focus notification, nothing that
@@ -27,6 +33,11 @@ Application::Application(term::Terminal& terminal, Clock& clock)
         if (mouse_capture_ == &v) mouse_capture_ = nullptr;
         if (input_capture_ == &v) input_capture_ = nullptr;
     });
+    // Every invalidate() anywhere in the tree marks the whole
+    // Application dirty (v1 scope: see step()'s doc comment — the
+    // dirty RECT itself is intentionally not yet used to scope
+    // painting, only to decide WHETHER to paint at all).
+    root_.set_dirty_rect_sink([this](Rect) { dirty_ = true; });
 }
 
 void Application::set_focus(View* view) {
@@ -226,7 +237,56 @@ bool Application::step(std::int64_t deadline_nanos) {
         did_work = true;
         fn();
     }
+
+    paint_and_present();
     return did_work;
+}
+
+void Application::invalidate_all() {
+    dirty_ = true;
+    presenter_.invalidate();
+}
+
+void Application::paint_view(View& view, const scene::Painter& parent_painter) {
+    if (!view.visible()) return;
+    const Rect local_bounds{0, 0, view.bounds().width, view.bounds().height};
+    scene::Painter painter = parent_painter.translated(Point{view.bounds().x, view.bounds().y}, local_bounds);
+    view.draw(painter);
+    for (const auto& child : view.children()) paint_view(*child, painter);
+}
+
+void Application::paint_and_present() {
+    if (!dirty_) return;
+
+    const Size current_size{root_.bounds().width, root_.bounds().height};
+    if (current_size.width != surface_.size().width || current_size.height != surface_.size().height) {
+        surface_.resize(current_size);
+        background_layer_.resize(current_size);
+        compositor_.resize(current_size);
+        presenter_.invalidate();
+    }
+
+    // v1 full-tree repaint (see step()'s doc comment) redraws every
+    // ImageView on every dirty frame, calling Painter::draw_image again
+    // with the SAME region id each time — Surface::add_raster_region
+    // requires ids to be unique among a Surface's CURRENT regions, so
+    // last frame's regions must be cleared first or a live widget would
+    // collide with its own still-registered region from one frame ago.
+    for (const scene::RasterRegion& region : std::vector<scene::RasterRegion>(surface_.raster_regions()))
+        surface_.remove_raster_region(region.id);
+
+    scene::Painter root_painter(surface_, Rect{0, 0, current_size.width, current_size.height});
+    for (const auto& child : root_.children()) paint_view(*child, root_painter);
+    dirty_ = false;
+
+    // surface_ is the sole layer, covering the whole frame — Compositor
+    // occlusion math over one layer is trivial, but this is still the
+    // real, tested pipeline that turns raster regions (Sixel/kitty
+    // image content) into the RasterSlices Presenter needs, rather than
+    // a hand-rolled duplicate of that logic here.
+    const std::vector<scene::Layer> layers{scene::Layer{0, &surface_, Point{0, 0}, false}};
+    compositor_.compose(layers, background_layer_);
+    presenter_.present(compositor_.frame().view(), compositor_.cursor(), compositor_.visible_rasters());
 }
 
 void Application::wake() noexcept {

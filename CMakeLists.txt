@@ -62,8 +62,16 @@ ckvision_strict(cvision)
 # The POSIX backend (termios/signal-based) only compiles on UNIX-like
 # systems; the Windows (ConPTY) backend is M7 scope (ROADMAP.md).
 if(UNIX)
-    target_sources(cvision PRIVATE src/term/posix_terminal.cpp)
+    target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_clock.cpp)
     target_compile_definitions(cvision PUBLIC CKVISION_HAS_POSIX_TERMINAL=1)
+endif()
+
+option(CKVISION_BUILD_EXAMPLES
+    "Build ckVision example applications" ${PROJECT_IS_TOP_LEVEL})
+if(CKVISION_BUILD_EXAMPLES)
+    # Ahead of tests/: test_gallery_smoke.cpp links the gallery_app
+    # target and needs it to already exist.
+    add_subdirectory(examples)
 endif()
 
 option(CKVISION_BUILD_TESTING
