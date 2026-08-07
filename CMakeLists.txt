@@ -26,6 +26,7 @@ add_library(cvision
     src/ui/anchor_pane.cpp
     src/ui/application.cpp
     src/ui/command.cpp
+    src/ui/grid.cpp
     src/ui/history.cpp
     src/ui/layout.cpp
     src/ui/standard_roles.cpp
