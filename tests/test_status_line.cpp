@@ -124,7 +124,7 @@ CK_TEST(clicking_an_items_label_fires_its_command) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kHelp = 1;
+    constexpr CommandId kHelp = ui::kFirstApplicationCommandId;
     app.commands().register_command(kHelp, "Help");
     bool ran = false;
     app.set_command_handler(kHelp, [&] { ran = true; });
@@ -160,7 +160,7 @@ CK_TEST(a_disabled_commands_item_still_fires_execute_command_which_itself_declin
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kHelp = 1;
+    constexpr CommandId kHelp = ui::kFirstApplicationCommandId;
     app.commands().register_command(kHelp, "Help");
     app.commands().set_enabled_predicate(kHelp, [] { return false; });
     bool ran = false;
@@ -180,8 +180,8 @@ CK_TEST(second_item_is_positioned_after_the_first_with_a_separator_between) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kFirst = 1;
-    constexpr CommandId kSecond = 2;
+    constexpr CommandId kFirst = ui::kFirstApplicationCommandId;
+    constexpr CommandId kSecond = ui::kFirstApplicationCommandId + 1;
     app.commands().register_command(kFirst, "First");
     app.commands().register_command(kSecond, "Second");
     bool second_ran = false;

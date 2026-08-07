@@ -3,7 +3,9 @@
 // A first-class command system (ARCHITECTURE.md §5, DECISIONS.md
 // D-013): 32-bit CommandId, ids below 4096 reserved for the library's
 // own standard commands, applications and extension libraries own the
-// space above.
+// space above. The reserved set itself (ckv::ui::std_commands, below)
+// is documented in full — the set, its default chords, and the
+// reasoning behind each — in docs/standard-commands.md.
 #pragma once
 
 #include <functional>
@@ -19,6 +21,47 @@ namespace ckv::ui {
 using CommandId = std::int32_t;
 inline constexpr CommandId kFirstApplicationCommandId = 4096;
 inline constexpr CommandId kInvalidCommand = 0;
+
+// The library's own standard command set (D-013 materialized, M9/
+// WP-12): reserved ids below kFirstApplicationCommandId, registered
+// by Application's constructor (D-029) with the default chords noted
+// below. An application attaches its own handler — via
+// CommandRegistry::set_handler() or Application::set_command_handler()
+// — to whichever of these its widgets actually need, rather than
+// defining an app-specific command for a concept the framework
+// already models (e.g. referencing std_commands::kQuit instead of
+// registering a private "quit" command of its own).
+//
+// Default-chord scheme (this project's own choice, authored for
+// WP-12 — no prior source consulted per this repo's provenance rule):
+// kHelp = F1, kMenu = F10, kNextWindow = F6, kPreviousWindow =
+// Shift+F6, kZoom = F5, kClose = Alt+F3, kQuit = Alt+X (already the
+// convention every example independently used before this landed).
+// kTile/kCascade/kWindowList get NO default chord — there is no
+// comparably strong, widely-recognized single-key convention for
+// them; an application binds one itself if it wants one.
+//
+// Titles are fixed, not overridable — the reserved range can only be
+// (re-)populated by register_standard_commands() itself, so
+// register_command()/add() reject any attempt to touch these ids (see
+// their own doc comments). An application that needs different
+// wording for the same concept — e.g. matching an external reference
+// example's own vocabulary, as examples/hello does for "Exit" — keeps
+// its own command in the application range instead of referencing the
+// standard one; that is a legitimate reason NOT to reference
+// std_commands, not a gap to work around.
+namespace std_commands {
+inline constexpr CommandId kQuit = 1;
+inline constexpr CommandId kClose = 2;
+inline constexpr CommandId kZoom = 3;
+inline constexpr CommandId kNextWindow = 4;
+inline constexpr CommandId kPreviousWindow = 5;
+inline constexpr CommandId kTile = 6;
+inline constexpr CommandId kCascade = 7;
+inline constexpr CommandId kWindowList = 8;
+inline constexpr CommandId kMenu = 9;
+inline constexpr CommandId kHelp = 10;
+}  // namespace std_commands
 
 struct CommandInfo {
     CommandId id = kInvalidCommand;
@@ -61,6 +104,11 @@ struct CommandDescriptor {
 // menus exist to observe it; M4 has no menu system yet to need one.
 class CommandRegistry {
 public:
+    // CKV_ASSERT if id falls inside the reserved std_commands range
+    // (M9/WP-12) — that range is populated exactly once, by
+    // Application's constructor calling register_standard_commands()
+    // below; application code always registers at
+    // kFirstApplicationCommandId or above.
     void register_command(CommandId id, std::string title, std::string category = {},
                            std::optional<KeyChord> default_chord = {});
 
@@ -73,7 +121,20 @@ public:
     // error to fix, not a condition to silently degrade from.
     void add(CommandDescriptor descriptor);
 
+    // Populates every std_commands::* id with its metadata and
+    // default chord (M9/WP-12, D-013/D-029) — called exactly once, by
+    // Application's constructor. Not for application code to call:
+    // there is nothing to configure, and calling it twice would just
+    // re-bind the same chords to the same ids.
+    void register_standard_commands();
+
     const CommandInfo* find(CommandId id) const noexcept;
+
+    // Every registered command, sorted by id (M9/WP-12 — a
+    // deterministic order for anything that enumerates the registry,
+    // e.g. the reference-docs command table generator; commands_
+    // itself is an unordered_map and gives no ordering guarantee).
+    std::vector<CommandInfo> all() const;
 
     void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
     bool is_enabled(CommandId id) const;  // true if no predicate registered
@@ -105,6 +166,12 @@ public:
     bool execute(CommandId id);
 
 private:
+    // The shared core of register_command()/register_standard_commands()
+    // — no reserved-range check, since register_standard_commands()'s
+    // whole job is populating that range.
+    void register_command_internal(CommandId id, std::string title, std::string category,
+                                    std::optional<KeyChord> default_chord);
+
     std::unordered_map<CommandId, CommandInfo> commands_;
     std::unordered_map<CommandId, std::function<bool()>> enabled_predicates_;
     std::unordered_map<CommandId, std::function<void()>> handlers_;

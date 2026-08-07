@@ -15,8 +15,10 @@ using ckv::ui::kFirstApplicationCommandId;
 using ckv::ui::kInvalidCommand;
 
 namespace {
-constexpr ckv::ui::CommandId kFileOpen = 1;
-constexpr ckv::ui::CommandId kFileSave = 2;
+// Application-space ids (M9/WP-12: register_command()/add() now
+// CKV_ASSERT that id is at or above kFirstApplicationCommandId).
+constexpr ckv::ui::CommandId kFileOpen = kFirstApplicationCommandId;
+constexpr ckv::ui::CommandId kFileSave = kFirstApplicationCommandId + 1;
 constexpr ckv::ui::CommandId kAppCustom = kFirstApplicationCommandId;
 
 KeyChord ctrl_o() { return KeyChord{Key::Char, Modifier::Ctrl, "o"}; }
@@ -196,6 +198,97 @@ CK_TEST(registering_a_command_with_kinvalidcommand_id_aborts) {
     ::waitpid(pid, &status, 0);
     CK_CHECK(WIFSIGNALED(status));
     CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+// --- Standard command set (M9/WP-12) ---------------------------------------
+
+CK_TEST(register_command_below_the_reserved_range_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        CommandRegistry reg;
+        reg.register_command(1, "Sneaks into the reserved range");  // must abort
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+CK_TEST(add_below_the_reserved_range_aborts) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        CommandRegistry reg;
+        // must abort
+        reg.add(CommandDescriptor{.id = 1, .title = "Sneaks into the reserved range"});
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
+CK_TEST(register_command_at_exactly_the_first_application_id_is_allowed) {
+    CommandRegistry reg;
+    reg.register_command(kFirstApplicationCommandId, "Fine");
+    CK_CHECK(reg.find(kFirstApplicationCommandId) != nullptr);
+}
+
+CK_TEST(register_standard_commands_populates_every_std_commands_id_with_a_title) {
+    using namespace ckv::ui::std_commands;
+    CommandRegistry reg;
+    reg.register_standard_commands();
+    const ckv::ui::CommandId ids[] = {
+        kQuit, kClose, kZoom, kNextWindow, kPreviousWindow, kTile, kCascade, kWindowList, kMenu,
+        kHelp,
+    };
+    for (auto id : ids) {
+        const auto* info = reg.find(id);
+        CK_CHECK(info != nullptr);
+        CK_CHECK(!info->title.empty());
+    }
+}
+
+CK_TEST(register_standard_commands_binds_the_documented_default_chords) {
+    using namespace ckv::ui::std_commands;
+    CommandRegistry reg;
+    reg.register_standard_commands();
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("F1")) == kHelp);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("F10")) == kMenu);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("F6")) == kNextWindow);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Shift+F6")) == kPreviousWindow);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("F5")) == kZoom);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Alt+F3")) == kClose);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Alt+X")) == kQuit);
+}
+
+CK_TEST(register_standard_commands_leaves_tile_cascade_and_window_list_with_no_default_chord) {
+    using namespace ckv::ui::std_commands;
+    CommandRegistry reg;
+    reg.register_standard_commands();
+    CK_CHECK(!reg.find(kTile)->default_chord.has_value());
+    CK_CHECK(!reg.find(kCascade)->default_chord.has_value());
+    CK_CHECK(!reg.find(kWindowList)->default_chord.has_value());
+}
+
+// --- all() (M9/WP-12) -------------------------------------------------------
+
+CK_TEST(all_is_empty_for_a_freshly_constructed_registry) {
+    CommandRegistry reg;
+    CK_CHECK(reg.all().empty());
+}
+
+CK_TEST(all_returns_every_registered_command_sorted_by_id) {
+    CommandRegistry reg;
+    reg.register_command(kFileSave, "Save");
+    reg.register_command(kFileOpen, "Open");  // registered second, sorts first (lower id)
+    const auto all = reg.all();
+    CK_CHECK(all.size() == 2);
+    CK_CHECK(all[0].id == kFileOpen);
+    CK_CHECK(all[1].id == kFileSave);
 }
 
 // --- set_handler / execute (M9/WP-10, moved here from Application) --------

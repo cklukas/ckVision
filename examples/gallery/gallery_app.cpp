@@ -11,12 +11,11 @@
 
 namespace ckv::gallery {
 
-namespace {
-constexpr ui::CommandId kCmdActivateMenu = 1;
-constexpr ui::CommandId kCmdQuit = 2;
-constexpr ui::CommandId kCmdTile = 3;
-constexpr ui::CommandId kCmdCascade = 4;
-}  // namespace
+// Every command this app needs is already in the standard set (M9/
+// WP-12) — activating the menu, quitting, tiling, and cascading are
+// all framework concepts with no gallery-specific wording to pin, so
+// this app has no application-space command ids of its own; it just
+// attaches handlers to ui::std_commands::*.
 
 GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
@@ -30,7 +29,7 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // all render live from the registration below.
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", kCmdActivateMenu}, {"", kCmdQuit}});
+    status->set_items({{"", ui::std_commands::kMenu}, {"", ui::std_commands::kQuit}});
     // dock_bottom (not add_child + a one-time set_bounds) keeps the
     // status line pinned to the last row across every future terminal
     // resize — Desktop::on_resized() re-derives its position from
@@ -41,27 +40,13 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     build_controls_window();
     build_image_window();
 
-    // One call each (M9/WP-10) — metadata, chord, and handler together,
-    // instead of a register_command()+set_command_handler() pair.
+    // Every one of these ids is already registered by Application's
+    // constructor (M9/WP-12) — only handlers need attaching here.
     auto& commands = app_.commands();
-    commands.add({.id = kCmdActivateMenu,
-                  .title = "Menu",
-                  .category = "Window",
-                  .chord = "F10",
-                  .handler = [this] { menu_->activate(); }});
-    commands.add({.id = kCmdQuit,
-                  .title = "&Quit",
-                  .category = "File",
-                  .chord = "Alt+X",
-                  .handler = [this] { quit_ = true; }});
-    commands.add({.id = kCmdTile,
-                  .title = "&Tile Windows",
-                  .category = "Window",
-                  .handler = [this] { desktop_->tile(); }});
-    commands.add({.id = kCmdCascade,
-                  .title = "&Cascade Windows",
-                  .category = "Window",
-                  .handler = [this] { desktop_->cascade(); }});
+    commands.set_handler(ui::std_commands::kMenu, [this] { menu_->activate(); });
+    commands.set_handler(ui::std_commands::kQuit, [this] { quit_ = true; });
+    commands.set_handler(ui::std_commands::kTile, [this] { desktop_->tile(); });
+    commands.set_handler(ui::std_commands::kCascade, [this] { desktop_->cascade(); });
 
     app_.set_focus(name_input_);
 }
@@ -82,12 +67,12 @@ void GalleryApp::build_menu_bar() {
                                                   },
                                                   false});
     file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
-    file_menu.items.push_back(widgets::MenuItem{"", kCmdQuit, nullptr, false});
+    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false});
     menus.push_back(std::move(file_menu));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem{"", kCmdTile, nullptr, false});
-    window_menu.items.push_back(widgets::MenuItem{"", kCmdCascade, nullptr, false});
+    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kTile, nullptr, false});
+    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kCascade, nullptr, false});
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

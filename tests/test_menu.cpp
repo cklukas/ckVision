@@ -72,7 +72,7 @@ CK_TEST(dropdown_with_the_first_item_disabled_skips_it_at_construction) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kDisabled = 1;
+    constexpr CommandId kDisabled = ui::kFirstApplicationCommandId;
     app.commands().register_command(kDisabled, "Disabled");
     app.commands().set_enabled_predicate(kDisabled, [] { return false; });
     auto menu = make_dropdown(f, app, {{"One", kDisabled, nullptr, false},
@@ -109,7 +109,7 @@ CK_TEST(navigation_skips_disabled_items_and_separators) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kDisabled = 1;
+    constexpr CommandId kDisabled = ui::kFirstApplicationCommandId;
     app.commands().register_command(kDisabled, "Disabled");
     app.commands().set_enabled_predicate(kDisabled, [] { return false; });
     auto menu = make_dropdown(f, app,
@@ -141,7 +141,7 @@ CK_TEST(enter_activates_the_highlighted_items_command) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = 1;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     app.commands().register_command(kSave, "Save");
     bool ran = false;
     app.set_command_handler(kSave, [&] { ran = true; });
@@ -195,7 +195,7 @@ CK_TEST(clicking_a_disabled_item_does_not_activate_it) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kDisabled = 1;
+    constexpr CommandId kDisabled = ui::kFirstApplicationCommandId;
     app.commands().register_command(kDisabled, "Disabled");
     app.commands().set_enabled_predicate(kDisabled, [] { return false; });
     bool ran = false;
@@ -233,7 +233,7 @@ CK_TEST(an_item_referencing_a_command_renders_the_registered_title_not_its_own_l
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = 1;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     app.commands().register_command(kSave, "&Save");
     // The label below ("Ignored") must never appear anywhere — an item
     // referencing a command carries no label text of its own.
@@ -254,7 +254,7 @@ CK_TEST(an_item_referencing_a_command_with_no_chord_bound_shows_no_chord_hint) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = 1;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     app.commands().register_command(kSave, "&Save");  // no default_chord
     auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false}});
     menu->set_bounds(Rect{0, 0, 20, 1});
@@ -273,7 +273,7 @@ CK_TEST(an_item_referencing_a_command_with_a_bound_chord_shows_it_right_aligned)
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = 1;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     app.commands().register_command(kSave, "&Save", "File",
                                       KeyChord{Key::Char, Modifier::Ctrl, "s"});
     auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false}});
@@ -299,7 +299,7 @@ CK_TEST(a_runtime_rebind_changes_the_rendered_chord_hint_without_touching_the_it
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = 1;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     app.commands().register_command(kSave, "&Save", "File",
                                       KeyChord{Key::Char, Modifier::Ctrl, "s"});
     auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false}});
@@ -325,7 +325,7 @@ CK_TEST(mnemonic_navigation_uses_the_registered_title_not_the_items_own_label) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = 1;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     bool ran = false;
     app.commands().register_command(kSave, "&Save");
     app.set_command_handler(kSave, [&] { ran = true; });

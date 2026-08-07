@@ -215,7 +215,7 @@ CK_TEST(a_key_unconsumed_by_the_focus_chain_falls_through_to_a_bound_command) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kQuit = 1;
+    constexpr ckv::ui::CommandId kQuit = ckv::ui::kFirstApplicationCommandId;
     app.commands().register_command(kQuit, "Quit", "App", KeyChord{Key::Escape, Modifier::None, ""});
     bool ran = false;
     app.set_command_handler(kQuit, [&] { ran = true; });
@@ -228,7 +228,7 @@ CK_TEST(a_disabled_command_does_not_run_even_when_its_chord_matches) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kQuit = 1;
+    constexpr ckv::ui::CommandId kQuit = ckv::ui::kFirstApplicationCommandId;
     app.commands().register_command(kQuit, "Quit", "App", KeyChord{Key::Escape, Modifier::None, ""});
     app.commands().set_enabled_predicate(kQuit, [] { return false; });
     bool ran = false;
@@ -242,7 +242,7 @@ CK_TEST(a_view_that_consumes_the_key_shadows_the_bound_command) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kQuit = 1;
+    constexpr ckv::ui::CommandId kQuit = ckv::ui::kFirstApplicationCommandId;
     app.commands().register_command(kQuit, "Quit", "App", KeyChord{Key::Escape, Modifier::None, ""});
     bool ran = false;
     app.set_command_handler(kQuit, [&] { ran = true; });
@@ -588,7 +588,14 @@ CK_TEST(multiple_timers_fire_independently_at_their_own_deadlines) {
 
 // --- F1 context help (D-027) -------------------------------------------
 
-CK_TEST(f1_with_no_provider_installed_is_unhandled) {
+// F1 is std_commands::kHelp's default chord (M9/WP-12): it now always
+// routes through the command system, same as any other standard
+// chord, so dispatch() reports "handled" once kHelp's (always-
+// installed) default handler runs — regardless of whether a help
+// provider is set or a key resolves. Those are the DEFAULT HANDLER's
+// own internal decisions, observable via the provider callback
+// itself, not via dispatch()'s return value.
+CK_TEST(f1_with_no_provider_installed_still_dispatches_through_khelps_default_handler) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -596,7 +603,7 @@ CK_TEST(f1_with_no_provider_installed_is_unhandled) {
     a->set_focus_policy(FocusPolicy::TabStop);
     a->set_help_context_key("topic.a");
     app.set_focus(a);
-    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
 }
 
 CK_TEST(f1_resolves_the_focused_views_help_context_key_and_hands_it_to_the_provider) {
@@ -627,7 +634,7 @@ CK_TEST(f1_walks_ancestors_when_the_focused_view_has_no_help_context_key_of_its_
     CK_CHECK(reported == "topic.root");
 }
 
-CK_TEST(f1_with_a_provider_but_no_resolvable_help_context_key_anywhere_is_unhandled) {
+CK_TEST(f1_with_a_provider_but_no_resolvable_help_context_key_anywhere_never_calls_it) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -636,8 +643,9 @@ CK_TEST(f1_with_a_provider_but_no_resolvable_help_context_key_anywhere_is_unhand
     auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
     a->set_focus_policy(FocusPolicy::TabStop);  // no key anywhere in the chain
     app.set_focus(a);
-    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
-    CK_CHECK(!called);
+    // kHelp's handler still ran
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(!called);  // but it found nothing to report, so the provider itself never fired
 }
 
 CK_TEST(a_view_that_consumes_f1_itself_shadows_the_help_provider) {
@@ -655,14 +663,15 @@ CK_TEST(a_view_that_consumes_f1_itself_shadows_the_help_provider) {
     CK_CHECK(!called);
 }
 
-CK_TEST(f1_with_no_focused_view_at_all_is_unhandled_even_with_a_provider_installed) {
+CK_TEST(f1_with_no_focused_view_at_all_never_calls_the_provider) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
     bool called = false;
     app.set_help_provider([&](const std::string&) { called = true; });
-    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
-    CK_CHECK(!called);
+    // kHelp's handler still ran
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}}));
+    CK_CHECK(!called);  // but there's no focused view to resolve a key from
 }
 
 // --- Regression: dangling focused_/mouse_capture_ after a view is

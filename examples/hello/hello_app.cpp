@@ -8,9 +8,15 @@
 namespace ckv::hello {
 
 namespace {
-constexpr ui::CommandId kCmdActivateMenu = 1;
-constexpr ui::CommandId kCmdGreeting = 2;
-constexpr ui::CommandId kCmdQuit = 3;
+// Application-space ids (M9/WP-12: below kFirstApplicationCommandId is
+// reserved for the library's own standard set). Menu activation
+// references ui::std_commands::kMenu directly instead of defining a
+// duplicate — but Quit keeps its own command rather than referencing
+// std_commands::kQuit: its title is pinned to "Exit," matching Turbo
+// Vision's own hello.cpp tutorial (see this file's own header
+// comment), not the framework's generic "Quit" wording.
+constexpr ui::CommandId kCmdGreeting = ui::kFirstApplicationCommandId;
+constexpr ui::CommandId kCmdQuit = ui::kFirstApplicationCommandId + 1;
 }  // namespace
 
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
@@ -34,17 +40,15 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", kCmdQuit}, {"", kCmdActivateMenu}});
+    status->set_items({{"", kCmdQuit}, {"", ui::std_commands::kMenu}});
     desktop_->dock_bottom(std::move(status));
 
     // One call each (M9/WP-10) — metadata, chord, and handler together,
     // instead of a register_command()+set_command_handler() pair.
+    // kMenu is already registered by Application's constructor (M9/
+    // WP-12) — only its handler needs attaching here.
     auto& commands = app_.commands();
-    commands.add({.id = kCmdActivateMenu,
-                  .title = "Menu",
-                  .category = "Window",
-                  .chord = "F10",
-                  .handler = [this] { menu_->activate(); }});
+    commands.set_handler(ui::std_commands::kMenu, [this] { menu_->activate(); });
     commands.add({.id = kCmdGreeting,
                   .title = "&Greeting...",
                   .category = "Hello",

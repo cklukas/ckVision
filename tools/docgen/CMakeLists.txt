@@ -4,6 +4,10 @@
 # installed, not part of ckVision's own public API. Only built when
 # the gallery example (whose object graph it screenshots) is also
 # built.
+add_executable(generate_standard_commands_table generate_standard_commands_table.cpp)
+target_link_libraries(generate_standard_commands_table PRIVATE ckvision::cvision)
+ckvision_strict(generate_standard_commands_table)
+
 if(TARGET gallery_app)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
     target_link_libraries(docgen_frame_svg PUBLIC ckvision::cvision)

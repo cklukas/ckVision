@@ -98,10 +98,14 @@ public:
 
     // --- Context help (ARCHITECTURE.md §5 "Commands and help", D-027) ---
     //
-    // F1, when unconsumed by the focus chain and unbound in the command
-    // keymap, resolves the focused view's nearest help-context key and
-    // hands it to this provider. No provider installed: F1 is simply
-    // unhandled, same as any other unbound key.
+    // F1 is std_commands::kHelp's default chord (M9/WP-12); its default
+    // handler (installed by this constructor) resolves the focused
+    // view's nearest help-context key and hands it to this provider —
+    // a no-op if none resolves. No provider installed, or F1 consumed
+    // earlier in the focus chain: same as any other command whose
+    // handler declines to do anything visible. An application wanting
+    // completely different F1 behavior replaces the default with its
+    // own commands().set_handler(std_commands::kHelp, ...).
     void set_help_provider(std::function<void(const std::string&)> provider);
 
     // --- Mouse input capture -------------------------------------------

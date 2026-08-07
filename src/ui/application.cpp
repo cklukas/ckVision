@@ -53,6 +53,20 @@ Application::Application(term::Terminal& terminal, Clock& clock)
     // (M9 WP-7, D-028) — installed once, propagates to every current
     // and future descendant exactly like the two sinks above.
     root_.set_context(Context{&theme_, &roles_, this});
+    // The standard command set, with its default chords (M9/WP-12,
+    // D-013/D-029) — an application attaches handlers to whichever of
+    // these it needs; it never re-registers the metadata itself.
+    commands_.register_standard_commands();
+    // std_commands::kHelp's own default behavior (D-027): resolve the
+    // focused view's nearest help-context key and hand it to whatever
+    // set_help_provider() installed. An application that wants
+    // completely different F1 behavior replaces this with its own
+    // set_handler(kHelp, ...) — same as any other standard command.
+    commands_.set_handler(std_commands::kHelp, [this] {
+        if (help_provider_ == nullptr || focused_ == nullptr) return;
+        const std::string* key = focused_->resolve_help_context_key();
+        if (key != nullptr) help_provider_(*key);
+    });
 }
 
 void Application::set_focus(View* view) {
@@ -157,14 +171,12 @@ bool Application::dispatch(const term::TerminalEvent& event) {
             if constexpr (std::is_same_v<T, KeyEvent>) {
                 for (View* v = focused_; v != nullptr; v = v->parent())
                     if (v->on_key(e)) return true;
+                // F1 context help (D-027) routes through std_commands::
+                // kHelp like any other standard chord (M9/WP-12) — its
+                // default handler (installed below, in the constructor)
+                // is exactly the old F1-specific logic this branch used
+                // to run inline.
                 if (auto id = commands_.command_for_key(e.chord)) return execute_command(*id);
-                if (e.chord.key == Key::F1 && help_provider_ && focused_ != nullptr) {
-                    const std::string* key = focused_->resolve_help_context_key();
-                    if (key != nullptr) {
-                        help_provider_(*key);
-                        return true;
-                    }
-                }
                 return false;
             } else if constexpr (std::is_same_v<T, TextEvent>) {
                 if (e.from_paste) clipboard_text_ = e.text;  // system import mirrors into the internal clipboard

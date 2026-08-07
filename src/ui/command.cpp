@@ -1,16 +1,46 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/command.hpp"
 
+#include <algorithm>
+
 #include "cvision/core/assert.hpp"
 
 namespace ckv::ui {
 
 void CommandRegistry::register_command(CommandId id, std::string title, std::string category,
                                         std::optional<KeyChord> default_chord) {
+    CKV_ASSERT(id >= kFirstApplicationCommandId);
+    register_command_internal(id, std::move(title), std::move(category), default_chord);
+}
+
+void CommandRegistry::register_command_internal(CommandId id, std::string title,
+                                                  std::string category,
+                                                  std::optional<KeyChord> default_chord) {
     CKV_ASSERT(id != kInvalidCommand);
     CommandInfo info{id, std::move(title), std::move(category), default_chord};
     commands_[id] = std::move(info);
     if (default_chord) bind_key(*default_chord, id);
+}
+
+void CommandRegistry::register_standard_commands() {
+    // Titles carry a conventional '&' mnemonic where there's a strong,
+    // low-collision-risk default (avoided for kMenu/kHelp, which are
+    // invoked by their chord directly, not usually a menu ITEM
+    // themselves — an application places them in a menu of its own
+    // choosing and can still parse_mnemonic() over whatever text it
+    // wants there). kCascade uses 'a' rather than 'c', since it can
+    // plausibly share a Window menu with kClose ('c').
+    using namespace std_commands;
+    register_command_internal(kHelp, "Help", "System", KeyChord::parse("F1"));
+    register_command_internal(kMenu, "Menu", "Window", KeyChord::parse("F10"));
+    register_command_internal(kNextWindow, "&Next", "Window", KeyChord::parse("F6"));
+    register_command_internal(kPreviousWindow, "&Previous", "Window", KeyChord::parse("Shift+F6"));
+    register_command_internal(kZoom, "&Zoom", "Window", KeyChord::parse("F5"));
+    register_command_internal(kClose, "&Close", "Window", KeyChord::parse("Alt+F3"));
+    register_command_internal(kQuit, "&Quit", "System", KeyChord::parse("Alt+X"));
+    register_command_internal(kTile, "&Tile", "Window", std::nullopt);
+    register_command_internal(kCascade, "C&ascade", "Window", std::nullopt);
+    register_command_internal(kWindowList, "&Window List", "Window", std::nullopt);
 }
 
 void CommandRegistry::add(CommandDescriptor descriptor) {
@@ -27,6 +57,15 @@ void CommandRegistry::add(CommandDescriptor descriptor) {
 const CommandInfo* CommandRegistry::find(CommandId id) const noexcept {
     auto it = commands_.find(id);
     return it == commands_.end() ? nullptr : &it->second;
+}
+
+std::vector<CommandInfo> CommandRegistry::all() const {
+    std::vector<CommandInfo> result;
+    result.reserve(commands_.size());
+    for (const auto& [id, info] : commands_) result.push_back(info);
+    std::sort(result.begin(), result.end(),
+              [](const CommandInfo& a, const CommandInfo& b) { return a.id < b.id; });
+    return result;
 }
 
 void CommandRegistry::set_enabled_predicate(CommandId id, std::function<bool()> predicate) {

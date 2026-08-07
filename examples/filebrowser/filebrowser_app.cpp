@@ -11,8 +11,13 @@
 namespace ckv::filebrowser {
 
 namespace {
-constexpr ui::CommandId kCmdQuit = 1;
-constexpr ui::CommandId kCmdFocusNextPane = 2;
+// Application-space id (M9/WP-12: below kFirstApplicationCommandId is
+// reserved for the library's own standard set). Quit references
+// ui::std_commands::kQuit directly — its wording ("&Quit", Alt+X)
+// already matches the framework default exactly, so this app has no
+// need for its own duplicate; only pane-focus cycling is genuinely
+// application-specific.
+constexpr ui::CommandId kCmdFocusNextPane = ui::kFirstApplicationCommandId;
 
 // Directories only, sorted, depth-capped against a real filesystem's
 // symlink cycles (a real, bounded disk still could be arbitrarily
@@ -51,14 +56,10 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     build_menu_bar();
     build_window();
 
-    // One call each (M9/WP-10) — metadata, chord, and handler together,
-    // instead of a register_command()+set_command_handler() pair.
+    // kQuit is already registered by Application's constructor (M9/
+    // WP-12) — only its handler needs attaching here.
     auto& commands = app_.commands();
-    commands.add({.id = kCmdQuit,
-                  .title = "&Quit",
-                  .category = "File",
-                  .chord = "Alt+X",
-                  .handler = [this] { quit_ = true; }});
+    commands.set_handler(ui::std_commands::kQuit, [this] { quit_ = true; });
 
     // Tab isn't wired to focus traversal anywhere in the library by
     // default (Application::focus_next()/previous() are callable
@@ -83,7 +84,7 @@ void FileBrowserApp::build_menu_bar() {
     // all render live from the registration above.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{"", kCmdQuit, nullptr, false});
+    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false});
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
@@ -91,7 +92,7 @@ void FileBrowserApp::build_menu_bar() {
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", kCmdFocusNextPane}, {"", kCmdQuit}});
+    status->set_items({{"", kCmdFocusNextPane}, {"", ui::std_commands::kQuit}});
     desktop_->dock_bottom(std::move(status));
 }
 
