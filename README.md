@@ -20,22 +20,49 @@ The library name is `cvision` (CMake target `ckvision::cvision`).
 
 ## Status
 
-**M3 (term) complete**, on top of M0's build skeleton, M1's core
-primitives (geometry, Color/Style/Cell/Image, keys/events, the Unicode
-services in [docs/text-width.md](docs/text-width.md)), and M2's scene
-layer (`Surface`/`Painter`/`Compositor` with damage tracking, junction
-merging, shadow occlusion, and raster occlusion slicing). The term
-layer now provides: the `Terminal` interface and `Capabilities` model;
-an incremental input decoder (legacy/kitty/modifyOtherKeys keys, SGR
-and SGR-Pixels mouse, sanitized bracketed paste, focus events, OSC
-10/11 and DECRPM probe responses — coverage documented in
-[docs/input-decoder.md](docs/input-decoder.md)); a `Presenter` (cell
-diffing, D-019 width-safe cursor re-addressing, color-depth
-degradation, synchronized output, OSC-safe emission, cropped Sixel
-raster overlay); a correct public-protocol Sixel encoder; headless,
-POSIX (real termios/signals/session-registry, PTY-tested), and
-record/replay backends. Implementation continues along the roadmap
-milestones.
+**M0 through M6 complete** — every layer through the widget catalog is
+implemented and adversarially tested (not just happy paths), reviewed,
+and green under both Release and ASan/UBSan builds.
+
+- **M0-M2**: build skeleton; core primitives (geometry, Color/Style/
+  Cell/Image, keys/events, the Unicode services in
+  [docs/text-width.md](docs/text-width.md)); the scene layer
+  (`Surface`/`Painter`/`Compositor` with damage tracking, junction
+  merging, shadow occlusion, raster occlusion slicing).
+- **M3 (term)**: the `Terminal` interface and `Capabilities` model; an
+  incremental input decoder (legacy/kitty/modifyOtherKeys keys, SGR and
+  SGR-Pixels mouse, sanitized bracketed paste, focus events, OSC 10/11
+  and DECRPM probe responses — coverage documented in
+  [docs/input-decoder.md](docs/input-decoder.md)); a `Presenter` (cell
+  diffing, D-019 width-safe cursor re-addressing, color-depth
+  degradation, synchronized output, OSC-safe emission, cropped Sixel
+  raster overlay); a correct public-protocol Sixel encoder; headless,
+  POSIX (real termios/signals/session-registry, PTY-tested), and
+  record/replay backends.
+- **M4 (ui core)**: `View` (the ui tree's base class), `Application`
+  (focus traversal, positional/focused/command-keymap event dispatch,
+  mouse input capture, timers, F1 context-help routing, the embeddable
+  `step()`/`wake()` loop), the flat interned-role `Theme` system,
+  `Row`/`Column` layout, the internal clipboard, `HistoryRegistry`,
+  declarative dialog descriptors with validated materialization, and
+  the four minimal controls (Label, StaticText, Button, InputLine).
+- **M5 (windows/menus)**: `Window` (frame chrome, move/resize, the
+  vetoable close protocol, zoom), `Desktop` (z-order, activation,
+  cycling, tile/cascade, popups), dialog accept-validation veto with
+  Esc-cancel, message boxes with every standard button set, and the
+  `MenuBar`/`DropdownMenu`/context-menu system with light-dismiss.
+- **M6 (widget completion)**: `Scrollbar`, `ScrollViewport`,
+  `CheckGroup`/`RadioGroup`, `ListView`, `TreeView`, `TextView`,
+  `Memo`, `Table`, `ImageView`, `Canvas`; InputLine completion
+  (validators, input masks, password echo, history cycling); the
+  Dark/Light/Mono theme schemes; the window-list dialog, file open/
+  save dialog and directory picker (both on the injected
+  `FileSystem`), and the Help viewer.
+
+Independent review passes across M4 and M5 found and fixed seven real
+bugs (three use-after-frees, three correctness issues, one z-order/
+lifecycle desync), each landed with a regression test verified under
+ASan/UBSan.
 
 ## Documents
 
