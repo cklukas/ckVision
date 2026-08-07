@@ -38,6 +38,17 @@ Application::Application(term::Terminal& terminal, Clock& clock)
     // dirty RECT itself is intentionally not yet used to scope
     // painting, only to decide WHETHER to paint at all).
     root_.set_dirty_rect_sink([this](Rect) { dirty_ = true; });
+    // The fill-the-root resize policy (View::fills_root(), M8 WP-1):
+    // every direct child of root that hasn't opted out is resized to
+    // root's own new bounds whenever a ResizeEvent changes them. This
+    // is what makes a Desktop's own on_resized() (which re-pins docked
+    // chrome and re-clamps windows) actually fire on a real terminal
+    // resize — previously ResizeEvent stopped at root_.set_bounds()
+    // and nothing propagated further.
+    root_.on_bounds_changed = [this](Rect bounds) {
+        for (const auto& child : root_.children())
+            if (child->fills_root()) child->set_bounds(Rect{0, 0, bounds.width, bounds.height});
+    };
 }
 
 void Application::set_focus(View* view) {

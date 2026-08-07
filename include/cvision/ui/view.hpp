@@ -94,6 +94,27 @@ public:
     // already been reported; the default does nothing.
     virtual void on_resized() {}
 
+    // Fired after on_resized(), with this view's NEW bounds (local —
+    // same value bounds() now returns), whenever set_bounds() actually
+    // changed them. The general-purpose escape hatch for an owner that
+    // needs to react to a view's own geometry change without
+    // subclassing it — the same shape as Button::on_press or
+    // Window::on_closed, just for geometry. Application installs one
+    // on root() to implement the fill-the-root resize policy (see
+    // fills_root() below); nothing else in the library sets this by
+    // default.
+    std::function<void(Rect)> on_bounds_changed;
+
+    // Whether this view is resized to fill Application::root()'s
+    // bounds whenever root's OWN bounds change (a terminal resize) —
+    // the policy every real root child (a Desktop, or an application's
+    // own full-screen surface) wants, which is why it defaults to
+    // true. Meaningless for any view that is not a direct child of
+    // root(); a view that must not stretch with the terminal (a fixed
+    // HUD overlay, say) opts out here.
+    bool fills_root() const noexcept { return fills_root_; }
+    void set_fills_root(bool fills) noexcept { fills_root_ = fills; }
+
     // Absolute (Desktop-root-relative) bounds, computed by walking
     // ancestors. O(depth); layout and hit-testing use this sparingly
     // and cache within a single pass rather than per-cell.
@@ -218,6 +239,7 @@ private:
     bool visible_ = true;
     bool enabled_ = true;
     FocusPolicy focus_policy_ = FocusPolicy::None;
+    bool fills_root_ = true;
     std::optional<std::string> help_context_key_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;

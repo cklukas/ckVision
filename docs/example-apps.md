@@ -110,11 +110,15 @@ File Browser is the master-detail example: a folder-hierarchy
 folder's contents in a second pane — a `TreeView::on_selection_changed`
 callback is the entire wiring between them. It also demonstrates
 `Desktop::dock_top`/`dock_bottom` (the menu bar and status line
-reposition themselves automatically across a terminal resize, rather
-than the application recomputing their bounds by hand) and
-`Window::set_frame_overlay` (the selected directory's full path shown
-live on the window's own bottom border — the general mechanism a text
-editor would use for a "line: N, col: M" indicator).
+reposition themselves automatically across a real terminal resize,
+not just when the application recomputes their bounds by hand — a live
+`ResizeEvent` propagates from `Application::root()` through
+`View::fills_root()`'s default down to the Desktop, whose own
+`on_resized()` repins both docks and reclamps every window; see
+`tests/test_m8_resize_integration.cpp`) and `Window::set_frame_overlay`
+(the selected directory's full path shown live on the window's own
+bottom border — the general mechanism a text editor would use for a
+"line: N, col: M" indicator).
 
 - **Real disk access**: the interactive binary browses the actual
   filesystem via `term::PosixFileSystem` — previously the only
@@ -132,10 +136,14 @@ editor would use for a "line: N, col: M" indicator).
   dialog's private helpers.
 - **Focus traversal**: Tab switches between the tree and file-list
   panes — bound explicitly to a command in `FileBrowserApp`'s own
-  constructor, since (by design) nothing in the library auto-binds Tab
-  to focus traversal; an application that wants Tab for something else
-  (a text editor inserting a literal tab) must be free to do that
-  instead.
+  constructor, since nothing in the library auto-binds Tab to focus
+  traversal today. DECISIONS.md D-029 has since superseded that
+  stance: a rebindable default keymap (Tab/Shift-Tab included) lands
+  in ROADMAP M9/WP-13, at which point this explicit binding — and this
+  bullet — disappear; an application that wants Tab for something else
+  (a text editor inserting a literal tab) keeps that freedom, because
+  a focused view consuming Tab already preempts the keymap by routing
+  order.
 
 ### What's verified, and how
 
