@@ -43,6 +43,7 @@ add_library(cvision
     src/widgets/scrollbar.cpp
     src/widgets/static_text.cpp
     src/widgets/status_line.cpp
+    src/widgets/table.cpp
     src/widgets/text_view.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp)

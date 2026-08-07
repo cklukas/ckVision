@@ -37,6 +37,7 @@ add_executable(cvision_tests
     test_standard_roles.cpp
     test_status_line.cpp
     test_surface.cpp
+    test_table.cpp
     test_text_view.cpp
     test_text_width.cpp
     test_theme.cpp
