@@ -12,20 +12,20 @@ using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 
-CK_TEST(intern_standard_roles_produces_twenty_distinct_role_ids) {
+CK_TEST(intern_standard_roles_produces_twentyone_distinct_role_ids) {
     RoleRegistry reg;
     const StandardRoles r = intern_standard_roles(reg);
     const std::set<ckv::ui::RoleId> ids{
-        r.dialog_frame,          r.dialog_background,      r.label_text,
-        r.label_mnemonic,        r.static_text,             r.button_normal,
-        r.button_focused,        r.button_default,          r.input_normal,
-        r.input_focused,         r.input_invalid,           r.window_frame_active,
-        r.window_frame_inactive, r.window_title_active,     r.window_title_inactive,
-        r.menu_bar_normal,       r.menu_bar_active,         r.menu_dropdown_normal,
-        r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
-    CK_CHECK(ids.size() == 20);
+        r.desktop_background,   r.dialog_frame,            r.dialog_background,
+        r.label_text,           r.label_mnemonic,          r.static_text,
+        r.button_normal,        r.button_focused,          r.button_default,
+        r.input_normal,         r.input_focused,           r.input_invalid,
+        r.window_frame_active,  r.window_frame_inactive,   r.window_title_active,
+        r.window_title_inactive, r.menu_bar_normal,        r.menu_bar_active,
+        r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
+    CK_CHECK(ids.size() == 21);
     for (auto id : ids) CK_CHECK(id != kInvalidRole);
-    CK_CHECK(reg.size() == 20);
+    CK_CHECK(reg.size() == 21);
 }
 
 CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_registry) {
@@ -34,7 +34,7 @@ CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_re
     const StandardRoles second = intern_standard_roles(reg);
     CK_CHECK(first.dialog_frame == second.dialog_frame);
     CK_CHECK(first.button_default == second.button_default);
-    CK_CHECK(reg.size() == 20);  // no duplicates from the second call
+    CK_CHECK(reg.size() == 21);  // no duplicates from the second call
 }
 
 CK_TEST(standard_role_names_are_namespaced_under_ckv_prefix) {
@@ -61,6 +61,21 @@ CK_TEST(classic_theme_resolves_every_standard_role_to_a_non_default_style) {
     // input_normal (the dialog-accept veto's visual signal).
     CK_CHECK(!(theme.resolve(r.button_default) == theme.resolve(r.button_normal)));
     CK_CHECK(!(theme.resolve(r.input_invalid) == theme.resolve(r.input_normal)));
+}
+
+CK_TEST(desktop_background_is_visually_distinct_from_dialog_background_in_every_scheme) {
+    // The whole point of a SEPARATE desktop_background role: the
+    // desktop must never accidentally look identical to a dialog/
+    // window interior just because an application forgot to pick a
+    // different color for it — this is a property of the role split
+    // itself, not something any one application can get right or
+    // wrong by construction, so it's asserted for all four schemes.
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    for (const auto& theme : {make_classic_theme(reg, r), ckv::ui::make_dark_theme(reg, r),
+                               ckv::ui::make_light_theme(reg, r), ckv::ui::make_mono_theme(reg, r)}) {
+        CK_CHECK(!(theme.resolve(r.desktop_background) == theme.resolve(r.dialog_background)));
+    }
 }
 
 CK_TEST(active_and_inactive_window_frame_roles_resolve_to_visually_distinct_styles) {
@@ -125,13 +140,13 @@ CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
     const StandardRoles r = intern_standard_roles(reg);
     const auto theme = ckv::ui::make_mono_theme(reg, r);
     const std::vector<ckv::ui::RoleId> all{
-        r.dialog_frame,          r.dialog_background,       r.label_text,
-        r.label_mnemonic,        r.static_text,              r.button_normal,
-        r.button_focused,        r.button_default,           r.input_normal,
-        r.input_focused,         r.input_invalid,            r.window_frame_active,
-        r.window_frame_inactive, r.window_title_active,      r.window_title_inactive,
-        r.menu_bar_normal,       r.menu_bar_active,          r.menu_dropdown_normal,
-        r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
+        r.desktop_background,    r.dialog_frame,             r.dialog_background,
+        r.label_text,            r.label_mnemonic,           r.static_text,
+        r.button_normal,         r.button_focused,           r.button_default,
+        r.input_normal,          r.input_focused,            r.input_invalid,
+        r.window_frame_active,   r.window_frame_inactive,    r.window_title_active,
+        r.window_title_inactive, r.menu_bar_normal,          r.menu_bar_active,
+        r.menu_dropdown_normal,  r.menu_dropdown_highlighted, r.menu_dropdown_disabled};
     for (auto role : all) {
         const ckv::Style style = theme.resolve(role);
         for (const ckv::Color& c : {style.fg, style.bg}) {

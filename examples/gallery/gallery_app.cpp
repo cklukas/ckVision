@@ -21,11 +21,11 @@ constexpr ui::CommandId kCmdCascade = 4;
 GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
-    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.dialog_background);
+    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
-    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.dialog_background, app_);
+    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
     status->set_items({{"F10 Menu", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
     status_ = status.get();
     desktop_->add_child(std::move(status));

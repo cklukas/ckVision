@@ -163,8 +163,13 @@ void Desktop::cascade() {
 }
 
 void Desktop::draw(scene::Painter& painter) {
+    // U+2591 LIGHT SHADE — the classic windowed-desktop fill pattern
+    // (distinct from a plain space so the desktop always reads as
+    // "background texture," never mistakable for an unstyled dialog
+    // panel even under a color scheme where the two happen to share a
+    // hue).
     painter.fill(Rect{0, 0, bounds().width, bounds().height},
-                  Cell::from_grapheme(" ", theme_.resolve(background_role_)));
+                  Cell::from_grapheme("░", theme_.resolve(background_role_)));
 }
 
 void Desktop::paint_children(const scene::Painter& own_painter) {

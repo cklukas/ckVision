@@ -171,10 +171,27 @@ void Window::draw(scene::Painter& painter) {
     const Style frame_style = theme_.resolve(frame_role);
     const Style title_style = theme_.resolve(title_role);
 
-    painter.draw_box(b, scene::LineStyle::Single, frame_style);
+    // Active windows get a DOUBLE-line frame, inactive ones single —
+    // the classic windowed-desktop convention for "this is the one
+    // that has focus," and (unlike relying on color alone) still
+    // legible on a monochrome terminal.
+    painter.draw_box(b, active_ ? scene::LineStyle::Double : scene::LineStyle::Single, frame_style);
     if (b.width > 6) {
-        painter.draw_text(Point{1, 0}, "[x]", frame_style);
-        painter.draw_text(Point{b.width - 3, 0}, "[]", frame_style);
+        // U+25A0 BLACK SQUARE for close, matching the convention's
+        // close-control glyph (not "x" — a plain filled square reads
+        // as a "control" the way "x" doesn't, and needs no ASCII
+        // fallback since box-drawing-adjacent glyphs are already
+        // required for the frame itself).
+        painter.draw_text(Point{1, 0}, "[■]", frame_style);
+        // Up-arrow "maximize"; changes to an up/down arrow once
+        // zoomed, matching the convention's own "toggle" affordance —
+        // previously this drew empty brackets with no glyph at all.
+        // b.width - 4, not - 3: a 3-glyph "[X]" ending at b.width - 3
+        // would land its last character ON the frame's own top-right
+        // corner column (b.width - 1) — this must end one column short
+        // of the corner, matching the close control's own symmetric
+        // margin on the left.
+        painter.draw_text(Point{b.width - 4, 0}, zoomed_ ? "[↕]" : "[↑]", frame_style);
     }
     if (b.width > 8) {
         const int available = b.width - 8;

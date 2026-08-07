@@ -231,3 +231,62 @@ CK_TEST(a_zero_height_scrollbar_does_not_crash_on_draw_or_mouse) {
     sb.draw(painter);
     CK_CHECK(true);
 }
+
+// --- Glyphs (windowed-desktop fidelity) -----------------------------------
+
+CK_TEST(a_vertical_scrollbar_draws_solid_triangle_end_arrows) {
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical, f.theme, f.roles.dialog_background, f.roles.dialog_frame);
+    sb.set_bounds(Rect{0, 0, 1, 10});
+    sb.set_range(100, 5);
+    ckv::scene::Surface s(ckv::Size{1, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 1, 10});
+    sb.draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "▲");
+    CK_CHECK(s.at(Point{0, 9}).grapheme() == "▼");
+}
+
+CK_TEST(a_horizontal_scrollbar_draws_solid_triangle_end_arrows) {
+    Fixture f;
+    Scrollbar sb(Orientation::Horizontal, f.theme, f.roles.dialog_background, f.roles.dialog_frame);
+    sb.set_bounds(Rect{0, 0, 10, 1});
+    sb.set_range(100, 5);
+    ckv::scene::Surface s(ckv::Size{10, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 10, 1});
+    sb.draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "◄");
+    CK_CHECK(s.at(Point{9, 0}).grapheme() == "►");
+}
+
+CK_TEST(the_track_and_thumb_use_distinct_glyphs_not_just_distinct_colors) {
+    // A previous version drew both track and thumb as a plain space,
+    // relying entirely on style/color to distinguish them — invisible
+    // on a monochrome terminal and visually flat everywhere else.
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical, f.theme, f.roles.dialog_background, f.roles.dialog_frame);
+    sb.set_bounds(Rect{0, 0, 1, 12});
+    sb.set_range(100, 2);  // a small thumb, leaving plenty of bare track
+    ckv::scene::Surface s(ckv::Size{1, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 1, 12});
+    sb.draw(painter);
+
+    bool found_track = false, found_thumb = false;
+    for (int y = 1; y < 11; ++y) {
+        const std::string_view g = s.at(Point{0, y}).grapheme();
+        if (g == "▒") found_track = true;
+        if (g == "■") found_thumb = true;
+    }
+    CK_CHECK(found_track);
+    CK_CHECK(found_thumb);
+}
+
+CK_TEST(a_thumb_that_fills_the_whole_track_leaves_no_bare_track_glyph_visible) {
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical, f.theme, f.roles.dialog_background, f.roles.dialog_frame);
+    sb.set_bounds(Rect{0, 0, 1, 10});
+    sb.set_range(5, 20);  // content smaller than viewport: thumb fills the track
+    ckv::scene::Surface s(ckv::Size{1, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 1, 10});
+    sb.draw(painter);
+    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "■");
+}

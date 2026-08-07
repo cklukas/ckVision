@@ -331,6 +331,116 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
     CK_CHECK(true);
 }
 
+// --- Frame style and control glyphs (windowed-desktop fidelity) ----------
+
+CK_TEST(an_inactive_window_draws_with_single_line_box_glyphs) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "┌");
+    CK_CHECK(s.at(Point{19, 0}).grapheme() == "┐");
+    CK_CHECK(s.at(Point{10, 0}).grapheme() == "─");
+    CK_CHECK(s.at(Point{0, 2}).grapheme() == "│");
+}
+
+CK_TEST(an_active_window_draws_with_double_line_box_glyphs) {
+    // The convention's own visual signal for "this window has focus" —
+    // distinct GLYPHS, not merely a color change, so it still reads on
+    // a monochrome terminal.
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    w.set_active(true);
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");
+    CK_CHECK(s.at(Point{19, 0}).grapheme() == "╗");
+    CK_CHECK(s.at(Point{10, 0}).grapheme() == "═");
+    CK_CHECK(s.at(Point{0, 2}).grapheme() == "║");
+}
+
+CK_TEST(reactivating_and_deactivating_a_window_switches_its_frame_style_back_and_forth) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+
+    w.set_active(true);
+    w.draw(painter);
+    CK_CHECK(s.at(Point{10, 0}).grapheme() == "═");
+
+    w.set_active(false);
+    w.draw(painter);
+    CK_CHECK(s.at(Point{10, 0}).grapheme() == "─");
+}
+
+CK_TEST(the_close_control_draws_a_filled_square_glyph) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == "[");
+    CK_CHECK(s.at(Point{2, 0}).grapheme() == "■");
+    CK_CHECK(s.at(Point{3, 0}).grapheme() == "]");
+}
+
+CK_TEST(the_zoom_control_draws_an_up_arrow_when_not_zoomed) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+    CK_CHECK(!w.zoomed());
+    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↑");
+}
+
+CK_TEST(the_zoom_control_draws_an_updown_arrow_once_zoomed) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    w.toggle_zoom(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w.draw(painter);
+    CK_CHECK(w.zoomed());
+    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↕");
+}
+
+CK_TEST(toggling_zoom_off_again_restores_the_up_arrow_glyph) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Window w = make_window(f);
+    w.set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+
+    w.toggle_zoom(Rect{0, 0, 20, 5});
+    w.toggle_zoom(Rect{0, 0, 20, 5});
+    CK_CHECK(!w.zoomed());
+    w.draw(painter);
+    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↑");
+}
+
+CK_TEST(the_zoom_control_hit_test_region_is_unaffected_by_the_glyph_change) {
+    // point_in_zoom_control's own hit-test geometry assumes a fixed
+    // 3-cell-wide "[X]" control regardless of what X is — the glyph
+    // swap must not have silently widened/narrowed the clickable
+    // region (both "↑" and "↕" are single-width like the "x"/blank
+    // they replaced).
+    Fixture f;
+    Window w = make_window(f);
+    w.set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w.on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));
+    CK_CHECK(w.zoomed());
+}
+
 // --- reposition_within (ARCHITECTURE.md §5 "Sizing policy") ---------------
 
 CK_TEST(reposition_within_is_a_no_op_when_the_window_already_fits) {

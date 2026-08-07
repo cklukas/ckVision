@@ -44,7 +44,7 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     : app_(app), fs_(fs), root_path_(std::move(root_path)), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
-    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.dialog_background);
+    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
@@ -81,7 +81,7 @@ void FileBrowserApp::build_menu_bar() {
                                                      roles_.menu_dropdown_disabled, app_, *desktop_);
     menu_ = static_cast<widgets::MenuBar*>(desktop_->dock_top(std::move(menu)));
 
-    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.dialog_background, app_);
+    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
     status->set_items({{"Tab Switch Pane", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
     desktop_->dock_bottom(std::move(status));
 }

@@ -144,14 +144,20 @@ void Scrollbar::draw(scene::Painter& painter) {
         painter.draw_text(p, glyph, style);
     };
 
-    put(0, orientation_ == Orientation::Horizontal ? "<" : "^", track_style);
-    if (total > 1) put(total - 1, orientation_ == Orientation::Horizontal ? ">" : "v", track_style);
+    // The classic windowed-desktop scrollbar glyph set: solid triangle
+    // arrows at each end, a light-shade track distinct from a solid
+    // thumb block — a real glyph difference, not just a style/color
+    // difference on an otherwise-blank cell (the previous " " for both
+    // track and thumb relied entirely on color, which is invisible on
+    // a monochrome terminal and reads as "unfinished" everywhere else).
+    put(0, orientation_ == Orientation::Horizontal ? "◄" : "▲", track_style);
+    if (total > 1) put(total - 1, orientation_ == Orientation::Horizontal ? "►" : "▼", track_style);
 
     const int thumb_start = thumb_start_cell();
     const int thumb_len = thumb_length_cells();
     for (int i = 0; i < track_length(); ++i) {
         const bool is_thumb = i >= thumb_start && i < thumb_start + thumb_len;
-        put(1 + i, " ", is_thumb ? thumb_style : track_style);
+        put(1 + i, is_thumb ? "■" : "▒", is_thumb ? thumb_style : track_style);
     }
 }
 

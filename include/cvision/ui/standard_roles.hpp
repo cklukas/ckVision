@@ -10,6 +10,13 @@
 namespace ckv::ui {
 
 struct StandardRoles {
+    // The Desktop's own fill — deliberately a SEPARATE role from
+    // dialog_background: sharing one role between the desktop and
+    // every dialog/window interior means they can never look visually
+    // distinct, which is exactly backwards for a windowed desktop
+    // where the desktop is supposed to read as "background," not
+    // "just another panel."
+    RoleId desktop_background;
     RoleId dialog_frame;
     RoleId dialog_background;
     RoleId label_text;
