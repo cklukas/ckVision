@@ -12,14 +12,16 @@ namespace {
 bool in_range(int v, int begin, int end_exclusive) noexcept { return v >= begin && v < end_exclusive; }
 }  // namespace
 
-Window::Window(std::string title, const ui::Theme& theme, ui::RoleId frame_active_role,
-               ui::RoleId frame_inactive_role, ui::RoleId title_active_role, ui::RoleId title_inactive_role)
-    : title_(std::move(title)),
-      theme_(theme),
-      frame_active_role_(frame_active_role),
-      frame_inactive_role_(frame_inactive_role),
-      title_active_role_(title_active_role),
-      title_inactive_role_(title_inactive_role) {}
+Window::Window(std::string title) : title_(std::move(title)) {}
+
+void Window::on_attached() {
+    if (frame_active_role_ == ui::kInvalidRole) frame_active_role_ = context().roles->find("ckv.window.frame.active");
+    if (frame_inactive_role_ == ui::kInvalidRole)
+        frame_inactive_role_ = context().roles->find("ckv.window.frame.inactive");
+    if (title_active_role_ == ui::kInvalidRole) title_active_role_ = context().roles->find("ckv.window.title.active");
+    if (title_inactive_role_ == ui::kInvalidRole)
+        title_inactive_role_ = context().roles->find("ckv.window.title.inactive");
+}
 
 void Window::set_title(std::string title) {
     title_ = std::move(title);
@@ -175,8 +177,9 @@ void Window::draw(scene::Painter& painter) {
     const Rect b = Rect{0, 0, bounds().width, bounds().height};
     const ui::RoleId frame_role = active_ ? frame_active_role_ : frame_inactive_role_;
     const ui::RoleId title_role = active_ ? title_active_role_ : title_inactive_role_;
-    const Style frame_style = theme_.resolve(frame_role);
-    const Style title_style = theme_.resolve(title_role);
+    const ui::Theme& theme = *context().theme;
+    const Style frame_style = theme.resolve(frame_role);
+    const Style title_style = theme.resolve(title_role);
 
     // The interior fills with the SAME style as the frame — matching
     // the convention's own "the window's palette is uniform across

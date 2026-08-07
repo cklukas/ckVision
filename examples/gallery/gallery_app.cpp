@@ -63,8 +63,7 @@ void GalleryApp::build_menu_bar() {
                                                           "ckVision Gallery — a demonstration application.",
                                                           widgets::MessageBoxButtons::Ok};
                                                       auto handle = widgets::make_message_box(
-                                                          descriptor, app_.theme(), roles_, app_, app_.focused(),
-                                                          nullptr);
+                                                          descriptor, roles_, app_, app_.focused(), nullptr);
                                                       desktop_->show_dialog(std::move(handle), app_);
                                                   },
                                                   false});
@@ -88,9 +87,9 @@ void GalleryApp::build_controls_window() {
     // Dialog-gray chrome: the Controls window is a form (a dialog),
     // and dialogs are the gray family — the Sixel Demo window below
     // keeps the blue document-window chrome so both looks appear.
-    auto window = std::make_unique<widgets::Window>("Controls", app_.theme(), roles_.dialog_frame,
-                                                      roles_.dialog_background, roles_.dialog_frame,
-                                                      roles_.dialog_background);
+    auto window = std::make_unique<widgets::Window>("Controls");
+    window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
+                               roles_.dialog_background);
     window->set_bounds(Rect{2, 2, 40, 10});
 
     auto content = std::make_unique<ui::View>();
@@ -114,8 +113,7 @@ void GalleryApp::build_controls_window() {
             widgets::MessageBoxKind::Info, "Greeting",
             name_input->text().empty() ? "Hello, stranger!" : "Hello, " + name_input->text() + "!",
             widgets::MessageBoxButtons::Ok};
-        auto handle = widgets::make_message_box(descriptor, app_ptr->theme(), roles_, *app_ptr, app_ptr->focused(),
-                                                  nullptr);
+        auto handle = widgets::make_message_box(descriptor, roles_, *app_ptr, app_ptr->focused(), nullptr);
         desktop->show_dialog(std::move(handle), *app_ptr);
     };
     content->add_child(std::move(greet));
@@ -137,9 +135,7 @@ std::shared_ptr<const Image> GalleryApp::make_demo_gradient() const {
 }
 
 void GalleryApp::build_image_window() {
-    auto window = std::make_unique<widgets::Window>("Sixel Demo", app_.theme(), roles_.window_frame_active,
-                                                      roles_.window_frame_inactive, roles_.window_title_active,
-                                                      roles_.window_title_inactive);
+    auto window = std::make_unique<widgets::Window>("Sixel Demo");  // default document-window roles
     window->set_bounds(Rect{20, 6, 34, 16});
 
     auto view = std::make_unique<widgets::ImageView>(app_.theme(), roles_.dialog_background);

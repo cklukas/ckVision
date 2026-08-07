@@ -58,9 +58,9 @@ void HelloApp::greeting_box() {
     // original's greeting box is a dialog, and dialogs are the gray
     // family (see standard_roles.cpp), which is also what the buttons'
     // black drop shadow composites against.
-    auto window = std::make_unique<widgets::Window>("Hello, World!", app_.theme(), roles_.dialog_frame,
-                                                      roles_.dialog_background, roles_.dialog_frame,
-                                                      roles_.dialog_background);
+    auto window = std::make_unique<widgets::Window>("Hello, World!");
+    window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
+                               roles_.dialog_background);
     window->set_bounds(Rect{25, 5, 30, 11});
     widgets::Window* window_ptr = window.get();
 

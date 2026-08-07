@@ -54,8 +54,8 @@ struct MessageBoxDescriptor {
 // meant for whatever UI is currently on screen. Desktop::show_dialog
 // (M8 WP-5) is the sanctioned way to attach the returned handle and
 // focus its initial_focus (the default button) in one call.
-WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
-                               const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result);
+WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
+                               ui::Application& app, ui::View* restore_focus_to,
+                               std::function<void(MessageBoxResult)> on_result);
 
 }  // namespace ckv::widgets

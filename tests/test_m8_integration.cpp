@@ -36,11 +36,7 @@ struct Fixture {
     Theme theme = make_classic_theme(registry, roles);
 };
 
-std::unique_ptr<Window> make_window(Fixture& f, std::string title = "W") {
-    return std::make_unique<Window>(std::move(title), f.theme, f.roles.window_frame_active,
-                                     f.roles.window_frame_inactive, f.roles.window_title_active,
-                                     f.roles.window_title_inactive);
-}
+std::unique_ptr<Window> make_window(std::string title = "W") { return std::make_unique<Window>(std::move(title)); }
 }  // namespace
 
 // --- WP-1: the resize chain -------------------------------------------
@@ -58,7 +54,7 @@ CK_TEST(an_application_level_resize_event_repins_docked_desktop_chrome_and_recla
     View* top = desktop_ptr->dock_top(std::make_unique<View>());
     View* bottom = desktop_ptr->dock_bottom(std::make_unique<View>());
 
-    auto window = make_window(fx);
+    auto window = make_window();
     window->set_bounds(Rect{60, 15, 15, 6});  // reachable in the original 80x24 desktop
     Window* window_ptr = desktop_ptr->add_window(std::move(window));
 
@@ -141,14 +137,14 @@ CK_TEST(clicking_deep_content_in_a_background_window_raises_and_activates_it_thr
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 
-    auto back_window = make_window(fx, "Back");
+    auto back_window = make_window("Back");
     back_window->set_bounds(Rect{0, 0, 30, 10});
     auto back_content = std::make_unique<View>();
     auto* deep_leaf = back_content->add_child(std::make_unique<View>(Rect{2, 2, 4, 1}));
     back_window->set_content(std::move(back_content));
     Window* back = desktop_ptr->add_window(std::move(back_window));
 
-    auto front_window = make_window(fx, "Front");
+    auto front_window = make_window("Front");
     front_window->set_bounds(Rect{40, 0, 30, 10});  // does not overlap `back`'s content point
     desktop_ptr->add_window(std::move(front_window));
 
@@ -184,7 +180,7 @@ CK_TEST(clicking_the_desktops_own_background_does_not_change_which_window_is_act
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 
-    auto window = make_window(fx);
+    auto window = make_window();
     window->set_bounds(Rect{0, 0, 10, 5});
     Window* w = desktop_ptr->add_window(std::move(window));
     CK_CHECK(w->active());

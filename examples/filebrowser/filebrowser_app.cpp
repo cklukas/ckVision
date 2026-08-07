@@ -87,9 +87,7 @@ void FileBrowserApp::build_menu_bar() {
 }
 
 void FileBrowserApp::build_window() {
-    auto window = std::make_unique<widgets::Window>("File Browser", app_.theme(), roles_.window_frame_active,
-                                                      roles_.window_frame_inactive, roles_.window_title_active,
-                                                      roles_.window_title_inactive);
+    auto window = std::make_unique<widgets::Window>("File Browser");  // default document-window roles
     window->set_bounds(desktop_->content_area());
     window->set_min_size(Size{40, 10});
     // Keeps filling the content area as the terminal grows, rather

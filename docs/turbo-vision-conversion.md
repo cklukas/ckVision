@@ -128,9 +128,9 @@ ckVision's port (`examples/hello/hello_app.cpp`, `greeting_box()`):
 
 ```cpp
 void HelloApp::greeting_box() {
-    auto window = std::make_unique<widgets::Window>("Hello, World!", app_.theme(), roles_.window_frame_active,
-                                                      roles_.window_frame_inactive, roles_.window_title_active,
-                                                      roles_.window_title_inactive);
+    auto window = std::make_unique<widgets::Window>("Hello, World!");
+    window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
+                               roles_.dialog_background);  // dialog-gray chrome, not document-window blue
     window->set_bounds(Rect{25, 5, 30, 11});
     widgets::Window* window_ptr = window.get();
 

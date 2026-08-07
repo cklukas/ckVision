@@ -26,9 +26,9 @@ HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
                                ui::View* restore_focus_to) {
-    auto window = std::make_unique<Window>("Help", theme, roles.dialog_frame,
-                                            roles.dialog_background, roles.dialog_frame,
-                                            roles.dialog_background);
+    auto window = std::make_unique<Window>("Help");
+    window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
+                               roles.dialog_background);
     Window* window_ptr = window.get();
 
     auto column = std::make_unique<Column>();

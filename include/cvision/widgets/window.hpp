@@ -33,10 +33,24 @@ enum class DesktopGrowPolicy {
     AnchorEdges,  // keeps its current distance to the right/bottom edges as the desktop grows or shrinks
 };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.window.frame.active/inactive" and
+// "ckv.window.title.active/inactive" — the document-window family.
+// set_role_override redirects all four at once; the dialog/message-
+// box/file-dialog family of internal windows calls it with
+// StandardRoles::dialog_frame/dialog_background (frame and title
+// share one role in that family) immediately after construction.
 class Window : public ui::View {
 public:
-    Window(std::string title, const ui::Theme& theme, ui::RoleId frame_active_role,
-           ui::RoleId frame_inactive_role, ui::RoleId title_active_role, ui::RoleId title_inactive_role);
+    explicit Window(std::string title);
+
+    void set_role_override(ui::RoleId frame_active_role, ui::RoleId frame_inactive_role,
+                            ui::RoleId title_active_role, ui::RoleId title_inactive_role) noexcept {
+        frame_active_role_ = frame_active_role;
+        frame_inactive_role_ = frame_inactive_role;
+        title_active_role_ = title_active_role;
+        title_inactive_role_ = title_inactive_role;
+    }
 
     void set_title(std::string title);
     const std::string& title() const noexcept { return title_; }
@@ -169,6 +183,7 @@ public:
 
     void draw(scene::Painter& painter) override;
     void on_resized() override;
+    void on_attached() override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
 
@@ -184,11 +199,10 @@ private:
     Rect clamp_size(Rect bounds) const noexcept;
 
     std::string title_;
-    const ui::Theme& theme_;
-    ui::RoleId frame_active_role_;
-    ui::RoleId frame_inactive_role_;
-    ui::RoleId title_active_role_;
-    ui::RoleId title_inactive_role_;
+    ui::RoleId frame_active_role_ = ui::kInvalidRole;
+    ui::RoleId frame_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId title_active_role_ = ui::kInvalidRole;
+    ui::RoleId title_inactive_role_ = ui::kInvalidRole;
 
     ui::View* content_ = nullptr;
     ui::View* frame_overlay_ = nullptr;

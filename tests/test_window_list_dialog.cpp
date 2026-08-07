@@ -27,11 +27,7 @@ struct Fixture {
     Theme theme = make_classic_theme(registry, roles);
 };
 
-std::unique_ptr<Window> make_window(Fixture& f, std::string title) {
-    return std::make_unique<Window>(std::move(title), f.theme, f.roles.window_frame_active,
-                                     f.roles.window_frame_inactive, f.roles.window_title_active,
-                                     f.roles.window_title_inactive);
-}
+std::unique_ptr<Window> make_window(std::string title) { return std::make_unique<Window>(std::move(title)); }
 
 ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
 }  // namespace
@@ -42,8 +38,8 @@ CK_TEST(the_dialogs_list_contains_every_windows_current_title_in_order) {
     Application app(term, clock);
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    desktop.add_window(make_window(f, "Alpha"));
-    desktop.add_window(make_window(f, "Beta"));
+    desktop.add_window(make_window("Alpha"));
+    desktop.add_window(make_window("Beta"));
 
     auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
     CK_CHECK(handle.window != nullptr);
@@ -56,8 +52,8 @@ CK_TEST(activating_a_row_switches_the_desktops_active_window_and_closes_the_dial
     Application app(term, clock);
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    Window* alpha = desktop.add_window(make_window(f, "Alpha"));
-    desktop.add_window(make_window(f, "Beta"));  // Beta is active after being added second
+    Window* alpha = desktop.add_window(make_window("Alpha"));
+    desktop.add_window(make_window("Beta"));  // Beta is active after being added second
     CK_CHECK(desktop.active_window() != alpha);
 
     auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
@@ -80,8 +76,8 @@ CK_TEST(the_close_button_dismisses_without_changing_the_active_window) {
     Application app(term, clock);
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    desktop.add_window(make_window(f, "Alpha"));
-    Window* beta = desktop.add_window(make_window(f, "Beta"));
+    desktop.add_window(make_window("Alpha"));
+    Window* beta = desktop.add_window(make_window("Beta"));
 
     auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, nullptr);
     bool closed = false;
@@ -106,7 +102,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
 
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    desktop.add_window(make_window(f, "Alpha"));
+    desktop.add_window(make_window("Alpha"));
 
     auto handle = make_window_list_dialog(desktop, f.theme, f.roles, app, invoker);
     app.root().add_child(std::move(handle.window));

@@ -20,10 +20,9 @@ using ui::SizePolicy;
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
                                ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result) {
-    auto window = std::make_unique<Window>(mode == FileDialogMode::Open ? "Open File" : "Save File", theme,
-                                            roles.dialog_frame,
-                                            roles.dialog_background, roles.dialog_frame,
-                                            roles.dialog_background);
+    auto window = std::make_unique<Window>(mode == FileDialogMode::Open ? "Open File" : "Save File");
+    window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
+                               roles.dialog_background);
     Window* window_ptr = window.get();
 
     auto column = std::make_unique<Column>();

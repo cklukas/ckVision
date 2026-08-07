@@ -50,7 +50,7 @@ CK_TEST(make_message_box_does_not_change_the_applications_focus) {
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Something happened.",
                                      MessageBoxButtons::Ok};
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
     CK_CHECK(app.focused() == other);  // still the pre-existing focus, not the box's default button
     CK_CHECK(handle.initial_focus != nullptr);
 }
@@ -64,7 +64,7 @@ CK_TEST(an_ok_only_box_fires_ok_and_closes_when_its_button_is_pressed) {
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
     std::optional<MessageBoxResult> result;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { result = r; });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
@@ -81,7 +81,7 @@ CK_TEST(escape_on_an_ok_only_box_is_equivalent_to_ok) {
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
     std::optional<MessageBoxResult> result;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { result = r; });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
@@ -101,7 +101,7 @@ CK_TEST(escape_on_an_ok_cancel_box_fires_cancel_not_ok) {
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
                                      MessageBoxButtons::OkCancel};
     std::optional<MessageBoxResult> result;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { result = r; });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
@@ -118,7 +118,7 @@ CK_TEST(the_ok_button_is_the_default_and_fires_via_enter_regardless_of_where_foc
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
                                      MessageBoxButtons::OkCancel};
     std::optional<MessageBoxResult> result;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { result = r; });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);  // OK is default and initially focused
@@ -135,7 +135,7 @@ CK_TEST(clicking_cancel_directly_fires_cancel_and_does_not_also_fire_ok) {
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
                                      MessageBoxButtons::OkCancel};
     std::vector<MessageBoxResult> results;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { results.push_back(r); });
     Window* window = handle.window.get();
     app.root().add_child(std::move(handle.window));
@@ -161,7 +161,7 @@ CK_TEST(escape_on_a_yes_no_cancel_box_fires_cancel) {
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Save changes?",
                                      MessageBoxButtons::YesNoCancel};
     std::optional<MessageBoxResult> result;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { result = r; });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
@@ -179,7 +179,7 @@ CK_TEST(escape_on_a_yes_no_box_fires_no) {
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Delete this?",
                                      MessageBoxButtons::YesNo};
     std::optional<MessageBoxResult> result;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult r) { result = r; });
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
@@ -198,7 +198,7 @@ CK_TEST(closing_the_box_restores_focus_to_the_view_that_invoked_it) {
 
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, invoker, nullptr);
+    auto handle = make_message_box(descriptor, f.roles, app, invoker, nullptr);
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
 
@@ -212,7 +212,7 @@ CK_TEST(a_null_on_result_callback_does_not_crash_when_a_button_is_pressed) {
     Application app(term, clock);
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
@@ -229,7 +229,7 @@ CK_TEST(only_one_result_ever_fires_even_though_both_accept_and_the_buttons_own_c
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
     int fire_count = 0;
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr,
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr,
                                     [&](MessageBoxResult) { ++fire_count; });
     int close_count = 0;
     handle.window->on_closed = [&close_count, previous = handle.window->on_closed]() {
@@ -256,7 +256,7 @@ CK_TEST(closing_the_box_schedules_its_own_removal_from_whatever_parented_it) {
     Application app(term, clock);
     Fixture f;
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
     Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
@@ -282,14 +282,11 @@ CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_w
     Application app(term, clock);
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    Window* background =
-        desktop.add_window(std::make_unique<Window>("Background", f.theme, f.roles.window_frame_active,
-                                                      f.roles.window_frame_inactive, f.roles.window_title_active,
-                                                      f.roles.window_title_inactive));
+    Window* background = desktop.add_window(std::make_unique<Window>("Background"));
     CK_CHECK(background->active());
 
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
-    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr, nullptr);
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
     Window* box_ptr = handle.window.get();
     View* default_button = handle.initial_focus;
     Window* attached = desktop.show_dialog(std::move(handle), app);

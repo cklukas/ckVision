@@ -36,7 +36,7 @@ landing commit). A row with no note is still open.
 | WP-4 | **Done** | `Window::zoom_area_provider`/`fill`/`refresh_zoom_area`, `DesktopGrowPolicy`; `tests/test_window.cpp`, `tests/test_desktop.cpp` |
 | WP-5 | **Done** | Unified `widgets::WindowHandle` (retired 5 duplicate per-widget Handle structs); `Desktop::show_dialog`; gallery migrated (F6 fixed); `tests/test_message_box.cpp` |
 | WP-6 | **Done** (M8 complete) | Gallery on `dock_top`/`dock_bottom` (F7); redundant `set_focus_policy(TabStop)` removed from all 3 examples (E6); filebrowser window declares `KeepFilling`; `tests/test_gallery_smoke.cpp` resize regression |
-| WP-7 | **In progress** | Core `ui::Context`/`on_attached()` mechanism done (own commit). M4 widgets migrated: Label, StaticText, Button, InputLine — all with `set_role_override`; `materialize_dialog` dropped its now-unused theme/roles parameters. Remaining: Window, MenuBar/DropdownMenu, StatusLine (M5); ListView, TreeView, Memo, Table, Scrollbar, ScrollViewport, OptionGroup, ImageView, Canvas, HelpViewer (M6); Desktop stays theme-holding (background_role_ has no natural "attach" moment independent of construction, revisit if that changes) |
+| WP-7 | **In progress** | Core `ui::Context`/`on_attached()` mechanism done. M4 widgets migrated: Label, StaticText, Button, InputLine — all with `set_role_override`; `materialize_dialog` and `make_message_box` dropped their now-unused `theme` parameter. Window migrated (4-role `set_role_override` for the dialog-chrome family). Found and fixed a real propagation gap while migrating Window (see note below) — 5 `Window(...)`-constructing dialog factories updated in the same commit. Remaining: MenuBar/DropdownMenu, StatusLine (M5, both still take `Theme&`/`Application&` as constructor params — deferred since they need `app` for behavior, folding into WP-7's remaining pass); ListView, TreeView, Memo, Table, Scrollbar, ScrollViewport, OptionGroup, ImageView, Canvas, HelpViewer (M6). Desktop stays theme-holding (background_role_ has no natural "attach" moment independent of construction, revisit if that changes). |
 | WP-8…22 | Open | — |
 
 ---
@@ -378,6 +378,27 @@ Widgets needing `Application&` for behavior (MenuBar focus save/
 restore, StatusLine click dispatch) take it from the context, dropping
 those constructor parameters too; `MenuBar`'s `Desktop&` parameter
 falls to a parent-walk at attach.
+
+**Implementation finding (Window's migration): `propagate_context`
+always overwrites, even with an invalid context — by design (a single
+authoritative source, matching how `dirty_rect_sink_`/`detach_sink_`
+already behave), but it means attaching an already-`set_context`'d
+child to a parent that has NO context yet silently erases the child's
+context.** This never bites real application code (Desktop always
+attaches to `Application::root()` — which is context-bearing from
+construction — before anything attaches to Desktop), but it did bite
+`tests/test_desktop.cpp`'s ~50 standalone-`Desktop` fixtures: a
+`make_window(f)` helper that called `set_context` on the window
+directly had that context immediately stomped by the very next
+`desktop.add_window(...)` call, since the test's `Desktop` itself was
+never given one. UBSan caught it immediately (`reference binding to
+null pointer of type 'const Theme'` in `Window::draw`) once a window
+actually needed to paint. Fix: `desktop.set_context(f.ctx())` on the
+handful of `Desktop` instances that exercise `paint_children` — the
+same shape a real `Application` gives every `Desktop` for free — not a
+change to the propagation mechanism itself, which is doing the right
+thing. Recorded here because it will recur for every remaining M6
+widget test fixture that attaches through a standalone `Desktop`.
 *Acceptance:* `Button b{"Ok"};` compiles and renders classic-correct
 under every built-in scheme (golden × 4 schemes); constructing,
 attaching, then switching themes at runtime re-resolves (existing

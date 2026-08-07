@@ -48,9 +48,9 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
                                     const ui::StandardRoles& roles, ui::Application& app,
                                     ui::View* restore_focus_to,
                                     std::function<void(bool, std::string)> on_result) {
-    auto window = std::make_unique<Window>("Select Directory", theme, roles.dialog_frame,
-                                            roles.dialog_background, roles.dialog_frame,
-                                            roles.dialog_background);
+    auto window = std::make_unique<Window>("Select Directory");
+    window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
+                               roles.dialog_background);
     Window* window_ptr = window.get();
 
     // record_paths() must run AFTER root is in its final resting place

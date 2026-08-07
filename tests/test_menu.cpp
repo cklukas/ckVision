@@ -434,8 +434,7 @@ CK_TEST(zooming_into_an_area_smaller_than_the_windows_minimum_size_still_clamps)
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    ckv::widgets::Window window("W", f.theme, f.roles.window_frame_active, f.roles.window_frame_inactive,
-                                 f.roles.window_title_active, f.roles.window_title_inactive);
+    ckv::widgets::Window window("W");
     window.set_min_size(ckv::Size{20, 10});
     window.set_bounds(Rect{0, 0, 25, 12});
     window.toggle_zoom(Rect{0, 0, 5, 5});  // far smaller than the configured minimum

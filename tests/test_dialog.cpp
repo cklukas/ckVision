@@ -177,10 +177,7 @@ CK_TEST(the_materialized_root_owns_the_entire_tree_and_destroying_it_is_safe) {
 // focus restore) -----------------------------------------------------
 
 namespace {
-Window make_window(Fixture& f) {
-    return Window("Dialog", f.theme, f.roles.window_frame_active, f.roles.window_frame_inactive,
-                  f.roles.window_title_active, f.roles.window_title_inactive);
-}
+Window make_window(Fixture&) { return Window("Dialog"); }
 }  // namespace
 
 CK_TEST(validate_dialog_with_all_valid_fields_returns_true_and_touches_no_focus) {

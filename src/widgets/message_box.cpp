@@ -53,12 +53,12 @@ MessageBoxResult escape_result(MessageBoxButtons buttons) {
 
 }  // namespace
 
-WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
-                               const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result) {
-    auto window = std::make_unique<Window>(descriptor.title, theme, roles.dialog_frame,
-                                            roles.dialog_background, roles.dialog_frame,
-                                            roles.dialog_background);
+WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
+                               ui::Application& app, ui::View* restore_focus_to,
+                               std::function<void(MessageBoxResult)> on_result) {
+    auto window = std::make_unique<Window>(descriptor.title);
+    window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
+                               roles.dialog_background);
     Window* window_ptr = window.get();
 
     auto column = std::make_unique<Column>();

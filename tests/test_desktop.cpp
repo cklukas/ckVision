@@ -10,11 +10,13 @@
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Rect;
 using ckv::scene::Painter;
 using ckv::scene::Surface;
+using ckv::ui::Context;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
@@ -28,12 +30,11 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    Context ctx() { return Context{&theme, &registry, nullptr}; }
 };
 
-std::unique_ptr<Window> make_window(Fixture& f, std::string title = "W") {
-    return std::make_unique<Window>(std::move(title), f.theme, f.roles.window_frame_active,
-                                     f.roles.window_frame_inactive, f.roles.window_title_active,
-                                     f.roles.window_title_inactive);
+std::unique_ptr<Window> make_window(Fixture&, std::string title = "W") {
+    return std::make_unique<Window>(std::move(title));
 }
 }  // namespace
 
@@ -111,8 +112,7 @@ CK_TEST(on_descendant_mouse_down_is_a_no_op_for_a_view_outside_any_owned_window)
 CK_TEST(remove_window_for_a_window_not_owned_by_this_desktop_returns_null) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    Window stray("stray", f.theme, f.roles.window_frame_active, f.roles.window_frame_inactive,
-                 f.roles.window_title_active, f.roles.window_title_inactive);
+    Window stray("stray");
     CK_CHECK(desktop.remove_window(&stray) == nullptr);
 }
 
@@ -175,8 +175,7 @@ CK_TEST(activate_on_a_window_not_owned_by_this_desktop_aborts) {
         Fixture f;
         Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
         desktop.add_window(make_window(f));
-        Window stray("stray", f.theme, f.roles.window_frame_active, f.roles.window_frame_inactive,
-                     f.roles.window_title_active, f.roles.window_title_inactive);
+        Window stray("stray");
         desktop.activate(&stray);  // must abort: not owned by this desktop
         ::_exit(1);
     }
@@ -310,6 +309,7 @@ CK_TEST(cascade_makes_the_last_window_topmost) {
 CK_TEST(cascade_keeps_every_window_within_the_desktop_bounds) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     for (int i = 0; i < 5; ++i) desktop.add_window(make_window(f));
     desktop.cascade();
     for (Window* w : desktop.windows()) {
@@ -395,6 +395,7 @@ CK_TEST(multiple_popups_stack_in_the_order_they_were_added) {
 CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 10, 4});
     CK_CHECK(w->casts_shadow());
@@ -417,6 +418,7 @@ CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
 CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 10, 4});
 
@@ -439,6 +441,7 @@ CK_TEST(a_window_that_does_not_cast_a_shadow_leaves_its_footprint_undimmed) {
     // get spuriously shadowed.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     auto plain = std::make_unique<ckv::ui::View>(Rect{5, 5, 10, 4});
     desktop.add_child(std::move(plain));
 
@@ -458,6 +461,7 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
     // undimmed — even where A's shadow footprint overlaps B.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     Window* a = desktop.add_window(make_window(f));
     a->set_bounds(Rect{2, 2, 10, 4});  // shadow footprint includes column 12-13, rows 3-6
 
@@ -629,6 +633,7 @@ CK_TEST(a_window_maximized_to_the_content_area_does_not_shadow_the_docked_status
     // dim it. Shadows must clip to content_area(), not the full desktop.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     ckv::ui::View* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(desktop.content_area());  // "maximized"
@@ -649,6 +654,7 @@ CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_
     // content_area() (not on the footer itself) still dim normally.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 10, 4});  // ordinary, unmaximized — well clear of the footer
@@ -675,6 +681,7 @@ CK_TEST(detach_child_on_a_window_added_via_add_window_also_removes_it_from_windo
     // windows_ forever once the Window itself was destroyed.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     Window* w = desktop.add_window(make_window(f));
     CK_CHECK(desktop.windows().size() == 1);
 
@@ -686,6 +693,7 @@ CK_TEST(detach_child_on_a_window_added_via_add_window_also_removes_it_from_windo
 CK_TEST(detach_child_on_a_popup_added_via_add_popup_also_removes_it_from_popups) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
     CK_CHECK(desktop.popups().size() == 1);
 
@@ -697,6 +705,7 @@ CK_TEST(detach_child_on_a_popup_added_via_add_popup_also_removes_it_from_popups)
 CK_TEST(detach_child_on_a_plain_child_falls_back_to_ordinary_removal) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     ckv::ui::View* plain = desktop.add_child(std::make_unique<ckv::ui::View>());
     CK_CHECK(desktop.children().size() == 1);
 
@@ -713,6 +722,7 @@ CK_TEST(detach_child_on_a_window_added_via_plain_add_child_does_not_touch_window
     // the plain-child path without crashing on the "not found" case.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
     Window* w = static_cast<Window*>(desktop.add_child(make_window(f)));
     CK_CHECK(desktop.windows().empty());
 
