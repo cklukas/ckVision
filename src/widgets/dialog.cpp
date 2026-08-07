@@ -80,7 +80,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor, const 
         for (const ButtonDescriptor& bd : descriptor.buttons) {
             auto button =
                 std::make_unique<Button>(bd.label, theme, roles.button_normal, roles.button_focused,
-                                          roles.button_default);
+                                          roles.button_default, roles.button_shadow);
             button->set_default(bd.is_default);
             button->on_press = bd.on_press;
             auto* button_ptr =

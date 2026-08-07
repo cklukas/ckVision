@@ -56,9 +56,9 @@ MessageBoxResult escape_result(MessageBoxButtons buttons) {
 MessageBoxHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::Theme& theme,
                                    const ui::StandardRoles& roles, ui::Application& app,
                                    ui::View* restore_focus_to, std::function<void(MessageBoxResult)> on_result) {
-    auto window = std::make_unique<Window>(descriptor.title, theme, roles.window_frame_active,
-                                            roles.window_frame_inactive, roles.window_title_active,
-                                            roles.window_title_inactive);
+    auto window = std::make_unique<Window>(descriptor.title, theme, roles.dialog_frame,
+                                            roles.dialog_background, roles.dialog_frame,
+                                            roles.dialog_background);
     Window* window_ptr = window.get();
 
     auto column = std::make_unique<Column>();
@@ -71,7 +71,7 @@ MessageBoxHandle make_message_box(const MessageBoxDescriptor& descriptor, const 
     Button* default_button = nullptr;
     for (const auto& [result, label] : button_specs(descriptor.buttons)) {
         auto button = std::make_unique<Button>(label, theme, roles.button_normal, roles.button_focused,
-                                                 roles.button_default);
+                                                 roles.button_default, roles.button_shadow);
         const bool is_default = default_button == nullptr;  // the first button in the set
         button->set_default(is_default);
         auto* raw = static_cast<Button*>(button_row->add_item(std::move(button), LayoutSpec{SizePolicy::Fixed, 1}));

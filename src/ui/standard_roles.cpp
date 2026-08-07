@@ -13,12 +13,12 @@ namespace {
 // with a green selection bar) — a convention, not any one framework's
 // copyrightable expression.
 constexpr Color kBlue = Color::rgb(0, 0, 170);
-constexpr Color kCyan = Color::rgb(0, 170, 170);
 constexpr Color kGreen = Color::rgb(0, 170, 0);
 constexpr Color kWhite = Color::rgb(255, 255, 255);
 constexpr Color kBlack = Color::rgb(0, 0, 0);
 constexpr Color kGray = Color::rgb(170, 170, 170);
 constexpr Color kLightGray = Color::rgb(200, 200, 200);
+constexpr Color kLightCyan = Color::rgb(85, 255, 255);
 constexpr Color kYellow = Color::rgb(255, 255, 85);
 constexpr Color kRed = Color::rgb(170, 0, 0);
 
@@ -27,14 +27,19 @@ constexpr Color kRed = Color::rgb(170, 0, 0);
 StandardRoles intern_standard_roles(RoleRegistry& registry) {
     StandardRoles r;
     r.desktop_background = registry.intern("ckv.desktop.background", Style{kBlue, kLightGray, Attr{}});
-    r.dialog_frame = registry.intern("ckv.dialog.frame", Style{kWhite, kCyan, Attr{}});
-    r.dialog_background = registry.intern("ckv.dialog.background", Style{kBlack, kCyan, Attr{}});
-    r.label_text = registry.intern("ckv.label.text", Style{kBlack, kCyan, Attr{}});
-    r.label_mnemonic = registry.intern("ckv.label.mnemonic", Style{kYellow, kCyan, Attr::Underline});
-    r.static_text = registry.intern("ckv.static.text", Style{kBlack, kCyan, Attr{}});
-    r.button_normal = registry.intern("ckv.button.normal", Style{kBlack, kGray, Attr{}});
-    r.button_focused = registry.intern("ckv.button.focused", Style{kWhite, kGray, Attr::Reverse});
-    r.button_default = registry.intern("ckv.button.default", Style{kYellow, kBlack, Attr::Bold});
+    // Dialogs are the convention's GRAY family (a dialog is visually a
+    // different kind of surface than a blue document window), with the
+    // iconic green buttons and a black composited drop shadow whose
+    // background matches the gray dialog surface the buttons sit on.
+    r.dialog_frame = registry.intern("ckv.dialog.frame", Style{kWhite, kLightGray, Attr{}});
+    r.dialog_background = registry.intern("ckv.dialog.background", Style{kBlack, kLightGray, Attr{}});
+    r.label_text = registry.intern("ckv.label.text", Style{kBlack, kLightGray, Attr{}});
+    r.label_mnemonic = registry.intern("ckv.label.mnemonic", Style{kYellow, kLightGray, Attr::Underline});
+    r.static_text = registry.intern("ckv.static.text", Style{kBlack, kLightGray, Attr{}});
+    r.button_normal = registry.intern("ckv.button.normal", Style{kBlack, kGreen, Attr{}});
+    r.button_focused = registry.intern("ckv.button.focused", Style{kWhite, kGreen, Attr{}});
+    r.button_default = registry.intern("ckv.button.default", Style{kLightCyan, kGreen, Attr{}});
+    r.button_shadow = registry.intern("ckv.button.shadow", Style{kBlack, kLightGray, Attr{}});
     r.input_normal = registry.intern("ckv.input.normal", Style{kBlack, kWhite, Attr{}});
     r.input_focused = registry.intern("ckv.input.focused", Style{kBlack, kWhite, Attr::Underline});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
@@ -54,14 +59,15 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
 Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& roles) {
     Theme theme(registry);
     theme.set(roles.desktop_background, Style{kBlue, kLightGray, Attr{}});
-    theme.set(roles.dialog_frame, Style{kWhite, kCyan, Attr{}});
-    theme.set(roles.dialog_background, Style{kBlack, kCyan, Attr{}});
-    theme.set(roles.label_text, Style{kBlack, kCyan, Attr{}});
-    theme.set(roles.label_mnemonic, Style{kYellow, kCyan, Attr::Underline});
-    theme.set(roles.static_text, Style{kBlack, kCyan, Attr{}});
-    theme.set(roles.button_normal, Style{kBlack, kGray, Attr{}});
-    theme.set(roles.button_focused, Style{kWhite, kGray, Attr::Reverse});
-    theme.set(roles.button_default, Style{kYellow, kBlack, Attr::Bold});
+    theme.set(roles.dialog_frame, Style{kWhite, kLightGray, Attr{}});
+    theme.set(roles.dialog_background, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.label_text, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.label_mnemonic, Style{kYellow, kLightGray, Attr::Underline});
+    theme.set(roles.static_text, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.button_normal, Style{kBlack, kGreen, Attr{}});
+    theme.set(roles.button_focused, Style{kWhite, kGreen, Attr{}});
+    theme.set(roles.button_default, Style{kLightCyan, kGreen, Attr{}});
+    theme.set(roles.button_shadow, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.input_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.input_focused, Style{kBlack, kWhite, Attr::Underline});
     theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
@@ -117,6 +123,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.button_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.button_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     theme.set(roles.button_default, Style{kDarkYellow, kDarkBg, Attr::Bold});
+    theme.set(roles.button_shadow, Style{kDarkBg, kDarkPanel, Attr{}});
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
@@ -143,6 +150,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.button_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.button_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.button_default, Style{kMonoBg, kLightYellow, Attr::Bold});
+    theme.set(roles.button_shadow, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
@@ -169,6 +177,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.button_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.button_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.button_default, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.button_shadow, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.input_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.input_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});

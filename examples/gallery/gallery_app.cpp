@@ -90,9 +90,12 @@ void GalleryApp::build_menu_bar() {
 }
 
 void GalleryApp::build_controls_window() {
-    auto window = std::make_unique<widgets::Window>("Controls", app_.theme(), roles_.window_frame_active,
-                                                      roles_.window_frame_inactive, roles_.window_title_active,
-                                                      roles_.window_title_inactive);
+    // Dialog-gray chrome: the Controls window is a form (a dialog),
+    // and dialogs are the gray family — the Sixel Demo window below
+    // keeps the blue document-window chrome so both looks appear.
+    auto window = std::make_unique<widgets::Window>("Controls", app_.theme(), roles_.dialog_frame,
+                                                      roles_.dialog_background, roles_.dialog_frame,
+                                                      roles_.dialog_background);
     window->set_bounds(Rect{2, 2, 40, 10});
 
     auto content = std::make_unique<ui::View>();
@@ -108,8 +111,8 @@ void GalleryApp::build_controls_window() {
     content->add_child(std::move(input));
 
     auto greet = std::make_unique<widgets::Button>("&Greet", app_.theme(), roles_.button_normal,
-                                                     roles_.button_focused, roles_.button_default);
-    greet->set_bounds(Rect{1, 3, 12, 1});
+                                                     roles_.button_focused, roles_.button_default, roles_.button_shadow);
+    greet->set_bounds(Rect{1, 3, 12, 2});  // two rows: face + drop shadow
     greet->set_focus_policy(ui::FocusPolicy::TabStop);
     greet->set_default(true);
     widgets::InputLine* name_input = name_input_;

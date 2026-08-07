@@ -16,9 +16,9 @@ using ui::SizePolicy;
 
 WindowListHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& theme, const ui::StandardRoles& roles,
                                           ui::Application& app, ui::View* restore_focus_to) {
-    auto window = std::make_unique<Window>("Window List", theme, roles.window_frame_active,
-                                            roles.window_frame_inactive, roles.window_title_active,
-                                            roles.window_title_inactive);
+    auto window = std::make_unique<Window>("Window List", theme, roles.dialog_frame,
+                                            roles.dialog_background, roles.dialog_frame,
+                                            roles.dialog_background);
     Window* window_ptr = window.get();
 
     auto column = std::make_unique<Column>();
@@ -34,7 +34,7 @@ WindowListHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& them
 
     auto button_row = std::make_unique<Row>();
     auto close_button =
-        std::make_unique<Button>("Close", theme, roles.button_normal, roles.button_focused, roles.button_default);
+        std::make_unique<Button>("Close", theme, roles.button_normal, roles.button_focused, roles.button_default, roles.button_shadow);
     close_button->set_default(true);
     auto* close_ptr =
         static_cast<Button*>(button_row->add_item(std::move(close_button), LayoutSpec{SizePolicy::Fixed, 1}));

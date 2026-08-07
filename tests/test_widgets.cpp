@@ -94,7 +94,7 @@ CK_TEST(label_buddy_defaults_to_null_and_round_trips) {
 
 CK_TEST(button_fires_on_press_on_enter_key) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     int presses = 0;
     button.on_press = [&] { ++presses; };
     CK_CHECK(button.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
@@ -103,7 +103,7 @@ CK_TEST(button_fires_on_press_on_enter_key) {
 
 CK_TEST(button_fires_on_press_on_space_char) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     int presses = 0;
     button.on_press = [&] { ++presses; };
     CK_CHECK(button.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, " "}}));
@@ -112,7 +112,7 @@ CK_TEST(button_fires_on_press_on_space_char) {
 
 CK_TEST(button_ignores_unrelated_keys) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     int presses = 0;
     button.on_press = [&] { ++presses; };
     CK_CHECK(!button.on_key(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}));
@@ -121,7 +121,7 @@ CK_TEST(button_ignores_unrelated_keys) {
 
 CK_TEST(button_press_fires_only_when_mouse_up_lands_inside_its_bounds) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     button.set_bounds(Rect{5, 5, 10, 1});
     int presses = 0;
     button.on_press = [&] { ++presses; };
@@ -135,7 +135,7 @@ CK_TEST(button_press_fires_only_when_mouse_up_lands_inside_its_bounds) {
 
 CK_TEST(button_press_does_not_fire_when_mouse_up_lands_outside_its_bounds_a_dragged_out_release) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     button.set_bounds(Rect{5, 5, 10, 1});
     int presses = 0;
     button.on_press = [&] { ++presses; };
@@ -149,14 +149,127 @@ CK_TEST(button_press_does_not_fire_when_mouse_up_lands_outside_its_bounds_a_drag
 
 CK_TEST(button_with_no_on_press_handler_does_not_crash_when_pressed) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     CK_CHECK(button.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
 }
 
 CK_TEST(button_is_a_tab_stop_by_construction) {
     Fixture f;
-    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default, f.roles.button_shadow);
     CK_CHECK(button.focusable());
+}
+
+// --- Button rendering (classic face + composited drop shadow) -------------
+
+CK_TEST(button_draws_a_face_with_half_block_shadow_on_the_right_edge_and_bottom_row) {
+    Fixture f;
+    Surface s = make_surface(14, 3);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 12, 2});
+    Painter painter(s, Rect{0, 0, 14, 3});
+    button.draw(painter);
+
+    CK_CHECK(s.at(ckv::Point{11, 0}).grapheme() == "▄");  // right edge, first face row
+    for (int x = 2; x <= 11; ++x) CK_CHECK(s.at(ckv::Point{x, 1}).grapheme() == "▀");  // bottom shadow run
+    CK_CHECK(s.at(ckv::Point{0, 1}).grapheme() == " ");  // bottom row spacer cells
+    CK_CHECK(s.at(ckv::Point{1, 1}).grapheme() == " ");
+
+    // Label centered on the face: "OK" in a 12-wide button -> cols 5-6.
+    CK_CHECK(s.at(ckv::Point{5, 0}).grapheme() == "O");
+    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == "K");
+
+    // Face cells carry the button style; shadow glyphs carry the shadow style.
+    CK_CHECK(s.at(ckv::Point{5, 0}).style() == f.theme.resolve(f.roles.button_normal));
+    CK_CHECK(s.at(ckv::Point{11, 0}).style() == f.theme.resolve(f.roles.button_shadow));
+    CK_CHECK(s.at(ckv::Point{5, 1}).style() == f.theme.resolve(f.roles.button_shadow));
+}
+
+CK_TEST(a_taller_button_uses_full_block_shadow_below_the_first_face_row) {
+    Fixture f;
+    Surface s = make_surface(14, 4);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 12, 3});  // two face rows + shadow row
+    Painter painter(s, Rect{0, 0, 14, 4});
+    button.draw(painter);
+    CK_CHECK(s.at(ckv::Point{11, 0}).grapheme() == "▄");
+    CK_CHECK(s.at(ckv::Point{11, 1}).grapheme() == "█");
+}
+
+CK_TEST(a_pressed_button_shifts_its_face_right_and_loses_its_shadow) {
+    Fixture f;
+    Surface s = make_surface(14, 3);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 12, 2});
+    button.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 0},
+                                     std::nullopt, Modifier::None});  // press and hold
+    Painter painter(s, Rect{0, 0, 14, 3});
+    button.draw(painter);
+
+    CK_CHECK(s.at(ckv::Point{11, 0}).grapheme() != "▄");                       // no right-edge shadow
+    for (int x = 2; x <= 11; ++x) CK_CHECK(s.at(ckv::Point{x, 1}).grapheme() == " ");  // no bottom shadow
+    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == "O");  // label shifted one cell right (was col 5)
+    CK_CHECK(s.at(ckv::Point{7, 0}).grapheme() == "K");
+}
+
+CK_TEST(releasing_a_pressed_button_restores_the_shadow) {
+    Fixture f;
+    Surface s = make_surface(14, 3);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 12, 2});
+    button.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 0},
+                                     std::nullopt, Modifier::None});
+    button.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{5, 0},
+                                     std::nullopt, Modifier::None});
+    Painter painter(s, Rect{0, 0, 14, 3});
+    button.draw(painter);
+    CK_CHECK(s.at(ckv::Point{11, 0}).grapheme() == "▄");
+    CK_CHECK(s.at(ckv::Point{5, 1}).grapheme() == "▀");
+}
+
+CK_TEST(a_focused_buttons_face_uses_the_focused_style) {
+    Fixture f;
+    Surface s = make_surface(14, 3);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 12, 2});
+    button.on_focus(ckv::FocusEvent{true});
+    Painter painter(s, Rect{0, 0, 14, 3});
+    button.draw(painter);
+    CK_CHECK(s.at(ckv::Point{5, 0}).style() == f.theme.resolve(f.roles.button_focused));
+}
+
+CK_TEST(a_default_buttons_face_uses_the_default_style_when_unfocused) {
+    Fixture f;
+    Surface s = make_surface(14, 3);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 12, 2});
+    button.set_default(true);
+    Painter painter(s, Rect{0, 0, 14, 3});
+    button.draw(painter);
+    CK_CHECK(s.at(ckv::Point{5, 0}).style() == f.theme.resolve(f.roles.button_default));
+}
+
+CK_TEST(button_prefers_a_two_row_height_so_layout_reserves_its_shadow_row) {
+    Fixture f;
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    CK_CHECK(button.vertical_size_hint().preferred == 2);
+}
+
+CK_TEST(a_degenerate_tiny_button_draws_without_crashing) {
+    Fixture f;
+    Surface s = make_surface(4, 2);
+    Button button("OK", f.theme, f.roles.button_normal, f.roles.button_focused, f.roles.button_default,
+                  f.roles.button_shadow);
+    button.set_bounds(Rect{0, 0, 2, 1});  // below the 3-cell minimum: draw() must bail, not crash
+    Painter painter(s, Rect{0, 0, 4, 2});
+    button.draw(painter);
+    CK_CHECK(true);
 }
 
 // --- StaticText ------------------------------------------------------------

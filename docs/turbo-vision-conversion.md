@@ -203,9 +203,14 @@ Initial screen — desktop, menu bar, status line:
 
 ![ckVision Hello: initial frame](generated/screenshots/hello-initial.svg)
 
-The greeting dialog (Alt+G) — double-line active frame (this window
-has focus), the close/zoom glyphs, and a solid content-interior fill
-(the classic scheme's blue-on-light-gray desktop, blue window):
+The greeting dialog (Alt+G) — a gray dialog surface exactly as the
+original's `TDialog` is (dialogs are the gray family; blue is for
+document windows), double-line active frame, centered padded title,
+and the classic green buttons with their composited black drop shadow
+(`▄`/`█` along the right edge, `▀` along the bottom — the focused
+button's label renders white, and pressing one shifts its face a cell
+right while the shadow disappears, the classic "push into the
+surface" feedback):
 
 ![ckVision Hello: greeting dialog](generated/screenshots/hello-greeting.svg)
 
@@ -213,16 +218,19 @@ In the Classic theme this is, deliberately, meant to look like a
 faithful windowed-desktop application — not "inspired by," identical
 in spirit: double-frame-on-focus, the ▲▼/◄► scrollbar glyphs, the `■`
 close glyph and `↑`/`↕` zoom glyph, the light-shade desktop texture,
+the gray-dialog/green-button palette with composited button shadows,
 and the blue-window/light-gray-menu/green-highlight palette are all
 covered by dedicated tests (see `tests/test_window.cpp`,
-`tests/test_scrollbar.cpp`, `tests/test_standard_roles.cpp`) as well
-as by this chapter's own golden dump. **No deviation from the
-original's visual language was introduced in this port** — porting
-`hello.cpp` surfaced two real ckVision rendering bugs along the way
-(a window's content interior was never filled at all, and the zoom
-control's glyph silently overwrote the frame's own top-right corner),
-both fixed as part of landing this chapter, not worked around in the
-example.
+`tests/test_widgets.cpp`, `tests/test_scrollbar.cpp`,
+`tests/test_standard_roles.cpp`) as well as by this chapter's own
+golden dump. **No deviation from the original's visual language was
+introduced in this port** — porting `hello.cpp` surfaced real
+ckVision rendering gaps along the way (a window's content interior
+was never filled at all, the zoom control's glyph silently overwrote
+the frame's top-right corner, the title lacked its centered padding,
+and buttons rendered as flat `[ Label ]` bars with none of the
+original's face/shadow/pressed geometry), each fixed in the library
+as part of landing this chapter, never worked around in the example.
 
 ## Verified, not just built
 

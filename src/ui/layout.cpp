@@ -196,4 +196,40 @@ void Column::relayout() {
     }
 }
 
+namespace {
+
+// Main axis: children's hints sum (plus spacing between consecutive
+// children); cross axis: the max over children. kUnboundedExtent from
+// any child makes the aggregate max unbounded too.
+SizeHint sum_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal, int spacing) {
+    SizeHint total{0, 0, 0};
+    for (const auto& child : children) {
+        const SizeHint h = horizontal ? child->horizontal_size_hint() : child->vertical_size_hint();
+        total.min += h.min;
+        total.preferred += h.preferred;
+    }
+    const int gaps = children.empty() ? 0 : spacing * (static_cast<int>(children.size()) - 1);
+    total.min += gaps;
+    total.preferred += gaps;
+    total.max = kUnboundedExtent;
+    return total;
+}
+
+SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal) {
+    SizeHint total{0, 0, kUnboundedExtent};
+    for (const auto& child : children) {
+        const SizeHint h = horizontal ? child->horizontal_size_hint() : child->vertical_size_hint();
+        total.min = std::max(total.min, h.min);
+        total.preferred = std::max(total.preferred, h.preferred);
+    }
+    return total;
+}
+
+}  // namespace
+
+SizeHint Row::horizontal_size_hint() const { return sum_hints(children(), true, spacing_); }
+SizeHint Row::vertical_size_hint() const { return max_hints(children(), false); }
+SizeHint Column::horizontal_size_hint() const { return max_hints(children(), true); }
+SizeHint Column::vertical_size_hint() const { return sum_hints(children(), false, spacing_); }
+
 }  // namespace ckv::ui

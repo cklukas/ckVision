@@ -54,9 +54,13 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 // the one deliberate structural deviation from the original, discussed
 // in docs/turbo-vision-conversion.md.
 void HelloApp::greeting_box() {
-    auto window = std::make_unique<widgets::Window>("Hello, World!", app_.theme(), roles_.window_frame_active,
-                                                      roles_.window_frame_inactive, roles_.window_title_active,
-                                                      roles_.window_title_inactive);
+    // Dialog-gray chrome, not the blue document-window roles — the
+    // original's greeting box is a dialog, and dialogs are the gray
+    // family (see standard_roles.cpp), which is also what the buttons'
+    // black drop shadow composites against.
+    auto window = std::make_unique<widgets::Window>("Hello, World!", app_.theme(), roles_.dialog_frame,
+                                                      roles_.dialog_background, roles_.dialog_frame,
+                                                      roles_.dialog_background);
     window->set_bounds(Rect{25, 5, 30, 11});
     widgets::Window* window_ptr = window.get();
 
@@ -69,7 +73,7 @@ void HelloApp::greeting_box() {
     widgets::Button* first_button = nullptr;
     for (const auto& [label, y] : labels) {
         auto button = std::make_unique<widgets::Button>(label, app_.theme(), roles_.button_normal,
-                                                          roles_.button_focused, roles_.button_default);
+                                                          roles_.button_focused, roles_.button_default, roles_.button_shadow);
         button->set_bounds(Rect{15, y, 12, 2});
         button->set_focus_policy(ui::FocusPolicy::TabStop);
         widgets::Button* raw = static_cast<widgets::Button*>(content->add_child(std::move(button)));

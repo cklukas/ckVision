@@ -157,3 +157,61 @@ CK_TEST(row_spacing_is_reflected_in_child_offsets) {
     row.set_spacing(2);  // idempotent set: same value, no-op path
     CK_CHECK(row.spacing() == 2);
 }
+
+// --- Container size-hint aggregation --------------------------------------
+
+namespace {
+class HintedView : public View {
+public:
+    HintedView(int w, int h) : w_(w), h_(h) {}
+    ckv::ui::SizeHint horizontal_size_hint() const override { return {w_, w_, w_}; }
+    ckv::ui::SizeHint vertical_size_hint() const override { return {h_, h_, h_}; }
+
+private:
+    int w_;
+    int h_;
+};
+}  // namespace
+
+CK_TEST(a_rows_horizontal_hint_sums_its_children_plus_spacing) {
+    Row row;
+    row.set_spacing(2);
+    row.add_item(std::make_unique<HintedView>(10, 2));
+    row.add_item(std::make_unique<HintedView>(8, 1));
+    CK_CHECK(row.horizontal_size_hint().preferred == 10 + 8 + 2);
+}
+
+CK_TEST(a_rows_vertical_hint_is_the_max_over_its_children) {
+    Row row;
+    row.add_item(std::make_unique<HintedView>(10, 2));
+    row.add_item(std::make_unique<HintedView>(8, 1));
+    CK_CHECK(row.vertical_size_hint().preferred == 2);
+}
+
+CK_TEST(a_columns_vertical_hint_sums_and_horizontal_hint_maxes) {
+    Column column;
+    column.set_spacing(1);
+    column.add_item(std::make_unique<HintedView>(10, 2));
+    column.add_item(std::make_unique<HintedView>(8, 3));
+    CK_CHECK(column.vertical_size_hint().preferred == 2 + 3 + 1);
+    CK_CHECK(column.horizontal_size_hint().preferred == 10);
+}
+
+CK_TEST(a_fixed_policy_row_nested_in_a_column_receives_its_aggregated_height) {
+    // Regression: a nested container's own hints used to be the bare
+    // View default (preferred 0), so a Fixed-policy button row inside
+    // a dialog's Column silently collapsed to zero cells — every
+    // factory dialog's buttons were invisible.
+    Column column(Rect{0, 0, 40, 10});
+    auto row = std::make_unique<Row>();
+    row->add_item(std::make_unique<HintedView>(10, 2));
+    auto* row_ptr = column.add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+    CK_CHECK(row_ptr->bounds().height == 2);
+}
+
+CK_TEST(an_empty_container_reports_zero_preferred_size_without_crashing) {
+    Row row;
+    Column column;
+    CK_CHECK(row.horizontal_size_hint().preferred == 0);
+    CK_CHECK(column.vertical_size_hint().preferred == 0);
+}

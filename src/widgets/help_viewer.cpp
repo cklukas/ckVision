@@ -26,8 +26,9 @@ HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
 HelpViewerHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                    const ui::Theme& theme, const ui::StandardRoles& roles, ui::Application& app,
                                    ui::View* restore_focus_to) {
-    auto window = std::make_unique<Window>("Help", theme, roles.window_frame_active, roles.window_frame_inactive,
-                                            roles.window_title_active, roles.window_title_inactive);
+    auto window = std::make_unique<Window>("Help", theme, roles.dialog_frame,
+                                            roles.dialog_background, roles.dialog_frame,
+                                            roles.dialog_background);
     Window* window_ptr = window.get();
 
     auto column = std::make_unique<Column>();
@@ -47,11 +48,11 @@ HelpViewerHandle make_help_viewer(const HelpProvider& provider, std::string init
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
     auto back_button = std::make_unique<Button>("Back", theme, roles.button_normal, roles.button_focused,
-                                                 roles.button_default);
+                                                 roles.button_default, roles.button_shadow);
     auto* back_ptr =
         static_cast<Button*>(button_row->add_item(std::move(back_button), LayoutSpec{SizePolicy::Fixed, 1}));
     auto close_button = std::make_unique<Button>("Close", theme, roles.button_normal, roles.button_focused,
-                                                  roles.button_default);
+                                                  roles.button_default, roles.button_shadow);
     close_button->set_default(true);
     auto* close_ptr =
         static_cast<Button*>(button_row->add_item(std::move(close_button), LayoutSpec{SizePolicy::Fixed, 1}));

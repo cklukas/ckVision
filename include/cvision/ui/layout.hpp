@@ -62,6 +62,14 @@ public:
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
 
+    // A container's own hints aggregate its children's (main axis:
+    // sum plus spacing; cross axis: max) — this is what lets a Fixed-
+    // policy Row of buttons nested inside a Column get its natural
+    // height rather than the bare-View default of preferred 0, under
+    // which a nested container silently collapsed to zero cells.
+    SizeHint horizontal_size_hint() const override;
+    SizeHint vertical_size_hint() const override;
+
     void on_resized() override { relayout(); }
 
 private:
@@ -80,6 +88,10 @@ public:
 
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
+
+    // See Row: main axis (vertical here) sums, cross axis maxes.
+    SizeHint horizontal_size_hint() const override;
+    SizeHint vertical_size_hint() const override;
 
     void on_resized() override { relayout(); }
 
