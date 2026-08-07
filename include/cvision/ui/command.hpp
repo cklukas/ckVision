@@ -48,6 +48,15 @@ public:
     void unbind_key(const KeyChord& chord);
     std::optional<CommandId> command_for_key(const KeyChord& chord) const;
 
+    // The reverse of command_for_key: the first chord currently bound
+    // to `id` (M9/WP-11 — what a menu/status item renders as its chord
+    // hint). A command may have more than one chord bound; this is
+    // display's "one representative chord" pick, not an enumeration.
+    // nullopt if nothing is bound to `id` right now, regardless of
+    // whatever default_chord it was registered with (a caller that
+    // unbinds a command's only chord sees that reflected here).
+    std::optional<KeyChord> chord_for_command(CommandId id) const;
+
 private:
     std::unordered_map<CommandId, CommandInfo> commands_;
     std::unordered_map<CommandId, std::function<bool()>> enabled_predicates_;

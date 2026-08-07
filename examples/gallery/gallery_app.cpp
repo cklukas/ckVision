@@ -25,9 +25,12 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
+    // Items referencing a command carry no label text of their own
+    // (M9/WP-11) — title (with mnemonic), chord hint, and enablement
+    // all render live from the registration below.
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"F10 Menu", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
+    status->set_items({{"", kCmdActivateMenu}, {"", kCmdQuit}});
     // dock_bottom (not add_child + a one-time set_bounds) keeps the
     // status line pinned to the last row across every future terminal
     // resize — Desktop::on_resized() re-derives its position from
@@ -38,12 +41,12 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     build_controls_window();
     build_image_window();
 
-    app_.commands().register_command(kCmdActivateMenu, "Activate Menu Bar", "Window",
+    app_.commands().register_command(kCmdActivateMenu, "Menu", "Window",
                                       KeyChord{Key::F10, Modifier::None, ""});
-    app_.commands().register_command(kCmdQuit, "Quit", "File",
+    app_.commands().register_command(kCmdQuit, "&Quit", "File",
                                       KeyChord{Key::Char, Modifier::Alt, "x"});
-    app_.commands().register_command(kCmdTile, "Tile Windows", "Window");
-    app_.commands().register_command(kCmdCascade, "Cascade Windows", "Window");
+    app_.commands().register_command(kCmdTile, "&Tile Windows", "Window");
+    app_.commands().register_command(kCmdCascade, "&Cascade Windows", "Window");
 
     app_.set_command_handler(kCmdActivateMenu, [this] { menu_->activate(); });
     app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
@@ -69,12 +72,12 @@ void GalleryApp::build_menu_bar() {
                                                   },
                                                   false});
     file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
-    file_menu.items.push_back(widgets::MenuItem{"E&xit", kCmdQuit, nullptr, false});
+    file_menu.items.push_back(widgets::MenuItem{"", kCmdQuit, nullptr, false});
     menus.push_back(std::move(file_menu));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem{"&Tile", kCmdTile, nullptr, false});
-    window_menu.items.push_back(widgets::MenuItem{"&Cascade", kCmdCascade, nullptr, false});
+    window_menu.items.push_back(widgets::MenuItem{"", kCmdTile, nullptr, false});
+    window_menu.items.push_back(widgets::MenuItem{"", kCmdCascade, nullptr, false});
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

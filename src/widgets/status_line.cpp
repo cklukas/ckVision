@@ -2,6 +2,7 @@
 #include "cvision/widgets/status_line.hpp"
 
 #include "cvision/core/text.hpp"
+#include "cvision/widgets/mnemonic.hpp"
 
 namespace ckv::widgets {
 
@@ -13,6 +14,19 @@ StatusLine::StatusLine() = default;
 
 void StatusLine::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
+}
+
+std::string StatusLine::effective_label(const StatusLineItem& item) const {
+    if (item.command == ui::kInvalidCommand) return item.label;
+    const ui::CommandInfo* info = context().app->commands().find(item.command);
+    if (info == nullptr) return item.label;
+    // Menu titles may carry a '&' mnemonic marker for menus to parse;
+    // the status line never navigates by letter, so it always strips
+    // one rather than leaking the raw character into the rendered text.
+    std::string text = parse_mnemonic(info->title).display;
+    if (const auto chord = context().app->commands().chord_for_command(item.command))
+        text = format(*chord) + " " + text;
+    return text;
 }
 
 void StatusLine::set_items(std::vector<StatusLineItem> items) {
@@ -38,7 +52,8 @@ int StatusLine::item_start_column(std::size_t index) const {
     const std::string hint = current_hint();
     int x = text::text_width(hint);
     if (!hint.empty() && !items_.empty()) x += 2;
-    for (std::size_t i = 0; i < index; ++i) x += text::text_width(items_[i].label) + kSeparatorWidth;
+    for (std::size_t i = 0; i < index; ++i)
+        x += text::text_width(effective_label(items_[i])) + kSeparatorWidth;
     return x;
 }
 
@@ -56,7 +71,7 @@ void StatusLine::draw(scene::Painter& painter) {
         const int x = item_start_column(i);
         if (x >= bounds().width) break;
         if (i > 0) painter.draw_text(Point{x - kSeparatorWidth, 0}, " | ", style);
-        painter.draw_text(Point{x, 0}, items_[i].label, style);
+        painter.draw_text(Point{x, 0}, effective_label(items_[i]), style);
     }
 }
 
@@ -67,7 +82,7 @@ bool StatusLine::on_mouse(const MouseEvent& event) {
     if (event.cell.y != abs.y) return false;
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const int x = item_start_column(i);
-        const int w = text::text_width(items_[i].label);
+        const int w = text::text_width(effective_label(items_[i]));
         if (local_x >= x && local_x < x + w) {
             if (items_[i].command != ui::kInvalidCommand)
                 context().app->execute_command(items_[i].command);

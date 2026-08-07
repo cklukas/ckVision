@@ -186,11 +186,15 @@ CK_TEST(second_item_is_positioned_after_the_first_with_a_separator_between) {
     app.commands().register_command(kSecond, "Second");
     bool second_ran = false;
     app.set_command_handler(kSecond, [&] { second_ran = true; });
+    // An item referencing a command renders the command's registered
+    // title, not its own label (M9/WP-11) — these hand-set labels
+    // ("AB", "Second") are therefore never shown; the actual rendered
+    // text is "First" / "Second" from the registrations above.
     status.set_items({StatusLineItem{"AB", kFirst}, StatusLineItem{"Second", kSecond}});
 
-    // "AB" occupies columns 0-1; " | " occupies 2-4; "Second" starts at 5.
-    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 0},
-                                              std::nullopt, Modifier::None}));
+    // "First" occupies columns 0-4; " | " occupies 5-7; "Second" starts at 8.
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                              ckv::Point{9, 0}, std::nullopt, Modifier::None}));
     CK_CHECK(second_ran);
 }
 

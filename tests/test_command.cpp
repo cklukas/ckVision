@@ -151,6 +151,38 @@ CK_TEST(chords_differing_only_by_modifier_are_distinct_bindings) {
     CK_CHECK(*reg.command_for_key(KeyChord{Key::Char, Modifier::Ctrl, "o"}) == kFileSave);
 }
 
+// --- chord_for_command (the reverse lookup, M9/WP-11) ---------------------
+
+CK_TEST(chord_for_command_returns_nullopt_when_nothing_is_bound) {
+    CommandRegistry reg;
+    CK_CHECK(!reg.chord_for_command(kFileOpen).has_value());
+}
+
+CK_TEST(chord_for_command_finds_the_chord_a_registered_default_bound) {
+    CommandRegistry reg;
+    reg.register_command(kFileOpen, "Open", "File", ctrl_o());
+    const auto chord = reg.chord_for_command(kFileOpen);
+    CK_CHECK(chord.has_value());
+    CK_CHECK(*chord == ctrl_o());
+}
+
+CK_TEST(chord_for_command_reflects_a_runtime_rebind_not_just_the_original_default) {
+    CommandRegistry reg;
+    reg.register_command(kFileOpen, "Open", "File", ctrl_o());
+    reg.unbind_key(ctrl_o());
+    reg.bind_key(KeyChord{Key::F1, Modifier::None, ""}, kFileOpen);
+    const auto chord = reg.chord_for_command(kFileOpen);
+    CK_CHECK(chord.has_value());
+    CK_CHECK(*chord == (KeyChord{Key::F1, Modifier::None, ""}));
+}
+
+CK_TEST(chord_for_command_returns_nullopt_after_its_only_chord_is_unbound) {
+    CommandRegistry reg;
+    reg.register_command(kFileOpen, "Open", "File", ctrl_o());
+    reg.unbind_key(ctrl_o());
+    CK_CHECK(!reg.chord_for_command(kFileOpen).has_value());
+}
+
 CK_TEST(registering_a_command_with_kinvalidcommand_id_aborts) {
     const pid_t pid = ::fork();
     CK_CHECK(pid >= 0);

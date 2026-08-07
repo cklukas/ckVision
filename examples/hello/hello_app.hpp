@@ -35,6 +35,7 @@ private:
     ui::Application& app_;
     ui::StandardRoles roles_;
     widgets::Desktop* desktop_ = nullptr;
+    widgets::MenuBar* menu_ = nullptr;
     bool quit_ = false;
 };
 

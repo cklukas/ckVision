@@ -51,7 +51,8 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     build_menu_bar();
     build_window();
 
-    app_.commands().register_command(kCmdQuit, "Quit", "File", KeyChord{Key::Char, Modifier::Alt, "x"});
+    app_.commands().register_command(kCmdQuit, "&Quit", "File",
+                                      KeyChord{Key::Char, Modifier::Alt, "x"});
     app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
 
     // Tab isn't wired to focus traversal anywhere in the library by
@@ -70,9 +71,12 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
 }
 
 void FileBrowserApp::build_menu_bar() {
+    // Items referencing a command carry no label text of their own
+    // (M9/WP-11) — title (with mnemonic), chord hint, and enablement
+    // all render live from the registration above.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{"E&xit", kCmdQuit, nullptr, false});
+    file_menu.items.push_back(widgets::MenuItem{"", kCmdQuit, nullptr, false});
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
@@ -80,7 +84,7 @@ void FileBrowserApp::build_menu_bar() {
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"Tab Switch Pane", ui::kInvalidCommand}, {"Alt+X Quit", kCmdQuit}});
+    status->set_items({{"", kCmdFocusNextPane}, {"", kCmdQuit}});
     desktop_->dock_bottom(std::move(status));
 }
 

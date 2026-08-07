@@ -8,11 +8,13 @@
 // an injected provider, which returns the hint text to display — the
 // library defines no help content format, same as F1's provider.
 //
-// Scope note: command-chord text (e.g. "F1 Help") is NOT rendered next
-// to each item — formatting an arbitrary KeyChord into a short display
-// string needs a real key-name table (this framework's Key enum
-// currently has no such table anywhere), which is its own increment.
-// Items show their label only; documented gap, not an oversight.
+// An item referencing a command (M9/WP-11) stops carrying its own
+// label text: it renders "{chord} {title}" composed live from
+// CommandRegistry (e.g. "Alt+X Quit"), chord omitted if nothing is
+// currently bound. A hand-labeled item (command == kInvalidCommand)
+// still renders its own `label` verbatim, unparsed — for the item
+// list, not the mnemonic-aware navigation menus use, since nothing
+// here jumps focus by letter.
 #pragma once
 
 #include <functional>
@@ -64,6 +66,10 @@ public:
     void on_attached() override;
 
 private:
+    // The rendered text for `item` — either its own hand-set label, or
+    // (when it references a command) "{chord} {title}" composed live
+    // from the registry, e.g. "Alt+X Quit".
+    std::string effective_label(const StatusLineItem& item) const;
     int item_start_column(std::size_t index) const;
 
     std::vector<StatusLineItem> items_;

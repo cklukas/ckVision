@@ -2,6 +2,8 @@
 #include "cvision/widgets/menu.hpp"
 
 #include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -12,6 +14,8 @@ using ckv::KeyChord;
 using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::Rect;
+using ckv::scene::Painter;
+using ckv::scene::Surface;
 using ckv::ui::Application;
 using ckv::ui::CommandId;
 using ckv::ui::intern_standard_roles;
@@ -42,6 +46,12 @@ std::unique_ptr<DropdownMenu> make_dropdown(Fixture& f, ckv::ui::Application& ap
 
 ckv::KeyEvent key(ckv::Key k, std::string text = "") {
     return ckv::KeyEvent{KeyChord{k, Modifier::None, std::move(text)}};
+}
+
+std::string row_text(const Surface& s, int y) {
+    std::string out;
+    for (int x = 0; x < s.size().width; ++x) out += s.at(ckv::Point{x, y}).grapheme();
+    return out;
 }
 }  // namespace
 
@@ -214,6 +224,117 @@ CK_TEST(clicking_outside_the_dropdowns_bounds_dismisses_it_without_activating) {
                                               ckv::Point{50, 50}, std::nullopt, Modifier::None}));
     CK_CHECK(dismissed);
     CK_CHECK(!ran);
+}
+
+// --- DropdownMenu: registry-rendered title and chord (M9/WP-11) -----------
+
+CK_TEST(an_item_referencing_a_command_renders_the_registered_title_not_its_own_label) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kSave = 1;
+    app.commands().register_command(kSave, "&Save");
+    // The label below ("Ignored") must never appear anywhere — an item
+    // referencing a command carries no label text of its own.
+    auto menu = make_dropdown(f, app, {{"Ignored", kSave, nullptr, false}});
+    menu->set_bounds(Rect{0, 0, 20, 1});
+
+    Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 1});
+    menu->draw(painter);
+
+    const std::string row = row_text(s, 0);
+    CK_CHECK(row.find("Save") != std::string::npos);
+    CK_CHECK(row.find("Ignored") == std::string::npos);
+}
+
+CK_TEST(an_item_referencing_a_command_with_no_chord_bound_shows_no_chord_hint) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kSave = 1;
+    app.commands().register_command(kSave, "&Save");  // no default_chord
+    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false}});
+    menu->set_bounds(Rect{0, 0, 20, 1});
+
+    Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 1});
+    menu->draw(painter);
+
+    // "Save" at column 1 (a 1-column left margin), nothing else on the
+    // row — no stray chord text past it.
+    CK_CHECK(row_text(s, 0) == " Save" + std::string(15, ' '));
+}
+
+CK_TEST(an_item_referencing_a_command_with_a_bound_chord_shows_it_right_aligned) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kSave = 1;
+    app.commands().register_command(kSave, "&Save", "File",
+                                      KeyChord{Key::Char, Modifier::Ctrl, "s"});
+    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false}});
+    menu->set_bounds(Rect{0, 0, 20, 1});
+
+    Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 1});
+    menu->draw(painter);
+
+    const std::string row = row_text(s, 0);
+    CK_CHECK(row.find("Save") != std::string::npos);
+    // format(Ctrl+S) upper-cases the single-letter Char chord for display.
+    const std::string hint = "Ctrl+S";
+    const auto hint_pos = row.find(hint);
+    CK_CHECK(hint_pos != std::string::npos);
+    // Right-aligned: the hint's last character sits one cell in from
+    // the dropdown's own right edge (column 19 of a 20-wide surface).
+    CK_CHECK(hint_pos + hint.size() == 19);
+}
+
+CK_TEST(a_runtime_rebind_changes_the_rendered_chord_hint_without_touching_the_item) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kSave = 1;
+    app.commands().register_command(kSave, "&Save", "File",
+                                      KeyChord{Key::Char, Modifier::Ctrl, "s"});
+    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false}});
+    menu->set_bounds(Rect{0, 0, 20, 1});
+
+    app.commands().unbind_key(KeyChord{Key::Char, Modifier::Ctrl, "s"});
+    app.commands().bind_key(KeyChord{Key::F5, Modifier::None, ""}, kSave);
+
+    Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 1});
+    menu->draw(painter);  // same MenuItem, no re-declaration — just a re-render
+
+    const std::string row = row_text(s, 0);
+    CK_CHECK(row.find("F5") != std::string::npos);
+    CK_CHECK(row.find("Ctrl+S") == std::string::npos);
+}
+
+CK_TEST(mnemonic_navigation_uses_the_registered_title_not_the_items_own_label) {
+    // The item's own label carries a DIFFERENT letter ('&Ignored') —
+    // if mnemonic lookup used it instead of the registered title
+    // ('&Save'), 'i' would activate this item and 's' would not.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kSave = 1;
+    bool ran = false;
+    app.commands().register_command(kSave, "&Save");
+    app.set_command_handler(kSave, [&] { ran = true; });
+    auto menu = make_dropdown(f, app, {{"&Ignored", kSave, nullptr, false}});
+
+    CK_CHECK(!menu->on_key(key(Key::Char, "i")));
+    CK_CHECK(!ran);
+    CK_CHECK(menu->on_key(key(Key::Char, "s")));
+    CK_CHECK(ran);
 }
 
 // --- MenuBar: activation, navigation, dismissal ---------------------------

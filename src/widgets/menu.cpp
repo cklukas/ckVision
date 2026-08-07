@@ -90,11 +90,28 @@ void DropdownMenu::dismiss() {
     if (callback) callback();
 }
 
+std::string DropdownMenu::item_source_text(const MenuItem& item) const {
+    if (item.command != ui::kInvalidCommand) {
+        if (const ui::CommandInfo* info = context().app->commands().find(item.command))
+            return info->title;
+    }
+    return item.label;
+}
+
+std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) const {
+    if (item.command == ui::kInvalidCommand) return std::nullopt;
+    const auto chord = context().app->commands().chord_for_command(item.command);
+    if (!chord) return std::nullopt;
+    return format(*chord);
+}
+
 SizeHint DropdownMenu::horizontal_size_hint() const {
     int max_width = 0;
     for (const auto& item : items_) {
         if (item.separator) continue;
-        max_width = std::max(max_width, text::text_width(parse_mnemonic(item.label).display));
+        int width = text::text_width(parse_mnemonic(item_source_text(item)).display);
+        if (const auto hint = item_chord_hint(item)) width += 2 + text::text_width(*hint);
+        max_width = std::max(max_width, width);
     }
     const int width = max_width + 2;
     return SizeHint{width, width, width};
@@ -132,7 +149,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
         case Key::Char:
             for (std::size_t i = 0; i < items_.size(); ++i) {
                 if (items_[i].separator) continue;
-                const auto parsed = parse_mnemonic(items_[i].label);
+                const auto parsed = parse_mnemonic(item_source_text(items_[i]));
                 if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text) &&
                     item_enabled(i)) {
                     activate(static_cast<int>(i));
@@ -165,16 +182,22 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
 void DropdownMenu::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
+        const MenuItem& item = items_[static_cast<std::size_t>(i)];
         const bool enabled = item_enabled(static_cast<std::size_t>(i));
         const Style style = !enabled ? theme.resolve(disabled_role_)
                              : (i == highlighted_) ? theme.resolve(highlighted_role_)
                                                     : theme.resolve(normal_role_);
         painter.fill(Rect{0, i, bounds().width, 1}, Cell::from_grapheme(" ", style));
-        if (items_[static_cast<std::size_t>(i)].separator) {
+        if (item.separator) {
             painter.hline(Point{0, i}, bounds().width, scene::LineStyle::Single, style);
         } else {
-            const auto parsed = parse_mnemonic(items_[static_cast<std::size_t>(i)].label);
+            const auto parsed = parse_mnemonic(item_source_text(item));
             painter.draw_text(Point{1, i}, parsed.display, style);
+            if (const auto hint = item_chord_hint(item)) {
+                const int hint_x = bounds().width - 1 - text::text_width(*hint);
+                const int label_end_x = 1 + text::text_width(parsed.display);
+                if (hint_x > label_end_x) painter.draw_text(Point{hint_x, i}, *hint, style);
+            }
         }
     }
 }

@@ -8,8 +8,9 @@
 namespace ckv::hello {
 
 namespace {
-constexpr ui::CommandId kCmdGreeting = 1;
-constexpr ui::CommandId kCmdQuit = 2;
+constexpr ui::CommandId kCmdActivateMenu = 1;
+constexpr ui::CommandId kCmdGreeting = 2;
+constexpr ui::CommandId kCmdQuit = 3;
 }  // namespace
 
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
@@ -19,23 +20,30 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
+    // Items referencing a command carry no label text of their own
+    // (M9/WP-11) — title (with mnemonic), chord hint, and enablement
+    // all render live from the registration below.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem hello_menu{"&Hello", {}};
-    hello_menu.items.push_back(widgets::MenuItem{"&Greeting...", kCmdGreeting, nullptr, false});
+    hello_menu.items.push_back(widgets::MenuItem{"", kCmdGreeting, nullptr, false});
     hello_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
-    hello_menu.items.push_back(widgets::MenuItem{"E&xit", kCmdQuit, nullptr, false});
+    hello_menu.items.push_back(widgets::MenuItem{"", kCmdQuit, nullptr, false});
     menus.push_back(std::move(hello_menu));
     auto menu_bar = std::make_unique<widgets::MenuBar>(std::move(menus));
-    desktop_->dock_top(std::move(menu_bar));
+    menu_ = desktop_->dock_top(std::move(menu_bar));
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"Alt-X Exit", kCmdQuit}, {"F10 Menu", ui::kInvalidCommand}});
+    status->set_items({{"", kCmdQuit}, {"", kCmdActivateMenu}});
     desktop_->dock_bottom(std::move(status));
 
-    app_.commands().register_command(kCmdGreeting, "Greeting...", "Hello",
+    app_.commands().register_command(kCmdActivateMenu, "Menu", "Window",
+                                      KeyChord{Key::F10, Modifier::None, ""});
+    app_.commands().register_command(kCmdGreeting, "&Greeting...", "Hello",
                                       KeyChord{Key::Char, Modifier::Alt, "g"});
-    app_.commands().register_command(kCmdQuit, "Exit", "Hello", KeyChord{Key::Char, Modifier::Alt, "x"});
+    app_.commands().register_command(kCmdQuit, "E&xit", "Hello",
+                                      KeyChord{Key::Char, Modifier::Alt, "x"});
+    app_.set_command_handler(kCmdActivateMenu, [this] { menu_->activate(); });
     app_.set_command_handler(kCmdGreeting, [this] { greeting_box(); });
     app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
 }

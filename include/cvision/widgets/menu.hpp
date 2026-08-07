@@ -24,6 +24,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -76,8 +77,9 @@ public:
     const std::vector<MenuItem>& items() const noexcept { return items_; }
     int highlighted() const noexcept { return highlighted_; }
 
-    // Preferred size: width fits the longest item label (+ padding),
-    // height is exactly one row per item (including separators).
+    // Preferred size: width fits the longest item label plus its chord
+    // hint column (+ padding), height is exactly one row per item
+    // (including separators).
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
 
@@ -87,6 +89,18 @@ public:
     void on_attached() override;
 
 private:
+    // Source text for an item's mnemonic/label parsing (M9/WP-11): the
+    // registered command's title when `item.command` is set — so a
+    // menu item referencing a command stops carrying its own label
+    // text, matching the command's registration exactly rather than
+    // risking the two drifting apart — falling back to `item.label`
+    // for hand-callback items with no command.
+    std::string item_source_text(const MenuItem& item) const;
+    // The right-aligned chord hint text ("Alt+G"), or nullopt if the
+    // item has no command or that command has no chord bound right
+    // now (CommandRegistry::chord_for_command, live — a runtime rebind
+    // changes what renders here without touching the item itself).
+    std::optional<std::string> item_chord_hint(const MenuItem& item) const;
     bool item_enabled(std::size_t index) const;
     int step_selection(int from, int direction) const;  // -1 if no selectable item exists at all
     void activate(int index);

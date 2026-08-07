@@ -54,4 +54,10 @@ std::optional<CommandId> CommandRegistry::command_for_key(const KeyChord& chord)
     return std::nullopt;
 }
 
+std::optional<KeyChord> CommandRegistry::chord_for_command(CommandId id) const {
+    for (const auto& [chord, existing_id] : keymap_)
+        if (existing_id == id) return chord;
+    return std::nullopt;
+}
+
 }  // namespace ckv::ui
