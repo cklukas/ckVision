@@ -20,6 +20,7 @@ add_executable(cvision_tests
     test_help_viewer.cpp
     test_history.cpp
     test_image.cpp
+    test_image_view.cpp
     test_input_decoder.cpp
     test_key_event.cpp
     test_layout.cpp

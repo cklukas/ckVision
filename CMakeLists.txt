@@ -35,6 +35,7 @@ add_library(cvision
     src/widgets/directory_picker.cpp
     src/widgets/file_dialog.cpp
     src/widgets/help_viewer.cpp
+    src/widgets/image_view.cpp
     src/widgets/input_line.cpp
     src/widgets/label.cpp
     src/widgets/list_view.cpp
