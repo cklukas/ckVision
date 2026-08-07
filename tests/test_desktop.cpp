@@ -514,3 +514,48 @@ CK_TEST(cascade_places_windows_within_the_content_area_not_under_the_docked_chro
     desktop.cascade();
     CK_CHECK(w->bounds().y >= 1);
 }
+
+CK_TEST(a_window_maximized_to_the_content_area_does_not_shadow_the_docked_status_line) {
+    // Regression: shadow_footprint's bottom strip falls exactly on the
+    // row just below a window's bottom edge — a window maximized to
+    // content_area() (Window::toggle_zoom is handed that exact rect by
+    // every real caller) has its bottom edge flush against the docked
+    // status line, so that strip used to land ON the status line and
+    // dim it. Shadows must clip to content_area(), not the full desktop.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    ckv::ui::View* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(desktop.content_area());  // "maximized"
+    CK_CHECK(w->bounds().y + w->bounds().height == status->bounds().y);  // flush against the footer
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    for (int x = 0; x < 40; ++x)
+        CK_CHECK(surface.at(ckv::Point{x, status->bounds().y}).style() == background_style);
+}
+
+CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_footer) {
+    // The fix must not over-clip: shadow rows that fall WITHIN
+    // content_area() (not on the footer itself) still dim normally.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 5, 10, 4});  // ordinary, unmaximized — well clear of the footer
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    const auto footprints = ckv::scene::shadow_footprint(w->bounds(), ckv::scene::ShadowSpec{});
+    CK_CHECK(!footprints.empty());
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    for (const Rect& fp : footprints)
+        CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == ckv::scene::default_dim(background_style));
+}

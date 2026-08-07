@@ -168,7 +168,14 @@ void Desktop::draw(scene::Painter& painter) {
 }
 
 void Desktop::paint_children(const scene::Painter& own_painter) {
-    const Rect desktop_local{0, 0, bounds().width, bounds().height};
+    // Shadows clip to content_area(), NOT the full desktop bounds: a
+    // maximized window fills content_area() exactly (Window::toggle_zoom
+    // is handed that same rect — see build_window()/menu handling in
+    // every consumer), so its footprint's bottom strip would otherwise
+    // fall exactly on the docked status line's row and dim it — a
+    // window's shadow is a windows-on-windows effect, and docked chrome
+    // is not a window.
+    const Rect shadow_clip = content_area();
     for (auto& child_ptr : children()) {
         View& child = *child_ptr;
         if (!paint_one_child(child, own_painter)) continue;  // invisible: nothing to shadow either
@@ -182,7 +189,7 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
         // direct child of this Desktop.
         scene::Painter mutable_painter = own_painter;
         for (const Rect& footprint : scene::shadow_footprint(child.bounds(), scene::ShadowSpec{})) {
-            const Rect clipped = footprint.intersected(desktop_local);
+            const Rect clipped = footprint.intersected(shadow_clip);
             if (!clipped.empty()) mutable_painter.transform_style(clipped, &scene::default_dim);
         }
     }
