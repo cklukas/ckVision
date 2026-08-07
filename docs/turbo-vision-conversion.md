@@ -62,49 +62,54 @@ factory methods" protocol — `Application`/`Desktop`/`MenuBar`/
 constructor wires up in whatever order makes sense:
 
 ```cpp
+constexpr ui::CommandId kCmdGreeting = ui::kFirstApplicationCommandId;
+constexpr ui::CommandId kCmdQuit = ui::kFirstApplicationCommandId + 1;
+
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
+    desktop_ = app_.root().add(
+        std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background));
 
-    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
-    desktop_ = desktop.get();
-    app_.root().add_child(std::move(desktop));
+    // F10 already activates the bar by default (M9/WP-13) — no handler
+    // to wire here.
+    std::vector<widgets::MenuBarItem> menus{
+        {"&Hello", {{.command = kCmdGreeting}, {.separator = true}, {.command = kCmdQuit}}}};
+    desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::move(menus)));
 
-    std::vector<widgets::MenuBarItem> menus;
-    widgets::MenuBarItem hello_menu{"&Hello", {}};
-    hello_menu.items.push_back(widgets::MenuItem{"&Greeting...", kCmdGreeting, nullptr, false});
-    hello_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});  // separator
-    hello_menu.items.push_back(widgets::MenuItem{"E&xit", kCmdQuit, nullptr, false});
-    menus.push_back(std::move(hello_menu));
-    auto menu_bar = std::make_unique<widgets::MenuBar>(std::move(menus), app_.theme(), roles_.menu_bar_normal,
-                                                         roles_.menu_bar_active, roles_.menu_dropdown_normal,
-                                                         roles_.menu_dropdown_highlighted,
-                                                         roles_.menu_dropdown_disabled, app_, *desktop_);
-    desktop_->dock_top(std::move(menu_bar));
+    auto* status = desktop_->dock_bottom(std::make_unique<widgets::StatusLine>());
+    status->set_role_override(roles_.menu_bar_normal);
+    status->set_items({{.command = kCmdQuit}, {.command = ui::std_commands::kMenu}});
 
-    auto status = std::make_unique<widgets::StatusLine>(app_.theme(), roles_.menu_bar_normal, app_);
-    status->set_items({{"Alt-X Exit", kCmdQuit}, {"F10 Menu", ui::kInvalidCommand}});
-    desktop_->dock_bottom(std::move(status));
-
-    app_.commands().register_command(kCmdGreeting, "Greeting...", "Hello", KeyChord{Key::Char, Modifier::Alt, "g"});
-    app_.commands().register_command(kCmdQuit, "Exit", "Hello", KeyChord{Key::Char, Modifier::Alt, "x"});
-    app_.set_command_handler(kCmdGreeting, [this] { greeting_box(); });
-    app_.set_command_handler(kCmdQuit, [this] { quit_ = true; });
+    auto& commands = app_.commands();
+    commands.add({.id = kCmdGreeting, .title = "&Greeting...", .category = "Hello",
+                  .chord = "Alt+G", .handler = [this] { greeting_box(); }});
+    commands.add({.id = kCmdQuit, .title = "E&xit", .category = "Hello",
+                  .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
 }
 ```
 
-Both sides are honestly about the same length. The real difference is
-**where the wiring lives**: Turbo Vision's menu items and status
-items each carry a raw key-chord constant (`kbAltG`) baked in at
-construction, invisible to anything outside that one factory method;
-ckVision's commands are registered once in `CommandRegistry` with
-their chord, title, and category together, and menu items /
-status-line items reference the command by id — the SAME registry a
-future help viewer, a keymap editor, or an exported command reference
-can all introspect. `dock_top`/`dock_bottom` replace the
-`r.b.y = r.a.y + 1` / `r.a.y = r.b.y - 1` manual rect surgery: the
+The dialog body aside (next section), the shell is honestly about the
+same length — 18 lines here against 20 for `THelloApp`'s two factory
+methods combined. The real difference is **where the wiring lives**:
+Turbo Vision's menu items and status items each carry a raw key-chord
+constant (`kbAltG`) baked in at construction, invisible to anything
+outside that one factory method; ckVision's commands are registered
+once in `CommandRegistry` with their chord, title, and category
+together (`CommandRegistry::add`, a single designated-initializer
+call — M9/WP-10), and menu items / status-line items reference the
+command by id alone, rendering their title, chord hint, and
+enablement live from that one registration (M9/WP-11) — the SAME
+registry a future help viewer, a keymap editor, or an exported
+command reference can all introspect. `dock_top`/`dock_bottom` replace
+the `r.b.y = r.a.y + 1` / `r.a.y = r.b.y - 1` manual rect surgery: the
 menu bar and status line stay pinned to their edges across every
 future resize automatically (see `widgets::Desktop::on_resized`),
-which the original's one-time rect computation does not.
+which the original's one-time rect computation does not. F10 needs no
+explicit handler at all — `MenuBar` installs itself as the standard
+menu-activation command's default the moment it attaches (M9/WP-13) —
+matching `TMenuBar`'s own built-in F10 behavior without ckVision
+having to hard-code it outside the ordinary, rebindable command
+keymap.
 
 ### The greeting dialog
 
@@ -130,80 +135,91 @@ ckVision's port (`examples/hello/hello_app.cpp`, `greeting_box()`):
 void HelloApp::greeting_box() {
     auto window = std::make_unique<widgets::Window>("Hello, World!");
     window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
-                               roles_.dialog_background);  // dialog-gray chrome, not document-window blue
+                               roles_.dialog_background);
     window->set_bounds(Rect{25, 5, 30, 11});
     widgets::Window* window_ptr = window.get();
 
-    auto content = std::make_unique<ui::View>();
-    auto text = std::make_unique<widgets::StaticText>("How are you?");
-    text->set_bounds(Rect{2, 4, 14, 1});
-    content->add_child(std::move(text));
+    window->add(std::make_unique<widgets::StaticText>("How are you?"))->set_bounds(Rect{3, 5, 12, 1});
 
-    const std::pair<const char*, int> labels[] = {{"Terrific", 0}, {"Ok", 2}, {"Lousy", 4}, {"Cancel", 6}};
     widgets::Button* first_button = nullptr;
+    const std::pair<const char*, int> labels[] = {{"Terrific", 0}, {"Ok", 2}, {"Lousy", 4}, {"Cancel", 6}};
     for (const auto& [label, y] : labels) {
-        auto button = std::make_unique<widgets::Button>(label);
-        button->set_bounds(Rect{15, y, 12, 2});
-        widgets::Button* raw = static_cast<widgets::Button*>(content->add_child(std::move(button)));
+        auto* raw = window->add(std::make_unique<widgets::Button>(label));
+        raw->set_bounds(Rect{16, y + 1, 12, 2});
         if (first_button == nullptr) first_button = raw;
         raw->on_press = [window_ptr] { window_ptr->close(); };
     }
 
-    window->set_content(std::move(content));
+    window->cancel_request = [window_ptr] { window_ptr->close(); };
     window->on_closed = [window_ptr, this] { schedule_self_detach(*window_ptr, app_); };
-    desktop_->add_window(std::move(window));
-    app_.set_focus(first_button);
+    desktop_->exec_window(app_, widgets::WindowHandle{std::move(window), first_button});
 }
 ```
 
+This is the one place the two sides genuinely diverge in size — 10
+lines for `greetingBox()` against 19 here. The gap is real, not a
+counting artifact: `TButton`'s constructor takes a command
+(`cmCancel`) that Turbo Vision's own dialog machinery already knows
+how to close on; ckVision's `Button` has no equivalent "close my
+enclosing dialog" built-in, so each button gets its own explicit
+`on_press` closure. That is a genuine ergonomics gap this port does
+not paper over — a future "buttons that close their dialog by
+default" convenience (in the spirit of `MessageBoxDescriptor`'s own
+button set, but for hand-built dialogs) is a real candidate for a
+later increment, not something this chapter should pretend already
+exists.
+
 Geometry: `TRect(25, 5, 55, 16)` is absolute desktop coordinates
 `{x:25, y:5, width:30, height:11}` — `Window::set_bounds(Rect{25, 5,
-30, 11})` is the direct translation. Each `TRect(16, 2, 28, 4)` button
-is likewise `{x:15, y:0..6, width:12, height:2}` once re-anchored to
-the content interior's own local origin (ckVision's content coordinate
-space starts at the window's interior, not the desktop — see
-`Window::content_rect()`).
+30, 11})` is the direct translation. `TStaticText(TRect(3, 5, 15, 6),
+...)` is `{x:3, y:5, width:12, height:1}` — width matches the
+12-character "How are you?" exactly, same as the original. Every
+control here is added directly as a child of `window` (not through a
+separate `content()` view), so its own `Rect` is `window`-local — the
+same frame of reference `insert()`'s own `TRect` arguments already use
+relative to the dialog, rather than a further-nested content-interior
+space. This chapter deliberately does not attempt to rederive Turbo
+Vision's own precise interior-offset convention beyond what's directly
+visible in the snippet above (per this project's own provenance rule,
+`AGENTS.md` — no Turbo Vision source is consulted here); the resulting
+layout is verified correct the way everything else in this chapter
+is — against the pinned golden dump and screenshot, not by reasoning
+about Turbo Vision's own internal geometry rules from the outside.
 
-## The one remaining structural difference — and why it isn't a gap
+## Blocking without a nested native loop
 
 Turbo Vision's `deskTop->execView(d)` **blocks the calling thread**
 until the dialog is dismissed: it runs a nested event loop right there
-in `greetingBox()`. ckVision's loop is embeddable by construction
-(`step()`/`wake()`, D-021 in `DECISIONS.md`) specifically so a host
-application can drive it from its own poll loop — nested native loops
-are explicitly rejected by that decision, not merely deferred, since
-they're hostile to embedding and create re-entrancy hazards with
-`post()` and mid-modal destruction. Modality in ckVision is loop
-*state* instead (`Application::push_modal`/`pop_modal`, M9/WP-15): a
-modal push scopes event routing (mouse hit-testing, focus traversal,
-and the keyboard-accelerator keymap fallback) to the modal's own
-subtree until it closes — nothing outside a modal dialog is reachable
-while one is open, exactly like `execView` — but that scoping is
-decoupled from *blocking the caller*. `widgets::exec_message_box`/
-`Desktop::exec_window` layer a blocking convenience on top of the same
-mechanism for callers that need a result back synchronously (see
-`docs/standard-commands.md` and `plans/api-ergonomics-review-2.md`'s
-WP-15 entry); `greeting_box()` doesn't need one, since it has no result
-to consume, so it uses `push_modal`/`show_dialog` directly and returns
-immediately with the dialog open.
+in `greetingBox()`. Naively, ckVision's own embeddable loop
+(`step()`/`wake()`, D-021 in `DECISIONS.md`) looks incompatible with
+that — a host application drives ckVision from its own poll loop, and
+a NESTED NATIVE loop the way `execView` works is explicitly rejected
+by D-021, not merely deferred, since it would be hostile to embedding
+and create re-entrancy hazards with `post()` and mid-modal
+destruction. But D-021's actual design separates two things
+`execView` conflates: modality (event routing scoped to the dialog,
+`Application::push_modal`/`pop_modal`) and blocking (the calling code
+waiting for a result). `Desktop::exec_window` (M9/WP-15) gives
+`greeting_box()` BOTH, over the SAME embeddable loop — it pushes the
+modal scope, then pumps `Application::step()` in a plain loop (no
+nested native loop, no re-entrancy hazard: `post()`ed work and
+mid-modal destruction both follow the ordinary single-loop rules)
+until the window closes, then pops the scope and returns. The
+CALLER's experience is indistinguishable from `execView`'s: the call
+blocks, and by the time it returns the dialog is gone.
 
-The port's `greeting_box()` therefore pushes a real modal scope around
-an ordinary `Window` and gives each button its own `on_press` that
-closes it directly, rather than routing all four through one shared
-`cmCancel`-equivalent command. **Observable behavior is now identical**
-for anyone interacting with the dialog: all four buttons dismiss it,
-exactly as `hello.cpp`'s reader would expect
+**Observable behavior is fully identical**, and so is this one
+structural property that used to differ: all four buttons dismiss the
+dialog, exactly as `hello.cpp`'s reader would expect
 (`tests/test_hello_golden.cpp`:
 `every_greeting_button_dismisses_the_dialog_matching_the_originals_shared_cmcancel`
 drives all four and asserts the window closes each time); Esc also
-dismisses it (`cancel_request`, wired as part of WP-15 — a real gap in
-an earlier, non-modal version of this port, not present here); and
-nothing outside the dialog responds while it's open
+dismisses it (`cancel_request`); nothing outside the dialog responds
+while it's open
 (`while_the_greeting_dialog_is_open_background_accelerators_are_scoped_out`
-confirms Alt+X is inert until the dialog closes). The only remaining
-difference is non-observable: whether `greeting_box()` itself returns
-before or after dismissal, which nothing in this app — or a user
-watching the terminal — can tell apart.
+confirms Alt+X is inert until the dialog closes); and `greeting_box()`
+itself now blocks its caller until dismissal, exactly like the
+original — no residual difference for a reader to reconcile.
 
 No other deviation was necessary. Layout, mnemonics (`&Greeting...` /
 `~G~reeting...`), the Alt-G/Alt-X chords, the menu separator, and the

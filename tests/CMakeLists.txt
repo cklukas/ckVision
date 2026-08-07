@@ -98,3 +98,8 @@ add_test(NAME cvision_tests
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
+
+# The M5 exit criterion (ROADMAP.md), wired for real (M9/WP-17): never
+# vanish silently, same reasoning as layer_check above.
+add_test(NAME hello_line_budget
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_hello_line_budget.py)

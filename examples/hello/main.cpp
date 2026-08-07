@@ -1,6 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// ckVision ckVision Hello — a faithful port of Turbo Vision's own canonical
+// ckVision Hello — a faithful port of Turbo Vision's own canonical
 // minimal example ("hello.cpp"), for a golden regression test and a
 // worked side-by-side comparison in docs/turbo-vision-conversion.md.
 #include "cvision/term/posix_clock.hpp"
