@@ -67,6 +67,12 @@ if(TARGET gallery_app)
     target_link_libraries(cvision_tests PRIVATE gallery_app)
 endif()
 
+if(TARGET docgen_frame_svg)
+    target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
+    target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
+    target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen)
+endif()
+
 add_test(NAME cvision_tests
     COMMAND cvision_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

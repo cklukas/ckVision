@@ -72,6 +72,7 @@ if(CKVISION_BUILD_EXAMPLES)
     # Ahead of tests/: test_gallery_smoke.cpp links the gallery_app
     # target and needs it to already exist.
     add_subdirectory(examples)
+    add_subdirectory(tools/docgen)
 endif()
 
 option(CKVISION_BUILD_TESTING

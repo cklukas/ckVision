@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "cvision/core/clock.hpp"
+#include "cvision/core/frame_view.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -43,6 +44,15 @@ public:
 
     View& root() noexcept { return root_; }
     const View& root() const noexcept { return root_; }
+
+    // The most recently composed frame (whatever paint_and_present()
+    // last produced via step()) — a non-owning view into Application's
+    // own off-screen state. For tooling that wants to render what's
+    // actually on screen outside of the terminal byte stream itself
+    // (e.g. a documentation screenshot generator driving a
+    // HeadlessTerminal): NOT part of the interactive rendering path,
+    // which goes through Presenter/Terminal exclusively.
+    FrameView current_frame() const noexcept { return compositor_.frame().view(); }
 
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
