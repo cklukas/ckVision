@@ -7,6 +7,7 @@ include(cmake/CkVisionSettings.cmake)
 add_library(cvision
     src/core/assert.cpp
     src/core/cell.cpp
+    src/core/filesystem.cpp
     src/core/golden.cpp
     src/core/text.cpp
     src/core/utf8.cpp
