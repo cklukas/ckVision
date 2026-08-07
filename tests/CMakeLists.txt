@@ -2,6 +2,7 @@
 add_executable(cvision_tests
     test_application.cpp
     test_box_drawing.cpp
+    test_canvas.cpp
     test_clock_diagnostics_error.cpp
     test_color_style_cell.cpp
     test_command.cpp
