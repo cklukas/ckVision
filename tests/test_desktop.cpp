@@ -527,6 +527,49 @@ CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
     CK_CHECK(status->bounds() == (Rect{0, 39, 100, 1}));
 }
 
+// --- Size-hint-change propagation (M9/WP-16, E10) -----------------------
+
+namespace {
+class MutableHeightView : public ckv::ui::View {
+public:
+    explicit MutableHeightView(int height) : height_(height) {}
+    void set_height(int height) {
+        height_ = height;
+        size_hint_changed();
+    }
+    ckv::ui::SizeHint vertical_size_hint() const override {
+        return ckv::ui::SizeHint{0, height_, ckv::ui::kUnboundedExtent};
+    }
+
+private:
+    int height_;
+};
+}  // namespace
+
+CK_TEST(a_docked_views_own_height_change_repositions_it_without_a_desktop_resize) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    auto* status = desktop.dock_bottom(std::make_unique<MutableHeightView>(1));
+    CK_CHECK(status->bounds() == (Rect{0, 23, 60, 1}));
+
+    status->set_height(2);  // e.g. a status line that now wraps to two rows
+
+    CK_CHECK(status->bounds() == (Rect{0, 22, 60, 2}));
+}
+
+CK_TEST(a_docked_views_own_height_change_re_clamps_windows_against_the_shrunk_content_area) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 20, 15, 4});  // bottom edge at row 24, the very last row
+    auto* status = desktop.dock_bottom(std::make_unique<MutableHeightView>(1));
+    CK_CHECK(w->bounds().y + w->bounds().height <= 23);  // already clamped by the initial dock
+
+    status->set_height(2);  // now occupies rows 22-23, shrinking content_area() further
+
+    CK_CHECK(w->bounds().y + w->bounds().height <= 22);
+}
+
 // --- Desktop growth tracking (DesktopGrowPolicy, M8 WP-4) ---------------
 
 CK_TEST(add_window_installs_a_zoom_area_provider_that_returns_content_area) {

@@ -400,6 +400,15 @@ exception to the single pass is **height-for-width**: wrapped widgets
 containers invoke once during the down pass — bounded, no measurement
 loops.
 
+A widget whose own preferred size changes after that pass already ran
+(a label growing, text wrapping to a new line count) calls
+`View::size_hint_changed()`, which notifies its immediate parent via
+`View::on_child_size_hint_changed()` — one hop, synchronous, never an
+automatic multi-ancestor walk (D-030). Row/Column simply re-run their
+own pass; Window and Desktop react only for the specific children
+whose geometry actually depends on the change (a frame overlay, a
+docked view).
+
 Dialog construction is **declarative descriptors, validated
 materialization**: applications describe dialogs as plain descriptor
 structs (designed for C++20 designated-initializer syntax), and a

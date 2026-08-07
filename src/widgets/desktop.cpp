@@ -37,6 +37,10 @@ void Desktop::on_attached() {
     }
 }
 
+void Desktop::on_child_size_hint_changed(ui::View& child) {
+    if (&child == top_dock_ || &child == bottom_dock_) on_resized();
+}
+
 void Desktop::close_active_window() {
     if (active_ != nullptr) active_->close();
 }

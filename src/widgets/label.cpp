@@ -21,6 +21,7 @@ void Label::set_text(std::string text) {
     mnemonic_byte_offset_ = parsed.mnemonic_byte_offset;
     set_preferred_size(Size{text::text_width(display_text_), 1});
     invalidate();
+    size_hint_changed();
 }
 
 void Label::draw(scene::Painter& painter) {

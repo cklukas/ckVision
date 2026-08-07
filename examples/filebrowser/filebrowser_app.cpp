@@ -133,11 +133,9 @@ void FileBrowserApp::refresh_file_list_for_selected_node() {
     selected_directory_ = it != path_of_.end() ? it->second : root_path_;
 
     if (path_label_ != nullptr) {
+        // set_text() propagates its own changed preferred width up to
+        // Window automatically (M9/WP-16) — no manual relayout call.
         path_label_->set_text(selected_directory_);
-        // set_text() changes the label's own preferred width, which
-        // nothing propagates upward automatically — see
-        // Window::relayout_frame_overlay's own doc comment.
-        window_->relayout_frame_overlay();
     }
 
     auto entries = fs_.list_directory(selected_directory_);

@@ -71,6 +71,11 @@ public:
     SizeHint vertical_size_hint() const override;
 
     void on_resized() override { relayout(); }
+    // A child's own hint changing (M9/WP-16) needs the exact same
+    // response as this Row's own bounds changing: this Row's aggregate
+    // hint is never cached (computed fresh from children() every call),
+    // so there is nothing to invalidate beyond re-running the pass.
+    void on_child_size_hint_changed(View&) override { relayout(); }
 
 private:
     void relayout();
@@ -94,6 +99,9 @@ public:
     SizeHint vertical_size_hint() const override;
 
     void on_resized() override { relayout(); }
+    // See Row: this Column's own aggregate hint is never cached, so a
+    // child's own hint changing (M9/WP-16) just re-runs the same pass.
+    void on_child_size_hint_changed(View&) override { relayout(); }
 
 private:
     void relayout();

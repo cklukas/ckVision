@@ -45,6 +45,16 @@ std::string row_text(const Surface& s, int y) {
     return out;
 }
 
+// Size-hint-change propagation (M9/WP-16): a bare View parent that
+// just counts how many times its own on_child_size_hint_changed()
+// fires, standing in for a real container (Row/Column/Window/Desktop),
+// all of which already have their own dedicated coverage.
+class SpyParent : public ui::View {
+public:
+    int notifications = 0;
+    void on_child_size_hint_changed(ui::View&) override { ++notifications; }
+};
+
 }  // namespace
 
 // --- Label -------------------------------------------------------------
@@ -313,6 +323,36 @@ CK_TEST(static_text_draws_wrapped_lines_into_the_surface) {
     text.draw(root);
     CK_CHECK(row_text(s, 0).substr(0, 7) == "one two");
     CK_CHECK(row_text(s, 1).substr(0, 5) == "three");
+}
+
+// --- Size-hint-change propagation (M9/WP-16, E10) ---------------------
+
+CK_TEST(label_set_text_notifies_its_parent_of_the_changed_size_hint) {
+    SpyParent parent;
+    parent.add_child(std::make_unique<Label>("&Name:"));
+    CK_CHECK(parent.notifications == 0);  // construction, before attachment, notified nobody
+
+    static_cast<Label*>(parent.children().front().get())->set_text("&A much longer label:");
+    CK_CHECK(parent.notifications == 1);
+}
+
+CK_TEST(button_set_text_notifies_its_parent_of_the_changed_size_hint) {
+    SpyParent parent;
+    parent.add_child(std::make_unique<Button>("OK"));
+    CK_CHECK(parent.notifications == 0);
+
+    static_cast<Button*>(parent.children().front().get())->set_text("Cancel Everything");
+    CK_CHECK(parent.notifications == 1);
+}
+
+CK_TEST(static_text_set_text_notifies_its_parent_of_the_changed_size_hint) {
+    SpyParent parent;
+    parent.add_child(std::make_unique<StaticText>("short"));
+    CK_CHECK(parent.notifications == 0);
+
+    auto* text = static_cast<StaticText*>(parent.children().front().get());
+    text->set_text("a much longer piece of text");
+    CK_CHECK(parent.notifications == 1);
 }
 
 // --- InputLine ---------------------------------------------------------

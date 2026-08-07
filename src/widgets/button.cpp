@@ -36,6 +36,7 @@ void Button::set_text(std::string text) {
     // rows tall by construction; the drop shadow IS part of the widget.
     set_preferred_size(Size{text::text_width(display_text_) + 4, 2});
     invalidate();
+    size_hint_changed();
 }
 
 // The classic button drawing algorithm, cell for cell (verified

@@ -16,6 +16,7 @@ void StaticText::on_attached() {
 void StaticText::set_text(std::string text) {
     raw_text_ = std::move(text);
     invalidate();
+    size_hint_changed();
 }
 
 std::vector<std::string> StaticText::wrap(int width) const {

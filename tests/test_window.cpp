@@ -6,6 +6,7 @@
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/label.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -20,6 +21,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::ui::View;
+using ckv::widgets::Label;
 using ckv::widgets::Window;
 
 namespace {
@@ -679,7 +681,10 @@ namespace {
 class FixedWidthView : public View {
 public:
     explicit FixedWidthView(int preferred_width) : preferred_width_(preferred_width) {}
-    void set_preferred_width(int width) { preferred_width_ = width; }
+    void set_preferred_width(int width) {
+        preferred_width_ = width;
+        size_hint_changed();
+    }
     ckv::ui::SizeHint horizontal_size_hint() const override {
         return ckv::ui::SizeHint{0, preferred_width_, ckv::ui::kUnboundedExtent};
     }
@@ -757,11 +762,10 @@ CK_TEST(frame_overlay_and_content_coexist_as_independent_children) {
     CK_CHECK(w->content()->bounds() == (Rect{1, 1, 28, 8}));
 }
 
-CK_TEST(relayout_frame_overlay_picks_up_a_changed_preferred_width_without_a_window_resize) {
-    // Window has no way to learn on its own that an already-installed
-    // overlay's own content changed size — relayout_frame_overlay() is
-    // the explicit hook a caller uses after that happens (e.g. a Label
-    // whose set_text() made it longer), exactly as documented.
+CK_TEST(the_overlay_repositions_automatically_when_its_own_preferred_width_changes) {
+    // A changed preferred size propagates through size_hint_changed()
+    // (M9/WP-16) — no manual relayout call needed, unlike the deleted
+    // relayout_frame_overlay() this replaces.
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
@@ -769,17 +773,43 @@ CK_TEST(relayout_frame_overlay_picks_up_a_changed_preferred_width_without_a_wind
     CK_CHECK(w->frame_overlay()->bounds().width == 4);
 
     static_cast<FixedWidthView*>(w->frame_overlay())->set_preferred_width(10);
-    CK_CHECK(w->frame_overlay()->bounds().width == 4);  // unchanged: nothing told Window yet
-
-    w->relayout_frame_overlay();
     CK_CHECK(w->frame_overlay()->bounds().width == 10);
     CK_CHECK(w->frame_overlay()->bounds() == (Rect{30 - 2 - 10, 9, 10, 1}));
 }
 
-CK_TEST(relayout_frame_overlay_with_no_overlay_set_is_a_harmless_no_op) {
+CK_TEST(a_content_child_changing_its_own_size_hint_does_not_touch_the_overlay) {
+    // on_child_size_hint_changed() fires for ANY direct child — content()
+    // is one too — but content_rect() depends only on Window's own
+    // bounds(), never on content()'s hint, so this must be a no-op.
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 30, 10});
-    w->relayout_frame_overlay();  // must not crash
-    CK_CHECK(w->frame_overlay() == nullptr);
+    w->set_frame_overlay(std::make_unique<FixedWidthView>(4));
+    const Rect before = w->frame_overlay()->bounds();
+
+    auto content = std::make_unique<FixedWidthView>(6);
+    FixedWidthView* content_ptr = content.get();
+    w->set_content(std::move(content));
+    content_ptr->set_preferred_width(20);
+
+    CK_CHECK(w->frame_overlay()->bounds() == before);
+}
+
+CK_TEST(a_growing_overlay_label_stays_right_aligned_live) {
+    // The concrete acceptance scenario (M9/WP-16): filebrowser_app.cpp's
+    // path_label_ used to need a manual relayout_frame_overlay() call
+    // after set_text() — now it doesn't.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 40, 10});
+    w->set_frame_overlay(std::make_unique<Label>("/a"));
+    auto* overlay = static_cast<Label*>(w->frame_overlay());
+    const Rect narrow = overlay->bounds();
+
+    overlay->set_text("/a/much/longer/path");
+
+    const Rect wide = overlay->bounds();
+    CK_CHECK(wide.width > narrow.width);
+    const int right_edge = narrow.x + narrow.width;
+    CK_CHECK(wide.x + wide.width == right_edge);  // still flush against the same margin
 }

@@ -159,6 +159,21 @@ public:
     }
     void set_preferred_size(Size size) { preferred_size_ = size; }
 
+    // Fired on the immediate parent (M9/WP-16, E10) whenever one of its
+    // direct children calls size_hint_changed() below — a container
+    // that must relayout when a child's own preferred size changes
+    // WITHOUT the container itself being resized (a Label growing
+    // longer inside a Row, a status line's own height changing inside
+    // Desktop's dock) overrides this instead of requiring every caller
+    // to remember to trigger relayout by hand. Single-hop by design: a
+    // container whose own aggregate hint depends on `child`'s (Row/
+    // Column, whose horizontal/vertical_size_hint() already reads
+    // children() live every call) needs no further action here beyond
+    // relaying out; one that itself needs to bubble the change further
+    // up calls its own size_hint_changed() from inside this override.
+    // Default: does nothing, the same shape as on_descendant_mouse_down.
+    virtual void on_child_size_hint_changed(View& child) { (void)child; }
+
     // The one sanctioned second pass (ARCHITECTURE.md §5): a wrapped
     // view (static text, memo) reports the height it needs for a given
     // width. Default: height is independent of width.
@@ -275,6 +290,18 @@ public:
     const std::string* resolve_help_context_key() const noexcept;
 
 protected:
+    // Called by a subclass whenever its OWN horizontal_size_hint()/
+    // vertical_size_hint()/height_for_width() would now return
+    // something different than before (M9/WP-16, E10) — e.g. Label/
+    // Button's set_text() changing their intrinsic width, StaticText's
+    // wrapping changing its intrinsic height. Notifies the immediate
+    // parent only (on_child_size_hint_changed(*this)); a harmless no-op
+    // before attachment (parent_ is null), the same as invalidate()
+    // before a dirty-rect sink is installed.
+    void size_hint_changed() {
+        if (parent_ != nullptr) parent_->on_child_size_hint_changed(*this);
+    }
+
     // Paints ONE child (visibility-gated) through a Painter translated
     // into its bounds, then recurses into ITS children via its own
     // paint_children() override — the shared per-child step every

@@ -215,3 +215,54 @@ CK_TEST(an_empty_container_reports_zero_preferred_size_without_crashing) {
     CK_CHECK(row.horizontal_size_hint().preferred == 0);
     CK_CHECK(column.vertical_size_hint().preferred == 0);
 }
+
+// --- Size-hint-change propagation (M9/WP-16, E10) ---------------------
+
+namespace {
+class MutableWidthView : public View {
+public:
+    explicit MutableWidthView(int width) : width_(width) {}
+    void set_width(int width) {
+        width_ = width;
+        size_hint_changed();
+    }
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return ckv::ui::SizeHint{0, width_, ckv::ui::kUnboundedExtent};
+    }
+
+private:
+    int width_;
+};
+
+class CountingView : public View {
+public:
+    int resizes = 0;
+    void on_resized() override { ++resizes; }
+};
+}  // namespace
+
+CK_TEST(a_row_re_distributes_when_a_child_grows_its_own_hint_without_a_row_resize) {
+    Row row(Rect{0, 0, 100, 5});
+    auto* grower =
+        static_cast<MutableWidthView*>(row.add_item(std::make_unique<MutableWidthView>(5)));
+    auto* second = static_cast<CountingView*>(
+        row.add_item(std::make_unique<CountingView>(), LayoutSpec{SizePolicy::Expanding, 1}));
+    const int x_before = second->bounds().x;
+
+    grower->set_width(20);  // no row resize — only the child's own hint changed
+
+    CK_CHECK(second->bounds().x == x_before + 15);  // shifted right by exactly the growth
+}
+
+CK_TEST(a_childs_changed_size_hint_triggers_exactly_one_relayout_pass) {
+    Row row(Rect{0, 0, 100, 5});
+    auto* grower =
+        static_cast<MutableWidthView*>(row.add_item(std::make_unique<MutableWidthView>(5)));
+    auto* spy = static_cast<CountingView*>(
+        row.add_item(std::make_unique<CountingView>(), LayoutSpec{SizePolicy::Expanding, 1}));
+    const int before = spy->resizes;
+
+    grower->set_width(20);  // one notification must produce one relayout, not a storm of repeats
+
+    CK_CHECK(spy->resizes == before + 1);
+}

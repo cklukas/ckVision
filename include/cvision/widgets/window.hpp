@@ -82,17 +82,6 @@ public:
     std::unique_ptr<ui::View> set_frame_overlay(std::unique_ptr<ui::View> overlay);
     ui::View* frame_overlay() const noexcept { return frame_overlay_; }
 
-    // Re-derives and reapplies the overlay's position/width from its
-    // CURRENT horizontal_size_hint() — a no-op if no overlay is set.
-    // Window has no way to learn on its own that an already-installed
-    // overlay's own preferred size changed (nothing in this library
-    // propagates a child's size-hint change up to its parent — the
-    // same reason content() doesn't auto-relayout when ITS content
-    // changes size either); a caller that mutates the overlay's own
-    // content in a way that changes its width (e.g. a Label whose
-    // set_text() makes it longer or shorter) calls this afterward.
-    void relayout_frame_overlay() noexcept;
-
     void set_min_size(Size min) noexcept;
     void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
 
@@ -184,6 +173,13 @@ public:
     void draw(scene::Painter& painter) override;
     void on_resized() override;
     void on_attached() override;
+    // Re-derives and reapplies the frame overlay's position/width
+    // whenever ITS OWN preferred size changes (M9/WP-16) — e.g. a Label
+    // overlay whose set_text() makes it longer or shorter — without the
+    // caller having to trigger it by hand. content() needs no reaction
+    // here: content_rect() depends only on this Window's own bounds(),
+    // never on content()'s size hint.
+    void on_child_size_hint_changed(ui::View& child) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
 

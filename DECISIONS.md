@@ -256,6 +256,33 @@ defaults hard-coded outside the keymap (would make the grammar
 non-rebindable, contradicting VISION #4). Scheduled as M8/WP-1…WP-4
 and M9/WP-12…WP-14.
 
+**D-030 — Size-hint changes propagate one hop, synchronously.**
+A widget whose own preferred size changes after construction (Label/
+Button's `set_text`, StaticText's wrapping) calls a new protected
+`View::size_hint_changed()`, which notifies exactly its immediate
+parent via a new virtual `View::on_child_size_hint_changed(View&)` —
+never further up the tree automatically, and never deferred through
+`Application::post()`. A container whose own aggregate hint depends on
+a child's (Row/Column, which already compute their hints fresh from
+`children()` on every call) just re-runs its existing layout pass;
+Window and Desktop react only when the changed child is specifically
+their frame overlay or a docked view, since their own layout otherwise
+depends only on their own bounds. A container that itself needs to
+bubble the change further up calls its own `size_hint_changed()` from
+inside its override — single-hop is the primitive, not a limitation.
+*Rejected:* an automatic multi-ancestor walk (mirroring
+`on_descendant_mouse_down`'s "notify every ancestor" shape) — every
+concrete container this landed for (Row/Column/Window/Desktop) only
+ever needs to react to its OWN direct children, and a walk that always
+continues to the root would force every intermediate View to opt out
+explicitly rather than the reverse. *Rejected:* deferring the
+notification through `post()` — nothing else in this propagation path
+is deferred (layout itself is a synchronous, immediate pass per
+ARCHITECTURE.md §5), and introducing a deferred hop here would let a
+container render one frame with a stale layout before catching up.
+Retired `Window::relayout_frame_overlay()`, the explicit manual hook
+this replaces. Scheduled as M9/WP-16.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

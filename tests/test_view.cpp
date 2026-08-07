@@ -228,6 +228,55 @@ CK_TEST(default_event_handlers_report_unhandled) {
     CK_CHECK(!v.on_mouse(ckv::MouseEvent{}));
 }
 
+// --- Size-hint-change propagation (M9/WP-16, E10) --------------------------
+
+namespace {
+class HintNotifyingView : public View {
+public:
+    void notify() { size_hint_changed(); }
+};
+
+class HintSpyView : public View {
+public:
+    int notifications = 0;
+    View* last_child = nullptr;
+    void on_child_size_hint_changed(View& child) override {
+        ++notifications;
+        last_child = &child;
+    }
+};
+}  // namespace
+
+CK_TEST(size_hint_changed_before_attachment_is_a_harmless_no_op) {
+    HintNotifyingView v;
+    v.notify();  // no parent yet — must not crash
+    CK_CHECK(v.parent() == nullptr);
+}
+
+CK_TEST(size_hint_changed_notifies_only_the_immediate_parent) {
+    HintSpyView grandparent;
+    auto parent_owned = std::make_unique<HintSpyView>();
+    auto* parent = static_cast<HintSpyView*>(grandparent.add_child(std::move(parent_owned)));
+    auto child_owned = std::make_unique<HintNotifyingView>();
+    auto* child = static_cast<HintNotifyingView*>(parent->add_child(std::move(child_owned)));
+
+    child->notify();
+
+    CK_CHECK(parent->notifications == 1);
+    CK_CHECK(parent->last_child == child);
+    // single-hop by design — no automatic bubbling further up
+    CK_CHECK(grandparent.notifications == 0);
+}
+
+CK_TEST(the_default_on_child_size_hint_changed_does_nothing) {
+    View parent;
+    HintNotifyingView* child =
+        static_cast<HintNotifyingView*>(parent.add_child(std::make_unique<HintNotifyingView>()));
+    // plain View's default override — must not crash
+    child->notify();
+    CK_CHECK(true);
+}
+
 // --- Help context ----------------------------------------------------------
 
 CK_TEST(resolve_help_context_key_returns_null_when_no_ancestor_has_one) {

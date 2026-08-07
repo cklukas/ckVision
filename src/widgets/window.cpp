@@ -150,8 +150,8 @@ void Window::on_resized() {
     if (frame_overlay_ != nullptr) frame_overlay_->set_bounds(frame_overlay_rect());
 }
 
-void Window::relayout_frame_overlay() noexcept {
-    if (frame_overlay_ != nullptr) frame_overlay_->set_bounds(frame_overlay_rect());
+void Window::on_child_size_hint_changed(ui::View& child) {
+    if (&child == frame_overlay_) frame_overlay_->set_bounds(frame_overlay_rect());
 }
 
 bool Window::point_in_close_control(Point local) const noexcept {

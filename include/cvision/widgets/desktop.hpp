@@ -117,6 +117,13 @@ public:
 
     void on_resized() override;
     void on_attached() override;
+    // A docked view's own preferred height changing (M9/WP-16) — e.g. a
+    // status line whose content now wraps to two rows — needs the same
+    // full treatment as a Desktop resize: content_area() shrinks/grows
+    // and every owned window re-clamps against it, not just the dock's
+    // own two lines, so this reuses on_resized() wholesale rather than
+    // duplicating a smaller slice of it.
+    void on_child_size_hint_changed(ui::View& child) override;
 
     // Raises `window` to the front and marks it active, deactivating
     // whichever window was active before (a no-op if `window` is
