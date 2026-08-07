@@ -124,6 +124,19 @@ public:
     // translated+clipped Painter) into LOCAL (view-relative) space.
     virtual void draw(scene::Painter& painter) { (void)painter; }
 
+    // Paints every child (in z-order: later children on top, matching
+    // Application::topmost_view_at's convention), each through its own
+    // translated+clipped Painter derived from `own_painter` (which is
+    // in THIS view's own local space). The default just walks
+    // children() in order via paint_one_child(). Overridden by Desktop
+    // to interleave window-shadow compositing between siblings — a
+    // shadow must dim exactly the window's footprint MINUS whatever is
+    // drawn above it in z-order, which only the view driving the
+    // z-ordered walk itself can get right; a separate post-pass over
+    // the whole tree cannot, since it can't tell "drawn after me" from
+    // "drawn before me" once painting has finished.
+    virtual void paint_children(const scene::Painter& own_painter);
+
     void invalidate();              // whole view
     void invalidate(Rect local_rect);
 
@@ -170,6 +183,18 @@ public:
     // Nearest help-context key walking from this view up through
     // ancestors (this view's own key wins if set).
     const std::string* resolve_help_context_key() const noexcept;
+
+protected:
+    // Paints ONE child (visibility-gated) through a Painter translated
+    // into its bounds, then recurses into ITS children via its own
+    // paint_children() override — the shared per-child step every
+    // paint_children() override (including the default) is built from.
+    // Returns the child's own Painter (nullopt if the child was
+    // invisible and therefore skipped) so an override (Desktop) can
+    // reuse the exact same coordinate frame for follow-up compositing
+    // (e.g. transform_style over a shadow footprint) without
+    // re-deriving the translate/clip math.
+    static std::optional<scene::Painter> paint_one_child(View& child, const scene::Painter& parent_painter);
 
 private:
     void propagate_dirty_rect_sink(const DirtyRectSink& sink);

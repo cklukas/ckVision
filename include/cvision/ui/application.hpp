@@ -195,7 +195,6 @@ private:
     View* topmost_view_at(Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
     std::vector<View*> focusable_views() const;
-    void paint_view(View& view, const scene::Painter& parent_painter);
     void paint_and_present();
 
     term::Terminal& terminal_;

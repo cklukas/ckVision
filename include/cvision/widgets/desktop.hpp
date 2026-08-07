@@ -85,6 +85,16 @@ public:
 
     void draw(scene::Painter& painter) override;
 
+    // Overridden (not just the default per-child walk) so a window's
+    // shadow can be composited immediately after that window paints,
+    // in the SAME z-order pass — the only place "dim exactly what's
+    // below me, leave alone whatever paints above me next" can be
+    // gotten right (ARCHITECTURE.md §5 "moving a window costs
+    // composition only" / D-... shadow declaration). See
+    // ui::View::paint_children's doc comment for why a separate
+    // post-pass over the whole tree cannot do this correctly.
+    void paint_children(const scene::Painter& own_painter) override;
+
 private:
     void reraise_popups();
 

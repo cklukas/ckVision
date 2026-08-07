@@ -95,6 +95,20 @@ void View::invalidate(Rect local_rect) {
                            local_rect.height});
 }
 
+std::optional<scene::Painter> View::paint_one_child(View& child, const scene::Painter& parent_painter) {
+    if (!child.visible()) return std::nullopt;
+    const Rect local_bounds{0, 0, child.bounds().width, child.bounds().height};
+    scene::Painter child_painter =
+        parent_painter.translated(Point{child.bounds().x, child.bounds().y}, local_bounds);
+    child.draw(child_painter);
+    child.paint_children(child_painter);
+    return child_painter;
+}
+
+void View::paint_children(const scene::Painter& own_painter) {
+    for (auto& child : children_) paint_one_child(*child, own_painter);
+}
+
 const std::string* View::resolve_help_context_key() const noexcept {
     for (const View* v = this; v != nullptr; v = v->parent_)
         if (v->help_context_key_) return &*v->help_context_key_;

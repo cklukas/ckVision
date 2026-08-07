@@ -247,14 +247,6 @@ void Application::invalidate_all() {
     presenter_.invalidate();
 }
 
-void Application::paint_view(View& view, const scene::Painter& parent_painter) {
-    if (!view.visible()) return;
-    const Rect local_bounds{0, 0, view.bounds().width, view.bounds().height};
-    scene::Painter painter = parent_painter.translated(Point{view.bounds().x, view.bounds().y}, local_bounds);
-    view.draw(painter);
-    for (const auto& child : view.children()) paint_view(*child, painter);
-}
-
 void Application::paint_and_present() {
     if (!dirty_) return;
 
@@ -276,7 +268,7 @@ void Application::paint_and_present() {
         surface_.remove_raster_region(region.id);
 
     scene::Painter root_painter(surface_, Rect{0, 0, current_size.width, current_size.height});
-    for (const auto& child : root_.children()) paint_view(*child, root_painter);
+    root_.paint_children(root_painter);
     dirty_ = false;
 
     // surface_ is the sole layer, covering the whole frame — Compositor

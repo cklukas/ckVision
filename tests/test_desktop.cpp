@@ -7,6 +7,7 @@
 #include <set>
 
 #include "cktest.hpp"
+#include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -345,4 +346,89 @@ CK_TEST(multiple_popups_stack_in_the_order_they_were_added) {
     ckv::ui::View* second = desktop.add_popup(std::make_unique<ckv::ui::View>());
     CK_CHECK(desktop.children().back().get() == second);
     (void)first;
+}
+
+// --- Window shadow compositing ------------------------------------------
+
+CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 5, 10, 4});
+    CK_CHECK(w->casts_shadow());
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    const auto footprints = ckv::scene::shadow_footprint(w->bounds(), ckv::scene::ShadowSpec{});
+    CK_CHECK(!footprints.empty());
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    for (const Rect& fp : footprints) {
+        const ckv::Point sample{fp.x, fp.y};
+        CK_CHECK(!(surface.at(sample).style() == background_style));
+        CK_CHECK(surface.at(sample).style() == ckv::scene::default_dim(background_style));
+    }
+}
+
+CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Window* w = desktop.add_window(make_window(f));
+    w->set_bounds(Rect{5, 5, 10, 4});
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    // Far corner of the desktop, well outside the window's shadow reach.
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == background_style);
+}
+
+CK_TEST(a_window_that_does_not_cast_a_shadow_leaves_its_footprint_undimmed) {
+    // Every baseline Window currently declares casts_shadow() == true
+    // unconditionally — this test documents the OTHER branch (the
+    // dynamic_cast-fails / non-Window-child path in
+    // Desktop::paint_children) by using a plain View standing in where
+    // a window would be, proving non-Window children never crash or
+    // get spuriously shadowed.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    auto plain = std::make_unique<ckv::ui::View>(Rect{5, 5, 10, 4});
+    desktop.add_child(std::move(plain));
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);  // must not crash on a non-Window child
+
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    CK_CHECK(surface.at(ckv::Point{17, 6}).style() == background_style);  // where a shadow WOULD be
+}
+
+CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shadow) {
+    // The whole point of interleaving shadow compositing with the
+    // z-order walk rather than a separate post-pass: window B, drawn
+    // AFTER window A's shadow is applied, must show ITS OWN content —
+    // undimmed — even where A's shadow footprint overlaps B.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Window* a = desktop.add_window(make_window(f));
+    a->set_bounds(Rect{2, 2, 10, 4});  // shadow footprint includes column 12-13, rows 3-6
+
+    Window* b = desktop.add_window(make_window(f));  // added after a: on top in z-order
+    b->set_bounds(Rect{12, 3, 10, 4});               // sits exactly over a's shadow region
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    // Inside b's frame (its own border style), not the dimmed
+    // dialog_background shadow style.
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == ckv::scene::default_dim(background_style)));
 }

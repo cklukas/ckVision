@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/scene/compositor.hpp"
 
 namespace ckv::widgets {
 
@@ -124,6 +125,27 @@ void Desktop::cascade() {
 void Desktop::draw(scene::Painter& painter) {
     painter.fill(Rect{0, 0, bounds().width, bounds().height},
                   Cell::from_grapheme(" ", theme_.resolve(background_role_)));
+}
+
+void Desktop::paint_children(const scene::Painter& own_painter) {
+    const Rect desktop_local{0, 0, bounds().width, bounds().height};
+    for (auto& child_ptr : children()) {
+        View& child = *child_ptr;
+        if (!paint_one_child(child, own_painter)) continue;  // invisible: nothing to shadow either
+
+        auto* window = dynamic_cast<Window*>(&child);
+        if (window == nullptr || !window->casts_shadow()) continue;
+
+        // Shadow is composited in DESKTOP-local space (own_painter's
+        // own coordinate frame), not the window's translated space —
+        // child.bounds() is already desktop-local since window is a
+        // direct child of this Desktop.
+        scene::Painter mutable_painter = own_painter;
+        for (const Rect& footprint : scene::shadow_footprint(child.bounds(), scene::ShadowSpec{})) {
+            const Rect clipped = footprint.intersected(desktop_local);
+            if (!clipped.empty()) mutable_painter.transform_style(clipped, &scene::default_dim);
+        }
+    }
 }
 
 }  // namespace ckv::widgets
