@@ -512,6 +512,28 @@ CK_TEST(history_up_cycles_to_the_most_recent_entry_and_down_restores_the_live_te
     CK_CHECK(input.text() == "typing...");  // restored the pre-browsing live text
 }
 
+CK_TEST(history_navigation_is_disabled_entirely_on_a_masked_field) {
+    // Regression guard: history_show() calls set_text() directly, which
+    // would splice arbitrary unmasked text (e.g. "second") into a
+    // masked field's fixed-length, class-constrained buffer — Up/Down
+    // must fall through to on_key_masked() instead of ever reaching
+    // history_show() when a mask is active.
+    Fixture f;
+    HistoryRegistry history;
+    history.record("k", "second");
+    history.record("k", "first");
+    InputLine input(f.theme, f.roles.input_normal, f.roles.input_focused, f.roles.input_invalid);
+    input.set_history(&history, "k");
+    input.set_mask("999");
+    input.on_text(ckv::TextEvent{"1", false});
+    input.on_text(ckv::TextEvent{"2", false});
+    const std::string before = input.text();
+
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}});
+    CK_CHECK(input.text() == before);  // untouched — Up did NOT pull in an unmasked history entry
+    CK_CHECK(input.has_mask());        // and the mask itself is still active
+}
+
 CK_TEST(history_up_with_an_empty_registry_is_a_harmless_no_op) {
     Fixture f;
     ui::HistoryRegistry history;

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <optional>
 
 #include "cvision/core/assert.hpp"
 
@@ -53,9 +54,22 @@ void Table::rebuild_order() {
 
 void Table::sort_by(int column, bool ascending) {
     CKV_ASSERT(column == -1 || (column >= 0 && static_cast<std::size_t>(column) < columns_.size()));
+
+    // Preserve selection IDENTITY (which underlying row is selected),
+    // not just the display index — a sort must not silently move the
+    // cursor onto a different row's data.
+    std::optional<std::size_t> underlying_cursor;
+    if (cursor_row_ >= 0 && static_cast<std::size_t>(cursor_row_) < order_.size())
+        underlying_cursor = order_[static_cast<std::size_t>(cursor_row_)];
+
     sort_column_ = column;
     sort_ascending_ = ascending;
     rebuild_order();
+
+    if (underlying_cursor) {
+        const auto it = std::find(order_.begin(), order_.end(), *underlying_cursor);
+        if (it != order_.end()) cursor_row_ = static_cast<int>(it - order_.begin());
+    }
     invalidate();
 }
 

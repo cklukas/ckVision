@@ -60,8 +60,9 @@ WindowListHandle make_window_list_dialog(Desktop& desktop, const ui::Theme& them
     };
     window->cancel_request = [window_ptr]() { window_ptr->close(); };
 
-    window->on_closed = [&app, restore_focus_to]() {
+    window->on_closed = [&app, restore_focus_to, window_ptr]() {
         if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
+        schedule_self_detach(*window_ptr, app);
     };
 
     return WindowListHandle{std::move(window), list_ptr};

@@ -240,3 +240,27 @@ CK_TEST(only_one_result_ever_fires_even_though_both_accept_and_the_buttons_own_c
     CK_CHECK(fire_count == 1);
     CK_CHECK(close_count == 1);
 }
+
+CK_TEST(closing_the_box_schedules_its_own_removal_from_whatever_parented_it) {
+    // Regression guard: on_closed used to only restore focus, leaving
+    // the closed Window live in its parent's child list forever.
+    // Removal is deferred via Application::post() (never inline — the
+    // Button::on_press call that triggered close() is still executing
+    // when on_closed fires), so it must not have happened yet right
+    // after dispatch(), only after the next step() drains posted work.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
+    auto handle = make_message_box(descriptor, f.theme, f.roles, app, nullptr, nullptr);
+    Window* window_ptr = handle.window.get();
+    app.root().add_child(std::move(handle.window));
+    app.set_focus(handle.initial_focus);
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    CK_CHECK(app.root().children().size() == 1);  // not yet removed
+    app.step(0);                                  // drains the posted removal
+    CK_CHECK(app.root().children().empty());
+    (void)window_ptr;
+}

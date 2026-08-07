@@ -53,11 +53,15 @@ DirectoryPickerHandle make_directory_picker(const FileSystem& fs, std::string ro
                                             roles.window_title_inactive);
     Window* window_ptr = window.get();
 
-    TreeNode root = build_subtree(fs, root_path, root_path);
-    auto path_of = std::make_shared<std::unordered_map<const TreeNode*, std::string>>();
-    record_paths(fs, root, root_path, *path_of);
+    // record_paths() must run AFTER root is in its final resting place
+    // (inside `roots`, the vector that gets moved into TreeView) — its
+    // OWN address changes the moment it's push_back'd; recording paths
+    // against the pre-move local would key the map with an address
+    // TreeView's tree can never actually contain.
     std::vector<TreeNode> roots;
-    roots.push_back(std::move(root));
+    roots.push_back(build_subtree(fs, root_path, root_path));
+    auto path_of = std::make_shared<std::unordered_map<const TreeNode*, std::string>>();
+    record_paths(fs, roots.front(), root_path, *path_of);
 
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
@@ -101,8 +105,9 @@ DirectoryPickerHandle make_directory_picker(const FileSystem& fs, std::string ro
     window_ptr->cancel_request = [cancel_ptr]() {
         if (cancel_ptr->on_press) cancel_ptr->on_press();
     };
-    window_ptr->on_closed = [&app, restore_focus_to]() {
+    window_ptr->on_closed = [&app, restore_focus_to, window_ptr]() {
         if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
+        schedule_self_detach(*window_ptr, app);
     };
 
     return DirectoryPickerHandle{std::move(window), tree_ptr};

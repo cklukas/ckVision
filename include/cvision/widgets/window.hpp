@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 
@@ -128,5 +129,19 @@ private:
     Point drag_start_mouse_;
     Rect drag_start_bounds_;
 };
+
+// Schedules (via Application::post — never inline, since close() is
+// typically still executing several stack frames deep inside a
+// Button::on_press or similar that lives INSIDE `window`; destroying
+// it before that call frame unwinds would be a use-after-free)
+// `window`'s removal from whatever View currently parents it —
+// Desktop, a plain View, or Application's own root. The sanctioned way
+// for a self-contained dialog (message box, file dialog, window list,
+// directory picker, help viewer) to actually detach and destroy itself
+// once its own on_closed fires, rather than lingering forever in its
+// parent's child list after Close/Cancel. A no-op if `window` has
+// already been detached (parent() is null) by the time the posted work
+// runs.
+void schedule_self_detach(Window& window, ui::Application& app);
 
 }  // namespace ckv::widgets

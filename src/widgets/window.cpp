@@ -228,4 +228,10 @@ bool Window::on_mouse(const MouseEvent& event) {
     return false;
 }
 
+void schedule_self_detach(Window& window, ui::Application& app) {
+    app.post([&window]() {
+        if (ui::View* parent = window.parent()) parent->remove_child(&window);
+    });
+}
+
 }  // namespace ckv::widgets

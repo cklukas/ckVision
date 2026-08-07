@@ -108,8 +108,9 @@ FileDialogHandle make_file_dialog(FileDialogMode mode, std::string initial_direc
         if (cancel_ptr->on_press) cancel_ptr->on_press();
     };
 
-    window_ptr->on_closed = [&app, restore_focus_to]() {
+    window_ptr->on_closed = [&app, restore_focus_to, window_ptr]() {
         if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
+        schedule_self_detach(*window_ptr, app);
     };
 
     return FileDialogHandle{std::move(window), list_ptr};

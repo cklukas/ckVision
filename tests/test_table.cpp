@@ -142,18 +142,20 @@ CK_TEST(clicking_a_header_sorts_ascending_and_clicking_again_reverses_it) {
     CK_CHECK(table.row(0)[0] == "Charlie");
 }
 
-CK_TEST(sorting_preserves_cursor_selection_by_underlying_row_via_row_lookup) {
-    // The cursor is a DISPLAY index, so sorting legitimately changes
-    // what row(cursor_row()) refers to — this documents that behavior
-    // rather than asserting a stable underlying selection (v1 scope:
-    // no persistent "selected underlying row" concept across sorts).
+CK_TEST(sorting_preserves_selection_identity_not_just_the_display_index) {
+    // cursor_row() is a DISPLAY index, but sort_by() must re-target it
+    // to wherever the SAME underlying row ends up — selection identity
+    // survives a sort, it does not silently follow display position 0.
     Fixture f;
     auto table = make_table(f);
     table.set_columns({TableColumn{"Name", 10, 3}});
     table.set_rows({{"Charlie"}, {"Alice"}, {"Bob"}});
     CK_CHECK(table.row(table.cursor_row())[0] == "Charlie");  // cursor 0, insertion order
     table.sort_by(0, true);
-    CK_CHECK(table.row(table.cursor_row())[0] == "Alice");  // cursor 0 now refers to the new first display row
+    // "Charlie" moved to display index 2 (last, alphabetically) — the
+    // cursor must have followed it there, not stayed at display index 0.
+    CK_CHECK(table.row(table.cursor_row())[0] == "Charlie");
+    CK_CHECK(table.cursor_row() == 2);
 }
 
 // --- Cell style hook -----------------------------------------------------

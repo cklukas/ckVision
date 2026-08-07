@@ -96,8 +96,9 @@ HelpViewerHandle make_help_viewer(const HelpProvider& provider, std::string init
     window_ptr->cancel_request = [close_ptr]() {
         if (close_ptr->on_press) close_ptr->on_press();
     };
-    window_ptr->on_closed = [&app, restore_focus_to]() {
+    window_ptr->on_closed = [&app, restore_focus_to, window_ptr]() {
         if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
+        schedule_self_detach(*window_ptr, app);
     };
 
     return HelpViewerHandle{std::move(window), text_view_ptr};

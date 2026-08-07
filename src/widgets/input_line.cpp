@@ -259,12 +259,19 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
-    if (history_registry_ != nullptr && event.chord.key == Key::Up) {
+    // History recall is gated on !has_mask(): history_show() calls the
+    // free-form set_text() directly, which would splice arbitrary
+    // unmasked text into a masked field's fixed-length, class-
+    // constrained buffer and corrupt subsequent mask-aware editing.
+    // Masked history is a real, separate feature (recalling only
+    // entries that already satisfy the mask), not something safe to
+    // bolt onto set_text() as-is — deferred rather than done unsoundly.
+    if (!has_mask() && history_registry_ != nullptr && event.chord.key == Key::Up) {
         const auto& entries = history_registry_->entries(history_key_);
         if (!entries.empty()) history_show(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));
         return true;
     }
-    if (history_registry_ != nullptr && event.chord.key == Key::Down) {
+    if (!has_mask() && history_registry_ != nullptr && event.chord.key == Key::Down) {
         if (history_index_ >= 0) history_show(history_index_ - 1);
         return true;
     }
