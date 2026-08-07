@@ -18,11 +18,17 @@ namespace ckv::widgets {
 
 using ui::SizeHint;
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused".
 class CheckGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic.
-    CheckGroup(std::vector<std::string> labels, const ui::Theme& theme, ui::RoleId normal_role,
-               ui::RoleId focused_role);
+    explicit CheckGroup(std::vector<std::string> labels);
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        normal_role_ = normal_role;
+        focused_role_ = focused_role;
+    }
 
     bool checked(std::size_t index) const;
     void set_checked(std::size_t index, bool value);
@@ -37,6 +43,7 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_attached() override;
 
 private:
     void toggle(std::size_t index);
@@ -46,15 +53,20 @@ private:
     std::vector<bool> checked_;
     std::size_t cursor_ = 0;
     bool has_focus_ = false;
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId focused_role_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
 };
 
+// Resolves its own theme roles from context() once attached (M9
+// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused".
 class RadioGroup : public ui::View {
 public:
-    RadioGroup(std::vector<std::string> labels, const ui::Theme& theme, ui::RoleId normal_role,
-               ui::RoleId focused_role);
+    explicit RadioGroup(std::vector<std::string> labels);
+
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        normal_role_ = normal_role;
+        focused_role_ = focused_role;
+    }
 
     int selected() const noexcept { return selected_; }  // -1 means none selected
     void set_selected(int index);
@@ -68,6 +80,7 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_attached() override;
 
 private:
     void move_cursor(int direction);
@@ -76,9 +89,8 @@ private:
     int selected_ = -1;
     std::size_t cursor_ = 0;
     bool has_focus_ = false;
-    const ui::Theme& theme_;
-    ui::RoleId normal_role_;
-    ui::RoleId focused_role_;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

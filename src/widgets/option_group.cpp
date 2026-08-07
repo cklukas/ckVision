@@ -24,11 +24,16 @@ bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
 
 // --- CheckGroup ------------------------------------------------------
 
-CheckGroup::CheckGroup(std::vector<std::string> labels, const ui::Theme& theme, ui::RoleId normal_role,
-                        ui::RoleId focused_role)
-    : labels_(std::move(labels)), checked_(labels_.size(), false), theme_(theme), normal_role_(normal_role),
-      focused_role_(focused_role) {
+CheckGroup::CheckGroup(std::vector<std::string> labels)
+    : labels_(std::move(labels)), checked_(labels_.size(), false) {
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+void CheckGroup::on_attached() {
+    if (normal_role_ == ui::kInvalidRole)
+        normal_role_ = context().roles->find("ckv.option.normal");
+    if (focused_role_ == ui::kInvalidRole)
+        focused_role_ = context().roles->find("ckv.option.focused");
 }
 
 bool CheckGroup::checked(std::size_t index) const {
@@ -112,9 +117,10 @@ void CheckGroup::on_focus(const FocusEvent& event) {
 }
 
 void CheckGroup::draw(scene::Painter& painter) {
+    const ui::Theme& theme = *context().theme;
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style =
-            (has_focus_ && i == cursor_) ? theme_.resolve(focused_role_) : theme_.resolve(normal_role_);
+        const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
+                                                          : theme.resolve(normal_role_);
         painter.fill(Rect{0, static_cast<int>(i), bounds().width, 1}, Cell::from_grapheme(" ", style));
         const std::string marker = checked_[i] ? "[x] " : "[ ] ";
         painter.draw_text(Point{0, static_cast<int>(i)}, marker, style);
@@ -124,10 +130,15 @@ void CheckGroup::draw(scene::Painter& painter) {
 
 // --- RadioGroup --------------------------------------------------------
 
-RadioGroup::RadioGroup(std::vector<std::string> labels, const ui::Theme& theme, ui::RoleId normal_role,
-                        ui::RoleId focused_role)
-    : labels_(std::move(labels)), theme_(theme), normal_role_(normal_role), focused_role_(focused_role) {
+RadioGroup::RadioGroup(std::vector<std::string> labels) : labels_(std::move(labels)) {
     set_focus_policy(ui::FocusPolicy::TabStop);
+}
+
+void RadioGroup::on_attached() {
+    if (normal_role_ == ui::kInvalidRole)
+        normal_role_ = context().roles->find("ckv.option.normal");
+    if (focused_role_ == ui::kInvalidRole)
+        focused_role_ = context().roles->find("ckv.option.focused");
 }
 
 void RadioGroup::set_selected(int index) {
@@ -206,9 +217,10 @@ void RadioGroup::on_focus(const FocusEvent& event) {
 }
 
 void RadioGroup::draw(scene::Painter& painter) {
+    const ui::Theme& theme = *context().theme;
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style =
-            (has_focus_ && i == cursor_) ? theme_.resolve(focused_role_) : theme_.resolve(normal_role_);
+        const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
+                                                          : theme.resolve(normal_role_);
         painter.fill(Rect{0, static_cast<int>(i), bounds().width, 1}, Cell::from_grapheme(" ", style));
         const std::string marker = (static_cast<int>(i) == selected_) ? "(x) " : "( ) ";
         painter.draw_text(Point{0, static_cast<int>(i)}, marker, style);

@@ -25,9 +25,13 @@
 
 namespace ckv::widgets {
 
+// Resolves its own theme role from context() once attached (M9
+// WP-7, D-028): "ckv.image.fallback".
 class ImageView : public ui::View {
 public:
-    ImageView(const ui::Theme& theme, ui::RoleId fallback_role);
+    ImageView();
+
+    void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
 
     void set_image(std::shared_ptr<const Image> image);
     const std::shared_ptr<const Image>& image() const noexcept { return image_; }
@@ -42,13 +46,13 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     std::shared_ptr<const Image> image_;
     int raster_id_;
 
-    const ui::Theme& theme_;
-    ui::RoleId fallback_role_;
+    ui::RoleId fallback_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

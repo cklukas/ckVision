@@ -10,8 +10,12 @@ int next_raster_id() {
 }
 }  // namespace
 
-Canvas::Canvas(const ui::Theme& theme, ui::RoleId fallback_role)
-    : raster_id_(next_raster_id()), theme_(theme), fallback_role_(fallback_role) {}
+Canvas::Canvas() : raster_id_(next_raster_id()) {}
+
+void Canvas::on_attached() {
+    if (fallback_role_ == ui::kInvalidRole)
+        fallback_role_ = context().roles->find("ckv.canvas.fallback");
+}
 
 void Canvas::set_pixel_size(int width, int height) {
     if (image_ != nullptr && image_->width() == width && image_->height() == height) return;
@@ -32,7 +36,7 @@ void Canvas::invalidate_content() {
 }
 
 void Canvas::draw(scene::Painter& painter) {
-    const Style style = theme_.resolve(fallback_role_);
+    const Style style = context().theme->resolve(fallback_role_);
     const Rect area{0, 0, bounds().width, bounds().height};
 
     if (image_ == nullptr || image_->width() <= 0 || image_->height() <= 0) {

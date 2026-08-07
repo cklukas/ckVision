@@ -4,6 +4,7 @@
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Image;
@@ -23,6 +24,7 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 
 ckv::MouseEvent click(ckv::Point p) {
@@ -34,7 +36,8 @@ ckv::MouseEvent click(ckv::Point p) {
 
 CK_TEST(with_no_image_installed_draw_fills_the_fallback_style_without_crashing) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 10, 5});
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
@@ -44,7 +47,7 @@ CK_TEST(with_no_image_installed_draw_fills_the_fallback_style_without_crashing) 
 
 CK_TEST(image_defaults_to_null) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
     CK_CHECK(view.image() == nullptr);
 }
 
@@ -52,7 +55,7 @@ CK_TEST(image_defaults_to_null) {
 
 CK_TEST(set_image_installs_the_image_and_invalidates) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
     auto img = std::make_shared<Image>(4, 4);
     view.set_image(img);
     CK_CHECK(view.image() == img);
@@ -60,7 +63,8 @@ CK_TEST(set_image_installs_the_image_and_invalidates) {
 
 CK_TEST(draw_with_a_real_image_calls_the_mandatory_fallback_and_does_not_crash) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 10, 5});
     view.set_image(std::make_shared<Image>(8, 8));
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -78,8 +82,10 @@ CK_TEST(replacing_the_image_uses_a_different_raster_id_each_time_a_new_view_is_c
     // raster regions") — verified indirectly: two ImageViews sharing a
     // Surface must not crash when both draw an image in the same frame.
     Fixture f;
-    ImageView a(f.theme, f.roles.dialog_background);
-    ImageView b(f.theme, f.roles.dialog_background);
+    ImageView a;
+    ImageView b;
+    a.set_context(f.ctx());
+    b.set_context(f.ctx());
     a.set_bounds(Rect{0, 0, 5, 5});
     b.set_bounds(Rect{5, 0, 5, 5});
     a.set_image(std::make_shared<Image>(4, 4));
@@ -95,7 +101,8 @@ CK_TEST(replacing_the_image_uses_a_different_raster_id_each_time_a_new_view_is_c
 
 CK_TEST(a_zero_width_image_falls_back_to_the_plain_fill_rather_than_calling_draw_image) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 10, 5});
     view.set_image(std::make_shared<Image>(0, 4));  // zero width — draw_image would CKV_ASSERT on this
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -106,7 +113,8 @@ CK_TEST(a_zero_width_image_falls_back_to_the_plain_fill_rather_than_calling_draw
 
 CK_TEST(a_zero_size_view_with_an_image_does_not_crash) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
+    view.set_context(f.ctx());
     view.set_bounds(Rect{0, 0, 0, 0});
     view.set_image(std::make_shared<Image>(4, 4));
     Surface s(ckv::Size{1, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
@@ -119,7 +127,7 @@ CK_TEST(a_zero_size_view_with_an_image_does_not_crash) {
 
 CK_TEST(on_click_receives_the_full_mouse_event_including_the_pixel_field_when_present) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
     view.set_bounds(Rect{0, 0, 10, 5});
     std::optional<ckv::PixelPoint> seen_pixel;
     bool called = false;
@@ -138,7 +146,7 @@ CK_TEST(on_click_receives_the_full_mouse_event_including_the_pixel_field_when_pr
 
 CK_TEST(on_click_receives_a_cell_only_event_with_no_pixel_field_when_the_terminal_has_none) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
     view.set_bounds(Rect{0, 0, 10, 5});
     std::optional<ckv::PixelPoint> seen_pixel = ckv::PixelPoint{1, 1};  // pre-seed to prove it gets cleared
     view.on_click = [&](const ckv::MouseEvent& e) { seen_pixel = e.pixel; };
@@ -148,7 +156,7 @@ CK_TEST(on_click_receives_a_cell_only_event_with_no_pixel_field_when_the_termina
 
 CK_TEST(with_no_on_click_handler_mouse_events_are_still_reported_as_handled) {
     Fixture f;
-    ImageView view(f.theme, f.roles.dialog_background);
+    ImageView view;
     view.set_bounds(Rect{0, 0, 10, 5});
     CK_CHECK(view.on_mouse(click(ckv::Point{2, 2})));
 }

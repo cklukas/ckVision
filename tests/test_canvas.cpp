@@ -4,6 +4,7 @@
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Modifier;
@@ -22,6 +23,7 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 }  // namespace
 
@@ -29,7 +31,8 @@ struct Fixture {
 
 CK_TEST(with_no_pixel_size_set_draw_falls_back_to_a_plain_fill) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
@@ -39,7 +42,8 @@ CK_TEST(with_no_pixel_size_set_draw_falls_back_to_a_plain_fill) {
 
 CK_TEST(setting_pixel_size_with_no_draw_callback_still_renders_via_the_mandatory_fallback) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     canvas.set_pixel_size(16, 16);  // no callback installed
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -62,7 +66,8 @@ CK_TEST(setting_pixel_size_with_no_draw_callback_still_renders_via_the_mandatory
 // under test.
 CK_TEST(the_draw_callback_runs_once_per_content_invalidation_not_once_per_frame) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     canvas.set_pixel_size(8, 8);
     int calls = 0;
@@ -91,7 +96,8 @@ CK_TEST(the_draw_callback_runs_once_per_content_invalidation_not_once_per_frame)
 
 CK_TEST(changing_pixel_size_marks_content_dirty_and_reruns_the_callback) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     canvas.set_pixel_size(8, 8);
     int calls = 0;
@@ -114,7 +120,8 @@ CK_TEST(changing_pixel_size_marks_content_dirty_and_reruns_the_callback) {
 
 CK_TEST(setting_pixel_size_to_the_same_value_again_is_a_no_op) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     canvas.set_pixel_size(8, 8);
     int calls = 0;
@@ -137,7 +144,8 @@ CK_TEST(setting_pixel_size_to_the_same_value_again_is_a_no_op) {
 
 CK_TEST(installing_a_new_draw_callback_marks_content_dirty) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     canvas.set_pixel_size(8, 8);
     canvas.set_draw_callback([](ckv::Image&) {});
@@ -161,7 +169,8 @@ CK_TEST(installing_a_new_draw_callback_marks_content_dirty) {
 
 CK_TEST(setting_a_zero_pixel_size_falls_back_to_the_plain_fill) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 10, 5});
     canvas.set_pixel_size(8, 8);
     canvas.set_pixel_size(0, 0);
@@ -173,7 +182,8 @@ CK_TEST(setting_a_zero_pixel_size_falls_back_to_the_plain_fill) {
 
 CK_TEST(a_zero_size_view_with_content_does_not_crash) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     canvas.set_bounds(Rect{0, 0, 0, 0});
     canvas.set_pixel_size(8, 8);
     canvas.set_draw_callback([](ckv::Image&) {});
@@ -187,7 +197,8 @@ CK_TEST(a_zero_size_view_with_content_does_not_crash) {
 
 CK_TEST(on_click_forwards_the_full_mouse_event) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     bool called = false;
     canvas.on_click = [&](const ckv::MouseEvent&) { called = true; };
     canvas.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1}, std::nullopt,
@@ -197,7 +208,8 @@ CK_TEST(on_click_forwards_the_full_mouse_event) {
 
 CK_TEST(with_no_on_click_handler_mouse_events_are_still_reported_as_handled) {
     Fixture f;
-    Canvas canvas(f.theme, f.roles.dialog_background);
+    Canvas canvas;
+    canvas.set_context(f.ctx());
     CK_CHECK(canvas.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1},
                                               std::nullopt, Modifier::None}));
 }

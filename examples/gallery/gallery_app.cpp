@@ -138,7 +138,8 @@ void GalleryApp::build_image_window() {
     auto window = std::make_unique<widgets::Window>("Sixel Demo");  // default document-window roles
     window->set_bounds(Rect{20, 6, 34, 16});
 
-    auto view = std::make_unique<widgets::ImageView>(app_.theme(), roles_.dialog_background);
+    auto view = std::make_unique<widgets::ImageView>();
+    view->set_role_override(roles_.dialog_background);
     view->set_bounds(Rect{0, 0, 32, 14});
     view->set_image(make_demo_gradient());
     window->set_content(std::move(view));

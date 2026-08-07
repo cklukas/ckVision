@@ -10,8 +10,12 @@ int next_raster_id() {
 }
 }  // namespace
 
-ImageView::ImageView(const ui::Theme& theme, ui::RoleId fallback_role)
-    : raster_id_(next_raster_id()), theme_(theme), fallback_role_(fallback_role) {}
+ImageView::ImageView() : raster_id_(next_raster_id()) {}
+
+void ImageView::on_attached() {
+    if (fallback_role_ == ui::kInvalidRole)
+        fallback_role_ = context().roles->find("ckv.image.fallback");
+}
 
 void ImageView::set_image(std::shared_ptr<const Image> image) {
     image_ = std::move(image);
@@ -19,7 +23,7 @@ void ImageView::set_image(std::shared_ptr<const Image> image) {
 }
 
 void ImageView::draw(scene::Painter& painter) {
-    const Style style = theme_.resolve(fallback_role_);
+    const Style style = context().theme->resolve(fallback_role_);
     const Rect area{0, 0, bounds().width, bounds().height};
 
     if (image_ == nullptr || image_->width() <= 0 || image_->height() <= 0) {

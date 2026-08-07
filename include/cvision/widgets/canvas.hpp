@@ -27,9 +27,13 @@
 
 namespace ckv::widgets {
 
+// Resolves its own theme role from context() once attached (M9
+// WP-7, D-028): "ckv.canvas.fallback".
 class Canvas : public ui::View {
 public:
-    Canvas(const ui::Theme& theme, ui::RoleId fallback_role);
+    Canvas();
+
+    void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
 
     // (width, height) in PIXELS (not cells) — the owner computes this
     // from the widget's cell box and the terminal's cell-pixel metrics.
@@ -51,6 +55,7 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
 
 private:
     std::shared_ptr<Image> image_;
@@ -58,8 +63,7 @@ private:
     std::function<void(Image&)> draw_callback_;
     int raster_id_;
 
-    const ui::Theme& theme_;
-    ui::RoleId fallback_role_;
+    ui::RoleId fallback_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets
