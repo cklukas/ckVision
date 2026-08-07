@@ -41,6 +41,9 @@ void CommandRegistry::register_standard_commands() {
     register_command_internal(kTile, "&Tile", "Window", std::nullopt);
     register_command_internal(kCascade, "C&ascade", "Window", std::nullopt);
     register_command_internal(kWindowList, "&Window List", "Window", std::nullopt);
+    register_command_internal(kFocusNext, "Next Field", "Window", KeyChord::parse("Tab"));
+    register_command_internal(kFocusPrevious, "Previous Field", "Window",
+                               KeyChord::parse("Shift+Tab"));
 }
 
 void CommandRegistry::add(CommandDescriptor descriptor) {
@@ -112,6 +115,11 @@ std::optional<KeyChord> CommandRegistry::chord_for_command(CommandId id) const {
 
 void CommandRegistry::set_handler(CommandId id, std::function<void()> handler) {
     handlers_[id] = std::move(handler);
+}
+
+bool CommandRegistry::has_handler(CommandId id) const {
+    auto it = handlers_.find(id);
+    return it != handlers_.end() && static_cast<bool>(it->second);
 }
 
 bool CommandRegistry::execute(CommandId id) {

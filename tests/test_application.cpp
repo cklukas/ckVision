@@ -92,6 +92,64 @@ CK_TEST(focus_previous_wraps_backward) {
     CK_CHECK(app.focused() == a);
 }
 
+// --- Default keymap: Tab/Shift-Tab traversal (M9/WP-13, D-029) ------------
+
+CK_TEST(tab_traverses_focus_out_of_the_box_with_no_app_side_setup) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    b->set_focus_policy(FocusPolicy::TabStop);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}));
+    CK_CHECK(app.focused() == a);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}));
+    CK_CHECK(app.focused() == b);
+}
+
+CK_TEST(shift_tab_traverses_backward_out_of_the_box) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    b->set_focus_policy(FocusPolicy::TabStop);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::Shift, ""}}));
+    CK_CHECK(app.focused() == b);  // starts at the last one, going backward
+}
+
+CK_TEST(a_view_that_consumes_tab_itself_still_receives_it_before_the_default_binding_fires) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->consume_keys = true;
+    a->set_focus_policy(FocusPolicy::TabStop);
+    b->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(a);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}));
+    CK_CHECK(a->key_events == 1);  // the view saw it
+    CK_CHECK(app.focused() == a);  // and focus never moved to b
+}
+
+CK_TEST(unbinding_tab_removes_the_default_traversal) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    app.commands().unbind_key(KeyChord{Key::Tab, Modifier::None, ""});
+
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}));
+    CK_CHECK(app.focused() == nullptr);
+}
+
 CK_TEST(disabled_and_hidden_views_are_skipped_by_traversal) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;

@@ -1,26 +1,27 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // MenuBar + DropdownMenu (ARCHITECTURE.md §5 "Menus" / plans/
-// widgets.md M5 baseline): F10-equivalent activation (activate(), a
-// caller binds F10 to it via CommandRegistry — MenuBar does not
-// intercept F10 itself, matching how every other accelerator in this
-// framework routes through the command keymap), mnemonic letters,
+// widgets.md M5 baseline): F10-equivalent activation (activate(),
+// installed as ui::std_commands::kMenu's default handler when
+// unclaimed — M9/WP-13, D-029 — routing through the command keymap
+// like every other accelerator in this framework), mnemonic letters,
 // Left/Right/Up/Down navigation with wrapping, Enter/mnemonic to
 // activate, disabled items skipped by navigation but still visible,
-// Esc closes one level, and light-dismiss on an outside click via
-// Application's mouse input capture.
+// Esc closes one level, light-dismiss on an outside click via
+// Application's mouse input capture, and right-aligned chord hints
+// rendered live from the command registry (M9/WP-11).
 //
 // show_context_menu() below reuses DropdownMenu directly as a
 // positional pop-up ("Context menu: positional pop-up with same
 // feature set" — plans/widgets.md M5 baseline) at a caller-chosen
 // screen position, e.g. from a right-click handler.
 //
-// Scope note (documented, not an oversight): nested submenus, right-
-// aligned accelerator-chord hints, checkable items, and context-menu
-// KEYBOARD invocation (Menu key / Shift-F10 at focus location — mouse
-// invocation via show_context_menu is covered) are each a real,
-// separate increment — landing them here would roughly double this
-// file without a concrete consumer to test any of it against yet.
+// Scope note (documented, not an oversight): nested submenus,
+// checkable items, and context-menu KEYBOARD invocation (Menu key /
+// Shift-F10 at focus location — mouse invocation via
+// show_context_menu is covered) are each a real, separate increment —
+// landing them here would roughly double this file without a
+// concrete consumer to test any of it against yet.
 #pragma once
 
 #include <functional>
@@ -126,6 +127,14 @@ struct MenuBarItem {
 // owning Desktop with a parent-chain walk at attach (real usage
 // always docks a MenuBar directly onto the Desktop it controls, via
 // Desktop::dock_top — see gallery_app.cpp).
+//
+// F10 activation (M9/WP-13, D-029): on_attached() installs itself as
+// ui::std_commands::kMenu's default handler — but ONLY if nothing has
+// claimed kMenu yet (CommandRegistry::has_handler) — so an application
+// that calls set_handler(kMenu, ...) itself before attaching a MenuBar
+// is never silently overridden. The destructor clears the handler
+// again if this instance was the one that installed it, so a
+// destroyed MenuBar can never be reached through a stale handler.
 class MenuBar : public ui::View {
 public:
     explicit MenuBar(std::vector<MenuBarItem> menus);
@@ -137,9 +146,10 @@ public:
     }
 
     // Gives the bar focus (saving whatever was previously focused, for
-    // deactivate()/Esc to restore) and highlights the first menu. A
-    // caller wires this to F10 via CommandRegistry — see the file
-    // comment for why MenuBar doesn't intercept F10 itself.
+    // deactivate()/Esc to restore) and highlights the first menu. Also
+    // callable directly by an application that wants its own trigger
+    // for opening the menu, in addition to (or instead of) the F10
+    // default this class installs itself — see the class comment.
     void activate();
     // Closes any open dropdown and restores focus to whatever was
     // focused before activate() was called.
@@ -169,6 +179,11 @@ private:
     ui::RoleId active_role_ = ui::kInvalidRole;
     ui::Application* app_ = nullptr;
     Desktop* desktop_ = nullptr;
+    // Whether THIS instance installed kMenu's default handler (M9/
+    // WP-13) — only then does the destructor clear it; a MenuBar that
+    // found kMenu already claimed by something else must not touch it
+    // on the way out.
+    bool installed_default_menu_handler_ = false;
 };
 
 // Opens `items` as a positional pop-up context menu at `screen_position`

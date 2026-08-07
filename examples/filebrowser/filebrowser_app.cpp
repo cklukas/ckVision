@@ -11,13 +11,11 @@
 namespace ckv::filebrowser {
 
 namespace {
-// Application-space id (M9/WP-12: below kFirstApplicationCommandId is
-// reserved for the library's own standard set). Quit references
-// ui::std_commands::kQuit directly — its wording ("&Quit", Alt+X)
-// already matches the framework default exactly, so this app has no
-// need for its own duplicate; only pane-focus cycling is genuinely
-// application-specific.
-constexpr ui::CommandId kCmdFocusNextPane = ui::kFirstApplicationCommandId;
+// Every command this app needs is already in the standard set (M9/
+// WP-12/WP-13) — Quit's wording ("&Quit", Alt+X) already matches the
+// framework default exactly, and Tab-switches-pane is just
+// std_commands::kFocusNext's own default behavior (D-029) — so this
+// app has no application-space command ids of its own.
 
 // Directories only, sorted, depth-capped against a real filesystem's
 // symlink cycles (a real, bounded disk still could be arbitrarily
@@ -57,23 +55,10 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     build_window();
 
     // kQuit is already registered by Application's constructor (M9/
-    // WP-12) — only its handler needs attaching here.
-    auto& commands = app_.commands();
-    commands.set_handler(ui::std_commands::kQuit, [this] { quit_ = true; });
-
-    // Tab isn't wired to focus traversal anywhere in the library by
-    // default (Application::focus_next()/previous() are callable
-    // directly, but nothing binds a key to them automatically — every
-    // application does this itself, the same way the M4 exit-criteria
-    // integration test drives focus_next() directly rather than
-    // through a Tab keystroke). Two panes with no OTHER use for Tab
-    // (unlike, say, a text editor that wants Tab to insert a literal
-    // tab) makes this the obvious default here.
-    commands.add({.id = kCmdFocusNextPane,
-                  .title = "Next Pane",
-                  .category = "Window",
-                  .chord = "Tab",
-                  .handler = [this] { app_.focus_next(); }});
+    // WP-12) — only its handler needs attaching here. Tab already
+    // switches focus between the tree and file-list panes out of the
+    // box (M9/WP-13, D-029) — nothing to wire for that at all.
+    app_.commands().set_handler(ui::std_commands::kQuit, [this] { quit_ = true; });
 
     app_.set_focus(tree_);
 }
@@ -92,7 +77,7 @@ void FileBrowserApp::build_menu_bar() {
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", kCmdFocusNextPane}, {"", ui::std_commands::kQuit}});
+    status->set_items({{"", ui::std_commands::kFocusNext}, {"", ui::std_commands::kQuit}});
     desktop_->dock_bottom(std::move(status));
 }
 

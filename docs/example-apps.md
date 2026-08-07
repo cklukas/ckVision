@@ -135,14 +135,11 @@ bottom border — the general mechanism a text editor would use for a
   example is copy-paste usable on its own, not dependent on that
   dialog's private helpers.
 - **Focus traversal**: Tab switches between the tree and file-list
-  panes — bound explicitly to a command in `FileBrowserApp`'s own
-  constructor, since nothing in the library auto-binds Tab to focus
-  traversal today. DECISIONS.md D-029 has since superseded that
-  stance: a rebindable default keymap (Tab/Shift-Tab included) lands
-  in ROADMAP M9/WP-13, at which point this explicit binding — and this
-  bullet — disappear; an application that wants Tab for something else
-  (a text editor inserting a literal tab) keeps that freedom, because
-  a focused view consuming Tab already preempts the keymap by routing
+  panes — the library's own default keymap (DECISIONS.md D-029, M9/
+  WP-13), with nothing bound explicitly in `FileBrowserApp`'s own
+  constructor. An application that wants Tab for something else (a
+  text editor inserting a literal tab) keeps that freedom, because a
+  focused view consuming Tab already preempts the keymap by routing
   order.
 
 ### What's verified, and how

@@ -36,7 +36,8 @@ inline constexpr CommandId kInvalidCommand = 0;
 // WP-12 — no prior source consulted per this repo's provenance rule):
 // kHelp = F1, kMenu = F10, kNextWindow = F6, kPreviousWindow =
 // Shift+F6, kZoom = F5, kClose = Alt+F3, kQuit = Alt+X (already the
-// convention every example independently used before this landed).
+// convention every example independently used before this landed),
+// kFocusNext = Tab, kFocusPrevious = Shift+Tab (M9/WP-13, D-029).
 // kTile/kCascade/kWindowList get NO default chord — there is no
 // comparably strong, widely-recognized single-key convention for
 // them; an application binds one itself if it wants one.
@@ -50,6 +51,30 @@ inline constexpr CommandId kInvalidCommand = 0;
 // its own command in the application range instead of referencing the
 // standard one; that is a legitimate reason NOT to reference
 // std_commands, not a gap to work around.
+//
+// Default HANDLERS (not just metadata/chords) are installed for the
+// commands where the framework can supply one without any
+// application-specific knowledge (M9/WP-13, D-029):
+//   - kFocusNext/kFocusPrevious call Application::focus_next()/
+//     previous() directly — always installed, since Application
+//     itself outlives everything that could invoke them.
+//   - kHelp's default handler is installed by Application's own
+//     constructor (see application.cpp) — D-027.
+//   - kMenu's default handler (calling MenuBar::activate()) is
+//     installed by MenuBar::on_attached() the moment one attaches,
+//     but ONLY if nothing has claimed kMenu yet
+//     (CommandRegistry::has_handler) — an application that wants
+//     different F10 behavior and calls set_handler(kMenu, ...) before
+//     attaching its MenuBar is never overridden. MenuBar's destructor
+//     clears the handler again if it was the one that installed it,
+//     so a destroyed MenuBar can never be called through a stale
+//     handler.
+// Every other standard command (kQuit, kClose, kZoom, kNextWindow,
+// kPreviousWindow, kTile, kCascade, kWindowList) needs an
+// application- or Desktop-owned window to act on, which the
+// CommandRegistry has no way to reach — an application attaches its
+// own handler for whichever of these it needs, same as before this
+// mechanism existed.
 namespace std_commands {
 inline constexpr CommandId kQuit = 1;
 inline constexpr CommandId kClose = 2;
@@ -61,6 +86,8 @@ inline constexpr CommandId kCascade = 7;
 inline constexpr CommandId kWindowList = 8;
 inline constexpr CommandId kMenu = 9;
 inline constexpr CommandId kHelp = 10;
+inline constexpr CommandId kFocusNext = 11;
+inline constexpr CommandId kFocusPrevious = 12;
 }  // namespace std_commands
 
 struct CommandInfo {
@@ -161,6 +188,12 @@ public:
     // need). `id` need not be pre-registered — a handler may be
     // attached before or after register_command()/add().
     void set_handler(CommandId id, std::function<void()> handler);
+    // Whether `id` currently has a real (non-empty) handler installed
+    // (M9/WP-13) — the guard a default-handler installer (MenuBar::
+    // on_attached(), see std_commands' own doc comment) checks before
+    // installing itself, so it never clobbers a handler an application
+    // deliberately set first.
+    bool has_handler(CommandId id) const;
     // Invokes id's handler if one is registered AND is_enabled(id).
     // Returns true if the handler ran.
     bool execute(CommandId id);

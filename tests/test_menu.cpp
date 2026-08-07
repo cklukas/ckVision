@@ -491,6 +491,66 @@ CK_TEST(on_key_is_unhandled_when_the_bar_is_not_active) {
     CK_CHECK(!bar->on_key(key(Key::Right)));
 }
 
+// --- MenuBar: F10 default activation (M9/WP-13, D-029) ---------------------
+
+CK_TEST(attaching_a_menu_bar_installs_itself_as_f10s_default_handler) {
+    MenuBarFixture mf;
+    CK_CHECK(!mf.app.commands().has_handler(ui::std_commands::kMenu));
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    CK_CHECK(mf.app.commands().has_handler(ui::std_commands::kMenu));
+    CK_CHECK(!bar->active());
+
+    mf.app.commands().execute(ui::std_commands::kMenu);
+    CK_CHECK(bar->active());
+}
+
+CK_TEST(a_pre_existing_kmenu_handler_is_not_overridden_by_attaching_a_menu_bar) {
+    MenuBarFixture mf;
+    bool custom_ran = false;
+    mf.app.commands().set_handler(ui::std_commands::kMenu, [&] { custom_ran = true; });
+
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+
+    mf.app.commands().execute(ui::std_commands::kMenu);
+    CK_CHECK(custom_ran);
+    // the bar's own activate() never ran — its handler was never installed
+    CK_CHECK(!bar->active());
+}
+
+CK_TEST(destroying_the_bar_clears_the_default_handler_it_installed) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    CK_CHECK(mf.app.commands().has_handler(ui::std_commands::kMenu));
+
+    mf.desktop.remove_child(bar).reset();  // destroys the MenuBar
+
+    CK_CHECK(!mf.app.commands().has_handler(ui::std_commands::kMenu));
+    // A stale handler calling into freed memory would crash (or, under
+    // ASan, report use-after-free) here rather than just returning false.
+    CK_CHECK(!mf.app.commands().execute(ui::std_commands::kMenu));
+}
+
+CK_TEST(a_second_menu_bar_that_finds_kmenu_already_claimed_does_not_clear_it_on_destruction) {
+    MenuBarFixture mf;
+    auto bar1_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
+    MenuBar* bar1 = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar1_owned)));
+
+    auto bar2_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&Edit", {}}});
+    MenuBar* bar2 = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar2_owned)));
+
+    // bar2 attached second: kMenu was already claimed by bar1, so bar2
+    // never installed its own handler — destroying it must not clear
+    // the one bar1 is relying on.
+    mf.desktop.remove_child(bar2).reset();
+    CK_CHECK(mf.app.commands().has_handler(ui::std_commands::kMenu));
+
+    mf.app.commands().execute(ui::std_commands::kMenu);
+    CK_CHECK(bar1->active());  // still routes to bar1, the true owner
+}
+
 // --- Regression: reentrancy during activation (review finding #1) ---------
 
 CK_TEST(an_items_on_activate_that_reopens_another_menu_does_not_crash_the_activating_dropdown) {

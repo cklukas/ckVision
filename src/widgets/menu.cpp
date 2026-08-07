@@ -208,7 +208,11 @@ MenuBar::MenuBar(std::vector<MenuBarItem> menus) : menus_(std::move(menus)) {
     set_focus_policy(ui::FocusPolicy::TabStop);
 }
 
-MenuBar::~MenuBar() { close_dropdown(); }
+MenuBar::~MenuBar() {
+    close_dropdown();
+    if (installed_default_menu_handler_ && app_ != nullptr)
+        app_->commands().set_handler(ui::std_commands::kMenu, nullptr);
+}
 
 void MenuBar::on_attached() {
     if (normal_role_ == ui::kInvalidRole)
@@ -221,6 +225,13 @@ void MenuBar::on_attached() {
             desktop_ = d;
             break;
         }
+    }
+    // F10 activation, default and overridable (M9/WP-13, D-029) — see
+    // the class comment for why this only installs itself when kMenu
+    // is still unclaimed.
+    if (app_ != nullptr && !app_->commands().has_handler(ui::std_commands::kMenu)) {
+        app_->commands().set_handler(ui::std_commands::kMenu, [this] { activate(); });
+        installed_default_menu_handler_ = true;
     }
 }
 

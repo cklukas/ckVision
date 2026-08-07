@@ -67,6 +67,12 @@ Application::Application(term::Terminal& terminal, Clock& clock)
         const std::string* key = focused_->resolve_help_context_key();
         if (key != nullptr) help_provider_(*key);
     });
+    // Tab/Shift-Tab traversal (M9/WP-13, D-029) — always installed,
+    // unconditionally: Application itself outlives everything that
+    // could invoke these, so there is no lifetime concern to guard
+    // against the way MenuBar's kMenu default handler has to.
+    commands_.set_handler(std_commands::kFocusNext, [this] { focus_next(); });
+    commands_.set_handler(std_commands::kFocusPrevious, [this] { focus_previous(); });
 }
 
 void Application::set_focus(View* view) {

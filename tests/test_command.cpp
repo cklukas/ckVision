@@ -242,8 +242,8 @@ CK_TEST(register_standard_commands_populates_every_std_commands_id_with_a_title)
     CommandRegistry reg;
     reg.register_standard_commands();
     const ckv::ui::CommandId ids[] = {
-        kQuit, kClose, kZoom, kNextWindow, kPreviousWindow, kTile, kCascade, kWindowList, kMenu,
-        kHelp,
+        kQuit,    kClose, kZoom,       kNextWindow, kPreviousWindow, kTile,
+        kCascade, kMenu,  kWindowList, kHelp,       kFocusNext,      kFocusPrevious,
     };
     for (auto id : ids) {
         const auto* info = reg.find(id);
@@ -263,6 +263,8 @@ CK_TEST(register_standard_commands_binds_the_documented_default_chords) {
     CK_CHECK(reg.command_for_key(*KeyChord::parse("F5")) == kZoom);
     CK_CHECK(reg.command_for_key(*KeyChord::parse("Alt+F3")) == kClose);
     CK_CHECK(reg.command_for_key(*KeyChord::parse("Alt+X")) == kQuit);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Tab")) == kFocusNext);
+    CK_CHECK(reg.command_for_key(*KeyChord::parse("Shift+Tab")) == kFocusPrevious);
 }
 
 CK_TEST(register_standard_commands_leaves_tile_cascade_and_window_list_with_no_default_chord) {
@@ -325,6 +327,27 @@ CK_TEST(a_handler_may_be_attached_before_the_command_is_ever_registered) {
     reg.register_command(kFileOpen, "Open");
     CK_CHECK(reg.execute(kFileOpen));
     CK_CHECK(ran);
+}
+
+// --- has_handler (M9/WP-13, the guard a default-handler installer
+// like MenuBar checks before installing itself) ----------------------
+
+CK_TEST(has_handler_is_false_for_an_id_with_no_handler_installed) {
+    CommandRegistry reg;
+    CK_CHECK(!reg.has_handler(kFileOpen));
+}
+
+CK_TEST(has_handler_is_true_once_a_real_handler_is_set) {
+    CommandRegistry reg;
+    reg.set_handler(kFileOpen, [] {});
+    CK_CHECK(reg.has_handler(kFileOpen));
+}
+
+CK_TEST(has_handler_is_false_after_the_handler_is_cleared_with_an_empty_function) {
+    CommandRegistry reg;
+    reg.set_handler(kFileOpen, [] {});
+    reg.set_handler(kFileOpen, nullptr);
+    CK_CHECK(!reg.has_handler(kFileOpen));
 }
 
 // --- add() (M9/WP-10 one-call registration) --------------------------------

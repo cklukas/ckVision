@@ -222,6 +222,20 @@ private:
 
     term::Terminal& terminal_;
     Clock& clock_;
+    // Declared (and therefore constructed) before root_, and — the
+    // reason this order matters, not just convention — destroyed
+    // AFTER it: every widget in the tree holds a Context pointing at
+    // roles_/theme_ (D-028) and can reach commands_ via context().app
+    // (M9/WP-9…WP-13, e.g. MenuBar's destructor clearing its own
+    // std_commands::kMenu handler). A widget's destructor firing
+    // during root_'s own teardown must find these still alive — with
+    // commands_/roles_/theme_ declared AFTER root_, they would already
+    // be destroyed by the time root_'s children (transitively) run
+    // their own destructors, a real dangling-reference bug found via
+    // ASan while wiring WP-13's MenuBar-clears-its-own-handler cleanup.
+    RoleRegistry roles_;
+    Theme theme_{roles_};
+    CommandRegistry commands_;
     View root_;
     scene::Surface surface_;
     // v1 renders through ONE shared Surface (Window baseline draws
@@ -238,9 +252,6 @@ private:
     scene::Compositor compositor_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
-    CommandRegistry commands_;
-    RoleRegistry roles_;
-    Theme theme_{roles_};
     HistoryRegistry history_;
     std::string clipboard_text_;
     View* focused_ = nullptr;
