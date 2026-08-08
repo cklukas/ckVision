@@ -2,8 +2,7 @@
 #include "cvision/ui/application.hpp"
 
 #include <algorithm>
-#include <atomic>
-#include <csignal>
+#include <iterator>
 #include <string>
 #include <type_traits>
 
@@ -25,18 +24,20 @@ bool contains(const Rect& r, Point p) noexcept {
 constexpr Color kTooSmallFg = Color::rgb(255, 255, 255);
 constexpr Color kTooSmallBg = Color::rgb(170, 0, 0);
 
-// run()'s SIGINT handling (M9/WP-14): a signal handler cannot capture
-// `this`, so the currently-run()-ning Application (if any) lives here
-// instead — swapped in/out around the loop, restoring whatever was
-// there before (nullptr for the common single-Application case, but
-// this also does the right thing for a nested/sequential run() call).
-// request_quit() is just a bool store, safe to call from a signal
-// handler; nothing else here touches Application state.
-std::atomic<Application*> g_run_instance{nullptr};
+class ActiveOperation final {
+public:
+    explicit ActiveOperation(bool& active) : active_(active) {
+        CKV_ASSERT(!active_);
+        active_ = true;
+    }
+    ~ActiveOperation() { active_ = false; }
 
-void handle_run_sigint(int) {
-    if (Application* app = g_run_instance.load(std::memory_order_relaxed)) app->request_quit();
-}
+    ActiveOperation(const ActiveOperation&) = delete;
+    ActiveOperation& operator=(const ActiveOperation&) = delete;
+
+private:
+    bool& active_;
+};
 
 }  // namespace
 
@@ -61,7 +62,30 @@ Application::Application(term::Terminal& terminal, Clock& clock)
         // the View identity is still valid, so no later routing path can
         // observe a stale modal root.  The sink also runs recursively for
         // a torn-down subtree, covering nested modal windows in order.
-        modal_stack_.erase(std::remove(modal_stack_.begin(), modal_stack_.end(), &v), modal_stack_.end());
+        for (auto it = modal_stack_.begin(); it != modal_stack_.end();) {
+            if (it->root != &v) {
+                ++it;
+                continue;
+            }
+            const bool was_innermost = std::next(it) == modal_stack_.end();
+            const std::optional<ViewHandle> restore = it->restore_focus;
+            it = modal_stack_.erase(it);
+
+            // If an outer modal disappears while an inner one remains,
+            // the inner scope's saved focus can point into the detached
+            // outer subtree. Carry the outer scope's restoration forward
+            // instead of losing it now; when the inner scope eventually
+            // ends it still restores to the right surviving owner.
+            if (it != modal_stack_.end() && restore) {
+                const View* const next_restore =
+                    it->restore_focus ? resolve_attached_view(*it->restore_focus) : nullptr;
+                if (next_restore == nullptr) it->restore_focus = restore;
+            }
+            // Only removing the active scope may restore focus now. A
+            // detached outer scope must never pull focus out of a still
+            // active inner modal.
+            if (was_innermost && restore) pending_modal_focus_restore_ = restore;
+        }
     });
     // Every invalidate() anywhere in the tree marks the whole
     // Application dirty (v1 scope: see step()'s doc comment — the
@@ -111,6 +135,13 @@ void Application::layout_root_children() {
 
 void Application::set_focus(View* view) {
     CKV_ASSERT(view == nullptr || view->focusable());
+    // A closing modal may attempt its ordinary focus restoration before
+    // its deferred detach has dropped the modal scope. Defer that request
+    // rather than letting focus escape the active scope; the detach path
+    // restores the scope's saved focus once routing is safe again.
+    if (view != nullptr && modal_root() != nullptr &&
+        (!tree_contains(root_, view) || !in_modal_scope(*view)))
+        return;
     if (view == focused_) return;
     // Application-owned trees get the lifetime-safe path below. A few
     // low-level construction tests intentionally focus an unattached tree;
@@ -150,6 +181,19 @@ View* Application::resolve_attached_view(const ViewHandle& handle) const noexcep
     return tree_contains(root_, handle.view) ? handle.view : nullptr;
 }
 
+bool Application::in_modal_scope(const View& view) const noexcept {
+    View* const scope = modal_root();
+    return scope == nullptr || is_ancestor_of(*scope, view);
+}
+
+void Application::restore_modal_focus_if_needed() {
+    if (!pending_modal_focus_restore_) return;
+    const ViewHandle restore = *pending_modal_focus_restore_;
+    pending_modal_focus_restore_.reset();
+    View* const candidate = resolve_attached_view(restore);
+    if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate)) set_focus(candidate);
+}
+
 bool Application::tree_contains(const View& root, const View* target) noexcept {
     if (&root == target) return true;
     for (const auto& child : root.children())
@@ -171,7 +215,7 @@ void Application::collect_focusable(View& view, std::vector<View*>& out) {
 
 std::vector<View*> Application::focusable_views() const {
     std::vector<View*> out;
-    View& start = modal_stack_.empty() ? const_cast<View&>(root_) : *modal_stack_.back();
+    View& start = modal_stack_.empty() ? const_cast<View&>(root_) : *modal_stack_.back().root;
     collect_focusable(start, out);
     return out;
 }
@@ -260,7 +304,8 @@ View* Application::topmost_view_at(Point absolute_point) noexcept {
 }
 
 bool Application::dispatch(const term::TerminalEvent& event) {
-    return std::visit(
+    ActiveOperation operation(dispatch_active_);
+    const bool handled = std::visit(
         [this](const auto& e) -> bool {
             using T = std::decay_t<decltype(e)>;
             if constexpr (std::is_same_v<T, KeyEvent>) {
@@ -273,9 +318,28 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 // (including std_commands like kMenu/kQuit) must not
                 // fire while a modal owns the scope.
                 View* const scope_root = modal_root();
-                for (View* v = focused_; v != nullptr; v = v->parent()) {
-                    if (v->on_key(e)) return true;
+                View* start = focused_;
+                if (scope_root != nullptr && (start == nullptr || !is_ancestor_of(*scope_root, *start)))
+                    start = scope_root;
+                // Low-level unit construction may focus a detached tree.
+                // Its lifetime is explicitly caller-owned; preserve that
+                // narrow facility while all Application-owned routes use
+                // lifetime handles below.
+                if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
+                    for (View* v = start; v != nullptr; v = v->parent())
+                        if (v->on_key(e)) return true;
+                    if (auto id = commands_.command_for_key(e.chord)) return execute_command(*id);
+                    return false;
+                }
+                std::vector<ViewHandle> route;
+                for (View* v = start; v != nullptr; v = v->parent()) {
+                    route.push_back(make_view_handle(*v));
                     if (v == scope_root) break;
+                }
+                for (const ViewHandle& handle : route) {
+                    View* const v = resolve_attached_view(handle);
+                    if (v == nullptr || (scope_root != nullptr && !is_ancestor_of(*scope_root, *v))) break;
+                    if (v->on_key(e)) return true;
                 }
                 if (scope_root != nullptr) return false;
                 // F1 context help (D-027) routes through std_commands::
@@ -287,8 +351,25 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 return false;
             } else if constexpr (std::is_same_v<T, TextEvent>) {
                 if (e.from_paste) clipboard_text_ = e.text;  // system import mirrors into the internal clipboard
-                for (View* v = focused_; v != nullptr; v = v->parent())
+                View* const scope_root = modal_root();
+                View* start = focused_;
+                if (scope_root != nullptr && (start == nullptr || !is_ancestor_of(*scope_root, *start)))
+                    start = scope_root;
+                if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
+                    for (View* v = start; v != nullptr; v = v->parent())
+                        if (v->on_text(e)) return true;
+                    return false;
+                }
+                std::vector<ViewHandle> route;
+                for (View* v = start; v != nullptr; v = v->parent()) {
+                    route.push_back(make_view_handle(*v));
+                    if (v == scope_root) break;
+                }
+                for (const ViewHandle& handle : route) {
+                    View* const v = resolve_attached_view(handle);
+                    if (v == nullptr || (scope_root != nullptr && !is_ancestor_of(*scope_root, *v))) break;
                     if (v->on_text(e)) return true;
+                }
                 return false;
             } else if constexpr (std::is_same_v<T, MouseEvent>) {
                 // Captured BEFORE target resolution: a popup (menu
@@ -297,6 +378,11 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 // end — click-to-focus below must never fire for them,
                 // regardless of what delivery does to input_capture_
                 // as a side effect (e.g. opening ANOTHER dropdown).
+                const auto usable_capture = [this](View* capture) {
+                    return capture != nullptr && tree_contains(root_, capture) && in_modal_scope(*capture);
+                };
+                if (!usable_capture(input_capture_)) input_capture_ = nullptr;
+                if (!usable_capture(mouse_capture_)) mouse_capture_ = nullptr;
                 const bool had_input_capture = input_capture_ != nullptr;
                 View* target = input_capture_;
                 if (target == nullptr) target = mouse_capture_;
@@ -357,12 +443,18 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             set_focus(v);
                             break;
                         }
+                        if (v == modal_root()) break;
                     }
                 }
                 return handled;
             } else if constexpr (std::is_same_v<T, FocusEvent>) {
-                if (focused_ == nullptr) return false;
-                focused_->on_focus(e);
+                View* recipient = focused_;
+                View* const scope_root = modal_root();
+                if (scope_root != nullptr &&
+                    (recipient == nullptr || !is_ancestor_of(*scope_root, *recipient)))
+                    recipient = scope_root;
+                if (recipient == nullptr) return false;
+                recipient->on_focus(e);
                 return true;
             } else if constexpr (std::is_same_v<T, ResizeEvent>) {
                 root_.set_bounds(Rect{0, 0, e.cells.width, e.cells.height});
@@ -380,14 +472,20 @@ bool Application::dispatch(const term::TerminalEvent& event) {
             }
         },
         event);
+    restore_modal_focus_if_needed();
+    return handled;
 }
 
 void Application::post(std::function<void()> fn) {
-    std::lock_guard<std::mutex> lock(post_mutex_);
-    posted_.push_back(std::move(fn));
+    {
+        std::lock_guard<std::mutex> lock(post_mutex_);
+        posted_.push_back(std::move(fn));
+    }
+    terminal_.wake();
 }
 
 bool Application::step(std::int64_t deadline_nanos) {
+    ActiveOperation operation(step_active_);
     bool wake_now = false;
     {
         std::lock_guard<std::mutex> lock(post_mutex_);
@@ -433,6 +531,7 @@ bool Application::step(std::int64_t deadline_nanos) {
         fn();
     }
 
+    restore_modal_focus_if_needed();
     paint_and_present();
     return did_work;
 }
@@ -496,19 +595,20 @@ void Application::paint_too_small_state(scene::Painter& painter, Size current_si
 }
 
 void Application::wake() noexcept {
-    std::lock_guard<std::mutex> lock(post_mutex_);
-    wake_requested_ = true;
+    {
+        std::lock_guard<std::mutex> lock(post_mutex_);
+        wake_requested_ = true;
+    }
+    terminal_.wake();
 }
 
 void Application::run() {
-    Application* previous_instance = g_run_instance.exchange(this, std::memory_order_relaxed);
-    void (*previous_handler)(int) = std::signal(SIGINT, handle_run_sigint);
     run_until([] { return false; });
-    std::signal(SIGINT, previous_handler);
-    g_run_instance.store(previous_instance, std::memory_order_relaxed);
 }
 
 bool Application::run_until(const std::function<bool()>& done) {
+    CKV_ASSERT(can_run_blocking());
+    ActiveOperation operation(run_active_);
     // Calls done() exactly once per check (never a redundant extra call
     // after the loop exits) — done() may carry real side effects (a
     // step counter, a captured optional) that a spurious re-evaluation
@@ -521,14 +621,30 @@ bool Application::run_until(const std::function<bool()>& done) {
     return finished;
 }
 
-void Application::push_modal(View& modal_root) {
+Application::ModalScopeId Application::push_modal(View& modal_root) {
     CKV_ASSERT(tree_contains(root_, &modal_root));
-    modal_stack_.push_back(&modal_root);
+    std::optional<ViewHandle> restore;
+    if (focused_ != nullptr && tree_contains(root_, focused_)) restore = make_view_handle(*focused_);
+    const ModalScopeId id = next_modal_scope_id_++;
+    CKV_ASSERT(id != 0);  // wraparound would make a retained identity ambiguous
+    modal_stack_.push_back(ModalScope{id, &modal_root, std::move(restore)});
+    return id;
 }
 
 void Application::pop_modal() {
     CKV_ASSERT(!modal_stack_.empty());
-    modal_stack_.pop_back();
+    const bool popped = pop_modal(modal_stack_.back().id);
+    CKV_ASSERT(popped);
+}
+
+bool Application::pop_modal(ModalScopeId scope) {
+    auto it = std::find_if(modal_stack_.begin(), modal_stack_.end(),
+                           [scope](const ModalScope& current) { return current.id == scope; });
+    if (it == modal_stack_.end() || std::next(it) != modal_stack_.end()) return false;
+    if (it->restore_focus) pending_modal_focus_restore_ = it->restore_focus;
+    modal_stack_.erase(it);
+    restore_modal_focus_if_needed();
+    return true;
 }
 
 }  // namespace ckv::ui

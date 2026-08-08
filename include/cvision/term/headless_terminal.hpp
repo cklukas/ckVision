@@ -40,6 +40,7 @@ public:
     // Headless never blocks on real time — it just drains whatever was
     // queued by inject_bytes()/inject_event() since the last poll().
     std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
+    void wake() noexcept override {}
 
     void write(std::string_view bytes) override;
     void set_title(std::string_view title) override { title_ = std::string(title); }

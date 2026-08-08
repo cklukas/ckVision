@@ -64,10 +64,13 @@ struct SessionRecord {
 
 SessionRecord g_sessions[kMaxSessions];
 std::atomic<bool> g_handlers_installed{false};
-volatile sig_atomic_t g_sigwinch_flag = 0;  // a single flag set-by-signal/read-by-mainline is
-                                             // exactly sig_atomic_t's textbook correct use
 
-extern "C" void on_sigwinch(int) { g_sigwinch_flag = 1; }
+// SIGWINCH has no terminal-session identity.  Its sole purpose here is
+// therefore to interrupt a blocked poll() promptly; every PosixTerminal
+// compares *its own* current geometry with last_size_ before returning,
+// which prevents a resize on one PTY from becoming a spurious ResizeEvent
+// in another session.
+extern "C" void on_sigwinch(int) {}
 
 // Async-signal-safe restore: write() is guaranteed safe. tcsetattr is
 // NOT on POSIX's async-signal-safe function list, but is relied upon
@@ -198,9 +201,24 @@ std::string base64_encode(std::string_view data) {
 }  // namespace
 
 PosixTerminal::PosixTerminal(int output_fd, int input_fd, Capabilities initial_caps)
-    : output_fd_(output_fd), input_fd_(input_fd), caps_(initial_caps), decoder_(initial_caps) {
+    : output_fd_(output_fd),
+      input_fd_(input_fd),
+      caps_(initial_caps),
+      decoder_(initial_caps),
+      last_size_(size()) {
+    // Establish the wake channel before touching the terminal.  A failed
+    // construction must leave the caller's terminal entirely unchanged;
+    // creating the pipe first makes that guarantee hold even when the OS
+    // cannot allocate another descriptor.
+    int pipe_fds[2] = {-1, -1};
+    CKV_ASSERT(::pipe(pipe_fds) == 0);
+    CKV_ASSERT(::fcntl(pipe_fds[0], F_SETFL, O_NONBLOCK) == 0);
+    CKV_ASSERT(::fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK) == 0);
+    self_pipe_read_ = pipe_fds[0];
+    self_pipe_write_ = pipe_fds[1];
+
     struct termios original{};
-    ::tcgetattr(input_fd_, &original);
+    CKV_ASSERT(::tcgetattr(input_fd_, &original) == 0);
 
     // Register BEFORE mutating any OS state (raw mode, alternate
     // screen). If every registry slot is already in use, CKV_ASSERT
@@ -217,16 +235,9 @@ PosixTerminal::PosixTerminal(int output_fd, int input_fd, Capabilities initial_c
 
     struct termios raw = original;
     ::cfmakeraw(&raw);
-    ::tcsetattr(input_fd_, TCSANOW, &raw);
+    CKV_ASSERT(::tcsetattr(input_fd_, TCSANOW, &raw) == 0);
 
     write_all(output_fd_, kEnterSequence);
-
-    int pipe_fds[2] = {-1, -1};
-    ::pipe(pipe_fds);
-    ::fcntl(pipe_fds[0], F_SETFL, O_NONBLOCK);
-    ::fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK);
-    self_pipe_read_ = pipe_fds[0];
-    self_pipe_write_ = pipe_fds[1];
 }
 
 PosixTerminal::~PosixTerminal() {
@@ -247,11 +258,17 @@ Size PosixTerminal::size() const noexcept {
 
 std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
     std::vector<TerminalEvent> events;
-
-    if (g_sigwinch_flag) {
-        g_sigwinch_flag = 0;
-        events.push_back(TerminalEvent{ResizeEvent{size()}});
-    }
+    const auto collect_resize = [this, &events] {
+        const Size observed = size();
+        if (observed == last_size_) return;
+        last_size_ = observed;
+        events.push_back(TerminalEvent{ResizeEvent{observed}});
+    };
+    // This deliberately compares on every poll rather than consuming a
+    // process-global SIGWINCH flag.  Signals carry no PTY identity; a
+    // per-session comparison is the only correct routing authority.
+    collect_resize();
+    if (!events.empty()) return events;
 
     std::array<struct pollfd, 2> fds{{{input_fd_, POLLIN, 0}, {self_pipe_read_, POLLIN, 0}}};
     const std::int64_t now = monotonic_now_nanos_impl();
@@ -282,6 +299,11 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
     } else if (rc == 0) {
         std::vector<TerminalEvent> decoded = decoder_.poll_timeout(monotonic_now_nanos_impl());
         for (auto& ev : decoded) events.push_back(std::move(ev));
+    } else if (errno == EINTR) {
+        // A SIGWINCH may have arrived between the first observation and
+        // poll(). Observe again so this very call reports its own session's
+        // resize without waiting for a subsequent frame.
+        collect_resize();
     }
     return events;
 }

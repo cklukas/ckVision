@@ -2,7 +2,7 @@
 //
 // The POSIX backend (macOS/Linux): raw-mode tty management, a
 // poll-based event loop with a self-pipe for cross-thread wakeups,
-// SIGWINCH resize coalescing, suspend/resume, and panic-safe restore
+// per-session resize observation, suspend/resume, and panic-safe restore
 // via a signal-safe session-state ledger (ARCHITECTURE.md §4/§9,
 // DECISIONS.md D-024). POSIX-only: guarded out of non-UNIX builds by
 // CMakeLists.txt.
@@ -38,8 +38,10 @@ public:
     // Blocks on the input fd (and the internal self-pipe, used to wake
     // a blocked poll() from another thread or a signal handler) up to
     // `deadline_nanos` on CLOCK_MONOTONIC. Also resolves a pending lone
-    // ESC and delivers a coalesced resize once per call if SIGWINCH
-    // fired since the last poll().
+    // ESC and delivers a coalesced resize when this terminal's own size
+    // differs from the size observed by its previous poll(). SIGWINCH
+    // merely interrupts a blocked poll promptly; it never routes a resize
+    // intended for one terminal session into another one.
     std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
 
     void write(std::string_view bytes) override;
@@ -48,8 +50,8 @@ public:
     void write_clipboard(std::string_view text) override;  // OSC 52
 
     // Wakes a blocked poll() from any thread (writes one byte to the
-    // self-pipe) — the mechanism `Application::post` (M4+) will use.
-    void wake() noexcept;
+    // self-pipe) — Terminal's Application::post()/wake() contract.
+    void wake() noexcept override;
 
     // CLOCK_MONOTONIC nanoseconds — the epoch poll()'s deadline_nanos
     // is measured against. Exposed so callers (and tests) can
@@ -61,6 +63,7 @@ private:
     int input_fd_;
     Capabilities caps_;
     InputDecoder decoder_;
+    Size last_size_;
     int self_pipe_read_ = -1;
     int self_pipe_write_ = -1;
     int session_slot_ = -1;

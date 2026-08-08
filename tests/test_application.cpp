@@ -1,6 +1,12 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/application.hpp"
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -50,6 +56,64 @@ public:
         else
             ++focus_lost;
     }
+};
+
+class WaitableTerminal final : public ckv::term::Terminal {
+public:
+    ckv::term::Capabilities capabilities() const noexcept override { return ckv::term::baseline_capabilities(); }
+    ckv::Size size() const noexcept override { return ckv::Size{80, 24}; }
+
+    std::vector<ckv::term::TerminalEvent> poll(std::int64_t) override {
+        std::unique_lock<std::mutex> lock(mutex_);
+        polling_ = true;
+        condition_.notify_all();
+        condition_.wait(lock, [this] { return woken_; });
+        woken_ = false;
+        return {};
+    }
+
+    void wake() noexcept override {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++wake_count_;
+        woken_ = true;
+        condition_.notify_all();
+    }
+
+    void write(std::string_view) override {}
+    void set_title(std::string_view) override {}
+    void bell() override {}
+    void write_clipboard(std::string_view) override {}
+
+    bool wait_until_polling() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return condition_.wait_for(lock, std::chrono::seconds(1), [this] { return polling_; });
+    }
+    int wake_count() const noexcept {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return wake_count_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable condition_;
+    bool polling_ = false;
+    bool woken_ = false;
+    int wake_count_ = 0;
+};
+
+class ReentrantLoopView final : public View {
+public:
+    explicit ReentrantLoopView(Application& app) : app_(app) {
+        set_fills_root(false);
+        set_focus_policy(FocusPolicy::TabStop);
+    }
+    bool on_key(const ckv::KeyEvent&) override {
+        app_.run_until([] { return true; });
+        return true;
+    }
+
+private:
+    Application& app_;
 };
 
 class SelfRemovingView final : public View {
@@ -811,7 +875,7 @@ CK_TEST(multiple_timers_fire_independently_at_their_own_deadlines) {
 // case: it steps a real Terminal/Clock in a genuine loop until
 // request_quit(), which is exactly the "just run it" behavior a
 // headless, deterministic unit test can't safely drive further
-// without either blocking or installing a real SIGINT — that behavior
+// without either blocking or installing a real host signal policy — that behavior
 // is verified through the examples instead (each one now IS this
 // exact call). What's tested here is the request_quit()/
 // quit_requested() contract run()'s loop condition depends on.
@@ -863,6 +927,46 @@ CK_TEST(run_until_returns_false_if_interrupted_by_a_quit_request) {
     CK_CHECK(app.quit_requested());
 }
 
+CK_TEST(post_interrupts_an_in_flight_terminal_wait_and_runs_on_the_owning_step) {
+    WaitableTerminal term;
+    ManualClock clock;
+    Application app(term, clock);
+    std::atomic<bool> posted_ran{false};
+    std::atomic<bool> step_did_work{false};
+    std::atomic<bool> step_returned{false};
+
+    std::thread step_thread([&] {
+        step_did_work.store(app.step(1'000'000'000), std::memory_order_release);
+        step_returned.store(true, std::memory_order_release);
+    });
+    CK_CHECK(term.wait_until_polling());
+    app.post([&] { posted_ran.store(true, std::memory_order_release); });
+    step_thread.join();
+
+    CK_CHECK(term.wake_count() == 1);
+    CK_CHECK(posted_ran.load(std::memory_order_acquire));
+    CK_CHECK(step_did_work.load(std::memory_order_acquire));
+    CK_CHECK(step_returned.load(std::memory_order_acquire));
+}
+
+CK_TEST(run_until_called_from_a_dispatch_handler_aborts_before_it_can_start_a_nested_pump) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+        ManualClock clock;
+        Application app(term, clock);
+        auto* view = app.root().add_child(std::make_unique<ReentrantLoopView>(app));
+        app.set_focus(view);
+        app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+        ::_exit(1);
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+    CK_CHECK(WIFSIGNALED(status));
+    CK_CHECK(WTERMSIG(status) == SIGABRT);
+}
+
 // --- Modality (M9/WP-15, D-021) --------------------------------------------
 
 CK_TEST(push_modal_confines_focus_traversal_to_the_modal_subtree) {
@@ -906,6 +1010,115 @@ CK_TEST(push_modal_confines_mouse_hit_testing_to_the_modal_subtree) {
 
     CK_CHECK(app.dispatch(down_at(ckv::Point{22, 2})));
     CK_CHECK(modal_root->mouse_events == 1);
+}
+
+CK_TEST(a_modal_excludes_background_focus_text_and_pointer_capture_routes) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(
+        app.root().add_child(std::make_unique<ProbeView>(Rect{0, 0, 80, 24})));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(background);
+    app.set_input_capture(background);
+
+    auto* modal = static_cast<ProbeView*>(
+        app.root().add_child(std::make_unique<ProbeView>(Rect{20, 5, 20, 10})));
+    modal->set_focus_policy(FocusPolicy::TabStop);
+    app.push_modal(*modal);
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    app.dispatch(ckv::TextEvent{"x", false});
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{21, 6},
+                                  std::nullopt, Modifier::None});
+
+    CK_CHECK(background->key_events == 0);
+    CK_CHECK(background->text_events == 0);
+    CK_CHECK(background->mouse_events == 0);
+    CK_CHECK(modal->key_events == 1);
+    CK_CHECK(modal->text_events == 1);
+    CK_CHECK(modal->mouse_events == 1);
+}
+
+CK_TEST(a_modal_routes_terminal_focus_events_to_its_scope_not_the_background_focus) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(background);
+    auto* modal = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+
+    app.push_modal(*modal);
+    CK_CHECK(app.dispatch(ckv::FocusEvent{true}));
+    CK_CHECK(background->focus_gained == 1);  // only set_focus() above reached the background
+    CK_CHECK(modal->focus_gained == 1);
+}
+
+CK_TEST(popping_or_detaching_a_modal_restores_the_saved_focus_only_after_scope_exit) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(background);
+    auto* modal = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    modal->set_focus_policy(FocusPolicy::TabStop);
+
+    app.push_modal(*modal);
+    app.focus_next();
+    CK_CHECK(app.focused() == modal);
+    app.pop_modal();
+    CK_CHECK(app.focused() == background);
+
+    app.push_modal(*modal);
+    app.focus_next();
+    std::unique_ptr<View> detached = app.root().remove_child(modal);
+    CK_CHECK(app.focused() == nullptr);  // detach never calls user focus code inline
+    app.step(0);
+    CK_CHECK(app.focused() == background);
+}
+
+CK_TEST(detaching_an_outer_modal_preserves_the_inner_modals_event_scope_and_restore_target) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(background);
+    auto* outer = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    outer->set_focus_policy(FocusPolicy::TabStop);
+    auto* inner = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    inner->set_focus_policy(FocusPolicy::TabStop);
+
+    app.push_modal(*outer);
+    app.focus_next();
+    const Application::ModalScopeId inner_scope = app.push_modal(*inner);
+    app.focus_next();
+    CK_CHECK(app.focused() == inner);
+
+    std::unique_ptr<View> detached_outer = app.root().remove_child(outer);
+    app.step(0);
+    CK_CHECK(app.focused() == inner);  // outer detach cannot escape the inner scope
+    CK_CHECK(!app.pop_modal(Application::ModalScopeId{0}));
+    CK_CHECK(app.pop_modal(inner_scope));
+    CK_CHECK(app.focused() == background);  // inherited outer restoration survives
+}
+
+CK_TEST(a_scope_specific_pop_never_pops_a_newer_nested_modal) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* first = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* second = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    const Application::ModalScopeId first_scope = app.push_modal(*first);
+    const Application::ModalScopeId second_scope = app.push_modal(*second);
+
+    CK_CHECK(!app.pop_modal(first_scope));
+    CK_CHECK(app.is_modal());
+    CK_CHECK(app.pop_modal(second_scope));
+    CK_CHECK(app.pop_modal(first_scope));
+    CK_CHECK(!app.is_modal());
 }
 
 CK_TEST(push_modal_suppresses_the_global_accelerator_fallback) {

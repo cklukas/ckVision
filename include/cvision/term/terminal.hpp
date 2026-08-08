@@ -43,6 +43,15 @@ public:
     // call (a batch), consistent with the ui-layer's batched loop.
     virtual std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) = 0;
 
+    // Interrupts an in-flight poll(), if this backend can wait. This is
+    // the cross-thread companion to ui::Application::post()/wake(): it
+    // must be safe to call from a non-owning thread, must not deliver a
+    // spurious input event, and may be a no-op for deterministic
+    // non-blocking terminals such as HeadlessTerminal and replay.
+    // Implementations return from poll() promptly and leave it to
+    // Application to drain the posted work in its ordinary batch.
+    virtual void wake() noexcept {}
+
     // The sole output sink: raw bytes to the terminal. Presenter is
     // the only intended caller for frame content; title/bell/clipboard
     // below are separate because they are not part of a frame's cell

@@ -39,6 +39,7 @@ public:
         log_.push_back(RecordedEntry{RecordedEvents{events}});
         return events;
     }
+    void wake() noexcept override { inner_.wake(); }
 
     void write(std::string_view bytes) override {
         inner_.write(bytes);
@@ -83,6 +84,7 @@ public:
         }
         return {};
     }
+    void wake() noexcept override {}
 
     void write(std::string_view bytes) override { written_.append(bytes); }
     void set_title(std::string_view title) override { title_ = std::string(title); }

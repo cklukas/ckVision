@@ -68,6 +68,8 @@ add_executable(cvision_tests
     test_window_list_dialog.cpp
     main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
+find_package(Threads REQUIRED)
+target_link_libraries(cvision_tests PRIVATE Threads::Threads)
 ckvision_strict(cvision_tests)
 
 if(UNIX)

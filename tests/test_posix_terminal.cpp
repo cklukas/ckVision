@@ -176,6 +176,61 @@ CK_TEST(sigwinch_delivers_a_coalesced_resize_event) {
     ::close(child.master_fd);
 }
 
+CK_TEST(wake_interrupts_an_in_flight_posix_poll_without_creating_input) {
+    PtyChild child = spawn_pty_child([](int slave_fd) {
+        PosixTerminal term(slave_fd, slave_fd);
+        std::thread waker([&term] {
+            ::usleep(50'000);
+            term.wake();
+        });
+        const auto started = std::chrono::steady_clock::now();
+        const auto events = term.poll(PosixTerminal::monotonic_now_nanos() + 2'000'000'000LL);
+        const auto elapsed = std::chrono::steady_clock::now() - started;
+        waker.join();
+        if (events.empty() && elapsed < std::chrono::milliseconds(750)) term.write("GOT-WAKE");
+    });
+    const std::string output = read_available(child.master_fd, 1500);
+    CK_CHECK(output.find("GOT-WAKE") != std::string::npos);
+    wait_child(child.pid);
+    ::close(child.master_fd);
+}
+
+CK_TEST(resize_observation_is_scoped_to_the_terminal_whose_geometry_changed) {
+    const pid_t pid = ::fork();
+    CK_CHECK(pid >= 0);
+    if (pid == 0) {
+        int first_master = -1;
+        int first_slave = -1;
+        int second_master = -1;
+        int second_slave = -1;
+        if (::openpty(&first_master, &first_slave, nullptr, nullptr, nullptr) != 0 ||
+            ::openpty(&second_master, &second_slave, nullptr, nullptr, nullptr) != 0)
+            ::_exit(1);
+        bool first_resized = false;
+        bool second_resized = false;
+        {
+            PosixTerminal first(first_slave, first_slave);
+            PosixTerminal second(second_slave, second_slave);
+            struct winsize ws{};
+            ws.ws_col = 100;
+            ws.ws_row = 40;
+            if (::ioctl(first_slave, TIOCSWINSZ, &ws) != 0) ::_exit(1);
+            for (const TerminalEvent& event : first.poll(PosixTerminal::monotonic_now_nanos()))
+                first_resized = first_resized || std::holds_alternative<ResizeEvent>(event);
+            for (const TerminalEvent& event : second.poll(PosixTerminal::monotonic_now_nanos()))
+                second_resized = second_resized || std::holds_alternative<ResizeEvent>(event);
+        }
+        ::close(first_master);
+        ::close(first_slave);
+        ::close(second_master);
+        ::close(second_slave);
+        ::_exit(first_resized && !second_resized ? 0 : 1);
+    }
+    const int status = wait_child(pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+}
+
 CK_TEST(exhausting_the_session_registry_aborts_without_mutating_the_failed_terminal) {
     // Regression: registration used to happen AFTER raw mode/alt-screen
     // were already entered, so a failed registration (every registry

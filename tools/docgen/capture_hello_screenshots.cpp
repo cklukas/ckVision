@@ -43,17 +43,11 @@ int main(int argc, char** argv) {
     app.step(0);
     write_svg(out_dir, "hello-initial", term.display());
 
-    // greeting_box() is intentionally blocking. Defer the capture by two
-    // nested steps: the first attaches and paints the modal, the second sees
-    // that presented display, records it, and closes the dialog so dispatch()
-    // can return. This mirrors the modal golden test's public-path script.
-    app.post([&] {
-        app.post([&] {
-            write_svg(out_dir, "hello-greeting", term.display());
-            app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
-        });
-    });
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
+    app.step(0);
+    write_svg(out_dir, "hello-greeting", term.display());
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    app.step(0);
 
     return 0;
 }

@@ -46,7 +46,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 2 | WP-24 — Root layout and resize correctness | 0.5–1 pw | **Implementation complete — gate pending** | WP-23 | WP-1; M4/M8 resize exit |
 | 3 | WP-25 — Lifetime-safe pointer input and activation | 1–2 pw | **Implementation complete — gate pending** | WP-24 | WP-2, WP-3; VISION click routing |
 | 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Implementation complete — gate pending** | WP-25 | WP-4, WP-5 |
-| 5 | WP-27 — Run loop, terminal session, wake, modality, and blocking API | 4–6 pw | **Ready** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
+| 5 | WP-27 — Run loop, terminal session, wake, modality, and blocking API | 4–6 pw | **In progress** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | Blocked | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | Blocked | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | Blocked | WP-29 | M1; cross-widget Unicode acceptance |
@@ -354,6 +354,17 @@ pumps, background event leakage, or stale modal/focus pointers.
   message-box, file-dialog, and directory-picker conveniences consistently.
 - Complete vetoable close and quit sweep behavior under modal and non-modal
   operation.
+
+**Progress checkpoint (2026-08-08).** The Application-global signal handler
+has been removed; `Terminal::wake()` now reaches the POSIX self-pipe and is
+covered while a real poll is blocked; modal key/text/mouse/focus routing,
+capture exclusion, detach-safe focus restoration, and re-entrant pump
+rejection are implemented. Modal owners now retain an exact scope identity so
+quitting or detaching an outer dialog cannot pop a newer nested dialog. POSIX
+resize observation is per terminal session, not a process-wide SIGWINCH flag.
+The package remains open for the full M3 lifecycle/probe/degradation,
+suspend/resume, record/replay, close/quit-sweep, cross-platform, sanitizer,
+and multi-Application PTY acceptance matrix listed above.
 
 **Acceptance.**
 

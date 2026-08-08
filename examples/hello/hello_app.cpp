@@ -25,8 +25,9 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     app_.commands().add({.id = kCmdQuit, .title = "E&xit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
 }
 
-// The example's modal scope is D-021: all four buttons and Esc dismiss
-// the dialog, while background input remains inactive until it closes.
+// The example's non-blocking modal scope is D-021: a command handler
+// never starts a nested event loop; all four buttons and Esc dismiss
+// the dialog while background input remains inactive until it closes.
 void HelloApp::greeting_box() {
     auto window = std::make_unique<widgets::Window>("Hello, World!");
     window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame, roles_.dialog_background);
@@ -45,7 +46,9 @@ void HelloApp::greeting_box() {
 
     window->cancel_request = [window_ptr] { window_ptr->close(); };
     window->on_closed = [window_ptr, this] { schedule_self_detach(*window_ptr, app_); };
-    desktop_->exec_window(app_, widgets::WindowHandle{std::move(window), first_button});
+    widgets::Window* shown = desktop_->add_window(std::move(window));
+    app_.push_modal(*shown);
+    app_.set_focus(first_button);
 }
 
 }  // namespace ckv::hello

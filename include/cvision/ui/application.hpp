@@ -20,6 +20,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -192,13 +193,8 @@ public:
     // view (or any of its ancestors/descendants) from ANY handler —
     // View's detach notification clears focused_/mouse_capture_
     // immediately, so the NEXT dispatch() call never touches a freed
-    // view. Known residual gap: destroying an ANCESTOR of the view
-    // currently being walked, from WITHIN that same key/text
-    // ancestor-chain walk (i.e. mid-dispatch, not merely mid-handler),
-    // is not yet hardened — the walk was already holding raw parent()
-    // pointers into that subtree before the handler ran. A handler that
-    // needs to tear down its own ancestry should defer the actual
-    // removal via post() rather than doing it inline.
+    // view. Dispatch itself is non-reentrant: a handler that needs a
+    // later event turn posts work instead of recursively entering it.
     bool dispatch(const term::TerminalEvent& event);
 
     // --- Cross-thread posting --------------------------------------------
@@ -234,15 +230,10 @@ public:
     // cell's style without any single View's bounds changing).
     void invalidate_all();
 
-    // Best-effort: makes the NEXT step() call return promptly even if
-    // its deadline has not elapsed, by clamping that call's effective
-    // poll deadline to "now". Documented scope gap: this cannot
-    // interrupt a poll() already in flight on another OS thread — true
-    // mid-poll interruption needs backend-level cooperation (a
-    // self-pipe or platform waitable handle) that the base Terminal
-    // interface does not yet expose. Every current backend's poll()
-    // already returns promptly at its own deadline, so the worst case
-    // is bounded by that deadline, never unbounded.
+    // Makes a currently blocked step() return promptly through
+    // Terminal::wake(). It is safe from another thread and does not
+    // synthesize an input event; the owning thread resumes its normal
+    // timer/post/paint batch after poll() returns.
     void wake() noexcept;
 
     // --- Standalone run loop (E8, D-021's convenience, M9/WP-14) ---------
@@ -250,17 +241,11 @@ public:
     // The "just run this as a terminal program" convenience: steps
     // repeatedly, each call's deadline kDefaultFrameIntervalNanos out
     // (via the injected Clock), until request_quit() has been called.
-    // Installs its own SIGINT handler for the duration — restoring
-    // whatever was previously installed when it returns — so Ctrl+C
-    // requests a clean quit and main() returns normally, letting
-    // Terminal's destructor restore the terminal's original mode,
-    // rather than the process dying mid-raw-mode under SIGINT's
-    // default disposition. An application embedding ckVision in its
-    // own event loop uses step()/wake() directly instead — those stay
-    // exactly as they are, with no signal-handling side effect; run()
-    // is a separate, optional entry point layered on top of them, not
-    // a replacement. Defined in terms of run_until() below (a constant-
-    // false predicate — only quit_requested() ever ends it).
+    // Signal policy belongs to the terminal session host, never to an
+    // Application: run() installs no process-global handlers, so two
+    // Applications cannot overwrite one another's policy. An embedding
+    // host uses step()/wake() directly; run() is only the simple
+    // single-Application loop, defined in terms of run_until() below.
     void run();
 
     // Steps repeatedly, at run()'s own cadence, until either `done()`
@@ -276,6 +261,12 @@ public:
     // Nothing stops an application from calling this directly for its
     // own blocking-wait needs.
     bool run_until(const std::function<bool()>& done);
+
+    // True only when a blocking convenience may begin a loop. Widget
+    // helpers use this before attaching their modal Window, so an
+    // attempted call from a handler fails deterministically without
+    // leaving half-presented state in the tree.
+    bool can_run_blocking() const noexcept { return !step_active_ && !dispatch_active_ && !run_active_; }
 
     // --- Modality (M9/WP-15, D-021) --------------------------------------
     //
@@ -299,13 +290,26 @@ public:
     // wrapper, part of the decided design; an application with its own
     // non-blocking modal need (scoping input without wanting to block
     // the calling code) can call it directly.
-    void push_modal(View& modal_root);
+    using ModalScopeId = std::uint64_t;
+
+    // Returns the identity of this precise scope. Callers that can be
+    // interrupted by quit or a detach retain it and pass it to the
+    // overload below; that prevents an outer owner from accidentally
+    // popping a newer, nested scope.
+    ModalScopeId push_modal(View& modal_root);
 
     // Pops the most recently pushed modal. Takes no argument and never
-    // dereferences the popped View.  Application also removes an entry
-    // when its root detaches, so an exec_* owner calls this only when the
-    // scope still exists. CKV_ASSERT if the stack is empty.
+    // dereferences the popped View. Application also removes an entry
+    // when its root detaches. This strict LIFO convenience CKV_ASSERTs
+    // if the stack is empty; owners that retain a particular scope use
+    // the identity-taking overload below.
     void pop_modal();
+
+    // Pops `scope` only when it is still the innermost scope. Returns
+    // false when the scope already detached or a newer nested modal is
+    // active, without changing the stack. This is the cleanup operation
+    // for a specific non-blocking or blocking-modal owner.
+    bool pop_modal(ModalScopeId scope);
 
     bool is_modal() const noexcept { return !modal_stack_.empty(); }
 
@@ -314,10 +318,8 @@ public:
     // from a Quit command's own handler — it is a plain flag, not
     // coupled to run() having been called. Backed by std::atomic
     // (relaxed ordering — the flag needs no synchronization with any
-    // other state) because run()'s SIGINT handler calls this on the
-    // signal-handler stack: writing/reading a plain bool there
-    // concurrently with the rest of the program is undefined
-    // behavior, atomic<bool> is the standard-sanctioned way to do it.
+    // other state), so an injected host policy may safely request a
+    // shutdown while another owning-thread operation is checking it.
     void request_quit() noexcept { quit_requested_.store(true, std::memory_order_relaxed); }
     bool quit_requested() const noexcept { return quit_requested_.load(std::memory_order_relaxed); }
 
@@ -326,11 +328,18 @@ private:
         View* view = nullptr;
         std::weak_ptr<void> liveness;
     };
+    struct ModalScope {
+        ModalScopeId id = 0;
+        View* root = nullptr;
+        std::optional<ViewHandle> restore_focus;
+    };
 
     ViewHandle make_view_handle(View& view) const;
     View* resolve_attached_view(const ViewHandle& handle) const noexcept;
     static bool tree_contains(const View& root, const View* target) noexcept;
     static bool is_ancestor_of(const View& ancestor, const View& descendant) noexcept;
+    bool in_modal_scope(const View& view) const noexcept;
+    void restore_modal_focus_if_needed();
 
     View* topmost_view_at(Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
@@ -339,7 +348,7 @@ private:
     // dispatch()/topmost_view_at()/focusable_views() all consult to
     // scope routing (see push_modal's own doc comment above).
     View* modal_root() const noexcept {
-        return modal_stack_.empty() ? nullptr : modal_stack_.back();
+        return modal_stack_.empty() ? nullptr : modal_stack_.back().root;
     }
     void layout_root_child(View& child);
     void layout_root_children();
@@ -384,7 +393,13 @@ private:
     View* focused_ = nullptr;
     View* mouse_capture_ = nullptr;
     View* input_capture_ = nullptr;
-    std::vector<View*> modal_stack_;
+    std::vector<ModalScope> modal_stack_;
+    ModalScopeId next_modal_scope_id_ = 1;
+    std::optional<ViewHandle> pending_modal_focus_restore_;
+
+    bool step_active_ = false;
+    bool dispatch_active_ = false;
+    bool run_active_ = false;
 
     std::function<void(const std::string&)> help_provider_;
 

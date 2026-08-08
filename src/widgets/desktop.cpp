@@ -88,15 +88,20 @@ Window* Desktop::show_dialog(WindowHandle handle, ui::Application& app) {
 }
 
 void Desktop::exec_window(ui::Application& app, WindowHandle handle) {
-    Window* window = show_dialog(std::move(handle), app);
-    app.push_modal(*window);
+    // A handler/post/timer is already executing within Application::step;
+    // pumping here would recursively dispatch and make lifetime/routing
+    // order unprovable. Callers in that context use show_dialog instead.
+    CKV_ASSERT(app.can_run_blocking());
+    Window* window = add_window(std::move(handle.window));
+    const ui::Application::ModalScopeId modal_scope = app.push_modal(*window);
+    app.set_focus(handle.initial_focus);
     app.run_until([this, window] {
         return std::find(windows_.begin(), windows_.end(), window) == windows_.end();
     });
     // The Application detach sink removes a modal scope as soon as its
-    // Window detaches.  A quit can end the pump while it is still open,
-    // in which case this remains the matching explicit pop.
-    if (app.is_modal()) app.pop_modal();
+    // Window detaches. A quit can end the pump while it is still open;
+    // pop exactly this scope, never an independently opened inner modal.
+    app.pop_modal(modal_scope);
 }
 
 std::unique_ptr<Window> Desktop::remove_window(Window* window) {
