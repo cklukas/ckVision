@@ -12,6 +12,10 @@ add_executable(generate_root_resize_goldens generate_root_resize_goldens.cpp)
 target_link_libraries(generate_root_resize_goldens PRIVATE ckvision::cvision)
 ckvision_strict(generate_root_resize_goldens)
 
+add_executable(generate_window_activation_goldens generate_window_activation_goldens.cpp)
+target_link_libraries(generate_window_activation_goldens PRIVATE ckvision::cvision)
+ckvision_strict(generate_window_activation_goldens)
+
 if(TARGET gallery_app)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
     target_link_libraries(docgen_frame_svg PUBLIC ckvision::cvision)

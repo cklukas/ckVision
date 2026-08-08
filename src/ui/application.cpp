@@ -106,9 +106,55 @@ void Application::layout_root_children() {
 void Application::set_focus(View* view) {
     CKV_ASSERT(view == nullptr || view->focusable());
     if (view == focused_) return;
+    // Application-owned trees get the lifetime-safe path below. A few
+    // low-level construction tests intentionally focus an unattached tree;
+    // retain that narrow standalone-view facility, whose lifetime remains
+    // wholly the caller's responsibility until it is attached.
+    const bool requested_is_attached = view != nullptr && tree_contains(root_, view);
+    const std::optional<ViewHandle> requested = requested_is_attached
+                                                    ? std::optional{make_view_handle(*view)}
+                                                    : std::nullopt;
     if (focused_ != nullptr) focused_->on_focus(FocusEvent{false});
-    focused_ = view;
-    if (focused_ != nullptr) focused_->on_focus(FocusEvent{true});
+    focused_ = nullptr;
+    // Focus loss is user code: it may remove, destroy, hide, disable, or
+    // reparent the requested view. Resolve the capability only after that
+    // callback, rather than trusting its original raw pointer.
+    if (requested) {
+        View* const next = resolve_attached_view(*requested);
+        if (next != nullptr && next->focusable()) {
+            focused_ = next;
+            focused_->on_focus(FocusEvent{true});
+        }
+    } else if (view != nullptr) {
+        focused_ = view;
+        focused_->on_focus(FocusEvent{true});
+    }
+}
+
+void Application::set_input_capture(View* view) {
+    input_capture_ = view;
+}
+
+Application::ViewHandle Application::make_view_handle(View& view) const {
+    return ViewHandle{&view, view.liveness_};
+}
+
+View* Application::resolve_attached_view(const ViewHandle& handle) const noexcept {
+    if (handle.view == nullptr || handle.liveness.expired()) return nullptr;
+    return tree_contains(root_, handle.view) ? handle.view : nullptr;
+}
+
+bool Application::tree_contains(const View& root, const View* target) noexcept {
+    if (&root == target) return true;
+    for (const auto& child : root.children())
+        if (tree_contains(*child, target)) return true;
+    return false;
+}
+
+bool Application::is_ancestor_of(const View& ancestor, const View& descendant) noexcept {
+    for (const View* current = &descendant; current != nullptr; current = current->parent())
+        if (current == &ancestor) return true;
+    return false;
 }
 
 void Application::collect_focusable(View& view, std::vector<View*>& out) {
@@ -250,6 +296,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 if (target == nullptr) target = mouse_capture_;
                 if (target == nullptr) target = topmost_view_at(e.cell);
                 if (target == nullptr) return false;
+                const ViewHandle target_handle = make_view_handle(*target);
+                if (resolve_attached_view(target_handle) == nullptr) return false;
                 if (e.action == MouseAction::Down && input_capture_ == nullptr) mouse_capture_ = target;
                 // Click-to-activate/raise (M8 WP-3): notify every
                 // ancestor of target BEFORE delivery, so a container
@@ -262,10 +310,28 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 // popups are Desktop's siblings, never descendants of
                 // a window, so this walk never finds one for them.
                 if (e.action == MouseAction::Down) {
-                    for (View* v = target->parent(); v != nullptr; v = v->parent())
-                        v->on_descendant_mouse_down(*target);
+                    // Snapshot no raw parent pointers across callbacks. Each
+                    // route entry and the original target is revalidated just
+                    // before use; detachment, destruction, or reparenting
+                    // ends this old route deterministically.
+                    std::vector<ViewHandle> capture_route;
+                    for (View* ancestor = target->parent(); ancestor != nullptr; ancestor = ancestor->parent())
+                        capture_route.push_back(make_view_handle(*ancestor));
+                    for (const ViewHandle& ancestor_handle : capture_route) {
+                        View* const current_target = resolve_attached_view(target_handle);
+                        View* const ancestor = resolve_attached_view(ancestor_handle);
+                        if (current_target == nullptr || ancestor == nullptr ||
+                            !is_ancestor_of(*ancestor, *current_target))
+                            break;
+                        ancestor->on_descendant_mouse_down(*current_target);
+                    }
                 }
-                const bool handled = target->on_mouse(e);
+                View* const delivery_target = resolve_attached_view(target_handle);
+                if (delivery_target == nullptr) {
+                    if (e.action == MouseAction::Up) mouse_capture_ = nullptr;
+                    return false;
+                }
+                const bool handled = delivery_target->on_mouse(e);
                 if (e.action == MouseAction::Up) mouse_capture_ = nullptr;
                 // Click-to-focus (VISION #7): a press outside any
                 // popup capture moves focus to the nearest focusable
@@ -280,7 +346,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 // delivery, so this never fights a widget's own
                 // choice — it only fills in when nothing did.
                 if (e.action == MouseAction::Down && !had_input_capture) {
-                    for (View* v = target; v != nullptr; v = v->parent()) {
+                    for (View* v = resolve_attached_view(target_handle); v != nullptr; v = v->parent()) {
                         if (v->focusable()) {
                             set_focus(v);
                             break;

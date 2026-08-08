@@ -22,6 +22,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -145,8 +146,10 @@ public:
     // own on_mouse checks whether a click landed inside or outside its
     // bounds, dismissing itself on the latter. Cleared automatically
     // (like focused_/mouse_capture_) if `view` is removed or destroyed
-    // while captured.
-    void set_input_capture(View* view) noexcept { input_capture_ = view; }
+    // while captured. Attached views receive Application-managed lifetime
+    // validation during pointer dispatch; an unattached composition tree is
+    // supported for low-level construction, with lifetime owned by its caller.
+    void set_input_capture(View* view);
     void clear_input_capture() noexcept { input_capture_ = nullptr; }
     View* input_capture() const noexcept { return input_capture_; }
 
@@ -322,6 +325,16 @@ public:
     bool quit_requested() const noexcept { return quit_requested_.load(std::memory_order_relaxed); }
 
 private:
+    struct ViewHandle {
+        View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+
+    ViewHandle make_view_handle(View& view) const;
+    View* resolve_attached_view(const ViewHandle& handle) const noexcept;
+    static bool tree_contains(const View& root, const View* target) noexcept;
+    static bool is_ancestor_of(const View& ancestor, const View& descendant) noexcept;
+
     View* topmost_view_at(Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
     std::vector<View*> focusable_views() const;

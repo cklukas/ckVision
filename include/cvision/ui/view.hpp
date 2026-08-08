@@ -348,6 +348,10 @@ private:
     DetachSink detach_sink_;
     BoundsChangedSink bounds_changed_sink_;
     ChildAttachedSink child_attached_sink_;
+    // An Application keeps weak references to this token while delivering
+    // pointer events. It can therefore prove that a raw View* survived a
+    // user callback before using it again, without a global registry.
+    std::shared_ptr<void> liveness_ = std::make_shared<int>(0);
     Context context_;
 };
 

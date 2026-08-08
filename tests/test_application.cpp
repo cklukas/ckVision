@@ -52,6 +52,79 @@ public:
     }
 };
 
+class SelfRemovingView final : public View {
+public:
+    explicit SelfRemovingView(View& owner) : owner_(owner) { set_fills_root(false); }
+
+    bool on_mouse(const ckv::MouseEvent&) override {
+        std::unique_ptr<View> removed = owner_.remove_child(this);
+        CK_CHECK(removed.get() == this);
+        removed.reset();  // destroys this view before control returns to Application
+        return true;
+    }
+
+private:
+    View& owner_;
+};
+
+class AncestorRemovingView final : public View {
+public:
+    explicit AncestorRemovingView(View& ancestor_owner) : ancestor_owner_(ancestor_owner) { set_fills_root(false); }
+
+    bool on_mouse(const ckv::MouseEvent&) override {
+        std::unique_ptr<View> removed = ancestor_owner_.remove_child(parent());
+        CK_CHECK(removed != nullptr);
+        removed.reset();  // destroys this view and its ancestor together
+        return true;
+    }
+
+private:
+    View& ancestor_owner_;
+};
+
+class ReparentingView final : public View {
+public:
+    ReparentingView(View& source, View& destination) : source_(source), destination_(destination) {
+        set_fills_root(false);
+        set_focus_policy(FocusPolicy::TabStop);
+    }
+
+    bool on_mouse(const ckv::MouseEvent&) override {
+        std::unique_ptr<View> moved = source_.remove_child(this);
+        CK_CHECK(moved.get() == this);
+        destination_.add_child(std::move(moved));
+        return true;
+    }
+
+    bool on_text(const ckv::TextEvent&) override {
+        ++text_events;
+        return true;
+    }
+
+    int text_events = 0;
+
+private:
+    View& source_;
+    View& destination_;
+};
+
+class DismissingPopupView final : public View {
+public:
+    DismissingPopupView(Application& app, View& owner) : app_(app), owner_(owner) { set_fills_root(false); }
+
+    bool on_mouse(const ckv::MouseEvent&) override {
+        app_.clear_input_capture();
+        std::unique_ptr<View> removed = owner_.remove_child(this);
+        CK_CHECK(removed.get() == this);
+        removed.reset();  // a light-dismiss handler may destroy its popup synchronously
+        return true;
+    }
+
+private:
+    Application& app_;
+    View& owner_;
+};
+
 }  // namespace
 
 // --- Focus traversal -------------------------------------------------------
@@ -390,6 +463,90 @@ CK_TEST(after_mouse_up_capture_releases_and_hit_testing_resumes) {
     app.dispatch(down_right);
     CK_CHECK(left->mouse_events == 2);
     CK_CHECK(right->mouse_events == 1);
+}
+
+// --- Pointer-event lifetime (WP-25) ----------------------------------------
+
+CK_TEST(mouse_dispatch_survives_a_target_that_destroys_itself) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* target = app.root().add_child(std::make_unique<SelfRemovingView>(app.root()));
+    target->set_bounds(Rect{0, 0, 5, 5});
+    target->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(target);
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1},
+                                           std::nullopt, Modifier::None}));
+    CK_CHECK(app.root().children().empty());
+    CK_CHECK(app.focused() == nullptr);
+    CK_CHECK(!app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{1, 1},
+                                            std::nullopt, Modifier::None}));
+}
+
+CK_TEST(mouse_dispatch_survives_a_target_that_destroys_its_ancestor) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto container = std::make_unique<ProbeView>(Rect{0, 0, 10, 10});
+    ProbeView* const container_ptr = container.get();
+    auto target = std::make_unique<AncestorRemovingView>(app.root());
+    AncestorRemovingView* const target_ptr = target.get();
+    target->set_bounds(Rect{1, 1, 5, 5});
+    target->set_focus_policy(FocusPolicy::TabStop);
+    container->add_child(std::move(target));
+    app.root().add_child(std::move(container));
+    app.set_focus(target_ptr);
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 2},
+                                           std::nullopt, Modifier::None}));
+    CK_CHECK(app.root().children().empty());
+    CK_CHECK(app.focused() == nullptr);
+    (void)container_ptr;
+}
+
+CK_TEST(mouse_dispatch_revalidates_a_reparented_target_before_focusing_and_text_input) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto source = std::make_unique<ProbeView>(Rect{0, 0, 10, 10});
+    auto destination = std::make_unique<ProbeView>(Rect{20, 0, 10, 10});
+    ProbeView* const source_ptr = source.get();
+    ProbeView* const destination_ptr = destination.get();
+    auto target = std::make_unique<ReparentingView>(*source, *destination);
+    ReparentingView* const target_ptr = target.get();
+    target->set_bounds(Rect{1, 1, 5, 5});
+    source->add_child(std::move(target));
+    app.root().add_child(std::move(source));
+    app.root().add_child(std::move(destination));
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 2},
+                                           std::nullopt, Modifier::None}));
+    CK_CHECK(target_ptr->parent() == destination_ptr);
+    CK_CHECK(app.focused() == target_ptr);
+    CK_CHECK(app.dispatch(ckv::TextEvent{"x", false}));
+    CK_CHECK(target_ptr->text_events == 1);
+    (void)source_ptr;
+}
+
+CK_TEST(mouse_dispatch_survives_a_light_dismiss_popup_that_destroys_itself) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto background = std::make_unique<ProbeView>(Rect{0, 0, 10, 10});
+    ProbeView* const background_ptr = background.get();
+    background->set_focus_policy(FocusPolicy::TabStop);
+    app.root().add_child(std::move(background));
+    app.set_focus(background_ptr);
+    View* popup = app.root().add_child(std::make_unique<DismissingPopupView>(app, app.root()));
+    popup->set_bounds(Rect{50, 50, 5, 5});
+    app.set_input_capture(popup);
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1},
+                                           std::nullopt, Modifier::None}));
+    CK_CHECK(app.input_capture() == nullptr);
+    CK_CHECK(app.focused() == background_ptr);  // popup capture never steals focus
+    CK_CHECK(app.root().children().size() == 1);
 }
 
 // --- Mouse: click-to-focus (M8/WP-2) ----------------------------------------

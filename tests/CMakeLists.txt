@@ -61,6 +61,7 @@ add_executable(cvision_tests
     test_version.cpp
     test_virtual_display.cpp
     test_view.cpp
+    test_window_activation_golden.cpp
     test_widgets.cpp
     test_window.cpp
     test_window_list_dialog.cpp

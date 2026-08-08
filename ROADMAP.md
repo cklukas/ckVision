@@ -267,6 +267,13 @@ the checked-in `tests/golden/root_resize_grow.dump` and
 `tests/golden/root_resize_shrink.dump` frames. The remaining M8 interaction
 criteria stay owned by WP-25, WP-26, and WP-35.
 
+WP-25 supplies the safe pointer-routing and activation portion through
+`tests/test_application.cpp` and `tests/test_window_activation_golden.cpp`,
+with `tests/golden/window_activation_before.dump` and
+`tests/golden/window_activation_after.dump` pinning the active/inactive frame
+transition. The remaining M8 ownership and dialog criteria stay owned by
+WP-26 and WP-35.
+
 ## M9 — API ergonomics: the 60-line hello (≈2–3 pw)
 
 **Acceptance status: reopened.** Legacy WP-10 remains incomplete, and the

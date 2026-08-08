@@ -296,6 +296,15 @@ capability-changed, user), dispatched by three explicit routes:
    regions, into image-local pixels. No second event system, no
    synthesized precision: if the terminal only reports cells, the pixel
    field is absent and the capability struct says so.
+
+   Pointer delivery has four ordered phases: resolve the target, notify its
+   capture ancestors, deliver to that target, then apply click-to-focus. Every
+   phase boundary is a user-code boundary. The Application keeps a
+   per-view lifetime capability and revalidates both target attachment and
+   current ancestry after each callback; a target that is detached or destroyed
+   ends the old route, while a reparented target is considered only through its
+   new attached path. Capture from a popup remains non-focusing, preserving
+   light-dismiss semantics.
 2. **Focused** (key/text): the focus chain from focused view up through
    its ancestors; first consumer wins. What survives goes to accelerator
    tables (window, then application), then menu mnemonics.

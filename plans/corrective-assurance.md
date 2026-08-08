@@ -44,8 +44,8 @@ dependent row's package prerequisite; `Blocked` does not.
 |---:|---|---:|---|---|---|
 | 1 | WP-23 — Provenance containment and authority repair | 1–2 pw | **Implementation complete — gate pending** | — | D-012; contradictory status and hello gates |
 | 2 | WP-24 — Root layout and resize correctness | 0.5–1 pw | **Implementation complete — gate pending** | WP-23 | WP-1; M4/M8 resize exit |
-| 3 | WP-25 — Lifetime-safe pointer input and activation | 1–2 pw | **Ready** | WP-24 | WP-2, WP-3; VISION click routing |
-| 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | Blocked | WP-25 | WP-4, WP-5 |
+| 3 | WP-25 — Lifetime-safe pointer input and activation | 1–2 pw | **Implementation complete — gate pending** | WP-24 | WP-2, WP-3; VISION click routing |
+| 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Ready** | WP-25 | WP-4, WP-5 |
 | 5 | WP-27 — Run loop, terminal session, wake, modality, and blocking API | 4–6 pw | Blocked | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | Blocked | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | Blocked | WP-28 | D-023; M3 security exit |
@@ -253,6 +253,21 @@ targets that handlers synchronously detach, destroy, or reparent.
   showing active/inactive frame roles before and after the click.
 - Click-to-focus and click-to-activate remain overridable and keyboard focus is
   unchanged when the click target is not focusable.
+
+**Implementation complete — gate pending (2026-08-08).** Application now
+captures an application-local weak lifetime capability for each attached mouse
+target and capture-route member, validating it and root attachment before every
+post-callback use. Detached or destroyed views end the old route; reparented
+views are resolved through their current ancestry before focus is applied.
+`tests/test_application.cpp` covers synchronous self-destruction, ancestor
+destruction, reparenting followed by text input, and a self-dismissing captured
+popup. `tests/test_window_activation_golden.cpp` drives a terminal-input script
+against genuinely overlapping windows, checks raise/restyle/focus/text routing,
+and pins the before/after active-frame goldens; the
+`generate_window_activation_goldens` tool regenerates them for review. Release
+and ASan/UBSan runs passed all 8 CTest gates on 2026-08-08. WP-25 remains gate
+pending until WP-38 records the complete cross-platform/global matrix. Its
+package prerequisite is satisfied, so WP-26 is the next ready work package.
 
 ### WP-26 — Desktop/window ownership and dialog attachment
 
