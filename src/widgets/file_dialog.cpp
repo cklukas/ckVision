@@ -5,6 +5,7 @@
 
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/list_view.hpp"
 
@@ -110,6 +111,24 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     };
 
     return WindowHandle{std::move(window), list_ptr};
+}
+
+FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+                                            const FileSystem& fs, ui::Application& app, Desktop& desktop,
+                                            const ui::StandardRoles& roles) {
+    using Access = detail::DialogPresentationAccess<FileDialogResult>;
+    auto parts = Access::make();
+    auto handle = make_file_dialog(mode, std::move(initial_directory), fs, roles, app, app.focused(),
+                                   [state = parts.state](FileDialogResult result) {
+                                       Access::record(state, std::move(result));
+                                   });
+    auto previous_on_detached = std::move(handle.window->on_detached);
+    handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
+        if (previous) previous();
+        Access::finish(state, FileDialogResult{});
+    };
+    desktop.present_modal(std::move(handle), app);
+    return std::move(parts.presentation);
 }
 
 }  // namespace ckv::widgets

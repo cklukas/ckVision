@@ -54,24 +54,6 @@ MessageBoxResult escape_result(MessageBoxButtons buttons) {
 
 }  // namespace
 
-struct MessageBoxPresentation::State {
-    std::optional<MessageBoxResult> selected_result;
-    std::optional<MessageBoxResult> completed_result;
-    std::function<void(MessageBoxResult)> completion_handler;
-    bool handler_set = false;
-
-    void record(MessageBoxResult result) { selected_result = result; }
-
-    void finish(MessageBoxResult fallback) {
-        if (completed_result) return;
-        completed_result = selected_result.value_or(fallback);
-        if (completion_handler) {
-            auto handler = std::move(completion_handler);
-            handler(*completed_result);
-        }
-    }
-};
-
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
                                ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(MessageBoxResult)> on_result) {
@@ -124,39 +106,21 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     return WindowHandle{std::move(window), default_button};
 }
 
-bool MessageBoxPresentation::completed() const noexcept {
-    return state_ != nullptr && state_->completed_result.has_value();
-}
-
-std::optional<MessageBoxResult> MessageBoxPresentation::result() const {
-    return state_ != nullptr ? state_->completed_result : std::nullopt;
-}
-
-void MessageBoxPresentation::set_completion_handler(std::function<void(MessageBoxResult)> handler) {
-    CKV_ASSERT(state_ != nullptr);
-    CKV_ASSERT(!state_->handler_set);
-    state_->handler_set = true;
-    state_->completion_handler = std::move(handler);
-    if (state_->completed_result && state_->completion_handler) {
-        auto completion = std::move(state_->completion_handler);
-        completion(*state_->completed_result);
-    }
-}
-
 MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
                                             const MessageBoxDescriptor& descriptor) {
-    auto state = std::make_shared<MessageBoxPresentation::State>();
+    using Access = detail::DialogPresentationAccess<MessageBoxResult>;
+    auto parts = Access::make();
     auto handle = make_message_box(descriptor, roles, app, app.focused(),
-                                   [state](MessageBoxResult result) { state->record(result); });
+                                   [state = parts.state](MessageBoxResult result) { Access::record(state, result); });
     const MessageBoxResult fallback = escape_result(descriptor.buttons);
     auto previous_on_detached = std::move(handle.window->on_detached);
-    handle.window->on_detached = [previous = std::move(previous_on_detached), state, fallback]() {
+    handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state, fallback]() {
         if (previous) previous();
-        state->finish(fallback);
+        Access::finish(state, fallback);
     };
     desktop.present_modal(std::move(handle), app);
-    return MessageBoxPresentation{std::move(state)};
+    return std::move(parts.presentation);
 }
 
 MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,

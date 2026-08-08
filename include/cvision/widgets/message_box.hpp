@@ -17,14 +17,13 @@
 #pragma once
 
 #include <functional>
-#include <memory>
-#include <optional>
 #include <string>
 
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -68,26 +67,7 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
 // detach, and quit resolve to the button set's documented Esc result.
 // set_completion_handler may be called once; if completion already
 // happened, it calls the handler immediately on the owning UI thread.
-class [[nodiscard]] MessageBoxPresentation {
-public:
-    MessageBoxPresentation(const MessageBoxPresentation&) = delete;
-    MessageBoxPresentation& operator=(const MessageBoxPresentation&) = delete;
-    MessageBoxPresentation(MessageBoxPresentation&&) noexcept = default;
-    MessageBoxPresentation& operator=(MessageBoxPresentation&&) noexcept = default;
-
-    bool completed() const noexcept;
-    std::optional<MessageBoxResult> result() const;
-    void set_completion_handler(std::function<void(MessageBoxResult)> handler);
-
-private:
-    struct State;
-    explicit MessageBoxPresentation(std::shared_ptr<State> state) : state_(std::move(state)) {}
-
-    std::shared_ptr<State> state_;
-
-    friend MessageBoxPresentation present_message_box(ui::Application&, Desktop&, const ui::StandardRoles&,
-                                                       const MessageBoxDescriptor&);
-};
+using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 
 // Presents a message box modally without starting a nested loop. The
 // returned handle is the sole result-observation path; applications

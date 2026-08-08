@@ -21,9 +21,12 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
+
+class Desktop;
 
 enum class FileDialogMode { Open, Save };
 
@@ -31,6 +34,8 @@ struct FileDialogResult {
     bool accepted = false;
     std::string path;  // full path; meaningful only when accepted
 };
+
+using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 
 // `initial_directory` must exist as a directory in `fs` (a dialog
 // opened on a stale/nonexistent path degrades to an empty listing
@@ -44,5 +49,12 @@ struct FileDialogResult {
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(FileDialogResult)> on_result);
+
+// Presents a file dialog modally without a nested loop. Completion
+// occurs only after detachment; an accepted result wins, while close,
+// external detach, and quit resolve to {false, ""}.
+[[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+                                                          const FileSystem& fs, ui::Application& app,
+                                                          Desktop& desktop, const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

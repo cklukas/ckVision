@@ -382,11 +382,11 @@ suspend/resume, record/replay, close/quit-sweep, cross-platform, sanitizer,
 and multi-Application PTY acceptance matrix listed above.
 
 D-038's first public slice is also landed: `Desktop` now distinguishes
-modeless, modal, and blocking-modal presentation; `present_message_box` is the
-typed non-blocking modal reference path and completes only after detachment.
-The remaining standard-dialog families, complete result-outcome matrix, and
-cross-platform acceptance remain WP-27 work; this landing does not satisfy the
-package exit.
+modeless, modal, and blocking-modal presentation; `present_message_box` and
+`present_file_dialog` share the typed non-blocking modal completion path and
+complete only after detachment. The remaining standard-dialog families,
+complete result-outcome matrix, and cross-platform acceptance remain WP-27
+work; this landing does not satisfy the package exit.
 
 **Acceptance.**
 
