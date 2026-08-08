@@ -23,7 +23,7 @@ complete; the ledger says what is still open and where it lands.
 
 | Element | Baseline | Beyond baseline |
 |---|---|---|
-| Menu bar | F10/Alt activation, mnemonic letters, arrow navigation, drop-down on Enter/Down/hover-while-open, disabled items | Overflow behavior on narrow terminals |
+| Menu bar | F10/Alt activation, mnemonic letters, arrow navigation, drop-down on Enter/Down/hover-while-open, disabled items | Overflow behavior on narrow terminals; live structure — runtime add/remove of items and whole top-level menus, safe while a dropdown is open |
 | Drop-down menu | **Shadow**, separators, nested submenus, right-aligned accelerator hints, checkable items, disabled items, mnemonic jump, Esc closes one level | Commands-driven: items render title/chord/enablement live from the command registry |
 | Context menu | Positional pop-up with same feature set | Keyboard invocation (Menu key / Shift-F10) at focus location |
 | Status line | Context-sensitive hints bound to focus, clickable items, command chords displayed | Priority-based item layout on narrow widths |
@@ -97,14 +97,16 @@ Catalog rows not yet implemented, with where each now lands. An item
 leaves this ledger by landing or by a recorded DECISIONS.md re-scope —
 never silently.
 
+Rows for WP-11 (registry-rendered menus/status), WP-15 (modality
+stack + `exec_*`), WP-19 (Splitter), WP-21 (resizable-dialog defaults;
+minimum-size degraded chrome / "terminal too small"), and WP-22 (tree
+payload/lazy model/callback args) have left this ledger by landing —
+each landing is recorded, with verification evidence, in
+plans/api-ergonomics-review-2.md's own status ledger.
+
 | Open item | Catalog row | Lands in |
 |---|---|---|
-| Modality stack; blocking `exec_*` conveniences | Dialog (modal) / D-021 | M9 (WP-15) |
-| Menus/status lines rendering title, chord, enablement from the registry; accelerator-hint column; Key→name table | Drop-down menu beyond-baseline; Status line baseline | M9 (WP-11) |
-| Resizable dialogs with layout; Esc-cancel and non-resizable defaults for fixed dialogs | Dialog beyond-baseline | M10 (WP-21) |
-| Splitter | Splitter | M10 (WP-19) |
-| Tree payload/lazy model, callback arguments, Left-to-parent | Tree beyond-baseline (virtualized model direction) | M10 (WP-22) |
-| Minimum-size degraded chrome and "terminal too small" state | Cross-cutting shrink acceptance (end state) | M10 (WP-21) |
+| Live menu/status structure (runtime add/remove of items and top-level menus); status-line context-sensitive hints; status-line enablement dimming; `CommandRegistry::remove()` retraction | Menu bar beyond-baseline; Status line baseline | M9 (WP-10, revised 2026-08-08 — spec in plans/api-ergonomics-review-2.md) |
 | Nested submenus; checkable menu items; context-menu keyboard invocation | Drop-down / context menu baseline | M11 entry gate |
 | Combo box | Combo box | M11 entry gate |
 | Tab control | Tab control | M11 entry gate |

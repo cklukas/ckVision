@@ -237,7 +237,11 @@ context with per-widget overrides and per-window theme scope
 (constructors take content, not plumbing); `StandardRoles` completed
 for the M6 widget set; typed `add<T>`/`make<T>` insertion; the
 one-call command registration from ARCHITECTURE §5 (metadata + handler
-+ chord + menu item + status item from one descriptor); the
++ chord in one descriptor; the menu/status placement half was revised
+2026-08-08 into live, mutable `MenuBar`/`StatusLine` structure —
+runtime add/remove of items and top-level menus, enablement dimming on
+the status line, context-sensitive status hints, command retraction —
+see the plan's revised WP-10); the
 Key→display-name table with `KeyChord` parse/format, and menus/status
 lines rendering title, chord, and enablement live from the registry;
 the standard command set below id 4096 registered by `Application`;
