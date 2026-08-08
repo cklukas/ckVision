@@ -56,6 +56,12 @@ Application::Application(term::Terminal& terminal, Clock& clock)
         if (focused_ == &v) focused_ = nullptr;
         if (mouse_capture_ == &v) mouse_capture_ = nullptr;
         if (input_capture_ == &v) input_capture_ = nullptr;
+        // A public removal path may detach a modal before its owner has
+        // reached the matching pop_modal().  Drop the scope here, while
+        // the View identity is still valid, so no later routing path can
+        // observe a stale modal root.  The sink also runs recursively for
+        // a torn-down subtree, covering nested modal windows in order.
+        modal_stack_.erase(std::remove(modal_stack_.begin(), modal_stack_.end(), &v), modal_stack_.end());
     });
     // Every invalidate() anywhere in the tree marks the whole
     // Application dirty (v1 scope: see step()'s doc comment — the
@@ -515,7 +521,10 @@ bool Application::run_until(const std::function<bool()>& done) {
     return finished;
 }
 
-void Application::push_modal(View& modal_root) { modal_stack_.push_back(&modal_root); }
+void Application::push_modal(View& modal_root) {
+    CKV_ASSERT(tree_contains(root_, &modal_root));
+    modal_stack_.push_back(&modal_root);
+}
 
 void Application::pop_modal() {
     CKV_ASSERT(!modal_stack_.empty());

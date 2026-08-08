@@ -45,7 +45,7 @@ status authority.
 | M5 | **Reopened** — Desktop lifetime, modality, backing stores, menu/catalog, hello, scripts, and goldens are incomplete | WP-25…WP-27, WP-31, WP-34A, WP-35, WP-38 |
 | M6 | **Reopened** — catalog features, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, gallery coverage, and reference docs are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-38 |
 | M7 | **Open / host-blocked** — Windows backend/full matrix has not met its exit | WP-32, WP-37; host availability remains explicit |
-| M8 | **Reopened** — WP-1…WP-6 landed partially but do not meet M8's literal integration exit | WP-24…WP-26, WP-35, WP-38 |
+| M8 | **Reopened** — corrected WP-24…WP-26 implementations still require example integration and the global matrix | WP-35, WP-38 |
 | M9 | **Reopened** — WP-10 is unfinished and theme, modality, command-context, and remaining example exits are unmet | WP-27, WP-35, WP-38 |
 | M10 | **Reopened** — WP-18…WP-22 landed code but the specified visible/script/golden/reference acceptance is incomplete | WP-36, WP-38 |
 | M11 | **Blocked** — release work cannot start until corrective assurance and M7 gates hold | WP-38 |
@@ -231,8 +231,9 @@ enhanced input) tested; legacy console refusal path tested.
 
 ## M8 — Integration correctness: the unplugged seams (≈1–2 pw)
 
-**Acceptance status: reopened.** WP-1…WP-6 produced useful partial landings,
-but WP-24…WP-26 and WP-35 in the corrective queue own the unmet criteria.
+**Acceptance status: reopened.** WP-1…WP-6 produced useful partial landings.
+WP-24…WP-26 now have implementation-complete corrective evidence; WP-35 and
+WP-38 own the remaining example and global acceptance criteria.
 
 Repairs the review's findings F1–F7 — cases where a mechanism is
 implemented and unit-tested but the wiring that lets a real terminal
@@ -242,10 +243,11 @@ the resize chain from `ResizeEvent` through root to the Desktop
 (the Application-owned fill-the-root policy, independent of `View`'s public
 bounds observer);
 click-to-focus in dispatch; click-to-activate/raise via a capture-phase
-mouse-descent hook Desktop implements; a working zoom control
-(`zoom_area_provider`), zoomed windows tracking desktop growth, and the
-per-window `DesktopGrowPolicy`; one sanctioned dialog-attach path
-(`Desktop::show_dialog`) used by every standard-dialog handle; example
+mouse-descent hook Desktop implements; a working, lifecycle-bound zoom control,
+zoomed windows tracking desktop growth, and the
+per-window `DesktopGrowPolicy`; a convenient dialog-attach path
+(`Desktop::show_dialog`) plus correct generic Desktop attachment for every
+standard-dialog handle; example
 hygiene (gallery on docking and `show_dialog`, redundant
 focus-policy calls removed).
 
@@ -264,15 +266,20 @@ with examples only consuming public API.
 WP-24 supplies the resize portion through
 `tests/test_m8_integration.cpp` and `tests/test_root_resize_golden.cpp`, with
 the checked-in `tests/golden/root_resize_grow.dump` and
-`tests/golden/root_resize_shrink.dump` frames. The remaining M8 interaction
-criteria stay owned by WP-25, WP-26, and WP-35.
+`tests/golden/root_resize_shrink.dump` frames.
 
 WP-25 supplies the safe pointer-routing and activation portion through
 `tests/test_application.cpp` and `tests/test_window_activation_golden.cpp`,
 with `tests/golden/window_activation_before.dump` and
 `tests/golden/window_activation_after.dump` pinning the active/inactive frame
-transition. The remaining M8 ownership and dialog criteria stay owned by
-WP-26 and WP-35.
+transition.
+
+WP-26 supplies lifecycle-safe Desktop ownership and direct standard-dialog
+attachment through polymorphic `View` insertion/removal; private, bound zoom
+targets; modal-detachment cleanup; terminal-input zoom/restore; and
+`tests/test_desktop_dialog_golden.cpp` with active/cycled/closed dialog frames.
+The remaining M8 example integration is owned by WP-35; the portable release
+matrix is owned by WP-38.
 
 ## M9 — API ergonomics: the 60-line hello (≈2–3 pw)
 

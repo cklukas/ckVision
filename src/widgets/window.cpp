@@ -329,12 +329,7 @@ bool Window::on_mouse(const MouseEvent& event) {
             return true;
         }
         if (point_in_zoom_control(local)) {
-            // zoom_area_provider is unset only for a standalone Window
-            // with no owning Desktop (a test, or an app not using
-            // one) — bounds() as the target then makes zooming a
-            // harmless no-op rather than reaching for a rect Window
-            // has no way to know.
-            toggle_zoom(zoom_area_provider ? zoom_area_provider() : bounds());
+            toggle_zoom(zoom_target());
             return true;
         }
         if (point_in_resize_grip(local)) {
@@ -371,6 +366,25 @@ bool Window::on_mouse(const MouseEvent& event) {
         return true;
     }
     return false;
+}
+
+Rect Window::zoom_target() const noexcept {
+    // Keep a strong capability for the call.  A detached Window has its
+    // target cleared before any detach observer can run; the weak check
+    // is the second line of defence for Desktop teardown.
+    if (const std::shared_ptr<void> lease = desktop_lifetime_.lock(); lease && desktop_zoom_target_)
+        return desktop_zoom_target_();
+    return bounds();  // standalone Window: a deliberately harmless no-op target
+}
+
+void Window::bind_desktop_zoom_target(std::function<Rect()> target, std::weak_ptr<void> desktop_lifetime) {
+    desktop_zoom_target_ = std::move(target);
+    desktop_lifetime_ = std::move(desktop_lifetime);
+}
+
+void Window::clear_desktop_zoom_target() noexcept {
+    desktop_zoom_target_ = nullptr;
+    desktop_lifetime_.reset();
 }
 
 void schedule_self_detach(Window& window, ui::Application& app) {

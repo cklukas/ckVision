@@ -106,7 +106,7 @@ reference acceptance is missing.
 
 | Open or unproven item | Catalog row / contract | Corrective owner |
 |---|---|---|
-| Desktop attachment, activation, cycling, modal, focus, and zoom-provider lifetime are coherent through every public attach/detach path | Desktop; Window; Dialog | WP-25…WP-27 |
+| Desktop attachment, activation, cycling, direct-dialog attachment, focus, modal detachment, and zoom-target lifetime are coherent through every public attach/detach path; broader modal routing remains | Desktop; Window; Dialog | WP-27 |
 | Paint-scope junction ownership and binary/non-cumulative shadow coverage across overlapping z-levels; window backing store, damage-scoped painting, composition-only move, resize-confined repaint, enforceable performance counters | Window beyond-baseline; D-010/D-036/D-037 | WP-31 |
 | Default button, Esc, validation veto, focus restore, nested modality, and complete blocking/non-blocking standard-dialog conveniences | Dialog baseline | WP-27, WP-36 |
 | Message-box severity accents and localizable standard strings | Message boxes beyond-baseline | WP-34A |

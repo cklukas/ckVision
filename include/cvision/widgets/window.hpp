@@ -178,17 +178,6 @@ public:
     void toggle_zoom(Rect available);
     bool zoomed() const noexcept { return zoomed_; }
 
-    // Supplies the rect toggle_zoom() zooms into when the zoom control
-    // is clicked, so Window itself never has to know about Desktop.
-    // Desktop::add_window installs `[desktop]{ return
-    // desktop->content_area(); }` on every window it owns; unset (a
-    // standalone Window with no Desktop — a test, or an application
-    // not using one), the zoom control zooms into the window's own
-    // current bounds, which is a visual no-op — the ORIGINAL behavior
-    // this field replaces as the "we don't have a real target" case,
-    // never a broken one.
-    std::function<Rect()> zoom_area_provider;
-
     // Resizes to exactly fill `available`, honoring min/max size
     // limits (shrinking to fit a max_size smaller than `available`, or
     // growing to min_size's floor if `available` is smaller) — reused
@@ -243,6 +232,8 @@ public:
     bool on_mouse(const MouseEvent& event) override;
 
 private:
+    friend class Desktop;
+
     enum class KeyboardMode { None, Move, Resize };
     enum class DragKind { None, Move, Resize };
 
@@ -252,6 +243,12 @@ private:
     bool point_in_zoom_control(Point local) const noexcept;
     bool point_in_resize_grip(Point local) const noexcept;
     Rect clamp_size(Rect bounds) const noexcept;
+    Rect zoom_target() const noexcept;
+    // Desktop owns this relationship.  It is deliberately not public:
+    // allowing callers to install a closure that captures a Desktop
+    // would let a detached Window retain a dangling reference.
+    void bind_desktop_zoom_target(std::function<Rect()> target, std::weak_ptr<void> desktop_lifetime);
+    void clear_desktop_zoom_target() noexcept;
 
     std::string title_;
     ui::RoleId frame_active_role_ = ui::kInvalidRole;
@@ -271,6 +268,8 @@ private:
     bool zoomed_ = false;
     Rect restored_bounds_;
     DesktopGrowPolicy grow_policy_ = DesktopGrowPolicy::None;
+    std::function<Rect()> desktop_zoom_target_;
+    std::weak_ptr<void> desktop_lifetime_;
 
     KeyboardMode keyboard_mode_ = KeyboardMode::None;
     Rect keyboard_mode_start_bounds_;

@@ -14,8 +14,14 @@ Desktop::Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role
 }
 
 Desktop::~Desktop() {
-    if (app_ == nullptr) return;
-    for (ui::CommandId id : installed_default_handlers_) app_->commands().set_handler(id, nullptr);
+    // Base View destruction happens only after this destructor body.  Clear
+    // every Window's Desktop-only callback while both objects are still
+    // alive, before a detach observer or retained Window can use it.
+    for (Window* window : windows_) window->clear_desktop_zoom_target();
+    window_relationship_.reset();
+
+    if (app_ != nullptr)
+        for (ui::CommandId id : installed_default_handlers_) app_->commands().set_handler(id, nullptr);
 }
 
 void Desktop::install_default_handler(ui::CommandId id, std::function<void()> handler) {
@@ -56,14 +62,23 @@ void Desktop::zoom_active_window() {
 
 Window* Desktop::add_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
-    auto* raw = add(std::move(window));
+    auto* raw = static_cast<Window*>(ui::View::add_child(std::move(window)));
     windows_.push_back(raw);  // stable insertion order — cycling order, not z-order
-    // Window never depends on Desktop directly (it stays independently
-    // testable) — this is the one place that wiring happens, so the
-    // zoom control works for every window a real application adds.
-    raw->zoom_area_provider = [this] { return content_area(); };
+    // Window never exposes a Desktop callback publicly.  This private,
+    // lifetime-bound capability is cleared before either participant can
+    // detach, so a retained Window cannot call into a former Desktop.
+    raw->bind_desktop_zoom_target([this] { return content_area(); }, window_relationship_);
     activate(raw);
     return raw;
+}
+
+ui::View* Desktop::add_child(std::unique_ptr<ui::View> child) {
+    CKV_ASSERT(child != nullptr);
+    if (dynamic_cast<Window*>(child.get()) != nullptr) {
+        std::unique_ptr<Window> owned_window(static_cast<Window*>(child.release()));
+        return add_window(std::move(owned_window));
+    }
+    return ui::View::add_child(std::move(child));
 }
 
 Window* Desktop::show_dialog(WindowHandle handle, ui::Application& app) {
@@ -78,7 +93,10 @@ void Desktop::exec_window(ui::Application& app, WindowHandle handle) {
     app.run_until([this, window] {
         return std::find(windows_.begin(), windows_.end(), window) == windows_.end();
     });
-    app.pop_modal();
+    // The Application detach sink removes a modal scope as soon as its
+    // Window detaches.  A quit can end the pump while it is still open,
+    // in which case this remains the matching explicit pop.
+    if (app.is_modal()) app.pop_modal();
 }
 
 std::unique_ptr<Window> Desktop::remove_window(Window* window) {
@@ -86,11 +104,18 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     if (it == windows_.end()) return nullptr;
     windows_.erase(it);
 
-    std::unique_ptr<ui::View> detached = remove_child(window);
-    CKV_ASSERT(detached != nullptr);  // was in windows_, so it must have been a child
-
+    // The relationship must disappear before View's detach sink can call
+    // application/user code.  The Window may outlive the Desktop in the
+    // unique_ptr returned below, but it can no longer reach this Desktop.
+    window->clear_desktop_zoom_target();
     if (active_ == window) {
         active_ = nullptr;
+        window->set_active(false);
+    }
+    std::unique_ptr<ui::View> detached = ui::View::remove_child(window);
+    CKV_ASSERT(detached != nullptr);  // was in windows_, so it must have been a child
+
+    if (active_ == nullptr) {
         // The new topmost WINDOW, not necessarily children().back() —
         // a popup may currently be topmost, and children() holds both.
         for (auto rit = children().rbegin(); rit != children().rend(); ++rit) {
@@ -104,6 +129,15 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
         }
     }
     return std::unique_ptr<Window>(static_cast<Window*>(detached.release()));
+}
+
+std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
+    if (auto* window = dynamic_cast<Window*>(child)) {
+        std::unique_ptr<Window> detached = remove_window(window);
+        return std::unique_ptr<ui::View>(detached.release());
+    }
+    if (std::find(popups_.begin(), popups_.end(), child) != popups_.end()) return remove_popup(child);
+    return ui::View::remove_child(child);
 }
 
 void Desktop::on_descendant_mouse_down(ui::View& target) {
@@ -129,7 +163,7 @@ void Desktop::activate(Window* window) {
 
 ui::View* Desktop::add_popup_impl(std::unique_ptr<ui::View> popup) {
     CKV_ASSERT(popup != nullptr);
-    ui::View* raw = add_child(std::move(popup));
+    ui::View* raw = ui::View::add_child(std::move(popup));
     popups_.push_back(raw);  // already topmost: add_child appends to the end of children_
     return raw;
 }
@@ -138,14 +172,10 @@ std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
     auto it = std::find(popups_.begin(), popups_.end(), popup);
     if (it == popups_.end()) return nullptr;
     popups_.erase(it);
-    return remove_child(popup);
+    return ui::View::remove_child(popup);
 }
 
 std::unique_ptr<ui::View> Desktop::detach_child(ui::View* child) {
-    if (auto* window = dynamic_cast<Window*>(child);
-        window != nullptr && std::find(windows_.begin(), windows_.end(), window) != windows_.end())
-        return remove_window(window);
-    if (std::find(popups_.begin(), popups_.end(), child) != popups_.end()) return remove_popup(child);
     return remove_child(child);
 }
 
@@ -176,7 +206,7 @@ void Desktop::select_by_number(int n) {
 
 ui::View* Desktop::dock_top_impl(std::unique_ptr<ui::View> view) {
     CKV_ASSERT(view != nullptr);
-    ui::View* raw = add_child(std::move(view));
+    ui::View* raw = ui::View::add_child(std::move(view));
     top_dock_ = raw;
     on_resized();  // position it immediately, not just on the next Desktop resize
     return raw;
@@ -184,7 +214,7 @@ ui::View* Desktop::dock_top_impl(std::unique_ptr<ui::View> view) {
 
 ui::View* Desktop::dock_bottom_impl(std::unique_ptr<ui::View> view) {
     CKV_ASSERT(view != nullptr);
-    ui::View* raw = add_child(std::move(view));
+    ui::View* raw = ui::View::add_child(std::move(view));
     bottom_dock_ = raw;
     on_resized();
     return raw;

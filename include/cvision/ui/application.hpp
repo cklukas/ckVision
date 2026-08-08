@@ -302,12 +302,9 @@ public:
     void push_modal(View& modal_root);
 
     // Pops the most recently pushed modal. Takes no argument and never
-    // dereferences the popped View: by the time an exec_* wrapper is
-    // ready to pop, the modal's own Window may already be destroyed —
-    // a dialog's standard "close, then self-detach via post()" sequence
-    // runs to completion inside the very step() call that produces the
-    // result exec_window was waiting on — so popping is by stack
-    // position, never by identity. CKV_ASSERT if the stack is empty.
+    // dereferences the popped View.  Application also removes an entry
+    // when its root detaches, so an exec_* owner calls this only when the
+    // scope still exists. CKV_ASSERT if the stack is empty.
     void pop_modal();
 
     bool is_modal() const noexcept { return !modal_stack_.empty(); }

@@ -210,23 +210,7 @@ CK_TEST(clicking_the_zoom_control_toggles_zoom) {
     CK_CHECK(w->zoomed());
 }
 
-// Regression (M8/WP-4): before zoom_area_provider existed, clicking
-// the zoom control always zoomed into bounds() — a visual no-op for
-// every desktop-owned window, since Window has no other way to learn
-// a real target rect. With a provider installed (as Desktop::add_window
-// does for every window it owns), the click must zoom into WHATEVER
-// the provider returns, not the window's own current bounds.
-CK_TEST(clicking_the_zoom_control_zooms_into_whatever_the_provider_returns) {
-    Fixture f;
-    auto w = make_window(f);
-    w->set_bounds(Rect{5, 5, 20, 10});
-    w->zoom_area_provider = [] { return Rect{0, 1, 80, 22}; };  // e.g. Desktop::content_area()
-    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));
-    CK_CHECK(w->zoomed());
-    CK_CHECK(w->bounds() == (Rect{0, 1, 80, 22}));
-}
-
-CK_TEST(with_no_provider_the_zoom_control_zooms_into_its_own_current_bounds_a_no_op) {
+CK_TEST(a_standalone_windows_zoom_control_uses_its_own_current_bounds_as_a_harmless_target) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});

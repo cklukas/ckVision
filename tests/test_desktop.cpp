@@ -614,21 +614,12 @@ CK_TEST(a_docked_views_own_height_change_re_clamps_windows_against_the_shrunk_co
 
 // --- Desktop growth tracking (DesktopGrowPolicy, M8 WP-4) ---------------
 
-CK_TEST(add_window_installs_a_zoom_area_provider_that_returns_content_area) {
-    Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
-    Window* w = desktop.add_window(make_window(f));
-    w->set_bounds(Rect{5, 5, 20, 10});
-    CK_CHECK(!!w->zoom_area_provider);
-    CK_CHECK(w->zoom_area_provider() == desktop.content_area());
-}
-
 CK_TEST(a_zoomed_window_refills_the_content_area_after_the_desktop_grows) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 20, 10});
-    w->toggle_zoom(w->zoom_area_provider());
+    w->toggle_zoom(desktop.content_area());
     CK_CHECK(w->bounds() == desktop.content_area());
 
     desktop.set_bounds(Rect{0, 0, 120, 50});
@@ -805,21 +796,59 @@ CK_TEST(detach_child_on_a_plain_child_falls_back_to_ordinary_removal) {
     CK_CHECK(desktop.children().empty());
 }
 
-CK_TEST(detach_child_on_a_window_added_via_plain_add_child_does_not_touch_windows) {
-    // A window attached via add_child() directly (the convention the
-    // library's own dialog factories use for throwaway, non-cycling
-    // windows — see the M6 review's message_box.cpp fix) was never in
-    // windows_ to begin with; detach_child must still remove it via
-    // the plain-child path without crashing on the "not found" case.
+CK_TEST(a_direct_window_attachment_uses_the_same_desktop_management_path_as_add_window) {
+    // View's generic public insertion is dynamically dispatched.  No
+    // direct Window child may bypass Desktop's ownership/bookkeeping.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
     desktop.set_context(f.ctx());
-    Window* w = static_cast<Window*>(desktop.add_child(make_window(f)));
-    CK_CHECK(desktop.windows().empty());
+    ui::View& generic_parent = desktop;
+    Window* w = static_cast<Window*>(generic_parent.add_child(make_window(f)));
+    CK_CHECK(desktop.windows().size() == 1);
+    CK_CHECK(desktop.windows().front() == w);
+    CK_CHECK(desktop.active_window() == w);
+    CK_CHECK(w->active());
 
-    auto owned = desktop.detach_child(w);
+    auto owned = generic_parent.remove_child(w);
     CK_CHECK(owned != nullptr);
     CK_CHECK(desktop.children().empty());
+    CK_CHECK(desktop.windows().empty());
+    CK_CHECK(desktop.active_window() == nullptr);
+}
+
+CK_TEST(a_window_retained_after_detaching_and_destroying_its_desktop_cannot_reach_the_former_desktop) {
+    // ASan/UBSan turns this interaction into a regression proof for the
+    // old captured-Desktop callback: the retained Window still exposes
+    // its normal mouse API, but must fall back to its own safe bounds.
+    Fixture f;
+    auto desktop = std::make_unique<Desktop>(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Window* raw = desktop->add_window(make_window(f));
+    raw->set_bounds(Rect{5, 5, 20, 10});
+    std::unique_ptr<Window> retained = desktop->remove_window(raw);
+    desktop.reset();
+
+    CK_CHECK(retained->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                                ckv::Point{23, 5}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(retained->zoomed());
+    CK_CHECK(retained->bounds() == (Rect{5, 5, 20, 10}));
+}
+
+CK_TEST(removing_a_modal_window_through_the_generic_desktop_api_clears_modal_routing_state) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+    Window* modal = desktop->add_window(std::make_unique<Window>("Modal"));
+    app.push_modal(*modal);
+    CK_CHECK(app.is_modal());
+
+    std::unique_ptr<ui::View> detached = desktop->remove_child(modal);
+    CK_CHECK(detached.get() == modal);
+    CK_CHECK(!app.is_modal());
 }
 
 // --- kClose/kQuit default handlers + exec_window (M9/WP-15, D-021) --------
@@ -864,6 +893,37 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kTile));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kCascade));
+}
+
+CK_TEST(terminal_mouse_zoom_and_restore_track_the_desktop_after_a_resize) {
+    // This is deliberately an end-to-end interaction: HeadlessTerminal
+    // input enters Application::step(), hit testing selects the Window,
+    // and only then does its private Desktop-bound zoom target run.
+    AttachedFixture af;
+    auto owned = make_window(af.f, "Zoom");
+    owned->set_bounds(Rect{10, 5, 20, 10});
+    Window* window = af.desktop->add_window(std::move(owned));
+    const Rect restored = window->bounds();
+
+    af.app.step(0);  // establish the initial composed frame
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{28, 5},
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(window->zoomed());
+    CK_CHECK(window->bounds() == af.desktop->content_area());
+
+    af.term.resize(ckv::Size{100, 30});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(window->zoomed());
+    CK_CHECK(window->bounds() == af.desktop->content_area());
+
+    const Rect zoomed = window->absolute_bounds();
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                         ckv::Point{zoomed.x + window->bounds().width - 2, zoomed.y},
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(!window->zoomed());
+    CK_CHECK(window->bounds() == restored);
 }
 
 CK_TEST(a_pre_existing_kclose_handler_is_not_overridden_by_attaching_a_desktop) {

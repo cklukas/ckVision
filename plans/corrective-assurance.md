@@ -45,8 +45,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 1 | WP-23 — Provenance containment and authority repair | 1–2 pw | **Implementation complete — gate pending** | — | D-012; contradictory status and hello gates |
 | 2 | WP-24 — Root layout and resize correctness | 0.5–1 pw | **Implementation complete — gate pending** | WP-23 | WP-1; M4/M8 resize exit |
 | 3 | WP-25 — Lifetime-safe pointer input and activation | 1–2 pw | **Implementation complete — gate pending** | WP-24 | WP-2, WP-3; VISION click routing |
-| 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Ready** | WP-25 | WP-4, WP-5 |
-| 5 | WP-27 — Run loop, terminal session, wake, modality, and blocking API | 4–6 pw | Blocked | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
+| 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Implementation complete — gate pending** | WP-25 | WP-4, WP-5 |
+| 5 | WP-27 — Run loop, terminal session, wake, modality, and blocking API | 4–6 pw | **Ready** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | Blocked | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | Blocked | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | Blocked | WP-29 | M1; cross-widget Unicode acceptance |
@@ -114,8 +114,8 @@ historical status labels in `api-ergonomics-review-2.md`.
 | WP-1 | Reopened — root fill used a replaceable public callback, add-time fill and the specified end-to-end resize golden are absent | WP-24 |
 | WP-2 | Reopened — post-handler focus logic can dereference a destroyed target; click-then-type integration is incomplete | WP-25 |
 | WP-3 | Reopened — the intended buried, overlapping-window activation and active-style golden are absent | WP-25 |
-| WP-4 | Reopened — a detached Window can retain a Desktop-capturing zoom provider; mouse-to-zoom end-to-end coverage is absent | WP-26 |
-| WP-5 | Reopened — public attachment paths can still bypass Desktop bookkeeping; the required cycling/appearance scenario is absent | WP-26 |
+| WP-4 | Implementation complete — WP-26 replaced the public Desktop-capturing callback with a private lifetime capability and terminal-input coverage; global matrix pending | WP-26 |
+| WP-5 | Implementation complete — WP-26 routes generic Window insertion/removal through Desktop bookkeeping and pins the dialog cycle visually; global matrix pending | WP-26 |
 | WP-6 | Reopened — example hygiene has no durable source check and depends on unresolved M8 behavior | WP-35 |
 | WP-7 | Reopened — per-window theme override is absent and Desktop still takes theme plumbing contrary to D-028 | WP-35 |
 | WP-8 | Reopened — role additions landed, but the specified scripted runtime theme mutation was not accepted | WP-35 |
@@ -299,6 +299,29 @@ Desktop model and eliminate callbacks that outlive the Desktop.
   evidence cover the full cycle.
 - Zoom/restore follows an injected mouse click and remains correct after a
   desktop resize.
+
+**Implementation complete — gate pending (2026-08-08).** `View` now makes
+generic child insertion/removal polymorphic, and `Desktop` routes every direct
+`Window` child through the same ownership, activation, z-order, resize, and
+detachment path as `add_window()`/`remove_window()`. The old public
+`zoom_area_provider` was removed: Desktop installs a private, weak-lifetime
+capability, clears it before any detach observer runs, and Window safely falls
+back to its own bounds after detachment. Application drops a modal scope when
+its root detaches, so generic Desktop removal cannot leave stale routing state.
+`show_dialog` remains the concise attach-and-focus operation, while standard
+`WindowHandle`s are correct through generic Desktop attachment too.
+
+`tests/test_desktop.cpp` covers base-typed generic attach/remove, retained
+Window use after its former Desktop is destroyed, modal-scope cleanup, and
+terminal mouse zoom/restore across a terminal resize. `tests/test_message_box.cpp`
+covers generic standard-dialog attachment, cycling, close, and focus restore.
+`tests/test_desktop_dialog_golden.cpp` drives F6/Enter through
+HeadlessTerminal and pins active, cycled, and closed frames in
+`desktop_dialog_open.dump`, `desktop_dialog_cycled.dump`, and
+`desktop_dialog_closed.dump`; `generate_desktop_dialog_goldens` regenerates
+those fixtures for review. Release and ASan/UBSan local CTest gates are green
+on macOS on 2026-08-08. WP-38 still owns the complete cross-platform/global
+matrix; WP-27 is now the next ready package.
 
 ### WP-27 — Run loop, terminal session, wake, modality, and blocking API
 

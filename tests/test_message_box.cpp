@@ -8,6 +8,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/input_line.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -271,11 +272,9 @@ CK_TEST(closing_the_box_schedules_its_own_removal_from_whatever_parented_it) {
 
 // --- Desktop::show_dialog (M8/WP-5) ----------------------------------------
 //
-// Regression guard for finding F6: attaching a message box's handle
-// via plain add_child (as examples/gallery used to) skips Desktop's
-// own activation entirely, so the box rendered with INACTIVE frame
-// styling while still holding focus and sat outside window cycling.
-// show_dialog is the one sanctioned path and must not have that gap.
+// show_dialog is the concise attach+focus convenience.  Desktop's
+// generic attachment is intentionally just as correct for a caller
+// that needs to retain a WindowHandle while composing its own flow.
 
 CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_window) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
@@ -298,6 +297,47 @@ CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_w
     CK_CHECK(app.focused() == default_button);
     CK_CHECK(desktop.active_window() == box_ptr);
     CK_CHECK(desktop.windows().back() == box_ptr);  // participates in cycling/z-order, not a bare orphan child
+}
+
+CK_TEST(generic_desktop_attachment_of_a_message_box_preserves_window_management_and_safe_close) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    auto background_owned = std::make_unique<Window>("Background");
+    auto input_owned = std::make_unique<ckv::widgets::InputLine>();
+    ckv::widgets::InputLine* background_focus = input_owned.get();
+    background_owned->set_content(std::move(input_owned));
+    Window* background = desktop->add_window(std::move(background_owned));
+    app.set_focus(background_focus);
+
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
+    auto handle = make_message_box(descriptor, roles, app, background_focus, nullptr);
+    Window* box = handle.window.get();
+    View* button = handle.initial_focus;
+    Window* attached = static_cast<Window*>(desktop->add_child(std::move(handle.window)));
+    app.set_focus(button);  // show_dialog's one convenience step, explicit here by choice
+
+    CK_CHECK(attached == box);
+    CK_CHECK(box->active());
+    CK_CHECK(!background->active());
+    CK_CHECK(desktop->windows().size() == 2);
+    desktop->activate_previous();
+    CK_CHECK(desktop->active_window() == background);
+    desktop->activate_next();
+    CK_CHECK(desktop->active_window() == box);
+
+    term.inject_event(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    CK_CHECK(app.step(0));
+    CK_CHECK(desktop->windows().size() == 1);
+    CK_CHECK(desktop->active_window() == background);
+    CK_CHECK(background->active());
+    CK_CHECK(app.focused() == background_focus);
 }
 
 // --- exec_message_box (M9/WP-15, D-021's blocking convenience) -------------

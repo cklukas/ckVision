@@ -61,7 +61,7 @@ public:
     // Returns a non-owning observer pointer to the child just added.
     // The type-erased primitive every other insertion form below is
     // built on.
-    View* add_child(std::unique_ptr<View> child);
+    virtual View* add_child(std::unique_ptr<View> child);
 
     // Typed insertion (M9/WP-9): adds `child` and returns it back as
     // T*, not View* — no static_cast at the call site. `add_child`
@@ -84,7 +84,7 @@ public:
     // Detaches and returns ownership of `child` (nullptr if `child` is
     // not one of this view's children). The caller decides its fate —
     // View never silently destroys a view a caller is mid-inspecting.
-    std::unique_ptr<View> remove_child(View* child);
+    virtual std::unique_ptr<View> remove_child(View* child);
 
     // The polymorphic entry point for "detach whatever this child is,
     // correctly" — for a caller that only knows it has a View* and a

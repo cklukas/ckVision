@@ -40,15 +40,20 @@ public:
     // previously active window) and returning a non-owning observer.
     Window* add_window(std::unique_ptr<Window> window);
 
+    // The generic View insertion/removal surface is safe to use with a
+    // Desktop too.  A direct Window child is always registered exactly
+    // as if it had been passed to add_window(), so no public attachment
+    // path can bypass activation, cycling, resize, or lifecycle state.
+    ui::View* add_child(std::unique_ptr<ui::View> child) override;
+    std::unique_ptr<ui::View> remove_child(ui::View* child) override;
+
     // The one sanctioned way to present a standard-dialog handle
     // (message box, file/save dialog, directory picker, window list,
     // help viewer — anything returned as a widgets::WindowHandle) on
     // this desktop (M8 WP-5): attaches handle.window via add_window
-    // (activation + z-order included, unlike attaching it through
-    // plain add_child, which skips activation entirely — a dialog
-    // attached that way renders with inactive-frame styling while
-    // still holding focus, and sits outside window cycling) and
-    // focuses handle.initial_focus. add_window itself remains the
+    // (activation + z-order included) and focuses handle.initial_focus.
+    // Generic add_child is also management-safe for a Window, but does
+    // not know a WindowHandle's initial-focus choice. add_window itself remains the
     // right call for an application's OWN windows, which don't come
     // with a pre-computed initial_focus to hand to set_focus.
     Window* show_dialog(WindowHandle handle, ui::Application& app);
@@ -182,13 +187,9 @@ public:
 
     void draw(scene::Painter& painter) override;
 
-    // Routes to remove_window()/remove_popup() when `child` is one of
-    // those (keeping windows_/popups_/active_ consistent — plain
-    // View::remove_child would silently desync them, leaving a
-    // dangling pointer in windows_ or popups_), falling back to plain
-    // child removal for anything else (docked chrome, or a window/
-    // popup attached via add_child() directly rather than add_window/
-    // add_popup, both of which remain fully supported).
+    // Polymorphic synonym for remove_child(), retained for callers that
+    // only know their parent as a View.  remove_child() itself has the
+    // same invariant, so either public removal entry point is safe.
     std::unique_ptr<ui::View> detach_child(ui::View* child) override;
 
     // Overridden (not just the default per-child walk) so a window's
@@ -202,6 +203,7 @@ public:
     void paint_children(const scene::Painter& own_painter) override;
 
 private:
+    struct WindowRelationshipToken {};
     ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
     ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
     ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
@@ -249,6 +251,11 @@ private:
     // depends on top_dock_/bottom_dock_, set after this member in
     // declaration order).
     Rect last_content_area_{};
+    // Capability held weakly by every attached Window's private zoom
+    // target.  It makes destruction and detachment safe even if a
+    // callback is accidentally invoked after the Window leaves us.
+    std::shared_ptr<WindowRelationshipToken> window_relationship_ =
+        std::make_shared<WindowRelationshipToken>();
 };
 
 }  // namespace ckv::widgets

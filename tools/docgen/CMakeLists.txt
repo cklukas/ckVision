@@ -16,6 +16,10 @@ add_executable(generate_window_activation_goldens generate_window_activation_gol
 target_link_libraries(generate_window_activation_goldens PRIVATE ckvision::cvision)
 ckvision_strict(generate_window_activation_goldens)
 
+add_executable(generate_desktop_dialog_goldens generate_desktop_dialog_goldens.cpp)
+target_link_libraries(generate_desktop_dialog_goldens PRIVATE ckvision::cvision)
+ckvision_strict(generate_desktop_dialog_goldens)
+
 if(TARGET gallery_app)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
     target_link_libraries(docgen_frame_svg PUBLIC ckvision::cvision)

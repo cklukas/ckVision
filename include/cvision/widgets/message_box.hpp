@@ -53,8 +53,10 @@ struct MessageBoxDescriptor {
 // so before the caller attaches `window` under the app's tree would
 // steal focus to a still-detached view, silently swallowing input
 // meant for whatever UI is currently on screen. Desktop::show_dialog
-// (M8 WP-5) is the sanctioned way to attach the returned handle and
-// focus its initial_focus (the default button) in one call.
+// is the concise way to attach the returned handle and focus its
+// initial_focus (the default button) in one call; attaching it through
+// Desktop's generic View API is equally window-management-safe when a
+// caller needs a more custom flow.
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
                                ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(MessageBoxResult)> on_result);
