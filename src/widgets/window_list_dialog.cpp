@@ -66,4 +66,18 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
     return WindowHandle{std::move(window), list_ptr};
 }
 
+WindowListDialogPresentation present_window_list_dialog(Desktop& desktop, ui::Application& app,
+                                                         const ui::StandardRoles& roles) {
+    using Access = detail::DialogPresentationAccess<WindowListDialogResult>;
+    auto parts = Access::make();
+    auto handle = make_window_list_dialog(desktop, roles, app, app.focused());
+    auto previous_on_detached = std::move(handle.window->on_detached);
+    handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
+        if (previous) previous();
+        Access::finish(state, WindowListDialogResult::Closed);
+    };
+    desktop.present_modal(std::move(handle), app);
+    return std::move(parts.presentation);
+}
+
 }  // namespace ckv::widgets

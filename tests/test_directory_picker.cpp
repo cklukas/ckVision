@@ -1,9 +1,12 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/directory_picker.hpp"
 
+#include <optional>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -17,6 +20,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::make_directory_picker;
+using ckv::widgets::present_directory_picker;
 using ckv::widgets::Window;
 
 namespace {
@@ -185,4 +189,34 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_picker) {
 
     window_ptr->cancel_request();
     CK_CHECK(app.focused() == invoker);
+}
+
+CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    auto* desktop = app.root().add(std::move(desktop_owned));
+    auto fs = sample_fs();
+
+    auto presentation = present_directory_picker(fs, "/a", app, *desktop, roles);
+    std::optional<ckv::widgets::DirectoryPickerResult> completion;
+    presentation.set_completion_handler(
+        [&](ckv::widgets::DirectoryPickerResult result) { completion = std::move(result); });
+
+    CK_CHECK(app.is_modal());
+    desktop->windows().back()->accept_request();
+    CK_CHECK(!presentation.completed());
+    app.step(0);
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result().has_value());
+    CK_CHECK(presentation.result()->accepted);
+    CK_CHECK(presentation.result()->path == "/a");
+    CK_CHECK(completion.has_value());
+    CK_CHECK(completion->accepted);
+    CK_CHECK(!app.is_modal());
 }

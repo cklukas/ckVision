@@ -6,6 +6,7 @@
 
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/tree_view.hpp"
 
 namespace ckv::widgets {
@@ -107,6 +108,25 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
     };
 
     return WindowHandle{std::move(window), tree_ptr};
+}
+
+DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
+                                                      ui::Application& app, Desktop& desktop,
+                                                      const ui::StandardRoles& roles) {
+    using Access = detail::DialogPresentationAccess<DirectoryPickerResult>;
+    auto parts = Access::make();
+    auto handle = make_directory_picker(
+        fs, std::move(root_path), roles, app, app.focused(),
+        [state = parts.state](bool accepted, std::string path) {
+            Access::record(state, DirectoryPickerResult{accepted, std::move(path)});
+        });
+    auto previous_on_detached = std::move(handle.window->on_detached);
+    handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
+        if (previous) previous();
+        Access::finish(state, DirectoryPickerResult{});
+    };
+    desktop.present_modal(std::move(handle), app);
+    return std::move(parts.presentation);
 }
 
 }  // namespace ckv::widgets

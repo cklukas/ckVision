@@ -21,9 +21,19 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
+
+class Desktop;
+
+struct DirectoryPickerResult {
+    bool accepted = false;
+    std::string path;  // full path; meaningful only when accepted
+};
+
+using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 
 // `root_path` must be an existing directory in `fs` (degrades to a
 // picker with just the root node and no children otherwise, same
@@ -38,5 +48,12 @@ namespace ckv::widgets {
 WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::StandardRoles& roles,
                                     ui::Application& app, ui::View* restore_focus_to,
                                     std::function<void(bool accepted, std::string path)> on_result);
+
+// Presents the picker modally without a nested loop. Completion occurs
+// after detachment; selecting a directory wins, while close, external
+// detach, and quit resolve to {false, ""}.
+[[nodiscard]] DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
+                                                                    ui::Application& app, Desktop& desktop,
+                                                                    const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

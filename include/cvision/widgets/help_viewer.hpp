@@ -30,9 +30,15 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
+
+class Desktop;
+
+enum class HelpViewerResult { Closed };
+using HelpViewerPresentation = DialogPresentation<HelpViewerResult>;
 
 struct HelpTopic {
     std::string title;
@@ -64,5 +70,9 @@ private:
 // explicit through Desktop::present_modal.
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to);
+
+[[nodiscard]] HelpViewerPresentation present_help_viewer(const HelpProvider& provider,
+                                                          std::string initial_topic_key, ui::Application& app,
+                                                          Desktop& desktop, const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

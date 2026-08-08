@@ -3,6 +3,7 @@
 
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/text_view.hpp"
 
@@ -99,6 +100,21 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     };
 
     return WindowHandle{std::move(window), text_view_ptr};
+}
+
+HelpViewerPresentation present_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
+                                           ui::Application& app, Desktop& desktop,
+                                           const ui::StandardRoles& roles) {
+    using Access = detail::DialogPresentationAccess<HelpViewerResult>;
+    auto parts = Access::make();
+    auto handle = make_help_viewer(provider, std::move(initial_topic_key), roles, app, app.focused());
+    auto previous_on_detached = std::move(handle.window->on_detached);
+    handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
+        if (previous) previous();
+        Access::finish(state, HelpViewerResult::Closed);
+    };
+    desktop.present_modal(std::move(handle), app);
+    return std::move(parts.presentation);
 }
 
 }  // namespace ckv::widgets

@@ -17,9 +17,13 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
+
+enum class WindowListDialogResult { Closed };
+using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 
 // Lists `desktop`'s windows() (stable insertion/cycling order, the
 // same order Desktop::select_by_number uses) with each window's
@@ -32,5 +36,8 @@ namespace ckv::widgets {
 // Desktop::present_modal.
 WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
                                       ui::View* restore_focus_to);
+
+[[nodiscard]] WindowListDialogPresentation present_window_list_dialog(Desktop& desktop, ui::Application& app,
+                                                                       const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets
