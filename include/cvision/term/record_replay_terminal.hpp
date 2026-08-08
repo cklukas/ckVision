@@ -22,14 +22,28 @@ struct RecordedWrite {
     std::string bytes;
     friend bool operator==(const RecordedWrite&, const RecordedWrite&) = default;
 };
-using RecordedEntry = std::variant<RecordedEvents, RecordedWrite>;
+struct RecordedTitle {
+    std::string title;
+    friend bool operator==(const RecordedTitle&, const RecordedTitle&) = default;
+};
+struct RecordedBell {
+    friend bool operator==(const RecordedBell&, const RecordedBell&) = default;
+};
+struct RecordedClipboard {
+    std::string text;
+    friend bool operator==(const RecordedClipboard&, const RecordedClipboard&) = default;
+};
+using RecordedEntry = std::variant<RecordedEvents, RecordedWrite, RecordedTitle, RecordedBell, RecordedClipboard>;
 
 // Wraps `inner`, forwarding every call to it while appending a
 // RecordedEntry for each poll() batch (even empty ones, so replay can
-// reconstruct timing-relative structure) and each write() call.
+// reconstruct timing-relative structure) and every observable terminal
+// output operation. The initial capability/size snapshot is retained so a
+// replay never has to borrow mutable state from the original terminal.
 class RecordingTerminal final : public Terminal {
 public:
-    explicit RecordingTerminal(Terminal& inner) : inner_(inner) {}
+    explicit RecordingTerminal(Terminal& inner)
+        : inner_(inner), initial_capabilities_(inner.capabilities()), initial_size_(inner.size()) {}
 
     Capabilities capabilities() const noexcept override { return inner_.capabilities(); }
     Size size() const noexcept override { return inner_.size(); }
@@ -46,24 +60,37 @@ public:
         log_.push_back(RecordedEntry{RecordedWrite{std::string(bytes)}});
     }
 
-    void set_title(std::string_view title) override { inner_.set_title(title); }
-    void bell() override { inner_.bell(); }
-    void write_clipboard(std::string_view text) override { inner_.write_clipboard(text); }
+    void set_title(std::string_view title) override {
+        inner_.set_title(title);
+        log_.push_back(RecordedEntry{RecordedTitle{std::string(title)}});
+    }
+    void bell() override {
+        inner_.bell();
+        log_.push_back(RecordedEntry{RecordedBell{}});
+    }
+    void write_clipboard(std::string_view text) override {
+        const bool supported = inner_.capabilities().clipboard_write;
+        inner_.write_clipboard(text);
+        if (supported) log_.push_back(RecordedEntry{RecordedClipboard{std::string(text)}});
+    }
 
     const std::vector<RecordedEntry>& recording() const noexcept { return log_; }
+    Capabilities initial_capabilities() const noexcept { return initial_capabilities_; }
+    Size initial_size() const noexcept { return initial_size_; }
 
 private:
     Terminal& inner_;
+    Capabilities initial_capabilities_;
+    Size initial_size_;
     std::vector<RecordedEntry> log_;
 };
 
 // Replays a previously captured recording: poll() returns each
-// RecordedEvents entry in order (RecordedWrite entries are skipped —
+// RecordedEvents entry in order (recorded output entries are skipped —
 // they were this session's OUTPUT, not input to replay), ignoring the
 // real deadline entirely (deterministic replay has no real time).
-// write()/title()/bell()/clipboard() behave like HeadlessTerminal
-// (captured, inspectable) so a caller can diff a re-run's output
-// against the original recording's RecordedWrite entries.
+// Every replayed poll and output is itself logged, allowing a complete
+// operation-by-operation comparison with the original recording.
 class ReplayTerminal final : public Terminal {
 public:
     ReplayTerminal(std::vector<RecordedEntry> recording, Capabilities caps, Size size)
@@ -79,18 +106,31 @@ public:
                 for (const TerminalEvent& ev : events->events)
                     if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev))
                         caps_ = changed->capabilities;
+                replayed_.push_back(RecordedEntry{*events});
                 return events->events;
             }
         }
+        replayed_.push_back(RecordedEntry{RecordedEvents{}});
         return {};
     }
     void wake() noexcept override {}
 
-    void write(std::string_view bytes) override { written_.append(bytes); }
-    void set_title(std::string_view title) override { title_ = std::string(title); }
-    void bell() override { ++bell_count_; }
+    void write(std::string_view bytes) override {
+        written_.append(bytes);
+        replayed_.push_back(RecordedEntry{RecordedWrite{std::string(bytes)}});
+    }
+    void set_title(std::string_view title) override {
+        title_ = std::string(title);
+        replayed_.push_back(RecordedEntry{RecordedTitle{title_}});
+    }
+    void bell() override {
+        ++bell_count_;
+        replayed_.push_back(RecordedEntry{RecordedBell{}});
+    }
     void write_clipboard(std::string_view text) override {
-        if (caps_.clipboard_write) clipboard_ = std::string(text);
+        if (!caps_.clipboard_write) return;
+        clipboard_ = std::string(text);
+        replayed_.push_back(RecordedEntry{RecordedClipboard{clipboard_}});
     }
 
     std::string_view written_bytes() const noexcept { return written_; }
@@ -99,6 +139,8 @@ public:
     int bell_count() const noexcept { return bell_count_; }
     const std::string& clipboard() const noexcept { return clipboard_; }
     bool exhausted() const noexcept { return cursor_ >= recording_.size(); }
+    const std::vector<RecordedEntry>& replayed() const noexcept { return replayed_; }
+    bool matches_recording() const noexcept { return replayed_ == recording_; }
 
 private:
     std::vector<RecordedEntry> recording_;
@@ -109,6 +151,7 @@ private:
     std::string title_;
     int bell_count_ = 0;
     std::string clipboard_;
+    std::vector<RecordedEntry> replayed_;
 };
 
 }  // namespace ckv::term

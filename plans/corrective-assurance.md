@@ -362,7 +362,9 @@ capture exclusion, detach-safe focus restoration, and re-entrant pump
 rejection are implemented. Modal owners now retain an exact scope identity so
 quitting or detaching an outer dialog cannot pop a newer nested dialog. POSIX
 resize observation is per terminal session, not a process-wide SIGWINCH flag.
-The package remains open for the full M3 lifecycle/probe/degradation,
+Record/replay now snapshots initial terminal state and verifies the complete
+event/output operation stream, including title, bell, and supported clipboard
+writes. The package remains open for the full M3 lifecycle/probe/degradation,
 suspend/resume, record/replay, close/quit-sweep, cross-platform, sanitizer,
 and multi-Application PTY acceptance matrix listed above.
 

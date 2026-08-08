@@ -151,9 +151,12 @@ event stream, frame presentation, clipboard write, title, notifications
   that consumes those output bytes into cell and RGBA planes. The virtual
   display implements only the documented VT subset Presenter emits plus the
   published Sixel grammar; unsupported output is a test failure, not ignored.
-- **record/replay**: wraps any backend; records the event stream —
-  including capability-probe responses — and presented bytes for
-  deterministic replay and debugging.
+- **record/replay**: wraps any backend; records an initial capability/size
+  snapshot, every event batch (including capability-probe responses), and
+  every observable terminal output operation (frame bytes, title, bell, and
+  supported clipboard write). Replay captures the same operation log so a
+  deterministic rerun can prove byte-for-byte and side-effect-for-side-effect
+  fidelity without consulting the original backend.
 
 **Session-state ledger and restoration.** Every mode the backend sets
 (alternate screen, raw mode, mouse modes, keyboard protocol pushes,
