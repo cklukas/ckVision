@@ -284,7 +284,7 @@ public:
     // correctly to the innermost one without either side needing to
     // know about the other.
     //
-    // widgets::exec_window (and every exec_* built on it) is the
+    // widgets::exec_modal (and every exec_* built on it) is the
     // sanctioned way most applications reach this — push/pop is public
     // because D-021 makes the modal push itself, not just its blocking
     // wrapper, part of the decided design; an application with its own

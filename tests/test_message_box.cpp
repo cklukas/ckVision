@@ -26,6 +26,7 @@ using ckv::ui::View;
 using ckv::widgets::Desktop;
 using ckv::widgets::exec_message_box;
 using ckv::widgets::make_message_box;
+using ckv::widgets::present_message_box;
 using ckv::widgets::Window;
 using ckv::widgets::MessageBoxButtons;
 using ckv::widgets::MessageBoxDescriptor;
@@ -270,13 +271,13 @@ CK_TEST(closing_the_box_schedules_its_own_removal_from_whatever_parented_it) {
     (void)window_ptr;
 }
 
-// --- Desktop::show_dialog (M8/WP-5) ----------------------------------------
+// --- Desktop::present_modeless (M8/WP-5) -----------------------------------
 //
-// show_dialog is the concise attach+focus convenience.  Desktop's
+// present_modeless is the concise attach+focus convenience. Desktop's
 // generic attachment is intentionally just as correct for a caller
 // that needs to retain a WindowHandle while composing its own flow.
 
-CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_window) {
+CK_TEST(present_modeless_attaches_the_box_active_and_focused_over_an_already_active_window) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -289,7 +290,7 @@ CK_TEST(show_dialog_attaches_the_box_active_and_focused_over_an_already_active_w
     auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
     Window* box_ptr = handle.window.get();
     View* default_button = handle.initial_focus;
-    Window* attached = desktop.show_dialog(std::move(handle), app);
+    Window* attached = desktop.present_modeless(std::move(handle), app);
 
     CK_CHECK(attached == box_ptr);
     CK_CHECK(box_ptr->active());           // NOT the inactive frame add_child alone would leave it with
@@ -321,7 +322,7 @@ CK_TEST(generic_desktop_attachment_of_a_message_box_preserves_window_management_
     Window* box = handle.window.get();
     View* button = handle.initial_focus;
     Window* attached = static_cast<Window*>(desktop->add_child(std::move(handle.window)));
-    app.set_focus(button);  // show_dialog's one convenience step, explicit here by choice
+    app.set_focus(button);  // present_modeless's focus step, explicit here by choice
 
     CK_CHECK(attached == box);
     CK_CHECK(box->active());
@@ -338,6 +339,81 @@ CK_TEST(generic_desktop_attachment_of_a_message_box_preserves_window_management_
     CK_CHECK(desktop->active_window() == background);
     CK_CHECK(background->active());
     CK_CHECK(app.focused() == background_focus);
+}
+
+// --- present_message_box (D-038's non-blocking modal path) ----------------
+
+CK_TEST(present_message_box_scopes_input_immediately_and_completes_after_detach) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    bool background_command_ran = false;
+    constexpr ckv::ui::CommandId kBackgroundCommand = ckv::ui::kFirstApplicationCommandId;
+    app.commands().add({.id = kBackgroundCommand,
+                        .title = "&Background",
+                        .category = "Test",
+                        .chord = "Alt+B",
+                        .handler = [&] { background_command_ran = true; }});
+
+    const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
+                                           MessageBoxButtons::Ok};
+    auto presentation = present_message_box(app, *desktop, roles, descriptor);
+    std::optional<MessageBoxResult> completion;
+    bool modal_was_gone_at_completion = false;
+    presentation.set_completion_handler([&](MessageBoxResult result) {
+        completion = result;
+        modal_was_gone_at_completion = !app.is_modal();
+    });
+
+    CK_CHECK(app.is_modal());
+    CK_CHECK(desktop->windows().size() == 1);
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "b"}});
+    CK_CHECK(!background_command_ran);
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    CK_CHECK(!presentation.completed());  // close schedules detachment; scope remains until then
+    app.step(0);
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result() == MessageBoxResult::Ok);
+    CK_CHECK(completion == MessageBoxResult::Ok);
+    CK_CHECK(modal_was_gone_at_completion);
+    CK_CHECK(desktop->windows().empty());
+}
+
+CK_TEST(present_message_box_external_detach_uses_the_documented_escape_result) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
+                                           MessageBoxButtons::OkCancel};
+    auto presentation = present_message_box(app, *desktop, roles, descriptor);
+    Window* const box = desktop->windows().back();
+    std::unique_ptr<Window> detached = desktop->remove_window(box);
+
+    CK_CHECK(detached != nullptr);
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result() == MessageBoxResult::Cancel);
+    CK_CHECK(!app.is_modal());
+
+    int completion_count = 0;
+    presentation.set_completion_handler([&](MessageBoxResult result) {
+        ++completion_count;
+        CK_CHECK(result == MessageBoxResult::Cancel);
+    });
+    CK_CHECK(completion_count == 1);
 }
 
 // --- exec_message_box (M9/WP-15, D-021's blocking convenience) -------------

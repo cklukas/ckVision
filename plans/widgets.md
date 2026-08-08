@@ -19,7 +19,7 @@ superseded below.
 |---|---|---|
 | Desktop | Background fill, owns z-ordered windows, tile/cascade, window cycling, select-by-number, window-list dialog | Background drawing hook; typed snapshot/restore of layout (geometry, z-order, zoom) |
 | Window | Frame (active/inactive styles), title, close control, zoom/restore, move by title-bar drag or keyboard mode, resize by grip/edges or keyboard mode, min/max size limits, **shadow**, vetoable close request on every close path | Backing store (drag never repaints content); double/single/rounded frame sets; optional maximize-to-desktop |
-| Dialog | Modal and modeless, default button (Enter), Esc-cancel, accept-time validation with veto (a failing control blocks accept and takes focus), correct initial focus by construction, focus restore on close | Declarative descriptor construction (labels auto-bind mnemonics to controls); resizable dialogs with layout |
+| Dialog | Explicit modal and modeless presentation, default button (Enter), Esc-cancel, accept-time validation with veto (a failing control blocks accept and takes focus), correct initial focus by construction, focus restore on close | Typed non-blocking completion handle; declarative descriptor construction (labels auto-bind mnemonics to controls); resizable dialogs with layout |
 | Message boxes | Info/warning/error/confirm with standard button sets | Localizable via string table; theme-role styled severity accents |
 
 ## Menu system (M5)
@@ -27,9 +27,9 @@ superseded below.
 | Element | Baseline | Beyond baseline |
 |---|---|---|
 | Menu bar | F10/Alt activation, mnemonic letters, arrow navigation, drop-down on Enter/Down/hover-while-open, disabled items | Overflow behavior on narrow terminals; live structure — runtime add/remove of items and whole top-level menus, safe while a dropdown is open |
-| Drop-down menu | **Shadow**, separators, nested submenus, right-aligned accelerator hints, checkable items, disabled items, mnemonic jump, Esc closes one level | Commands-driven: items render title/chord/enablement live from the command registry |
+| Drop-down menu | **Shadow**, separators, nested submenus, right-aligned accelerator hints, checkable items, disabled items, mnemonic jump, Esc closes one level | Commands-driven: items render chord/enablement live from the command registry and may carry an explicit, surface-specific display label/mnemonic without duplicating the command |
 | Context menu | Positional pop-up with same feature set | Keyboard invocation (Menu key / Shift-F10) at focus location |
-| Status line | Context-sensitive hints bound to focus, clickable items, command chords displayed | Priority-based item layout on narrow widths |
+| Status line | Context-sensitive hints bound to focus, clickable items, command chords displayed | Command presentation labels independent of menu wording; priority-based item layout on narrow widths |
 
 Menu behavior contract (excerpt, pinned by event scripts): bar activation
 never steals unsaved state; navigation wraps; disabled items are skipped
@@ -108,9 +108,9 @@ reference acceptance is missing.
 |---|---|---|
 | Desktop attachment, activation, cycling, direct-dialog attachment, focus, modal detachment, and zoom-target lifetime are coherent through every public attach/detach path; broader modal routing remains | Desktop; Window; Dialog | WP-27 |
 | Paint-scope junction ownership and binary/non-cumulative shadow coverage across overlapping z-levels; window backing store, damage-scoped painting, composition-only move, resize-confined repaint, enforceable performance counters | Window beyond-baseline; D-010/D-036/D-037 | WP-31 |
-| Default button, Esc, validation veto, focus restore, nested modality, and complete blocking/non-blocking standard-dialog conveniences | Dialog baseline | WP-27, WP-36 |
+| Default button, Esc, validation veto, focus restore, nested modality, explicit modal/modeless presentation, typed non-blocking completion, and complete blocking standard-dialog conveniences | Dialog baseline / beyond-baseline | WP-27, WP-36 |
 | Message-box severity accents and localizable standard strings | Message boxes beyond-baseline | WP-34A |
-| Live menu/status structure, safe mutation while open, status hints/enablement, and command retraction | Menu bar beyond-baseline; Status line baseline | WP-35 |
+| Live menu/status structure, safe mutation while open, status hints/enablement, command retraction, surface-specific command presentation, and declarative application chrome composition | Menu bar beyond-baseline; Status line baseline | WP-35 |
 | Nested/checkable dropdowns and keyboard context-menu invocation | Drop-down / context menu baseline | WP-34A |
 | Menu overflow and status priority layout on narrow terminals | Menu bar / Status line beyond-baseline | WP-34A or a new settled re-scope decision |
 | Label mnemonic activates/focuses its buddy | Label baseline | WP-34B |

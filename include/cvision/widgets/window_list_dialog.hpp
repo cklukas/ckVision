@@ -27,8 +27,9 @@ namespace ckv::widgets {
 // window (via desktop.activate()) and closes the dialog; Esc closes
 // without activating anything. `desktop` must outlive the returned
 // Window (the installed closures capture it by reference).
-// Desktop::show_dialog (M8 WP-5) attaches the returned handle and
-// focuses its initial_focus in one call.
+// Desktop::present_modeless attaches the returned handle and focuses
+// its initial_focus in one call; modal presentation is explicit through
+// Desktop::present_modal.
 WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
                                       ui::View* restore_focus_to);
 

@@ -476,6 +476,28 @@ special-casing only the lower-right corner (leaves cross-window overlap broken);
 making `default_dim` itself idempotent through text attributes (conflates shadow
 coverage with legitimate content styling and does not govern custom transforms).
 
+**D-038 — Dialog presentation makes modality and completion explicit.**
+Constructing a `WindowHandle` is separate from presenting it. `Desktop` exposes
+distinct modeless and modal presentation operations; no method named `show_*`
+silently chooses modality. A modal operation establishes its input scope before
+returning and that scope ends when its root detaches, so neither menu/status
+input nor background accelerators can leak into the interval.
+
+Every standard-dialog family supplies a non-blocking `present_*` convenience
+that returns a typed presentation handle. It reports one deterministic typed
+completion after the presented window has detached: an explicit button result
+wins; a close control, external detach, or quit uses that dialog family's
+documented cancellation result. Completion is therefore safe to use from a
+command handler and never starts a nested loop. The existing `exec_*` family is
+the outer-loop-only blocking wrapper over the same presentation path. Raw
+`Window*` observers remain appropriate for general application windows, not
+for obtaining standard-dialog results.
+
+*Rejected:* a Boolean modal option (call sites conceal the consequential
+choice); callbacks that fire while the dialog is still attached (a callback can
+open a nested dialog against a stale scope); a future/promise or coroutine
+surface (would add scheduler or polling obligations contrary to D-002/D-009).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

@@ -81,16 +81,23 @@ ui::View* Desktop::add_child(std::unique_ptr<ui::View> child) {
     return ui::View::add_child(std::move(child));
 }
 
-Window* Desktop::show_dialog(WindowHandle handle, ui::Application& app) {
+Window* Desktop::present_modeless(WindowHandle handle, ui::Application& app) {
     Window* window = add_window(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     return window;
 }
 
-void Desktop::exec_window(ui::Application& app, WindowHandle handle) {
+Window* Desktop::present_modal(WindowHandle handle, ui::Application& app) {
+    Window* window = add_window(std::move(handle.window));
+    app.push_modal(*window);
+    app.set_focus(handle.initial_focus);
+    return window;
+}
+
+void Desktop::exec_modal(ui::Application& app, WindowHandle handle) {
     // A handler/post/timer is already executing within Application::step;
     // pumping here would recursively dispatch and make lifetime/routing
-    // order unprovable. Callers in that context use show_dialog instead.
+    // order unprovable. Callers in that context use present_modal instead.
     CKV_ASSERT(app.can_run_blocking());
     Window* window = add_window(std::move(handle.window));
     const ui::Application::ModalScopeId modal_scope = app.push_modal(*window);

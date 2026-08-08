@@ -218,9 +218,17 @@ public:
 
     bool casts_shadow() const noexcept { return true; }
 
+    // Runs after this Window has left the Application tree and its
+    // modal scope (if any) has been removed. Standard-dialog
+    // presentation helpers use it to publish completion only once no
+    // stale input scope remains. General windows may use it for their
+    // own detach cleanup.
+    std::function<void()> on_detached;
+
     void draw(scene::Painter& painter) override;
     void on_resized() override;
     void on_attached() override;
+    void on_detaching() override;
     // Re-derives and reapplies ONE frame overlay's position/width
     // whenever ITS OWN preferred size changes (M9/WP-16) — e.g. a Label
     // overlay whose set_text() makes it longer or shorter — without the
@@ -287,8 +295,8 @@ private:
 // the factory itself: doing so before the caller attaches `window`
 // under the Application's tree would steal focus to a still-detached
 // view, silently swallowing input meant for whatever UI is currently
-// on screen (see Desktop::show_dialog, the sanctioned way to both
-// attach and focus in one call).
+// on screen (see Desktop::present_modeless and present_modal, the
+// sanctioned presentation operations).
 struct WindowHandle {
     std::unique_ptr<Window> window;
     ui::View* initial_focus = nullptr;

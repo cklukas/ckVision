@@ -46,7 +46,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 2 | WP-24 — Root layout and resize correctness | 0.5–1 pw | **Implementation complete — gate pending** | WP-23 | WP-1; M4/M8 resize exit |
 | 3 | WP-25 — Lifetime-safe pointer input and activation | 1–2 pw | **Implementation complete — gate pending** | WP-24 | WP-2, WP-3; VISION click routing |
 | 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Implementation complete — gate pending** | WP-25 | WP-4, WP-5 |
-| 5 | WP-27 — Run loop, terminal session, wake, modality, and blocking API | 4–6 pw | **In progress** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
+| 5 | WP-27 — Run loop, terminal session, wake, modality, and presentation API | 4–6 pw | **In progress** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | Blocked | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | Blocked | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | Blocked | WP-29 | M1; cross-widget Unicode acceptance |
@@ -57,12 +57,12 @@ dependent row's package prerequisite; `Blocked` does not.
 | 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | Blocked | WP-33 | M5/M6 catalog gaps |
 | 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | Blocked | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | Blocked | WP-34B | M6 remaining catalog gaps |
-| 16 | WP-35 — Theme, command, and example ergonomics closure | 3–4 pw | Blocked | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
+| 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Blocked | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Blocked | WP-35 | WP-16, WP-18…WP-22; M10 exit |
 | 18 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
 | 19 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
 
-Corrective work is currently estimated at roughly **40–65 focused
+Corrective work is currently estimated at roughly **41–67 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
 re-estimate later rows if its authority/provenance audit invalidates more
 implementation than is currently known; that update changes the estimates,
@@ -120,7 +120,7 @@ historical status labels in `api-ergonomics-review-2.md`.
 | WP-7 | Reopened — per-window theme override is absent and Desktop still takes theme plumbing contrary to D-028 | WP-35 |
 | WP-8 | Reopened — role additions landed, but the specified scripted runtime theme mutation was not accepted | WP-35 |
 | WP-9 | Reopened — the zero-`static_cast<widgets::` example criterion is not met | WP-35 |
-| WP-10 | Transferred — metadata/handler work landed; live menu/status structure, hints, enablement, and retraction remain | WP-35 |
+| WP-10 | Transferred — metadata/handler work landed; live menu/status structure, hints, enablement, retraction, and surface-specific command presentation remain | WP-35 |
 | WP-11 | Revalidation required — registry-rendered labels/chords must pass the final command and golden matrix | WP-35, WP-38 |
 | WP-12 | Revalidation required — standard commands must compose with modal routing and complete documentation | WP-27, WP-35 |
 | WP-13 | Reopened — named command contexts remain incomplete and default traversal fails inside the current modal boundary | WP-27, WP-35 |
@@ -282,9 +282,9 @@ Desktop model and eliminate callbacks that outlive the Desktop.
   outside Desktop's window order, activation, cycling, grow policy, and modal
   bookkeeping. Either constrain the public API or make generic attachment
   correct by construction; documentation alone is insufficient.
-- Apply the same invariant to all standard dialog handles. Keep
-  `show_dialog` as the convenient sanctioned API, not the only path that happens
-  to be correct.
+- Apply the same invariant to all standard dialog handles. Keep explicit
+  modeless/modal presentation as the sanctioned API, not the only path that
+  happens to be correct.
 - Test the zoom glyph through terminal mouse input and Application dispatch,
   not by invoking Window handlers directly.
 
@@ -308,8 +308,9 @@ detachment path as `add_window()`/`remove_window()`. The old public
 capability, clears it before any detach observer runs, and Window safely falls
 back to its own bounds after detachment. Application drops a modal scope when
 its root detaches, so generic Desktop removal cannot leave stale routing state.
-`show_dialog` remains the concise attach-and-focus operation, while standard
-`WindowHandle`s are correct through generic Desktop attachment too.
+`present_modeless` is the concise attach-and-focus operation, while standard
+`WindowHandle`s are correct through generic Desktop attachment too. D-038 adds
+the distinct modal path and typed standard-dialog completion in WP-27.
 
 `tests/test_desktop.cpp` covers base-typed generic attach/remove, retained
 Window use after its former Desktop is destroyed, modal-scope cleanup, and
@@ -323,7 +324,7 @@ those fixtures for review. Release and ASan/UBSan local CTest gates are green
 on macOS on 2026-08-08. WP-38 still owns the complete cross-platform/global
 matrix; WP-27 is now the next ready package.
 
-### WP-27 — Run loop, terminal session, wake, modality, and blocking API
+### WP-27 — Run loop, terminal session, wake, modality, and presentation API
 
 **Purpose.** Complete D-021 without global Application state, nested modal
 pumps, background event leakage, or stale modal/focus pointers.
@@ -348,10 +349,22 @@ pumps, background event leakage, or stale modal/focus pointers.
   outside that scope. Nested modal scopes must be deterministic.
 - Remove modal/focus entries on detach/destruction and restore the saved focus
   only if it is still attached, visible, enabled, and in the newly active scope.
+- Replace ambiguous standard-dialog presentation entry points with an explicit
+  modal/modeless family. The non-blocking modal path must establish input
+  scoping before it returns; the modeless path must never imply modal behavior.
+  Re-derive and record the final public naming and ownership contract before
+  implementation, then remove superseded pre-1.0 entry points and update every
+  caller and reference page together.
+- Give every non-blocking standard-dialog presentation a typed completion
+  handle/result contract: a caller can register for exactly one typed result
+  without retaining a raw `Window*`, and cancellation, close, detach, and quit
+  have documented deterministic outcomes. It must be usable from a command
+  handler without a nested event loop or unsafe lifetime capture.
 - A blocking `exec_*` may drive the loop only when no loop/dispatch is already
-  active. Calling it from a handler must not create a nested pump; offer the
-  callback/non-blocking path there. Complete Window, descriptor dialog,
-  message-box, file-dialog, and directory-picker conveniences consistently.
+  active. Calling it from a handler must not create a nested pump; the typed
+  non-blocking modal path is the handler-safe alternative. Complete Window,
+  descriptor dialog, message-box, file-dialog, and directory-picker
+  conveniences consistently.
 - Complete vetoable close and quit sweep behavior under modal and non-modal
   operation.
 
@@ -368,6 +381,13 @@ writes. The package remains open for the full M3 lifecycle/probe/degradation,
 suspend/resume, record/replay, close/quit-sweep, cross-platform, sanitizer,
 and multi-Application PTY acceptance matrix listed above.
 
+D-038's first public slice is also landed: `Desktop` now distinguishes
+modeless, modal, and blocking-modal presentation; `present_message_box` is the
+typed non-blocking modal reference path and completes only after detachment.
+The remaining standard-dialog families, complete result-outcome matrix, and
+cross-platform acceptance remain WP-27 work; this landing does not satisfy the
+package exit.
+
 **Acceptance.**
 
 - Tab, Shift-Tab, F1, local accelerators, text entry, and mouse input work
@@ -375,9 +395,13 @@ and multi-Application PTY acceptance matrix listed above.
   excluded.
 - Scripts cover nested modals, destruction/detach at each event phase, focus
   restoration, close veto, and quit sweep.
+- Modal and modeless calls are unmistakable in public examples and reference
+  signatures. A non-blocking modal message box blocks background menu, status,
+  shortcut, mouse, text, and focus routing immediately; its typed completion
+  fires once for every normal close, cancellation, detach, and quit outcome.
 - Blocking APIs reject re-entrant use deterministically and are tested in their
-  supported outer-loop context; examples use non-blocking completion from
-  handlers.
+  supported outer-loop context; examples use typed non-blocking modal completion
+  from handlers.
 - Two Applications run on separate PTYs in one process; SIGINT/resize/wake for
   one cannot mutate or stop the other except according to documented host
   policy.
@@ -805,7 +829,7 @@ catalog ledger that prevents another silent scope gap.
 - Gallery inventory and draft public reference pages include every shipped
   widget and standard dialog, ready for WP-38's final matrix audit.
 
-### WP-35 — Theme, command, and example ergonomics closure
+### WP-35 — Theme, command presentation, composition, and example ergonomics closure
 
 **Purpose.** Finish the actual M9/D-028/D-029 contract instead of accepting
 documented exceptions to literal criteria.
@@ -819,6 +843,18 @@ documented exceptions to literal criteria.
   activation, live menu/status structure, safe mutation while open, status
   hints/enablement, command retraction, and declare-once example usage. This
   absorbs the unfinished half of legacy WP-10.
+- Add a widgets-layer command-presentation value for menu and status entries:
+  it references one `CommandId` and may provide a display label/mnemonic for
+  that surface. Handler, chord, enablement, context, and command identity stay
+  in the registry; an override changes presentation only and cannot create a
+  second action path. Define mnemonic conflict, rebind, retraction, and
+  localization behavior in the public reference before implementation.
+- Add an optional widgets-layer application-shell composition helper for the
+  ordinary theme, Desktop, menu bar, and status line arrangement. It must retain
+  the existing explicit low-level construction path; expose non-owning typed
+  access to constructed chrome; own no process state; start no event loop; and
+  keep `ui` independent of `widgets`. Its purpose is declarative common-case
+  construction, not a configuration language or hidden policy.
 - Make every typed insertion surface return the inserted concrete type,
   including frame overlays, so examples require no `static_cast<widgets::`.
 - Add durable source checks for forbidden constructor plumbing, duplicate
@@ -834,10 +870,17 @@ documented exceptions to literal criteria.
   tested in Classic, Dark, Light, and Mono without reconstructing widgets.
 - Hello and filebrowser declare each command once; menu/status content and
   chords update live after rebinding, context change, enable/disable, add/remove,
-  and retraction.
+  and retraction. A single quit command is golden- and script-tested while
+  presenting as `Exit` (with its own mnemonic) in a File menu and `Quit` in a
+  status line; both keyboard and mouse activation must execute the same command
+  handler.
 - Named command contexts work under ordinary, popup, and modal focus scopes.
 - `examples/` passes automated zero-plumbing, zero-duplicate-chord, and
   zero-`static_cast<widgets::` checks and the authoritative hello line gate.
+- The application-shell helper is covered by a minimal application that
+  declaratively installs File/status chrome and presents the WP-27 modal info
+  dialog; the corresponding low-level example proves no ownership, lifecycle,
+  or loop-control capability was lost.
 - The public construction examples meet VISION's one-screen/sane-defaults bar
   without exceptions hidden in status notes.
 

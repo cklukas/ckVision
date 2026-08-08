@@ -145,6 +145,7 @@ void View::set_context(const Context& context) { propagate_context(context); }
 
 void View::notify_detaching_recursive() {
     if (detach_sink_) detach_sink_(*this);
+    on_detaching();
     for (auto& child : children_) child->notify_detaching_recursive();
 }
 

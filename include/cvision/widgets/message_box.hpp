@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "cvision/ui/application.hpp"
@@ -52,26 +53,60 @@ struct MessageBoxDescriptor {
 // materialize_dialog, which reports initial_focus the same way): doing
 // so before the caller attaches `window` under the app's tree would
 // steal focus to a still-detached view, silently swallowing input
-// meant for whatever UI is currently on screen. Desktop::show_dialog
-// is the concise way to attach the returned handle and focus its
-// initial_focus (the default button) in one call; attaching it through
-// Desktop's generic View API is equally window-management-safe when a
-// caller needs a more custom flow.
+// meant for whatever UI is currently on screen. Desktop::present_modeless
+// attaches the returned handle and focuses its initial_focus (the default
+// button) in one call; present_message_box is the ordinary modal path.
+// Attaching through Desktop's generic View API is equally window-management-
+// safe when a caller needs a more custom flow.
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
                                ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(MessageBoxResult)> on_result);
 
+// A move-only observer for a non-blocking message-box presentation
+// (D-038). Completion happens after the box has detached and its modal
+// scope has ended. An explicit button result wins; close, external
+// detach, and quit resolve to the button set's documented Esc result.
+// set_completion_handler may be called once; if completion already
+// happened, it calls the handler immediately on the owning UI thread.
+class [[nodiscard]] MessageBoxPresentation {
+public:
+    MessageBoxPresentation(const MessageBoxPresentation&) = delete;
+    MessageBoxPresentation& operator=(const MessageBoxPresentation&) = delete;
+    MessageBoxPresentation(MessageBoxPresentation&&) noexcept = default;
+    MessageBoxPresentation& operator=(MessageBoxPresentation&&) noexcept = default;
+
+    bool completed() const noexcept;
+    std::optional<MessageBoxResult> result() const;
+    void set_completion_handler(std::function<void(MessageBoxResult)> handler);
+
+private:
+    struct State;
+    explicit MessageBoxPresentation(std::shared_ptr<State> state) : state_(std::move(state)) {}
+
+    std::shared_ptr<State> state_;
+
+    friend MessageBoxPresentation present_message_box(ui::Application&, Desktop&, const ui::StandardRoles&,
+                                                       const MessageBoxDescriptor&);
+};
+
+// Presents a message box modally without starting a nested loop. The
+// returned handle is the sole result-observation path; applications
+// normally retain it and register a completion handler from the command
+// handler that presented the box.
+[[nodiscard]] MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
+                                                          const ui::StandardRoles& roles,
+                                                          const MessageBoxDescriptor& descriptor);
+
 // The blocking convenience (M9/WP-15, D-021's "blocking wrapper for
 // applications that own the loop"): builds and shows the box exactly
-// like make_message_box + Desktop::show_dialog, scopes input to it for
-// the duration (Desktop::exec_window), and returns the button's (or
+// like make_message_box + Desktop::present_modal, scopes input to it for
+// the duration (Desktop::exec_modal), and returns the button's (or
 // Esc's) result once it closes — no nested native loop, built entirely
 // over Application::step(). Focus restores to whatever was focused
 // before the call, matching make_message_box's own restore_focus_to
-// contract. The non-blocking one-liner (make_message_box +
-// Desktop::show_dialog, fire-and-forget with a callback or no callback
-// at all) is unaffected and remains the right call for anything that
-// doesn't need to block.
+// contract. The non-blocking convenience is present_message_box; a caller
+// needing a modeless box explicitly combines make_message_box with
+// Desktop::present_modeless.
 MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
                                    const ui::StandardRoles& roles,
                                    const MessageBoxDescriptor& descriptor);

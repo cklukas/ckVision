@@ -38,8 +38,9 @@ struct FileDialogResult {
 // contract). `on_result` fires exactly once: with accepted=true and
 // the chosen path on OK, or accepted=false on Cancel/Esc. `fs` must
 // outlive the returned Window (the installed closures capture it by
-// reference). Desktop::show_dialog (M8 WP-5) attaches the returned
-// handle and focuses its initial_focus in one call.
+// reference). Desktop::present_modeless attaches the returned handle
+// and focuses its initial_focus in one call; modal presentation is
+// explicit through Desktop::present_modal.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(FileDialogResult)> on_result);

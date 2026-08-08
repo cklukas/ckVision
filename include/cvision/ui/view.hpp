@@ -257,6 +257,13 @@ public:
     // carry no theming of their own.
     virtual void on_attached() {}
 
+    // Fired after the owning Application has removed its raw observers
+    // (focus, capture, modal scope) for this still-live view, but before
+    // descendants receive the same notification. A widget may complete
+    // its own presentation/lifecycle work here; it must not reattach
+    // itself during detachment.
+    virtual void on_detaching() {}
+
     // --- Events (ARCHITECTURE.md §5 "Events") ---------------------------
     // Each returns true if it consumed the event (stopping the route).
 

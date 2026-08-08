@@ -851,7 +851,7 @@ CK_TEST(removing_a_modal_window_through_the_generic_desktop_api_clears_modal_rou
     CK_CHECK(!app.is_modal());
 }
 
-// --- kClose/kQuit default handlers + exec_window (M9/WP-15, D-021) --------
+// --- kClose/kQuit default handlers + exec_modal (M9/WP-15, D-021) ---------
 //
 // Unlike every test above, these need a REAL Application with the
 // Desktop actually attached via add_child (not a standalone Desktop
@@ -872,7 +872,7 @@ struct AttachedFixture {
     // Styles `app`'s OWN theme/roles (not `f`'s standalone ones) — real
     // attachment propagates THIS context to every descendant (see
     // View::add_child), so a Window attached here that later gets
-    // painted (exec_window's pump calls step(), which paints) must
+    // painted (exec_modal's pump calls step(), which paints) must
     // resolve real roles through it, exactly like every example's own
     // `app_.theme() = make_classic_theme(app_.roles(), roles_);`.
     AttachedFixture() {
@@ -1121,7 +1121,7 @@ CK_TEST(kcascade_default_arranges_every_window_offset_diagonally) {
     CK_CHECK(a->bounds().x != b->bounds().x || a->bounds().y != b->bounds().y);
 }
 
-CK_TEST(exec_window_blocks_until_the_window_closes) {
+CK_TEST(exec_modal_blocks_until_the_window_closes) {
     AttachedFixture af;
     auto modal = make_window(af.f);
     Window* modal_ptr = modal.get();
@@ -1134,14 +1134,14 @@ CK_TEST(exec_window_blocks_until_the_window_closes) {
     });
 
     CK_CHECK(af.desktop->windows().empty());
-    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+    af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
 
     CK_CHECK(still_modal_mid_pump);           // scoped for the duration of the pump...
     CK_CHECK(!af.app.is_modal());             // ...and unscoped again once it returns
     CK_CHECK(af.desktop->windows().empty());  // the modal window is gone
 }
 
-CK_TEST(exec_window_runs_posted_work_during_the_pump) {
+CK_TEST(exec_modal_runs_posted_work_during_the_pump) {
     // The "post during modal" re-entrancy case (D-021, WP-15's own
     // acceptance criterion): posted work follows the ordinary
     // single-loop rules regardless of modality, since step() itself has
@@ -1155,13 +1155,13 @@ CK_TEST(exec_window_runs_posted_work_during_the_pump) {
     af.app.post([&] { unrelated_work_ran = true; });  // ahead of the dismiss, same drain batch
     af.app.post([&] { modal_ptr->close(); });
 
-    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+    af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
     CK_CHECK(unrelated_work_ran);
 }
 
-CK_TEST(exec_window_is_not_disrupted_by_an_unrelated_windows_close_during_the_pump) {
+CK_TEST(exec_modal_is_not_disrupted_by_an_unrelated_windows_close_during_the_pump) {
     // The "close during modal" re-entrancy case: closing some OTHER
-    // window while exec_window's pump is running for THIS one must not
+    // window while exec_modal's pump is running for THIS one must not
     // end the pump early — it watches this specific window, not
     // "windows() changed."
     AttachedFixture af;
@@ -1179,12 +1179,12 @@ CK_TEST(exec_window_is_not_disrupted_by_an_unrelated_windows_close_during_the_pu
         modal_ptr->close();
     });
 
-    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+    af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
     CK_CHECK(modal_still_open_after_other_closed);
     CK_CHECK(af.desktop->windows().empty());  // `other` and the modal both ended up closed
 }
 
-CK_TEST(exec_window_returns_promptly_if_quit_is_requested_before_the_window_closes) {
+CK_TEST(exec_modal_returns_promptly_if_quit_is_requested_before_the_window_closes) {
     // Without this, a SIGINT delivered while an exec_* call is blocked
     // (run()'s own SIGINT handler just sets the atomic flag, M9/WP-14)
     // would leave the process stuck forever inside the pump — nothing
@@ -1199,7 +1199,7 @@ CK_TEST(exec_window_returns_promptly_if_quit_is_requested_before_the_window_clos
 
     af.app.post([&] { af.app.request_quit(); });  // never actually dismisses the modal
 
-    af.desktop->exec_window(af.app, WindowHandle{std::move(modal), nullptr});
+    af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
 
     CK_CHECK(af.app.quit_requested());
     CK_CHECK(!af.app.is_modal());  // pop_modal still ran even though the window never closed

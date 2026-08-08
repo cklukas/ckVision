@@ -47,20 +47,23 @@ public:
     ui::View* add_child(std::unique_ptr<ui::View> child) override;
     std::unique_ptr<ui::View> remove_child(ui::View* child) override;
 
-    // The one sanctioned way to present a standard-dialog handle
-    // (message box, file/save dialog, directory picker, window list,
-    // help viewer — anything returned as a widgets::WindowHandle) on
-    // this desktop (M8 WP-5): attaches handle.window via add_window
-    // (activation + z-order included) and focuses handle.initial_focus.
-    // Generic add_child is also management-safe for a Window, but does
-    // not know a WindowHandle's initial-focus choice. add_window itself remains the
-    // right call for an application's OWN windows, which don't come
-    // with a pre-computed initial_focus to hand to set_focus.
-    Window* show_dialog(WindowHandle handle, ui::Application& app);
+    // Explicit modeless standard-dialog presentation (D-038): attaches
+    // through add_window (activation + z-order included) and focuses
+    // handle.initial_focus, but leaves ordinary background input active.
+    // Generic add_child is equally management-safe for a Window but
+    // deliberately does not know WindowHandle's initial-focus choice.
+    Window* present_modeless(WindowHandle handle, ui::Application& app);
 
-    // The blocking sibling of show_dialog (M9/WP-15, D-021's "blocking
+    // Explicit non-blocking modal presentation (D-038): attaches and
+    // focuses like present_modeless, but pushes the Window onto the
+    // Application modal stack before returning. The scope ends when
+    // the Window detaches; standard-dialog present_* helpers provide
+    // typed completion rather than exposing this raw observer.
+    Window* present_modal(WindowHandle handle, ui::Application& app);
+
+    // The blocking sibling of present_modal (M9/WP-15, D-021's "blocking
     // convenience for applications that own the loop"): attaches and
-    // focuses `handle` exactly like show_dialog, then scopes event
+    // focuses `handle` exactly like present_modal, then scopes event
     // routing to it (Application::push_modal) and pumps
     // Application::step() — never a nested native loop — until the
     // window is no longer among windows() (it has closed and self-
@@ -70,7 +73,7 @@ public:
     // exec_file_dialog) captures its own typed result through the SAME
     // on_result-style callback its factory already accepts — into a
     // local read back after this call returns.
-    void exec_window(ui::Application& app, WindowHandle handle);
+    void exec_modal(ui::Application& app, WindowHandle handle);
 
     // Detaches and returns ownership (nullptr if `window` is not one of
     // this desktop's windows). If it was the active window, activates

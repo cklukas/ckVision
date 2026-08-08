@@ -23,6 +23,10 @@ void Window::on_attached() {
         title_inactive_role_ = context().roles->find("ckv.window.title.inactive");
 }
 
+void Window::on_detaching() {
+    if (on_detached) on_detached();
+}
+
 void Window::set_title(std::string title) {
     title_ = std::move(title);
     invalidate();

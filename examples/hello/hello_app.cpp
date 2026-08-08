@@ -46,9 +46,7 @@ void HelloApp::greeting_box() {
 
     window->cancel_request = [window_ptr] { window_ptr->close(); };
     window->on_closed = [window_ptr, this] { schedule_self_detach(*window_ptr, app_); };
-    widgets::Window* shown = desktop_->add_window(std::move(window));
-    app_.push_modal(*shown);
-    app_.set_focus(first_button);
+    desktop_->present_modal(widgets::WindowHandle{std::move(window), first_button}, app_);
 }
 
 }  // namespace ckv::hello

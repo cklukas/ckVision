@@ -245,10 +245,9 @@ bounds observer);
 click-to-focus in dispatch; click-to-activate/raise via a capture-phase
 mouse-descent hook Desktop implements; a working, lifecycle-bound zoom control,
 zoomed windows tracking desktop growth, and the
-per-window `DesktopGrowPolicy`; a convenient dialog-attach path
-(`Desktop::show_dialog`) plus correct generic Desktop attachment for every
-standard-dialog handle; example
-hygiene (gallery on docking and `show_dialog`, redundant
+per-window `DesktopGrowPolicy`; explicit modeless/modal dialog-presentation
+paths plus correct generic Desktop attachment for every standard-dialog handle;
+example hygiene (gallery on docking and `present_modal`, redundant
 focus-policy calls removed).
 
 **Exit:** end-to-end headless resize script through
@@ -294,20 +293,26 @@ widgets resolve their own theme roles through a root-installed ui
 context with per-widget overrides and per-window theme scope
 (constructors take content, not plumbing); `StandardRoles` completed
 for the M6 widget set; typed `add<T>`/`make<T>` insertion; the
-one-call command registration from ARCHITECTURE §5 (metadata + handler
-+ chord in one descriptor; the menu/status placement half was revised
-2026-08-08 into live, mutable `MenuBar`/`StatusLine` structure —
-runtime add/remove of items and top-level menus, enablement dimming on
-the status line, context-sensitive status hints, command retraction —
-see the plan's revised WP-10); the
+one-call command registration from ARCHITECTURE §5 (metadata, handler, and
+chord in one descriptor) and its widgets-layer command-presentation
+counterpart: menu/status entries may supply a surface-specific display label
+and mnemonic while retaining one `CommandId`, handler, chord, and enablement
+source of truth. It also supplies live, mutable `MenuBar`/`StatusLine`
+structure — runtime add/remove of items and top-level menus, enablement dimming
+on the status line, context-sensitive status hints, command retraction — see
+the plan's revised WP-10; the
 Key→display-name table with `KeyChord` parse/format, and menus/status
 lines rendering title, chord, and enablement live from the registry;
 the standard command set below id 4096 registered by `Application`;
 the default keymap (Tab/Shift-Tab traversal, F10 menu, window
 management) over rebindable bindings; `Application::run()` and
-`request_quit()`; the modality stack with event scoping and the
-blocking `exec_*` conveniences (completing D-021), plus non-blocking
-`show_*` one-liners; size-hint-change propagation replacing
+`request_quit()`; the modality stack with event scoping; explicitly named
+modeless and modal presentation APIs; a typed, non-blocking presentation
+completion handle; and the blocking outer-loop-only `exec_*` conveniences
+(completing D-021). An optional widgets-layer application-shell composition
+helper constructs the ordinary theme/desktop/menu/status skeleton declaratively
+without adding a global, a second event loop, or a dependency from `ui` into
+`widgets`; size-hint-change propagation replacing
 `Window::relayout_frame_overlay`; `examples/hello` rewritten to the
 target shape.
 
@@ -315,9 +320,13 @@ target shape.
 non-comment budget checked in CI, with golden coverage — the M5 exit
 criterion finally wired; every command in the examples declared exactly
 once; no hand-encoded chord text and no `static_cast<widgets::` in
-`examples/`; modal scoping, blocking `exec_message_box`, quit-sweep
-integration, and runtime rebinding re-rendering menus/status lines all
-covered by scripts; `docs/hello-example.md` records the example's
+`examples/`; one command can intentionally present as `Exit` in a File menu
+and `Quit` in a status line without a duplicate handler or a hand callback;
+modal versus modeless presentation is explicit at every call site; typed
+non-blocking completion, blocking `exec_message_box`, quit-sweep integration,
+and runtime rebinding re-rendering menus/status lines all covered by scripts.
+The application-shell helper is exercised by a one-screen example without
+hiding ownership or loop control. `docs/hello-example.md` records the example's
 ckVision-owned behavior contract and its golden/script evidence; theme
 switching and per-window theme override golden-tested across all four
 schemes.
