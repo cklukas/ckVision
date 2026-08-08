@@ -3,11 +3,11 @@
 // End-to-end M8 regressions for seams whose mechanisms are built and
 // unit-tested elsewhere but were never wired to a real terminal
 // session (see plans/api-ergonomics-review-2.md, findings F1-F7). Each
-// scenario here is driven entirely through Application's public event
-// dispatch — the same path the POSIX/headless backends use — not by
-// poking the affected widget's own methods directly, since that is
-// exactly the gap that let each finding stay green under unit tests
-// while broken interactively.
+// scenario here is driven through the public HeadlessTerminal and
+// Application::step path — the same path the POSIX backend uses — not
+// by injecting a ResizeEvent into Application or poking a widget's own
+// methods directly, since that is exactly the gap that let each finding
+// stay green under unit tests while broken interactively.
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
@@ -18,36 +18,33 @@
 using ckv::Rect;
 using ckv::Size;
 using ckv::ManualClock;
-using ckv::ResizeEvent;
 using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
-using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
-using ckv::ui::Theme;
 using ckv::ui::View;
 using ckv::widgets::Desktop;
 using ckv::widgets::Window;
 
 namespace {
-struct Fixture {
-    RoleRegistry registry;
-    StandardRoles roles = intern_standard_roles(registry);
-    Theme theme = make_classic_theme(registry, roles);
-};
+StandardRoles install_standard_theme(Application& app) {
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    return roles;
+}
 
 std::unique_ptr<Window> make_window(std::string title = "W") { return std::make_unique<Window>(std::move(title)); }
 }  // namespace
 
 // --- WP-1: the resize chain -------------------------------------------
 
-CK_TEST(an_application_level_resize_event_repins_docked_desktop_chrome_and_reclamps_windows) {
-    Fixture fx;
+CK_TEST(a_headless_terminal_resize_repins_docked_desktop_chrome_and_reclamps_windows) {
     ckv::term::HeadlessTerminal term(Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
+    const StandardRoles roles = install_standard_theme(app);
 
-    auto desktop = std::make_unique<Desktop>(app.root().bounds(), fx.theme, fx.roles.desktop_background);
+    auto desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 
@@ -58,8 +55,9 @@ CK_TEST(an_application_level_resize_event_repins_docked_desktop_chrome_and_recla
     window->set_bounds(Rect{60, 15, 15, 6});  // reachable in the original 80x24 desktop
     Window* window_ptr = desktop_ptr->add_window(std::move(window));
 
-    // Shrink, exactly as a POSIX SIGWINCH-driven ResizeEvent would.
-    CK_CHECK(app.dispatch(ResizeEvent{Size{40, 10}}));
+    // Resize arrives through Terminal::poll during the public step path.
+    term.resize(Size{40, 10});
+    CK_CHECK(app.step(0));
 
     CK_CHECK(desktop_ptr->bounds() == (Rect{0, 0, 40, 10}));
     CK_CHECK(top->bounds() == (Rect{0, 0, 40, 1}));
@@ -75,7 +73,8 @@ CK_TEST(an_application_level_resize_event_repins_docked_desktop_chrome_and_recla
 
     // Grow past the original size — chrome must track the NEW edges,
     // not stay pinned to the old (or shrunk) ones.
-    CK_CHECK(app.dispatch(ResizeEvent{Size{120, 50}}));
+    term.resize(Size{120, 50});
+    CK_CHECK(app.step(0));
 
     CK_CHECK(desktop_ptr->bounds() == (Rect{0, 0, 120, 50}));
     CK_CHECK(top->bounds() == (Rect{0, 0, 120, 1}));
@@ -87,10 +86,12 @@ CK_TEST(a_view_that_opts_out_of_fills_root_is_left_alone_by_a_terminal_resize) {
     ManualClock clock;
     Application app(term, clock);
 
-    auto* fixed = app.root().add_child(std::make_unique<View>(Rect{5, 5, 10, 3}));
-    fixed->set_fills_root(false);
+    auto fixed_view = std::make_unique<View>(Rect{5, 5, 10, 3});
+    fixed_view->set_fills_root(false);  // opt out before direct-root attachment
+    auto* fixed = app.root().add_child(std::move(fixed_view));
 
-    CK_CHECK(app.dispatch(ResizeEvent{Size{200, 60}}));
+    term.resize(Size{200, 60});
+    CK_CHECK(app.step(0));
 
     CK_CHECK(fixed->bounds() == (Rect{5, 5, 10, 3}));  // untouched
     CK_CHECK(app.root().bounds() == (Rect{0, 0, 200, 60}));  // root itself still resized
@@ -103,9 +104,45 @@ CK_TEST(a_default_root_child_fills_root_on_construction_default_and_on_resize) {
 
     auto* child = app.root().add_child(std::make_unique<View>());
     CK_CHECK(child->fills_root());  // default is fill (F1's escape hatch defaults to on)
+    CK_CHECK(child->bounds() == (Rect{0, 0, 80, 24}));  // correct before its first frame
 
-    CK_CHECK(app.dispatch(ResizeEvent{Size{30, 12}}));
+    term.resize(Size{30, 12});
+    CK_CHECK(app.step(0));
     CK_CHECK(child->bounds() == (Rect{0, 0, 30, 12}));
+}
+
+CK_TEST(a_root_bounds_observer_cannot_replace_framework_root_layout) {
+    ckv::term::HeadlessTerminal term(Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* child = app.root().add_child(std::make_unique<View>());
+    bool observed = false;
+    app.root().on_bounds_changed = [&](Rect bounds) {
+        observed = true;
+        CK_CHECK(bounds == (Rect{0, 0, 120, 40}));
+        CK_CHECK(child->bounds() == (Rect{0, 0, 80, 24}));
+        child->set_bounds(Rect{7, 7, 1, 1});  // observer cannot override it
+    };
+
+    term.resize(Size{120, 40});
+    CK_CHECK(app.step(0));
+
+    CK_CHECK(observed);
+    CK_CHECK(child->bounds() == (Rect{0, 0, 120, 40}));
+}
+
+CK_TEST(changing_fills_root_after_attachment_only_affects_future_terminal_resizes) {
+    ckv::term::HeadlessTerminal term(Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    View* child = app.root().add_child(std::make_unique<View>(Rect{5, 5, 10, 3}));
+    CK_CHECK(child->bounds() == (Rect{0, 0, 80, 24}));
+
+    child->set_fills_root(false);
+    term.resize(Size{120, 40});
+    CK_CHECK(app.step(0));
+
+    CK_CHECK(child->bounds() == (Rect{0, 0, 80, 24}));
 }
 
 CK_TEST(on_bounds_changed_fires_with_the_new_bounds_only_when_bounds_actually_change) {
@@ -128,12 +165,12 @@ CK_TEST(on_bounds_changed_fires_with_the_new_bounds_only_when_bounds_actually_ch
 // --- WP-3: click-to-activate/raise, end to end -------------------------
 
 CK_TEST(clicking_deep_content_in_a_background_window_raises_and_activates_it_through_dispatch) {
-    Fixture fx;
     ckv::term::HeadlessTerminal term(Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
+    const StandardRoles roles = install_standard_theme(app);
 
-    auto desktop = std::make_unique<Desktop>(app.root().bounds(), fx.theme, fx.roles.desktop_background);
+    auto desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 
@@ -171,12 +208,12 @@ CK_TEST(clicking_deep_content_in_a_background_window_raises_and_activates_it_thr
 }
 
 CK_TEST(clicking_the_desktops_own_background_does_not_change_which_window_is_active) {
-    Fixture fx;
     ckv::term::HeadlessTerminal term(Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
+    const StandardRoles roles = install_standard_theme(app);
 
-    auto desktop = std::make_unique<Desktop>(app.root().bounds(), fx.theme, fx.roles.desktop_background);
+    auto desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 

@@ -421,6 +421,25 @@ CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
     }
 }
 
+CK_TEST(overlapping_window_shadows_dim_the_desktop_exactly_once) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
+    Window* first = desktop.add_window(make_window(f, "First"));
+    first->set_bounds(Rect{2, 2, 5, 3});
+    Window* second = desktop.add_window(make_window(f, "Second"));
+    second->set_bounds(Rect{3, 2, 5, 3});
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    CK_CHECK(surface.at(ckv::Point{8, 3}).style() ==
+             ckv::scene::default_dim(background_style));
+}
+
 CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
@@ -483,6 +502,29 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
     // dialog_background shadow style.
     const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
     CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == ckv::scene::default_dim(background_style)));
+}
+
+CK_TEST(a_foreground_window_frame_does_not_merge_with_a_background_window_frame) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    desktop.set_context(f.ctx());
+
+    Window* background = desktop.add_window(make_window(f, "Background"));
+    background->set_bounds(Rect{2, 2, 14, 4});  // bottom edge: y=5, x=2..15
+
+    Window* foreground = desktop.add_window(make_window(f, "Front"));
+    foreground->set_bounds(Rect{12, 3, 12, 7});  // active double frame, painted last
+
+    Surface surface(ckv::Size{40, 20});
+    Painter painter(surface, Rect{0, 0, 40, 20});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    // The foreground's left edge crosses the background's bottom edge
+    // at (12,5). Z-order means the later double vertical line replaces
+    // the earlier single horizontal line; the two windows are unrelated
+    // drawing contexts, so this must never become a junction ("╬").
+    CK_CHECK(surface.at(ckv::Point{12, 5}).grapheme() == "║");
 }
 
 // --- Docked chrome (dock_top/dock_bottom) and resize reflow ---------------

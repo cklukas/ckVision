@@ -21,12 +21,13 @@ using ckv::ui::Application;
 
 namespace {
 
-void write_svg(const std::filesystem::path& dir, const std::string& name, const ckv::FrameView& frame) {
-    const std::string svg = ckv::docgen::render_frame_svg(frame);
+void write_svg(const std::filesystem::path& dir, const std::string& name,
+               const ckv::term::VirtualDisplay& display) {
+    const std::string svg = ckv::docgen::render_virtual_display_svg(display);
     std::ofstream out(dir / (name + ".svg"));
     out << svg;
-    std::fprintf(stderr, "wrote %s (%dx%d cells)\n", (dir / (name + ".svg")).c_str(), frame.size().width,
-                 frame.size().height);
+    std::fprintf(stderr, "wrote %s (%dx%d cells)\n", (dir / (name + ".svg")).c_str(),
+                 display.size().width, display.size().height);
 }
 
 MemoryFileSystem make_demo_tree() {
@@ -54,23 +55,23 @@ int main(int argc, char** argv) {
     const std::filesystem::path out_dir = argv[1];
     std::filesystem::create_directories(out_dir);
 
-    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile());
     ManualClock clock;
     Application app(term, clock);
     MemoryFileSystem fs = make_demo_tree();
     ckv::filebrowser::FileBrowserApp browser(app, fs, "/project");
 
     app.step(0);
-    write_svg(out_dir, "filebrowser-initial", app.current_frame());
+    write_svg(out_dir, "filebrowser-initial", term.display());
 
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});  // -> src
     app.step(0);
-    write_svg(out_dir, "filebrowser-src-selected", app.current_frame());
+    write_svg(out_dir, "filebrowser-src-selected", term.display());
 
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});  // expand src (no children: no-op)
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});   // -> include
     app.step(0);
-    write_svg(out_dir, "filebrowser-include-selected", app.current_frame());
+    write_svg(out_dir, "filebrowser-include-selected", term.display());
 
     return 0;
 }

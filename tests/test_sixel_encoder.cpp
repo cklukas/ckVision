@@ -27,8 +27,18 @@ CK_TEST(empty_image_encodes_to_empty_string) {
 CK_TEST(encoded_sequence_has_the_correct_dcs_and_string_terminator) {
     Image img(4, 4);
     const std::string sixel = encode_sixel(img);
-    CK_CHECK(sixel.substr(0, 3) == "\x1BPq");
+    CK_CHECK(sixel.starts_with("\x1BP0;0;0q\"1;1;4;4"));
     CK_CHECK(sixel.substr(sixel.size() - 2) == "\x1B\\");
+}
+
+CK_TEST(source_alpha_is_ignored_and_the_encoded_raster_is_explicitly_opaque) {
+    Image img(2, 1);
+    img.set_pixel(0, 0, Image::Rgba{255, 0, 0, 0});
+    img.set_pixel(1, 0, Image::Rgba{0, 255, 0, 127});
+    const std::string sixel = encode_sixel(img);
+    CK_CHECK(sixel.starts_with("\x1BP0;0;0q\"1;1;2;1"));
+    CK_CHECK(sixel.find("#0;2;100;0;0") != std::string::npos);
+    CK_CHECK(sixel.find("#1;2;0;100;0") != std::string::npos);
 }
 
 CK_TEST(single_color_image_defines_exactly_one_palette_register) {
@@ -72,7 +82,8 @@ CK_TEST(single_band_image_has_no_newline_separator) {
     const std::string sixel = encode_sixel(img);
     // No '-' should appear as a band separator (only inside the DCS
     // body — none expected here since there is exactly one band).
-    const std::string body = sixel.substr(3, sixel.size() - 3 - 2);  // strip DCS header/ST
+    const std::size_t q = sixel.find('q');
+    const std::string body = sixel.substr(q + 1, sixel.size() - q - 1 - 2);  // strip DCS header/ST
     CK_CHECK(body.find('-') == std::string::npos);
 }
 

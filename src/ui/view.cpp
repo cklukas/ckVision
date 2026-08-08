@@ -22,6 +22,7 @@ View* View::add_child(std::unique_ptr<View> child) {
     child->propagate_detach_sink(detach_sink_);
     child->propagate_context(context_);
     children_.push_back(std::move(child));
+    if (child_attached_sink_) child_attached_sink_(*observer);
     return observer;
 }
 
@@ -65,6 +66,7 @@ void View::set_bounds(Rect bounds) {
     if (dirty_rect_sink_) dirty_rect_sink_(old_absolute);  // and the vacated old bounds
     on_resized();
     if (on_bounds_changed) on_bounds_changed(bounds_);
+    if (bounds_changed_sink_) bounds_changed_sink_(bounds_);
 }
 
 Rect View::absolute_bounds() const noexcept {
@@ -97,11 +99,12 @@ void View::invalidate(Rect local_rect) {
                            local_rect.height});
 }
 
-std::optional<scene::Painter> View::paint_one_child(View& child, const scene::Painter& parent_painter) {
+std::optional<scene::Painter> View::paint_one_child(
+    View& child, const scene::Painter& parent_painter) {
     if (!child.visible()) return std::nullopt;
     const Rect local_bounds{0, 0, child.bounds().width, child.bounds().height};
-    scene::Painter child_painter =
-        parent_painter.translated(Point{child.bounds().x, child.bounds().y}, local_bounds);
+    scene::Painter child_painter = parent_painter.isolated().translated(
+        Point{child.bounds().x, child.bounds().y}, local_bounds);
     child.draw(child_painter);
     child.paint_children(child_painter);
     return child_painter;

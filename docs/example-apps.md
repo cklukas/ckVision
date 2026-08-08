@@ -20,10 +20,30 @@ describe the real application, never a simplified stand-in.
 This page is generated documentation in the sense that its screenshots
 are: they come from `tools/docgen/capture_gallery_screenshots`, which
 builds an example app on a `HeadlessTerminal`, scripts a short
-interaction, and renders the actually-composed frame to SVG via
-`tools/docgen/frame_svg`. Regenerate them (and this page's HTML/PDF
+interaction, and renders the HeadlessTerminal virtual display to SVG via
+`tools/docgen/frame_svg`. The virtual display consumes the exact VT/Sixel bytes
+written by Presenter and independently reconstructs styled cells plus decoded
+raster pixels; the screenshot path does not read the source `Image` directly.
+Under the Sixel profile, Presenter first writes clean panel-colored blank cells
+through the visible image region—never the `[image]` fallback text—and emits an
+explicitly opaque Sixel raster. The SVG stores that decoded raster as one
+lossless embedded bitmap, avoiding the hairline transparency artifacts that
+adjacent per-pixel SVG rectangles can acquire during PDF conversion; equal
+neighboring cell backgrounds are likewise merged so the surrounding panel
+remains a clean solid color in PDF output. Recognized box-drawing glyphs are
+rendered as cell-edge-aligned SVG geometry instead of font text, preventing
+host-font metrics from introducing false gaps at frame corners.
+Regenerate them (and this page's HTML/PDF
 output) with `tools/docgen/generate_docs.sh` — never hand-edit an SVG
 under `docs/generated/`.
+
+The same Sixel and no-graphics images are also emitted as test artifacts. Run
+`ctest --test-dir build -R gallery_visual_capture -V`; its output names the
+SVGs under `build/test-artifacts/gallery/`. This visual test is separately
+labelled `visual` and `artifact`, while the unit suite independently checks the
+decoded pixel plane and raw protocol bytes. These artifacts are review aids;
+WP-32A still owns the broader byte/hash-pinned pixel-golden matrix listed in
+the corrective plan.
 
 ## Gallery (`examples/gallery`)
 
@@ -48,9 +68,10 @@ reaches past those headers.
   capability advertises Sixel support.
 - **Window shadows**: both windows cast a real, composited shadow
   (`widgets::Desktop::paint_children` interleaves
-  `Painter::transform_style` with the z-ordered window paint — see
+  `Painter::apply_shadow` with the z-ordered window paint — see
   that method's doc comment for why a naive whole-tree post-pass
-  cannot get shadow occlusion right).
+  cannot get shadow occlusion right). Shadow coverage is binary: one
+  or several overlapping casters apply the dim transform exactly once.
 - **Move/resize**: `Window`'s own mouse handling supports dragging the
   title bar to move and dragging an edge/corner to resize, clamped to
   `Window`'s declared min/max size.
@@ -69,16 +90,27 @@ exists":
 | Esc after F10 restores prior focus | `escape_after_f10_returns_focus_to_where_it_was` |
 | Alt+X quits via the documented shortcut | `alt_x_quits_via_the_status_lines_documented_shortcut` |
 | A mouse click on Greet opens a message box with the typed name | `clicking_greet_opens_a_message_box_that_renders_the_typed_name` |
-| Sixel bytes actually reach the terminal under full capabilities | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities` |
+| Sixel bytes reach the terminal and decode into the virtual display's RGBA plane | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities` |
+| Sixel mode emits no `[image]` text and decodes to a solid, fully opaque 64×32 pixel rectangle | `the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities`; `sixel_presentation_replaces_fallback_text_with_clean_background_cells` |
+| The same frame has no raster pixels under NoGraphics | `the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics` |
+| Runtime Sixel → NoGraphics → Sixel changes remove and restore pixels without stale content | `runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pixels` |
 | Window shadow cells are actually dimmed (exact expected style) | `tests/test_desktop.cpp`: `a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop` |
 | A higher window is never dimmed by a lower window's shadow | `a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shadow` |
+| One or several overlapping window shadows remain one uniform shadow, including the lower-right footprint corner | `a_single_shadow_footprint_is_a_non_overlapping_union`; `overlapping_shadows_are_a_binary_union_not_cumulative_dimming`; `overlapping_window_shadows_dim_the_desktop_exactly_once` |
+| A foreground frame crossing a lower window's frame stays a plain foreground border, never a merged junction | `a_foreground_window_frame_does_not_merge_with_a_background_window_frame`; `tests/golden/window_z_order_junction.dump` |
 
 ### Screenshots
 
-Initial frame — menu bar, status line, both windows, the "Controls"
-window's shadow visible under the "Sixel Demo" window's left edge:
+Initial frame under the fixed-metrics Sixel profile — menu bar, status line,
+both windows, and the decoded, fully opaque gradient emitted by Presenter over
+clean panel-colored backing cells:
 
 ![Gallery: initial frame](generated/screenshots/gallery-initial.svg)
+
+The identical initial application state under NoGraphics — no Sixel DCS is
+emitted and ImageView's mandatory textual fallback remains visible:
+
+![Gallery: no-graphics fallback](generated/screenshots/gallery-no-graphics.svg)
 
 After typing a name into the input field:
 
@@ -113,10 +145,11 @@ WP-22) is the entire wiring between them. It also demonstrates
 `Desktop::dock_top`/`dock_bottom` (the menu bar and status line
 reposition themselves automatically across a real terminal resize,
 not just when the application recomputes their bounds by hand — a live
-`ResizeEvent` propagates from `Application::root()` through
-`View::fills_root()`'s default down to the Desktop, whose own
-`on_resized()` repins both docks and reclamps every window; see
-`tests/test_m8_resize_integration.cpp`) and `Window::add_frame_overlay`
+`ResizeEvent` enters through the terminal and `Application::step`; the
+Application-owned root layout then applies `View::fills_root()`'s default to
+the Desktop, whose own `on_resized()` repins both docks and reclamps every
+window. See `tests/test_m8_integration.cpp` and
+`tests/test_root_resize_golden.cpp`.) and `Window::add_frame_overlay`
 (the selected directory's full path shown live on the window's own
 bottom border — the general mechanism a text editor would use for a
 "line: N, col: M" indicator; M10/WP-20's plural, positioned overlays

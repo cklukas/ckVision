@@ -79,7 +79,15 @@ std::string encode_sixel(const Image& image) {
             static_cast<std::uint8_t>((key >> 16) & 0xFF), static_cast<std::uint8_t>((key >> 8) & 0xFF),
             static_cast<std::uint8_t>(key & 0xFF)};
 
-    std::string out = "\x1BPq";
+    // Pa=0 (device pixel aspect), Pb=0 (opaque background), Ph=0.
+    // Raster attributes pin the exact width/height so the final partial
+    // sixel band cannot paint beyond the source image. Sixel carries no
+    // alpha channel; source alpha is deliberately ignored above and every
+    // source pixel is represented by an opaque palette color.
+    std::string out = "\x1BP0;0;0q\"1;1;";
+    out += std::to_string(w);
+    out += ';';
+    out += std::to_string(h);
     for (std::size_t i = 0; i < palette_colors.size(); ++i) {
         out += '#';
         out += std::to_string(i);

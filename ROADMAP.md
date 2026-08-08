@@ -1,24 +1,24 @@
 # ckVision — Roadmap
 
 Milestones are sequential; each has binding exit criteria. No dates —
-sequence and criteria only. Effort figures are coarse planning aids
-(focused person-weeks, one senior developer driving agent tooling);
-the full sequence totals roughly 26–34 pw.
+sequence and criteria only. Original milestone effort figures are coarse
+historical planning aids (focused person-weeks, one senior developer driving
+agent tooling); their former 26–34 pw total no longer describes the reopened
+scope. The corrective queue carries a new 40–65 pw estimate, subject to WP-23's
+provenance/authority rebaseline.
 
 M8–M10 were inserted by the 2026-08-07 API-ergonomics and integration
-review ([plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md),
-"the review" below): M8 repairs seams whose mechanisms are built and
-unit-tested but never wired end to end; M9 delivers the decided-but-
-unbuilt ergonomics layer down to the enforced 60-line hello; M10
-completes the decided layout system. The former M8 (release) is now
-M11, unchanged in content. M7 (Windows) is deferred until a Windows
-host is available and does not block M8–M10. Historical milestone
-texts (M5/M6) are left as written; where one of their exit items is
-still open — the enforced 60-line hello, the modality stack, backing
-stores, the menu-system remainder, and peers — the
-[plans/widgets.md](plans/widgets.md) open-items ledger records it with
-its new landing milestone, so the sequence stays honest without
-rewriting history.
+review ([plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md)).
+A 2026-08-08 implementation and verification audit found that the earlier
+ledger used `Done` for partial landings even when literal exit criteria or
+global gates did not hold. D-034 corrects that status model.
+
+The sole executable work-package queue is now
+[plans/corrective-assurance.md](plans/corrective-assurance.md). The instruction
+**“work on the next open WP”** means the first `In progress` row, otherwise the
+first `Ready` row, in that plan's **Current execution queue**. The old WP-1…WP-22
+ledger is historical landing evidence only. Developers must not use its status
+labels to choose work.
 
 A milestone is done when its exit criteria hold **and** the global gates
 hold: clean build with zero warnings on all target platforms, all tests
@@ -27,6 +27,28 @@ wall-clock budgets are checked on the pinned reference machine —
 ARCHITECTURE §8), and reference documentation written for everything the
 milestone added. The documentation site (M11) assembles per-milestone
 docs; it does not backfill them.
+
+## Current acceptance status
+
+No milestone below is currently accepted as `Done`. Substantial code has
+landed, but the following exit gaps are reopened and have explicit corrective
+owners. Historical milestone scope remains useful; this table is the current
+status authority.
+
+| Milestone | Current status | Corrective owner(s) |
+|---|---|---|
+| M0 | **Reopened** — Windows test portability and complete gate reporting do not hold | WP-32, WP-37, WP-38 |
+| M1 | **Reopened** — Unicode tables/corpora are incomplete and widget clipping can split UTF-8 | WP-30, WP-38 |
+| M2 | **Reopened** — paint-scope junction ownership and binary shadow union have initial fixes and overlap goldens, but per-window backing stores, zero-allocation/cells-touched budgets, and the complete cross-platform golden matrix are not accepted | WP-31, WP-38 |
+| M3 | **Reopened** — the initial Sixel/no-graphics virtual display and captures have landed, but its full pixel-golden/state matrix, security, fuzzing, degradation/restoration, p99, and backend evidence remain incomplete | WP-27, WP-29, WP-31, WP-32A, WP-33, WP-37, WP-38 |
+| M4 | **Reopened** — root/input/modality/platform-service/zero-allocation/command-context exits are incomplete | WP-24, WP-25, WP-27, WP-28, WP-31, WP-32, WP-35, WP-38 |
+| M5 | **Reopened** — Desktop lifetime, modality, backing stores, menu/catalog, hello, scripts, and goldens are incomplete | WP-25…WP-27, WP-31, WP-34A, WP-35, WP-38 |
+| M6 | **Reopened** — catalog features, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, gallery coverage, and reference docs are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-38 |
+| M7 | **Open / host-blocked** — Windows backend/full matrix has not met its exit | WP-32, WP-37; host availability remains explicit |
+| M8 | **Reopened** — WP-1…WP-6 landed partially but do not meet M8's literal integration exit | WP-24…WP-26, WP-35, WP-38 |
+| M9 | **Reopened** — WP-10 is unfinished and theme, modality, command-context, and remaining example exits are unmet | WP-27, WP-35, WP-38 |
+| M10 | **Reopened** — WP-18…WP-22 landed code but the specified visible/script/golden/reference acceptance is incomplete | WP-36, WP-38 |
+| M11 | **Blocked** — release work cannot start until corrective assurance and M7 gates hold | WP-38 |
 
 ## M0 — Bootstrap (≈1 pw)
 
@@ -62,8 +84,11 @@ slicing), Compositor (z-order, occlusion, damage-only composition),
 shadow pass, scroll-intent annotations, cursor state.
 
 **Exit:** golden suites for clipping, junction merging, occlusion, and
-shadows (windows and menus dim underlying content correctly, including
-overlapping shadows); raster-region goldens for anchoring, occlusion
+shadows (windows and menus dim underlying content correctly; each footprint is
+non-overlapping and any number of overlapping shadows remains one uniform
+binary shadow); junction coverage proves that same-view rules can join
+their own frames while an overlapping foreground view never merges with a
+lower-z frame; raster-region goldens for anchoring, occlusion
 slicing, scrolling, and fallback activation via the symbolic dump
 representation; a captured Surface round-trips through the golden format
 byte-exactly; compose-stage machine-independent budgets (cells touched,
@@ -71,8 +96,10 @@ zero allocations) enforced in CI.
 
 ## M3 — term: POSIX + headless + record/replay (≈3–4 pw)
 
-Terminal interface (core-typed); headless backend (scripted input, frame
-capture, capability profiles); record/replay backend (events including
+Terminal interface (core-typed); headless backend (scripted input, named
+capability profiles, raw-byte and symbolic-frame capture, plus a deterministic
+virtual display that decodes the emitted VT/Sixel stream into cell and RGBA
+planes); record/replay backend (events including
 probe responses, presented bytes); POSIX backend (raw mode, poll loop,
 self-pipe, SIGWINCH coalescing, suspend/resume, session-state ledger,
 alternate-screen policy, panic-safe restore); capability profiles +
@@ -93,7 +120,10 @@ Sixel slice emission with encoding cache); system clipboard write
 event-to-bytes measured by the scripted PTY harness with timestamped
 injection on the reference machine; image demo with correct occlusion
 and scrolling on macOS and Linux, plus its fallback rendering under a
-no-graphics profile; dual-space mouse events verified headlessly and
+no-graphics profile; the identical image-demo script produces decoded
+pixel-plane visual goldens under a fixed-metrics Sixel profile and fallback-only
+goldens under NoGraphics, including runtime profile changes with no stale
+pixels; dual-space mouse events verified headlessly and
 interactively; decoder and sanitizer fuzz targets in CI with zero
 findings; hostile-paste and OSC-injection cases golden-tested; the
 degradation matrix (color depth, keyboard protocol, pixel mouse,
@@ -183,7 +213,9 @@ beyond-baseline columns implemented; every widget has golden appearance
 tests (all four states, every built-in scheme), interaction scripts, and
 reference documentation; file-dialog goldens run against the scripted
 in-memory filesystem; the gallery exercises every widget in every
-built-in scheme.
+built-in scheme. Raster-bearing widgets additionally have symbolic scene
+goldens plus decoded pixel-plane visual goldens under Sixel and fallback-only
+visual goldens under NoGraphics, driven by the same scripts.
 
 ## M7 — Windows platform + full matrix (≈2 pw; deferred until a Windows host is available — M8–M10 proceed first)
 
@@ -199,15 +231,16 @@ enhanced input) tested; legacy console refusal path tested.
 
 ## M8 — Integration correctness: the unplugged seams (≈1–2 pw)
 
-**Status: complete** — WP-1…WP-6 all landed; see the status ledger in
-[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md).
+**Acceptance status: reopened.** WP-1…WP-6 produced useful partial landings,
+but WP-24…WP-26 and WP-35 in the corrective queue own the unmet criteria.
 
 Repairs the review's findings F1–F7 — cases where a mechanism is
 implemented and unit-tested but the wiring that lets a real terminal
 session reach it was never made. Work packages WP-1…WP-6 in
 [plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md):
 the resize chain from `ResizeEvent` through root to the Desktop
-(fill-the-root policy plus a settable bounds observer on `View`);
+(the Application-owned fill-the-root policy, independent of `View`'s public
+bounds observer);
 click-to-focus in dispatch; click-to-activate/raise via a capture-phase
 mouse-descent hook Desktop implements; a working zoom control
 (`zoom_area_provider`), zoomed windows tracking desktop growth, and the
@@ -228,7 +261,18 @@ desktop-owned window; `docs/example-apps.md`'s resize claims are true
 and carry test references; every M8 behavior change is a library fix,
 with examples only consuming public API.
 
+WP-24 supplies the resize portion through
+`tests/test_m8_integration.cpp` and `tests/test_root_resize_golden.cpp`, with
+the checked-in `tests/golden/root_resize_grow.dump` and
+`tests/golden/root_resize_shrink.dump` frames. The remaining M8 interaction
+criteria stay owned by WP-25, WP-26, and WP-35.
+
 ## M9 — API ergonomics: the 60-line hello (≈2–3 pw)
+
+**Acceptance status: reopened.** Legacy WP-10 remains incomplete, and the
+modality, theme-scope, command-context, and remaining example acceptance gaps
+are owned by WP-27 and WP-35. WP-23 owns the separate D-012 provenance and
+60-line gate repair.
 
 Delivers the decided-but-unbuilt convenience layer (review findings
 E1–E10, F8, F9; work packages WP-7…WP-17; decisions D-028/D-029):
@@ -259,15 +303,16 @@ criterion finally wired; every command in the examples declared exactly
 once; no hand-encoded chord text and no `static_cast<widgets::` in
 `examples/`; modal scoping, blocking `exec_message_box`, quit-sweep
 integration, and runtime rebinding re-rendering menus/status lines all
-covered by scripts; `docs/turbo-vision-conversion.md` regenerated from
-the new hello with its Part-III corrections applied, its side-by-side
-now favoring ckVision without caveats; theme switching and per-window
-theme override golden-tested across all four schemes.
+covered by scripts; `docs/hello-example.md` records the example's
+ckVision-owned behavior contract and its golden/script evidence; theme
+switching and per-window theme override golden-tested across all four
+schemes.
 
 ## M10 — Layout and widget-model completion (≈2–3 pw)
 
-**Status: complete** — WP-18…WP-22 all landed; see the status ledger in
-[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md).
+**Acceptance status: reopened.** WP-18…WP-22 landed mechanisms, but WP-36 owns
+the missing literal interaction scripts, appearance goldens, height-for-width
+behavior, standard-dialog application, and reference evidence.
 
 Completes D-006's decided container set and the data-widget model
 (review packages WP-18…WP-22): `Anchors` for fixed-geometry children
@@ -297,19 +342,19 @@ reference-documented.
 
 ## M11 — graphics polish, themes, docs, release (≈2 pw)
 
+**Entry status: blocked.** WP-23…WP-38 in the corrective queue, including the
+M7 platform package, must hold before release work begins.
+
 Graphics polish (kitty-graphics secondary encoder, Sixel palette
 optimization); scheme polish; the theme-editor standard dialog; the
 documentation site assembled from per-milestone reference docs plus
 tutorial and extension guides (worked examples for every §14 extension
 point); examples finalized; fuzz/bench hardening pass.
 
-Entry gate — the catalog remainder ledger in
-[plans/widgets.md](plans/widgets.md) (window backing stores and
-damage-scoped painting per the performance charter, nested submenus
-and checkable menu items, combo box, tab control, progress, the
-localization string table, desktop snapshot/restore) is worked off
-here or explicitly re-scoped by a recorded decision; the release does
-not ship with the ledger silently open.
+Entry gate — WP-34A…WP-34C have closed or formally re-scoped every catalog
+row, WP-38 has verified the complete widget/state/scheme matrix and public
+reference coverage, and the corrective queue contains no `Ready`, `In progress`, or
+`Blocked` row. Release work does not inherit known corrective debt.
 
 **Exit — 0.1 release criteria:** every VISION.md non-negotiable
 demonstrably works in the gallery on all three platforms; documentation

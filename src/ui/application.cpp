@@ -62,17 +62,11 @@ Application::Application(term::Terminal& terminal, Clock& clock)
     // dirty RECT itself is intentionally not yet used to scope
     // painting, only to decide WHETHER to paint at all).
     root_.set_dirty_rect_sink([this](Rect) { dirty_ = true; });
-    // The fill-the-root resize policy (View::fills_root(), M8 WP-1):
-    // every direct child of root that hasn't opted out is resized to
-    // root's own new bounds whenever a ResizeEvent changes them. This
-    // is what makes a Desktop's own on_resized() (which re-pins docked
-    // chrome and re-clamps windows) actually fire on a real terminal
-    // resize — previously ResizeEvent stopped at root_.set_bounds()
-    // and nothing propagated further.
-    root_.on_bounds_changed = [this](Rect bounds) {
-        for (const auto& child : root_.children())
-            if (child->fills_root()) child->set_bounds(Rect{0, 0, bounds.width, bounds.height});
-    };
+    // Root layout is Application-owned and deliberately separate from
+    // View::on_bounds_changed: a public observer can observe geometry but
+    // cannot replace the framework's direct-root-child fill invariant.
+    root_.set_bounds_changed_sink([this](Rect) { layout_root_children(); });
+    root_.set_child_attached_sink([this](View& child) { layout_root_child(child); });
     // The context every widget resolves its own theme roles through
     // (M9 WP-7, D-028) — installed once, propagates to every current
     // and future descendant exactly like the two sinks above.
@@ -97,6 +91,16 @@ Application::Application(term::Terminal& terminal, Clock& clock)
     // against the way MenuBar's kMenu default handler has to.
     commands_.set_handler(std_commands::kFocusNext, [this] { focus_next(); });
     commands_.set_handler(std_commands::kFocusPrevious, [this] { focus_previous(); });
+}
+
+void Application::layout_root_child(View& child) {
+    if (!child.fills_root()) return;
+    const Rect bounds = root_.bounds();
+    child.set_bounds(Rect{0, 0, bounds.width, bounds.height});
+}
+
+void Application::layout_root_children() {
+    for (const auto& child : root_.children()) layout_root_child(*child);
 }
 
 void Application::set_focus(View* view) {
@@ -292,7 +296,13 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                 root_.set_bounds(Rect{0, 0, e.cells.width, e.cells.height});
                 return true;
             } else if constexpr (std::is_same_v<T, term::CapabilityChangedEvent>) {
-                return false;  // no capability-dependent ui-layer state yet (M4 scope)
+                // Presentation policy (graphics/fallback, color depth,
+                // synchronized output, width agreement) can change even
+                // when widget state does not. Force a full repaint and
+                // presenter reset so the old capability's terminal pixels
+                // cannot survive the transition.
+                invalidate_all();
+                return true;
             } else {
                 static_assert(!sizeof(T*), "unhandled TerminalEvent alternative");
             }

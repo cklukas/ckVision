@@ -2,6 +2,7 @@
 #include "frame_svg.hpp"
 
 #include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 
 using ckv::Attr;
@@ -12,7 +13,9 @@ using ckv::Size;
 using ckv::Style;
 using ckv::docgen::FrameSvgOptions;
 using ckv::docgen::render_frame_svg;
+using ckv::docgen::render_virtual_display_svg;
 using ckv::scene::Surface;
+using ckv::term::VirtualDisplay;
 
 CK_TEST(dimensions_scale_by_cell_size_and_frame_size) {
     Surface surface(Size{10, 5});
@@ -46,6 +49,17 @@ CK_TEST(a_plain_space_grapheme_emits_no_text_element_only_background) {
     const std::string svg = render_frame_svg(surface.view());
     CK_CHECK(svg.find("<text") == std::string::npos);
     CK_CHECK(svg.find("#090909") != std::string::npos);  // the background rect still renders
+}
+
+CK_TEST(equal_neighboring_cell_backgrounds_merge_into_one_seam_free_rectangle) {
+    const Style panel{Color{}, Color::rgb(90, 91, 92), Attr{}};
+    Surface surface(Size{3, 2}, Cell::from_grapheme(" ", panel));
+    const std::string svg = render_frame_svg(surface.view());
+    const std::size_t first = svg.find("fill=\"#5a5b5c\"");
+    CK_CHECK(first != std::string::npos);
+    CK_CHECK(svg.find("fill=\"#5a5b5c\"", first + 1) == std::string::npos);
+    CK_CHECK(svg.find("width=\"27\" height=\"36\" fill=\"#5a5b5c\"") !=
+             std::string::npos);
 }
 
 CK_TEST(a_continuation_cell_from_a_wide_glyph_is_skipped_entirely) {
@@ -91,4 +105,38 @@ CK_TEST(bold_and_underline_attributes_are_reflected_as_svg_text_attributes) {
     const std::string svg = render_frame_svg(surface.view());
     CK_CHECK(svg.find("font-weight=\"bold\"") != std::string::npos);
     CK_CHECK(svg.find("text-decoration=\"underline\"") != std::string::npos);
+}
+
+CK_TEST(box_drawing_cells_use_cell_aligned_svg_geometry_instead_of_font_glyphs) {
+    Surface surface(Size{4, 3});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 4, 3});
+    painter.draw_box(ckv::Rect{0, 0, 4, 3}, ckv::scene::LineStyle::Double,
+                     Style{Color::rgb(255, 255, 255), Color::rgb(0, 0, 170), Attr::Bold});
+
+    const std::string svg = render_frame_svg(surface.view());
+    CK_CHECK(svg.find("data-box-drawing=\"double\"") != std::string::npos);
+    CK_CHECK(svg.find(">╝</text>") == std::string::npos);
+    CK_CHECK(svg.find("stroke-linecap=\"square\"") != std::string::npos);
+    CK_CHECK(svg.find("d=\"M 31.5 35.5 L 31.5 45 L 26.5 45\"") !=
+             std::string::npos);  // bottom-right corner reaches both neighboring cell edges
+}
+
+CK_TEST(virtual_display_svg_contains_pixels_decoded_from_sixel_output) {
+    VirtualDisplay display(Size{2, 1}, Size{4, 6});
+    CK_CHECK(display.write("\x1B[1;1H\x1BPq#0;2;100;0;0~\x1B\\"));
+    const std::string svg = render_virtual_display_svg(display);
+    CK_CHECK(svg.find("id=\"raster-plane\"") != std::string::npos);
+    CK_CHECK(svg.find("<image x=\"0\" y=\"0\" width=\"1\" height=\"6\"") !=
+             std::string::npos);
+    CK_CHECK(svg.find("href=\"data:image/png;base64,iVBORw0KGgo") != std::string::npos);
+    CK_CHECK(svg.find("fill-opacity") == std::string::npos);
+}
+
+CK_TEST(virtual_display_svg_has_no_opaque_raster_rects_for_a_cell_only_frame) {
+    VirtualDisplay display(Size{2, 1}, Size{4, 6});
+    CK_CHECK(display.write("\x1B[1;1H\x1B[0mOK\x1B[?25l"));
+    const std::string svg = render_virtual_display_svg(display);
+    const std::size_t raster_group = svg.find("id=\"raster-plane\"");
+    CK_CHECK(raster_group != std::string::npos);
+    CK_CHECK(svg.find("<image", raster_group) == std::string::npos);
 }

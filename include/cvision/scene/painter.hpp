@@ -5,6 +5,7 @@
 // to a Surface's visible content goes through here.
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string_view>
@@ -27,8 +28,9 @@ using StyleTransform = Style (*)(Style) noexcept;
 // LOCAL space (origin at its own top-left) — the view-relative
 // addressing every widget author actually wants (ARCHITECTURE.md §5:
 // "easy things easy"). `clip()` and internal bookkeeping are in
-// absolute Surface space; translated()/clipped() are how a parent
-// hands a child its own Painter.
+// absolute Surface space. translated()/clipped() retain this Painter's
+// logical junction scope; isolated() starts the independent scope used
+// when the view tree hands a Painter to another view.
 class Painter {
 public:
     // `clip` is the ABSOLUTE drawable region within `surface`; `origin`
@@ -36,8 +38,11 @@ public:
     // (0,0 by default: a top-level Painter's local space already is
     // absolute space). Every draw call additionally clips to the
     // surface's own bounds.
-    Painter(Surface& surface, Rect clip, Point origin = {})
-        : surface_(surface), clip_(clip), origin_(origin) {}
+    Painter(Surface& surface, Rect clip, Point origin = {}) noexcept
+        : surface_(surface),
+          clip_(clip),
+          origin_(origin),
+          junction_scope_(surface.create_junction_scope()) {}
 
     // The absolute clip rect, still in Surface space (not translated).
     Rect clip() const noexcept { return clip_; }
@@ -47,7 +52,8 @@ public:
     // origin — the mechanism draw_image uses to keep a fallback
     // callback inside its anchor.
     Painter clipped(Rect sub_clip) const noexcept {
-        return Painter(surface_, clip_.intersected(to_absolute(sub_clip)), origin_);
+        return Painter(surface_, clip_.intersected(to_absolute(sub_clip)), origin_,
+                       junction_scope_);
     }
 
     // A Painter for a child view: `offset` (in this Painter's local
@@ -59,8 +65,14 @@ public:
         const Point new_origin{origin_.x + offset.x, origin_.y + offset.y};
         const Rect absolute_clip = Rect{new_origin.x + local_clip.x, new_origin.y + local_clip.y,
                                          local_clip.width, local_clip.height};
-        return Painter(surface_, clip_.intersected(absolute_clip), new_origin);
+        return Painter(surface_, clip_.intersected(absolute_clip), new_origin, junction_scope_);
     }
+
+    // Starts a new logical paint scope without changing coordinates or
+    // clipping. Lines merge only with line metadata from this returned
+    // Painter (and its translated/clipped derivatives), never with a
+    // lower-z view that happened to leave a box-drawing glyph behind.
+    Painter isolated() const noexcept { return Painter(surface_, clip_, origin_); }
 
     // Fills `rect` with a repeated cell. `cell` must be width 1 (a
     // repeating wide- or zero-width pattern has no well-defined
@@ -76,11 +88,12 @@ public:
     // is drawn either — no partial wide glyphs, ever.
     void draw_text(Point pos, std::string_view text, Style style);
 
-    // Straight-line runs. Each cell's connector directions merge with
-    // whatever box-drawing glyph (of any style) already occupies it —
-    // this is the automatic junction merging (box_drawing.hpp): drawing
-    // an hline across an existing vline produces a cross or a T
-    // automatically, with no separate junction API needed.
+    // Straight-line runs. Connector directions merge with earlier line
+    // operations in this Painter's logical scope: drawing an hline
+    // across a vline from the same view produces a cross or T. Content
+    // painted by another view is replaced according to z-order and can
+    // never change the new line's topology merely because it used a
+    // box-drawing glyph.
     void hline(Point pos, int length, LineStyle style, Style cell_style);
     void vline(Point pos, int length, LineStyle style, Style cell_style);
 
@@ -92,6 +105,13 @@ public:
     // Applies `transform` to the existing style of every cell in `rect`,
     // leaving each cell's grapheme untouched.
     void transform_style(Rect rect, StyleTransform transform);
+
+    // Applies one binary shadow coverage pass. A cell is transformed only
+    // for the first shadow that covers its current content; overlapping
+    // footprint pieces and shadows from other views do not compound. Any
+    // later content write clears the coverage marker, allowing a shadow
+    // above that newly painted content to apply normally.
+    void apply_shadow(Rect rect, StyleTransform transform);
 
     // Places a cell-anchored raster image (ARCHITECTURE.md §7). `id`
     // must be unique among this surface's raster regions (encoder cache
@@ -106,7 +126,15 @@ public:
                      const std::function<void(Painter&)>& fallback);
 
 private:
-    Point to_absolute(Point local) const noexcept { return {local.x + origin_.x, local.y + origin_.y}; }
+    Painter(Surface& surface, Rect clip, Point origin, std::uint64_t junction_scope) noexcept
+        : surface_(surface),
+          clip_(clip),
+          origin_(origin),
+          junction_scope_(junction_scope) {}
+
+    Point to_absolute(Point local) const noexcept {
+        return {local.x + origin_.x, local.y + origin_.y};
+    }
     Rect to_absolute(Rect local) const noexcept {
         return Rect{local.x + origin_.x, local.y + origin_.y, local.width, local.height};
     }
@@ -118,6 +146,7 @@ private:
     Surface& surface_;
     Rect clip_;      // absolute
     Point origin_;   // this Painter's local (0,0) in absolute Surface space
+    std::uint64_t junction_scope_;
 };
 
 }  // namespace ckv::scene

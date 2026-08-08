@@ -13,6 +13,7 @@
 #include <string>
 
 #include "cvision/core/frame_view.hpp"
+#include "cvision/term/virtual_display.hpp"
 
 namespace ckv::docgen {
 
@@ -24,9 +25,18 @@ struct FrameSvgOptions {
 
 // Renders every cell of `frame` as a background rect plus (for
 // non-continuation cells) a glyph, honoring Attr::Bold/Underline and
-// swapping fg/bg for Attr::Reverse. A default (unset) fg/bg resolves
-// to the classic terminal default pair (light gray on black) since SVG
-// has no "inherit the terminal's own color" concept to defer to.
+// swapping fg/bg for Attr::Reverse. Recognized box-drawing cells use
+// deterministic cell-edge SVG geometry instead of host-font metrics. A
+// default (unset) fg/bg resolves to the classic terminal default pair
+// (light gray on black) since SVG has no "inherit the terminal's own
+// color" concept to defer to.
 std::string render_frame_svg(const FrameView& frame, const FrameSvgOptions& options = {});
+
+// Renders the independently decoded terminal state, including Sixel
+// pixels received through Terminal::write. Raster pixels are drawn
+// after the styled-cell plane, matching Presenter/terminal layering.
+// The display's fixed cell-pixel metrics define SVG geometry.
+std::string render_virtual_display_svg(const term::VirtualDisplay& display,
+                                       const FrameSvgOptions& options = {});
 
 }  // namespace ckv::docgen

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/scene/compositor.hpp"
 
+#include <algorithm>
 #include <cstdint>
 
 #include "cvision/scene/rect_ops.hpp"
@@ -38,9 +39,10 @@ Style default_dim(Style style) noexcept {
 
 std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept {
     std::vector<Rect> result;
-    if (shadow.dx > 0)
-        result.push_back(
-            Rect{layer_rect.right(), layer_rect.top() + shadow.dy, shadow.dx, layer_rect.height});
+    const int right_height = std::max(0, layer_rect.height - shadow.dy);
+    if (shadow.dx > 0 && right_height > 0)
+        result.push_back(Rect{layer_rect.right(), layer_rect.top() + shadow.dy, shadow.dx,
+                              right_height});
     if (shadow.dy > 0)
         result.push_back(
             Rect{layer_rect.left() + shadow.dx, layer_rect.bottom(), layer_rect.width, shadow.dy});
@@ -134,20 +136,20 @@ std::vector<Rect> Compositor::compute_damage(const std::vector<Layer>& layers,
 
 Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
                                std::size_t exclusive_top, const Surface& background) const {
-    // A single descending pass, not two separate ones: at each layer,
-    // from top to bottom, check its own rect FIRST, then whether it
-    // casts a shadow over p. Two separate passes (own-rect scan over
-    // every layer, THEN a shadow scan) would let a layer far BELOW a
-    // shadow-caster win outright before the shadow is ever considered
-    // — meaning a shadow could only ever fall on bare background, never
-    // dim another layer sitting underneath its caster, contradicting
-    // ARCHITECTURE.md §3's "dimming whatever content is there... every
-    // layer's own rect wins over any shadow at or below it in z-order".
+    // A single descending pass resolves both visible content and binary
+    // shadow coverage. Shadows encountered above the winning content set
+    // one flag; any number of overlapping shadows still applies exactly
+    // one transform. Returning as soon as a layer owns `p` also means a
+    // lower layer's shadow can never affect content above it.
+    bool shadowed = false;
     for (std::size_t i = exclusive_top; i-- > 0;) {
         const Layer& l = layers[i];
         const Rect rect = layer_rect(l);
-        if (rect.contains(p))
-            return l.surface->at(Point{p.x - l.position.x, p.y - l.position.y});
+        if (rect.contains(p)) {
+            Cell result = l.surface->at(Point{p.x - l.position.x, p.y - l.position.y});
+            if (shadowed) result.set_style(shadow.dim(result.style()));
+            return result;
+        }
 
         if (!l.casts_shadow) continue;
         const std::vector<Rect> footprint = shadow_footprint(rect, shadow);
@@ -157,17 +159,11 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
                 covered = true;
                 break;
             }
-        if (!covered) continue;
-        // Whatever is under the shadow, excluding layer i and above —
-        // recursion terminates because i is strictly smaller than
-        // exclusive_top on every call, and a layer's own shadow
-        // footprint never overlaps its own rect (it starts at the
-        // rect's own right/bottom edge), so there is no self-recursion.
-        Cell under = resolve_cell(p, layers, shadow, i, background);
-        under.set_style(shadow.dim(under.style()));
-        return under;
+        if (covered) shadowed = true;
     }
-    return background.at(p);
+    Cell result = background.at(p);
+    if (shadowed) result.set_style(shadow.dim(result.style()));
+    return result;
 }
 
 void Compositor::compute_visible_rasters(const std::vector<Layer>& layers) {

@@ -6,6 +6,8 @@
 // actually renders, and that keyboard (Tab, F10 menu, typing) and
 // mouse (menu-bar click) navigation work against the real render
 // pipeline, not a simplified stand-in.
+#include <algorithm>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/input_line.hpp"
@@ -28,6 +30,37 @@ struct Fixture {
     Application app{term, clock};
     ckv::gallery::GalleryApp gallery{app};
 };
+
+std::size_t opaque_pixel_count(const ckv::Image& image) {
+    std::size_t count = 0;
+    for (int y = 0; y < image.height(); ++y)
+        for (int x = 0; x < image.width(); ++x)
+            if (image.pixel(x, y).a != 0) ++count;
+    return count;
+}
+
+bool opaque_pixels_form_a_solid_rectangle(const ckv::Image& image) {
+    int left = image.width();
+    int top = image.height();
+    int right = 0;
+    int bottom = 0;
+    bool found = false;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            if (image.pixel(x, y).a == 0) continue;
+            found = true;
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + 1);
+            bottom = std::max(bottom, y + 1);
+        }
+    }
+    if (!found) return false;
+    for (int y = top; y < bottom; ++y)
+        for (int x = left; x < right; ++x)
+            if (image.pixel(x, y).a != 255) return false;
+    return true;
+}
 }  // namespace
 
 CK_TEST(the_gallery_renders_both_windows_titles_on_first_frame) {
@@ -51,8 +84,8 @@ CK_TEST(the_menu_bar_and_status_line_both_render) {
 // its menu bar and status line with a one-time set_bounds call instead
 // of Desktop::dock_top/dock_bottom — the exact stale-after-resize
 // pattern docking exists to eliminate. Now that it docks like the
-// other examples, a real terminal resize (through the same chain
-// tests/test_m8_integration.cpp exercises directly on Desktop) must
+// other examples, a real terminal resize (through the same public
+// terminal/step chain exercised in tests/test_m8_integration.cpp) must
 // reach it end to end.
 CK_TEST(resizing_the_terminal_repins_the_menu_bar_and_status_line_to_the_new_edges) {
     Fixture f;
@@ -62,7 +95,8 @@ CK_TEST(resizing_the_terminal_repins_the_menu_bar_and_status_line_to_the_new_edg
     CK_CHECK(menu_bar != nullptr);
     CK_CHECK(status_line != nullptr);
 
-    CK_CHECK(f.app.dispatch(ckv::ResizeEvent{ckv::Size{120, 40}}));
+    f.term.resize(ckv::Size{120, 40});
+    CK_CHECK(f.app.step(0));
 
     CK_CHECK(menu_bar->bounds() == (ckv::Rect{0, 0, 120, 1}));
     CK_CHECK(status_line->bounds() == (ckv::Rect{0, 39, 120, 1}));
@@ -123,9 +157,7 @@ CK_TEST(clicking_greet_opens_a_message_box_that_renders_the_typed_name) {
 }
 
 CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities) {
-    ckv::term::Capabilities caps = ckv::term::baseline_capabilities();
-    caps.sixel_graphics = true;
-    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, caps);
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_sixel_profile());
     ManualClock clock;
     Application app(term, clock);
     ckv::gallery::GalleryApp gallery(app);
@@ -135,5 +167,42 @@ CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_c
     // somewhere in the presented frame once the image window's
     // ImageView is on screen and the terminal advertises Sixel.
     CK_CHECK(term.written_bytes().find("\x1B" "P") != std::string::npos);
+    CK_CHECK(term.written_bytes().find("[image]") == std::string::npos);
+    CK_CHECK(term.display().has_raster_pixels());
+    CK_CHECK(opaque_pixel_count(term.display().raster_plane()) == 64U * 32U);
+    CK_CHECK(opaque_pixels_form_a_solid_rectangle(term.display().raster_plane()));
+    (void)gallery;
+}
+
+CK_TEST(the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24},
+                                     ckv::term::headless_no_graphics_profile());
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::gallery::GalleryApp gallery(app);
+
+    app.step(0);
+    CK_CHECK(term.written_bytes().find("\x1B" "P") == std::string::npos);
+    CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
+    CK_CHECK(!term.display().has_raster_pixels());
+    (void)gallery;
+}
+
+CK_TEST(runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pixels) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_sixel_profile());
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::gallery::GalleryApp gallery(app);
+
+    app.step(0);
+    CK_CHECK(term.display().has_raster_pixels());
+
+    term.inject_capability_change(ckv::term::headless_no_graphics_profile());
+    app.step(0);
+    CK_CHECK(!term.display().has_raster_pixels());
+
+    term.inject_capability_change(ckv::term::headless_sixel_profile());
+    app.step(0);
+    CK_CHECK(term.display().has_raster_pixels());
     (void)gallery;
 }

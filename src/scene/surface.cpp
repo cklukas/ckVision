@@ -6,10 +6,37 @@
 #include "cvision/core/assert.hpp"
 
 namespace ckv::scene {
+namespace {
+
+constexpr std::uint64_t kDirectionBits = 4;
+constexpr std::uint64_t kDirectionMask = (std::uint64_t{1} << kDirectionBits) - 1U;
+constexpr std::uint64_t kShadowBit = std::uint64_t{1} << 63U;
+constexpr std::uint64_t kMaxJunctionScope = (kShadowBit - 1U) >> kDirectionBits;
+constexpr std::uint64_t kJunctionScopeMask = kMaxJunctionScope << kDirectionBits;
+
+std::uint64_t pack_junction(std::uint64_t scope, Junction junction) noexcept {
+    CKV_ASSERT(scope > 0 && scope <= kMaxJunctionScope);
+    const std::uint64_t directions =
+        (junction.up ? 1U : 0U) | (junction.down ? 2U : 0U) | (junction.left ? 4U : 0U) |
+        (junction.right ? 8U : 0U);
+    CKV_ASSERT(directions != 0);
+    return (scope << kDirectionBits) | directions;
+}
+
+Junction unpack_junction(std::uint64_t packed) noexcept {
+    const std::uint64_t directions = packed & kDirectionMask;
+    CKV_ASSERT(directions != 0);
+    return Junction{(directions & 1U) != 0, (directions & 2U) != 0,
+                    (directions & 4U) != 0, (directions & 8U) != 0};
+}
+
+}  // namespace
 
 Surface::Surface(Size size, Cell fill)
     : size_(size),
       cells_(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height), fill),
+      junction_provenance_(static_cast<std::size_t>(size.width) *
+                           static_cast<std::size_t>(size.height)),
       row_damage_(static_cast<std::size_t>(size.height), DamageSpan{0, size.width}) {
     CKV_ASSERT(size.width >= 0 && size.height >= 0);
 }
@@ -20,6 +47,46 @@ const Cell& Surface::at(Point p) const noexcept {
 }
 
 void Surface::set_cell(Point p, Cell cell) {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    junction_provenance_[index(p)] = 0;
+    write_cell(p, std::move(cell));
+}
+
+std::uint64_t Surface::create_junction_scope() noexcept {
+    // Scope zero is reserved for ordinary cells. Exhausting 2^59-1
+    // logical paints on one Surface is not a recoverable rendering state,
+    // and must fail rather than silently alias live provenance.
+    CKV_ASSERT(next_junction_scope_ <= kMaxJunctionScope);
+    return next_junction_scope_++;
+}
+
+std::optional<Junction> Surface::junction_in_scope(Point p, std::uint64_t scope) const noexcept {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    CKV_ASSERT(scope != 0);
+    const std::uint64_t provenance = junction_provenance_[index(p)];
+    if (((provenance & kJunctionScopeMask) >> kDirectionBits) != scope)
+        return std::nullopt;
+    return unpack_junction(provenance);
+}
+
+bool Surface::begin_shadow(Point p) noexcept {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    std::uint64_t& provenance = junction_provenance_[index(p)];
+    if ((provenance & kShadowBit) != 0) return false;
+    provenance |= kShadowBit;
+    return true;
+}
+
+void Surface::set_junction_cell(Point p, Cell cell, std::uint64_t scope, Junction junction) {
+    CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
+    CKV_ASSERT(scope != 0);
+    junction_provenance_[index(p)] = pack_junction(scope, junction);
+    write_cell(p, std::move(cell));
+}
+
+void Surface::set_cell_preserving_junction(Point p, Cell cell) { write_cell(p, std::move(cell)); }
+
+void Surface::write_cell(Point p, Cell cell) {
     CKV_ASSERT(p.x >= 0 && p.x < size_.width && p.y >= 0 && p.y < size_.height);
     cells_[index(p)] = std::move(cell);
     DamageSpan& span = row_damage_[static_cast<std::size_t>(p.y)];
@@ -68,6 +135,9 @@ void Surface::resize(Size new_size, Cell fill) {
     cells_.assign(
         static_cast<std::size_t>(new_size.width) * static_cast<std::size_t>(new_size.height),
         fill);
+    junction_provenance_.assign(
+        static_cast<std::size_t>(new_size.width) * static_cast<std::size_t>(new_size.height),
+        0);
     row_damage_.assign(static_cast<std::size_t>(new_size.height), DamageSpan{0, new_size.width});
     raster_regions_.clear();
 }

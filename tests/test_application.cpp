@@ -20,7 +20,11 @@ namespace {
 
 class ProbeView : public View {
 public:
-    explicit ProbeView(Rect bounds = {}) : View(bounds) {}
+    explicit ProbeView(Rect bounds = {}) : View(bounds) {
+        // Probe geometry is the subject of these tests; it is an explicit
+        // fixed overlay when attached directly to Application::root().
+        set_fills_root(false);
+    }
     int key_events = 0;
     int text_events = 0;
     int mouse_events = 0;

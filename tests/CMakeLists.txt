@@ -44,6 +44,7 @@ add_executable(cvision_tests
     test_presenter.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
+    test_root_resize_golden.cpp
     test_scroll_viewport.cpp
     test_scrollbar.cpp
     test_sixel_encoder.cpp
@@ -58,6 +59,7 @@ add_executable(cvision_tests
     test_tree_view.cpp
     test_utf8.cpp
     test_version.cpp
+    test_virtual_display.cpp
     test_view.cpp
     test_widgets.cpp
     test_window.cpp
@@ -98,13 +100,47 @@ add_test(NAME cvision_tests
     COMMAND cvision_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Keep a human-inspectable rendering artifact beside the machine assertions.
+# This drives Presenter output through HeadlessTerminal's VT/Sixel decoder;
+# capture code never receives the source Image directly (D-035).
+if(TARGET capture_gallery_screenshots)
+    add_test(NAME gallery_visual_capture
+        COMMAND capture_gallery_screenshots
+                ${CMAKE_BINARY_DIR}/test-artifacts/gallery)
+    set_tests_properties(gallery_visual_capture PROPERTIES LABELS "visual;artifact")
+endif()
+
+if(TARGET capture_filebrowser_screenshots)
+    add_test(NAME filebrowser_visual_capture
+        COMMAND capture_filebrowser_screenshots
+                ${CMAKE_BINARY_DIR}/test-artifacts/filebrowser)
+    set_tests_properties(filebrowser_visual_capture PROPERTIES LABELS "visual;artifact")
+endif()
+
+if(TARGET capture_hello_screenshots)
+    add_test(NAME hello_visual_capture
+        COMMAND capture_hello_screenshots
+                ${CMAKE_BINARY_DIR}/test-artifacts/hello)
+    set_tests_properties(hello_visual_capture PROPERTIES LABELS "visual;artifact")
+endif()
+
 # Python is build/CI tooling, not a library dependency (D-004 untouched).
 # REQUIRED so the layer/include enforcement gate can never vanish silently.
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
 
-# The M5 exit criterion (ROADMAP.md), wired for real (M9/WP-17): never
-# vanish silently, same reasoning as layer_check above.
+# The M9 60-line Hello exit criterion (ROADMAP.md), wired for real:
+# never vanish silently, same reasoning as layer_check above.
 add_test(NAME hello_line_budget
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_hello_line_budget.py)
+
+# D-012/WP-23: scan every tracked and non-ignored text artifact for
+# prohibited source-fidelity claims, and separately prove that the checker
+# rejects representative positive cases while accepting clean-room wording.
+add_test(NAME provenance_check
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_provenance.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+add_test(NAME provenance_checker_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_provenance.py
+            --self-test)

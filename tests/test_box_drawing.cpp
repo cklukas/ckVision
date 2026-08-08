@@ -4,6 +4,8 @@
 #include "cktest.hpp"
 
 using ckv::scene::Junction;
+using ckv::scene::JunctionGlyphInfo;
+using ckv::scene::classify_junction_glyph;
 using ckv::scene::junction_glyph;
 using ckv::scene::junction_of;
 using ckv::scene::LineStyle;
@@ -93,4 +95,19 @@ CK_TEST(reverse_lookup_rejects_plain_text) {
     CK_CHECK(!junction_of("A").has_value());
     CK_CHECK(!junction_of(" ").has_value());
     CK_CHECK(!junction_of("").has_value());
+}
+
+CK_TEST(glyph_classification_preserves_concrete_line_style_for_visual_renderers) {
+    const std::optional<JunctionGlyphInfo> double_corner = classify_junction_glyph("╝");
+    CK_CHECK(double_corner.has_value());
+    if (double_corner) {
+        CK_CHECK(double_corner->junction == (Junction{true, false, true, false}));
+        CK_CHECK(double_corner->style == LineStyle::Double);
+    }
+
+    const std::optional<JunctionGlyphInfo> rounded_corner = classify_junction_glyph("╭");
+    CK_CHECK(rounded_corner.has_value());
+    if (rounded_corner) CK_CHECK(rounded_corner->style == LineStyle::Rounded);
+
+    CK_CHECK(!classify_junction_glyph("A").has_value());
 }

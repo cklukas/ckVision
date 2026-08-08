@@ -86,7 +86,12 @@ The rendering model is retained cell surfaces with damage tracking:
   (single/double/rounded/heavy line sets with automatic junction merging),
   horizontal/vertical rules, clipping, style-transform regions, and
   raster-region placement. Widgets never emit escape sequences and never
-  touch cells directly.
+  touch cells directly. Junction merging is provenance-scoped (D-036): each
+  view paint has an isolated, surface-local scope, while translated/clipped
+  painters within that view inherit it. Exact connector metadata, never a
+  reverse interpretation of the visible glyph, controls merging. Thus
+  same-view dividers can join their frame, while later z-order content always
+  replaces unrelated lower-view lines normally.
 - **Raster regions**: a surface can host cell-anchored raster content —
   an `Image` with a cell-rect anchor and a pixel extent. Raster regions
   are first-class scene citizens: z-ordered, clipped, and occluded by the
@@ -102,8 +107,11 @@ The rendering model is retained cell surfaces with damage tracking:
   **shadows** as a compositor pass: a shadow is a declared geometry
   (default: two columns right, one row down — the classic look) rendered
   by style-transforming the cells *beneath* it, dimming whatever content
-  is there, exactly like the classics did it. Window shadows and menu
-  shadows fall out of the same mechanism.
+  is there. Shadow coverage is a binary union (D-037): one or many overlapping
+  shadow casters apply exactly one transform, never progressively darker
+  transforms. A later-painted higher layer clears lower shadow coverage by
+  replacing the cell normally. Window shadows and menu shadows fall out of the
+  same mechanism.
 - **Scroll intent**: when a viewport scrolls by whole rows, the shift is
   recorded as an annotation on the compose/present handoff, so the
   presenter can apply scroll optimizations from declared intent instead
@@ -138,7 +146,11 @@ event stream, frame presentation, clipboard write, title, notifications
   recorded in the capability report. Non-VT hosts are refused with a
   clear diagnostic.
 - **headless**: a full in-memory terminal for tests and automation —
-  scripted input, frame capture, capability profiles set per test.
+  scripted input, named capability profiles set per instance, raw output-byte
+  capture, symbolic composed-frame capture, and a deterministic virtual display
+  that consumes those output bytes into cell and RGBA planes. The virtual
+  display implements only the documented VT subset Presenter emits plus the
+  published Sixel grammar; unsupported output is a test failure, not ignored.
 - **record/replay**: wraps any backend; records the event stream —
   including capability-probe responses — and presented bytes for
   deterministic replay and debugging.
@@ -177,8 +189,11 @@ per-profile data plus an optional startup width probe — D-019),
 by mode 2031 notifications where supported), hyperlinks (OSC 8),
 synchronized output, clipboard write, focus events, paste bracketing.
 Every capability has a defined degradation and a headless test for both
-the full and degraded paths. Terminal multiplexers (tmux, screen) and
-the Linux console are curated profiles like any other.
+the full and degraded paths. Graphics tests run the identical application
+script under named `Sixel` and `NoGraphics` profiles with fixed cell-pixel
+metrics, including runtime capability-change re-presentation. Terminal
+multiplexers (tmux, screen) and the Linux console are curated profiles like
+any other.
 
 **Input decoder.** A single incremental state machine turns bytes into
 typed events: keys (legacy escape sequences, `modifyOtherKeys`, kitty
@@ -378,6 +393,15 @@ output). On shrink, windows are deterministically clamped and
 repositioned to remain reachable; dialogs larger than the screen clamp
 and scroll their content. Shrink storms are golden-tested.
 
+**Root layout**: `Application` owns an internal fill policy for its direct
+root children. A child that keeps `View::fills_root()` at its default is sized
+to the current terminal grid immediately on attachment and after every terminal
+resize; a fixed root overlay opts out before attachment. `on_bounds_changed`
+is a public observer only: replacing it, or changing child geometry from it,
+cannot replace the framework layout pass. Headless resize scripts enter through
+`HeadlessTerminal` and `Application::step`, and pin the composed frame at each
+resize step.
+
 ### Focus and traversal
 
 One focused view per application, always visible, always consistent:
@@ -475,7 +499,12 @@ The **fallback contract** is architectural: no API in the library accepts
 raster content without its textual fallback, so an application that runs
 on a graphics terminal runs — fully functional, merely less pretty — on a
 text-only terminal. Capability decides at render time; application code
-has one path.
+has one path. The textual fallback is not an underlay: under an active graphics
+profile, Presenter writes style-preserving blank cells across each visible
+raster slice, then emits an explicitly opaque, extent-bounded Sixel image.
+Only the no-graphics profile emits the fallback glyphs. This prevents fallback
+text from bleeding through during multi-pass Sixel painting or terminal
+repaints and gives capability transitions a clean backing surface.
 
 Pixel-space interaction is honest: pixel positions come only from the
 terminal's own pixel reporting; cell metrics (for layout and image sizing
@@ -542,7 +571,25 @@ dies.
   appearance, including shadows, junctions, and degraded color modes.
   Goldens pin the library's own width tables; fidelity on real terminals
   is guaranteed by the width-agreement strategy (§4, D-019), which has
-  its own test matrix.
+  its own test matrix. Symbolic raster records specify scene semantics;
+  they do not prove terminal-protocol rendering (D-035).
+- **Junction/z-order goldens**: line-topology fixtures cover both halves of
+  D-036: rules produced within one view join its own frame, while crossing
+  borders from overlapping sibling windows remain the exact glyph and style
+  of the foreground window. Direct cell assertions accompany the full-frame
+  golden so a topology failure is localized rather than hidden in a large
+  visual diff.
+- **Virtual-display graphics goldens**: the headless terminal feeds the exact
+  bytes received by `Terminal::write` into an independently tested VT/Sixel
+  decoder and captures the resulting cell + RGBA planes. These pixel-plane
+  goldens specify Sixel encoding, placement, cropping, occlusion, clearing, and
+  capability-change behavior. The same script also runs under `NoGraphics`,
+  where the capture must contain the cell fallback and no raster pixels.
+  Documentation screenshots are generated from this decoded virtual display,
+  never from a cell-only `FrameView` or directly from the source `Image`.
+  Recognized box-drawing cells are emitted as cell-edge-aligned SVG geometry,
+  not font-dependent text, so HTML and PDF cannot introduce false gaps in
+  otherwise correct frame corners.
 - **Event scripts**: recorded or hand-written typed-event sequences drive
   applications headlessly; script + capability profile + goldens =
   executable interaction specification (menu navigation, focus order,

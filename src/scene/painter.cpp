@@ -62,9 +62,10 @@ void Painter::merge_junction(Point p, Junction contribution, LineStyle style, St
     if (!clip_.contains(p)) return;
 
     Junction merged = contribution;
-    if (const std::optional<Junction> existing = junction_of(surface_.at(p).grapheme()))
+    if (const std::optional<Junction> existing = surface_.junction_in_scope(p, junction_scope_))
         merged = merged | *existing;
-    surface_.set_cell(p, Cell::from_grapheme(junction_glyph(merged, style), cell_style));
+    surface_.set_junction_cell(
+        p, Cell::from_grapheme(junction_glyph(merged, style), cell_style), junction_scope_, merged);
 }
 
 void Painter::draw_line_segment(Point pos, int length, bool horizontal, LineStyle style,
@@ -137,7 +138,25 @@ void Painter::transform_style(Rect rect, StyleTransform transform) {
             const Point p{x, y};
             Cell updated = surface_.at(p);
             updated.set_style(transform(updated.style()));
-            surface_.set_cell(p, updated);
+            // A style-only pass (for example a window shadow) must not
+            // erase the line ownership beneath it. If the owning view
+            // resumes drawing in the same scope, its own junctions still
+            // merge; a different view still replaces them.
+            surface_.set_cell_preserving_junction(p, updated);
+        }
+    }
+}
+
+void Painter::apply_shadow(Rect rect, StyleTransform transform) {
+    const Rect r = to_absolute(rect).intersected(clip_).intersected(
+        Rect{0, 0, surface_.size().width, surface_.size().height});
+    for (int y = r.top(); y < r.bottom(); ++y) {
+        for (int x = r.left(); x < r.right(); ++x) {
+            const Point p{x, y};
+            if (!surface_.begin_shadow(p)) continue;
+            Cell updated = surface_.at(p);
+            updated.set_style(transform(updated.style()));
+            surface_.set_cell_preserving_junction(p, updated);
         }
     }
 }

@@ -110,8 +110,8 @@ CK_TEST(shadow_dims_the_background_beneath_it) {
     ShadowSpec shadow;  // dx=2, dy=1, default_dim
     c.compose(layers, bg, shadow);
 
-    // Right strip of the shadow: columns 3-4, rows 1-2 (layer height 2,
-    // offset down by dy=1).
+    // Right strip of the shadow: columns 3-4, row 1 (it ends where the
+    // non-overlapping bottom strip begins).
     const ckv::Cell shadowed = c.frame().at(ckv::Point{3, 1});
     CK_CHECK(shadowed.grapheme() == ".");      // background's own content shows through
     CK_CHECK(shadowed.style().fg.r() == 100);  // halved from 200
@@ -120,6 +120,31 @@ CK_TEST(shadow_dims_the_background_beneath_it) {
     CK_CHECK(bottom_shadowed.style().fg.r() == 100);
     // Outside the shadow footprint: untouched.
     CK_CHECK(c.frame().at(ckv::Point{6, 3}).style().fg.r() == 200);
+}
+
+CK_TEST(a_single_shadow_footprint_is_a_non_overlapping_union) {
+    const std::vector<ckv::Rect> footprint =
+        ckv::scene::shadow_footprint(ckv::Rect{2, 2, 5, 3}, ShadowSpec{});
+    CK_CHECK(footprint.size() == 2);
+    CK_CHECK(footprint[0].intersected(footprint[1]).empty());
+}
+
+CK_TEST(overlapping_shadows_are_a_binary_union_not_cumulative_dimming) {
+    Compositor c(ckv::Size{10, 6});
+    const ckv::Style bright{ckv::Color::rgb(200, 200, 200), ckv::Color{}, ckv::Attr{}};
+    Surface bg = make_surface(10, 6, ".", bright);
+    Surface first = make_surface(3, 2, "A");
+    Surface second = make_surface(3, 2, "B");
+    std::vector<Layer> layers{
+        {1, &first, ckv::Point{0, 0}, /*casts_shadow=*/true},
+        {2, &second, ckv::Point{1, 0}, /*casts_shadow=*/true},
+    };
+
+    c.compose(layers, bg);
+
+    // (4,1) is in both right-hand shadow strips and in neither window.
+    // Shadow coverage is a set membership, not an opacity accumulator.
+    CK_CHECK(c.frame().at(ckv::Point{4, 1}).style().fg.r() == 100);
 }
 
 CK_TEST(shadow_dims_a_lower_layer_beneath_the_caster_not_just_background) {
@@ -139,7 +164,7 @@ CK_TEST(shadow_dims_a_lower_layer_beneath_the_caster_not_just_background) {
     ShadowSpec shadow;  // dx=2, dy=1
     c.compose(layers, bg, shadow);
 
-    // Right strip of the caster's shadow: columns 3-4, rows 1-2. `low`
+    // Right strip of the caster's shadow: columns 3-4, row 1. `low`
     // covers this area too, so its "L" content — dimmed — must show.
     const ckv::Cell cell = c.frame().at(ckv::Point{3, 1});
     CK_CHECK(cell.grapheme() == "L");

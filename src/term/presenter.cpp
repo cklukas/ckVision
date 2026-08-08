@@ -139,13 +139,30 @@ std::string sanitize_osc_text(std::string_view text) {
     return out;
 }
 
-bool Presenter::cell_changed(FrameView frame, Point p) const noexcept {
-    if (force_full_ || previous_size_ != frame.size()) return true;
-    const Cell& cur = frame.at(p);
+Cell Presenter::presentation_cell(FrameView frame, Point p,
+                                  const std::vector<RasterSlice>& rasters) const {
+    const Cell& source = frame.at(p);
+    if (terminal_.capabilities().sixel_graphics) {
+        for (const RasterSlice& slice : rasters) {
+            if (slice.image && !slice.image->empty() && !slice.visible_rect.empty() &&
+                !slice.full_anchor.empty() && slice.visible_rect.contains(p)) {
+                // The fallback remains mandatory scene content, but it must
+                // not be emitted beneath an active opaque Sixel image. Keep
+                // its style so writing this blank also establishes the
+                // surrounding panel/window background before the DCS.
+                return Cell::from_grapheme(" ", source.style());
+            }
+        }
+    }
+    return source;
+}
+
+bool Presenter::cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept {
+    if (force_full_ || previous_size_ != frame_size) return true;
     const Cell& prev = previous_cells_[static_cast<std::size_t>(p.y) *
                                             static_cast<std::size_t>(previous_size_.width) +
                                         static_cast<std::size_t>(p.x)];
-    return !(cur == prev);
+    return !(cell == prev);
 }
 
 void Presenter::emit_cursor_move(std::string& out, int x, int y) const {
@@ -156,7 +173,7 @@ void Presenter::emit_cursor_move(std::string& out, int x, int y) const {
     out += 'H';
 }
 
-std::string Presenter::render_frame(FrameView frame) {
+std::string Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& rasters) {
     std::string out;
     const Size size = frame.size();
     const ColorDepth depth = terminal_.capabilities().color_depth;
@@ -168,11 +185,12 @@ std::string Presenter::render_frame(FrameView frame) {
     for (int y = 0; y < size.height; ++y) {
         int x = 0;
         while (x < size.width) {
-            if (!cell_changed(frame, Point{x, y})) {
+            const Cell first = presentation_cell(frame, Point{x, y}, rasters);
+            if (!cell_changed(first, size, Point{x, y})) {
                 ++x;
                 continue;
             }
-            if (frame.at(Point{x, y}).is_continuation()) {
+            if (first.is_continuation()) {
                 ++x;  // an orphaned continuation cell (shouldn't occur at a run start); skip
                 continue;
             }
@@ -182,12 +200,12 @@ std::string Presenter::render_frame(FrameView frame) {
             int run_end = x;
             bool unsafe_in_run = false;
             while (run_end < size.width) {
-                const Cell& c = frame.at(Point{run_end, y});
+                const Cell c = presentation_cell(frame, Point{run_end, y}, rasters);
                 if (c.is_continuation()) {
                     ++run_end;
                     continue;
                 }
-                if (run_end != x && !cell_changed(frame, Point{run_end, y})) break;
+                if (run_end != x && !cell_changed(c, size, Point{run_end, y})) break;
                 const bool this_unsafe = is_width_unsafe(c.grapheme());
                 ++run_end;
                 if (this_unsafe) {
@@ -203,7 +221,8 @@ std::string Presenter::render_frame(FrameView frame) {
                     // already needed for an unrelated reason (a gap or
                     // a row change), so the safety reset was never
                     // actually observable.
-                    while (run_end < size.width && frame.at(Point{run_end, y}).is_continuation())
+                    while (run_end < size.width &&
+                           presentation_cell(frame, Point{run_end, y}, rasters).is_continuation())
                         ++run_end;
                     unsafe_in_run = true;
                     break;
@@ -211,7 +230,7 @@ std::string Presenter::render_frame(FrameView frame) {
             }
 
             for (int rx = x; rx < run_end; ++rx) {
-                const Cell& c = frame.at(Point{rx, y});
+                const Cell c = presentation_cell(frame, Point{rx, y}, rasters);
                 if (c.is_continuation()) continue;
                 if (!style_known || !(c.style() == current_style)) {
                     out += style_to_sgr(c.style(), depth);
@@ -228,7 +247,8 @@ std::string Presenter::render_frame(FrameView frame) {
     return out;
 }
 
-void Presenter::emit_raster_slices(std::string& out, const std::vector<RasterSlice>& rasters) const {
+void Presenter::emit_raster_slices(std::string& out, FrameView frame,
+                                   const std::vector<RasterSlice>& rasters) const {
     // No graphics capability: the fallback cells the cell-diff pass
     // already rendered are the whole story — nothing more to emit.
     if (!terminal_.capabilities().sixel_graphics) return;
@@ -262,14 +282,20 @@ void Presenter::emit_raster_slices(std::string& out, const std::vector<RasterSli
             for (int x = 0; x < crop_w; ++x) cropped.set_pixel(x, y, image.pixel(px_x0 + x, px_y0 + y));
 
         emit_cursor_move(out, slice.visible_rect.x, slice.visible_rect.y);
+        // P2=0 Sixel background pixels use the terminal's current
+        // background color. Re-establish the clean backing cell's style
+        // immediately before the DCS rather than inheriting whichever
+        // style happened to end the cell-diff traversal.
+        out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
+                            terminal_.capabilities().color_depth);
         out += encode_sixel(cropped);
     }
 }
 
 void Presenter::present(FrameView frame, CursorState cursor,
                          const std::vector<RasterSlice>& rasters) {
-    std::string out = render_frame(frame);
-    emit_raster_slices(out, rasters);
+    std::string out = render_frame(frame, rasters);
+    emit_raster_slices(out, frame, rasters);
 
     if (cursor.visible) {
         emit_cursor_move(out, cursor.position.x, cursor.position.y);
@@ -289,7 +315,8 @@ void Presenter::present(FrameView frame, CursorState cursor,
     for (int y = 0; y < frame.size().height; ++y)
         for (int x = 0; x < frame.size().width; ++x)
             previous_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.size().width) +
-                             static_cast<std::size_t>(x)] = frame.at(Point{x, y});
+                             static_cast<std::size_t>(x)] =
+                presentation_cell(frame, Point{x, y}, rasters);
     previous_size_ = frame.size();
     force_full_ = false;
 }

@@ -16,8 +16,10 @@
 
 namespace ckv::term {
 
-// Encodes `image` as a complete Sixel DCS sequence (DCS q ... ST),
-// ready to interleave into presented output. Empty for an empty image.
+// Encodes `image` as a complete, explicitly opaque Sixel DCS sequence
+// (DCS 0;0;0 q ... ST) with an exact raster extent, ready to interleave
+// into presented output. Sixel has no alpha channel, so source alpha is
+// deliberately ignored. Empty for an empty image.
 std::string encode_sixel(const Image& image);
 
 }  // namespace ckv::term

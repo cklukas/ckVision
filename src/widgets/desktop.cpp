@@ -302,7 +302,7 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
         scene::Painter mutable_painter = own_painter;
         for (const Rect& footprint : scene::shadow_footprint(child.bounds(), scene::ShadowSpec{})) {
             const Rect clipped = footprint.intersected(shadow_clip);
-            if (!clipped.empty()) mutable_painter.transform_style(clipped, &scene::default_dim);
+            if (!clipped.empty()) mutable_painter.apply_shadow(clipped, &scene::default_dim);
         }
     }
 }

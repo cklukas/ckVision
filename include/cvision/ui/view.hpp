@@ -21,6 +21,8 @@
 
 namespace ckv::ui {
 
+class Application;
+
 // Requested size along one axis: a view proposes [min, preferred, max];
 // a layout container reconciles competing hints (ARCHITECTURE.md §5
 // "Layout and dialog construction"). `max` of `Size::unbounded()`'s
@@ -121,19 +123,21 @@ public:
     // changed them. The general-purpose escape hatch for an owner that
     // needs to react to a view's own geometry change without
     // subclassing it — the same shape as Button::on_press or
-    // Window::on_closed, just for geometry. Application installs one
-    // on root() to implement the fill-the-root resize policy (see
-    // fills_root() below); nothing else in the library sets this by
-    // default.
+    // Window::on_closed, just for geometry. It is an observer only:
+    // framework layout runs through a separate internal path after this
+    // observer returns, so replacing or mutating through this callback
+    // can never disable layout.
     std::function<void(Rect)> on_bounds_changed;
 
     // Whether this view is resized to fill Application::root()'s
-    // bounds whenever root's OWN bounds change (a terminal resize) —
-    // the policy every real root child (a Desktop, or an application's
-    // own full-screen surface) wants, which is why it defaults to
-    // true. Meaningless for any view that is not a direct child of
-    // root(); a view that must not stretch with the terminal (a fixed
-    // HUD overlay, say) opts out here.
+    // bounds whenever root's OWN bounds change (a terminal resize), and
+    // immediately when it becomes a direct root child. The policy every
+    // real root child (a Desktop, or an application's own full-screen
+    // surface) wants, which is why it defaults to true. Meaningless for
+    // any view that is not a direct child of root(); a view that must not
+    // stretch with the terminal (a fixed HUD overlay, say) opts out
+    // before attachment. Changing this after attachment controls future
+    // root resizes; it deliberately does not restore prior geometry.
     bool fills_root() const noexcept { return fills_root_; }
     void set_fills_root(bool fills) noexcept { fills_root_ = fills; }
 
@@ -189,13 +193,15 @@ public:
 
     // Paints this view's own content only (children are painted
     // separately by whatever drives the tree, each through its own
-    // translated+clipped Painter) into LOCAL (view-relative) space.
+    // isolated, translated, and clipped Painter) into LOCAL
+    // (view-relative) space. Isolation prevents lower-z siblings' line
+    // glyphs from becoming junctions in this view's own frame.
     virtual void draw(scene::Painter& painter) { (void)painter; }
 
     // Paints every child (in z-order: later children on top, matching
     // Application::topmost_view_at's convention), each through its own
-    // translated+clipped Painter derived from `own_painter` (which is
-    // in THIS view's own local space). The default just walks
+    // isolated+translated+clipped Painter derived from `own_painter`
+    // (which is in THIS view's own local space). The default just walks
     // children() in order via paint_one_child(). Overridden by Desktop
     // to interleave window-shadow compositing between siblings — a
     // shadow must dim exactly the window's footprint MINUS whatever is
@@ -309,11 +315,21 @@ protected:
     // Returns the child's own Painter (nullopt if the child was
     // invisible and therefore skipped) so an override (Desktop) can
     // reuse the exact same coordinate frame for follow-up compositing
-    // (e.g. transform_style over a shadow footprint) without
+    // (e.g. apply_shadow over a shadow footprint) without
     // re-deriving the translate/clip math.
     static std::optional<scene::Painter> paint_one_child(View& child, const scene::Painter& parent_painter);
 
 private:
+    friend class Application;
+
+    // Application installs these on its root only. Keeping layout
+    // ownership private makes public geometry observation non-replaceable
+    // framework behavior instead of a callback convention.
+    using BoundsChangedSink = std::function<void(Rect)>;
+    using ChildAttachedSink = std::function<void(View&)>;
+    void set_bounds_changed_sink(BoundsChangedSink sink) { bounds_changed_sink_ = std::move(sink); }
+    void set_child_attached_sink(ChildAttachedSink sink) { child_attached_sink_ = std::move(sink); }
+
     void propagate_dirty_rect_sink(const DirtyRectSink& sink);
     void propagate_detach_sink(const DetachSink& sink);
     void propagate_context(const Context& context);
@@ -330,6 +346,8 @@ private:
     std::optional<std::string> help_context_key_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;
+    BoundsChangedSink bounds_changed_sink_;
+    ChildAttachedSink child_attached_sink_;
     Context context_;
 };
 

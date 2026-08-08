@@ -108,8 +108,14 @@ std::string_view junction_glyph(Junction j, LineStyle style) noexcept {
 }
 
 std::optional<Junction> junction_of(std::string_view grapheme) noexcept {
+    const std::optional<JunctionGlyphInfo> info = classify_junction_glyph(grapheme);
+    if (!info) return std::nullopt;
+    return info->junction;
+}
+
+std::optional<JunctionGlyphInfo> classify_junction_glyph(std::string_view grapheme) noexcept {
     for (const Entry& e : kTable)
-        if (e.glyph == grapheme) return e.junction;
+        if (e.glyph == grapheme) return JunctionGlyphInfo{e.junction, e.style};
     return std::nullopt;
 }
 

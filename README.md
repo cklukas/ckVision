@@ -20,19 +20,26 @@ The library name is `cvision` (CMake target `ckvision::cvision`).
 
 ## Status
 
-**M0 through M6 delivered** — every layer through the widget catalog is
-implemented and adversarially tested (not just happy paths), reviewed,
-and green under both Release and ASan/UBSan builds. Catalog rows still
-open (modality stack, backing stores, nested submenus, combo box, tab
-control, progress, splitter, and peers) are tracked explicitly in the
-[plans/widgets.md](plans/widgets.md) open-items ledger — nothing is
-silently deferred.
+Substantial implementation has landed through M10, but **no milestone is
+currently acceptance-complete**. A 2026-08-08 audit reopened M0–M6 and M8–M10
+because literal exit criteria, cross-platform gates, security/performance
+evidence, widget coverage, and documentation remain incomplete. Passing local
+Release and ASan/UBSan suites is useful evidence, not the full definition of
+done.
+
+The authoritative task source is the
+[corrective assurance plan](plans/corrective-assurance.md). “Work on the next
+open WP” means its first `In progress` row, otherwise its first `Ready` row.
+Earlier `Done` labels are historical landing records and must not be used to
+skip reopened work.
 
 - **M0-M2**: build skeleton; core primitives (geometry, Color/Style/
   Cell/Image, keys/events, the Unicode services in
   [docs/text-width.md](docs/text-width.md)); the scene layer
   (`Surface`/`Painter`/`Compositor` with damage tracking, junction
-  merging, shadow occlusion, raster occlusion slicing).
+  merging scoped by view provenance so unrelated z-levels never alter one
+  another's borders, binary/non-cumulative shadow occlusion, raster occlusion
+  slicing).
 - **M3 (term)**: the `Terminal` interface and `Capabilities` model; an
   incremental input decoder (legacy/kitty/modifyOtherKeys keys, SGR and
   SGR-Pixels mouse, sanitized bracketed paste, focus events, OSC 10/11
@@ -90,24 +97,15 @@ border, e.g. a "current line" indicator (`Window::add_frame_overlay`
 as of the second review below — plural, positioned overlays replacing
 this first review's original single-slot `set_frame_overlay`).
 
-**A second, full API-ergonomics and integration review (2026-08-07,
-[plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md))
-is now the active plan.** It found that three integration seams remain
-broken end to end even though their mechanisms are individually green
-under test — terminal resize never actually reaches the Desktop
-(`ResizeEvent` stops at the root view), there is no click-to-focus or
-click-to-activate, and the zoom glyph is inert when clicked — and that
-the API carries avoidable noise (theme/role parameters on every
-constructor, commands declared in triplicate, a five-step message box)
-against VISION's own "one screen of readable code" bar. The roadmap
-now sequences that work as **M8** (integration correctness), **M9**
-(API ergonomics, down to an enforced 60-line `examples/hello`), and
-**M10** (layout completion: anchors, Grid/Dock/Overlay, splitter,
-lazy tree model); the release milestone is now **M11**, and M7 — the
-Windows/ConPTY backend — remains deferred to a Windows host per
-ROADMAP.md. Decisions D-028 (constructors take content, not plumbing)
-and D-029 (framework-supplied interaction defaults, all overridable)
-record the two policy changes.
+The 2026-08-07
+[API-ergonomics and integration review](plans/api-ergonomics-review-2.md)
+is a compact historical index for WP-1…WP-22. The corrective audit
+found that several mechanisms landed without their specified end-to-end
+acceptance and exposed additional lifetime, modality, provenance, Unicode,
+performance, portability, fuzzing, Sixel visual-capture, catalog, and
+documentation gaps. WP-23…WP-38
+now own those repairs explicitly; ROADMAP's Current acceptance status table
+maps every reopened milestone to them.
 
 ## Documents
 
@@ -117,9 +115,12 @@ record the two policy changes.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Target architecture: layers, rendering pipeline, event/command system, backends |
 | [ROADMAP.md](ROADMAP.md) | Development milestones with exit criteria |
 | [DECISIONS.md](DECISIONS.md) | Architecture decision records (settled and open) |
-| [plans/widgets.md](plans/widgets.md) | Widget catalog: capability baseline and beyond-baseline features, plus the open-items ledger |
-| [plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md) | The 2026-08-07 API-ergonomics and integration review: findings F1–F10/E1–E10 and work packages WP-1…WP-22 for M8–M10 |
+| [plans/widgets.md](plans/widgets.md) | Widget catalog plus the current corrective feature ledger |
+| [plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md) | Historical 2026-08-07 findings and landing record for WP-1…WP-22 |
+| [plans/corrective-assurance.md](plans/corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-38 corrective acceptance |
 | [docs/example-apps.md](docs/example-apps.md) | Example applications: what each one demonstrates, how it's tested, generated screenshots |
+| [docs/hello-example.md](docs/hello-example.md) | Hello behavior contract, golden evidence, and 60-line gate |
+| [plans/clean-room-derivation.md](plans/clean-room-derivation.md) | D-012 clean-room derivation record for rewritten material |
 | [AGENTS.md](AGENTS.md) | Engineering standard for working in this repository |
 
 ## Copyright

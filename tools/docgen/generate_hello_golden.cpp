@@ -46,9 +46,15 @@ int main(int argc, char** argv) {
     app.step(0);
     write_dump(out_dir, "hello_initial", app);
 
+    // greeting_box() blocks until its modal closes. Capture after its first
+    // nested step has painted, then dismiss it so this generator terminates.
+    app.post([&] {
+        app.post([&] {
+            write_dump(out_dir, "hello_greeting", app);
+            app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+        });
+    });
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
-    app.step(0);
-    write_dump(out_dir, "hello_greeting", app);
 
     return 0;
 }

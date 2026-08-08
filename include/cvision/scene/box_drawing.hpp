@@ -39,16 +39,29 @@ struct Junction {
     }
 };
 
+struct JunctionGlyphInfo {
+    Junction junction;
+    LineStyle style = LineStyle::Single;
+};
+
 // The glyph for `j` under `style`. `j` must have at least one direction
 // set (a single-direction "stub" renders as the straight-line glyph for
 // that axis — the Box Drawing block has no dedicated dead-end glyphs).
 std::string_view junction_glyph(Junction j, LineStyle style) noexcept;
 
+// Classifies a recognized glyph with both its connector topology and its
+// concrete line style. Shared Single/Rounded straight and junction glyphs
+// classify as Single; Rounded is distinguishable only for its four dedicated
+// corner glyphs, matching Unicode's actual repertoire.
+std::optional<JunctionGlyphInfo> classify_junction_glyph(std::string_view grapheme) noexcept;
+
 // Reverse lookup: if `grapheme` is one of the recognized box-drawing
-// glyphs (any style), returns its connector pattern — used to merge a
-// newly drawn segment with whatever is already in a cell. Returns
-// std::nullopt for anything else, including plain text and box-drawing
-// glyphs this module doesn't recognize (mixed-weight junctions, e.g.).
+// glyphs (any style), returns its connector pattern. This is a glyph
+// classification utility only: visible glyph shape carries no paint
+// ownership, so Painter never uses reverse lookup to merge lines from
+// a Surface. Returns std::nullopt for anything else, including plain
+// text and box-drawing glyphs this module doesn't recognize
+// (mixed-weight junctions, e.g.).
 std::optional<Junction> junction_of(std::string_view grapheme) noexcept;
 
 }  // namespace ckv::scene

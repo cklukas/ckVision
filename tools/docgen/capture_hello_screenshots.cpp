@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // Same discipline as capture_gallery_screenshots.cpp, for HelloApp —
-// the screenshots docs/turbo-vision-conversion.md embeds.
+// the screenshots docs/hello-example.md embeds.
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -17,12 +17,13 @@ using ckv::Modifier;
 using ckv::ui::Application;
 
 namespace {
-void write_svg(const std::filesystem::path& dir, const std::string& name, const ckv::FrameView& frame) {
-    const std::string svg = ckv::docgen::render_frame_svg(frame);
+void write_svg(const std::filesystem::path& dir, const std::string& name,
+               const ckv::term::VirtualDisplay& display) {
+    const std::string svg = ckv::docgen::render_virtual_display_svg(display);
     std::ofstream out(dir / (name + ".svg"));
     out << svg;
-    std::fprintf(stderr, "wrote %s (%dx%d cells)\n", (dir / (name + ".svg")).c_str(), frame.size().width,
-                 frame.size().height);
+    std::fprintf(stderr, "wrote %s (%dx%d cells)\n", (dir / (name + ".svg")).c_str(),
+                 display.size().width, display.size().height);
 }
 }  // namespace
 
@@ -34,17 +35,25 @@ int main(int argc, char** argv) {
     const std::filesystem::path out_dir = argv[1];
     std::filesystem::create_directories(out_dir);
 
-    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile());
     ManualClock clock;
     Application app(term, clock);
     ckv::hello::HelloApp hello(app);
 
     app.step(0);
-    write_svg(out_dir, "hello-initial", app.current_frame());
+    write_svg(out_dir, "hello-initial", term.display());
 
+    // greeting_box() is intentionally blocking. Defer the capture by two
+    // nested steps: the first attaches and paints the modal, the second sees
+    // that presented display, records it, and closes the dialog so dispatch()
+    // can return. This mirrors the modal golden test's public-path script.
+    app.post([&] {
+        app.post([&] {
+            write_svg(out_dir, "hello-greeting", term.display());
+            app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+        });
+    });
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
-    app.step(0);
-    write_svg(out_dir, "hello-greeting", app.current_frame());
 
     return 0;
 }

@@ -11,6 +11,9 @@
 
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
+#include "cvision/ui/context.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cktest.hpp"
 
 using namespace ckv;
@@ -119,6 +122,24 @@ CK_TEST(golden_shadow_dims_the_desktop_in_an_l_shaped_footprint) {
     expect_round_trip(capture_frame(c), "golden/shadow.dump");
 }
 
+CK_TEST(golden_overlapping_shadows_form_one_binary_union) {
+    Compositor c(Size{10, 5});
+    const Style bright{Color::rgb(200, 200, 200), Color::rgb(160, 160, 160), Attr{}};
+    Surface bg(Size{10, 5}, Cell::from_grapheme(".", bright));
+    Surface first(Size{3, 2}, Cell::from_grapheme("A", Style{}));
+    Surface second(Size{3, 2}, Cell::from_grapheme("B", Style{}));
+    std::vector<Layer> layers{
+        {1, &first, Point{0, 0}, /*casts_shadow=*/true},
+        {2, &second, Point{1, 0}, /*casts_shadow=*/true},
+    };
+    c.compose(layers, bg, ShadowSpec{});
+
+    // The right-hand shadow strips overlap at (4,1), while the bottom
+    // strips overlap at (3,2) and (4,2). The golden contains one dimmed
+    // style and no twice-dimmed style for those intersections.
+    expect_round_trip(capture_frame(c), "golden/shadow_binary_union.dump");
+}
+
 CK_TEST(golden_raster_region_anchoring_occlusion_slicing_and_fallback) {
     Compositor c(Size{8, 6});
     Surface bg(Size{8, 6}, Cell::from_grapheme(".", Style{}));
@@ -141,4 +162,26 @@ CK_TEST(golden_raster_region_anchoring_occlusion_slicing_and_fallback) {
     for (const auto& vr : c.visible_rasters()) CK_CHECK(vr.fallback_active);
 
     expect_round_trip(capture_frame(c), "golden/raster_occlusion.dump");
+}
+
+CK_TEST(golden_z_order_keeps_foreground_frame_topology_independent_of_background_frame) {
+    ui::RoleRegistry registry;
+    const ui::StandardRoles roles = ui::intern_standard_roles(registry);
+    const ui::Theme theme = ui::make_classic_theme(registry, roles);
+    widgets::Desktop desktop(Rect{0, 0, 26, 12}, theme, roles.dialog_background);
+    desktop.set_context(ui::Context{&theme, &registry, nullptr});
+
+    widgets::Window* background =
+        desktop.add_window(std::make_unique<widgets::Window>("Back"));
+    background->set_bounds(Rect{2, 2, 14, 4});
+    widgets::Window* foreground =
+        desktop.add_window(std::make_unique<widgets::Window>("Front"));
+    foreground->set_bounds(Rect{12, 3, 12, 7});
+
+    Surface surface(Size{26, 12});
+    Painter painter(surface, Rect{0, 0, 26, 12});
+    desktop.draw(painter);
+    desktop.paint_children(painter);
+
+    expect_round_trip(capture(surface), "golden/window_z_order_junction.dump");
 }

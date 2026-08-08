@@ -30,15 +30,12 @@ lets:
   appears and render consistent title/chord/enablement (M9/WP-11) no
   matter which application built it.
 
-An application that needs different wording for the same concept —
-matching an external reference example's own vocabulary, the way
-`examples/hello` keeps "Exit" (not the standard "Quit") to match Turbo
-Vision's own `hello.cpp` tutorial — keeps its own command in the
-application range instead of referencing the standard one. That is a
-legitimate, expected choice, not a workaround: the reserved range's
-titles are fixed (only `register_standard_commands()` can populate
-that range), precisely so that referencing a standard id always means
-the same thing everywhere.
+An application that needs different wording for the same concept can keep
+its own command in the application range instead of referencing the standard
+one. `examples/hello` does this for its "Exit" command. That is a legitimate,
+expected choice, not a workaround: the reserved range's titles are fixed (only
+`register_standard_commands()` can populate that range), precisely so that
+referencing a standard id always means the same thing everywhere.
 
 ## The set
 

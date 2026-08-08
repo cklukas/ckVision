@@ -264,7 +264,32 @@ CK_TEST(raster_slices_are_not_emitted_without_graphics_capability) {
     const auto image = std::make_shared<Image>(8, 8);
     std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 2}, Rect{0, 0, 2, 2}, image, true}};
     presenter.present(s.view(), CursorState{}, rasters);
-    CK_CHECK(term.written_bytes().find("\x1BPq") == std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
+}
+
+CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
+    HeadlessTerminal term(Size{8, 1}, headless_sixel_profile());
+    Presenter presenter(term);
+    Surface s = make_surface(8, 1, ".");
+    const Style panel{Color::rgb(0, 0, 0), Color::rgb(180, 180, 180), Attr{}};
+    constexpr std::string_view fallback = "[image]";
+    for (int x = 0; x < static_cast<int>(fallback.size()); ++x)
+        s.set_cell(Point{x, 0},
+                   Cell::from_grapheme(fallback.substr(static_cast<std::size_t>(x), 1), panel));
+
+    auto image = std::make_shared<Image>(7, 1);
+    for (int x = 0; x < image->width(); ++x)
+        image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
+    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image, true}};
+    presenter.present(s.view(), CursorState{}, rasters);
+
+    CK_CHECK(term.written_bytes().find(fallback) == std::string_view::npos);
+    for (int x = 0; x < 7; ++x) {
+        const Cell& cell = term.display().frame().at(Point{x, 0});
+        CK_CHECK(cell.grapheme() == " ");
+        CK_CHECK(cell.style().bg == panel.bg);
+    }
+    CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 255);
 }
 
 CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {
@@ -278,7 +303,7 @@ CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {
     // visible_rect == full_anchor: unoccluded, the whole image applies.
     std::vector<RasterSlice> rasters{{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image, true}};
     presenter.present(s.view(), CursorState{}, rasters);
-    CK_CHECK(term.written_bytes().find("\x1BPq") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") != std::string_view::npos);
     CK_CHECK(term.written_bytes().find("#0;2;78;0;0") != std::string_view::npos);  // 200/255 ~ 78%
 }
 
@@ -312,7 +337,7 @@ CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
     presenter.present(s.view(), CursorState{}, rasters);
     // Cursor move to row2+1;col3+1 = "3;4H" must precede the sixel DCS.
     const std::size_t move_pos = term.written_bytes().find(";4H");
-    const std::size_t dcs_pos = term.written_bytes().find("\x1BPq");
+    const std::size_t dcs_pos = term.written_bytes().find("\x1BP0;0;0q");
     CK_CHECK(move_pos != std::string_view::npos);
     CK_CHECK(dcs_pos != std::string_view::npos);
     CK_CHECK(move_pos < dcs_pos);

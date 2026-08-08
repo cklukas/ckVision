@@ -149,6 +149,52 @@ CK_TEST(hline_and_vline_form_a_cross_via_automatic_junction_merging) {
     CK_CHECK(s.at(ckv::Point{2, 0}).grapheme() == "│");
 }
 
+CK_TEST(isolated_painters_replace_unrelated_lines_instead_of_forming_a_junction) {
+    Surface s = make_surface(5, 5);
+    Painter background(s, ckv::Rect{0, 0, 5, 5});
+    background.hline(ckv::Point{0, 2}, 5, LineStyle::Single, ckv::Style{});
+
+    Painter foreground = background.isolated();
+    foreground.vline(ckv::Point{2, 0}, 5, LineStyle::Double, ckv::Style{});
+
+    CK_CHECK(s.at(ckv::Point{2, 2}).grapheme() == "║");
+}
+
+CK_TEST(resize_does_not_alias_a_live_painters_scope_with_a_new_painter) {
+    Surface s = make_surface(5, 5);
+    Painter before_resize(s, ckv::Rect{0, 0, 5, 5});
+    s.resize(ckv::Size{5, 5});
+    before_resize.hline(ckv::Point{0, 2}, 5, LineStyle::Single, ckv::Style{});
+
+    Painter after_resize(s, ckv::Rect{0, 0, 5, 5});
+    after_resize.vline(ckv::Point{2, 0}, 5, LineStyle::Double, ckv::Style{});
+
+    CK_CHECK(s.at(ckv::Point{2, 2}).grapheme() == "║");
+}
+
+CK_TEST(translated_and_clipped_derivatives_keep_their_logical_junction_scope) {
+    Surface s = make_surface(7, 5);
+    Painter p(s, ckv::Rect{0, 0, 7, 5});
+    p.draw_box(ckv::Rect{0, 0, 7, 5}, LineStyle::Single, ckv::Style{});
+
+    Painter content = p.translated(ckv::Point{0, 0}, ckv::Rect{0, 0, 7, 5})
+                          .clipped(ckv::Rect{0, 0, 7, 5});
+    content.hline(ckv::Point{0, 2}, 7, LineStyle::Single, ckv::Style{});
+
+    CK_CHECK(s.at(ckv::Point{0, 2}).grapheme() == "├");
+    CK_CHECK(s.at(ckv::Point{6, 2}).grapheme() == "┤");
+}
+
+CK_TEST(an_ordinary_box_drawing_glyph_does_not_claim_junction_provenance) {
+    Surface s = make_surface(5, 5);
+    Painter p(s, ckv::Rect{0, 0, 5, 5});
+    p.hline(ckv::Point{0, 2}, 5, LineStyle::Single, ckv::Style{});
+    p.draw_text(ckv::Point{2, 2}, "─", ckv::Style{});
+    p.vline(ckv::Point{2, 0}, 5, LineStyle::Single, ckv::Style{});
+
+    CK_CHECK(s.at(ckv::Point{2, 2}).grapheme() == "│");
+}
+
 CK_TEST(vline_ending_partway_through_an_hline_forms_a_tee) {
     Surface s = make_surface(5, 5);
     Painter p(s, ckv::Rect{0, 0, 5, 5});
@@ -203,6 +249,19 @@ CK_TEST(transform_style_changes_style_but_not_grapheme) {
     CK_CHECK(s.at(ckv::Point{0, 0}).style().fg == ckv::Color::rgb(200, 200, 200));  // untouched
     CK_CHECK(s.at(ckv::Point{1, 0}).style().fg == ckv::Color::rgb(100, 100, 100));  // dimmed
     CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == "b");                             // grapheme unchanged
+}
+
+CK_TEST(transform_style_preserves_junction_provenance) {
+    Surface s = make_surface(5, 5);
+    Painter p(s, ckv::Rect{0, 0, 5, 5});
+    p.hline(ckv::Point{0, 2}, 5, LineStyle::Single, ckv::Style{});
+    p.transform_style(ckv::Rect{0, 2, 5, 1}, [](ckv::Style style) noexcept {
+        style.attrs |= ckv::Attr::Bold;
+        return style;
+    });
+    p.vline(ckv::Point{2, 0}, 5, LineStyle::Single, ckv::Style{});
+
+    CK_CHECK(s.at(ckv::Point{2, 2}).grapheme() == "┼");
 }
 
 CK_TEST(draw_image_paints_fallback_and_registers_a_raster_region) {

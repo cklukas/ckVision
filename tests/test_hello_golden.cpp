@@ -1,12 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// Golden regression test for HelloApp — a faithful ckVision port of
-// Turbo Vision's own canonical minimal example (see hello_app.hpp's
-// file comment). Pins the EXACT rendered output (via the golden dump
-// format, D-014) of a well-known, independently-specified small app
-// shape, so any unintended visual regression in Window/MenuBar/
-// StatusLine/Button/StaticText/Desktop rendering shows up here even
-// if no other test happens to assert the specific cells involved.
+// Golden regression test for HelloApp's ckVision-owned visual contract.
+// It pins its D-014 frames so regressions in Window/MenuBar/StatusLine/
+// Button/StaticText/Desktop rendering are visible even when no other test
+// happens to assert the relevant cells.
 //
 // greeting_box() blocks its caller (Desktop::exec_window, M9/WP-15/
 // WP-17) — a test that wants to inspect or interact with the dialog
@@ -89,9 +86,9 @@ CK_TEST(hello_greeting_dialog_frame_matches_the_pinned_golden_dump) {
     CK_CHECK(actual == expected);
 }
 
-// --- Behavioral parity with the original (not just pixels) ----------------
+// --- Application behavior, in addition to pixels --------------------------
 
-CK_TEST(alt_g_opens_the_greeting_dialog_matching_the_originals_alt_g_mnemonic) {
+CK_TEST(alt_g_opens_the_greeting_dialog) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -140,13 +137,8 @@ CK_TEST(while_the_greeting_dialog_is_open_background_accelerators_are_scoped_out
     CK_CHECK(app.quit_requested());  // restored once the modal closes
 }
 
-CK_TEST(every_greeting_button_dismisses_the_dialog_matching_the_originals_shared_cmcancel) {
-    // The original wires all four buttons to the SAME command
-    // (cmCancel) — every button means "dismiss," none is individually
-    // distinguishable by the handler. The port preserves that
-    // observable behavior (all four close the dialog) even though it
-    // gets there structurally differently — see hello_app.cpp's
-    // greeting_box() doc comment for why.
+CK_TEST(every_greeting_button_dismisses_the_dialog) {
+    // The example contract makes every greeting button a dismiss action.
     for (int button_index = 0; button_index < 4; ++button_index) {
         ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
         ManualClock clock;
@@ -167,7 +159,7 @@ CK_TEST(every_greeting_button_dismisses_the_dialog_matching_the_originals_shared
     }
 }
 
-CK_TEST(alt_x_quits_matching_the_originals_alt_x_status_line_shortcut) {
+CK_TEST(alt_x_quits_via_the_status_line_shortcut) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);

@@ -38,11 +38,14 @@ public:
     void invalidate() noexcept { force_full_ = true; }
 
 private:
-    std::string render_frame(FrameView frame);
-    bool cell_changed(FrameView frame, Point p) const noexcept;
+    Cell presentation_cell(FrameView frame, Point p,
+                           const std::vector<RasterSlice>& rasters) const;
+    std::string render_frame(FrameView frame, const std::vector<RasterSlice>& rasters);
+    bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
     void emit_style(std::string& out, const Style& style) const;
-    void emit_raster_slices(std::string& out, const std::vector<RasterSlice>& rasters) const;
+    void emit_raster_slices(std::string& out, FrameView frame,
+                            const std::vector<RasterSlice>& rasters) const;
 
     Terminal& terminal_;
     std::vector<Cell> previous_cells_;

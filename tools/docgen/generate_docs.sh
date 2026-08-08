@@ -38,7 +38,20 @@ mkdir -p "$SCREENSHOTS_DIR"
 # itself); if it's absent, PDF rendering below degrades to a clear
 # warning per file rather than a hard failure.
 if command -v rsvg-convert >/dev/null 2>&1; then
-    for svg in "$SCREENSHOTS_DIR"/*.svg; do
+    screenshot_names=(
+        gallery-initial
+        gallery-typed-name
+        gallery-menu-open
+        gallery-no-graphics
+        filebrowser-initial
+        filebrowser-src-selected
+        filebrowser-include-selected
+        hello-initial
+        hello-greeting
+    )
+    for name in "${screenshot_names[@]}"; do
+        svg="$SCREENSHOTS_DIR/$name.svg"
+        echo "    converting $name.svg -> PDF"
         rsvg-convert --format=pdf -o "${svg%.svg}.pdf" "$svg"
     done
 else

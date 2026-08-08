@@ -36,9 +36,8 @@ if(UNIX)
     ckvision_strict(ckvision_filebrowser)
 endif()
 
-# ckVision Hello: a faithful port of Turbo Vision's own canonical minimal
-# example, for a golden regression test (tests/test_hello_golden.cpp)
-# and docs/turbo-vision-conversion.md's worked comparison.
+# ckVision Hello: a compact, ckVision-owned visual integration example,
+# pinned by tests/test_hello_golden.cpp and documented in docs/hello-example.md.
 add_library(hello_app STATIC hello/hello_app.cpp)
 target_link_libraries(hello_app PUBLIC ckvision::cvision)
 target_include_directories(hello_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/hello)

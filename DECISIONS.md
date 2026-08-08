@@ -87,6 +87,13 @@ control sequences, kitty protocol specs, Microsoft console VT docs,
 Unicode reports) and this project's own specifications and goldens.
 The binding working rule lives in AGENTS.md.
 
+The D-012 review record is
+`plans/clean-room-derivation.md`. It identifies the approved ckVision
+specification and executable evidence for material re-derived during an
+authority repair; the `provenance_check` and
+`provenance_checker_self_test` CTest gates are mandatory lexical safeguards,
+not proof of provenance.
+
 **D-013 — Commands are first-class.**
 32-bit `CommandId`: ids below 4096 are reserved for the library's
 standard commands; applications own the space above; extension libraries
@@ -122,8 +129,13 @@ protocol, kitty graphics secondary. No API accepts raster content
 without its textual fallback, so applications keep one code path and
 remain fully functional on text-only terminals. Emission order (raster
 after cells, on top, within the synchronized frame) is a presentation
-detail the API never exposes. *Supersedes the earlier "optional gfx
-module" shape.*
+detail the API never exposes. When graphics are active, Presenter replaces the
+visible raster region's fallback glyphs with style-preserving blank cells
+before emitting the image; it must never rely on an image covering textual
+fallback. ckVision's Sixel stream explicitly selects the opaque background
+mode and declares its raster extent; source alpha is ignored because Sixel has
+no alpha channel. The fallback text is emitted only by a no-graphics profile.
+*Supersedes the earlier "optional gfx module" shape.*
 
 **D-018 — One mouse model, two native coordinate spaces.**
 Every mouse event carries the cell position; it also carries the pixel
@@ -374,6 +386,95 @@ widget" reason. `TreeView::set_roots()` with an empty forest no longer
 fires `on_selection_changed` at all (a real, small contract change
 from "always fires, even to nothing" — there is no `TreeNode&` to pass
 a reference to when nothing is selected). Scheduled as M10/WP-22.
+
+**D-034 — Completion is acceptance-based; historical landing is not current
+status.** A work package or milestone is `Done` only while every literal exit
+criterion and applicable global verification gate holds. Landing some planned
+code, substituting a narrower test, accepting an implementation compromise, or
+recording a green local build is useful historical evidence but never changes
+an unmet criterion. A later defect, contradiction, missing platform gate, or
+missing required evidence reopens the owning package and every dependent
+milestone. Reopening does not erase landing history; it separates that history
+from the current acceptance state.
+
+Before the final global matrix is available, a package whose literal
+package-specific criteria hold may use `Implementation complete — gate pending`.
+That state advances the execution queue but is explicitly not `Done`; WP-38
+must either promote it with the missing global evidence or return it to `Ready`
+with the failed criterion named.
+
+The authoritative meaning of “work on the next open WP” is the first
+`In progress` row, otherwise the first `Ready` row, in
+`plans/corrective-assurance.md`'s Current execution queue. Legacy ledgers and
+milestone prose are not executable queues. Completion changes must update the
+queue, reopened-package mapping, ROADMAP acceptance table, and affected catalog
+ledgers together. *Rejected:* treating `Done` as “the scoped commit landed”
+while known acceptance gaps remain — that interpretation allowed later
+developers to skip required repairs in numerically earlier packages.
+
+**D-035 — Graphics verification uses symbolic and protocol-decoded oracles.**
+Raster scene semantics and terminal presentation are different contracts and
+must not validate each other through one shared object path. Styled-cell golden
+dumps retain D-014's symbolic raster records (visible anchor/slice, pixel
+extent, content hash, fallback state) to specify scene/compositor behavior in a
+stable, diff-friendly form. Separately, a deterministic virtual display consumes
+the exact bytes written through `Terminal::write`, parses the supported VT
+output subset, decodes Sixel from its published protocol, and produces a cell +
+RGBA pixel-plane capture. End-to-end graphics visual goldens and generated
+screenshots come from that decoded output, never directly from the source
+`Image`, `Surface`, or `RasterSlice`.
+
+Tests use named per-instance capability profiles, including at least Sixel and
+NoGraphics with fixed cell-pixel metrics, and drive identical application
+scripts through both. Sixel acceptance requires actual decoded pixels;
+NoGraphics acceptance requires the mandatory cell fallback and zero raster
+pixels. Raw-byte assertions, symbolic raster goldens, and decoded visual
+goldens remain independent gates. The virtual display is validated with
+hand-authored fixtures derived from published terminal/Sixel documentation and
+fails on unsupported output rather than silently ignoring it. *Rejected:*
+calling a cell-only `FrameView` SVG a graphics screenshot; rendering the source
+Image directly in test tooling (bypasses Presenter/encoder); relying only on a
+DCS substring assertion (proves emission, not rendering or placement).
+Documentation SVG/PDF renders reconstruct recognized Unicode box-drawing cells
+as exact cell-edge geometry instead of delegating them to ambient font metrics;
+otherwise font fallback can make a correct corner glyph appear disconnected.
+
+**D-036 — Junction merging is scoped to one logical view paint.** A visible
+box-drawing glyph does not identify the drawing operation or z-layer that
+produced it. `Surface` therefore retains the exact connector directions and an
+opaque, surface-local paint-scope id beside every line cell. A view receives a
+fresh scope; translated and clipped painters derived inside that view retain
+it. Ordinary cell writes clear the provenance, while style-only transforms
+preserve it.
+
+`Painter` merges connector directions only when the stored scope matches its
+own. Otherwise the new line replaces the old cell normally, so a foreground
+window border crossing a background window border remains the foreground
+border instead of becoming a cross. Intentional dividers and rules drawn by
+the same view still join its own frame automatically. Scope ids are allocated
+per `Surface`, deterministically, with no global registry or object-address
+identity. *Rejected:* reverse-inferring ownership from any Unicode
+box-drawing glyph already visible in the cell (conflates unrelated z-levels);
+disabling junction merging altogether (loses intentional same-view joins);
+relying on eventual per-window backing stores alone (does not protect
+overlapping sibling/overlay views that share a surface).
+
+**D-037 — Shadow coverage is binary and idempotent.** A composed cell is either
+covered by at least one shadow above its visible content or it is not. Exactly
+one configured shadow transform applies in the covered case, regardless of how
+many footprint pieces or distinct windows cover the cell. The standard
+right/bottom footprint is represented as two non-overlapping rectangles. The
+retained Compositor accumulates a boolean while resolving z-order; the interim
+single-surface Desktop path carries the same binary marker beside each cell,
+cleared by any later content write and preserved by style-only operations.
+
+This preserves z-order: a lower window's shadow cannot dim a higher window that
+is painted afterward, while shadows from multiple higher windows still dim
+lower content exactly once. *Rejected:* applying a multiplicative dim transform
+for every covering rectangle or caster (creates artificial dark intersections);
+special-casing only the lower-right corner (leaves cross-window overlap broken);
+making `default_dim` itself idempotent through text attributes (conflates shadow
+coverage with legitimate content styling and does not govern custom transforms).
 
 ## Open
 

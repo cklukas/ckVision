@@ -331,6 +331,8 @@ private:
     View* modal_root() const noexcept {
         return modal_stack_.empty() ? nullptr : modal_stack_.back();
     }
+    void layout_root_child(View& child);
+    void layout_root_children();
     void paint_and_present();
     void paint_too_small_state(scene::Painter& painter, Size current_size) const;
 

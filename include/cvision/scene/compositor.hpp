@@ -42,9 +42,10 @@ struct ShadowSpec {
     StyleTransform dim = &default_dim;
 };
 
-// The L-shaped footprint (a right strip plus a bottom strip, each
-// possibly empty) a shadow casts for a layer occupying `layer_rect`,
-// unclipped to any frame bounds.
+// The L-shaped footprint (a non-overlapping right strip plus bottom
+// strip, each possibly empty) a shadow casts for a layer occupying
+// `layer_rect`, unclipped to any frame bounds. Multiple shadows compose
+// as a binary union: covered or not covered, never cumulative dimming.
 std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 
 // Compositor produces ckv::RasterSlice (core/frame_view.hpp), zero or

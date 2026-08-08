@@ -9,13 +9,30 @@
 
 #include "cvision/term/input_decoder.hpp"
 #include "cvision/term/terminal.hpp"
+#include "cvision/term/virtual_display.hpp"
 
 namespace ckv::term {
+
+// Canonical deterministic profiles for paired graphics/fallback tests
+// (D-035). Both use the same truecolor and cell-pixel geometry; only
+// the graphics capability differs, so visual diffs isolate that path.
+constexpr Capabilities headless_no_graphics_profile() noexcept {
+    Capabilities caps = baseline_capabilities();
+    caps.color_depth = ColorDepth::TrueColor;
+    caps.cell_pixels = Size{9, 18};
+    return caps;
+}
+
+constexpr Capabilities headless_sixel_profile() noexcept {
+    Capabilities caps = headless_no_graphics_profile();
+    caps.sixel_graphics = true;
+    return caps;
+}
 
 class HeadlessTerminal final : public Terminal {
 public:
     explicit HeadlessTerminal(Size size, Capabilities caps = baseline_capabilities())
-        : size_(size), caps_(caps), decoder_(caps) {}
+        : size_(size), caps_(caps), decoder_(caps), display_(size, effective_cell_pixels(caps)) {}
 
     Capabilities capabilities() const noexcept override { return caps_; }
     Size size() const noexcept override { return size_; }
@@ -24,7 +41,7 @@ public:
     // queued by inject_bytes()/inject_event() since the last poll().
     std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
 
-    void write(std::string_view bytes) override { written_.append(bytes); }
+    void write(std::string_view bytes) override;
     void set_title(std::string_view title) override { title_ = std::string(title); }
     void bell() override { ++bell_count_; }
     void write_clipboard(std::string_view text) override {
@@ -34,13 +51,12 @@ public:
     // --- Scripting interface (tests / recorded scripts) -------------
     void inject_bytes(std::string_view bytes, std::int64_t now_nanos);
     void inject_timeout_check(std::int64_t now_nanos);  // resolves a pending lone ESC, if due
-    void inject_event(TerminalEvent event) { pending_events_.push_back(std::move(event)); }
-    void set_capabilities(Capabilities caps) noexcept {
-        caps_ = caps;
-        decoder_.set_capabilities(caps);
-    }
+    void inject_event(TerminalEvent event);
+    void inject_capability_change(Capabilities caps);
+    void set_capabilities(Capabilities caps) noexcept;
     void resize(Size new_size) {
         size_ = new_size;
+        display_.resize(new_size);
         pending_events_.push_back(TerminalEvent{ResizeEvent{new_size}});
     }
 
@@ -49,11 +65,18 @@ public:
     const std::string& title() const noexcept { return title_; }
     int bell_count() const noexcept { return bell_count_; }
     const std::string& clipboard() const noexcept { return clipboard_; }
+    const VirtualDisplay& display() const noexcept { return display_; }
+    VirtualDisplay& display() noexcept { return display_; }
 
 private:
+    static constexpr Size effective_cell_pixels(Capabilities caps) noexcept {
+        return caps.cell_pixels.width > 0 && caps.cell_pixels.height > 0 ? caps.cell_pixels : Size{9, 18};
+    }
+
     Size size_;
     Capabilities caps_;
     InputDecoder decoder_;
+    VirtualDisplay display_;
     std::string written_;
     std::string title_;
     int bell_count_ = 0;

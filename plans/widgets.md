@@ -6,9 +6,12 @@ windowed TUI offered. "Beyond" is where ckVision must exceed it. Every
 widget: keyboard-complete, mouse-complete, theme-role documented, golden
 appearance tests, scripted interaction tests, reference docs.
 
-Implementation status against this inventory is tracked in the ledger
-at the end of this file — the catalog rows stay aspirationally
-complete; the ledger says what is still open and where it lands.
+Current implementation status is owned by WP-34A…WP-34C and WP-38 in
+[corrective-assurance.md](corrective-assurance.md). The catalog rows stay
+aspirationally complete. A feature is complete only when the final traceability
+matrix links its implementation, interaction script, appearance goldens, and
+reference documentation. The earlier narrative ledger was incomplete and is
+superseded below.
 
 ## Desktop and window chrome (M5)
 
@@ -87,34 +90,53 @@ widgets and dialogs, never per-widget state.
   (deterministic clamping, never corrupted output).
 - Golden-tested in active, inactive, focused, disabled states.
 - Raster-bearing widgets additionally: correct occlusion and scrolling,
-  fallback rendering verified under a no-graphics capability profile,
-  dual-space mouse verified under a pixel-mouse profile.
+  symbolic raster-scene goldens, decoded pixel-plane visual goldens under a
+  fixed-metrics Sixel profile, fallback rendering with zero raster pixels under
+  a no-graphics profile, runtime switching between those profiles without
+  stale pixels, and dual-space mouse verified under a pixel-mouse profile.
 - Documented behavior contract: keys, mouse, notifications, theme roles.
 
-## Open-items ledger (2026-08-07 review; see plans/api-ergonomics-review-2.md)
+## Current corrective ledger
 
-Catalog rows not yet implemented, with where each now lands. An item
-leaves this ledger by landing or by a recorded DECISIONS.md re-scope —
-never silently.
+M5/M6 acceptance is reopened. This is a finding inventory, not a substitute
+for WP-34C's required row-by-row traceability matrix. Every item below remains
+open until that matrix carries literal evidence. A prior code landing does not
+remove an item when its integrated behavior, full state/scheme appearance, or
+reference acceptance is missing.
 
-Rows for WP-11 (registry-rendered menus/status), WP-15 (modality
-stack + `exec_*`), WP-19 (Splitter), WP-21 (resizable-dialog defaults;
-minimum-size degraded chrome / "terminal too small"), and WP-22 (tree
-payload/lazy model/callback args) have left this ledger by landing —
-each landing is recorded, with verification evidence, in
-plans/api-ergonomics-review-2.md's own status ledger.
-
-| Open item | Catalog row | Lands in |
+| Open or unproven item | Catalog row / contract | Corrective owner |
 |---|---|---|
-| Live menu/status structure (runtime add/remove of items and top-level menus); status-line context-sensitive hints; status-line enablement dimming; `CommandRegistry::remove()` retraction | Menu bar beyond-baseline; Status line baseline | M9 (WP-10, revised 2026-08-08 — spec in plans/api-ergonomics-review-2.md) |
-| Nested submenus; checkable menu items; context-menu keyboard invocation | Drop-down / context menu baseline | M11 entry gate |
-| Combo box | Combo box | M11 entry gate |
-| Tab control | Tab control | M11 entry gate |
-| Progress | Progress | M11 entry gate |
-| Window backing store; damage-scoped painting; composition-only move benchmark | Window beyond-baseline; performance charter | M11 entry gate |
-| Message-box severity accents; localizable string table | Message boxes beyond-baseline; §5 Localization | M11 entry gate |
-| Desktop typed snapshot/restore | Desktop beyond-baseline | M11 entry gate |
-| List virtualized model; incremental search; columned mode | List view beyond-baseline | post-0.1 unless an adopter needs it sooner |
-| Table virtualized rows; sort indicators; column resize | Table beyond-baseline | post-0.1 unless an adopter needs it sooner |
-| Scrollbar auto-hide; smooth scroll-region diffs | Scrollbar/viewport beyond-baseline | post-0.1 unless an adopter needs it sooner |
-| Status-line priority layout; menu-bar overflow on narrow terminals | Status line / menu bar beyond-baseline | post-0.1 unless an adopter needs it sooner |
+| Desktop attachment, activation, cycling, modal, focus, and zoom-provider lifetime are coherent through every public attach/detach path | Desktop; Window; Dialog | WP-25…WP-27 |
+| Paint-scope junction ownership and binary/non-cumulative shadow coverage across overlapping z-levels; window backing store, damage-scoped painting, composition-only move, resize-confined repaint, enforceable performance counters | Window beyond-baseline; D-010/D-036/D-037 | WP-31 |
+| Default button, Esc, validation veto, focus restore, nested modality, and complete blocking/non-blocking standard-dialog conveniences | Dialog baseline | WP-27, WP-36 |
+| Message-box severity accents and localizable standard strings | Message boxes beyond-baseline | WP-34A |
+| Live menu/status structure, safe mutation while open, status hints/enablement, and command retraction | Menu bar beyond-baseline; Status line baseline | WP-35 |
+| Nested/checkable dropdowns and keyboard context-menu invocation | Drop-down / context menu baseline | WP-34A |
+| Menu overflow and status priority layout on narrow terminals | Menu bar / Status line beyond-baseline | WP-34A or a new settled re-scope decision |
+| Label mnemonic activates/focuses its buddy | Label baseline | WP-34B |
+| StaticText alignment and visible height-for-width layout | Static text beyond-baseline; D-006 | WP-34B, WP-36 |
+| Button repeat-on-hold | Button beyond-baseline | WP-34B |
+| InputLine clipboard cut/copy/paste, pointer drag selection, history dropdown, complete undo, and grapheme correctness | Input line baseline/beyond-baseline | WP-30, WP-34B |
+| Memo clipboard, bounded undo, word wrap, and grapheme navigation | Memo baseline/beyond-baseline | WP-30, WP-34B |
+| Check/Radio mnemonic completeness and CheckGroup tri-state | Option groups baseline/beyond-baseline | WP-34B |
+| ListView Clock-based double-click semantics; virtualized/incremental/columned model | List view baseline/beyond-baseline | WP-34B or a new settled re-scope decision for beyond-baseline model work |
+| ComboBox editable/pick-only/history/shadow behavior | Combo box beyond-baseline | WP-34B |
+| Scrollbar auto-hide and viewport wheel delivery over descendant content; smooth scroll diffs | Scrollbar / Scroll viewport | WP-31, WP-34B; re-scope decision required for any post-0.1 item |
+| TabControl complete behavior | Tab control beyond-baseline | WP-34B |
+| Table resize/sort/virtualized/styled-cell model | Table beyond-baseline | WP-34C or a new settled re-scope decision |
+| Tree virtualized model/connector styles and complete lazy/navigation integration | Tree beyond-baseline | WP-34C, WP-36; re-scope decision required for any remainder |
+| Progress complete behavior | Progress beyond-baseline | WP-34B |
+| Splitter keyboard adjustment and integrated resize/golden behavior | Splitter beyond-baseline | WP-34C, WP-36 |
+| TextView activatable links, OSC 8 rendering, and inline styles | Text view beyond-baseline | WP-34C |
+| Help cross-links/back/index/provider behavior | Help viewer baseline/beyond-baseline | WP-34C |
+| ImageView scaling, fallback, occlusion/scroll, dual-space pointer matrix, and paired decoded-Sixel/no-graphics visual captures | Image view beyond-baseline; raster acceptance | WP-32A, WP-34C, WP-38 |
+| Canvas automatically derives pixel size from cell metrics, redraws on metric/size change, and passes paired decoded-Sixel/no-graphics visual captures | Canvas beyond-baseline | WP-32A, WP-34C |
+| File open/save completion, filters, recent locations, hidden toggle, injected filesystem, and cross-platform paths | File dialog baseline/beyond-baseline | WP-28, WP-34C |
+| Directory picker and Window list full keyboard/mouse/filter/close behavior | Standard dialogs | WP-34A, WP-34C |
+| Desktop typed snapshot/restore | Desktop beyond-baseline | WP-34A |
+| Every widget × applicable active/inactive/focused/disabled state × Classic/Dark/Light/Mono, plus scripts and reference docs | Cross-cutting acceptance; M6 exit | WP-38 |
+
+The catalog currently says M6 implements both baseline and beyond-baseline
+columns. Therefore “post-0.1” is not a valid state by ledger annotation alone.
+WP-34A…WP-34C must either implement such an item for 0.1 or record a settled decision
+that changes ROADMAP/catalog scope before code or status is changed.

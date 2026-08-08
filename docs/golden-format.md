@@ -60,6 +60,25 @@ end
 - At most 62 styles per frame. A later version adds a declared
   multi-character style column width if a real frame ever needs more.
 
+## Raster records versus rendered-graphics captures
+
+The `raster` line is a symbolic scene/compositor oracle. It proves which image
+slice is visible, where it is anchored, its pixel extent and content hash, and
+whether a mandatory fallback exists. It does **not** prove that Presenter
+emitted valid Sixel, that a terminal decoded it, or that the pixels appeared at
+the right place over the fallback cells.
+
+D-035 therefore requires a separate virtual-display visual golden. That
+capture is produced by feeding the exact `Terminal::write` byte stream into an
+independently tested VT/Sixel decoder and comparing its resulting cell + RGBA
+planes. Raster-bearing acceptance runs the same script twice: a fixed-metrics
+Sixel profile must show decoded pixels, while NoGraphics must show the cell
+fallback and zero raster pixels. In the Sixel capture, cells below every
+visible raster slice must be style-preserving blanks—never fallback glyphs—and
+the encoder-produced pixel extent must be fully opaque. The symbolic dump
+remains intentionally diff-friendly; the decoded visual capture tests the
+protocol path it cannot.
+
 ## Example
 
 ```

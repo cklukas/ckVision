@@ -4,15 +4,20 @@
 // tracking and cell-anchored raster regions (ARCHITECTURE.md §3).
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "cvision/core/cell.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/scene/box_drawing.hpp"
 
 namespace ckv::scene {
+
+class Painter;
 
 // A row's dirty column span, as a half-open interval [lo, hi). `hi <=
 // lo` means the row carries no damage.
@@ -85,13 +90,29 @@ public:
     const std::vector<RasterRegion>& raster_regions() const noexcept { return raster_regions_; }
 
 private:
+    friend class Painter;
+
     std::size_t index(Point p) const noexcept {
         return static_cast<std::size_t>(p.y) * static_cast<std::size_t>(size_.width) +
                static_cast<std::size_t>(p.x);
     }
 
+    std::uint64_t create_junction_scope() noexcept;
+    std::optional<Junction> junction_in_scope(Point p, std::uint64_t scope) const noexcept;
+    bool begin_shadow(Point p) noexcept;
+    void set_junction_cell(Point p, Cell cell, std::uint64_t scope, Junction junction);
+    void set_cell_preserving_junction(Point p, Cell cell);
+    void write_cell(Point p, Cell cell);
+
     Size size_;
     std::vector<Cell> cells_;
+    // Box-drawing connectivity is semantic paint metadata and cannot be
+    // reconstructed from a visible glyph. Each cell is packed as the
+    // contributing logical paint's 59-bit scope, four direction bits, and a
+    // binary shadow-coverage bit. A compact parallel plane avoids separate
+    // padded metadata allocations for these paint semantics.
+    std::vector<std::uint64_t> junction_provenance_;
+    std::uint64_t next_junction_scope_ = 1;
     std::vector<DamageSpan> row_damage_;
     std::vector<RasterRegion> raster_regions_;
 };

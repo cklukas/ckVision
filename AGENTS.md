@@ -22,6 +22,16 @@ documentation, Unicode standards and reports (UAX #11, #29, TR#51), and
 platform API references. Behavioral conventions of classic desktops may be
 described from documentation and observation, never lifted from code.
 
+### Provenance review checklist
+
+Before a change is accepted, author and reviewer confirm that its behavior is
+derived from the authority chain above, an approved published reference, or a
+documented observation — never a prior implementation's source. Record the
+ckVision specification and executable evidence for re-derived behavior; do not
+present a comparison, a port, or outside-implementation faithfulness as evidence. Run the mandatory
+`provenance_check` and `provenance_checker_self_test` CTest gates. Those checks
+are lexical guards, not a substitute for this review.
+
 ## Architecture discipline
 
 - The layer model and dependency rules in ARCHITECTURE.md §1 are binding;
