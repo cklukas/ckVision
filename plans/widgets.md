@@ -48,17 +48,17 @@ widgets and dialogs, never per-widget state.
 | Label | Mnemonic that focuses its buddy control | — |
 | Static text | Styled, wrapped | Alignment options |
 | Button | Default/normal, mnemonic, pressed feedback | Repeat-on-hold option |
-| Input line | Editing keys, selection, clipboard, overwrite/insert, scrolling content, validators, input masks, password echo, history dropdown | Grapheme-correct editing (never splits clusters); undo within field |
+| Input line | Editing keys, selection, clipboard, overwrite/insert, scrolling content, validators, input masks, password echo, history cycling | Grapheme-correct editing (never splits clusters); undo within field |
 | Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo | Word wrap toggle; grapheme-correct navigation |
 | Check group | Multi-select, arrow navigation, mnemonics | Tri-state option |
 | Radio group | Exclusive select, arrow navigation, mnemonics | — |
-| List view | Scrolling, single/multi select, keyboard search, double-click activate | Virtualized model interface (millions of rows), incremental search, column-less and columned modes |
+| List view | Scrolling, single/multi select, keyboard search, injected-Clock double-click activate | Post-0.1 per D-041: virtualized model interface and columned modes |
 | Combo box | — (the classics lacked a true one) | Editable and pick-only variants, history integration, dropdown with shadow |
 | Scrollbar | Proportional thumb, arrows, paging, drag | Auto-hide policy option |
-| Scroll viewport | Scrolls any content view, keyboard and wheel | Smooth cell-line scrolling via scroll-region diffs |
+| Scroll viewport | Scrolls any content view, keyboard and wheel | Semantic cell-line scrolling; scroll-region byte-diff optimization is renderer/performance scope per D-041 |
 | Tab control | — | Top tabs with mnemonics, keyboard cycling, per-tab pages, overflow |
-| Table | — | Columns with headers, resize, sort indicators, virtualized rows, cell styling hook |
-| Tree / outline | Expand/collapse, keyboard navigation | Virtualized model, connector-line styles |
+| Table | — | Columns with headers, resize, sort indicators, cell styling hook; virtualized rows are post-0.1 per D-041 |
+| Tree / outline | Expand/collapse, keyboard navigation | Connector-line styles; virtualized model is post-0.1 per D-041 |
 | Progress | — | Determinate/indeterminate, label slot |
 | Splitter | — | Keyboard-adjustable split panes |
 | Text view | Read-only styled text, scrolling | Links (activatable; rendered as OSC 8 hyperlinks where supported), simple inline styles; the building block for help browsers and about boxes |
@@ -116,12 +116,12 @@ reference acceptance is missing.
 | Label mnemonic activates/focuses its buddy | Label baseline | WP-34B |
 | StaticText alignment and visible height-for-width layout | Static text beyond-baseline; D-006 | WP-34B, WP-36 |
 | Button repeat-on-hold | Button beyond-baseline | WP-34B |
-| InputLine clipboard cut/copy/paste, pointer drag selection, history dropdown, complete undo, and grapheme correctness | Input line baseline/beyond-baseline | WP-30, WP-34B |
+| InputLine clipboard cut/copy/paste, pointer drag selection, history cycling, complete undo, and grapheme correctness | Input line baseline/beyond-baseline | WP-30, WP-34B; dropdown history surface moved to ComboBox by D-041 |
 | Memo clipboard, bounded undo, word wrap, and grapheme navigation | Memo baseline/beyond-baseline | WP-30, WP-34B |
 | Check/Radio mnemonic completeness and CheckGroup tri-state | Option groups baseline/beyond-baseline | WP-34B |
-| ListView Clock-based double-click semantics; virtualized/incremental/columned model | List view baseline/beyond-baseline | WP-34B or a new settled re-scope decision for beyond-baseline model work |
+| ListView Clock-based double-click semantics; materialized search/selection behavior | List view baseline/beyond-baseline | WP-34B; virtualized/columned model moved post-0.1 by D-041 |
 | ComboBox editable/pick-only/history/shadow behavior | Combo box beyond-baseline | WP-34B |
-| Scrollbar auto-hide and viewport wheel delivery over descendant content; smooth scroll diffs | Scrollbar / Scroll viewport | WP-31, WP-34B; re-scope decision required for any post-0.1 item |
+| Scrollbar auto-hide and viewport wheel delivery over descendant content; semantic cell-line scrolling | Scrollbar / Scroll viewport | WP-31, WP-34B; scroll-region byte-diff optimization moved out of widget catalog by D-041 |
 | TabControl complete behavior | Tab control beyond-baseline | WP-34B |
 | Table resize/sort/virtualized/styled-cell model | Table beyond-baseline | WP-34C or a new settled re-scope decision |
 | Tree virtualized model/connector styles and complete lazy/navigation integration | Tree beyond-baseline | WP-34C, WP-36; re-scope decision required for any remainder |

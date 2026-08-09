@@ -39,9 +39,8 @@ void Button::set_text(std::string text) {
     size_hint_changed();
 }
 
-// The classic button drawing algorithm, cell for cell (verified
-// against the reference implementation's drawState): face rows
-// y = 0..h-2, shadow row y = h-1.
+// ckVision's classic button drawing contract: face rows y = 0..h-2,
+// shadow row y = h-1.
 //
 // Not pressed:            Pressed (face shifts right, shadow gone):
 //   .FFFFFFFF▄              ..FFFFFFFF
@@ -103,6 +102,7 @@ SizeHint Button::horizontal_size_hint() const {
 SizeHint Button::vertical_size_hint() const { return SizeHint{1, 2, 2}; }
 
 bool Button::on_key(const KeyEvent& event) {
+    if (event.action == KeyAction::Release) return false;
     if (event.chord.key == Key::Enter || (event.chord.key == Key::Char && event.chord.text == " ")) {
         fire_press();
         return true;

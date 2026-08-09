@@ -20,12 +20,39 @@ bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
     return true;
 }
 
+bool is_mnemonic_request(const KeyEvent& event) noexcept {
+    return event.chord.key == Key::Char && !event.chord.text.empty() &&
+           !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+           !has_modifier(event.chord.modifiers, Modifier::Super);
+}
+
+bool is_space_request(const KeyEvent& event) noexcept {
+    return event.chord.key == Key::Char && event.chord.text == " " &&
+           event.chord.modifiers == Modifier::None;
+}
+
+bool state_as_bool(CheckState state) noexcept { return state == CheckState::Checked; }
+
+CheckState toggled_state(CheckState state, bool tristate) noexcept {
+    if (!tristate) return state == CheckState::Checked ? CheckState::Unchecked : CheckState::Checked;
+    switch (state) {
+        case CheckState::Unchecked:
+            return CheckState::Checked;
+        case CheckState::Checked:
+            return CheckState::Mixed;
+        case CheckState::Mixed:
+            return CheckState::Unchecked;
+    }
+    CKV_ASSERT(false);
+    return CheckState::Unchecked;
+}
+
 }  // namespace
 
 // --- CheckGroup ------------------------------------------------------
 
 CheckGroup::CheckGroup(std::vector<std::string> labels)
-    : labels_(std::move(labels)), checked_(labels_.size(), false) {
+    : labels_(std::move(labels)), states_(labels_.size(), CheckState::Unchecked) {
     set_focus_policy(ui::FocusPolicy::TabStop);
 }
 
@@ -37,19 +64,28 @@ void CheckGroup::on_attached() {
 }
 
 bool CheckGroup::checked(std::size_t index) const {
-    CKV_ASSERT(index < checked_.size());
-    return checked_[index];
+    return state_as_bool(check_state(index));
 }
 
 void CheckGroup::set_checked(std::size_t index, bool value) {
-    CKV_ASSERT(index < checked_.size());
-    if (checked_[index] == value) return;
-    checked_[index] = value;
-    invalidate();
-    if (on_changed) on_changed(index, value);
+    set_check_state(index, value ? CheckState::Checked : CheckState::Unchecked);
 }
 
-void CheckGroup::toggle(std::size_t index) { set_checked(index, !checked_[index]); }
+CheckState CheckGroup::check_state(std::size_t index) const {
+    CKV_ASSERT(index < states_.size());
+    return states_[index];
+}
+
+void CheckGroup::set_check_state(std::size_t index, CheckState state) {
+    CKV_ASSERT(index < states_.size());
+    if (states_[index] == state) return;
+    states_[index] = state;
+    invalidate();
+    if (on_state_changed) on_state_changed(index, state);
+    if (on_changed) on_changed(index, state_as_bool(state));
+}
+
+void CheckGroup::toggle(std::size_t index) { set_check_state(index, toggled_state(states_[index], tristate_)); }
 
 void CheckGroup::move_cursor(int direction) {
     if (labels_.empty()) return;
@@ -83,10 +119,11 @@ bool CheckGroup::on_key(const KeyEvent& event) {
             if (!labels_.empty()) toggle(cursor_);
             return true;
         case Key::Char:
-            if (event.chord.text == " ") {
+            if (is_space_request(event)) {
                 if (!labels_.empty()) toggle(cursor_);
                 return true;
             }
+            if (!is_mnemonic_request(event)) return false;
             for (std::size_t i = 0; i < labels_.size(); ++i) {
                 const auto parsed = parse_mnemonic(labels_[i]);
                 if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {
@@ -122,7 +159,9 @@ void CheckGroup::draw(scene::Painter& painter) {
         const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
                                                           : theme.resolve(normal_role_);
         painter.fill(Rect{0, static_cast<int>(i), bounds().width, 1}, Cell::from_grapheme(" ", style));
-        const std::string marker = checked_[i] ? "[x] " : "[ ] ";
+        const std::string marker = states_[i] == CheckState::Checked ? "[x] "
+                                 : states_[i] == CheckState::Mixed   ? "[~] "
+                                                                     : "[ ] ";
         painter.draw_text(Point{0, static_cast<int>(i)}, marker, style);
         painter.draw_text(Point{4, static_cast<int>(i)}, parse_mnemonic(labels_[i]).display, style);
     }
@@ -183,10 +222,11 @@ bool RadioGroup::on_key(const KeyEvent& event) {
             if (!labels_.empty()) set_selected(static_cast<int>(cursor_));
             return true;
         case Key::Char:
-            if (event.chord.text == " ") {
+            if (is_space_request(event)) {
                 if (!labels_.empty()) set_selected(static_cast<int>(cursor_));
                 return true;
             }
+            if (!is_mnemonic_request(event)) return false;
             for (std::size_t i = 0; i < labels_.size(); ++i) {
                 const auto parsed = parse_mnemonic(labels_[i]);
                 if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {

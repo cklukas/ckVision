@@ -90,8 +90,23 @@ int StaticText::height_for_width(int width) const { return static_cast<int>(wrap
 void StaticText::draw(scene::Painter& painter) {
     const std::vector<std::string> lines = wrap(bounds().width);
     const Style style = context().theme->resolve(role_);
-    for (std::size_t row = 0; row < lines.size() && static_cast<int>(row) < bounds().height; ++row)
-        painter.draw_text(Point{0, static_cast<int>(row)}, lines[row], style);
+    for (std::size_t row = 0; row < lines.size() && static_cast<int>(row) < bounds().height; ++row) {
+        const int line_width = text::text_width(lines[row]);
+        int x = 0;
+        switch (alignment_) {
+            case ui::Alignment::Start:
+            case ui::Alignment::Fill:
+                x = 0;
+                break;
+            case ui::Alignment::Center:
+                x = std::max(0, (bounds().width - line_width) / 2);
+                break;
+            case ui::Alignment::End:
+                x = std::max(0, bounds().width - line_width);
+                break;
+        }
+        painter.draw_text(Point{x, static_cast<int>(row)}, lines[row], style);
+    }
 }
 
 }  // namespace ckv::widgets

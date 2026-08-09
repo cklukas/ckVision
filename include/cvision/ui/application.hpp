@@ -118,6 +118,9 @@ public:
 
     HistoryRegistry& history() noexcept { return history_; }
 
+    Clock& clock() noexcept { return clock_; }
+    const Clock& clock() const noexcept { return clock_; }
+
     // --- Diagnostics (ARCHITECTURE.md §11) -------------------------------
     //
     // Every Application owns an in-memory diagnostic buffer. Applications

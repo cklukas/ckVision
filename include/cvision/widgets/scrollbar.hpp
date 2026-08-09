@@ -36,6 +36,9 @@ public:
     int position() const noexcept { return position_; }
     int max_position() const noexcept;
 
+    void set_auto_hide(bool enabled);
+    bool auto_hide() const noexcept { return auto_hide_; }
+
     // Fired whenever position changes for ANY reason (arrows, paging,
     // drag, or a direct set_position call) — one place for a scroll
     // viewport to observe, rather than instrumenting every input path.
@@ -60,6 +63,7 @@ private:
     bool dragging_ = false;
     int drag_start_cell_ = 0;
     int drag_start_position_ = 0;
+    bool auto_hide_ = false;
 
     ui::RoleId track_role_ = ui::kInvalidRole;
     ui::RoleId thumb_role_ = ui::kInvalidRole;

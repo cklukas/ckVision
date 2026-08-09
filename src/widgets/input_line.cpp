@@ -5,6 +5,7 @@
 #include <cctype>
 
 #include "cvision/core/text.hpp"
+#include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
 
@@ -30,6 +31,8 @@ void InputLine::set_text(std::string text) {
     for (std::string_view g : text::split_graphemes(text)) graphemes_.emplace_back(g);
     cursor_ = graphemes_.size();
     selection_anchor_.reset();
+    undo_stack_.clear();
+    dragging_selection_ = false;
     invalidate();
     revalidate();
 }
@@ -77,6 +80,58 @@ void InputLine::commit_to_history() {
     if (history_registry_ == nullptr) return;
     history_registry_->record(history_key_, text());
     history_index_ = -1;
+}
+
+void InputLine::record_undo_state() {
+    if (undo_stack_.size() == kMaxUndoDepth) undo_stack_.erase(undo_stack_.begin());
+    undo_stack_.push_back(EditState{graphemes_, cursor_, selection_anchor_, overwrite_mode_});
+}
+
+bool InputLine::undo() {
+    if (undo_stack_.empty()) return false;
+    EditState state = std::move(undo_stack_.back());
+    undo_stack_.pop_back();
+    graphemes_ = std::move(state.graphemes);
+    cursor_ = state.cursor;
+    selection_anchor_ = state.selection_anchor;
+    overwrite_mode_ = state.overwrite_mode;
+    dragging_selection_ = false;
+    invalidate();
+    revalidate();
+    return true;
+}
+
+std::string InputLine::selected_text() const {
+    if (!selection_anchor_) return {};
+    const auto [begin, end] = selection_range();
+    std::string out;
+    for (std::size_t i = begin; i < end; ++i) out += graphemes_[i];
+    return out;
+}
+
+bool InputLine::copy_selection_to_clipboard() {
+    if (context().app == nullptr || !selection_anchor_) return false;
+    const std::string selected = selected_text();
+    if (selected.empty()) return false;
+    context().app->set_clipboard_text(selected);
+    return true;
+}
+
+bool InputLine::cut_selection_to_clipboard() {
+    if (!selection_anchor_ || selected_text().empty()) return false;
+    if (context().app == nullptr) return false;
+    record_undo_state();
+    context().app->set_clipboard_text(selected_text());
+    erase_selection();
+    invalidate();
+    return true;
+}
+
+bool InputLine::paste_from_clipboard() {
+    if (context().app == nullptr) return false;
+    const std::string& clip = context().app->clipboard_text();
+    if (clip.empty()) return false;
+    return on_text(TextEvent{clip, false});
 }
 
 void InputLine::history_show(int index) {
@@ -183,6 +238,7 @@ bool InputLine::on_key_masked(const KeyEvent& event) {
         case Key::Backspace: {
             const std::size_t prev = mask_previous_editable(cursor_);
             if (prev < graphemes_.size()) {
+                record_undo_state();
                 graphemes_[prev] = std::string(1, mask_placeholder_);
                 cursor_ = prev;
                 invalidate();
@@ -192,6 +248,7 @@ bool InputLine::on_key_masked(const KeyEvent& event) {
         }
         case Key::Delete: {
             if (cursor_ < graphemes_.size() && mask_position_editable(cursor_)) {
+                record_undo_state();
                 graphemes_[cursor_] = std::string(1, mask_placeholder_);
                 invalidate();
                 revalidate();
@@ -209,6 +266,7 @@ bool InputLine::on_text_masked(const TextEvent& event) {
         const std::size_t pos = mask_next_editable(cursor_);
         if (pos >= graphemes_.size()) break;
         if (!mask_char_accepts(mask_[pos], g)) continue;
+        if (!changed) record_undo_state();
         graphemes_[pos] = std::string(g);
         cursor_ = mask_next_editable(pos + 1);
         changed = true;
@@ -263,6 +321,16 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
+        const char chord = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
+        if (chord == 'c') return copy_selection_to_clipboard();
+        if (chord == 'x') return cut_selection_to_clipboard();
+        if (chord == 'v') return paste_from_clipboard();
+        if (chord == 'z') return undo();
+    }
+
     // Terminals report ordinary typed characters as Key::Char events, whereas
     // IMEs and bracketed paste arrive as TextEvent. Normalize the former at
     // the editing boundary so both paths obey the same insertion, validation,
@@ -307,9 +375,11 @@ bool InputLine::on_key(const KeyEvent& event) {
             return true;
         case Key::Backspace:
             if (selection_anchor_) {
+                record_undo_state();
                 erase_selection();
                 invalidate();
             } else if (cursor_ > 0) {
+                record_undo_state();
                 graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_ - 1));
                 --cursor_;
                 invalidate();
@@ -318,9 +388,11 @@ bool InputLine::on_key(const KeyEvent& event) {
             return true;
         case Key::Delete:
             if (selection_anchor_) {
+                record_undo_state();
                 erase_selection();
                 invalidate();
             } else if (cursor_ < graphemes_.size()) {
+                record_undo_state();
                 graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_));
                 invalidate();
                 revalidate();
@@ -339,17 +411,34 @@ bool InputLine::on_text(const TextEvent& event) {
     if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;
     for (std::string_view g : text::split_graphemes(event.text)) graphemes.emplace_back(g);
+    if (!graphemes.empty()) record_undo_state();
     insert_graphemes(graphemes);
     return true;
 }
 
 bool InputLine::on_mouse(const MouseEvent& event) {
+    if (event.action == MouseAction::Up && dragging_selection_) {
+        dragging_selection_ = false;
+        return true;
+    }
+    if (event.action == MouseAction::Move && dragging_selection_) {
+        move_cursor(cursor_index_at(event.cell), true);
+        return true;
+    }
     if (event.action != MouseAction::Down) return false;
     if (!contains(absolute_bounds(), event.cell)) return false;
-    const int local_x = event.cell.x - absolute_bounds().x;
+    dragging_selection_ = true;
+    move_cursor(cursor_index_at(event.cell), false);
+    return true;
+}
+
+std::size_t InputLine::cursor_index_at(Point absolute_cell) const {
+    const int local_x = absolute_cell.x - absolute_bounds().x;
+    if (local_x <= 0) return static_cast<std::size_t>(scroll_offset_for_display());
+    const int scroll = scroll_offset_for_display();
     int col = 0;
     std::size_t index = graphemes_.size();
-    for (std::size_t i = 0; i < graphemes_.size(); ++i) {
+    for (std::size_t i = static_cast<std::size_t>(scroll); i < graphemes_.size(); ++i) {
         const int w = text::grapheme_width(graphemes_[i]);
         if (local_x < col + w) {
             index = i;
@@ -357,8 +446,7 @@ bool InputLine::on_mouse(const MouseEvent& event) {
         }
         col += w;
     }
-    move_cursor(index, false);
-    return true;
+    return index;
 }
 
 void InputLine::on_focus(const FocusEvent& event) {

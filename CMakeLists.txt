@@ -43,6 +43,7 @@ add_library(cvision
     src/ui/view.cpp
     src/widgets/button.cpp
     src/widgets/canvas.cpp
+    src/widgets/combo_box.cpp
     src/widgets/desktop.cpp
     src/widgets/dialog.cpp
     src/widgets/directory_picker.cpp
@@ -57,6 +58,7 @@ add_library(cvision
     src/widgets/message_box.cpp
     src/widgets/mnemonic.cpp
     src/widgets/option_group.cpp
+    src/widgets/progress.cpp
     src/widgets/scroll_viewport.cpp
     src/widgets/scrollbar.cpp
     src/widgets/splitter.cpp
@@ -64,6 +66,7 @@ add_library(cvision
     src/widgets/static_text.cpp
     src/widgets/status_line.cpp
     src/widgets/table.cpp
+    src/widgets/tab_control.cpp
     src/widgets/text_view.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp

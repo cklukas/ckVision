@@ -55,7 +55,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | **Implementation complete — gate pending** | WP-32 | M3 headless/raster acceptance; screenshot gap |
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | **Implementation complete — gate pending** | WP-32A | M3 fuzz exit; verification standard |
 | 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | **Implementation complete — gate pending** | WP-33 | M5/M6 catalog gaps |
-| 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | Ready | WP-34A | M4/M6 control gaps |
+| 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | **Implementation complete — gate pending** | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | Blocked | WP-34B | M6 remaining catalog gaps |
 | 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Blocked | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Blocked | WP-35 | WP-16, WP-18…WP-22; M10 exit |
@@ -1437,14 +1437,15 @@ catalog currently promise but the implementation does not provide.
   repeat-on-hold, and complete CheckGroup/RadioGroup mnemonic behavior plus
   tri-state checks.
 - Complete InputLine clipboard cut/copy/paste, pointer drag selection, history
-  dropdown, and undo; complete Memo clipboard, bounded undo, word-wrap toggle,
-  and grapheme navigation using WP-30 primitives.
+  cycling, and undo; complete Memo clipboard, bounded undo, word-wrap toggle,
+  and grapheme navigation using WP-30 primitives. ComboBox owns dropdown-style
+  history per D-041.
 - Give ListView true injected-Clock double-click semantics and finish its
-  baseline search/selection behavior. Implement or formally re-scope its
-  virtual/incremental/columned promises.
+  baseline search/selection behavior. D-041 formally moves virtualized and
+  columned ListView models out of the 0.1 controls gate.
 - Complete ComboBox, TabControl, Progress, Scrollbar auto-hide, and ScrollViewport
-  wheel delivery over descendant content. Smooth scroll-region diffs either
-  land with WP-31 integration or require a settled 0.1 re-scope.
+  wheel delivery over descendant content. D-041 classifies scroll-region diffs
+  as renderer/performance optimization rather than a 0.1 widget behavior.
 
 **Acceptance.**
 
@@ -1454,6 +1455,26 @@ catalog currently promise but the implementation does not provide.
   masking/password modes, focus loss, destruction, and terminal shrink.
 - Every Controls catalog cell is implemented with linked unit and interaction
   evidence or explicitly removed from 0.1 by a settled decision.
+
+**Implementation complete — gate pending (2026-08-09).** WP-34B closes the
+control-surface gap locally: Label buddy mnemonics, StaticText alignment,
+Button key-repeat activation, CheckGroup tri-state and complete option
+mnemonics, InputLine clipboard/drag/undo, Memo clipboard/drag/undo/word-wrap,
+Clock-based ListView double-click activation, Scrollbar auto-hide,
+ScrollViewport wheel bubbling over descendants, and new ComboBox, TabControl,
+and Progress widgets are implemented. D-041 records the settled 0.1 scope
+change for virtualized/columned list-shaped models and scroll-region byte-diff
+optimization.
+
+Local evidence: `cmake --build build --target cvision_tests --parallel 4`
+passed on macOS. Focused WP-34B CTest suites
+`suite_test_combo_box`, `suite_test_tab_control`, `suite_test_progress`,
+`suite_test_memo`, `suite_test_widgets`, `suite_test_option_group`,
+`suite_test_list_view`, `suite_test_scrollbar`, and
+`suite_test_scroll_viewport` passed 9/9. The full local CTest matrix then
+passed **96/96**, including `layer_check`, `provenance_check`,
+`provenance_checker_self_test`, `test_inventory`, `hello_line_budget`, and
+`scene_budget_gate`; `git diff --check` was also clean.
 
 ### WP-34C — Data, media, help, file, and catalog closure
 

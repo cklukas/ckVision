@@ -2,13 +2,17 @@
 #include "cvision/widgets/memo.hpp"
 
 #include "cktest.hpp"
+#include "cvision/core/clock.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
+using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::Rect;
 using ckv::ui::intern_standard_roles;
@@ -30,6 +34,16 @@ struct Fixture {
 Memo make_memo(Fixture&) { return Memo(); }
 
 ckv::KeyEvent key(ckv::Key k, ckv::Modifier m = Modifier::None) { return ckv::KeyEvent{KeyChord{k, m, ""}}; }
+
+ckv::KeyEvent ctrl_char(std::string text) {
+    return ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, std::move(text)}};
+}
+
+std::string row_text(const ckv::scene::Surface& surface, int row) {
+    std::string out;
+    for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, row}).grapheme();
+    return out;
+}
 }  // namespace
 
 // --- set_text / text round trip ------------------------------------
@@ -219,6 +233,47 @@ CK_TEST(plain_arrow_after_a_selection_collapses_it_without_deleting_anything) {
     CK_CHECK(memo.text() == "hello");
 }
 
+CK_TEST(copy_cut_and_paste_use_the_application_clipboard) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+
+    Memo memo;
+    memo.set_context(ckv::ui::Context{&app.theme(), &app.roles(), &app});
+    memo.set_text("hello");
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_key(key(Key::Right, Modifier::Shift));
+
+    CK_CHECK(memo.on_key(ctrl_char("c")));
+    CK_CHECK(app.clipboard_text() == "he");
+    CK_CHECK(memo.text() == "hello");
+
+    CK_CHECK(memo.on_key(ctrl_char("x")));
+    CK_CHECK(app.clipboard_text() == "he");
+    CK_CHECK(memo.text() == "llo");
+
+    memo.on_key(key(Key::End));
+    CK_CHECK(memo.on_key(ctrl_char("v")));
+    CK_CHECK(memo.text() == "llohe");
+}
+
+CK_TEST(undo_restores_the_previous_memo_text_cursor_and_selection) {
+    Fixture f;
+    auto memo = make_memo(f);
+    memo.set_text("hello");
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_text(ckv::TextEvent{"X", false});
+
+    CK_CHECK(memo.text() == "Xllo");
+    CK_CHECK(memo.on_key(ctrl_char("z")));
+    CK_CHECK(memo.text() == "hello");
+    CK_CHECK(memo.has_selection());
+    CK_CHECK(memo.selection_range() == std::make_pair(MemoPosition{0, 0}, MemoPosition{0, 2}));
+}
+
 // --- Mouse ------------------------------------------------------------
 
 CK_TEST(clicking_places_the_cursor_at_the_clicked_line_and_column) {
@@ -240,6 +295,22 @@ CK_TEST(click_outside_the_memos_bounds_is_ignored) {
                                              std::nullopt, Modifier::None}));
 }
 
+CK_TEST(mouse_drag_extends_the_memo_selection) {
+    Fixture f;
+    auto memo = make_memo(f);
+    memo.set_bounds(Rect{0, 0, 20, 5});
+    memo.set_text("abcdef");
+
+    CK_CHECK(memo.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 0},
+                                            std::nullopt, Modifier::None}));
+    CK_CHECK(memo.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{4, 0},
+                                            std::nullopt, Modifier::None}));
+    CK_CHECK(memo.has_selection());
+    CK_CHECK(memo.selection_range() == std::make_pair(MemoPosition{0, 1}, MemoPosition{0, 4}));
+    CK_CHECK(memo.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{4, 0},
+                                            std::nullopt, Modifier::None}));
+}
+
 // --- Rendering does not crash --------------------------------------
 
 CK_TEST(draw_does_not_crash_for_an_empty_focused_memo) {
@@ -252,6 +323,23 @@ CK_TEST(draw_does_not_crash_for_an_empty_focused_memo) {
     ckv::scene::Painter painter(s, Rect{0, 0, 20, 5});
     memo.draw(painter);
     CK_CHECK(true);
+}
+
+CK_TEST(word_wrap_draws_soft_rows_without_changing_the_document_text) {
+    Fixture f;
+    auto memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.set_bounds(Rect{0, 0, 6, 3});  // five text columns plus scrollbar
+    memo.set_text("abcdefgh");
+    memo.set_word_wrap(true);
+
+    ckv::scene::Surface surface(ckv::Size{6, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 6, 3});
+    memo.draw(painter);
+
+    CK_CHECK(memo.text() == "abcdefgh");
+    CK_CHECK(row_text(surface, 0).substr(0, 5) == "abcde");
+    CK_CHECK(row_text(surface, 1).substr(0, 3) == "fgh");
 }
 
 CK_TEST(a_grapheme_correct_backspace_removes_a_whole_multi_byte_cluster) {

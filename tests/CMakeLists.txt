@@ -9,6 +9,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_color_style_cell.cpp
     test_command.cpp
     test_compositor.cpp
+    test_combo_box.cpp
     test_filesystem.cpp
     test_desktop.cpp
     test_desktop_dialog_golden.cpp
@@ -46,6 +47,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_paste_security.cpp
     test_platform_services.cpp
     test_presenter.cpp
+    test_progress.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
     test_root_resize_golden.cpp
@@ -58,6 +60,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_status_line.cpp
     test_surface.cpp
     test_table.cpp
+    test_tab_control.cpp
     test_text_view.cpp
     test_text_width.cpp
     test_unicode_grapheme_break.cpp

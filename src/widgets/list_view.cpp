@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cctype>
 
+#include "cvision/ui/application.hpp"
+
 namespace ckv::widgets {
 
 ListView::ListView(bool multi_select) : multi_select_(multi_select) {
@@ -20,6 +22,8 @@ void ListView::set_items(std::vector<std::string> items) {
     items_ = std::move(items);
     selected_.assign(items_.size(), false);
     cursor_ = items_.empty() ? -1 : 0;
+    last_click_index_ = -1;
+    last_click_nanos_ = -1;
     on_resized();
     ensure_cursor_visible();
     invalidate();
@@ -147,7 +151,13 @@ bool ListView::on_mouse(const MouseEvent& event) {
     const int index = scrollbar_->position() + row;
     if (index < 0 || static_cast<std::size_t>(index) >= items_.size()) return false;
 
-    if (index == cursor_) {
+    const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : -1;
+    const bool double_click = now >= 0 && last_click_nanos_ >= 0 && index == last_click_index_ &&
+                              now - last_click_nanos_ <= kDoubleClickIntervalNanos;
+    last_click_index_ = index;
+    last_click_nanos_ = now;
+
+    if (double_click) {
         if (on_activate) on_activate(static_cast<std::size_t>(index));
     } else {
         move_cursor(index, !multi_select_);

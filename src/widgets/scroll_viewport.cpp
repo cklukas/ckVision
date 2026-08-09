@@ -7,12 +7,14 @@ namespace ckv::widgets {
 
 ScrollViewport::ScrollViewport() {
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    v_scrollbar_->set_auto_hide(true);
     v_scrollbar_->on_position_changed = [this](int p) {
         scroll_y_ = p;
         reposition_content();
     };
 
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
+    h_scrollbar_->set_auto_hide(true);
     h_scrollbar_->on_position_changed = [this](int p) {
         scroll_x_ = p;
         reposition_content();
@@ -43,20 +45,26 @@ void ScrollViewport::reposition_content() {
 void ScrollViewport::relayout() {
     const int width = bounds().width;
     const int height = bounds().height;
-    const int content_area_w = std::max(0, width - 1);
-    const int content_area_h = std::max(0, height - 1);
+    int preferred_w = width;
+    int preferred_h = height;
+    if (content_ != nullptr) {
+        preferred_w = std::max(0, content_->horizontal_size_hint().preferred);
+        preferred_h = std::max(0, content_->vertical_size_hint().preferred);
+    }
+
+    bool need_v = preferred_h > height;
+    bool need_h = preferred_w > std::max(0, width - (need_v ? 1 : 0));
+    need_v = preferred_h > std::max(0, height - (need_h ? 1 : 0));
+
+    const int content_area_w = std::max(0, width - (need_v ? 1 : 0));
+    const int content_area_h = std::max(0, height - (need_h ? 1 : 0));
+    const int content_w = std::max(content_area_w, preferred_w);
+    const int content_h = std::max(content_area_h, preferred_h);
 
     if (v_scrollbar_ != nullptr)
-        v_scrollbar_->set_bounds(Rect{content_area_w, 0, std::min(1, width), content_area_h});
+        v_scrollbar_->set_bounds(Rect{content_area_w, 0, need_v ? std::min(1, width) : 0, content_area_h});
     if (h_scrollbar_ != nullptr)
-        h_scrollbar_->set_bounds(Rect{0, content_area_h, content_area_w, std::min(1, height)});
-
-    int content_w = content_area_w;
-    int content_h = content_area_h;
-    if (content_ != nullptr) {
-        content_w = std::max(content_area_w, content_->horizontal_size_hint().preferred);
-        content_h = std::max(content_area_h, content_->vertical_size_hint().preferred);
-    }
+        h_scrollbar_->set_bounds(Rect{0, content_area_h, content_area_w, need_h ? std::min(1, height) : 0});
     if (v_scrollbar_ != nullptr) v_scrollbar_->set_range(content_h, std::max(1, content_area_h));
     if (h_scrollbar_ != nullptr) h_scrollbar_->set_range(content_w, std::max(1, content_area_w));
 

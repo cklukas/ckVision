@@ -583,13 +583,36 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             ancestor->on_descendant_mouse_down(*current_target);
                         }
                     }
+                    if (e.action == MouseAction::Wheel) {
+                        std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
+                        wheel_route.clear();
+                        for (View* ancestor = target->parent(); ancestor != nullptr;
+                             ancestor = ancestor->parent())
+                            wheel_route.push_back(make_view_handle(*ancestor));
+                    }
                     View* const delivery_target = resolve_attached_view(target_handle);
                     if (delivery_target == nullptr) {
                         if (e.action == MouseAction::Up)
                             mouse_capture_ = nullptr;
                         return false;
                     }
-                    const bool handled = delivery_target->on_mouse(e);
+                    bool handled = delivery_target->on_mouse(e);
+                    if (!handled && e.action == MouseAction::Wheel) {
+                        std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
+                        for (const ViewHandle& ancestor_handle : wheel_route) {
+                            View* const current_target = resolve_attached_view(target_handle);
+                            View* const ancestor = resolve_attached_view(ancestor_handle);
+                            if (current_target == nullptr || ancestor == nullptr ||
+                                !is_ancestor_of(*ancestor, *current_target))
+                                break;
+                            if (ancestor->on_mouse(e)) {
+                                handled = true;
+                                break;
+                            }
+                            if (ancestor == modal_root())
+                                break;
+                        }
+                    }
                     if (e.action == MouseAction::Up)
                         mouse_capture_ = nullptr;
                     // Click-to-focus (VISION #7): a press outside any

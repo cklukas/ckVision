@@ -6,6 +6,7 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
+#include "cvision/widgets/label.hpp"
 
 namespace ckv::widgets {
 
@@ -321,14 +322,11 @@ void Window::draw(scene::Painter& painter) {
         painter.draw_text(Point{b.width - 4, 0}, zoomed_ ? "[↕]" : "[↑]", frame_style);
     }
     if (b.width > 8) {
-        // Centered, with a one-cell padding space on each side — the
-        // convention's own title placement (verified against the
-        // reference implementation's frame-drawing source: title width
-        // is bounded, then `i = (width - l) >> 1` centers it and a
-        // blank is written at i-1 and i+l). Previously this drew the
-        // title left-aligned at a fixed column, immediately abutting
-        // the close control with no padding at all — visibly cramped
-        // and not what the convention actually does.
+        // Centered, with a one-cell padding space on each side. The
+        // title budget is bounded by the active frame controls, then
+        // centered inside the remaining top border span. Previously this
+        // drew the title left-aligned at a fixed column, immediately
+        // abutting the close control with no padding at all.
         const int reserved_for_controls = (b.width > 6) ? 10 : 4;  // both controls flank ~2 cells of margin each
         const int available = std::max(0, b.width - reserved_for_controls);
         const std::string shown = text::elide_to_width(title_, available);
@@ -350,6 +348,8 @@ bool Window::on_key(const KeyEvent& event) {
             cancel_request();
             return true;
         }
+        if (context().app != nullptr && activate_label_mnemonic(*this, event, *context().app))
+            return true;
         return false;
     }
 

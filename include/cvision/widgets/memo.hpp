@@ -5,19 +5,15 @@
 // discipline (cursor/selection/Backspace/Delete never split a
 // cluster).
 //
-// Scope note (documented, not an oversight, matching InputLine's own
-// documented gaps): clipboard integration and bounded undo are
-// deferred — both depend on Application-level machinery (the internal
-// clipboard, a real undo/redo command stack) that doesn't have a
-// concrete second consumer yet beyond InputLine's own already-deferred
-// clipboard wiring; landing a widget-local stand-in here would mean
-// throwing it away when that machinery arrives. Word-wrap toggle and
-// grapheme-correct navigation refinements are explicitly beyond-
-// baseline in the catalog.
+// Clipboard and undo are application-local and deterministic: cut/copy/paste
+// route through Application's injected clipboard state, and undo stores bounded
+// grapheme-indexed field snapshots. Word wrap is a widget policy bit that
+// affects soft visual rows without changing the stored document text.
 #pragma once
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cvision/ui/theme.hpp"
@@ -48,10 +44,18 @@ public:
     void set_text(std::string text);
     std::string text() const;
 
+    void set_word_wrap(bool enabled);
+    bool word_wrap() const noexcept { return word_wrap_; }
+
     MemoPosition cursor() const noexcept { return cursor_; }
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
     // [begin, end) in document order; {cursor, cursor} if no selection.
     std::pair<MemoPosition, MemoPosition> selection_range() const noexcept;
+
+    bool copy_selection_to_clipboard();
+    bool cut_selection_to_clipboard();
+    bool paste_from_clipboard();
+    bool undo();
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;
@@ -62,17 +66,39 @@ public:
     void on_attached() override;
 
 private:
+    struct EditState {
+        std::vector<std::vector<std::string>> lines;
+        MemoPosition cursor;
+        std::optional<MemoPosition> selection_anchor;
+    };
+
+    struct VisualRow {
+        int line = 0;
+        int begin = 0;
+        int end = 0;
+    };
+
+    static constexpr std::size_t kMaxUndoDepth = 64;
+
     void insert_text_at_cursor(std::string_view text);
     void erase_selection();
     void move_cursor(MemoPosition target, bool extend_selection);
     MemoPosition clamp_position(MemoPosition p) const noexcept;
     int line_length(int line) const noexcept;
+    std::string selected_text() const;
+    void record_undo_state();
+    std::vector<VisualRow> visual_rows(int visible_width) const;
+    int visual_row_for_position(MemoPosition position, int visible_width) const;
+    MemoPosition position_at_visual_row_column(int visual_row, int local_x, int visible_width) const;
     void ensure_cursor_visible();
 
     std::vector<std::vector<std::string>> lines_;  // each line: graphemes
     MemoPosition cursor_;
     std::optional<MemoPosition> selection_anchor_;
+    std::vector<EditState> undo_stack_;
     bool has_focus_ = false;
+    bool word_wrap_ = false;
+    bool dragging_selection_ = false;
 
     Scrollbar* scrollbar_ = nullptr;
     ui::RoleId normal_role_ = ui::kInvalidRole;

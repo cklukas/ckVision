@@ -6,26 +6,20 @@
 // horizontal scroll-to-keep-cursor-visible, an automatic validator,
 // input masks, password echo, and history-registry cycling.
 //
-// v1 scope (documented, not an oversight): clipboard cut/copy/paste is
-// still deferred — it depends on Application's internal clipboard,
-// landed after this widget's core editing but never wired back in
-// (a real, separate increment: cut/copy need a selection-to-clipboard
-// path and paste needs to route through Application::dispatch's
-// existing paste-mirrors-into-clipboard logic, neither trivial).
-// Mouse interaction is click-to-place-cursor only; drag-to-select is
-// deferred alongside clipboard for the same reason — without copy, a
-// mouse selection has nothing to do. History integration is Up/Down
-// CYCLING through previously committed entries, not a dropdown popup
-// (that needs the same popup+input-capture machinery menus use, not
-// yet threaded through a plain field); commit_to_history() is called
-// explicitly by the owner (e.g. on dialog accept), never automatically
-// on Enter, since Enter's meaning for a given field is the caller's to
-// decide (submit the dialog vs. accept the field vs. both).
+// Clipboard cut/copy/paste routes through Application's deterministic
+// internal clipboard; mouse drag selection and bounded undo are part of
+// the control itself. History integration is Up/Down cycling through
+// previously committed entries; ComboBox supplies the dropdown-style
+// history surface. commit_to_history() is called explicitly by the
+// owner (e.g. on dialog accept), never automatically on Enter, since
+// Enter's meaning for a given field is the caller's to decide (submit
+// the dialog vs. accept the field vs. both).
 #pragma once
 
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cvision/ui/history.hpp"
@@ -96,6 +90,11 @@ public:
     void set_history(ui::HistoryRegistry* registry, std::string key);
     void commit_to_history();
 
+    bool copy_selection_to_clipboard();
+    bool cut_selection_to_clipboard();
+    bool paste_from_clipboard();
+    bool undo();
+
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     bool on_key(const KeyEvent& event) override;
@@ -105,9 +104,21 @@ public:
     void on_attached() override;
 
 private:
+    struct EditState {
+        std::vector<std::string> graphemes;
+        std::size_t cursor = 0;
+        std::optional<std::size_t> selection_anchor;
+        bool overwrite_mode = false;
+    };
+
+    static constexpr std::size_t kMaxUndoDepth = 64;
+
     void insert_graphemes(const std::vector<std::string>& graphemes);
     void erase_selection();
     void move_cursor(std::size_t new_cursor, bool extend_selection);
+    std::size_t cursor_index_at(Point absolute_cell) const;
+    std::string selected_text() const;
+    void record_undo_state();
     int scroll_offset_for_display() const;
     void revalidate();
 
@@ -140,6 +151,8 @@ private:
     std::string history_key_;
     int history_index_ = -1;  // -1 = showing live text, not browsing
     std::string history_saved_text_;
+    std::vector<EditState> undo_stack_;
+    bool dragging_selection_ = false;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;

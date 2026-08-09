@@ -14,12 +14,12 @@ using ui::View;
 
 // Baseline per plans/widgets.md: default/normal styling, mnemonic
 // (visual only — see widgets/mnemonic.hpp), pressed feedback. Fires
-// `on_press` on Enter/Space while focused, or a full mouse Down-then-Up
-// cycle inside its own bounds (a drag-out-then-release cancels the
-// press, matching every classic button's own behavior).
+// `on_press` on Enter/Space press and repeat while focused, never on
+// key release, or a full mouse Down-then-Up cycle inside its own bounds
+// (a drag-out-then-release cancels the press, matching every classic
+// button's own behavior).
 //
-// Rendering follows the classic windowed-desktop button verbatim
-// (verified against the reference implementation's own drawState):
+// Rendering follows ckVision's documented classic-desktop button contract:
 // a solid face with the label centered, a drop shadow composited from
 // half-block glyphs — "▄" at the face's right edge on its first row,
 // "█" below it, and a "▀" run along the bottom row — and a depressed

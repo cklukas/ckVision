@@ -2,8 +2,10 @@
 #include "cvision/widgets/memo.hpp"
 
 #include <algorithm>
+#include <cctype>
 
 #include "cvision/core/text.hpp"
+#include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
 
@@ -39,6 +41,8 @@ void Memo::set_text(std::string text) {
     }
     cursor_ = {0, 0};
     selection_anchor_.reset();
+    undo_stack_.clear();
+    dragging_selection_ = false;
     on_resized();
     ensure_cursor_visible();
     invalidate();
@@ -51,6 +55,14 @@ std::string Memo::text() const {
         if (i + 1 < lines_.size()) out += '\n';
     }
     return out;
+}
+
+void Memo::set_word_wrap(bool enabled) {
+    if (word_wrap_ == enabled) return;
+    word_wrap_ = enabled;
+    on_resized();
+    ensure_cursor_visible();
+    invalidate();
 }
 
 int Memo::line_length(int line) const noexcept {
@@ -68,6 +80,80 @@ std::pair<MemoPosition, MemoPosition> Memo::selection_range() const noexcept {
     if (!selection_anchor_) return {cursor_, cursor_};
     return position_less(*selection_anchor_, cursor_) ? std::make_pair(*selection_anchor_, cursor_)
                                                         : std::make_pair(cursor_, *selection_anchor_);
+}
+
+void Memo::record_undo_state() {
+    if (undo_stack_.size() == kMaxUndoDepth) undo_stack_.erase(undo_stack_.begin());
+    undo_stack_.push_back(EditState{lines_, cursor_, selection_anchor_});
+}
+
+bool Memo::undo() {
+    if (undo_stack_.empty()) return false;
+    EditState state = std::move(undo_stack_.back());
+    undo_stack_.pop_back();
+    lines_ = std::move(state.lines);
+    cursor_ = state.cursor;
+    selection_anchor_ = state.selection_anchor;
+    dragging_selection_ = false;
+    on_resized();
+    ensure_cursor_visible();
+    invalidate();
+    return true;
+}
+
+std::string Memo::selected_text() const {
+    if (!selection_anchor_) return {};
+    const auto [begin, end] = selection_range();
+    if (begin == end) return {};
+
+    std::string out;
+    if (begin.line == end.line) {
+        const auto& line = lines_[static_cast<std::size_t>(begin.line)];
+        for (int column = begin.column; column < end.column; ++column) out += line[static_cast<std::size_t>(column)];
+        return out;
+    }
+
+    const auto& first_line = lines_[static_cast<std::size_t>(begin.line)];
+    for (int column = begin.column; column < static_cast<int>(first_line.size()); ++column)
+        out += first_line[static_cast<std::size_t>(column)];
+    out += '\n';
+
+    for (int line_index = begin.line + 1; line_index < end.line; ++line_index) {
+        for (const auto& grapheme : lines_[static_cast<std::size_t>(line_index)]) out += grapheme;
+        out += '\n';
+    }
+
+    const auto& last_line = lines_[static_cast<std::size_t>(end.line)];
+    for (int column = 0; column < end.column; ++column) out += last_line[static_cast<std::size_t>(column)];
+    return out;
+}
+
+bool Memo::copy_selection_to_clipboard() {
+    if (context().app == nullptr || !selection_anchor_) return false;
+    const std::string selected = selected_text();
+    if (selected.empty()) return false;
+    context().app->set_clipboard_text(selected);
+    return true;
+}
+
+bool Memo::cut_selection_to_clipboard() {
+    if (context().app == nullptr || !selection_anchor_) return false;
+    const std::string selected = selected_text();
+    if (selected.empty()) return false;
+    record_undo_state();
+    context().app->set_clipboard_text(selected);
+    erase_selection();
+    on_resized();
+    ensure_cursor_visible();
+    invalidate();
+    return true;
+}
+
+bool Memo::paste_from_clipboard() {
+    if (context().app == nullptr) return false;
+    const std::string& clip = context().app->clipboard_text();
+    if (clip.empty()) return false;
+    return on_text(TextEvent{clip, false});
 }
 
 void Memo::move_cursor(MemoPosition target, bool extend_selection) {
@@ -138,22 +224,93 @@ void Memo::insert_text_at_cursor(std::string_view text) {
     invalidate();
 }
 
+std::vector<Memo::VisualRow> Memo::visual_rows(int visible_width) const {
+    std::vector<VisualRow> rows;
+    if (lines_.empty()) return rows;
+
+    for (int line_index = 0; line_index < static_cast<int>(lines_.size()); ++line_index) {
+        const auto& line = lines_[static_cast<std::size_t>(line_index)];
+        if (!word_wrap_ || visible_width <= 0) {
+            rows.push_back(VisualRow{line_index, 0, static_cast<int>(line.size())});
+            continue;
+        }
+        if (line.empty()) {
+            rows.push_back(VisualRow{line_index, 0, 0});
+            continue;
+        }
+
+        int begin = 0;
+        int columns = 0;
+        for (int column = 0; column < static_cast<int>(line.size()); ++column) {
+            const int grapheme_columns = text::grapheme_width(line[static_cast<std::size_t>(column)]);
+            if (column > begin && columns + grapheme_columns > visible_width) {
+                rows.push_back(VisualRow{line_index, begin, column});
+                begin = column;
+                columns = 0;
+            }
+            columns += grapheme_columns;
+        }
+        rows.push_back(VisualRow{line_index, begin, static_cast<int>(line.size())});
+    }
+    return rows;
+}
+
+int Memo::visual_row_for_position(MemoPosition position, int visible_width) const {
+    position = clamp_position(position);
+    const std::vector<VisualRow> rows = visual_rows(visible_width);
+    for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
+        const VisualRow& row = rows[static_cast<std::size_t>(i)];
+        if (row.line != position.line) continue;
+        if (position.column >= row.begin && position.column <= row.end) return i;
+    }
+    return 0;
+}
+
+MemoPosition Memo::position_at_visual_row_column(int visual_row, int local_x, int visible_width) const {
+    const std::vector<VisualRow> rows = visual_rows(visible_width);
+    if (rows.empty()) return MemoPosition{};
+    visual_row = std::clamp(visual_row, 0, static_cast<int>(rows.size()) - 1);
+    const VisualRow& row = rows[static_cast<std::size_t>(visual_row)];
+    const auto& line = lines_[static_cast<std::size_t>(row.line)];
+    int x = 0;
+    for (int column = row.begin; column < row.end; ++column) {
+        const int grapheme_columns = text::grapheme_width(line[static_cast<std::size_t>(column)]);
+        if (local_x < x + grapheme_columns) return MemoPosition{row.line, column};
+        x += grapheme_columns;
+        if (visible_width > 0 && x >= visible_width) break;
+    }
+    return MemoPosition{row.line, row.end};
+}
+
 void Memo::ensure_cursor_visible() {
     if (scrollbar_ == nullptr) return;
-    if (cursor_.line < scrollbar_->position()) {
-        scrollbar_->set_position(cursor_.line);
-    } else if (cursor_.line >= scrollbar_->position() + scrollbar_->viewport_size()) {
-        scrollbar_->set_position(cursor_.line - scrollbar_->viewport_size() + 1);
+    const int cursor_row = visual_row_for_position(cursor_, std::max(0, bounds().width - 1));
+    if (cursor_row < scrollbar_->position()) {
+        scrollbar_->set_position(cursor_row);
+    } else if (cursor_row >= scrollbar_->position() + scrollbar_->viewport_size()) {
+        scrollbar_->set_position(cursor_row - scrollbar_->viewport_size() + 1);
     }
 }
 
 void Memo::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
-    scrollbar_->set_range(static_cast<int>(lines_.size()), std::max(1, bounds().height));
+    scrollbar_->set_range(static_cast<int>(visual_rows(std::max(0, bounds().width - 1)).size()),
+                          std::max(1, bounds().height));
 }
 
 bool Memo::on_key(const KeyEvent& event) {
+    if (event.action == KeyAction::Release) return false;
+    if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
+        const char chord = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
+        if (chord == 'c') return copy_selection_to_clipboard();
+        if (chord == 'x') return cut_selection_to_clipboard();
+        if (chord == 'v') return paste_from_clipboard();
+        if (chord == 'z') return undo();
+    }
+
     // Terminals report ordinary typed characters as Key::Char events, whereas
     // IMEs and bracketed paste arrive as TextEvent. Keep both ingress paths at
     // the editable-control boundary so insertion has one implementation.
@@ -227,16 +384,20 @@ bool Memo::on_key(const KeyEvent& event) {
             return true;
         }
         case Key::Enter:
+            record_undo_state();
             insert_text_at_cursor("\n");
             return true;
         case Key::Backspace:
             if (selection_anchor_) {
+                record_undo_state();
                 erase_selection();
             } else if (cursor_.column > 0) {
+                record_undo_state();
                 lines_[static_cast<std::size_t>(cursor_.line)].erase(
                     lines_[static_cast<std::size_t>(cursor_.line)].begin() + cursor_.column - 1);
                 --cursor_.column;
             } else if (cursor_.line > 0) {
+                record_undo_state();
                 const int prev_len = line_length(cursor_.line - 1);
                 for (auto& g : lines_[static_cast<std::size_t>(cursor_.line)])
                     lines_[static_cast<std::size_t>(cursor_.line - 1)].push_back(std::move(g));
@@ -250,11 +411,14 @@ bool Memo::on_key(const KeyEvent& event) {
             return true;
         case Key::Delete:
             if (selection_anchor_) {
+                record_undo_state();
                 erase_selection();
             } else if (cursor_.column < line_length(cursor_.line)) {
+                record_undo_state();
                 lines_[static_cast<std::size_t>(cursor_.line)].erase(
                     lines_[static_cast<std::size_t>(cursor_.line)].begin() + cursor_.column);
             } else if (cursor_.line < static_cast<int>(lines_.size()) - 1) {
+                record_undo_state();
                 for (auto& g : lines_[static_cast<std::size_t>(cursor_.line + 1)])
                     lines_[static_cast<std::size_t>(cursor_.line)].push_back(std::move(g));
                 lines_.erase(lines_.begin() + cursor_.line + 1);
@@ -268,18 +432,33 @@ bool Memo::on_key(const KeyEvent& event) {
 }
 
 bool Memo::on_text(const TextEvent& event) {
+    if (event.text.empty()) return false;
+    record_undo_state();
     insert_text_at_cursor(event.text);
     return true;
 }
 
 bool Memo::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down || scrollbar_ == nullptr) return false;
+    if (scrollbar_ == nullptr) return false;
+    if (event.action == MouseAction::Up && dragging_selection_) {
+        dragging_selection_ = false;
+        return true;
+    }
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;
-    const int line = std::clamp(scrollbar_->position() + row, 0, static_cast<int>(lines_.size()) - 1);
-    const int column = std::clamp(event.cell.x - abs.x, 0, line_length(line));
-    move_cursor(MemoPosition{line, column}, false);
+    const int visible_width = std::max(0, bounds().width - 1);
+    const MemoPosition target =
+        position_at_visual_row_column(scrollbar_->position() + row, std::clamp(event.cell.x - abs.x, 0, visible_width),
+                                      visible_width);
+
+    if (event.action == MouseAction::Move && dragging_selection_) {
+        move_cursor(target, true);
+        return true;
+    }
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    dragging_selection_ = true;
+    move_cursor(target, has_modifier(event.modifiers, Modifier::Shift));
     return true;
 }
 
@@ -291,29 +470,33 @@ void Memo::on_focus(const FocusEvent& event) {
 void Memo::draw(scene::Painter& painter) {
     const Style base = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
     const int visible_width = std::max(0, bounds().width - 1);
+    const std::vector<VisualRow> rows = visual_rows(visible_width);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const auto [sel_begin, sel_end] = selection_range();
 
     for (int row = 0; row < bounds().height; ++row) {
-        const int line_index = top + row;
+        const int visual_index = top + row;
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", base));
-        if (line_index < 0 || static_cast<std::size_t>(line_index) >= lines_.size()) continue;
-        const auto& line = lines_[static_cast<std::size_t>(line_index)];
+        if (visual_index < 0 || static_cast<std::size_t>(visual_index) >= rows.size()) continue;
+        const VisualRow& visual_row = rows[static_cast<std::size_t>(visual_index)];
+        const int line_index = visual_row.line;
+        const auto& line = lines_[static_cast<std::size_t>(visual_row.line)];
         int x = 0;
-        for (std::size_t i = 0; i < line.size() && x < visible_width; ++i) {
-            const int grapheme_columns = text::grapheme_width(line[i]);
+        for (int i = visual_row.begin; i < visual_row.end && x < visible_width; ++i) {
+            const int grapheme_columns = text::grapheme_width(line[static_cast<std::size_t>(i)]);
             if (grapheme_columns > visible_width - x) break;
             Style style = base;
-            const MemoPosition p{line_index, static_cast<int>(i)};
+            const MemoPosition p{line_index, i};
             if (selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
                 style.attrs |= Attr::Reverse;
-            painter.draw_text(Point{x, row}, line[i], style);
+            painter.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
             x += grapheme_columns;
         }
-        if (has_focus_ && line_index == cursor_.line) {
-            const int cursor_x = [&] {
+        if (has_focus_ && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
+            cursor_.column <= visual_row.end) {
+            const int cursor_x = [&line, &visual_row, this] {
                 int cx = 0;
-                for (int i = 0; i < cursor_.column && static_cast<std::size_t>(i) < line.size(); ++i)
+                for (int i = visual_row.begin; i < cursor_.column && static_cast<std::size_t>(i) < line.size(); ++i)
                     cx += text::grapheme_width(line[static_cast<std::size_t>(i)]);
                 return cx;
             }();

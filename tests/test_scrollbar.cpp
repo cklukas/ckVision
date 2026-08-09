@@ -50,6 +50,19 @@ CK_TEST(content_smaller_than_viewport_has_zero_max_position) {
     CK_CHECK(sb.max_position() == 0);
 }
 
+CK_TEST(auto_hide_hides_the_scrollbar_only_when_no_scroll_range_exists) {
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_auto_hide(true);
+    sb.set_range(5, 10);
+    CK_CHECK(!sb.visible());
+    sb.set_range(20, 10);
+    CK_CHECK(sb.visible());
+    sb.set_auto_hide(false);
+    sb.set_range(5, 10);
+    CK_CHECK(sb.visible());
+}
+
 CK_TEST(set_position_clamps_to_the_valid_range) {
     Fixture f;
     Scrollbar sb(Orientation::Vertical);

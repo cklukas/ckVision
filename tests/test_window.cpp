@@ -463,12 +463,10 @@ CK_TEST(window_title_elision_never_splits_an_emoji_sequence) {
 }
 
 CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned) {
-    // Matches the windowed-desktop convention's own frame-drawing
-    // algorithm (verified against the reference implementation's
-    // source: title width bounded, then centered via
-    // `i = (width - l) >> 1`, with a blank written at i-1 and i+l) —
-    // previously the title was drawn left-aligned at a fixed column,
-    // immediately abutting the close control with no padding.
+    // The title width is bounded by frame controls, then centered with
+    // one-cell padding on both sides. Previously the title was drawn
+    // left-aligned at a fixed column, immediately abutting the close
+    // control with no padding.
     Fixture f;
     Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     auto w = make_window(f, "Test");  // 4 columns wide

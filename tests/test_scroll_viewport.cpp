@@ -2,13 +2,18 @@
 #include "cvision/widgets/scroll_viewport.hpp"
 
 #include "cktest.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
+using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::Rect;
 using ckv::Size;
+using ckv::term::HeadlessTerminal;
+using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
@@ -29,6 +34,18 @@ std::unique_ptr<View> make_content(int w, int h) {
     v->set_preferred_size(Size{w, h});
     return v;
 }
+
+class WheelIgnoringContent final : public View {
+public:
+    int wheel_events = 0;
+
+    WheelIgnoringContent(int w, int h) { set_preferred_size(Size{w, h}); }
+
+    bool on_mouse(const ckv::MouseEvent& event) override {
+        if (event.action == ckv::MouseAction::Wheel) ++wheel_events;
+        return false;
+    }
+};
 }  // namespace
 
 CK_TEST(content_smaller_than_the_viewport_is_not_scrollable) {
@@ -39,6 +56,26 @@ CK_TEST(content_smaller_than_the_viewport_is_not_scrollable) {
     viewport.set_scroll(100, 100);  // attempt to scroll far past the (empty) scrollable range
     CK_CHECK(viewport.scroll_x() == 0);
     CK_CHECK(viewport.scroll_y() == 0);
+    CK_CHECK(viewport.content()->bounds().width == 40);
+    CK_CHECK(viewport.content()->bounds().height == 20);
+}
+
+CK_TEST(vertical_auto_hide_reclaims_horizontal_content_space_when_only_horizontal_scroll_is_unneeded) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 20, 10});
+    viewport.set_content(make_content(10, 50));
+    CK_CHECK(viewport.content()->bounds().width == 19);
+    CK_CHECK(viewport.content()->bounds().height == 50);
+}
+
+CK_TEST(horizontal_auto_hide_reclaims_vertical_content_space_when_only_vertical_scroll_is_unneeded) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 20, 10});
+    viewport.set_content(make_content(100, 5));
+    CK_CHECK(viewport.content()->bounds().width == 100);
+    CK_CHECK(viewport.content()->bounds().height == 9);
 }
 
 CK_TEST(content_larger_than_the_viewport_positions_at_a_negative_offset_when_scrolled) {
@@ -135,6 +172,24 @@ CK_TEST(mouse_wheel_scrolls_vertically) {
     CK_CHECK(viewport.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp,
                                                 ckv::Point{5, 5}, std::nullopt, Modifier::None}));
     CK_CHECK(viewport.scroll_y() == 0);
+}
+
+CK_TEST(application_routes_wheel_events_over_descendant_content_to_the_scroll_viewport) {
+    HeadlessTerminal term(Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto viewport = std::make_unique<ScrollViewport>();
+    viewport->set_fills_root(false);
+    auto* viewport_ptr = app.root().add(std::move(viewport));
+    viewport_ptr->set_bounds(Rect{0, 0, 20, 10});
+    auto content = std::make_unique<WheelIgnoringContent>(100, 50);
+    auto* content_ptr = content.get();
+    viewport_ptr->set_content(std::move(content));
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                           ckv::Point{5, 5}, std::nullopt, Modifier::None}));
+    CK_CHECK(content_ptr->wheel_events == 1);
+    CK_CHECK(viewport_ptr->scroll_y() == 1);
 }
 
 CK_TEST(a_non_wheel_mouse_event_is_unhandled_by_the_viewport_itself) {

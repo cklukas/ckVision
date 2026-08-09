@@ -8,16 +8,13 @@
 // fit; scrolling here is "which row is first visible," not "content
 // view offset."
 //
-// Scope note: "double-click" is approximated without real timing —
-// clicking on the row that is ALREADY the cursor (i.e. a second click
-// on the same row, whenever it happens) activates it. Genuine time-
-// windowed double-click detection needs the injected Clock threaded
-// into widget event handlers, which no widget currently receives;
-// documented gap, not an oversight. Virtualized-model support for
-// millions of rows is explicitly beyond-baseline.
+// Double-click activation uses Application's injected Clock when the list is
+// attached under an Application context. D-041 keeps ListView row-materialized
+// for 0.1; virtualized and columned list models are post-0.1 scope.
 #pragma once
 
 #include <functional>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -64,6 +61,8 @@ public:
     void on_attached() override;
 
 private:
+    static constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
+
     void move_cursor(int new_cursor, bool extend_or_replace_selection);
     void ensure_cursor_visible();
     void select_only(std::size_t index);
@@ -73,6 +72,8 @@ private:
     std::vector<bool> selected_;
     int cursor_ = -1;
     bool multi_select_;
+    int last_click_index_ = -1;
+    std::int64_t last_click_nanos_ = -1;
 
     Scrollbar* scrollbar_ = nullptr;
 

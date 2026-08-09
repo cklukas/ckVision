@@ -2,15 +2,19 @@
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/static_text.hpp"
+#include "cvision/widgets/window.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
+using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::Point;
 using ckv::Rect;
@@ -27,6 +31,7 @@ using ckv::widgets::Button;
 using ckv::widgets::InputLine;
 using ckv::widgets::Label;
 using ckv::widgets::StaticText;
+using ckv::widgets::Window;
 
 namespace {
 
@@ -43,6 +48,10 @@ std::string row_text(const Surface& s, int y) {
     std::string out;
     for (int x = 0; x < s.size().width; ++x) out += s.at(ckv::Point{x, y}).grapheme();
     return out;
+}
+
+ckv::KeyEvent ctrl_char(std::string text) {
+    return ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, std::move(text)}};
 }
 
 // Size-hint-change propagation (M9/WP-16): a bare View parent that
@@ -99,6 +108,36 @@ CK_TEST(label_buddy_defaults_to_null_and_round_trips) {
     CK_CHECK(label.buddy() == &buddy_view);
 }
 
+CK_TEST(label_buddy_returns_null_after_the_buddy_is_destroyed) {
+    Label label("Plain");
+    {
+        auto buddy = std::make_unique<ckv::ui::View>();
+        label.set_buddy(buddy.get());
+        CK_CHECK(label.buddy() == buddy.get());
+    }
+    CK_CHECK(label.buddy() == nullptr);
+}
+
+CK_TEST(alt_mnemonic_on_a_window_focuses_the_labels_buddy) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+
+    auto* window = app.root().add(std::make_unique<Window>("Form"));
+    window->set_bounds(Rect{0, 0, 40, 10});
+    auto& pane = window->content_pane();
+    auto* label = pane.add(std::make_unique<Label>("&Name:"));
+    auto* input = pane.add(std::make_unique<InputLine>());
+    auto* other = pane.add(std::make_unique<InputLine>());
+    label->set_buddy(input);
+    app.set_focus(other);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "n"}}));
+    CK_CHECK(app.focused() == input);
+}
+
 // --- Button --------------------------------------------------------------
 
 CK_TEST(button_fires_on_press_on_enter_key) {
@@ -107,6 +146,17 @@ CK_TEST(button_fires_on_press_on_enter_key) {
     int presses = 0;
     button.on_press = [&] { ++presses; };
     CK_CHECK(button.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(presses == 1);
+}
+
+CK_TEST(button_fires_on_press_on_enter_key_repeat_but_not_release) {
+    Button button("OK");
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+    CK_CHECK(button.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""},
+                                         ckv::KeyAction::Repeat}));
+    CK_CHECK(!button.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""},
+                                          ckv::KeyAction::Release}));
     CK_CHECK(presses == 1);
 }
 
@@ -341,6 +391,30 @@ CK_TEST(static_text_draws_wrapped_lines_into_the_surface) {
     CK_CHECK(row_text(s, 1).substr(0, 5) == "three");
 }
 
+CK_TEST(static_text_center_alignment_offsets_each_wrapped_line) {
+    Fixture f;
+    Surface s = make_surface(10, 3);
+    StaticText text("hi");
+    text.set_context(f.ctx());
+    text.set_bounds(Rect{0, 0, 10, 1});
+    text.set_alignment(ui::Alignment::Center);
+    Painter root(s, Rect{0, 0, 10, 3});
+    text.draw(root);
+    CK_CHECK(row_text(s, 0) == "    hi    ");
+}
+
+CK_TEST(static_text_end_alignment_offsets_each_wrapped_line) {
+    Fixture f;
+    Surface s = make_surface(10, 3);
+    StaticText text("hi");
+    text.set_context(f.ctx());
+    text.set_bounds(Rect{0, 0, 10, 1});
+    text.set_alignment(ui::Alignment::End);
+    Painter root(s, Rect{0, 0, 10, 3});
+    text.draw(root);
+    CK_CHECK(row_text(s, 0) == "        hi");
+}
+
 // --- Size-hint-change propagation (M9/WP-16, E10) ---------------------
 
 CK_TEST(label_set_text_notifies_its_parent_of_the_changed_size_hint) {
@@ -511,6 +585,23 @@ CK_TEST(mouse_click_places_the_cursor_at_the_clicked_grapheme) {
     CK_CHECK(input.cursor() == 3);
 }
 
+CK_TEST(mouse_drag_extends_the_input_line_selection) {
+    Fixture f;
+    InputLine input;
+    input.set_bounds(Rect{0, 0, 20, 1});
+    input.set_text("abcdef");
+    input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 0},
+                                    std::nullopt, Modifier::None});
+    input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{4, 0},
+                                    std::nullopt, Modifier::None});
+    input.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{4, 0},
+                                    std::nullopt, Modifier::None});
+    CK_CHECK(input.has_selection());
+    const auto [begin, end] = input.selection_range();
+    CK_CHECK(begin == 1);
+    CK_CHECK(end == 4);
+}
+
 CK_TEST(click_outside_the_widgets_bounds_is_ignored) {
     Fixture f;
     InputLine input;
@@ -544,6 +635,50 @@ CK_TEST(long_text_scrolls_so_the_cursor_stays_visible) {
     input.draw(root);
     // The tail of the text (near the cursor) must be visible, not the head.
     CK_CHECK(row_text(s, 0).find('j') != std::string::npos);
+}
+
+CK_TEST(input_line_copy_cut_and_paste_use_the_application_clipboard) {
+    Fixture f;
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    InputLine input;
+    input.set_context(ui::Context{&f.theme, &f.registry, &app});
+    input.set_text("hello");
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Shift, ""}});
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Shift, ""}});
+
+    CK_CHECK(input.on_key(ctrl_char("c")));
+    CK_CHECK(app.clipboard_text() == "lo");
+    CK_CHECK(input.text() == "hello");
+
+    CK_CHECK(input.on_key(ctrl_char("x")));
+    CK_CHECK(app.clipboard_text() == "lo");
+    CK_CHECK(input.text() == "hel");
+
+    CK_CHECK(input.on_key(ctrl_char("v")));
+    CK_CHECK(input.text() == "hello");
+}
+
+CK_TEST(input_line_undo_restores_the_previous_text_and_selection_state) {
+    Fixture f;
+    InputLine input;
+    input.set_text("ab");
+    input.on_text(ckv::TextEvent{"c", false});
+    CK_CHECK(input.text() == "abc");
+    CK_CHECK(input.on_key(ctrl_char("z")));
+    CK_CHECK(input.text() == "ab");
+
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Shift, ""}});
+    CK_CHECK(input.has_selection());
+    input.on_text(ckv::TextEvent{"X", false});
+    CK_CHECK(input.text() == "aX");
+    CK_CHECK(input.on_key(ctrl_char("z")));
+    CK_CHECK(input.text() == "ab");
+    CK_CHECK(input.has_selection());
+    const auto [begin, end] = input.selection_range();
+    CK_CHECK(begin == 1);
+    CK_CHECK(end == 2);
 }
 
 // --- InputLine completion: validator, mask, password echo, history ---

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "cvision/ui/theme.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/view.hpp"
 
 namespace ckv::widgets {
@@ -25,6 +26,12 @@ public:
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
+    void set_alignment(ui::Alignment alignment) noexcept {
+        alignment_ = alignment;
+        invalidate();
+    }
+    ui::Alignment alignment() const noexcept { return alignment_; }
+
     void set_role_override(ui::RoleId role) noexcept { role_ = role; }
 
     void draw(scene::Painter& painter) override;
@@ -35,6 +42,7 @@ private:
     std::vector<std::string> wrap(int width) const;
 
     std::string raw_text_;
+    ui::Alignment alignment_ = ui::Alignment::Start;
     ui::RoleId role_ = ui::kInvalidRole;
 };
 

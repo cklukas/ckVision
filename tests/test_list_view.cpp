@@ -2,12 +2,18 @@
 #include "cvision/widgets/list_view.hpp"
 
 #include "cktest.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
+using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::Rect;
+using ckv::term::HeadlessTerminal;
+using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
@@ -200,15 +206,58 @@ CK_TEST(enter_activates_the_cursor_item) {
     CK_CHECK(activated == 0);
 }
 
-CK_TEST(clicking_the_already_current_row_activates_it) {
+CK_TEST(a_single_click_on_the_current_row_does_not_activate_without_a_timed_second_click) {
     Fixture f;
+    HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
     auto list = make_list(f);
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
     list.set_items({"a", "b", "c"});
     list.set_bounds(Rect{0, 0, 10, 5});
     bool activated = false;
     list.on_activate = [&](std::size_t) { activated = true; };
-    list.on_mouse(click(ckv::Point{0, 0}));  // moves cursor to row 0 (already there)
-    CK_CHECK(activated);
+    list.on_mouse(click(ckv::Point{0, 0}));
+    CK_CHECK(!activated);
+}
+
+CK_TEST(a_second_click_on_the_same_row_within_the_clock_threshold_activates_it) {
+    Fixture f;
+    HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto list = make_list(f);
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+    list.set_items({"a", "b", "c"});
+    list.set_bounds(Rect{0, 0, 10, 5});
+    std::size_t activated = 999;
+    list.on_activate = [&](std::size_t index) { activated = index; };
+
+    list.on_mouse(click(ckv::Point{0, 1}));
+    clock.advance(100'000'000);
+    list.on_mouse(click(ckv::Point{0, 1}));
+
+    CK_CHECK(activated == 1);
+}
+
+CK_TEST(a_second_click_after_the_clock_threshold_only_moves_the_cursor) {
+    Fixture f;
+    HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto list = make_list(f);
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+    list.set_items({"a", "b", "c"});
+    list.set_bounds(Rect{0, 0, 10, 5});
+    bool activated = false;
+    list.on_activate = [&](std::size_t) { activated = true; };
+
+    list.on_mouse(click(ckv::Point{0, 1}));
+    clock.advance(600'000'000);
+    list.on_mouse(click(ckv::Point{0, 1}));
+
+    CK_CHECK(!activated);
+    CK_CHECK(list.cursor() == 1);
 }
 
 CK_TEST(clicking_a_different_row_moves_the_cursor_without_activating) {

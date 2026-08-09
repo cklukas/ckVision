@@ -14,6 +14,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::CheckGroup;
+using ckv::widgets::CheckState;
 using ckv::widgets::RadioGroup;
 
 namespace {
@@ -25,6 +26,10 @@ struct Fixture {
 
 ckv::KeyEvent key(ckv::Key k, std::string text = "") {
     return ckv::KeyEvent{KeyChord{k, Modifier::None, std::move(text)}};
+}
+
+ckv::KeyEvent key(ckv::Key k, Modifier modifier, std::string text) {
+    return ckv::KeyEvent{KeyChord{k, modifier, std::move(text)}};
 }
 }  // namespace
 
@@ -80,6 +85,46 @@ CK_TEST(mnemonic_key_toggles_the_matching_item_and_moves_the_cursor_to_it) {
     CK_CHECK(group.checked(1));
     group.on_key(key(Key::Char, " "));  // cursor should now be on item 1
     CK_CHECK(!group.checked(1));        // toggled back off
+}
+
+CK_TEST(alt_mnemonic_key_toggles_the_matching_check_item_but_ctrl_does_not) {
+    Fixture f;
+    CheckGroup group({"&A", "&B"});
+    CK_CHECK(group.on_key(key(Key::Char, Modifier::Alt, "b")));
+    CK_CHECK(group.checked(1));
+    CK_CHECK(!group.on_key(key(Key::Char, Modifier::Ctrl, "a")));
+    CK_CHECK(!group.checked(0));
+}
+
+CK_TEST(tristate_check_group_cycles_through_checked_mixed_and_unchecked) {
+    Fixture f;
+    CheckGroup group({"&A"});
+    group.set_tristate(true);
+    group.on_key(key(Key::Char, " "));
+    CK_CHECK(group.check_state(0) == CheckState::Checked);
+    group.on_key(key(Key::Char, " "));
+    CK_CHECK(group.check_state(0) == CheckState::Mixed);
+    CK_CHECK(!group.checked(0));
+    group.on_key(key(Key::Char, " "));
+    CK_CHECK(group.check_state(0) == CheckState::Unchecked);
+}
+
+CK_TEST(on_state_changed_reports_mixed_without_losing_the_existing_bool_callback) {
+    Fixture f;
+    CheckGroup group({"&A"});
+    CheckState last_state = CheckState::Unchecked;
+    bool last_bool = true;
+    group.on_state_changed = [&](std::size_t index, CheckState state) {
+        CK_CHECK(index == 0);
+        last_state = state;
+    };
+    group.on_changed = [&](std::size_t index, bool value) {
+        CK_CHECK(index == 0);
+        last_bool = value;
+    };
+    group.set_check_state(0, CheckState::Mixed);
+    CK_CHECK(last_state == CheckState::Mixed);
+    CK_CHECK(last_bool == false);
 }
 
 CK_TEST(setting_checked_to_its_current_value_does_not_fire_on_changed) {
@@ -211,6 +256,15 @@ CK_TEST(mnemonic_key_selects_the_matching_item) {
     Fixture f;
     RadioGroup group({"&A", "&B"});
     CK_CHECK(group.on_key(key(Key::Char, "b")));
+    CK_CHECK(group.selected() == 1);
+}
+
+CK_TEST(alt_mnemonic_key_selects_the_matching_radio_item_but_ctrl_does_not) {
+    Fixture f;
+    RadioGroup group({"&A", "&B"});
+    CK_CHECK(group.on_key(key(Key::Char, Modifier::Alt, "b")));
+    CK_CHECK(group.selected() == 1);
+    CK_CHECK(!group.on_key(key(Key::Char, Modifier::Ctrl, "a")));
     CK_CHECK(group.selected() == 1);
 }
 

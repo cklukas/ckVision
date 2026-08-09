@@ -579,6 +579,36 @@ remain separately sanitized at their boundaries.
 claiming timing proves origin; dropping interrupted content (needlessly loses
 user text); and a decoder-only warning invisible to applications.
 
+**D-041 — 0.1 controls are materialized cell controls; virtualized models and
+scroll-delta optimization are post-0.1.** The M6 catalog mixed first-release
+control behavior with scale/performance extensions that need separate model
+contracts. For 0.1, `ListView`, `Table`, and `TreeView` are materialized
+widgets: the application supplies the visible row/tree data as values, the
+widget owns deterministic cursor/selection/drawing behavior, and tests cover
+keyboard, mouse, Unicode-safe clipping, and injected-clock activation. The
+0.1 contract does not include a virtualized row provider, million-row lazy
+fetching, columned `ListView` mode, typed/numeric table comparators, or a
+cell-level table editor.
+
+`ComboBox` is the first 0.1 dropdown/history control: it owns editable and
+pick-only state, draws its own in-bounds dropdown, and integrates with the
+application-scoped `HistoryRegistry`. `InputLine` history remains cycling,
+not a popup; a popup field is a combo box, not a second input-line mode.
+
+`ScrollViewport`'s 0.1 behavior is semantic scrolling: content bounds,
+auto-hidden scrollbars, keyboard/wheel input, and correct event delivery.
+Terminal scroll-region diffing is an output optimization owned by damage and
+presentation work, not a public widget behavior required for 0.1. It may be
+added later if benchmarks prove it necessary, without changing the
+`ScrollViewport` API.
+
+*Rejected:* forcing every list-shaped widget through one generic virtual model
+before there is a concrete client; treating table cell editing as part of a
+forms/widget library rather than an application editor concern; making
+`InputLine` open popups when `ComboBox` is the explicit dropdown control; and
+calling scroll-region byte savings a catalog feature instead of a renderer
+optimization.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

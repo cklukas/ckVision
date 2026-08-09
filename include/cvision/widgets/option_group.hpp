@@ -18,6 +18,12 @@ namespace ckv::widgets {
 
 using ui::SizeHint;
 
+enum class CheckState {
+    Unchecked,
+    Checked,
+    Mixed,
+};
+
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.option.normal"/"ckv.option.focused".
 class CheckGroup : public ui::View {
@@ -32,10 +38,16 @@ public:
 
     bool checked(std::size_t index) const;
     void set_checked(std::size_t index, bool value);
+    CheckState check_state(std::size_t index) const;
+    void set_check_state(std::size_t index, CheckState state);
+    void set_tristate(bool enabled) noexcept { tristate_ = enabled; }
+    bool tristate() const noexcept { return tristate_; }
 
     // Fired whenever an item's checked state changes, with its index
-    // and new state.
+    // and new bool state. Mixed reports false here; use on_state_changed
+    // when the caller needs to distinguish Mixed from Unchecked.
     std::function<void(std::size_t, bool)> on_changed;
+    std::function<void(std::size_t, CheckState)> on_state_changed;
 
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
@@ -50,8 +62,9 @@ private:
     void move_cursor(int direction);
 
     std::vector<std::string> labels_;
-    std::vector<bool> checked_;
+    std::vector<CheckState> states_;
     std::size_t cursor_ = 0;
+    bool tristate_ = false;
     bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
