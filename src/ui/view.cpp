@@ -117,6 +117,9 @@ void View::set_enabled(bool enabled) {
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }
 
 void View::invalidate(Rect local_rect) {
+    on_invalidated(local_rect);
+    for (View* ancestor = parent_; ancestor != nullptr; ancestor = ancestor->parent_)
+        ancestor->on_descendant_invalidated(*this, local_rect);
     if (!dirty_rect_sink_) return;
     const Rect absolute = absolute_bounds();
     dirty_rect_sink_(Rect{absolute.x + local_rect.x, absolute.y + local_rect.y, local_rect.width,
@@ -136,6 +139,19 @@ std::optional<scene::Painter> View::paint_one_child(
 
 void View::paint_children(const scene::Painter& own_painter) {
     for (auto& child : children_) paint_one_child(*child, own_painter);
+}
+
+void View::paint_retained(const scene::Painter& own_painter,
+                          std::vector<scene::Layer>& layers) {
+    for (auto& child_ptr : children_) {
+        View& child = *child_ptr;
+        if (!child.visible()) continue;
+        const Rect local_bounds{0, 0, child.bounds().width, child.bounds().height};
+        scene::Painter child_painter = own_painter.isolated().translated(
+            Point{child.bounds().x, child.bounds().y}, local_bounds);
+        child.draw_retained(child_painter);
+        child.paint_retained(child_painter, layers);
+    }
 }
 
 const std::string* View::resolve_help_context_key() const noexcept {

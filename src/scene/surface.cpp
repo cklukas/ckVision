@@ -161,6 +161,11 @@ void Surface::remove_raster_region(int id) noexcept {
     mark_damage(anchor);
 }
 
+void Surface::clear_raster_regions() noexcept {
+    for (const RasterRegion& region : raster_regions_) mark_damage(region.anchor);
+    raster_regions_.clear();
+}
+
 void Surface::set_raster_fallback_active(int id, bool active) noexcept {
     for (RasterRegion& r : raster_regions_) {
         if (r.id != id) continue;

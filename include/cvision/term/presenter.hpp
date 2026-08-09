@@ -6,6 +6,8 @@
 // never on scene::Surface — so term stays independent of scene.
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "cvision/core/cursor.hpp"
@@ -37,11 +39,17 @@ public:
     // affects rendering (e.g. color depth).
     void invalidate() noexcept { force_full_ = true; }
 
+    // Exact payload size passed to Terminal::write() by the most recent
+    // present(). This is a deterministic frame-cost counter: an unchanged
+    // frame reports zero, while callers can make byte budgets executable
+    // without inspecting a terminal backend's private capture buffer.
+    std::size_t last_bytes_emitted() const noexcept { return last_bytes_emitted_; }
+
 private:
     Cell presentation_cell(FrameView frame, Point p,
                            const std::vector<RasterSlice>& rasters) const;
     bool can_emit_raster_slice(const RasterSlice& slice) const noexcept;
-    std::string render_frame(FrameView frame, const std::vector<RasterSlice>& rasters);
+    void render_frame(FrameView frame, const std::vector<RasterSlice>& rasters, std::string& out);
     bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
     void emit_style(std::string& out, const Style& style) const;
@@ -50,8 +58,11 @@ private:
 
     Terminal& terminal_;
     std::vector<Cell> previous_cells_;
+    std::string output_buffer_;
     Size previous_size_;
+    std::optional<CursorState> previous_cursor_;
     bool force_full_ = true;
+    std::size_t last_bytes_emitted_ = 0;
 };
 
 // Encodes a foreground/background pair's SGR sequence for `depth`,

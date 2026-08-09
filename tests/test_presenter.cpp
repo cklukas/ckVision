@@ -27,7 +27,7 @@ CK_TEST(first_present_writes_every_cell) {
     CK_CHECK(term.written_bytes().find("xxx") != std::string_view::npos);
 }
 
-CK_TEST(second_present_with_no_changes_writes_nothing_but_cursor_visibility) {
+CK_TEST(second_present_with_no_changes_writes_no_bytes) {
     HeadlessTerminal term(Size{3, 1});
     Presenter presenter(term);
     Surface s = make_surface(3, 1, "x");
@@ -35,9 +35,8 @@ CK_TEST(second_present_with_no_changes_writes_nothing_but_cursor_visibility) {
     term.clear_written();
 
     presenter.present(s.view(), CursorState{});
-    // No content changed: only the cursor-visibility toggle should be
-    // written, no cell content and no cursor-move escape for content.
-    CK_CHECK(term.written_bytes().find('x') == std::string_view::npos);
+    CK_CHECK(term.written_bytes().empty());
+    CK_CHECK(presenter.last_bytes_emitted() == 0);
 }
 
 CK_TEST(only_the_changed_cell_is_rewritten) {

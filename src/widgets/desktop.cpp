@@ -104,6 +104,7 @@ void Desktop::zoom_active_window() {
 Window* Desktop::add_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
     auto* raw = static_cast<Window*>(ui::View::add_child(std::move(window)));
+    raw->compositor_layer_id_ = next_compositor_layer_id_++;
     windows_.push_back(raw);  // stable insertion order — cycling order, not z-order
     // Window never exposes a Desktop callback publicly.  This private,
     // lifetime-bound capability is cleared before either participant can
@@ -251,6 +252,7 @@ ui::View* Desktop::add_popup_impl(std::unique_ptr<ui::View> popup) {
     CKV_ASSERT(popup != nullptr);
     ui::View* raw = ui::View::add_child(std::move(popup));
     popups_.push_back(raw);  // already topmost: add_child appends to the end of children_
+    popup_backings_.emplace(raw, PopupBacking{std::nullopt, next_compositor_layer_id_++});
     return raw;
 }
 
@@ -258,6 +260,7 @@ std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
     auto it = std::find(popups_.begin(), popups_.end(), popup);
     if (it == popups_.end()) return nullptr;
     popups_.erase(it);
+    popup_backings_.erase(popup);
     return ui::View::remove_child(popup);
 }
 
@@ -440,6 +443,28 @@ void Desktop::draw(scene::Painter& painter) {
                   Cell::from_grapheme("░", theme_.resolve(background_role_)));
 }
 
+void Desktop::draw_retained(scene::Painter& painter) {
+    if (!retained_base_dirty_) return;
+    draw(painter);
+    retained_base_dirty_ = false;
+}
+
+bool Desktop::is_descendant_of(const ui::View& view, const ui::View* ancestor) noexcept {
+    for (const ui::View* current = &view; current != nullptr; current = current->parent())
+        if (current == ancestor) return true;
+    return false;
+}
+
+void Desktop::on_invalidated(Rect) { retained_base_dirty_ = true; }
+
+void Desktop::on_descendant_invalidated(const ui::View& source, Rect) {
+    // Windows and popups have independent retained surfaces. Docked chrome
+    // is composed into the base surface, so only it (or its descendants)
+    // invalidates that surface.
+    if (is_descendant_of(source, top_dock_) || is_descendant_of(source, bottom_dock_))
+        retained_base_dirty_ = true;
+}
+
 void Desktop::paint_children(const scene::Painter& own_painter) {
     // Shadows clip to content_area(), NOT the full desktop bounds: a
     // maximized window fills content_area() exactly (Window::toggle_zoom
@@ -465,6 +490,50 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
             const Rect clipped = footprint.intersected(shadow_clip);
             if (!clipped.empty()) mutable_painter.apply_shadow(clipped, &scene::default_dim);
         }
+    }
+}
+
+void Desktop::paint_retained(const scene::Painter& own_painter,
+                             std::vector<scene::Layer>& layers) {
+    last_content_repaints_ = 0;
+    for (auto& child_ptr : children()) {
+        ui::View& child = *child_ptr;
+        if (!child.visible()) continue;
+
+        if (auto* window = dynamic_cast<Window*>(&child)) {
+            if (window->repaint_backing_if_needed()) ++last_content_repaints_;
+            const Rect desktop_bounds = absolute_bounds();
+            const Rect content = content_area();
+            const Rect shadow_clip{desktop_bounds.x + content.x, desktop_bounds.y + content.y,
+                                   content.width, content.height};
+            layers.push_back(scene::Layer{window->compositor_layer_id_, &window->backing_surface(),
+                                          Point{window->absolute_bounds().x,
+                                                window->absolute_bounds().y},
+                                          window->casts_shadow(), shadow_clip});
+            continue;
+        }
+
+        const auto popup = popup_backings_.find(&child);
+        if (popup != popup_backings_.end()) {
+            const Size size{child.bounds().width, child.bounds().height};
+            if (!popup->second.surface || popup->second.surface->size() != size)
+                popup->second.surface.emplace(size);
+            scene::Surface& backing = *popup->second.surface;
+            backing.clear_raster_regions();
+            scene::Painter popup_painter(backing, Rect{0, 0, size.width, size.height});
+            child.draw(popup_painter);
+            child.paint_children(popup_painter);
+            layers.push_back(scene::Layer{popup->second.compositor_layer_id, &backing,
+                                          Point{child.absolute_bounds().x, child.absolute_bounds().y}, false,
+                                          std::nullopt});
+            continue;
+        }
+
+        const Rect local_bounds{0, 0, child.bounds().width, child.bounds().height};
+        scene::Painter child_painter = own_painter.isolated().translated(
+            Point{child.bounds().x, child.bounds().y}, local_bounds);
+        child.draw_retained(child_painter);
+        child.paint_retained(child_painter, layers);
     }
 }
 

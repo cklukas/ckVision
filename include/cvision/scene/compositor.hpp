@@ -7,6 +7,8 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "cvision/core/frame_view.hpp"
@@ -28,6 +30,16 @@ struct Layer {
     Surface* surface = nullptr;
     Point position;
     bool casts_shadow = false;
+    // Optional frame-absolute boundary for this layer's shadow only. The
+    // layer content itself remains clipped by its Surface; Desktop uses this
+    // to keep window shadows out of docked chrome.
+    std::optional<Rect> shadow_clip;
+
+    Layer() = default;
+    Layer(int layer_id, Surface* layer_surface, Point layer_position, bool layer_casts_shadow,
+          std::optional<Rect> layer_shadow_clip = std::nullopt)
+        : id(layer_id), surface(layer_surface), position(layer_position),
+          casts_shadow(layer_casts_shadow), shadow_clip(std::move(layer_shadow_clip)) {}
 };
 
 // Default shadow dimming: halves each RGB channel; a "default" (no-RGB)
@@ -92,10 +104,11 @@ private:
         int id;
         Rect rect;
         bool casts_shadow;
+        std::optional<Rect> shadow_clip;
     };
 
-    std::vector<Rect> compute_damage(const std::vector<Layer>& layers, const Surface& background,
-                                      const ShadowSpec& shadow) const;
+    void compute_damage(const std::vector<Layer>& layers, const Surface& background,
+                        const ShadowSpec& shadow);
     Cell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
                        std::size_t exclusive_top, const Surface& background) const;
     void compute_visible_rasters(const std::vector<Layer>& layers);
@@ -104,6 +117,13 @@ private:
     CursorState cursor_;
     std::vector<PreviousLayer> previous_layers_;
     std::vector<RasterSlice> visible_rasters_;
+    // Instance-owned scratch space makes steady-state composition allocation
+    // free. Capacity may grow only when the scene's layer/raster complexity
+    // itself grows; no process-global cache is involved.
+    std::vector<Rect> damage_;
+    std::vector<Rect> clipped_damage_;
+    std::vector<Rect> rect_scratch_a_;
+    std::vector<Rect> rect_scratch_b_;
     std::size_t cells_touched_ = 0;
 };
 

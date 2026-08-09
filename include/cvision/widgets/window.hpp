@@ -16,6 +16,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <unordered_map>
@@ -223,6 +224,14 @@ public:
 
     bool casts_shadow() const noexcept { return true; }
 
+    // Desktop's retained-scene path owns the layer relationship; a Window
+    // owns only its local backing store. Moving changes the layer position
+    // and therefore never enters this repaint operation.
+    bool repaint_backing_if_needed();
+    scene::Surface& backing_surface() noexcept;
+    const scene::Surface& backing_surface() const noexcept;
+    std::size_t content_repaint_count() const noexcept { return content_repaint_count_; }
+
     // Runs after this Window has left the Application tree and its
     // modal scope (if any) has been removed. Standard-dialog
     // presentation helpers use it to publish completion only once no
@@ -243,6 +252,10 @@ public:
     void on_child_size_hint_changed(ui::View& child) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+
+protected:
+    void on_invalidated(Rect local_rect) override;
+    void on_descendant_invalidated(const ui::View& source, Rect source_local_rect) override;
 
 private:
     friend class Desktop;
@@ -297,6 +310,11 @@ private:
     DragKind drag_kind_ = DragKind::None;
     Point drag_start_mouse_;
     Rect drag_start_bounds_;
+
+    std::optional<scene::Surface> backing_surface_;
+    bool backing_dirty_ = true;
+    std::size_t content_repaint_count_ = 0;
+    int compositor_layer_id_ = 0;
 };
 
 // A built-but-not-yet-attached Window paired with the control that

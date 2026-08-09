@@ -86,6 +86,7 @@ public:
 
     void add_raster_region(RasterRegion region);
     void remove_raster_region(int id) noexcept;
+    void clear_raster_regions() noexcept;
     void set_raster_fallback_active(int id, bool active) noexcept;
     const std::vector<RasterRegion>& raster_regions() const noexcept { return raster_regions_; }
 

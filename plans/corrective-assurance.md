@@ -50,7 +50,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | **Implementation complete — gate pending** | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | **Implementation complete — gate pending** | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Implementation complete — gate pending** | WP-29 | M1; cross-widget Unicode acceptance |
-| 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **Ready** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
+| 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **In progress — retained-scene foundation landed; budget closure remains** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | Blocked | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | Blocked (partial landing recorded below) | WP-32 | M3 headless/raster acceptance; screenshot gap |
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Blocked | WP-32A | M3 fuzz exit; verification standard |
@@ -1035,6 +1035,22 @@ the same overlap visually. This does not satisfy WP-31: the retained
 per-window backing-store design, damage-scoped traversal, counters, budgets,
 portable/sanitizer matrix, and post-backing-store revalidation below remain
 open.
+
+**Implementation checkpoint (2026-08-09; package remains in progress).**
+`Application` now composes a retained base surface with independent Window and
+popup layers. A Window owns and repaints its local backing only when its own
+content or size changes; translation updates only its compositor layer. The
+Compositor holds instance-owned damage scratch storage, resolves non-overlap
+damage once, and accepts a per-layer shadow clip so Desktop keeps window
+shadows inside its content area. Presenter reuses its output buffer and does
+not emit a repeated unchanged cursor state. Deterministic counters expose
+window content repaints, cells composed, and bytes emitted; executable tests
+prove translation performs no content repaint, resize repaints only the
+resized Window, and movement stays within its old/new rectangles and shadows.
+The scene benchmark now fails on steady-state or single-cell composition
+budget regressions. The remaining WP work is allocation accounting across all
+hot paths, complete counter/budget coverage (including presenter bytes), and
+the named-host/sanitizer evidence required by the Acceptance section.
 
 **Work.**
 

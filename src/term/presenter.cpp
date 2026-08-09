@@ -198,8 +198,8 @@ void Presenter::emit_cursor_move(std::string& out, int x, int y) const {
     out += 'H';
 }
 
-std::string Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& rasters) {
-    std::string out;
+void Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& rasters,
+                             std::string& out) {
     const Size size = frame.size();
     const ColorDepth depth = terminal_.capabilities().color_depth;
 
@@ -269,7 +269,6 @@ std::string Presenter::render_frame(FrameView frame, const std::vector<RasterSli
             x = run_end;
         }
     }
-    return out;
 }
 
 void Presenter::emit_raster_slices(std::string& out, FrameView frame,
@@ -319,30 +318,40 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
 
 void Presenter::present(FrameView frame, CursorState cursor,
                          const std::vector<RasterSlice>& rasters) {
-    std::string out = render_frame(frame, rasters);
+    std::string& out = output_buffer_;
+    out.clear();
+    render_frame(frame, rasters, out);
     emit_raster_slices(out, frame, rasters);
 
-    if (cursor.visible) {
-        emit_cursor_move(out, cursor.position.x, cursor.position.y);
-        out += "\x1B[?25h";
-    } else {
-        out += "\x1B[?25l";
+    if (force_full_ || !previous_cursor_ || cursor != *previous_cursor_) {
+        if (cursor.visible) {
+            emit_cursor_move(out, cursor.position.x, cursor.position.y);
+            out += "\x1B[?25h";
+        } else {
+            out += "\x1B[?25l";
+        }
     }
 
-    if (terminal_.capabilities().synchronized_output && !out.empty())
-        out = "\x1B[?2026h" + out + "\x1B[?2026l";
+    if (terminal_.capabilities().synchronized_output && !out.empty()) {
+        constexpr std::string_view kSynchronizedOutputBegin = "\x1B[?2026h";
+        constexpr std::string_view kSynchronizedOutputEnd = "\x1B[?2026l";
+        out.reserve(out.size() + kSynchronizedOutputBegin.size() + kSynchronizedOutputEnd.size());
+        out.insert(0, kSynchronizedOutputBegin);
+        out += kSynchronizedOutputEnd;
+    }
 
+    last_bytes_emitted_ = out.size();
     if (!out.empty()) terminal_.write(out);
 
-    previous_cells_.assign(static_cast<std::size_t>(frame.size().width) *
-                                static_cast<std::size_t>(frame.size().height),
-                            Cell{});
+    previous_cells_.resize(static_cast<std::size_t>(frame.size().width) *
+                           static_cast<std::size_t>(frame.size().height));
     for (int y = 0; y < frame.size().height; ++y)
         for (int x = 0; x < frame.size().width; ++x)
             previous_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.size().width) +
                              static_cast<std::size_t>(x)] =
                 presentation_cell(frame, Point{x, y}, rasters);
     previous_size_ = frame.size();
+    previous_cursor_ = cursor;
     force_full_ = false;
 }
 

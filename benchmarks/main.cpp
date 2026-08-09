@@ -4,10 +4,9 @@
 // other bench_*.cpp exposes a run_*_benchmarks() function and must NOT
 // define its own main().
 void run_golden_benchmarks();
-void run_scene_benchmarks();
+bool run_scene_benchmarks();
 
 int main() {
     run_golden_benchmarks();
-    run_scene_benchmarks();
-    return 0;
+    return run_scene_benchmarks() ? 0 : 1;
 }

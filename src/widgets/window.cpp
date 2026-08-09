@@ -211,8 +211,47 @@ Rect Window::clamp_size(Rect b) const noexcept {
 }
 
 void Window::on_resized() {
+    if (backing_surface_ && backing_surface_->size() == Size{bounds().width, bounds().height}) {
+        // A pure translation invalidates the window's old and new desktop
+        // rectangles through View::set_bounds(), but its local backing cells
+        // remain valid. Composition handles that structural movement.
+        backing_dirty_ = false;
+    } else {
+        backing_dirty_ = true;
+    }
     if (content_ != nullptr) content_->set_bounds(content_rect());
     relayout_frame_overlays();
+}
+
+void Window::on_invalidated(Rect) { backing_dirty_ = true; }
+
+void Window::on_descendant_invalidated(const ui::View&, Rect) { backing_dirty_ = true; }
+
+bool Window::repaint_backing_if_needed() {
+    const Size local_size{bounds().width, bounds().height};
+    if (!backing_surface_ || backing_surface_->size() != local_size) {
+        backing_surface_.emplace(local_size);
+        backing_dirty_ = true;
+    }
+    if (!backing_dirty_) return false;
+
+    backing_surface_->clear_raster_regions();
+    scene::Painter painter(*backing_surface_, Rect{0, 0, local_size.width, local_size.height});
+    draw(painter);
+    ui::View::paint_children(painter);
+    backing_dirty_ = false;
+    ++content_repaint_count_;
+    return true;
+}
+
+scene::Surface& Window::backing_surface() noexcept {
+    CKV_ASSERT(backing_surface_.has_value());
+    return *backing_surface_;
+}
+
+const scene::Surface& Window::backing_surface() const noexcept {
+    CKV_ASSERT(backing_surface_.has_value());
+    return *backing_surface_;
 }
 
 void Window::on_child_size_hint_changed(ui::View& child) {

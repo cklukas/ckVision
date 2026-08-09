@@ -16,6 +16,7 @@
 
 #include "cvision/core/event.hpp"
 #include "cvision/core/geometry.hpp"
+#include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/ui/context.hpp"
 
@@ -223,6 +224,17 @@ public:
     // "drawn before me" once painting has finished.
     virtual void paint_children(const scene::Painter& own_painter);
 
+    // Retained-scene paint entry point. The default preserves ordinary
+    // tree painting; containers that own composited backing stores override
+    // it to paint their static background while contributing retained child
+    // layers. Application calls this instead of paint_children().
+    // draw_retained() is separate from draw() so a retained container can
+    // skip an unchanged base surface without changing the direct Painter
+    // contract used by focused scene/unit tests.
+    virtual void draw_retained(scene::Painter& painter) { draw(painter); }
+    virtual void paint_retained(const scene::Painter& own_painter,
+                                std::vector<scene::Layer>& layers);
+
     void invalidate();              // whole view
     void invalidate(Rect local_rect);
 
@@ -319,6 +331,15 @@ public:
     const std::string* resolve_help_context_key() const noexcept;
 
 protected:
+    // Retained containers observe invalidation without changing the public
+    // dirty-rect callback contract. The initiating view receives the first
+    // hook, then each ancestor receives the descendant notification.
+    virtual void on_invalidated(Rect local_rect) { (void)local_rect; }
+    virtual void on_descendant_invalidated(const View& source, Rect source_local_rect) {
+        (void)source;
+        (void)source_local_rect;
+    }
+
     // Called by a subclass whenever its OWN horizontal_size_hint()/
     // vertical_size_hint()/height_for_width() would now return
     // something different than before (M9/WP-16, E10) — e.g. Label/

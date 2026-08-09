@@ -122,6 +122,21 @@ CK_TEST(shadow_dims_the_background_beneath_it) {
     CK_CHECK(c.frame().at(ckv::Point{6, 3}).style().fg.r() == 200);
 }
 
+CK_TEST(a_layer_shadow_clip_excludes_docked_chrome_from_window_shadow) {
+    Compositor c(ckv::Size{8, 4});
+    const ckv::Style bright{ckv::Color::rgb(200, 200, 200), ckv::Color{}, ckv::Attr{}};
+    Surface bg = make_surface(8, 4, ".", bright);
+    Surface window = make_surface(4, 2, "W");
+    // The content area ends before row 2. The window's bottom shadow would
+    // otherwise dim that row, which represents a Desktop dock/status line.
+    std::vector<Layer> layers{{1, &window, ckv::Point{1, 0}, /*casts_shadow=*/true,
+                               ckv::Rect{0, 0, 8, 2}}};
+
+    c.compose(layers, bg);
+    CK_CHECK(c.frame().at(ckv::Point{5, 1}).style().fg.r() == 100);  // right shadow stays in content
+    CK_CHECK(c.frame().at(ckv::Point{3, 2}).style().fg.r() == 200);  // bottom shadow is clipped
+}
+
 CK_TEST(a_single_shadow_footprint_is_a_non_overlapping_union) {
     const std::vector<ckv::Rect> footprint =
         ckv::scene::shadow_footprint(ckv::Rect{2, 2, 5, 3}, ShadowSpec{});

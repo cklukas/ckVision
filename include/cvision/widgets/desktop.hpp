@@ -12,6 +12,8 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include "cvision/ui/application.hpp"
@@ -200,6 +202,7 @@ public:
     void on_descendant_mouse_down(ui::View& target) override;
 
     void draw(scene::Painter& painter) override;
+    void draw_retained(scene::Painter& painter) override;
 
     // Polymorphic synonym for remove_child(), retained for callers that
     // only know their parent as a View.  remove_child() itself has the
@@ -215,6 +218,13 @@ public:
     // ui::View::paint_children's doc comment for why a separate
     // post-pass over the whole tree cannot do this correctly.
     void paint_children(const scene::Painter& own_painter) override;
+    void paint_retained(const scene::Painter& own_painter,
+                        std::vector<scene::Layer>& layers) override;
+
+    // Number of retained child backing stores repainted in the most recent
+    // retained Desktop pass. A translated Window leaves this at zero;
+    // resizing or changing a window's content increments only that window.
+    std::size_t last_content_repaints() const noexcept { return last_content_repaints_; }
 
 private:
     struct WindowRelationshipToken {};
@@ -250,12 +260,23 @@ private:
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
     void zoom_active_window();
+    void on_invalidated(Rect) override;
+    void on_descendant_invalidated(const ui::View& source, Rect) override;
+    static bool is_descendant_of(const ui::View& view, const ui::View* ancestor) noexcept;
 
     const ui::Theme& theme_;
     ui::RoleId background_role_;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     Window* active_ = nullptr;
     std::vector<ui::View*> popups_;
+    struct PopupBacking {
+        std::optional<scene::Surface> surface;
+        int compositor_layer_id = 0;
+    };
+    std::unordered_map<ui::View*, PopupBacking> popup_backings_;
+    int next_compositor_layer_id_ = 1;
+    std::size_t last_content_repaints_ = 0;
+    bool retained_base_dirty_ = true;
     ui::View* top_dock_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;

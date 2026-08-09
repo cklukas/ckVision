@@ -66,7 +66,7 @@ Application::Application(term::Terminal& terminal, Clock& clock,
       clipboard_writer_(borrowed_clipboard_writer != nullptr ? *borrowed_clipboard_writer
                                                               : *owned_clipboard_writer_),
       root_(Rect{0, 0, terminal.size().width, terminal.size().height}), surface_(terminal.size()),
-      background_layer_(terminal.size()), compositor_(terminal.size()), presenter_(terminal) {
+      compositor_(terminal.size()), presenter_(terminal) {
     // Never call back into `v` here: it may be mid-destructor (its
     // derived-class members already torn down) when this fires. Just
     // drop the raw pointers — no on_focus notification, nothing that
@@ -116,10 +116,10 @@ Application::Application(term::Terminal& terminal, Clock& clock,
                 pending_modal_focus_restore_ = restore;
         }
     });
-    // Every invalidate() anywhere in the tree marks the whole
-    // Application dirty (v1 scope: see step()'s doc comment — the
-    // dirty RECT itself is intentionally not yet used to scope
-    // painting, only to decide WHETHER to paint at all).
+    // Every invalidate() schedules a frame. Surface row damage and retained
+    // backing stores then constrain the actual composition work; the
+    // Application deliberately keeps this scheduling boundary simple and
+    // instance-local.
     root_.set_dirty_rect_sink([this](Rect) { dirty_ = true; });
     // Root layout is Application-owned and deliberately separate from
     // View::on_bounds_changed: a public observer can observe geometry but
@@ -728,36 +728,24 @@ void Application::paint_and_present() {
     if (current_size.width != surface_.size().width ||
         current_size.height != surface_.size().height) {
         surface_.resize(current_size);
-        background_layer_.resize(current_size);
         compositor_.resize(current_size);
         presenter_.invalidate();
     }
 
-    // v1 full-tree repaint (see step()'s doc comment) redraws every
-    // ImageView on every dirty frame, calling Painter::draw_image again
-    // with the SAME region id each time — Surface::add_raster_region
-    // requires ids to be unique among a Surface's CURRENT regions, so
-    // last frame's regions must be cleared first or a live widget would
-    // collide with its own still-registered region from one frame ago.
-    for (const scene::RasterRegion& region :
-         std::vector<scene::RasterRegion>(surface_.raster_regions()))
-        surface_.remove_raster_region(region.id);
+    // A redraw replaces the base surface's raster set. Retained Window and
+    // popup backings manage their own corresponding lifecycle.
+    surface_.clear_raster_regions();
 
     scene::Painter root_painter(surface_, Rect{0, 0, current_size.width, current_size.height});
+    composition_layers_.clear();
     if (terminal_too_small()) {
         paint_too_small_state(root_painter, current_size);
     } else {
-        root_.paint_children(root_painter);
+        root_.paint_retained(root_painter, composition_layers_);
     }
     dirty_ = false;
 
-    // surface_ is the sole layer, covering the whole frame — Compositor
-    // occlusion math over one layer is trivial, but this is still the
-    // real, tested pipeline that turns raster regions (Sixel/kitty
-    // image content) into the RasterSlices Presenter needs, rather than
-    // a hand-rolled duplicate of that logic here.
-    const std::vector<scene::Layer> layers{scene::Layer{0, &surface_, Point{0, 0}, false}};
-    compositor_.compose(layers, background_layer_);
+    compositor_.compose(composition_layers_, surface_);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
                        compositor_.visible_rasters());
 }

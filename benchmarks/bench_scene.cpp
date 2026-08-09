@@ -12,7 +12,7 @@
 using namespace ckv;
 using namespace ckv::scene;
 
-void run_scene_benchmarks() {
+bool run_scene_benchmarks() {
     constexpr int kWidth = 200;
     constexpr int kHeight = 60;
 
@@ -34,18 +34,26 @@ void run_scene_benchmarks() {
     std::printf("  (touched %zu cells on the first, fully-damaged compose)\n",
                 compositor.last_compose_cells_touched());
 
+    bool budgets_hold = true;
     ckbench::run("compose_steady_state_no_damage", 1000, [&] {
         compositor.compose(layers, background, ShadowSpec{});
         sink += compositor.last_compose_cells_touched();
+        if (compositor.last_compose_cells_touched() != 0) budgets_hold = false;
     });
     std::printf("  (touched %zu cells per steady-state compose — must be 0)\n",
                 compositor.last_compose_cells_touched());
 
+    bool use_x = true;
     ckbench::run("compose_single_cell_content_change", 500, [&] {
-        window.set_cell(Point{5, 5}, Cell::from_grapheme("x", Style{}));
+        window.set_cell(Point{5, 5}, Cell::from_grapheme(use_x ? "x" : "y", Style{}));
+        use_x = !use_x;
         compositor.compose(layers, background, ShadowSpec{});
         sink += compositor.last_compose_cells_touched();
+        if (compositor.last_compose_cells_touched() != 1) budgets_hold = false;
     });
 
     std::printf("checksum %zu\n", sink);
+    if (!budgets_hold)
+        std::fputs("scene budget failure: damage scopes exceeded their checked limits\n", stderr);
+    return budgets_hold;
 }

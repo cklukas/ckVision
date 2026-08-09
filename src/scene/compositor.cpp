@@ -21,6 +21,46 @@ Rect layer_rect(const Layer& l) {
     return Rect{l.position.x, l.position.y, l.surface->size().width, l.surface->size().height};
 }
 
+void append_shadow_footprint(Rect layer, ShadowSpec shadow, const std::optional<Rect>& shadow_clip,
+                             std::vector<Rect>& out) {
+    const auto append = [&out, &shadow_clip](Rect footprint) {
+        if (shadow_clip) footprint = footprint.intersected(*shadow_clip);
+        if (!footprint.empty()) out.push_back(footprint);
+    };
+    const int right_height = std::max(0, layer.height - shadow.dy);
+    if (shadow.dx > 0 && right_height > 0)
+        append(Rect{layer.right(), layer.top() + shadow.dy, shadow.dx, right_height});
+    if (shadow.dy > 0)
+        append(Rect{layer.left() + shadow.dx, layer.bottom(), layer.width, shadow.dy});
+}
+
+bool shadow_covers(Rect layer, ShadowSpec shadow, const std::optional<Rect>& shadow_clip,
+                   Point p) noexcept {
+    if (shadow_clip && !shadow_clip->contains(p)) return false;
+    const int right_height = std::max(0, layer.height - shadow.dy);
+    const Rect right{layer.right(), layer.top() + shadow.dy, shadow.dx, right_height};
+    const Rect bottom{layer.left() + shadow.dx, layer.bottom(), layer.width, shadow.dy};
+    return right.contains(p) || bottom.contains(p);
+}
+
+void append_difference(Rect from, Rect cut, std::vector<Rect>& out) {
+    const Rect overlap = from.intersected(cut);
+    if (overlap.empty()) {
+        out.push_back(from);
+        return;
+    }
+    if (overlap.top() > from.top())
+        out.push_back(Rect{from.x, from.y, from.width, overlap.top() - from.top()});
+    if (overlap.bottom() < from.bottom())
+        out.push_back(Rect{from.x, overlap.bottom(), from.width, from.bottom() - overlap.bottom()});
+    if (overlap.left() > from.left())
+        out.push_back(Rect{from.x, overlap.top(), overlap.left() - from.left(),
+                           overlap.bottom() - overlap.top()});
+    if (overlap.right() < from.right())
+        out.push_back(Rect{overlap.right(), overlap.top(), from.right() - overlap.right(),
+                           overlap.bottom() - overlap.top()});
+}
+
 }  // namespace
 
 Style default_dim(Style style) noexcept {
@@ -51,13 +91,12 @@ std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept 
 
 Compositor::Compositor(Size frame_size) : frame_(frame_size) {}
 
-std::vector<Rect> Compositor::compute_damage(const std::vector<Layer>& layers,
-                                              const Surface& background,
-                                              const ShadowSpec& shadow) const {
-    std::vector<Rect> damage;
+void Compositor::compute_damage(const std::vector<Layer>& layers, const Surface& background,
+                                const ShadowSpec& shadow) {
+    damage_.clear();
 
-    accumulate_surface_damage(damage, background, Point{0, 0});
-    for (const Layer& l : layers) accumulate_surface_damage(damage, *l.surface, l.position);
+    accumulate_surface_damage(damage_, background, Point{0, 0});
+    for (const Layer& l : layers) accumulate_surface_damage(damage_, *l.surface, l.position);
 
     const auto find_previous = [this](int id) -> const PreviousLayer* {
         for (const PreviousLayer& p : previous_layers_)
@@ -80,44 +119,33 @@ std::vector<Rect> Compositor::compute_damage(const std::vector<Layer>& layers,
             // its own rect (over background or other layers), so a
             // freshly appearing shadow needs its own explicit damage,
             // exactly like the removal path below already does.
-            if (l.casts_shadow) {
-                const auto pieces = shadow_footprint(new_rect, shadow);
-                damage.insert(damage.end(), pieces.begin(), pieces.end());
-            }
+            if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
             continue;
         }
 
         if (prev->rect != new_rect) {
-            damage.push_back(prev->rect);
-            damage.push_back(new_rect);
-            if (prev->casts_shadow) {
-                const auto pieces = shadow_footprint(prev->rect, shadow);
-                damage.insert(damage.end(), pieces.begin(), pieces.end());
-            }
-            if (l.casts_shadow) {
-                const auto pieces = shadow_footprint(new_rect, shadow);
-                damage.insert(damage.end(), pieces.begin(), pieces.end());
-            }
-        } else if (prev->casts_shadow != l.casts_shadow) {
-            const auto pieces = shadow_footprint(new_rect, shadow);
-            damage.insert(damage.end(), pieces.begin(), pieces.end());
+            damage_.push_back(prev->rect);
+            damage_.push_back(new_rect);
+            if (prev->casts_shadow)
+                append_shadow_footprint(prev->rect, shadow, prev->shadow_clip, damage_);
+            if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
+        } else if (prev->casts_shadow != l.casts_shadow || prev->shadow_clip != l.shadow_clip) {
+            if (prev->casts_shadow)
+                append_shadow_footprint(prev->rect, shadow, prev->shadow_clip, damage_);
+            if (l.casts_shadow) append_shadow_footprint(new_rect, shadow, l.shadow_clip, damage_);
         }
     }
     for (const PreviousLayer& prev : previous_layers_) {
         if (find_current(prev.id)) continue;
-        damage.push_back(prev.rect);
-        if (prev.casts_shadow) {
-            const auto pieces = shadow_footprint(prev.rect, shadow);
-            damage.insert(damage.end(), pieces.begin(), pieces.end());
-        }
+        damage_.push_back(prev.rect);
+        if (prev.casts_shadow) append_shadow_footprint(prev.rect, shadow, prev.shadow_clip, damage_);
     }
 
     const Rect bounds{0, 0, frame_.size().width, frame_.size().height};
-    std::vector<Rect> clipped;
-    clipped.reserve(damage.size());
-    for (const Rect& r : damage) {
+    clipped_damage_.clear();
+    for (const Rect& r : damage_) {
         const Rect c = r.intersected(bounds);
-        if (!c.empty()) clipped.push_back(c);
+        if (!c.empty()) clipped_damage_.push_back(c);
     }
 
     // Damage sources (background, each layer, structural diffs, shadow
@@ -126,12 +154,19 @@ std::vector<Rect> Compositor::compute_damage(const std::vector<Layer>& layers,
     // non-overlapping set via the same subtract-based technique
     // visible-raster occlusion uses: each new rect keeps only the part
     // of itself not already covered by an accepted rect.
-    std::vector<Rect> merged;
-    merged.reserve(clipped.size());
-    for (const Rect& r : clipped) {
-        for (const Rect& piece : subtract_rects(r, merged)) merged.push_back(piece);
+    damage_.clear();
+    for (const Rect& r : clipped_damage_) {
+        rect_scratch_b_.clear();
+        rect_scratch_b_.push_back(r);
+        for (const Rect& covered : damage_) {
+            rect_scratch_a_.clear();
+            for (const Rect& candidate : rect_scratch_b_)
+                append_difference(candidate, covered, rect_scratch_a_);
+            rect_scratch_a_.swap(rect_scratch_b_);
+            if (rect_scratch_b_.empty()) break;
+        }
+        damage_.insert(damage_.end(), rect_scratch_b_.begin(), rect_scratch_b_.end());
     }
-    return merged;
 }
 
 Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
@@ -152,14 +187,7 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
         }
 
         if (!l.casts_shadow) continue;
-        const std::vector<Rect> footprint = shadow_footprint(rect, shadow);
-        bool covered = false;
-        for (const Rect& fr : footprint)
-            if (fr.contains(p)) {
-                covered = true;
-                break;
-            }
-        if (covered) shadowed = true;
+        if (shadow_covers(rect, shadow, l.shadow_clip, p)) shadowed = true;
     }
     Cell result = background.at(p);
     if (shadowed) result.set_style(shadow.dim(result.style()));
@@ -174,9 +202,17 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers) {
             const Rect full_anchor{region.anchor.x + layer.position.x,
                                     region.anchor.y + layer.position.y, region.anchor.width,
                                     region.anchor.height};
-            std::vector<Rect> occluders;
-            for (std::size_t j = i + 1; j < layers.size(); ++j) occluders.push_back(layer_rect(layers[j]));
-            for (const Rect& visible : subtract_rects(full_anchor, occluders))
+            rect_scratch_a_.clear();
+            rect_scratch_a_.push_back(full_anchor);
+            for (std::size_t j = i + 1; j < layers.size(); ++j) {
+                rect_scratch_b_.clear();
+                const Rect occluder = layer_rect(layers[j]);
+                for (const Rect& candidate : rect_scratch_a_)
+                    append_difference(candidate, occluder, rect_scratch_b_);
+                rect_scratch_a_.swap(rect_scratch_b_);
+                if (rect_scratch_a_.empty()) break;
+            }
+            for (const Rect& visible : rect_scratch_a_)
                 visible_rasters_.push_back(
                     RasterSlice{region.id, visible, full_anchor, region.image, region.fallback_active});
         }
@@ -185,9 +221,9 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers) {
 
 void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
                           ShadowSpec shadow) {
-    const std::vector<Rect> damage = compute_damage(layers, background, shadow);
+    compute_damage(layers, background, shadow);
     cells_touched_ = 0;
-    for (const Rect& r : damage) {
+    for (const Rect& r : damage_) {
         for (int y = r.top(); y < r.bottom(); ++y) {
             for (int x = r.left(); x < r.right(); ++x) {
                 const Point p{x, y};
@@ -203,7 +239,7 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
     previous_layers_.clear();
     previous_layers_.reserve(layers.size());
     for (const Layer& l : layers)
-        previous_layers_.push_back(PreviousLayer{l.id, layer_rect(l), l.casts_shadow});
+        previous_layers_.push_back(PreviousLayer{l.id, layer_rect(l), l.casts_shadow, l.shadow_clip});
 
     compute_visible_rasters(layers);
 }

@@ -11,7 +11,9 @@
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/window.hpp"
 
 using ckv::ManualClock;
 using ckv::Rect;
@@ -20,6 +22,8 @@ using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::widgets::Label;
+using ckv::widgets::Desktop;
+using ckv::widgets::Window;
 
 namespace {
 class ColorProbe final : public ckv::ui::View {
@@ -153,6 +157,57 @@ CK_TEST(a_resize_event_grows_the_backing_surface_and_forces_a_full_repaint) {
     CK_CHECK(f.term.written_bytes().find("Grow") != std::string::npos);
     CK_CHECK(f.app.root().bounds().width == 60);
     CK_CHECK(f.app.root().bounds().height == 20);
+}
+
+CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
+    Desktop* desktop = desktop_owned.get();
+    auto window_owned = std::make_unique<Window>("Retained");
+    window_owned->set_bounds(Rect{2, 2, 14, 6});
+    Window* window = desktop->add_window(std::move(window_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+
+    f.app.step(0);
+    const std::size_t original_repaints = window->content_repaint_count();
+    CK_CHECK(original_repaints == 1);
+
+    window->set_bounds(Rect{18, 2, 14, 6});  // same local size: composition-only movement
+    f.term.clear_written();
+    f.app.step(0);
+
+    CK_CHECK(window->content_repaint_count() == original_repaints);
+    CK_CHECK(desktop->last_content_repaints() == 0);
+    // Two 14x6 positions plus their non-overlapping 2x1 shadow footprints
+    // are the whole possible structural damage: this is deliberately far
+    // below the 40x12 desktop and catches a hidden base/full-frame repaint.
+    CK_CHECK(f.app.last_compose_cells_touched() <= 216);
+    CK_CHECK(f.app.last_bytes_emitted() > 0);
+    CK_CHECK(!f.term.written_bytes().empty());
+}
+
+CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
+    Desktop* desktop = desktop_owned.get();
+    auto first_owned = std::make_unique<Window>("First");
+    first_owned->set_bounds(Rect{2, 2, 12, 6});
+    Window* first = desktop->add_window(std::move(first_owned));
+    auto second_owned = std::make_unique<Window>("Second");
+    second_owned->set_bounds(Rect{18, 2, 12, 6});
+    Window* second = desktop->add_window(std::move(second_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+
+    f.app.step(0);
+    const std::size_t first_repaints = first->content_repaint_count();
+    const std::size_t second_repaints = second->content_repaint_count();
+
+    first->set_bounds(Rect{2, 2, 15, 7});
+    f.app.step(0);
+
+    CK_CHECK(first->content_repaint_count() == first_repaints + 1);
+    CK_CHECK(second->content_repaint_count() == second_repaints);
+    CK_CHECK(desktop->last_content_repaints() == 1);
 }
 
 // --- Terminal too small (ARCHITECTURE.md §5 "Sizing policy", M10/WP-21) ---

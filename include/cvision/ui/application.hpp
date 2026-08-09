@@ -102,6 +102,14 @@ public:
     const scene::Surface& composed_surface() const noexcept { return compositor_.frame(); }
     CursorState current_cursor() const noexcept { return compositor_.cursor(); }
 
+    // Deterministic render-cost counters for the most recently presented
+    // frame. They are application-local by construction and support the
+    // machine-independent performance gates in ARCHITECTURE.md §8.
+    std::size_t last_compose_cells_touched() const noexcept {
+        return compositor_.last_compose_cells_touched();
+    }
+    std::size_t last_bytes_emitted() const noexcept { return presenter_.last_bytes_emitted(); }
+
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
 
@@ -427,18 +435,11 @@ private:
     Theme theme_{roles_};
     CommandRegistry commands_;
     View root_;
+    // The retained base layer for root-owned chrome/background. Desktop and
+    // other retained containers contribute child backing stores separately to
+    // composition_layers_; this surface never contains a Window's content.
     scene::Surface surface_;
-    // v1 renders through ONE shared Surface (Window baseline draws
-    // through the ordinary View/Painter tree, no per-window backing
-    // store yet — see widgets/window.hpp's own scope note), but
-    // Compositor is still what turns a Surface's raster regions
-    // (Sixel/kitty image content) into the RasterSlices Presenter
-    // needs — its occlusion slicing is trivial with a single "layer"
-    // covering the whole frame, but reusing the real, tested Compositor
-    // path is strictly better than re-deriving that math ad hoc here.
-    // `background_layer_` exists only because compose() requires a
-    // background distinct from its layers; it is never drawn into.
-    scene::Surface background_layer_;
+    std::vector<scene::Layer> composition_layers_;
     scene::Compositor compositor_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
