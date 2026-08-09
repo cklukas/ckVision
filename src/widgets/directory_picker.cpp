@@ -64,8 +64,9 @@ struct DirectoryPickerCompletion {
 
 WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::StandardRoles& roles,
                                     ui::Application& app, ui::View* restore_focus_to,
-                                    std::function<void(bool, std::string)> on_result) {
-    auto window = std::make_unique<Window>("Select Directory");
+                                    std::function<void(bool, std::string)> on_result,
+                                    const StandardStrings& strings) {
+    auto window = std::make_unique<Window>(strings.select_directory_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     Window* window_ptr = window.get();
@@ -93,11 +94,11 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
-    auto select_button = std::make_unique<Button>("Select");
+    auto select_button = std::make_unique<Button>(strings.select);
     select_button->set_default(true);
     auto* select_ptr =
         static_cast<Button*>(button_row->add_item(std::move(select_button), LayoutSpec{SizePolicy::Fixed, 1}));
-    auto cancel_button = std::make_unique<Button>("Cancel");
+    auto cancel_button = std::make_unique<Button>(strings.cancel);
     auto* cancel_ptr =
         static_cast<Button*>(button_row->add_item(std::move(cancel_button), LayoutSpec{SizePolicy::Fixed, 1}));
     column->add_item(std::move(button_row), LayoutSpec{SizePolicy::Fixed, 1});
@@ -138,14 +139,16 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 
 DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
                                                       ui::Application& app, Desktop& desktop,
-                                                      const ui::StandardRoles& roles) {
+                                                      const ui::StandardRoles& roles,
+                                                      const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<DirectoryPickerResult>;
     auto parts = Access::make();
     auto handle = make_directory_picker(
         fs, std::move(root_path), roles, app, app.focused(),
         [state = parts.state](bool accepted, std::string path) {
             Access::record(state, DirectoryPickerResult{accepted, std::move(path)});
-        });
+        },
+        strings);
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
         if (previous) previous();
@@ -157,11 +160,13 @@ DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::
 
 DirectoryPickerResult exec_directory_picker(const FileSystem& fs, std::string root_path,
                                             ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles) {
+                                            const ui::StandardRoles& roles,
+                                            const StandardStrings& strings) {
     std::optional<DirectoryPickerResult> result;
     auto handle = make_directory_picker(
         fs, std::move(root_path), roles, app, app.focused(),
-        [&result](bool accepted, std::string path) { result = DirectoryPickerResult{accepted, std::move(path)}; });
+        [&result](bool accepted, std::string path) { result = DirectoryPickerResult{accepted, std::move(path)}; },
+        strings);
     desktop.exec_modal(app, std::move(handle));
     // Every normal selection/cancellation path records a result before
     // closing. If the host quits while the modal is still attached,

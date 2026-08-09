@@ -22,6 +22,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
+#include "cvision/widgets/standard_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -49,14 +50,16 @@ using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 // explicit through Desktop::present_modal.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
-                               std::function<void(FileDialogResult)> on_result);
+                               std::function<void(FileDialogResult)> on_result,
+                               const StandardStrings& strings = english_standard_strings());
 
 // Presents a file dialog modally without a nested loop. Completion
 // occurs only after detachment; an accepted result wins, while close,
 // external detach, and quit resolve to {false, ""}.
 [[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, ui::Application& app,
-                                                          Desktop& desktop, const ui::StandardRoles& roles);
+                                                          Desktop& desktop, const ui::StandardRoles& roles,
+                                                          const StandardStrings& strings = english_standard_strings());
 
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and
@@ -64,6 +67,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // present_file_dialog is the handler-safe alternative. A quit request that
 // ends the outer pump resolves to the same cancelled result as Esc.
 FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles);
+                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                  const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets

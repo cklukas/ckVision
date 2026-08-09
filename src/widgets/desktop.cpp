@@ -215,6 +215,58 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     return std::unique_ptr<Window>(static_cast<Window*>(detached.release()));
 }
 
+Desktop::Snapshot Desktop::snapshot() const {
+    Snapshot snapshot;
+    snapshot.windows.reserve(windows_.size());
+    for (const auto& child : children()) {
+        auto* window = dynamic_cast<Window*>(child.get());
+        if (window == nullptr) continue;
+        if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) continue;
+        snapshot.windows.push_back(WindowSnapshot{window,
+                                                  window->lifetime_token(),
+                                                  window->bounds(),
+                                                  window->restored_bounds_,
+                                                  window->grow_policy_,
+                                                  window == active_,
+                                                  window->zoomed_});
+    }
+    return snapshot;
+}
+
+void Desktop::restore(const Snapshot& snapshot) {
+    struct LiveEntry {
+        const WindowSnapshot* snapshot = nullptr;
+        Window* window = nullptr;
+    };
+    std::vector<LiveEntry> live;
+    live.reserve(snapshot.windows.size());
+    for (const WindowSnapshot& entry : snapshot.windows) {
+        if (entry.window == nullptr || entry.liveness.expired()) continue;
+        if (std::find(windows_.begin(), windows_.end(), entry.window) == windows_.end()) continue;
+        live.push_back(LiveEntry{&entry, entry.window});
+    }
+
+    if (active_ != nullptr) {
+        active_->set_active(false);
+        active_ = nullptr;
+    }
+
+    for (const LiveEntry& entry : live) {
+        Window& window = *entry.window;
+        window.restored_bounds_ = entry.snapshot->restored_bounds;
+        window.grow_policy_ = entry.snapshot->grow_policy;
+        window.zoomed_ = entry.snapshot->zoomed;
+        window.set_bounds(entry.snapshot->bounds);
+        if (entry.snapshot->active) active_ = &window;
+    }
+
+    for (const LiveEntry& entry : live) raise_layer_to_front(entry.window);
+    reraise_popups();
+
+    if (active_ != nullptr) active_->set_active(true);
+    request_layer_recompose();
+}
+
 std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
     if (auto* window = dynamic_cast<Window*>(child)) {
         std::unique_ptr<Window> detached = remove_window(window);

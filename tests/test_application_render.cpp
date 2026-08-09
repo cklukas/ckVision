@@ -344,7 +344,7 @@ CK_TEST(dropdown_menu_shadows_follow_the_retained_popup_layer) {
     auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
     Desktop* desktop = desktop_owned.get();
     auto dropdown_owned = std::make_unique<DropdownMenu>(
-        std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false}});
+        std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false, {}, {}}});
     dropdown_owned->set_bounds(Rect{2, 2, 6, 2});
     DropdownMenu* dropdown = desktop->add_popup(std::move(dropdown_owned));
     f.app.root().add_child(std::move(desktop_owned));
@@ -369,7 +369,7 @@ CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
     window_owned->set_bounds(Rect{2, 2, 10, 6});
     desktop->add_window(std::move(window_owned));
     auto dropdown_owned = std::make_unique<DropdownMenu>(
-        std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false}});
+        std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false, {}, {}}});
     dropdown_owned->set_bounds(Rect{6, 3, 6, 2});
     desktop->add_popup(std::move(dropdown_owned));
     f.app.root().add_child(std::move(desktop_owned));
@@ -396,7 +396,7 @@ CK_TEST(rapid_retained_window_and_dropdown_lifecycles_leave_no_stale_scene_conte
         f.app.step(0);
 
         auto dropdown_owned = std::make_unique<DropdownMenu>(
-            std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false}});
+            std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false, {}, {}}});
         dropdown_owned->set_bounds(Rect{4, 3, 6, 2});
         ckv::ui::View* dropdown = desktop->add_popup(std::move(dropdown_owned));
         f.app.step(0);

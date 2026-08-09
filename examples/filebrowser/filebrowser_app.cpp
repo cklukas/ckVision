@@ -72,7 +72,7 @@ void FileBrowserApp::build_menu_bar() {
     // all render live from the registration above.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false});
+    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false, {}, {}});
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
@@ -80,7 +80,7 @@ void FileBrowserApp::build_menu_bar() {
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", ui::std_commands::kFocusNext}, {"", ui::std_commands::kQuit}});
+    status->set_items({{"", ui::std_commands::kFocusNext, 0}, {"", ui::std_commands::kQuit, 0}});
     desktop_->dock_bottom(std::move(status));
 }
 

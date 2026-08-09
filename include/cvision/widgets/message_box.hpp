@@ -9,11 +9,9 @@
 // wiring here would double-fire the default button's close (it would
 // close itself directly on click AND again via accept_request).
 //
-// Scope note: severity-accented styling per MessageBoxKind ("theme-
-// role styled severity accents" in plans/widgets.md) is explicitly
-// beyond-baseline — this module stores `kind` on the descriptor for a
-// future theming pass but renders every kind identically today via
-// StandardRoles::static_text.
+// MessageBoxKind selects a standard message text role, so schemes can
+// distinguish info/warning/error/confirm boxes without changing the
+// dialog factory API.
 #pragma once
 
 #include <functional>
@@ -24,6 +22,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
+#include "cvision/widgets/standard_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -61,7 +60,8 @@ struct MessageBoxDescriptor {
 // safe when a caller needs a more custom flow.
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
                                ui::Application& app, ui::View* restore_focus_to,
-                               std::function<void(MessageBoxResult)> on_result);
+                               std::function<void(MessageBoxResult)> on_result,
+                               const StandardStrings& strings = english_standard_strings());
 
 // A move-only observer for a non-blocking message-box presentation
 // (D-038). Completion happens after the box has detached and its modal
@@ -77,7 +77,8 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // handler that presented the box.
 [[nodiscard]] MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
                                                           const ui::StandardRoles& roles,
-                                                          const MessageBoxDescriptor& descriptor);
+                                                          const MessageBoxDescriptor& descriptor,
+                                                          const StandardStrings& strings = english_standard_strings());
 
 // The blocking convenience (M9/WP-15, D-021's "blocking wrapper for
 // applications that own the loop"): builds and shows the box exactly
@@ -91,6 +92,7 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // Desktop::present_modeless.
 MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
                                    const ui::StandardRoles& roles,
-                                   const MessageBoxDescriptor& descriptor);
+                                   const MessageBoxDescriptor& descriptor,
+                                   const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets

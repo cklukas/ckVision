@@ -18,18 +18,19 @@ using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
 
-std::vector<std::pair<MessageBoxResult, std::string>> button_specs(MessageBoxButtons buttons) {
+std::vector<std::pair<MessageBoxResult, std::string>> button_specs(MessageBoxButtons buttons,
+                                                                    const StandardStrings& strings) {
     switch (buttons) {
         case MessageBoxButtons::Ok:
-            return {{MessageBoxResult::Ok, "OK"}};
+            return {{MessageBoxResult::Ok, strings.ok}};
         case MessageBoxButtons::OkCancel:
-            return {{MessageBoxResult::Ok, "OK"}, {MessageBoxResult::Cancel, "Cancel"}};
+            return {{MessageBoxResult::Ok, strings.ok}, {MessageBoxResult::Cancel, strings.cancel}};
         case MessageBoxButtons::YesNo:
-            return {{MessageBoxResult::Yes, "Yes"}, {MessageBoxResult::No, "No"}};
+            return {{MessageBoxResult::Yes, strings.yes}, {MessageBoxResult::No, strings.no}};
         case MessageBoxButtons::YesNoCancel:
-            return {{MessageBoxResult::Yes, "Yes"},
-                    {MessageBoxResult::No, "No"},
-                    {MessageBoxResult::Cancel, "Cancel"}};
+            return {{MessageBoxResult::Yes, strings.yes},
+                    {MessageBoxResult::No, strings.no},
+                    {MessageBoxResult::Cancel, strings.cancel}};
     }
     CKV_ASSERT(false);  // unreachable: every enumerator handled above
     return {};
@@ -50,6 +51,21 @@ MessageBoxResult escape_result(MessageBoxButtons buttons) {
     }
     CKV_ASSERT(false);
     return MessageBoxResult::Ok;
+}
+
+ui::RoleId message_role(MessageBoxKind kind, const ui::StandardRoles& roles) noexcept {
+    switch (kind) {
+        case MessageBoxKind::Info:
+            return roles.message_info_text;
+        case MessageBoxKind::Warning:
+            return roles.message_warning_text;
+        case MessageBoxKind::Error:
+            return roles.message_error_text;
+        case MessageBoxKind::Confirm:
+            return roles.message_confirm_text;
+    }
+    CKV_ASSERT(false);
+    return roles.message_info_text;
 }
 
 // Button and cancel handlers may be destroyed by the result callback itself:
@@ -73,7 +89,8 @@ struct MessageBoxCompletion {
 
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
                                ui::Application& app, ui::View* restore_focus_to,
-                               std::function<void(MessageBoxResult)> on_result) {
+                               std::function<void(MessageBoxResult)> on_result,
+                               const StandardStrings& strings) {
     auto window = std::make_unique<Window>(descriptor.title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
@@ -85,12 +102,14 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
 
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
-    column->add_item(std::make_unique<StaticText>(descriptor.message), LayoutSpec{SizePolicy::Expanding, 1});
+    auto message = std::make_unique<StaticText>(descriptor.message);
+    message->set_role_override(message_role(descriptor.kind, roles));
+    column->add_item(std::move(message), LayoutSpec{SizePolicy::Expanding, 1});
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
     Button* default_button = nullptr;
-    for (const auto& [result, label] : button_specs(descriptor.buttons)) {
+    for (const auto& [result, label] : button_specs(descriptor.buttons, strings)) {
         auto button = std::make_unique<Button>(label);
         const bool is_default = default_button == nullptr;  // the first button in the set
         button->set_default(is_default);
@@ -136,11 +155,13 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
 
 MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
-                                            const MessageBoxDescriptor& descriptor) {
+                                            const MessageBoxDescriptor& descriptor,
+                                            const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<MessageBoxResult>;
     auto parts = Access::make();
     auto handle = make_message_box(descriptor, roles, app, app.focused(),
-                                   [state = parts.state](MessageBoxResult result) { Access::record(state, result); });
+                                   [state = parts.state](MessageBoxResult result) { Access::record(state, result); },
+                                   strings);
     const MessageBoxResult fallback = escape_result(descriptor.buttons);
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state, fallback]() {
@@ -153,10 +174,11 @@ MessageBoxPresentation present_message_box(ui::Application& app, Desktop& deskto
 
 MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
                                    const ui::StandardRoles& roles,
-                                   const MessageBoxDescriptor& descriptor) {
+                                   const MessageBoxDescriptor& descriptor,
+                                   const StandardStrings& strings) {
     std::optional<MessageBoxResult> result;
     auto on_result = [&result](MessageBoxResult r) { result = r; };
-    auto handle = make_message_box(descriptor, roles, app, app.focused(), on_result);
+    auto handle = make_message_box(descriptor, roles, app, app.focused(), on_result, strings);
     desktop.exec_modal(app, std::move(handle));
     // on_result always fires before the box's own close() call, on
     // every dismissal path (every button, and cancel_request/Esc) — the

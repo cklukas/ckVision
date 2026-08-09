@@ -35,6 +35,20 @@ namespace ckv::widgets {
 // already claimed.
 class Desktop : public ui::View {
 public:
+    struct WindowSnapshot {
+        Window* window = nullptr;
+        std::weak_ptr<void> liveness;
+        Rect bounds;
+        Rect restored_bounds;
+        DesktopGrowPolicy grow_policy = DesktopGrowPolicy::None;
+        bool active = false;
+        bool zoomed = false;
+    };
+
+    struct Snapshot {
+        std::vector<WindowSnapshot> windows;
+    };
+
     Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role);
     ~Desktop() override;
 
@@ -103,6 +117,14 @@ public:
     const std::vector<Window*>& windows() const noexcept { return windows_; }
 
     Window* active_window() const noexcept { return active_; }
+
+    // Typed layout snapshot/restore for application-owned session state.
+    // The snapshot records current windows by instance identity and liveness,
+    // then restore ignores entries whose original Window is no longer owned.
+    // It restores geometry, z-order, active state, zoom state, and grow policy;
+    // it never creates or destroys windows.
+    Snapshot snapshot() const;
+    void restore(const Snapshot& snapshot);
 
     // --- Docked chrome (menu bar / status line) --------------------
     //

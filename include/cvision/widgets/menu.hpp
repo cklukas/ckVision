@@ -7,21 +7,18 @@
 // like every other accelerator in this framework), mnemonic letters,
 // Left/Right/Up/Down navigation with wrapping, Enter/mnemonic to
 // activate, disabled items skipped by navigation but still visible,
-// Esc closes one level, light-dismiss on an outside click via
-// Application's mouse input capture, and right-aligned chord hints
-// rendered live from the command registry (M9/WP-11).
+// checkable items, nested submenus, Esc closes one level, light-dismiss
+// on an outside click via Application's mouse input capture, and
+// right-aligned chord hints rendered live from the command registry
+// (M9/WP-11).
 //
 // show_context_menu() below reuses DropdownMenu directly as a
 // positional pop-up ("Context menu: positional pop-up with same
 // feature set" — plans/widgets.md M5 baseline) at a caller-chosen
-// screen position, e.g. from a right-click handler.
-//
-// Scope note (documented, not an oversight): nested submenus,
-// checkable items, and context-menu KEYBOARD invocation (Menu key /
-// Shift-F10 at focus location — mouse invocation via
-// show_context_menu is covered) are each a real, separate increment —
-// landing them here would roughly double this file without a
-// concrete consumer to test any of it against yet.
+// screen position, e.g. from a right-click handler. show_context_menu_for_focus()
+// supplies the keyboard path: applications that own the current context menu
+// model call it from their Shift+F10/Menu-command handler, and the menu opens
+// at the focused view's cell location without any global menu registry.
 #pragma once
 
 #include <functional>
@@ -40,11 +37,19 @@ namespace ckv::widgets {
 using ui::SizeHint;
 using ui::View;
 
+enum class MenuItemCheck {
+    None,
+    Unchecked,
+    Checked,
+};
+
 struct MenuItem {
     std::string label;                     // may carry a '&' mnemonic; ignored if separator
     ui::CommandId command = ui::kInvalidCommand;  // if set, activation calls app.execute_command(command)
     std::function<void()> on_activate;     // used when command == kInvalidCommand
     bool separator = false;                // a divider: never highlighted, navigated to, or activated
+    MenuItemCheck check = MenuItemCheck::None;
+    std::vector<MenuItem> submenu;
 };
 
 // Resolves its own theme roles from context() once attached (M9
@@ -53,7 +58,7 @@ struct MenuItem {
 // comment on why menus are one of the few widgets that need it.
 class DropdownMenu : public ui::View {
 public:
-    explicit DropdownMenu(std::vector<MenuItem> items);
+    explicit DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu = nullptr);
     ~DropdownMenu() override;
 
     void set_role_override(ui::RoleId normal_role, ui::RoleId highlighted_role,
@@ -107,9 +112,19 @@ private:
     int step_selection(int from, int direction) const;  // -1 if no selectable item exists at all
     void activate(int index);
     void dismiss();
+    void open_submenu(int index);
+    void close_submenu(bool restore_capture);
+    void dismiss_chain();
+    bool has_check_column() const noexcept;
+    bool has_submenu_column() const noexcept;
 
     std::vector<MenuItem> items_;
     int highlighted_ = -1;
+    ui::Application* app_ = nullptr;
+    Desktop* desktop_ = nullptr;
+    DropdownMenu* parent_menu_ = nullptr;
+    DropdownMenu* child_menu_ = nullptr;
+    bool dismissing_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId highlighted_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
@@ -203,5 +218,17 @@ private:
 // click) — do not retain it past that point.
 DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop);
+
+// The standard portable keyboard context-menu chord. Terminals can report a
+// physical Menu key through future backends, but Shift+F10 is the baseline
+// chord already representable by ckVision's key model.
+bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept;
+
+// Opens a context menu at the focused view's top-left cell when focus is
+// inside `desktop`; otherwise uses the Desktop origin. This is the keyboard
+// equivalent of a right-click positional context menu and deliberately accepts
+// caller-provided items instead of installing a process-global context source.
+DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Application& app,
+                                          Desktop& desktop);
 
 }  // namespace ckv::widgets

@@ -45,6 +45,13 @@ decoded pixel plane and raw protocol bytes. These artifacts are review aids;
 WP-32A still owns the broader byte/hash-pinned pixel-golden matrix listed in
 the corrective plan.
 
+Standard dialog factories keep their built-in English labels by default and
+also accept a `widgets::StandardStrings` table when an application needs
+localized button text or standard window titles. The table covers message-box
+buttons, file dialog titles/actions, directory picker labels, the Window List,
+and Help Viewer chrome without installing any global mutable localization
+state.
+
 ## Gallery (`examples/gallery`)
 
 Gallery is the baseline example: a `Desktop` with a menu bar, a status

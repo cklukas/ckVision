@@ -12,7 +12,7 @@ using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 
-CK_TEST(intern_standard_roles_produces_thirtyseven_distinct_role_ids) {
+CK_TEST(intern_standard_roles_produces_fortyone_distinct_role_ids) {
     RoleRegistry reg;
     const StandardRoles r = intern_standard_roles(reg);
     const std::set<ckv::ui::RoleId> ids{
@@ -20,7 +20,8 @@ CK_TEST(intern_standard_roles_produces_thirtyseven_distinct_role_ids) {
         r.label_text,           r.label_mnemonic,          r.static_text,
         r.button_normal,        r.button_focused,          r.button_default,
         r.button_shadow,        r.input_normal,            r.input_focused,
-        r.input_invalid,
+        r.input_invalid,         r.message_info_text,      r.message_warning_text,
+        r.message_error_text,    r.message_confirm_text,
         r.window_frame_active,  r.window_frame_inactive,   r.window_title_active,
         r.window_title_inactive, r.menu_bar_normal,        r.menu_bar_active,
         r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
@@ -29,9 +30,9 @@ CK_TEST(intern_standard_roles_produces_thirtyseven_distinct_role_ids) {
         r.option_focused,       r.scrollbar_track,         r.scrollbar_thumb,
         r.image_fallback,       r.canvas_fallback,         r.text_view_text,
         r.status_line_normal,   r.splitter_normal,         r.splitter_focused};
-    CK_CHECK(ids.size() == 37);
+    CK_CHECK(ids.size() == 41);
     for (auto id : ids) CK_CHECK(id != kInvalidRole);
-    CK_CHECK(reg.size() == 37);
+    CK_CHECK(reg.size() == 41);
 }
 
 CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_registry) {
@@ -40,7 +41,7 @@ CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_re
     const StandardRoles second = intern_standard_roles(reg);
     CK_CHECK(first.dialog_frame == second.dialog_frame);
     CK_CHECK(first.button_default == second.button_default);
-    CK_CHECK(reg.size() == 37);  // no duplicates from the second call
+    CK_CHECK(reg.size() == 41);  // no duplicates from the second call
 }
 
 CK_TEST(standard_role_names_are_namespaced_under_ckv_prefix) {

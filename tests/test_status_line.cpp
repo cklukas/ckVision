@@ -128,7 +128,7 @@ CK_TEST(clicking_an_items_label_fires_its_command) {
     app.commands().register_command(kHelp, "Help");
     bool ran = false;
     app.set_command_handler(kHelp, [&] { ran = true; });
-    status.set_items({StatusLineItem{"Help", kHelp}});
+    status.set_items({StatusLineItem{"Help", kHelp, 0}});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -143,7 +143,7 @@ CK_TEST(clicking_outside_any_item_is_unhandled) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand}});
+    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand, 0}});
     CK_CHECK(!status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{30, 0},
                                                std::nullopt, Modifier::None}));
 }
@@ -165,7 +165,7 @@ CK_TEST(a_disabled_commands_item_still_fires_execute_command_which_itself_declin
     app.commands().set_enabled_predicate(kHelp, [] { return false; });
     bool ran = false;
     app.set_command_handler(kHelp, [&] { ran = true; });
-    status.set_items({StatusLineItem{"Help", kHelp}});
+    status.set_items({StatusLineItem{"Help", kHelp, 0}});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -190,7 +190,7 @@ CK_TEST(second_item_is_positioned_after_the_first_with_a_separator_between) {
     // title, not its own label (M9/WP-11) — these hand-set labels
     // ("AB", "Second") are therefore never shown; the actual rendered
     // text is "First" / "Second" from the registrations above.
-    status.set_items({StatusLineItem{"AB", kFirst}, StatusLineItem{"Second", kSecond}});
+    status.set_items({StatusLineItem{"AB", kFirst, 0}, StatusLineItem{"Second", kSecond, 0}});
 
     // "First" occupies columns 0-4; " | " occupies 5-7; "Second" starts at 8.
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
@@ -211,7 +211,7 @@ CK_TEST(draw_renders_the_hint_and_items_without_crashing) {
     view->set_focus_policy(FocusPolicy::TabStop);
     view->set_help_context_key("Ready");
     app.set_focus(view);
-    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand}});
+    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand, 0}});
 
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});
@@ -227,10 +227,38 @@ CK_TEST(draw_stops_placing_items_that_would_start_past_the_available_width_witho
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 5, 1});  // very narrow
-    status.set_items({StatusLineItem{"This label is far too long to fit", ui::kInvalidCommand}});
+    status.set_items({StatusLineItem{"This label is far too long to fit", ui::kInvalidCommand, 0}});
 
     Surface s(ckv::Size{5, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 5, 1});
     status.draw(painter);  // must not crash even though the item overflows the bounds
     CK_CHECK(true);
+}
+
+CK_TEST(narrow_status_line_keeps_higher_priority_items_visible_and_clickable) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 8, 1});
+    constexpr CommandId kLow = ui::kFirstApplicationCommandId;
+    constexpr CommandId kHigh = ui::kFirstApplicationCommandId + 1;
+    app.commands().register_command(kLow, "Verbose");
+    app.commands().register_command(kHigh, "Quit");
+    bool high_ran = false;
+    app.set_command_handler(kHigh, [&] { high_ran = true; });
+    status.set_items({StatusLineItem{"", kLow, 0}, StatusLineItem{"", kHigh, 10}});
+
+    Surface s(ckv::Size{8, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 8, 1});
+    status.draw(painter);
+    const std::string row = row_text(s, 0);
+    CK_CHECK(row.find("Quit") != std::string::npos);
+    CK_CHECK(row.find("Verbose") == std::string::npos);
+
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                              ckv::Point{1, 0}, std::nullopt, Modifier::None}));
+    CK_CHECK(high_ran);
 }

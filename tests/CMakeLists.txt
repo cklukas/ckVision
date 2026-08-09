@@ -53,6 +53,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_scrollbar.cpp
     test_sixel_encoder.cpp
     test_splitter.cpp
+    test_standard_strings.cpp
     test_standard_roles.cpp
     test_status_line.cpp
     test_surface.cpp

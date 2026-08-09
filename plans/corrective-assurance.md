@@ -54,8 +54,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | **Implementation complete — gate pending** | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | **Implementation complete — gate pending** | WP-32 | M3 headless/raster acceptance; screenshot gap |
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | **Implementation complete — gate pending** | WP-32A | M3 fuzz exit; verification standard |
-| 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | Ready | WP-33 | M5/M6 catalog gaps |
-| 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | Blocked | WP-34A | M4/M6 control gaps |
+| 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | **Implementation complete — gate pending** | WP-33 | M5/M6 catalog gaps |
+| 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | Ready | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | Blocked | WP-34B | M6 remaining catalog gaps |
 | 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Blocked | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Blocked | WP-35 | WP-16, WP-18…WP-22; M10 exit |
@@ -1391,6 +1391,40 @@ layer, after lifetime/modality/performance foundations are correct.
   disabled/check states, context invocation, and narrow widths.
 - Snapshot/restore and every standard-dialog close path preserve z-order,
   focus, modality, and veto invariants under sanitizers.
+
+**Implementation complete — gate pending (2026-08-09).** WP-34A now has local
+implementation evidence for the catalog gaps above:
+
+- `DropdownMenu` supports checkable rows, nested submenus, one-level Esc
+  dismissal, full-chain dismissal on leaf activation, and a focus-positioned
+  Shift+F10 keyboard context-menu helper in addition to positional mouse
+  context menus.
+- `StatusLine` accepts item priorities and hides lower-priority entries on
+  narrow widths while preserving original order and mouse routing for visible
+  entries.
+- `Desktop::snapshot()` / `Desktop::restore()` preserve direct-window
+  geometry, z-order, active state, zoom state, restored bounds, and grow policy
+  while ignoring windows that have left the Desktop.
+- Message boxes resolve kind-specific text roles, and standard dialog factories
+  use an injectable `widgets::StandardStrings` table for built-in titles and
+  button labels without global mutable localization state.
+- Window List activation, close, focus restore, modal completion, and
+  first-letter type-ahead are covered through the dialog's public focus/input
+  path. Directory picker and file/message/help/window-list factories continue
+  to share the same default-button, Esc/cancel, focus-restore, and
+  presentation-completion contracts from WP-27.
+
+Focused suites passed:
+`suite_test_menu`, `suite_test_status_line`, `suite_test_desktop`,
+`suite_test_message_box`, `suite_test_standard_roles`,
+`suite_test_standard_strings`, `suite_test_window_list_dialog`,
+`suite_test_directory_picker`, `suite_test_file_dialog`,
+`suite_test_help_viewer`, and `suite_test_dialog_presentation`.
+The full local CTest matrix then passed **93/93** on macOS, including
+`layer_check`, `provenance_check`, both self-tests, `hello_line_budget`,
+`test_inventory`, and `scene_budget_gate`; `git diff --check` was also clean.
+WP-38 still owns the exhaustive cross-scheme appearance matrix and final
+promotion from gate-pending to `Done`.
 
 ### WP-34B — Controls, editing, selection, and scrolling closure
 

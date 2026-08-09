@@ -29,6 +29,10 @@ struct StandardRoles {
     RoleId input_normal;
     RoleId input_focused;
     RoleId input_invalid;  // a failed validator (ARCHITECTURE.md §5 dialog-accept veto)
+    RoleId message_info_text;
+    RoleId message_warning_text;
+    RoleId message_error_text;
+    RoleId message_confirm_text;
 
     // Window chrome (ARCHITECTURE.md §5 "Windows, popups, modality").
     RoleId window_frame_active;

@@ -281,6 +281,57 @@ CK_TEST(select_by_number_out_of_range_is_a_harmless_no_op) {
     CK_CHECK(desktop.active_window() == a);
 }
 
+CK_TEST(snapshot_restore_recovers_window_geometry_zoom_active_state_and_z_order) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    a->set_bounds(Rect{1, 1, 20, 8});
+    b->set_bounds(Rect{4, 3, 22, 9});
+    c->set_bounds(Rect{7, 5, 24, 10});
+    b->toggle_zoom(desktop.content_area());
+    desktop.activate(a);
+    const Desktop::Snapshot snapshot = desktop.snapshot();
+    ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
+
+    a->set_bounds(Rect{30, 10, 15, 6});
+    b->toggle_zoom(desktop.content_area());
+    c->set_bounds(Rect{35, 12, 16, 7});
+    desktop.activate(c);
+
+    desktop.restore(snapshot);
+
+    CK_CHECK(a->bounds() == (Rect{1, 1, 20, 8}));
+    CK_CHECK(b->zoomed());
+    CK_CHECK(b->bounds() == desktop.content_area());
+    CK_CHECK(c->bounds() == (Rect{7, 5, 24, 10}));
+    CK_CHECK(desktop.active_window() == a);
+    CK_CHECK(a->active());
+    CK_CHECK(!c->active());
+    CK_CHECK(desktop.children()[0].get() == b);
+    CK_CHECK(desktop.children()[1].get() == c);
+    CK_CHECK(desktop.children()[2].get() == a);
+    CK_CHECK(desktop.children().back().get() == popup);
+}
+
+CK_TEST(snapshot_restore_ignores_windows_that_have_left_the_desktop) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    const Desktop::Snapshot snapshot = desktop.snapshot();
+
+    auto detached = desktop.remove_window(b);
+    CK_CHECK(detached.get() == b);
+    a->set_bounds(Rect{9, 9, 20, 6});
+    desktop.restore(snapshot);
+
+    CK_CHECK(desktop.windows().size() == 1);
+    CK_CHECK(desktop.windows()[0] == a);
+    CK_CHECK(a->bounds() == snapshot.windows[0].bounds);
+}
+
 // --- Tile / cascade ------------------------------------------------------
 
 CK_TEST(tile_divides_the_desktop_width_evenly_among_windows_with_no_overlap_or_gap) {

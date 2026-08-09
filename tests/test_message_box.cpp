@@ -5,10 +5,15 @@
 #include <vector>
 
 #include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/context.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/static_text.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -30,6 +35,7 @@ using ckv::widgets::present_message_box;
 using ckv::widgets::Window;
 using ckv::widgets::MessageBoxButtons;
 using ckv::widgets::MessageBoxDescriptor;
+using ckv::widgets::MessageBoxKind;
 using ckv::widgets::MessageBoxResult;
 
 namespace {
@@ -56,6 +62,31 @@ CK_TEST(make_message_box_does_not_change_the_applications_focus) {
     auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
     CK_CHECK(app.focused() == other);  // still the pre-existing focus, not the box's default button
     CK_CHECK(handle.initial_focus != nullptr);
+}
+
+CK_TEST(message_box_kind_selects_the_matching_message_text_role) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MessageBoxDescriptor descriptor{MessageBoxKind::Error, "Error", "Failure.", MessageBoxButtons::Ok};
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
+    handle.window->set_context(ckv::ui::Context{&f.theme, &f.registry, &app});
+    Window* box = handle.window.get();
+    auto* column = dynamic_cast<ckv::ui::Column*>(box->content());
+    CK_CHECK(column != nullptr);
+    if (column == nullptr) return;
+    CK_CHECK(!column->children().empty());
+    if (column->children().empty()) return;
+    auto* message = dynamic_cast<ckv::widgets::StaticText*>(column->children()[0].get());
+    CK_CHECK(message != nullptr);
+    if (message == nullptr) return;
+    message->set_bounds(Rect{0, 0, 20, 1});
+
+    ckv::scene::Surface surface(ckv::Size{20, 1});
+    ckv::scene::Painter painter(surface, Rect{0, 0, 20, 1});
+    message->draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.message_error_text));
 }
 
 // --- Ok-only box -----------------------------------------------------------

@@ -33,6 +33,9 @@ struct Fixture {
 std::unique_ptr<Window> make_window(std::string title) { return std::make_unique<Window>(std::move(title)); }
 
 ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
+ckv::KeyEvent text_key(std::string text) {
+    return ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, std::move(text)}};
+}
 }  // namespace
 
 CK_TEST(the_dialogs_list_contains_every_windows_current_title_in_order) {
@@ -70,6 +73,33 @@ CK_TEST(activating_a_row_switches_the_desktops_active_window_and_closes_the_dial
 
     app.dispatch(key(Key::Enter));  // activates row 0 ("Alpha")
     CK_CHECK(desktop.active_window() == alpha);
+    CK_CHECK(closed);
+}
+
+CK_TEST(type_ahead_selects_a_matching_window_before_activation) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    desktop.add_window(make_window("Alpha"));
+    Window* beta = desktop.add_window(make_window("Beta"));
+    Window* gamma = desktop.add_window(make_window("Gamma"));
+    CK_CHECK(desktop.active_window() == gamma);
+
+    auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
+    bool closed = false;
+    handle.window->on_closed = [&closed, previous = handle.window->on_closed]() {
+        closed = true;
+        if (previous) previous();
+    };
+    app.root().add_child(std::move(handle.window));
+    app.set_focus(handle.initial_focus);
+
+    app.dispatch(text_key("b"));
+    app.dispatch(key(Key::Enter));
+
+    CK_CHECK(desktop.active_window() == beta);
     CK_CHECK(closed);
 }
 

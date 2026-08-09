@@ -29,7 +29,7 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // all render live from the registration below.
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", ui::std_commands::kMenu}, {"", ui::std_commands::kQuit}});
+    status->set_items({{"", ui::std_commands::kMenu, 0}, {"", ui::std_commands::kQuit, 0}});
     // dock_bottom (not add_child + a one-time set_bounds) keeps the
     // status line pinned to the last row across every future terminal
     // resize — Desktop::on_resized() re-derives its position from
@@ -67,14 +67,14 @@ void GalleryApp::build_menu_bar() {
                                                           widgets::present_message_box(app_, *desktop_, roles_, descriptor);
                                                       presentation.set_completion_handler([](widgets::MessageBoxResult) {});
                                                   },
-                                                  false});
-    file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
-    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false});
+                                                  false, {}, {}});
+    file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true, {}, {}});
+    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false, {}, {}});
     menus.push_back(std::move(file_menu));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kTile, nullptr, false});
-    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kCascade, nullptr, false});
+    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kTile, nullptr, false, {}, {}});
+    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kCascade, nullptr, false, {}, {}});
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

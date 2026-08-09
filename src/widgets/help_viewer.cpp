@@ -26,8 +26,8 @@ HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
 
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                const ui::StandardRoles& roles, ui::Application& app,
-                               ui::View* restore_focus_to) {
-    auto window = std::make_unique<Window>("Help");
+                               ui::View* restore_focus_to, const StandardStrings& strings) {
+    auto window = std::make_unique<Window>(strings.help_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     Window* window_ptr = window.get();
@@ -48,10 +48,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
-    auto back_button = std::make_unique<Button>("Back");
+    auto back_button = std::make_unique<Button>(strings.back);
     auto* back_ptr =
         static_cast<Button*>(button_row->add_item(std::move(back_button), LayoutSpec{SizePolicy::Fixed, 1}));
-    auto close_button = std::make_unique<Button>("Close");
+    auto close_button = std::make_unique<Button>(strings.close);
     close_button->set_default(true);
     auto* close_ptr =
         static_cast<Button*>(button_row->add_item(std::move(close_button), LayoutSpec{SizePolicy::Fixed, 1}));
@@ -109,10 +109,11 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 
 HelpViewerPresentation present_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                            ui::Application& app, Desktop& desktop,
-                                           const ui::StandardRoles& roles) {
+                                           const ui::StandardRoles& roles,
+                                           const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<HelpViewerResult>;
     auto parts = Access::make();
-    auto handle = make_help_viewer(provider, std::move(initial_topic_key), roles, app, app.focused());
+    auto handle = make_help_viewer(provider, std::move(initial_topic_key), roles, app, app.focused(), strings);
     auto previous_on_detached = std::move(handle.window->on_detached);
     handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state]() {
         if (previous) previous();

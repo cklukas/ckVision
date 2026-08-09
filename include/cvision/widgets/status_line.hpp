@@ -33,6 +33,7 @@ using ui::SizeHint;
 struct StatusLineItem {
     std::string label;
     ui::CommandId command = ui::kInvalidCommand;
+    int priority = 0;  // higher priority survives first on narrow status lines
 };
 
 // Resolves its own theme role from context() once attached (M9
@@ -71,6 +72,12 @@ private:
     // from the registry, e.g. "Alt+X Quit".
     std::string effective_label(const StatusLineItem& item) const;
     int item_start_column(std::size_t index) const;
+    struct LaidOutItem {
+        std::size_t index = 0;
+        int x = 0;
+        int width = 0;
+    };
+    std::vector<LaidOutItem> visible_items() const;
 
     std::vector<StatusLineItem> items_;
     std::function<std::string(const std::string&)> hint_provider_;

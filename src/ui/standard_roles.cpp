@@ -43,6 +43,10 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.input_normal = registry.intern("ckv.input.normal", Style{kBlack, kWhite, Attr{}});
     r.input_focused = registry.intern("ckv.input.focused", Style{kBlack, kWhite, Attr::Underline});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
+    r.message_info_text = registry.intern("ckv.message.info.text", Style{kBlack, kLightGray, Attr{}});
+    r.message_warning_text = registry.intern("ckv.message.warning.text", Style{kBlack, kLightGray, Attr::Bold});
+    r.message_error_text = registry.intern("ckv.message.error.text", Style{kWhite, kRed, Attr::Bold});
+    r.message_confirm_text = registry.intern("ckv.message.confirm.text", Style{kBlack, kLightGray, Attr{}});
     r.window_frame_active = registry.intern("ckv.window.frame.active", Style{kWhite, kBlue, Attr::Bold});
     r.window_frame_inactive = registry.intern("ckv.window.frame.inactive", Style{kLightGray, kBlue, Attr{}});
     r.window_title_active = registry.intern("ckv.window.title.active", Style{kWhite, kBlue, Attr::Bold});
@@ -89,6 +93,10 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.input_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.input_focused, Style{kBlack, kWhite, Attr::Underline});
     theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
+    theme.set(roles.message_info_text, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.message_warning_text, Style{kBlack, kLightGray, Attr::Bold});
+    theme.set(roles.message_error_text, Style{kWhite, kRed, Attr::Bold});
+    theme.set(roles.message_confirm_text, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.window_frame_active, Style{kWhite, kBlue, Attr::Bold});
     theme.set(roles.window_frame_inactive, Style{kLightGray, kBlue, Attr{}});
     theme.set(roles.window_title_active, Style{kWhite, kBlue, Attr::Bold});
@@ -160,6 +168,10 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
+    theme.set(roles.message_info_text, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.message_warning_text, Style{kDarkYellow, kDarkPanel, Attr::Bold});
+    theme.set(roles.message_error_text, Style{kMonoFg, kDarkRed, Attr::Bold});
+    theme.set(roles.message_confirm_text, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_frame_active, Style{kMonoFg, kDarkFocus, Attr::Bold});
     theme.set(roles.window_frame_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_title_active, Style{kMonoFg, kDarkAccent, Attr::Bold});
@@ -202,6 +214,10 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
+    theme.set(roles.message_info_text, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.message_warning_text, Style{kLightFg, kLightYellow, Attr::Bold});
+    theme.set(roles.message_error_text, Style{kMonoFg, kLightRed, Attr::Bold});
+    theme.set(roles.message_confirm_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_frame_active, Style{kLightFg, kLightFocus, Attr::Bold});
     theme.set(roles.window_frame_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_title_active, Style{kLightFg, kLightAccent, Attr::Bold});
@@ -244,6 +260,10 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.input_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.input_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
+    theme.set(roles.message_info_text, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.message_warning_text, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.message_error_text, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
+    theme.set(roles.message_confirm_text, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.window_frame_active, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.window_frame_inactive, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.window_title_active, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});

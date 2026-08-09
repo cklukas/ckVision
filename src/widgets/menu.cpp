@@ -28,11 +28,18 @@ int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index
     return x;
 }
 
+bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
+    for (const ui::View* p = &view; p != nullptr; p = p->parent())
+        if (p == &ancestor) return true;
+    return false;
+}
+
 }  // namespace
 
 // --- DropdownMenu ------------------------------------------------------
 
-DropdownMenu::DropdownMenu(std::vector<MenuItem> items) : items_(std::move(items)) {}
+DropdownMenu::DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu)
+    : items_(std::move(items)), parent_menu_(parent_menu) {}
 
 DropdownMenu::~DropdownMenu() { dismiss(); }
 
@@ -43,6 +50,13 @@ void DropdownMenu::on_attached() {
         highlighted_role_ = context().roles->find("ckv.menu.dropdown.highlighted");
     if (disabled_role_ == ui::kInvalidRole)
         disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
+    app_ = context().app;
+    for (ui::View* p = parent(); p != nullptr; p = p->parent()) {
+        if (auto* d = dynamic_cast<Desktop*>(p)) {
+            desktop_ = d;
+            break;
+        }
+    }
     // Deferred from construction: item_enabled() below needs
     // context().app, which is only valid from here on.
     highlighted_ = step_selection(-1, +1);
@@ -69,6 +83,10 @@ int DropdownMenu::step_selection(int from, int direction) const {
 
 void DropdownMenu::activate(int index) {
     if (index < 0 || !item_enabled(static_cast<std::size_t>(index))) return;
+    if (!items_[static_cast<std::size_t>(index)].submenu.empty()) {
+        open_submenu(index);
+        return;
+    }
     // Copy what we need out of items_/context() BEFORE dismiss(): on_dismiss
     // may destroy `this` (e.g. MenuBar::close_dropdown() removes this
     // popup from its owning Desktop) — nothing below may read a member
@@ -76,7 +94,7 @@ void DropdownMenu::activate(int index) {
     const ui::CommandId command = items_[static_cast<std::size_t>(index)].command;
     const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].on_activate;
     ui::Application& app = *context().app;
-    dismiss();
+    dismiss_chain();
     if (command != ui::kInvalidCommand)
         app.execute_command(command);
     else if (on_activate)
@@ -84,10 +102,66 @@ void DropdownMenu::activate(int index) {
 }
 
 void DropdownMenu::dismiss() {
+    if (dismissing_) return;
+    dismissing_ = true;
+    close_submenu(false);
     // Copy before invoking: the callback may destroy `this`, so
     // `this->on_dismiss` must not be touched after it starts running.
     const std::function<void()> callback = on_dismiss;
     if (callback) callback();
+}
+
+void DropdownMenu::dismiss_chain() {
+    DropdownMenu* root = this;
+    while (root->parent_menu_ != nullptr) root = root->parent_menu_;
+    root->dismiss();
+}
+
+void DropdownMenu::open_submenu(int index) {
+    if (index < 0 || static_cast<std::size_t>(index) >= items_.size()) return;
+    const MenuItem& item = items_[static_cast<std::size_t>(index)];
+    if (item.submenu.empty() || desktop_ == nullptr || app_ == nullptr) return;
+    close_submenu(false);
+
+    auto submenu = std::make_unique<DropdownMenu>(item.submenu, this);
+    auto* raw = desktop_->add_popup(std::move(submenu));
+    const SizeHint w = raw->horizontal_size_hint();
+    const SizeHint h = raw->vertical_size_hint();
+    const Rect abs = absolute_bounds();
+    const Rect desktop_abs = desktop_->absolute_bounds();
+    int local_x = abs.x + bounds().width - desktop_abs.x - 1;
+    if (local_x + w.preferred > desktop_->bounds().width)
+        local_x = abs.x - desktop_abs.x - w.preferred + 1;
+    const int local_y = abs.y + index - desktop_abs.y;
+    raw->set_bounds(Rect{local_x, local_y, w.preferred, h.preferred});
+    raw->on_dismiss = [this, raw]() {
+        if (child_menu_ == raw) close_submenu(true);
+    };
+    child_menu_ = raw;
+    app_->set_input_capture(raw);
+    invalidate();
+}
+
+void DropdownMenu::close_submenu(bool restore_capture) {
+    DropdownMenu* child = child_menu_;
+    if (child == nullptr) return;
+    child_menu_ = nullptr;
+    if (app_ != nullptr && app_->input_capture() == child) app_->clear_input_capture();
+    if (desktop_ != nullptr) desktop_->remove_popup(child);
+    if (restore_capture && app_ != nullptr) app_->set_input_capture(this);
+    invalidate();
+}
+
+bool DropdownMenu::has_check_column() const noexcept {
+    return std::any_of(items_.begin(), items_.end(), [](const MenuItem& item) {
+        return item.check != MenuItemCheck::None;
+    });
+}
+
+bool DropdownMenu::has_submenu_column() const noexcept {
+    return std::any_of(items_.begin(), items_.end(), [](const MenuItem& item) {
+        return !item.submenu.empty();
+    });
 }
 
 std::string DropdownMenu::item_source_text(const MenuItem& item) const {
@@ -107,9 +181,12 @@ std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) c
 
 SizeHint DropdownMenu::horizontal_size_hint() const {
     int max_width = 0;
+    const int check_columns = has_check_column() ? 2 : 0;
+    const int submenu_columns = has_submenu_column() ? 2 : 0;
     for (const auto& item : items_) {
         if (item.separator) continue;
-        int width = text::text_width(parse_mnemonic(item_source_text(item)).display);
+        int width = check_columns + text::text_width(parse_mnemonic(item_source_text(item)).display) +
+                    submenu_columns;
         if (const auto hint = item_chord_hint(item)) width += 2 + text::text_width(*hint);
         max_width = std::max(max_width, width);
     }
@@ -125,6 +202,7 @@ SizeHint DropdownMenu::vertical_size_hint() const {
 bool DropdownMenu::on_key(const KeyEvent& event) {
     switch (event.chord.key) {
         case Key::Up: {
+            close_submenu(true);
             const int next = step_selection(highlighted_, -1);
             if (next != highlighted_) {
                 highlighted_ = next;
@@ -133,6 +211,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             return true;
         }
         case Key::Down: {
+            close_submenu(true);
             const int next = step_selection(highlighted_, +1);
             if (next != highlighted_) {
                 highlighted_ = next;
@@ -143,6 +222,15 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
         case Key::Enter:
             activate(highlighted_);
             return true;
+        case Key::Right:
+            open_submenu(highlighted_);
+            return true;
+        case Key::Left:
+            if (parent_menu_ != nullptr) {
+                dismiss();
+                return true;
+            }
+            return false;
         case Key::Escape:
             dismiss();
             return true;
@@ -181,6 +269,8 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
 
 void DropdownMenu::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
+    const bool check_column = has_check_column();
+    const bool submenu_column = has_submenu_column();
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
         const MenuItem& item = items_[static_cast<std::size_t>(i)];
         const bool enabled = item_enabled(static_cast<std::size_t>(i));
@@ -192,16 +282,23 @@ void DropdownMenu::draw(scene::Painter& painter) {
             painter.hline(Point{0, i}, bounds().width, scene::LineStyle::Single, style);
         } else {
             const auto parsed = parse_mnemonic(item_source_text(item));
-            int label_columns = std::max(0, bounds().width - 2);
+            const int label_x = check_column ? 3 : 1;
+            const int submenu_columns = submenu_column ? 2 : 0;
+            int label_columns = std::max(0, bounds().width - label_x - 1 - submenu_columns);
+            if (check_column && item.check != MenuItemCheck::None)
+                painter.draw_text(Point{1, i}, item.check == MenuItemCheck::Checked ? "x" : " ", style);
             if (const auto hint = item_chord_hint(item)) {
-                const int hint_x = bounds().width - 1 - text::text_width(*hint);
-                label_columns = std::max(0, hint_x - 2);
-                const int label_end_x = 1 + text::text_width(text::clip_to_width(parsed.display, label_columns));
-                painter.draw_text(Point{1, i}, text::clip_to_width(parsed.display, label_columns), style);
+                const int hint_x = bounds().width - 1 - submenu_columns - text::text_width(*hint);
+                label_columns = std::max(0, hint_x - label_x - 1);
+                const int label_end_x =
+                    label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
+                painter.draw_text(Point{label_x, i}, text::clip_to_width(parsed.display, label_columns), style);
                 if (hint_x > label_end_x) painter.draw_text(Point{hint_x, i}, *hint, style);
             } else {
-                painter.draw_text(Point{1, i}, text::clip_to_width(parsed.display, label_columns), style);
+                painter.draw_text(Point{label_x, i}, text::clip_to_width(parsed.display, label_columns), style);
             }
+            if (submenu_column && !item.submenu.empty() && bounds().width >= 2)
+                painter.draw_text(Point{bounds().width - 2, i}, ">", style);
         }
     }
 }
@@ -380,6 +477,23 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
     };
     app.set_input_capture(raw);
     return raw;
+}
+
+bool is_keyboard_context_menu_request(const KeyEvent& event) noexcept {
+    return event.action == KeyAction::Press && event.chord.key == Key::F10 &&
+           event.chord.modifiers == Modifier::Shift;
+}
+
+DropdownMenu* show_context_menu_for_focus(std::vector<MenuItem> items, ui::Application& app,
+                                          Desktop& desktop) {
+    const Rect desktop_abs = desktop.absolute_bounds();
+    Point position{desktop_abs.x, desktop_abs.y};
+    if (ui::View* focused = app.focused(); focused != nullptr && is_descendant_of(*focused, desktop)) {
+        const Rect focused_abs = focused->absolute_bounds();
+        position = Point{std::clamp(focused_abs.x, desktop_abs.x, std::max(desktop_abs.x, desktop_abs.right() - 1)),
+                         std::clamp(focused_abs.y, desktop_abs.y, std::max(desktop_abs.y, desktop_abs.bottom() - 1))};
+    }
+    return show_context_menu(std::move(items), position, app, desktop);
 }
 
 }  // namespace ckv::widgets

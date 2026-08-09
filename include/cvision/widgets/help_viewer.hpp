@@ -31,6 +31,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
+#include "cvision/widgets/standard_strings.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -69,13 +70,15 @@ private:
 // and focuses its initial_focus in one call; modal presentation is
 // explicit through Desktop::present_modal.
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to);
+                               const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
+                               const StandardStrings& strings = english_standard_strings());
 
 // Presents help modally without a nested loop. Completion occurs only after
 // detachment; close, external detach, and quit all resolve to Closed because
 // the viewer returns no separate selection value.
 [[nodiscard]] HelpViewerPresentation present_help_viewer(const HelpProvider& provider,
                                                           std::string initial_topic_key, ui::Application& app,
-                                                          Desktop& desktop, const ui::StandardRoles& roles);
+                                                          Desktop& desktop, const ui::StandardRoles& roles,
+                                                          const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets
