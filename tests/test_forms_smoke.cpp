@@ -2,6 +2,7 @@
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "forms_app.hpp"
@@ -32,6 +33,11 @@ CK_TEST(forms_example_renders_form_controls_and_chrome) {
     CK_CHECK(f.forms.options()->check_state(1) == ckv::widgets::CheckState::Mixed);
     CK_CHECK(f.forms.mode()->selected() == 0);
     CK_CHECK(f.forms.country()->text() == "DE");
+    CK_CHECK(f.forms.date_picker()->value() == (ckv::widgets::DateValue{2026, 8, 9}));
+    CK_CHECK(f.forms.time_picker()->value() == (ckv::widgets::TimeValue{14, 30, 0}));
+    CK_CHECK(f.forms.spin_box()->value() == 3);
+    CK_CHECK(f.forms.slider()->value() == 40);
+    CK_CHECK(!f.forms.wizard()->can_go_next());
 }
 
 CK_TEST(forms_descriptor_dialog_vetoes_invalid_accept_and_records_valid_completion) {

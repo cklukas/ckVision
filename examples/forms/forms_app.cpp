@@ -7,6 +7,7 @@
 
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -72,7 +73,7 @@ void FormsApp::build_chrome() {
 
 void FormsApp::build_window() {
     auto window = std::make_unique<widgets::Window>("Forms");
-    window->set_bounds(Rect{4, 3, 58, 16});
+    window->set_bounds(Rect{4, 3, 68, 19});
     window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
                               roles_.dialog_background);
     window->close_request = [this] { return close_allowed_; };
@@ -115,21 +116,53 @@ void FormsApp::build_window() {
     country_ = country.get();
     content->add_child(std::move(country));
 
+    auto date = std::make_unique<widgets::DatePicker>();
+    date->set_bounds(Rect{1, 10, 13, 1});
+    date->set_value(widgets::DateValue{2026, 8, 9});
+    date_picker_ = date.get();
+    content->add_child(std::move(date));
+
+    auto time = std::make_unique<widgets::TimePicker>();
+    time->set_bounds(Rect{16, 10, 10, 1});
+    time->set_value(widgets::TimeValue{14, 30, 0});
+    time_picker_ = time.get();
+    content->add_child(std::move(time));
+
+    auto spin = std::make_unique<widgets::SpinBox>();
+    spin->set_bounds(Rect{30, 13, 10, 1});
+    spin->set_range(0, 10);
+    spin->set_value(3);
+    spin_box_ = spin.get();
+    content->add_child(std::move(spin));
+
+    auto slider = std::make_unique<widgets::Slider>();
+    slider->set_bounds(Rect{42, 13, 18, 1});
+    slider->set_value(40);
+    slider_ = slider.get();
+    content->add_child(std::move(slider));
+
+    auto wizard = std::make_unique<widgets::Wizard>();
+    wizard->set_bounds(Rect{47, 4, 16, 5});
+    wizard->set_pages({widgets::WizardPage{"Step 1", [this] { return !name_input_->text().empty(); }},
+                       widgets::WizardPage{"Step 2", [] { return true; }}});
+    wizard_ = wizard.get();
+    content->add_child(std::move(wizard));
+
     auto dialog = std::make_unique<widgets::Button>("&Profile...");
-    dialog->set_bounds(Rect{1, 11, 14, 2});
+    dialog->set_bounds(Rect{1, 14, 14, 2});
     dialog->set_default(true);
     dialog->on_press = [this] { present_profile_dialog(); };
     dialog_button_ = dialog.get();
     content->add_child(std::move(dialog));
 
     auto message = std::make_unique<widgets::Button>("&Info");
-    message->set_bounds(Rect{18, 11, 12, 2});
+    message->set_bounds(Rect{18, 14, 12, 2});
     message->on_press = [this] { present_info_message(); };
     message_button_ = message.get();
     content->add_child(std::move(message));
 
     auto help = std::make_unique<widgets::Button>("&Help");
-    help->set_bounds(Rect{33, 11, 12, 2});
+    help->set_bounds(Rect{33, 14, 12, 2});
     help->on_press = [this] { present_help(); };
     help_button_ = help.get();
     content->add_child(std::move(help));

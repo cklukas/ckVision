@@ -89,6 +89,13 @@ unless explicitly marked post-0.1 below.
 | Notification center / toast | Severity-styled transient/persistent messages with keyboard dismissal | Timing, if any, must be injected; no hidden wall-clock reads |
 | Tooltip / popover | Focus/pointer-triggered explanatory popup with deterministic placement | Keyboard-accessible invocation; same popup dismissal discipline as menus |
 
+**Implementation status.** WP-36B implements the 0.1 common-component set in
+`include/cvision/widgets/common_components.hpp` and
+`src/widgets/common_components.cpp`, with focused coverage in
+`tests/test_common_components.cpp` and example integration in `examples/forms`
+and `examples/workbench`. WP-38 owns the exhaustive state/scheme/reference
+visual matrix before release acceptance.
+
 Post-0.1 candidates unless promoted by a recorded decision: tree-table /
 outline-table with columns, chart widgets beyond `Progress`/`Canvas`, rich
 document/code editor, and dockable/floating tool-palette systems.

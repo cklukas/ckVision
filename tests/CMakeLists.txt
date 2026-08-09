@@ -8,6 +8,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_clock_diagnostics_error.cpp
     test_color_style_cell.cpp
     test_command.cpp
+    test_common_components.cpp
     test_compositor.cpp
     test_combo_box.cpp
     test_filesystem.cpp

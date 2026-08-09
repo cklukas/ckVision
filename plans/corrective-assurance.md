@@ -60,7 +60,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | **Implementation complete — gate pending** | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | **Implementation complete — gate pending** | WP-35 | WP-16, WP-18…WP-22; M10 exit |
 | 18 | WP-36A — Comprehensive examples and client capability demos | 2–4 pw | **Implementation complete — gate pending** | WP-36 | M6/M11 example coverage; client usability |
-| 19 | WP-36B — Common widget and UI component expansion | 3–6 pw | Ready | WP-36A | Calendar/date/time, numeric controls, command palette, utility chrome |
+| 19 | WP-36B — Common widget and UI component expansion | 3–6 pw | **Implementation complete — gate pending** | WP-36A | Calendar/date/time, numeric controls, command palette, utility chrome |
 | 20 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
 | 21 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
 
@@ -1834,6 +1834,30 @@ hand-roll them.
 - WP-38 can enumerate these components in the same state/scheme/reference
   matrix as the existing M5/M6 catalog.
 
+**Implementation evidence.** WP-36B adds
+`include/cvision/widgets/common_components.hpp` and
+`src/widgets/common_components.cpp`, covering `CalendarView`, `DatePicker`,
+`TimePicker`, `SpinBox`, `Slider`, `SearchBox`, `CommandPalette`, `ToolBar`,
+`BreadcrumbBar`, `PropertyInspector`, `Wizard`, `NotificationCenter`, and
+`Tooltip`. Date/time values, labels, "today", command data, separators, and
+notification timing are all caller-supplied; the implementation performs no
+locale, timezone, clock, filesystem, or global-registry reads. `CommandPalette`
+and `ToolBar` read the owning `ui::CommandRegistry` through the existing
+application context instead of inventing a parallel command model.
+
+Example integration is public-path: `examples/forms` now shows date/time,
+numeric, slider, and wizard components; `examples/workbench` shows search,
+toolbar, command palette, breadcrumb, property inspector, notifications, and
+tooltip/popover behavior. `suite_test_common_components` covers the new
+component family directly, and the forms/workbench smoke suites assert the
+example object graphs contain the WP-36B components.
+
+Focused verification passed on macOS on 2026-08-09:
+`suite_test_common_components`, `suite_test_forms_smoke`,
+`suite_test_workbench_smoke`, `example_hygiene`, `provenance_check`, and
+`provenance_checker_self_test`. WP-38 still owns the exhaustive
+state/scheme/reference visual matrix for these new components.
+
 ### WP-37 — Windows backend and three-platform matrix
 
 **Purpose.** Put M7 in the same executable queue as every other remaining
@@ -1924,7 +1948,7 @@ and prevent milestone status from outrunning verification again.
 | Missing per-window themes, Desktop plumbing, WP-8 mutation, example cast/checks | WP-35 |
 | Named command contexts and incomplete live menu/status WP-10 | WP-35 |
 | Height-for-width not consumed; unit assertions substituted for M10 scripts/goldens | WP-36 |
-| Smoke-only example set does not yet teach or demonstrate the whole public widget/layout/capability surface | WP-36A, WP-38 |
-| Calendar/date/time and other common client UI components are absent from the catalog and would otherwise be hand-rolled by applications | WP-36B, WP-38 |
+| Example suite now covers the public surface locally; exhaustive state/theme/reference release traceability remains | WP-36A, WP-38 |
+| Common modern components now exist locally; exhaustive state/theme/reference release traceability remains | WP-36B, WP-38 |
 | Windows backend/host and full three-platform matrix remain unaccepted | WP-32, WP-37 |
 | Six appearance dumps, smoke-only examples, incomplete public docs and release evidence | WP-38 |

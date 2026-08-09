@@ -6,6 +6,7 @@
 
 #include "cvision/core/style.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/list_view.hpp"
@@ -91,6 +92,12 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     command_input_ = command.get();
     page->add_child(std::move(command));
 
+    auto toolbar = std::make_unique<widgets::ToolBar>();
+    toolbar->set_bounds(Rect{1, 14, 34, 1});
+    toolbar->set_commands({ui::std_commands::kMenu, ui::std_commands::kQuit});
+    tool_bar_ = toolbar.get();
+    page->add_child(std::move(toolbar));
+
     auto text = std::make_unique<widgets::TextView>();
     text->set_bounds(Rect{39, 1, 30, 12});
     text->set_spans({widgets::TextSpan{"TextView links export as ", static_cast<Attr>(0), std::nullopt},
@@ -150,6 +157,18 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     progress_ = progress.get();
     page->add_child(std::move(progress));
 
+    auto search = std::make_unique<widgets::SearchBox>();
+    search->set_bounds(Rect{1, 15, 22, 1});
+    search->set_query("alpha");
+    search_box_ = search.get();
+    page->add_child(std::move(search));
+
+    auto breadcrumb = std::make_unique<widgets::BreadcrumbBar>();
+    breadcrumb->set_bounds(Rect{25, 15, 30, 1});
+    breadcrumb->set_segments({"workspace", "src", "widgets"});
+    breadcrumb_ = breadcrumb.get();
+    page->add_child(std::move(breadcrumb));
+
     return page;
 }
 
@@ -159,6 +178,30 @@ std::unique_ptr<ui::View> WorkbenchApp::build_help_page() {
     text->set_bounds(Rect{1, 1, 66, 12});
     text->set_text("Workbench combines ordinary app surfaces: text editing, data browsing, commands, tabs, and progress.");
     page->add_child(std::move(text));
+
+    auto palette = std::make_unique<widgets::CommandPalette>();
+    palette->set_bounds(Rect{1, 4, 28, 6});
+    palette->set_query("quit");
+    command_palette_ = palette.get();
+    page->add_child(std::move(palette));
+
+    auto inspector = std::make_unique<widgets::PropertyInspector>();
+    inspector->set_bounds(Rect{32, 4, 28, 5});
+    inspector->set_items({widgets::PropertyItem{"Theme", "Classic", true},
+                          widgets::PropertyItem{"Mode", "Demo", true}});
+    property_inspector_ = inspector.get();
+    page->add_child(std::move(inspector));
+
+    auto notifications = std::make_unique<widgets::NotificationCenter>();
+    notifications->set_bounds(Rect{1, 11, 32, 2});
+    notifications->add(widgets::Notification{widgets::NotificationSeverity::Info, "Indexed commands are searchable", true});
+    notifications_ = notifications.get();
+    page->add_child(std::move(notifications));
+
+    auto tooltip = std::make_unique<widgets::Tooltip>("Tooltip / popover text");
+    tooltip->show_at(Point{36, 11});
+    tooltip_ = tooltip.get();
+    page->add_child(std::move(tooltip));
     return page;
 }
 

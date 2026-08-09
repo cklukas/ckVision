@@ -11,14 +11,21 @@
 #include "cvision/widgets/desktop.hpp"
 
 namespace ckv::widgets {
+class BreadcrumbBar;
+class CommandPalette;
 class ComboBox;
 class InputLine;
 class ListView;
 class Memo;
+class NotificationCenter;
+class PropertyInspector;
 class Progress;
+class SearchBox;
 class TabControl;
 class Table;
 class TextView;
+class ToolBar;
+class Tooltip;
 class TreeView;
 class Window;
 }  // namespace ckv::widgets
@@ -40,6 +47,13 @@ public:
     widgets::ListView* list() const noexcept { return list_; }
     widgets::ComboBox* combo() const noexcept { return combo_; }
     widgets::Progress* progress() const noexcept { return progress_; }
+    widgets::SearchBox* search_box() const noexcept { return search_box_; }
+    widgets::ToolBar* tool_bar() const noexcept { return tool_bar_; }
+    widgets::CommandPalette* command_palette() const noexcept { return command_palette_; }
+    widgets::BreadcrumbBar* breadcrumb() const noexcept { return breadcrumb_; }
+    widgets::PropertyInspector* property_inspector() const noexcept { return property_inspector_; }
+    widgets::NotificationCenter* notifications() const noexcept { return notifications_; }
+    widgets::Tooltip* tooltip() const noexcept { return tooltip_; }
     const std::optional<std::string>& last_link() const noexcept { return last_link_; }
 
 private:
@@ -64,6 +78,13 @@ private:
     widgets::ListView* list_ = nullptr;
     widgets::ComboBox* combo_ = nullptr;
     widgets::Progress* progress_ = nullptr;
+    widgets::SearchBox* search_box_ = nullptr;
+    widgets::ToolBar* tool_bar_ = nullptr;
+    widgets::CommandPalette* command_palette_ = nullptr;
+    widgets::BreadcrumbBar* breadcrumb_ = nullptr;
+    widgets::PropertyInspector* property_inspector_ = nullptr;
+    widgets::NotificationCenter* notifications_ = nullptr;
+    widgets::Tooltip* tooltip_ = nullptr;
     std::optional<std::string> last_link_;
 };
 

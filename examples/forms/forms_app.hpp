@@ -12,11 +12,16 @@
 
 namespace ckv::widgets {
 class Button;
+class DatePicker;
 class CheckGroup;
 class ComboBox;
 class InputLine;
 class RadioGroup;
+class Slider;
+class SpinBox;
 class StatusLine;
+class TimePicker;
+class Wizard;
 class Window;
 }  // namespace ckv::widgets
 
@@ -32,6 +37,11 @@ public:
     widgets::CheckGroup* options() const noexcept { return options_; }
     widgets::RadioGroup* mode() const noexcept { return mode_; }
     widgets::ComboBox* country() const noexcept { return country_; }
+    widgets::DatePicker* date_picker() const noexcept { return date_picker_; }
+    widgets::TimePicker* time_picker() const noexcept { return time_picker_; }
+    widgets::SpinBox* spin_box() const noexcept { return spin_box_; }
+    widgets::Slider* slider() const noexcept { return slider_; }
+    widgets::Wizard* wizard() const noexcept { return wizard_; }
     widgets::Button* dialog_button() const noexcept { return dialog_button_; }
     widgets::Button* message_button() const noexcept { return message_button_; }
     widgets::Button* help_button() const noexcept { return help_button_; }
@@ -63,6 +73,11 @@ private:
     widgets::CheckGroup* options_ = nullptr;
     widgets::RadioGroup* mode_ = nullptr;
     widgets::ComboBox* country_ = nullptr;
+    widgets::DatePicker* date_picker_ = nullptr;
+    widgets::TimePicker* time_picker_ = nullptr;
+    widgets::SpinBox* spin_box_ = nullptr;
+    widgets::Slider* slider_ = nullptr;
+    widgets::Wizard* wizard_ = nullptr;
     widgets::Button* dialog_button_ = nullptr;
     widgets::Button* message_button_ = nullptr;
     widgets::Button* help_button_ = nullptr;

@@ -287,10 +287,11 @@ Run:
 `ckvision_forms` demonstrates form-level client patterns: `InputLine`,
 `CheckGroup`, `RadioGroup`, editable `ComboBox`, descriptor dialogs with accept
 validation veto, localized `StandardStrings`, modal message boxes, help viewer
-presentation, status hints keyed by help context, and a vetoable window close
-protocol. The smoke suite opens the descriptor dialog through the example
-object graph, verifies invalid accept is vetoed, completes a valid dialog, and
-checks the close-veto path.
+presentation, status hints keyed by help context, common date/time/numeric
+components (`DatePicker`, `TimePicker`, `SpinBox`, `Slider`), `Wizard`, and a
+vetoable window close protocol. The smoke suite opens the descriptor dialog
+through the example object graph, verifies invalid accept is vetoed, completes a
+valid dialog, and checks the close-veto path plus the WP-36B component state.
 
 Run:
 
@@ -303,9 +304,12 @@ Run:
 `ckvision_workbench` is the practical application template. It combines
 `TabControl`, `Memo`, `InputLine` history, `TextView` links and OSC 8 export,
 `TreeView`, multi-select `ListView`, sortable `Table`, `ComboBox`, and
-`Progress` inside ordinary menu/status chrome. The smoke suite verifies the text
-page, activates the public TextView link path, switches to the data page, and
-checks the table/tree/list/combo/progress surface.
+`Progress` inside ordinary menu/status chrome. WP-36B extends it with
+`SearchBox`, `ToolBar`, `CommandPalette`, `BreadcrumbBar`,
+`PropertyInspector`, `NotificationCenter`, and `Tooltip`. The smoke suite
+verifies the text page, activates the public TextView link path, switches to the
+data page, and checks the table/tree/list/combo/progress/common-component
+surface.
 
 Run:
 

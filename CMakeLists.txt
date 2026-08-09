@@ -45,6 +45,7 @@ add_library(cvision
     src/widgets/button.cpp
     src/widgets/canvas.cpp
     src/widgets/combo_box.cpp
+    src/widgets/common_components.cpp
     src/widgets/desktop.cpp
     src/widgets/dialog.cpp
     src/widgets/directory_picker.cpp

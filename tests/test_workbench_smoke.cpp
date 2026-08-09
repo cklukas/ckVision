@@ -2,6 +2,7 @@
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/memo.hpp"
@@ -54,7 +55,20 @@ CK_TEST(workbench_data_page_contains_table_tree_list_combo_and_progress) {
     CK_CHECK(f.workbench.list()->selected_indices().size() == 1);
     CK_CHECK(f.workbench.combo()->selected_index() == std::optional<std::size_t>{1});
     CK_CHECK(f.workbench.progress()->fraction() > 0.6);
+    CK_CHECK(f.workbench.search_box()->query() == "alpha");
+    CK_CHECK(f.workbench.breadcrumb()->segments().size() == 3);
 
     f.workbench.table()->sort_by(1, true);
     CK_CHECK(f.workbench.table()->sort_column() == 1);
+}
+
+CK_TEST(workbench_help_page_contains_command_and_utility_components) {
+    Fixture f;
+    f.workbench.tabs()->set_active_index(2);
+    f.app.step(0);
+
+    CK_CHECK(f.workbench.command_palette()->highlighted_command().has_value());
+    CK_CHECK(f.workbench.property_inspector()->items().size() == 2);
+    CK_CHECK(f.workbench.notifications()->notifications().size() == 1);
+    CK_CHECK(f.workbench.tooltip()->shown());
 }
