@@ -2,23 +2,11 @@
 //
 // Help viewer: context topics (F1 from any view via help-context keys,
 // D-027 — already routed by Application::set_help_provider), activatable
-// cross-links, back navigation (plans/widgets.md M6c baseline). The
-// library defines no help file format — HelpProvider is the injected
-// content interface an application implements over whatever storage
-// it wants (MemoryHelpProvider, provided here, is the in-memory/test
-// form).
-//
-// Scope note (documented, not an oversight): "activatable cross-links"
-// are a topic's own explicit link LIST (HelpTopic::links), shown as a
-// separate selectable list below the body text — not inline hyperlinks
-// hit-testable within the running prose. Genuine inline-text link
-// activation needs per-character hit-testing machinery TextView
-// doesn't have (and which plans/widgets.md itself marks beyond-
-// baseline for Text view specifically); this delivers the same
-// end-user capability — jump to a related topic, keyboard or mouse,
-// with back navigation — through a mechanism that composes with what
-// already exists rather than inventing rich-text hit-testing under
-// time pressure.
+// cross-links, back navigation, and provider-backed index/keyword lookup
+// (plans/widgets.md M6c baseline). The library defines no help file format —
+// HelpProvider is the injected content interface an application implements
+// over whatever storage it wants (MemoryHelpProvider, provided here, is the
+// in-memory/test form).
 #pragma once
 
 #include <memory>
@@ -47,18 +35,29 @@ struct HelpTopic {
     std::vector<std::pair<std::string, std::string>> links;  // {topic_key, display_label}
 };
 
+struct HelpIndexEntry {
+    std::string key;
+    std::string title;
+
+    friend bool operator==(const HelpIndexEntry&, const HelpIndexEntry&) = default;
+};
+
 class HelpProvider {
 public:
     virtual ~HelpProvider() = default;
     // Implementation-defined (but never throwing/crashing) for an
     // unknown key — MemoryHelpProvider returns a "Not Found" topic.
     virtual HelpTopic topic(const std::string& key) const = 0;
+    virtual std::vector<HelpIndexEntry> index() const = 0;
+    virtual std::vector<HelpIndexEntry> search(std::string_view keyword) const = 0;
 };
 
 class MemoryHelpProvider final : public HelpProvider {
 public:
     void add_topic(std::string key, HelpTopic topic);
     HelpTopic topic(const std::string& key) const override;
+    std::vector<HelpIndexEntry> index() const override;
+    std::vector<HelpIndexEntry> search(std::string_view keyword) const override;
 
 private:
     std::unordered_map<std::string, HelpTopic> topics_;

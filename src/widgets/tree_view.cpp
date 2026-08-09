@@ -15,6 +15,12 @@ void TreeView::on_attached() {
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
 }
 
+void TreeView::set_connector_style(TreeConnectorStyle style) {
+    if (connector_style_ == style) return;
+    connector_style_ = style;
+    invalidate();
+}
+
 void TreeView::set_roots(std::vector<TreeNode> roots) {
     roots_ = std::move(roots);
     auto entries = visible_entries();
@@ -206,8 +212,19 @@ void TreeView::draw(scene::Painter& painter) {
 
         const VisibleEntry& entry = entries[static_cast<std::size_t>(index)];
         const int indent = entry.depth * 2;
-        const std::string twisty =
-            !entry.node->might_have_children() ? "  " : (entry.node->expanded ? "- " : "+ ");
+        const std::string twisty = [&] {
+            if (connector_style_ == TreeConnectorStyle::Minimal)
+                return !entry.node->might_have_children() ? std::string("  ")
+                                                          : (entry.node->expanded ? std::string("- ")
+                                                                                  : std::string("+ "));
+            if (connector_style_ == TreeConnectorStyle::Ascii)
+                return !entry.node->might_have_children() ? std::string("`-")
+                                                          : (entry.node->expanded ? std::string("--")
+                                                                                  : std::string("+-"));
+            return !entry.node->might_have_children() ? std::string("└─")
+                                                      : (entry.node->expanded ? std::string("├▼")
+                                                                              : std::string("├▶"));
+        }();
         painter.draw_text(Point{indent, row}, twisty, style);
         painter.draw_text(Point{indent + 2, row}, entry.node->label, style);
     }

@@ -15,10 +15,13 @@
 
 #include <functional>
 #include <memory>
+#include <cstddef>
 #include <string>
+#include <vector>
 
 #include "cvision/core/filesystem.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/history.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
@@ -30,6 +33,25 @@ namespace ckv::widgets {
 class Desktop;
 
 enum class FileDialogMode { Open, Save };
+
+struct FileDialogFilter {
+    std::string label;
+    // Case-insensitive file suffixes. ".txt" and "txt" both match
+    // "report.txt". Directories are never removed by file filters.
+    std::vector<std::string> extensions;
+};
+
+struct FileDialogOptions {
+    std::vector<FileDialogFilter> filters;
+    std::size_t active_filter = 0;
+    bool show_hidden = false;
+
+    // Optional recent-location registry. The dialog records the current
+    // directory on accept and shows still-existing directories as navigable
+    // "Recent: ..." rows at the top of the list.
+    ui::HistoryRegistry* recent_locations = nullptr;
+    std::string recent_locations_key = "ckv.file_dialog.recent_locations";
+};
 
 struct FileDialogResult {
     bool accepted = false;
@@ -53,12 +75,23 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                                std::function<void(FileDialogResult)> on_result,
                                const StandardStrings& strings = english_standard_strings());
 
+WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                               FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
+                               ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
+                               const StandardStrings& strings = english_standard_strings());
+
 // Presents a file dialog modally without a nested loop. Completion
 // occurs only after detachment; an accepted result wins, while close,
 // external detach, and quit resolve to {false, ""}.
 [[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, ui::Application& app,
                                                           Desktop& desktop, const ui::StandardRoles& roles,
+                                                          const StandardStrings& strings = english_standard_strings());
+
+[[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+                                                          const FileSystem& fs, FileDialogOptions options,
+                                                          ui::Application& app, Desktop& desktop,
+                                                          const ui::StandardRoles& roles,
                                                           const StandardStrings& strings = english_standard_strings());
 
 // Blocking convenience for an application that owns the outer loop. It uses
@@ -68,6 +101,11 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // ends the outer pump resolves to the same cancelled result as Esc.
 FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                   ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                  const StandardStrings& strings = english_standard_strings());
+
+FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                  FileDialogOptions options, ui::Application& app, Desktop& desktop,
+                                  const ui::StandardRoles& roles,
                                   const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets

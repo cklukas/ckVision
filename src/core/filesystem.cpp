@@ -1,30 +1,60 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/core/filesystem.hpp"
 
+#include <cctype>
+
 namespace ckv {
 
 namespace {
+bool drive_absolute(std::string_view path) noexcept {
+    return path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) != 0 && path[1] == ':' &&
+           (path[2] == '/' || path[2] == '\\');
+}
+
 std::string normalize(std::string_view path) {
-    std::string p(path);
-    if (p.empty() || p.front() != '/') p = "/" + p;
-    while (p.size() > 1 && p.back() == '/') p.pop_back();
+    std::string p;
+    p.reserve(path.size());
+    bool previous_slash = false;
+    for (char ch : path) {
+        const bool slash = ch == '/' || ch == '\\';
+        if (slash) {
+            if (!previous_slash) p.push_back('/');
+            previous_slash = true;
+        } else {
+            p.push_back(ch);
+            previous_slash = false;
+        }
+    }
+    if (p.empty()) p = "/";
+    if (p.front() != '/' && !drive_absolute(p)) p = "/" + p;
+    while (p.size() > 1 && !(p.size() == 3 && p[1] == ':' && p[2] == '/') && p.back() == '/') p.pop_back();
     return p;
 }
 }  // namespace
 
+std::string FileSystem::normalize_path(std::string_view path) const { return normalize(path); }
+
+bool FileSystem::is_absolute_path(std::string_view path) const noexcept {
+    return !path.empty() && (path.front() == '/' || path.front() == '\\' || drive_absolute(path));
+}
+
 std::string FileSystem::join(std::string_view directory, std::string_view name) const {
-    std::string dir(directory);
+    std::string dir = normalize_path(directory);
     while (dir.size() > 1 && dir.back() == '/') dir.pop_back();
     std::string n(name);
+    for (char& ch : n)
+        if (ch == '\\') ch = '/';
     while (!n.empty() && n.front() == '/') n.erase(n.begin());
     if (dir == "/") return "/" + n;
-    return dir + "/" + n;
+    return normalize_path(dir + "/" + n);
 }
 
 std::string FileSystem::parent(std::string_view path) const {
-    const std::string p = normalize(path);
+    const std::string p = normalize_path(path);
     if (p == "/") return "/";
     const std::size_t pos = p.find_last_of('/');
+    if (p.size() == 3 && p[1] == ':' && p[2] == '/') return p;
+    if (pos == 2 && p[1] == ':') return p.substr(0, 3);
     if (pos == std::string::npos || pos == 0) return "/";
     return p.substr(0, pos);
 }

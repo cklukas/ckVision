@@ -76,6 +76,23 @@ CK_TEST(draw_with_a_real_image_calls_the_mandatory_fallback_and_does_not_crash) 
     CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "[");
 }
 
+CK_TEST(draw_with_a_real_image_adds_a_raster_region_at_the_widget_cell_anchor) {
+    Fixture f;
+    ImageView view;
+    view.set_context(f.ctx());
+    view.set_bounds(Rect{0, 0, 10, 5});
+    auto image = std::make_shared<Image>(8, 8);
+    view.set_image(image);
+    Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 10, 5});
+    view.draw(painter);
+
+    CK_CHECK(s.raster_regions().size() == 1);
+    CK_CHECK(s.raster_regions()[0].anchor == (Rect{0, 0, 10, 5}));
+    CK_CHECK(s.raster_regions()[0].image == image);
+    CK_CHECK(s.raster_regions()[0].fallback_active);
+}
+
 CK_TEST(replacing_the_image_uses_a_different_raster_id_each_time_a_new_view_is_constructed) {
     // Each ImageView instance must have its own stable raster id
     // (Painter::draw_image requires uniqueness "among this surface's

@@ -52,6 +52,62 @@ CK_TEST(setting_pixel_size_with_no_draw_callback_still_renders_via_the_mandatory
     CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "[");
 }
 
+CK_TEST(cell_metrics_derive_the_canvas_pixel_size_from_the_widget_bounds) {
+    Fixture f;
+    Canvas canvas;
+    canvas.set_context(f.ctx());
+    canvas.set_bounds(Rect{0, 0, 4, 3});
+    canvas.set_cell_metrics(ckv::Size{2, 3});
+    CK_CHECK(canvas.pixel_size() == (ckv::Size{8, 9}));
+    CK_CHECK(canvas.cell_metrics() == (ckv::Size{2, 3}));
+}
+
+CK_TEST(resizing_a_metric_driven_canvas_reallocates_and_redraws_at_the_new_pixel_size) {
+    Fixture f;
+    Canvas canvas;
+    canvas.set_context(f.ctx());
+    canvas.set_bounds(Rect{0, 0, 4, 3});
+    canvas.set_cell_metrics(ckv::Size{2, 3});
+    int calls = 0;
+    ckv::Size seen;
+    canvas.set_draw_callback([&](ckv::Image& image) {
+        ++calls;
+        seen = ckv::Size{image.width(), image.height()};
+    });
+    {
+        Surface s(ckv::Size{10, 10}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+        Painter painter(s, Rect{0, 0, 10, 10});
+        canvas.draw(painter);
+    }
+    CK_CHECK(calls == 1);
+    CK_CHECK(seen == (ckv::Size{8, 9}));
+
+    canvas.set_bounds(Rect{0, 0, 5, 4});
+    {
+        Surface s(ckv::Size{10, 10}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+        Painter painter(s, Rect{0, 0, 10, 10});
+        canvas.draw(painter);
+    }
+    CK_CHECK(calls == 2);
+    CK_CHECK(seen == (ckv::Size{10, 12}));
+}
+
+CK_TEST(canvas_draw_adds_a_raster_region_with_the_widget_cell_anchor) {
+    Fixture f;
+    Canvas canvas;
+    canvas.set_context(f.ctx());
+    canvas.set_bounds(Rect{0, 0, 4, 3});
+    canvas.set_cell_metrics(ckv::Size{2, 2});
+    Surface s(ckv::Size{4, 3}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 4, 3});
+    canvas.draw(painter);
+
+    CK_CHECK(s.raster_regions().size() == 1);
+    CK_CHECK(s.raster_regions()[0].anchor == (Rect{0, 0, 4, 3}));
+    CK_CHECK(s.raster_regions()[0].image->width() == 8);
+    CK_CHECK(s.raster_regions()[0].image->height() == 6);
+}
+
 // --- Draw callback invocation ------------------------------------------
 
 // Each canvas.draw() call adds a raster region to whatever Surface its

@@ -13,6 +13,7 @@ using ckv::Modifier;
 using ckv::Rect;
 using ckv::scene::Painter;
 using ckv::scene::Surface;
+using ckv::widgets::TextSpan;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
@@ -30,7 +31,9 @@ struct Fixture {
 
 TextView make_view(Fixture&) { return TextView(); }
 
-ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
+ckv::KeyEvent key(ckv::Key k, Modifier modifier = Modifier::None) {
+    return ckv::KeyEvent{KeyChord{k, modifier, ""}};
+}
 
 std::string row_text(const Surface& s, int y) {
     std::string out;
@@ -60,6 +63,59 @@ CK_TEST(newlines_split_into_separate_lines_including_a_trailing_empty_one) {
     auto view = make_view(f);
     view.set_text("a\nb\nc\n");
     CK_CHECK(view.line_count() == 4);  // "a", "b", "c", ""
+}
+
+CK_TEST(spans_build_plain_text_lines_and_link_inventory) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_spans({TextSpan{"Open ", static_cast<ckv::Attr>(0), std::nullopt},
+                    TextSpan{"Docs", ckv::Attr::Bold, std::string("https://example.test/docs")},
+                    TextSpan{"\nNext", static_cast<ckv::Attr>(0), std::string("next-topic")}});
+
+    CK_CHECK(view.text() == "Open Docs\nNext");
+    CK_CHECK(view.line_count() == 2);
+    CK_CHECK(view.link_count() == 2);
+    CK_CHECK(view.current_link() == 0);
+}
+
+CK_TEST(tab_cycles_links_and_enter_activates_the_current_link) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_spans({TextSpan{"One", static_cast<ckv::Attr>(0), std::string("one")},
+                    TextSpan{" Two", static_cast<ckv::Attr>(0), std::string("two")}});
+
+    std::string activated;
+    view.on_link_activate = [&](const std::string& target) { activated = target; };
+    CK_CHECK(view.on_key(key(Key::Tab)));
+    CK_CHECK(view.current_link() == 1);
+    CK_CHECK(view.on_key(key(Key::Tab, Modifier::Shift)));
+    CK_CHECK(view.current_link() == 0);
+    CK_CHECK(view.on_key(key(Key::Enter)));
+    CK_CHECK(activated == "one");
+}
+
+CK_TEST(mouse_click_on_a_link_activates_that_link) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_bounds(Rect{0, 0, 20, 3});
+    view.set_spans({TextSpan{"Go ", static_cast<ckv::Attr>(0), std::nullopt},
+                    TextSpan{"there", static_cast<ckv::Attr>(0), std::string("target")}});
+
+    std::string activated;
+    view.on_link_activate = [&](const std::string& target) { activated = target; };
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 0},
+                                            std::nullopt, Modifier::None}));
+    CK_CHECK(activated == "target");
+}
+
+CK_TEST(osc8_text_wraps_link_spans_and_strips_control_bytes) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_spans({TextSpan{"See ", static_cast<ckv::Attr>(0), std::nullopt},
+                    TextSpan{"Docs", static_cast<ckv::Attr>(0), std::string("https://example.test/\x1b")},
+                    TextSpan{"\n", static_cast<ckv::Attr>(0), std::nullopt}});
+
+    CK_CHECK(view.osc8_text() == "See \x1b]8;;https://example.test/\x1b\\Docs\x1b]8;;\x1b\\\n");
 }
 
 // --- Scrolling: keyboard -------------------------------------------------
@@ -158,6 +214,24 @@ CK_TEST(draw_renders_the_lines_starting_at_the_current_scroll_position) {
     view.draw(painter);
     CK_CHECK(row_text(s, 0).substr(0, 6) == "second");
     CK_CHECK(row_text(s, 1).substr(0, 5) == "third");
+}
+
+CK_TEST(draw_applies_inline_and_link_styles) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_context(f.ctx());
+    view.set_bounds(Rect{0, 0, 20, 3});
+    view.set_spans({TextSpan{"A", ckv::Attr::Bold, std::nullopt},
+                    TextSpan{"B", ckv::Attr::Italic, std::string("target")}});
+
+    Surface s(ckv::Size{20, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 3});
+    view.draw(painter);
+
+    CK_CHECK(ckv::has_attr(s.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Bold));
+    CK_CHECK(ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Italic));
+    CK_CHECK(ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Underline));
+    CK_CHECK(ckv::has_attr(s.at(ckv::Point{1, 0}).style().attrs, ckv::Attr::Reverse));
 }
 
 CK_TEST(draw_leaves_rows_past_the_end_of_content_blank_without_crashing) {

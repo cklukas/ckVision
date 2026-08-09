@@ -19,6 +19,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::HelpTopic;
+using ckv::widgets::HelpIndexEntry;
 using ckv::widgets::make_help_viewer;
 using ckv::widgets::present_help_viewer;
 using ckv::widgets::MemoryHelpProvider;
@@ -55,6 +56,26 @@ CK_TEST(memory_help_provider_returns_a_not_found_topic_for_an_unknown_key) {
     const auto t = provider.topic("nonexistent");
     CK_CHECK(t.title == "Not Found");
     CK_CHECK(t.links.empty());
+}
+
+CK_TEST(memory_help_provider_index_is_sorted_and_stable) {
+    MemoryHelpProvider provider;
+    provider.add_topic("z", HelpTopic{"Zulu", "Last.", {}});
+    provider.add_topic("a", HelpTopic{"Alpha", "First.", {}});
+
+    const std::vector<HelpIndexEntry> expected{{"a", "Alpha"}, {"z", "Zulu"}};
+    CK_CHECK(provider.index() == expected);
+}
+
+CK_TEST(memory_help_provider_keyword_search_matches_key_title_body_and_link_labels) {
+    auto provider = sample_provider();
+
+    const std::vector<HelpIndexEntry> intro{{"intro", "Introduction"}};
+    const std::vector<HelpIndexEntry> details{{"details", "Details"}};
+    CK_CHECK(provider.search("Welcome") == intro);
+    CK_CHECK(provider.search("information") == details);
+    CK_CHECK(provider.search("See details") == intro);
+    CK_CHECK(provider.search("missing").empty());
 }
 
 // --- HelpViewer: construction / navigation --------------------------

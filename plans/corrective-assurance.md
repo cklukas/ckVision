@@ -56,8 +56,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | **Implementation complete — gate pending** | WP-32A | M3 fuzz exit; verification standard |
 | 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | **Implementation complete — gate pending** | WP-33 | M5/M6 catalog gaps |
 | 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | **Implementation complete — gate pending** | WP-34A | M4/M6 control gaps |
-| 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | Blocked | WP-34B | M6 remaining catalog gaps |
-| 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Blocked | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
+| 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | **Implementation complete — gate pending** | WP-34B | M6 remaining catalog gaps |
+| 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Ready | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Blocked | WP-35 | WP-16, WP-18…WP-22; M10 exit |
 | 18 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
 | 19 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
@@ -1516,6 +1516,35 @@ catalog ledger that prevents another silent scope gap.
   goldens under Sixel plus cell-fallback goldens under no-graphics.
 - Gallery inventory and draft public reference pages include every shipped
   widget and standard dialog, ready for WP-38's final matrix audit.
+
+**Progress checkpoint (2026-08-09).** TextView now supports structured spans,
+inline attributes, activatable link spans, keyboard and mouse link activation,
+and deterministic OSC 8 text export. HelpProvider now exposes provider-backed
+index and keyword search, and MemoryHelpProvider supplies deterministic sorted
+index/search results. D-041-aligned Table and Tree comments/catalog rows now
+state the materialized 0.1 model and move virtualized providers post-0.1.
+FileDialog now exposes options for file filters, hidden-entry toggling, and
+recent-location history, uses FileSystem path normalization for separator
+portable accept/completion behavior, and keeps all listing/completion tests on
+MemoryFileSystem. Canvas now derives backing pixel size from injected cell
+metrics on metric or widget resize, and ImageView/Canvas focused tests assert
+their raster anchors, mandatory fallback, and dual-space mouse forwarding.
+
+Local evidence: `cmake --build build --target cvision_tests --parallel 4`
+passed on macOS, and focused WP-34C suites `suite_test_text_view` and
+`suite_test_help_viewer` passed 2/2; focused filesystem/dialog suites
+`suite_test_filesystem` and `suite_test_file_dialog` passed 2/2; focused media
+suites `suite_test_canvas` and `suite_test_image_view` passed 2/2; focused
+data/layout suites `suite_test_table`, `suite_test_tree_view`, and
+`suite_test_splitter` passed 3/3; focused standard-dialog suites
+`suite_test_directory_picker` and `suite_test_window_list_dialog` passed 2/2.
+The full local CTest matrix then passed **96/96**, including
+`gallery_visual_capture`, `filebrowser_visual_capture`, `hello_visual_capture`,
+`layer_check`, `provenance_check`, `provenance_checker_self_test`,
+`test_inventory`, `hello_line_budget`, and `scene_budget_gate`; `git diff
+--check` was also clean. WP-38 still owns promotion from gate-pending to
+`Done` through the final cross-platform/cross-scheme visual and reference
+matrix.
 
 ### WP-35 — Theme, command presentation, composition, and example ergonomics closure
 

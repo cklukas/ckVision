@@ -1,19 +1,11 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// Table: columns with headers, resize, sort indicators, cell styling
-// hook (plans/widgets.md — Table has NO baseline column in the
-// catalog, its entire listed feature set is beyond-baseline; this
-// implements that full listed set except virtualized rows).
-//
-// Scope note (documented, not an oversight): no virtualized rows — the
-// whole row set is held and sorted in memory, matching every other
-// M6a/M6b list-shaped widget's "no virtualized model in v1" precedent
-// (ListView, TreeView). Sort is a single-column stable string compare
-// (lexicographic on the cell text) — typed/numeric sort comparators
-// are a natural follow-on once a concrete caller needs one. No
-// keyboard column navigation or cell-level selection in v1 — only
-// row-level cursor movement, matching ListView's own row model; column
-// resize is mouse-drag only.
+// Table: columns with headers, resize, sort indicators, and cell styling hook
+// (plans/widgets.md — Table has no baseline column; the listed 0.1 behavior is
+// beyond-baseline). Per D-041, rows are materialized values in 0.1; virtualized
+// rows and table-cell editing are post-0.1. Sort is a single-column stable
+// string compare (lexicographic on the cell text). Keyboard navigation is
+// row-level, matching ListView's row model; column resize is mouse-drag.
 #pragma once
 
 #include <functional>

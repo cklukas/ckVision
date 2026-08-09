@@ -50,6 +50,24 @@ CK_TEST(parent_ignores_a_trailing_slash) {
     CK_CHECK(fs.parent("/a/b/") == "/a");
 }
 
+CK_TEST(normalize_path_accepts_backslashes_and_collapses_repeated_separators) {
+    MemoryFileSystem fs;
+    CK_CHECK(fs.normalize_path("\\a\\\\b\\") == "/a/b");
+}
+
+CK_TEST(join_normalizes_backslashes_in_a_relative_name_fragment) {
+    MemoryFileSystem fs;
+    CK_CHECK(fs.join("/base", "other\\file.txt") == "/base/other/file.txt");
+}
+
+CK_TEST(is_absolute_path_accepts_posix_root_and_drive_root_spellings) {
+    MemoryFileSystem fs;
+    CK_CHECK(fs.is_absolute_path("/a"));
+    CK_CHECK(fs.is_absolute_path("\\a"));
+    CK_CHECK(fs.is_absolute_path("C:\\a"));
+    CK_CHECK(!fs.is_absolute_path("relative"));
+}
+
 // --- MemoryFileSystem: add / exists / is_directory -----------------------
 
 CK_TEST(the_root_always_exists_as_a_directory) {

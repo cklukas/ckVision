@@ -123,11 +123,11 @@ reference acceptance is missing.
 | ComboBox editable/pick-only/history/shadow behavior | Combo box beyond-baseline | WP-34B |
 | Scrollbar auto-hide and viewport wheel delivery over descendant content; semantic cell-line scrolling | Scrollbar / Scroll viewport | WP-31, WP-34B; scroll-region byte-diff optimization moved out of widget catalog by D-041 |
 | TabControl complete behavior | Tab control beyond-baseline | WP-34B |
-| Table resize/sort/virtualized/styled-cell model | Table beyond-baseline | WP-34C or a new settled re-scope decision |
-| Tree virtualized model/connector styles and complete lazy/navigation integration | Tree beyond-baseline | WP-34C, WP-36; re-scope decision required for any remainder |
+| Table resize/sort/styled-cell model | Table beyond-baseline | WP-34C; virtualized rows moved post-0.1 by D-041 |
+| Tree connector styles and complete lazy/navigation integration | Tree beyond-baseline | WP-34C, WP-36; virtualized model moved post-0.1 by D-041 |
 | Progress complete behavior | Progress beyond-baseline | WP-34B |
 | Splitter keyboard adjustment and integrated resize/golden behavior | Splitter beyond-baseline | WP-34C, WP-36 |
-| TextView activatable links, OSC 8 rendering, and inline styles | Text view beyond-baseline | WP-34C |
+| TextView activatable links, OSC 8 export, and inline styles | Text view beyond-baseline | WP-34C |
 | Help cross-links/back/index/provider behavior | Help viewer baseline/beyond-baseline | WP-34C |
 | ImageView scaling, fallback, occlusion/scroll, dual-space pointer matrix, and paired decoded-Sixel/no-graphics visual captures | Image view beyond-baseline; raster acceptance | WP-32A, WP-34C, WP-38 |
 | Canvas automatically derives pixel size from cell metrics, redraws on metric/size change, and passes paired decoded-Sixel/no-graphics visual captures | Canvas beyond-baseline | WP-32A, WP-34C |
@@ -140,3 +140,22 @@ The catalog currently says M6 implements both baseline and beyond-baseline
 columns. Therefore “post-0.1” is not a valid state by ledger annotation alone.
 WP-34A…WP-34C must either implement such an item for 0.1 or record a settled decision
 that changes ROADMAP/catalog scope before code or status is changed.
+
+## WP-34C traceability matrix
+
+This matrix is the WP-34C replacement for narrative catalog assertions for the
+data, media, help, file, and remaining standard-dialog rows. WP-38 still owns
+the exhaustive cross-scheme visual/reference promotion gate.
+
+| Catalog item | 0.1 implementation / scope authority | Executable evidence | State |
+|---|---|---|---|
+| Table headers, resize, sort indicators, styled-cell hook | `widgets::Table`, `TableColumn`, `Table::sort_by`, `Table::set_cell_style_hook`; virtualized rows and cell editor are post-0.1 by D-041 | `suite_test_table` | Implemented locally |
+| Tree expand/collapse, keyboard/mouse navigation, lazy population, connector styles | `widgets::TreeView`, `TreeNode::children_known`, `TreeView::on_expand_request`, `TreeConnectorStyle`; virtualized provider is post-0.1 by D-041 | `suite_test_tree_view` | Implemented locally |
+| Splitter keyboard-adjustable panes | `widgets::Splitter::on_key`, `set_split_position`, size-hint clamp; integrated resize golden remains WP-36 | `suite_test_splitter` | Implemented locally; integrated golden deferred to WP-36 |
+| TextView links, OSC 8, inline styles | `widgets::TextView::set_spans`, `TextSpan`, `on_link_activate`, `osc8_text` | `suite_test_text_view` | Implemented locally |
+| Help viewer cross-links, back, index/keyword lookup, injected provider | `HelpProvider`, `MemoryHelpProvider::index/search`, `make_help_viewer`, `present_help_viewer` | `suite_test_help_viewer` | Implemented locally |
+| ImageView fallback, raster anchor, dual-space mouse | `widgets::ImageView`, mandatory `Painter::draw_image` fallback, full `MouseEvent` forwarding | `suite_test_image_view`; final paired decoded/fallback captures remain WP-38 | Implemented locally; final visual matrix deferred to WP-38 |
+| Canvas metric-derived pixel size, fallback, raster anchor, redraw on metric/size change, dual-space mouse | `widgets::Canvas::set_cell_metrics`, `pixel_size`, `on_resized`, mandatory fallback, full `MouseEvent` forwarding | `suite_test_canvas`; final paired decoded/fallback captures remain WP-38 | Implemented locally; final visual matrix deferred to WP-38 |
+| File open/save completion, filters, recent locations, hidden toggle, injected filesystem, separator-portable paths | `FileDialogOptions`, `FileDialogFilter`, `CompletingInputLine`, `FileSystem::normalize_path/is_absolute_path`, `MemoryFileSystem` | `suite_test_file_dialog`, `suite_test_filesystem` | Implemented locally |
+| Directory picker tree selection | `make_directory_picker`, `present_directory_picker` over injected `FileSystem` | `suite_test_directory_picker` | Implemented locally |
+| Window list keyboard/mouse/filter/close behavior | `make_window_list_dialog`, type-ahead/filter and activation/close behavior | `suite_test_window_list_dialog` | Implemented locally |

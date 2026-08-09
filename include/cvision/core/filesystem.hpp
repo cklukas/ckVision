@@ -8,11 +8,11 @@
 // supplies a real implementation at the application boundary; tests
 // use MemoryFileSystem.
 //
-// Scope note: paths are opaque, forward-slash-joined strings — no
-// platform-specific path semantics (drive letters, backslashes,
-// symlink resolution) in v1. Cross-platform path handling is called
-// out as a beyond-baseline File dialog feature in plans/widgets.md;
-// this is the minimal contract real dialogs need today.
+// Paths are normalized by the injected filesystem contract before dialog logic
+// reasons about them. The default implementation treats '/' and '\' as
+// separators, collapses repeated separators, strips redundant trailing
+// separators, and recognizes POSIX-rooted and drive-rooted absolute paths.
+// Platform adapters may override when their host semantics differ.
 #pragma once
 
 #include <string>
@@ -41,8 +41,12 @@ public:
     virtual bool exists(std::string_view path) const noexcept = 0;
     virtual bool is_directory(std::string_view path) const noexcept = 0;
 
+    virtual std::string normalize_path(std::string_view path) const;
+    virtual bool is_absolute_path(std::string_view path) const noexcept;
+
     // Forward-slash joins `directory` and `name` (collapsing a
-    // trailing/leading slash so the result never has "//").
+    // trailing/leading slash so the result never has "//"). Absolute-path
+    // acceptance is caller policy; join() treats `name` as a child fragment.
     virtual std::string join(std::string_view directory, std::string_view name) const;
 
     // The path with its last "/segment" removed; "/" for a path with

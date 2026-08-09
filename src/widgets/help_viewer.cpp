@@ -1,6 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/help_viewer.hpp"
 
+#include <algorithm>
+#include <cctype>
+
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/desktop.hpp"
@@ -14,6 +17,18 @@ using ui::Column;
 using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
+
+std::string lowercase(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (unsigned char ch : text) out.push_back(static_cast<char>(std::tolower(ch)));
+    return out;
+}
+
+bool contains_case_insensitive(std::string_view haystack, std::string_view needle) {
+    if (needle.empty()) return true;
+    return lowercase(haystack).find(lowercase(needle)) != std::string::npos;
+}
 }  // namespace
 
 void MemoryHelpProvider::add_topic(std::string key, HelpTopic topic) { topics_[std::move(key)] = std::move(topic); }
@@ -22,6 +37,33 @@ HelpTopic MemoryHelpProvider::topic(const std::string& key) const {
     auto it = topics_.find(key);
     if (it != topics_.end()) return it->second;
     return HelpTopic{"Not Found", "No help is available for this topic.", {}};
+}
+
+std::vector<HelpIndexEntry> MemoryHelpProvider::index() const {
+    std::vector<HelpIndexEntry> entries;
+    entries.reserve(topics_.size());
+    for (const auto& [key, topic] : topics_) entries.push_back(HelpIndexEntry{key, topic.title});
+    std::sort(entries.begin(), entries.end(), [](const HelpIndexEntry& a, const HelpIndexEntry& b) {
+        if (a.title != b.title) return a.title < b.title;
+        return a.key < b.key;
+    });
+    return entries;
+}
+
+std::vector<HelpIndexEntry> MemoryHelpProvider::search(std::string_view keyword) const {
+    std::vector<HelpIndexEntry> entries;
+    for (const auto& [key, topic] : topics_) {
+        bool match = contains_case_insensitive(key, keyword) || contains_case_insensitive(topic.title, keyword) ||
+                     contains_case_insensitive(topic.body, keyword);
+        for (const auto& [link_key, label] : topic.links)
+            match = match || contains_case_insensitive(link_key, keyword) || contains_case_insensitive(label, keyword);
+        if (match) entries.push_back(HelpIndexEntry{key, topic.title});
+    }
+    std::sort(entries.begin(), entries.end(), [](const HelpIndexEntry& a, const HelpIndexEntry& b) {
+        if (a.title != b.title) return a.title < b.title;
+        return a.key < b.key;
+    });
+    return entries;
 }
 
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,

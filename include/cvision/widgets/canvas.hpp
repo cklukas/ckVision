@@ -8,14 +8,10 @@
 // owned by Canvas and repainted by an application-supplied callback
 // rather than displaying a caller-owned Image.
 //
-// Scope note: Canvas does NOT query terminal cell-pixel metrics
-// itself — core/ui/widgets never touch the environment directly
-// (D-039's injected-impurity discipline extends here too), so
-// "redraw on resize" means the OWNER calls set_pixel_size() with
-// (cell box × cell metrics) computed from the term layer's own
-// capability data whenever either changes; Canvas's own on_resized()
-// only marks content stale, it cannot compute the new pixel size
-// without that externally-owned information.
+// Canvas never queries terminal cell-pixel metrics itself — core/ui/widgets
+// do not touch the environment directly (D-039). The owner injects current
+// cell metrics with set_cell_metrics(); Canvas then derives its pixel backing
+// from its cell bounds automatically on metric or widget resize.
 #pragma once
 
 #include <functional>
@@ -36,10 +32,14 @@ public:
     void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
 
     // (width, height) in PIXELS (not cells) — the owner computes this
-    // from the widget's cell box and the terminal's cell-pixel metrics.
-    // Reallocates the backing Image and marks content stale; a no-op
-    // if the size is unchanged.
+    // when manual sizing is desired. Reallocates the backing Image and marks
+    // content stale; a no-op if the size is unchanged. Manual sizing disables
+    // automatic metric-derived sizing until set_cell_metrics() is called again.
     void set_pixel_size(int width, int height);
+    Size pixel_size() const noexcept;
+
+    void set_cell_metrics(Size cell_pixels);
+    Size cell_metrics() const noexcept { return cell_pixels_; }
 
     // Invoked with the backing Image whenever content needs repainting
     // (after set_pixel_size changes the size, or after
@@ -55,10 +55,16 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_resized() override;
     void on_attached() override;
 
 private:
+    void resize_backing_image(Size pixel_size);
+    void update_pixel_size_from_metrics();
+
     std::shared_ptr<Image> image_;
+    Size cell_pixels_{0, 0};
+    bool derive_pixel_size_from_metrics_ = false;
     bool content_dirty_ = true;
     std::function<void(Image&)> draw_callback_;
     int raster_id_;

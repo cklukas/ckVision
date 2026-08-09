@@ -3,11 +3,15 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/widgets/button.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/list_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -21,6 +25,8 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::FileDialogMode;
+using ckv::widgets::FileDialogOptions;
+using ckv::widgets::FileDialogFilter;
 using ckv::widgets::FileDialogResult;
 using ckv::widgets::exec_file_dialog;
 using ckv::widgets::make_file_dialog;
@@ -42,6 +48,24 @@ MemoryFileSystem sample_fs() {
 }
 
 ckv::KeyEvent key(ckv::Key k, ckv::Modifier m = Modifier::None) { return ckv::KeyEvent{KeyChord{k, m, ""}}; }
+
+template <class T>
+T* find_descendant(ckv::ui::View& view) {
+    if (auto* typed = dynamic_cast<T*>(&view)) return typed;
+    for (const auto& child : view.children()) {
+        if (auto* found = find_descendant<T>(*child)) return found;
+    }
+    return nullptr;
+}
+
+ckv::widgets::Button* find_button(ckv::ui::View& view, std::string_view text) {
+    if (auto* button = dynamic_cast<ckv::widgets::Button*>(&view); button != nullptr && button->text() == text)
+        return button;
+    for (const auto& child : view.children()) {
+        if (auto* found = find_button(*child, text)) return found;
+    }
+    return nullptr;
+}
 }  // namespace
 
 // --- Construction / initial listing --------------------------------
@@ -112,6 +136,113 @@ CK_TEST(activating_a_file_entry_fills_the_path_field_rather_than_navigating) {
     // accepting through the default button and checking the result.
     window_ptr->accept_request();
     CK_CHECK(result_calls == 1);
+}
+
+CK_TEST(filters_limit_visible_files_and_the_filter_button_cycles_filters) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    fs.add_file("/home/user/notes.md");
+
+    FileDialogOptions options;
+    options.filters = {FileDialogFilter{"Text", {".txt"}}, FileDialogFilter{"All", {}}};
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, std::move(options), f.roles, app,
+                                   nullptr, nullptr);
+    auto* list = static_cast<ckv::widgets::ListView*>(handle.initial_focus);
+    const std::vector<std::string> text_only{"..", "docs/", "readme.txt"};
+    CK_CHECK(list->items() == text_only);
+
+    auto* filter = find_button(*handle.window, "Filter: Text");
+    CK_CHECK(filter != nullptr);
+    filter->on_press();
+    const std::vector<std::string> all_files{"..", "docs/", "notes.md", "readme.txt"};
+    CK_CHECK(list->items() == all_files);
+}
+
+CK_TEST(hidden_toggle_reveals_and_hides_dot_entries_without_host_filesystem_access) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    fs.add_file("/home/user/.secret");
+
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr, nullptr);
+    auto* list = static_cast<ckv::widgets::ListView*>(handle.initial_focus);
+    const std::vector<std::string> hidden_off{"..", "docs/", "readme.txt"};
+    CK_CHECK(list->items() == hidden_off);
+
+    auto* hidden = find_button(*handle.window, "Show Hidden");
+    CK_CHECK(hidden != nullptr);
+    hidden->on_press();
+    const std::vector<std::string> hidden_on{"..", "docs/", ".secret", "readme.txt"};
+    CK_CHECK(list->items() == hidden_on);
+
+    hidden = find_button(*handle.window, "Hide Hidden");
+    CK_CHECK(hidden != nullptr);
+    hidden->on_press();
+    CK_CHECK(list->items() == hidden_off);
+}
+
+CK_TEST(recent_locations_are_listed_as_navigable_rows_and_accept_records_the_current_directory) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    ckv::ui::HistoryRegistry recent;
+    recent.record("recent-files", "/home/user/docs");
+
+    FileDialogOptions options;
+    options.recent_locations = &recent;
+    options.recent_locations_key = "recent-files";
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, std::move(options), f.roles, app,
+                                   nullptr, nullptr);
+    auto* list = static_cast<ckv::widgets::ListView*>(handle.initial_focus);
+    CK_CHECK(list->items().front() == "Recent: /home/user/docs");
+
+    list->on_activate(0);
+    const std::vector<std::string> docs_listing{"Recent: /home/user/docs", "..", "report.txt"};
+    CK_CHECK(list->items() == docs_listing);
+
+    ckv::widgets::Window* window_ptr = handle.window.get();
+    window_ptr->accept_request();
+    CK_CHECK(recent.entries("recent-files").front() == "/home/user/docs");
+}
+
+CK_TEST(path_field_tab_completion_uses_the_filtered_injected_directory_listing) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr, nullptr);
+    auto* input = find_descendant<ckv::widgets::InputLine>(*handle.window);
+    CK_CHECK(input != nullptr);
+    input->set_text("doc");
+    CK_CHECK(input->on_key(key(Key::Tab)));
+    CK_CHECK(input->text() == "/home/user/docs/");
+}
+
+CK_TEST(relative_paths_with_backslashes_are_normalized_against_the_current_directory_on_accept) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    FileDialogResult result;
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
+                                   [&](FileDialogResult r) { result = std::move(r); });
+    auto* input = find_descendant<ckv::widgets::InputLine>(*handle.window);
+    CK_CHECK(input != nullptr);
+    input->set_text("docs\\report.txt");
+
+    handle.window->accept_request();
+    CK_CHECK(result.accepted);
+    CK_CHECK(result.path == "/home/user/docs/report.txt");
 }
 
 // --- Accept / cancel -----------------------------------------------

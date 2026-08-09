@@ -2,18 +2,24 @@
 #include "cvision/widgets/tree_view.hpp"
 
 #include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
 using ckv::Modifier;
 using ckv::Rect;
+using ckv::scene::Painter;
+using ckv::scene::Surface;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::TreeNode;
+using ckv::widgets::TreeConnectorStyle;
 using ckv::widgets::TreeView;
 
 namespace {
@@ -21,11 +27,18 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 
 TreeView make_tree(Fixture&) { return TreeView(); }
 
 ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
+
+std::string row_text(const Surface& surface, int row) {
+    std::string out;
+    for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, row}).grapheme();
+    return out;
+}
 
 std::vector<TreeNode> sample_forest() {
     TreeNode child1{.label = "child1"};
@@ -61,6 +74,44 @@ CK_TEST(collapsed_children_are_not_reachable_by_down_arrow) {
     tree.set_roots(sample_forest());  // "parent" starts collapsed
     tree.on_key(key(Key::Down));
     CK_CHECK(tree.selected()->label == "leaf");  // skipped straight past parent's hidden children
+}
+
+CK_TEST(connector_style_defaults_to_minimal) {
+    Fixture f;
+    auto tree = make_tree(f);
+    CK_CHECK(tree.connector_style() == TreeConnectorStyle::Minimal);
+}
+
+CK_TEST(ascii_connector_style_draws_printable_branch_prefixes) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(TreeConnectorStyle::Ascii);
+    tree.set_roots(sample_forest());
+
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+
+    CK_CHECK(row_text(surface, 0).substr(0, 2) == "+-");
+    CK_CHECK(row_text(surface, 1).substr(0, 2) == "`-");
+}
+
+CK_TEST(box_drawing_connector_style_draws_box_branch_prefixes) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(TreeConnectorStyle::BoxDrawing);
+    tree.set_roots(sample_forest());
+
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+
+    CK_CHECK(row_text(surface, 0).substr(0, 6) == "├▶");
+    CK_CHECK(row_text(surface, 1).substr(0, 6) == "└─");
 }
 
 // --- Expand / collapse -----------------------------------------------

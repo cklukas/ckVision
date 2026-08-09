@@ -9,10 +9,10 @@
 // std::vector<TreeNode> and invalidate them — set_roots() with a
 // freshly built forest is the sanctioned way to change the content).
 //
-// Scope note (documented, not an oversight): no virtualized model
-// (explicitly beyond-baseline) — the whole forest is flattened to its
-// visible entries on every navigation/draw, fine for the tree sizes a
-// TUI actually shows.
+// Per D-041, the 0.1 tree model is materialized: the whole forest is flattened
+// to its visible entries on navigation/draw. A virtualized provider is
+// post-0.1 scope; lazy expansion through on_expand_request remains part of the
+// materialized model.
 #pragma once
 
 #include <any>
@@ -26,6 +26,12 @@
 #include "cvision/widgets/scrollbar.hpp"
 
 namespace ckv::widgets {
+
+enum class TreeConnectorStyle {
+    Minimal,     // existing compact "+ "/"- " twisties
+    Ascii,       // "+-"/"--"/"`-" printable connectors
+    BoxDrawing,  // box-drawing connectors for capable terminals
+};
 
 struct TreeNode {
     std::string label;
@@ -77,6 +83,9 @@ public:
         normal_role_ = normal_role;
         selected_role_ = selected_role;
     }
+
+    void set_connector_style(TreeConnectorStyle style);
+    TreeConnectorStyle connector_style() const noexcept { return connector_style_; }
 
     void set_roots(std::vector<TreeNode> roots);
     TreeNode* selected() const noexcept { return cursor_node_; }
@@ -140,6 +149,7 @@ private:
     std::vector<TreeNode> roots_;
     TreeNode* cursor_node_ = nullptr;
     Scrollbar* scrollbar_ = nullptr;
+    TreeConnectorStyle connector_style_ = TreeConnectorStyle::Minimal;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;

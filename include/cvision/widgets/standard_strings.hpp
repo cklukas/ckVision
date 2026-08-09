@@ -19,6 +19,9 @@ struct StandardStrings {
     std::string open = "Open";
     std::string save = "Save";
     std::string select = "Select";
+    std::string filter = "Filter";
+    std::string show_hidden = "Show Hidden";
+    std::string hide_hidden = "Hide Hidden";
 
     std::string open_file_title = "Open File";
     std::string save_file_title = "Save File";
