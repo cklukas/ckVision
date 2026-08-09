@@ -67,7 +67,7 @@ bool run_scene_benchmarks() {
     ui::Application app(terminal, clock);
     const ui::StandardRoles roles = ui::intern_standard_roles(app.roles());
     app.theme() = ui::make_classic_theme(app.roles(), roles);
-    auto desktop_owned = std::make_unique<widgets::Desktop>(Rect{}, app.theme(), roles.desktop_background);
+    auto desktop_owned = std::make_unique<widgets::Desktop>(Rect{});
     widgets::Desktop* desktop = desktop_owned.get();
     auto window_owned = std::make_unique<widgets::Window>("Benchmark Window");
     window_owned->set_bounds(Rect{10, 5, 30, 10});

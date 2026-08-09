@@ -66,6 +66,33 @@ widgets and dialogs, never per-widget state.
 | Image view | — | Shows an `Image` scaled to its cell box; mandatory fallback content; dual-space (cell + pixel) mouse events where the terminal reports pixels |
 | Canvas | — | Application draws RGBA at the widget's current pixel size (cell box × cell metrics, redraw on resize); mandatory fallback painter; dual-space mouse events |
 
+## Common modern components (WP-36B)
+
+These are not replacements for the classic M5/M6 catalog; they are the
+additional components a practical client library should provide so common
+applications do not hand-roll inconsistent patterns. They are 0.1-planned
+unless explicitly marked post-0.1 below.
+
+| Component | Baseline | Beyond baseline / notes |
+|---|---|---|
+| Calendar view | Month grid, keyboard/mouse day selection, range/disabled-date support, current-day styling, caller-supplied labels | Optional ISO week row; no library locale/timezone/clock reads |
+| Date picker | Input/dropdown or dialog-backed date selection over Calendar view | Formatting/parsing policy supplied by options or caller callbacks |
+| Time picker | Hour/minute/second selection, 12/24-hour display option | No locale/global state; optional seconds field |
+| Spin box / numeric stepper | Integer value with min/max/step, arrows/buttons/wheel, validation feedback | Optional editable text field |
+| Slider | Horizontal bounded numeric value selection with keyboard/mouse operation | Optional tick labels |
+| Search box / filter bar | InputLine plus clear/status affordance for filtering list/table/tree/text content | Debounce, if any, must use injected clock/timer; no hidden wall-clock reads |
+| Command palette | Searchable command popup over `ui::CommandRegistry` | Honors command contexts, enablement, labels/chords, retraction, and rebinding live |
+| Tool bar / action bar | Compact command-button row, dockable top/bottom, keyboard/mouse complete | Overflow policy on narrow widths; shares CommandPresentation with menu/status |
+| Breadcrumb bar | Segment navigation with overflow elision and keyboard focus | Caller supplies path semantics/separators; no filesystem access in widget |
+| Property inspector | Two-column name/value editor with typed cell editors and validation | Integrates text/bool/enum/numeric/date-time editors as they exist |
+| Wizard / assistant | Multi-page workflow shell with Back/Next/Finish/Cancel and per-page validation | Progress/step indicator and typed non-blocking completion |
+| Notification center / toast | Severity-styled transient/persistent messages with keyboard dismissal | Timing, if any, must be injected; no hidden wall-clock reads |
+| Tooltip / popover | Focus/pointer-triggered explanatory popup with deterministic placement | Keyboard-accessible invocation; same popup dismissal discipline as menus |
+
+Post-0.1 candidates unless promoted by a recorded decision: tree-table /
+outline-table with columns, chart widgets beyond `Progress`/`Canvas`, rich
+document/code editor, and dockable/floating tool-palette systems.
+
 ## Standard dialogs (M6)
 
 | Dialog | Baseline | Beyond baseline |
@@ -74,6 +101,7 @@ widgets and dialogs, never per-widget state.
 | Directory picker | Tree-based selection | — |
 | Window list | Select/activate/close from list | Type-ahead filter |
 | Theme editor | — | Enumerates theme roles from the flat tables, edits styles with live preview, produces a theme value the application persists (M11) |
+| Date/time picker dialogs | Calendar/time selection using the WP-36B components | Localizable labels supplied through explicit string/options tables; no locale reads |
 
 ## Explicitly not widgets
 
@@ -134,6 +162,8 @@ reference acceptance is missing.
 | File open/save completion, filters, recent locations, hidden toggle, injected filesystem, and cross-platform paths | File dialog baseline/beyond-baseline | WP-28, WP-34C |
 | Directory picker and Window list full keyboard/mouse/filter/close behavior | Standard dialogs | WP-34A, WP-34C |
 | Desktop typed snapshot/restore | Desktop beyond-baseline | WP-34A |
+| Comprehensive client-facing examples cover every widget, layout, dialog, graphics/degradation path, and command/theme capability through public API | Example suite / client usability | WP-36A, WP-38 |
+| Calendar, date/time picker, numeric stepper, slider, search/filter, command palette, toolbar, breadcrumb, property inspector, wizard, notifications, and tooltip/popover | Common modern components | WP-36B, WP-38 |
 | Every widget × applicable active/inactive/focused/disabled state × Classic/Dark/Light/Mono, plus scripts and reference docs | Cross-cutting acceptance; M6 exit | WP-38 |
 
 The catalog currently says M6 implements both baseline and beyond-baseline

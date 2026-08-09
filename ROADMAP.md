@@ -4,7 +4,7 @@ Milestones are sequential; each has binding exit criteria. No dates —
 sequence and criteria only. Original milestone effort figures are coarse
 historical planning aids (focused person-weeks, one senior developer driving
 agent tooling); their former 26–34 pw total no longer describes the reopened
-scope. The corrective queue carries a new 40–65 pw estimate, subject to WP-23's
+scope. The corrective queue carries a new 46–77 pw estimate, subject to WP-23's
 provenance/authority rebaseline.
 
 M8–M10 were inserted by the 2026-08-07 API-ergonomics and integration
@@ -43,7 +43,7 @@ status authority.
 | M3 | **Reopened** — the initial Sixel/no-graphics virtual display and captures have landed, but its full pixel-golden/state matrix, security, fuzzing, degradation/restoration, p99, and backend evidence remain incomplete | WP-27, WP-29, WP-31, WP-32A, WP-33, WP-37, WP-38 |
 | M4 | **Reopened** — root/input/modality/platform-service/zero-allocation/command-context exits are incomplete | WP-24, WP-25, WP-27, WP-28, WP-31, WP-32, WP-35, WP-38 |
 | M5 | **Reopened** — Desktop lifetime, modality, backing stores, menu/catalog, hello, scripts, and goldens are incomplete | WP-25…WP-27, WP-31, WP-34A, WP-35, WP-38 |
-| M6 | **Reopened** — catalog features, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, gallery coverage, and reference docs are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-38 |
+| M6 | **Reopened** — catalog features, common modern components, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, comprehensive example coverage, and reference docs are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-36A, WP-36B, WP-38 |
 | M7 | **Open / host-blocked** — Windows backend/full matrix has not met its exit | WP-32, WP-37; host availability remains explicit |
 | M8 | **Reopened** — corrected WP-24…WP-26 implementations still require example integration and the global matrix | WP-35, WP-38 |
 | M9 | **Reopened** — WP-10 is unfinished and theme, modality, command-context, and remaining example exits are unmet | WP-27, WP-35, WP-38 |
@@ -372,15 +372,18 @@ Graphics polish (kitty-graphics secondary encoder, Sixel palette
 optimization); scheme polish; the theme-editor standard dialog; the
 documentation site assembled from per-milestone reference docs plus
 tutorial and extension guides (worked examples for every §14 extension
-point); examples finalized; fuzz/bench hardening pass.
+point); WP-36A's comprehensive examples polished for release packaging;
+fuzz/bench hardening pass.
 
 Entry gate — WP-34A…WP-34C have closed or formally re-scoped every catalog
-row, WP-38 has verified the complete widget/state/scheme matrix and public
+row, WP-36A has a complete executable example coverage matrix, WP-36B has
+closed or explicitly deferred the common modern components, WP-38 has
+verified the complete widget/state/scheme matrix and public
 reference coverage, and the corrective queue contains no `Ready`, `In progress`, or
 `Blocked` row. Release work does not inherit known corrective debt.
 
 **Exit — 0.1 release criteria:** every VISION.md non-negotiable
-demonstrably works in the gallery on all three platforms; documentation
+demonstrably works in the gallery/showcase examples on all three platforms; documentation
 covers every public API; the tutorial walkthrough is executed by script
 in a clean container/VM per platform and reaches a running hello in
 under ten minutes from documented prerequisites; license decision

@@ -48,3 +48,50 @@ if(UNIX)
     target_link_libraries(ckvision_hello PRIVATE hello_app ckvision::cvision)
     ckvision_strict(ckvision_hello)
 endif()
+
+# WP-36A comprehensive client-facing examples.  Each app follows the same
+# split as the established examples above: reusable object graph library for
+# headless tests plus a thin terminal main where a backend exists.
+add_library(layouts_app STATIC layouts/layouts_app.cpp)
+target_link_libraries(layouts_app PUBLIC ckvision::cvision)
+target_include_directories(layouts_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/layouts)
+ckvision_strict(layouts_app)
+
+if(UNIX)
+    add_executable(ckvision_layouts layouts/main.cpp)
+    target_link_libraries(ckvision_layouts PRIVATE layouts_app ckvision::cvision)
+    ckvision_strict(ckvision_layouts)
+endif()
+
+add_library(forms_app STATIC forms/forms_app.cpp)
+target_link_libraries(forms_app PUBLIC ckvision::cvision)
+target_include_directories(forms_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/forms)
+ckvision_strict(forms_app)
+
+if(UNIX)
+    add_executable(ckvision_forms forms/main.cpp)
+    target_link_libraries(ckvision_forms PRIVATE forms_app ckvision::cvision)
+    ckvision_strict(ckvision_forms)
+endif()
+
+add_library(workbench_app STATIC workbench/workbench_app.cpp)
+target_link_libraries(workbench_app PUBLIC ckvision::cvision)
+target_include_directories(workbench_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/workbench)
+ckvision_strict(workbench_app)
+
+if(UNIX)
+    add_executable(ckvision_workbench workbench/main.cpp)
+    target_link_libraries(ckvision_workbench PRIVATE workbench_app ckvision::cvision)
+    ckvision_strict(ckvision_workbench)
+endif()
+
+add_library(graphics_app STATIC graphics/graphics_app.cpp)
+target_link_libraries(graphics_app PUBLIC ckvision::cvision)
+target_include_directories(graphics_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graphics)
+ckvision_strict(graphics_app)
+
+if(UNIX)
+    add_executable(ckvision_graphics graphics/main.cpp)
+    target_link_libraries(ckvision_graphics PRIVATE graphics_app ckvision::cvision)
+    ckvision_strict(ckvision_graphics)
+endif()

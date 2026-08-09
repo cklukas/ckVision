@@ -3,19 +3,19 @@ title: ckVision Example Applications
 author: C. Klukas
 date: 2026-08-07
 format: report
-description: Gallery and File Browser — ckVision's tested, screenshot-documented example applications.
+description: ckVision's tested example applications and WP-36A coverage matrix.
 ---
 
 # Example applications
 
-ckVision ships example applications the way tvision-sixel does —
-small, complete programs that exercise the library end to end rather
-than isolated widget demos. Each one lives under `examples/<name>/`
-as a plain library-linkable static target (`<name>_app`) plus a thin
-`main.cpp` that attaches it to a real terminal, so the exact same
-object graph an interactive user runs is also what the headless test
-suite drives — a documentation screenshot or a test failure both
-describe the real application, never a simplified stand-in.
+ckVision ships small, complete example applications that exercise the
+library end to end rather than isolated widget demos. Each one lives
+under `examples/<name>/` as a plain library-linkable static target
+(`<name>_app`) plus a thin `main.cpp` that attaches it to a real
+terminal, so the exact same object graph an interactive user runs is
+also what the headless test suite drives — a documentation screenshot
+or a test failure both describe the real application, never a
+simplified stand-in.
 
 This page is generated documentation in the sense that its screenshots
 are: they come from `tools/docgen/capture_gallery_screenshots`, which
@@ -235,6 +235,97 @@ border's path indicator both updated:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ./build/examples/ckvision_filebrowser [path]   # defaults to the current directory
+```
+
+## WP-36A comprehensive demo suite
+
+WP-36A turns the example directory into a client-facing demo suite with a
+checked-in traceability matrix at `plans/example-coverage.md`. `hello`,
+`gallery`, and `filebrowser` remain the established integration examples;
+`layouts`, `forms`, `workbench`, and `graphics` add focused coverage for the
+major public layout, dialog, data/text, and raster surfaces.
+
+The suite is:
+
+| Example | Purpose |
+|---|---|
+| `hello` | Minimal one-screen application: desktop, File menu, status line, command presentation, modal info dialog, and clean loop ownership. |
+| `gallery` | Main showcase shell for chrome, forms, windows, commands, message boxes, themes, and ImageView. |
+| `filebrowser` | Practical master/detail app over a real or injected filesystem: tree/list coordination, Splitter, frame overlays, menu/status chrome, and lazy expansion. |
+| `layouts` | Resize-focused layout lab: Row, Column, Grid, Dock, AnchorPane, Overlay, Splitter, alignment, margins, frame overlays, shrink, and recovery. |
+| `forms` | Dialog and form patterns: descriptor dialogs, validation veto, default/cancel buttons, focus restore, localized `StandardStrings`, help/status context, option groups, combo boxes, and close veto. |
+| `workbench` | Application template: Memo, TextView links/OSC8 export, InputLine history, Table, TreeView, ListView, TabControl, Progress, clipboard-ready editing, commands, and status presentation. |
+| `graphics` | Raster and capability demo: ImageView, Canvas, Sixel/fallback switching, raster occlusion/scrolling, cell/pixel mouse, and deterministic degradation. |
+
+Each example keeps the existing tested-artifact shape:
+
+1. A public-API object graph in `examples/<name>/<name>_app.{hpp,cpp}`.
+2. A thin terminal `main.cpp`.
+3. A headless script suite that drives the same object graph.
+4. Screenshot/visual capture states where the example teaches visible behavior;
+   the exhaustive state/theme visual matrix is WP-38 scope.
+5. A row in the checked-in coverage matrix:
+   public widget/layout/capability → example → scripted interaction → golden or
+   visual artifact → documentation section.
+
+### Layouts (`examples/layouts`)
+
+`ckvision_layouts` is the resize lab. Its single window combines every layout
+container in one public object graph: `Row`, `Column`, `Grid`, `Dock`,
+`AnchorPane`, `Overlay`, `Splitter`, and `Window::add_frame_overlay`. The smoke
+suite renders the labels, adjusts the splitter through keyboard dispatch, and
+resizes the terminal to prove docked chrome and anchored content recover.
+
+Run:
+
+```bash
+./build/examples/ckvision_layouts
+```
+
+### Forms (`examples/forms`)
+
+`ckvision_forms` demonstrates form-level client patterns: `InputLine`,
+`CheckGroup`, `RadioGroup`, editable `ComboBox`, descriptor dialogs with accept
+validation veto, localized `StandardStrings`, modal message boxes, help viewer
+presentation, status hints keyed by help context, and a vetoable window close
+protocol. The smoke suite opens the descriptor dialog through the example
+object graph, verifies invalid accept is vetoed, completes a valid dialog, and
+checks the close-veto path.
+
+Run:
+
+```bash
+./build/examples/ckvision_forms
+```
+
+### Workbench (`examples/workbench`)
+
+`ckvision_workbench` is the practical application template. It combines
+`TabControl`, `Memo`, `InputLine` history, `TextView` links and OSC 8 export,
+`TreeView`, multi-select `ListView`, sortable `Table`, `ComboBox`, and
+`Progress` inside ordinary menu/status chrome. The smoke suite verifies the text
+page, activates the public TextView link path, switches to the data page, and
+checks the table/tree/list/combo/progress surface.
+
+Run:
+
+```bash
+./build/examples/ckvision_workbench
+```
+
+### Graphics (`examples/graphics`)
+
+`ckvision_graphics` isolates raster behavior from the broader gallery:
+`ImageView` shows caller-owned RGBA image data, `Canvas` derives its backing
+pixels from caller-supplied cell metrics, both expose full mouse events, and
+the same frame is tested under Sixel and NoGraphics terminal profiles. The
+exhaustive paired visual captures remain WP-38 release-gate work; WP-36A adds
+the executable public-path example and coverage matrix row.
+
+Run:
+
+```bash
+./build/examples/ckvision_graphics
 ```
 
 ## Adding another example

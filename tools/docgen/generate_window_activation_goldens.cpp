@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     ckv::ui::Application app(terminal, clock);
     const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
     app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
-    auto desktop = std::make_unique<ckv::widgets::Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+    auto desktop = std::make_unique<ckv::widgets::Desktop>(app.root().bounds());
     ckv::widgets::Desktop* const desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 

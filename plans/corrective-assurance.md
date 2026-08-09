@@ -59,10 +59,12 @@ dependent row's package prerequisite; `Blocked` does not.
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | **Implementation complete — gate pending** | WP-34B | M6 remaining catalog gaps |
 | 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | **Implementation complete — gate pending** | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | **Implementation complete — gate pending** | WP-35 | WP-16, WP-18…WP-22; M10 exit |
-| 18 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
-| 19 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
+| 18 | WP-36A — Comprehensive examples and client capability demos | 2–4 pw | **Implementation complete — gate pending** | WP-36 | M6/M11 example coverage; client usability |
+| 19 | WP-36B — Common widget and UI component expansion | 3–6 pw | Ready | WP-36A | Calendar/date/time, numeric controls, command palette, utility chrome |
+| 20 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
+| 21 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
 
-Corrective work is currently estimated at roughly **41–67 focused
+Corrective work is currently estimated at roughly **46–77 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
 re-estimate later rows if its authority/provenance audit invalidates more
 implementation than is currently known; that update changes the estimates,
@@ -1657,6 +1659,181 @@ regression evidence lives in `suite_test_layout`, `suite_test_grid`, and
 `suite_test_dock`; filebrowser lazy expansion/Splitter/payload/callback
 evidence remains in `suite_test_filebrowser_smoke`.
 
+### WP-36A — Comprehensive examples and client capability demos
+
+**Purpose.** Turn examples from a few smoke/integration samples into a client-
+facing demonstration suite comparable in seriousness to classic TUI framework
+demo programs: a new user can run the examples to understand what ckVision can
+build, and maintainers can use the same examples as executable coverage for the
+public API surface.
+
+**Example set.**
+
+- Keep `examples/hello` as the minimal one-screen application and
+  `examples/filebrowser` as the real-filesystem master/detail application.
+- Promote `examples/gallery` into the top-level showcase shell, or replace it
+  with `examples/showcase` if the cleaner design is a fresh object graph. The
+  showcase must expose navigable pages for every widget catalog family:
+  controls, forms, selection widgets, tables/trees/lists, text/memo, standard
+  dialogs, menus/status/commands, themes, graphics/canvas/images, and desktop
+  window management.
+- Add `examples/layouts`: a resize-focused application covering Row, Column,
+  Grid, Dock, AnchorPane, Overlay, Splitter, margins/alignment, frame overlays,
+  terminal-too-small degradation, and recovery.
+- Add `examples/forms`: descriptor dialogs, validation veto, default/cancel
+  buttons, focus restore, message/file/directory/window-list/help dialogs,
+  localization via `StandardStrings`, command contexts, and close veto.
+- Add `examples/workbench`: a practical multi-window application combining
+  `Memo`, `TextView` links/OSC8 export, `InputLine` completion/history,
+  `Table`, `TreeView`, `TabControl`, `Progress`, clipboard operations, help,
+  and status/menu command presentation.
+- Add `examples/graphics`: `ImageView`, `Canvas`, Sixel/fallback switching,
+  raster occlusion/scrolling, cell/pixel mouse, and capability degradation.
+
+**Work.**
+
+- Define a checked-in example coverage matrix:
+  public widget/layout/capability → example → scripted interaction → golden or
+  visual artifact → reference-doc section.
+- Implement every example as the established split target:
+  `examples/<name>/<name>_app.{hpp,cpp}` as a linkable static library plus a
+  thin terminal `main.cpp`; tests must drive the same app object graph as the
+  interactive binary.
+- Extend `example_hygiene` so comprehensive examples still use only public
+  headers, typed insertion APIs, declarative command presentation, injected
+  services, and no duplicate command/chord declarations.
+- Add headless script suites for each example covering keyboard-only,
+  mouse-only where applicable, resize/shrink/recovery, theme switching, modal
+  routing, command enable/disable/retraction where relevant, and deterministic
+  teardown.
+- Add visual capture tools and documentation screenshots for the stable states
+  that teach the API; raster examples need paired Sixel and NoGraphics captures.
+- Update `docs/example-apps.md` into a real example guide: what to run, what
+  each example demonstrates, what code pattern it teaches, and which tests pin
+  the behavior.
+
+**Acceptance.**
+
+- Every public widget, layout container, standard dialog, command/theme surface,
+  injected platform service, graphics/degradation path, and desktop/window
+  behavior has at least one named example and at least one scripted test
+  exercising it through public API.
+- The examples are useful as client templates: no demo-only private hooks, no
+  hidden test-only objects in the interactive path, no hand-wired behavior that
+  should be a library feature.
+- The example coverage matrix has no missing catalog row and no smoke-only row;
+  rows that cannot be visually demonstrated explain why and point to stronger
+  executable evidence.
+- The documentation page includes screenshots for the teaching states and
+  command lines for building/running every example.
+- WP-38 can consume the matrix directly for its final release-gate
+  traceability report instead of rediscovering example coverage from scratch.
+
+**Implementation evidence.** WP-36A adds the checked-in
+`plans/example-coverage.md` matrix and four new split examples:
+`examples/layouts`, `examples/forms`, `examples/workbench`, and
+`examples/graphics`. Each follows the established app-library plus thin
+terminal-main pattern, and each has a focused headless smoke suite wired into
+CTest: `suite_test_layouts_smoke`, `suite_test_forms_smoke`,
+`suite_test_workbench_smoke`, and `suite_test_graphics_smoke`. The examples
+cover the existing layout catalog, descriptor/modal form patterns, practical
+text/data application widgets, and raster/fallback graphics paths while keeping
+`hello`, `gallery`, and `filebrowser` as the minimal/showcase/filesystem
+examples. `docs/example-apps.md` now describes every runnable example and points
+the final release audit to the matrix. The complete WP-38 visual/state/theme
+matrix remains the release-gate owner for exhaustive screenshots; WP-36A
+provides the executable public-path example coverage.
+
+Focused verification passed on macOS on 2026-08-09:
+`suite_test_layouts_smoke`, `suite_test_forms_smoke`,
+`suite_test_workbench_smoke`, `suite_test_graphics_smoke`, `example_hygiene`,
+`provenance_check`, and `provenance_checker_self_test`. Full CTest also passed:
+103/103 tests, including `scene_budget_gate`.
+
+### WP-36B — Common widget and UI component expansion
+
+**Purpose.** Fill practical client-application gaps that were not present in
+the original classic-widget catalog but are expected in a modern terminal UI
+library. This package keeps the 0.1 surface coherent by adding common
+components as first-class widgets instead of letting every example/application
+hand-roll them.
+
+**0.1 component set.**
+
+- `CalendarView`: month grid with ISO week-row option, keyboard/mouse day
+  selection, min/max date range, disabled dates, today/current-day styling, and
+  locale-free caller-supplied month/weekday labels.
+- `DatePicker`: input/dropdown or dialog-backed date selection built on
+  `CalendarView`, using an injected date value rather than reading wall-clock
+  time from the library.
+- `TimePicker`: hour/minute/second selection with 12/24-hour display controlled
+  by options and no locale/global state.
+- `SpinBox` / numeric stepper: integer value entry with min/max/step, keyboard
+  arrows, mouse buttons/wheel, validation feedback, and optional text editing.
+- `Slider`: horizontal value selection for bounded numeric values, keyboard and
+  mouse complete, with optional tick labels.
+- `SearchBox` / filter bar: input line plus clear button/status, intended to
+  drive ListView/Table/Tree/TextView filtering without each application
+  reimplementing the pattern.
+- `CommandPalette`: searchable command popup over `ui::CommandRegistry`,
+  honoring command contexts, enablement, labels/chords, and retraction.
+- `ToolBar` / action bar: compact command-button row with overflow policy,
+  usable as top/bottom dock chrome and driven by the same command presentation
+  model as menus/status lines.
+- `BreadcrumbBar`: path/navigation component with segment activation, overflow
+  elision, keyboard focus, and optional filesystem/path separators supplied by
+  the caller.
+- `PropertyInspector`: two-column property grid for name/value editing using
+  typed editors (text, bool, enum, numeric, date/time where available), with
+  validation veto and change notification.
+- `Wizard`: multi-page guided workflow shell with Back/Next/Finish/Cancel,
+  per-page validation, progress/step indicator, and focus restore.
+- `NotificationCenter` plus toast/notification popup: transient and persistent
+  messages with severity roles, keyboard dismissal, no hidden timers in library
+  code unless driven by injected clock/timers.
+- `Tooltip` / popover: focus or pointer triggered explanatory popup with
+  deterministic placement and keyboard-accessible invocation.
+
+**Explicit post-0.1 candidates unless promoted by decision.**
+
+- Tree-table / outline table with hierarchical rows and columns.
+- Data charts beyond `Progress` and `Canvas`; applications can draw charts on
+  Canvas for 0.1.
+- Rich document/code editor; still out of scope beyond `Memo` and `TextView`.
+- Dockable/floating tool palettes and MDI-style docking systems.
+
+**Work.**
+
+- Update the widget catalog and public docs before implementation so every new
+  component has a behavior contract, theme roles, keyboard grammar, mouse
+  grammar, accessibility/focus contract, and deterministic-test strategy.
+- Implement components without global mutable state, locale reads, filesystem
+  reads, or wall-clock reads. Calendar/date/time labels and "today" values are
+  supplied by the application or injected services.
+- Reuse existing primitives where appropriate: `CommandRegistry`,
+  `CommandPresentation`, `Popup`/menu infrastructure, `InputLine`,
+  `CompletingInputLine`, `ListView`, `Table`, `DialogPresentation`, and
+  `StandardStrings`.
+- Add every new component to the comprehensive examples from WP-36A and to the
+  example coverage matrix; no new widget may land without a client-facing
+  demonstration.
+- Add unit, script, golden/visual where relevant, and documentation coverage for
+  each new component.
+
+**Acceptance.**
+
+- Calendar/date/time selection is deterministic, keyboard/mouse complete,
+  range-aware, theme-covered, and does not consult locale, timezone, clock, or
+  filesystem from library code.
+- CommandPalette and ToolBar are command-registry surfaces, not parallel command
+  systems; they reflect enablement, context, rebindings, and retraction live.
+- SearchBox, BreadcrumbBar, PropertyInspector, Wizard, notifications, and
+  Tooltip/Popover each have public-path scripts and client-facing example pages.
+- The widget catalog has no "common component" row without an owner, executable
+  evidence plan, and post-0.1 decision if deferred.
+- WP-38 can enumerate these components in the same state/scheme/reference
+  matrix as the existing M5/M6 catalog.
+
 ### WP-37 — Windows backend and three-platform matrix
 
 **Purpose.** Put M7 in the same executable queue as every other remaining
@@ -1697,14 +1874,16 @@ and prevent milestone status from outrunning verification again.
 
 - Generate a traceability report from milestone exit item → corrective WP →
   implementation → unit/script/golden/fuzz/benchmark evidence → public docs.
-- Complete the appearance matrix for every widget/chrome element, applicable
-  active/inactive/focused/disabled state, all four built-in schemes, wide text,
-  terminal shrink, and paired Sixel/no-graphics profiles. Raster-bearing rows
-  require both the symbolic scene golden and WP-32A's decoded pixel-plane
-  golden; neither substitutes for the other.
-- Make gallery, hello, filebrowser, form/dialog, menu-only-keyboard,
+- Complete the appearance matrix for every widget/chrome element, including
+  WP-36B's common modern components, applicable active/inactive/focused/disabled
+  state, all four built-in schemes, wide text, terminal shrink, and paired
+  Sixel/no-graphics profiles. Raster-bearing rows require both the symbolic
+  scene golden and WP-32A's decoded pixel-plane golden; neither substitutes for
+  the other.
+- Consume WP-36A's example coverage matrix and promote gallery/showcase, hello,
+  filebrowser, layouts, forms, workbench, graphics, menu-only-keyboard,
   menu-only-mouse, modal, close-veto, restoration, and degradation scenarios
-  byte-exact scripted tests rather than smoke-only assertions.
+  to the final byte-exact scripted/golden release evidence.
 - Write reference documentation for every public API and run a link/symbol
   coverage check. Examples and tutorials must be executable from documented
   prerequisites.
@@ -1745,5 +1924,7 @@ and prevent milestone status from outrunning verification again.
 | Missing per-window themes, Desktop plumbing, WP-8 mutation, example cast/checks | WP-35 |
 | Named command contexts and incomplete live menu/status WP-10 | WP-35 |
 | Height-for-width not consumed; unit assertions substituted for M10 scripts/goldens | WP-36 |
+| Smoke-only example set does not yet teach or demonstrate the whole public widget/layout/capability surface | WP-36A, WP-38 |
+| Calendar/date/time and other common client UI components are absent from the catalog and would otherwise be hand-rolled by applications | WP-36B, WP-38 |
 | Windows backend/host and full three-platform matrix remain unaccepted | WP-32, WP-37 |
 | Six appearance dumps, smoke-only examples, incomplete public docs and release evidence | WP-38 |
