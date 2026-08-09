@@ -163,6 +163,18 @@ CK_TEST(incomplete_and_malformed_sixel_sequences_fail_explicitly) {
 }
 
 CK_TEST(virtual_display_rejects_bounded_control_and_repeat_limit_violations) {
+    VirtualDisplay maximal_valid_repeat(Size{1, 1});
+    CK_CHECK(maximal_valid_repeat.write("\x1BP0;0;0q#0;2;100;0;0!1000000~\x1B\\"));
+    CK_CHECK(maximal_valid_repeat.valid());
+    CK_CHECK(maximal_valid_repeat.raster_plane().pixel(0, 0).r == 255);
+    CK_CHECK(maximal_valid_repeat.raster_plane().pixel(0, 0).a == 255);
+
+    VirtualDisplay far_cursor(Size{1, 1});
+    CK_CHECK(far_cursor.write("\x1B[2147483647;2147483647H"
+                              "\x1BP0;0;0q\"1;1;1000000;6#0;2;100;0;0!1000000~\x1B\\"));
+    CK_CHECK(far_cursor.valid());
+    CK_CHECK(!far_cursor.has_raster_pixels());
+
     VirtualDisplay excessive_repeat(Size{1, 1});
     CK_CHECK(!excessive_repeat.write("\x1BP0;0;0q#0;2;100;0;0!1000001~\x1B\\"));
     CK_CHECK(!excessive_repeat.valid());

@@ -81,8 +81,9 @@ private:
     void erase_cells(int left, int top, int right, int bottom) noexcept;
     void scroll_rows(int rows) noexcept;
     void clear_cell_pixels(int cell_x, int cell_y, int cell_width = 1) noexcept;
-    void clear_pixel_rect(int left, int top, int right, int bottom) noexcept;
-    void plot_sixel_pixel(int x, int y, Rgba color) noexcept;
+    void clear_pixel_rect(std::int64_t left, std::int64_t top, std::int64_t right,
+                          std::int64_t bottom) noexcept;
+    void plot_sixel_run(int x, int y, int repeat, unsigned char bits, Rgba color) noexcept;
     void begin_synchronized_output();
     void end_synchronized_output() noexcept;
     void discard_synchronized_snapshot() noexcept;

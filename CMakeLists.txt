@@ -4,6 +4,12 @@ project(ckvision VERSION 0.1.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 
+option(CKVISION_BUILD_FUZZERS
+    "Build libFuzzer targets and bounded corpus tests (Clang only)" OFF)
+if(CKVISION_BUILD_FUZZERS AND MSVC)
+    message(FATAL_ERROR "CKVISION_BUILD_FUZZERS requires a Clang-family compiler")
+endif()
+
 add_library(cvision
     src/core/assert.cpp
     src/core/cell.cpp
@@ -65,6 +71,9 @@ add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 ckvision_strict(cvision)
+if(CKVISION_BUILD_FUZZERS)
+    target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
+endif()
 
 # The POSIX backend (termios/signal-based) only compiles on UNIX-like
 # systems; the Windows (ConPTY) backend is M7 scope (ROADMAP.md).
@@ -89,4 +98,8 @@ if(CKVISION_BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
     add_subdirectory(benchmarks)
+endif()
+
+if(CKVISION_BUILD_FUZZERS)
+    add_subdirectory(fuzz)
 endif()

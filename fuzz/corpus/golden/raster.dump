@@ -1,0 +1,11 @@
+ckvision-golden 1
+frame 1 1
+cursor hidden
+styles 1
+0 fg default bg default attrs -
+grid
+| |
+stylemap
+|0|
+raster 1 anchor 0 0 span 1 1 pixels 1 1 hash 0000000000000001 fallback active
+end

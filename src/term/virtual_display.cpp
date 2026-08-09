@@ -98,6 +98,13 @@ Attr without_attr(Attr attrs, Attr removed) noexcept {
     return static_cast<Attr>(bits & static_cast<std::uint8_t>(~mask));
 }
 
+int advance_saturated(int value, int delta) noexcept {
+    if (delta > 0 && value > std::numeric_limits<int>::max() - delta) {
+        return std::numeric_limits<int>::max();
+    }
+    return value + delta;
+}
+
 }  // namespace
 
 VirtualDisplay::VirtualDisplay(Size cells, Size cell_pixels)
@@ -460,15 +467,22 @@ void VirtualDisplay::put_grapheme(std::string_view grapheme) {
 }
 
 void VirtualDisplay::clear_cell_pixels(int cell_x, int cell_y, int cell_width) noexcept {
-    clear_pixel_rect(cell_x * cell_pixels_.width, cell_y * cell_pixels_.height,
-                     (cell_x + cell_width) * cell_pixels_.width, (cell_y + 1) * cell_pixels_.height);
+    clear_pixel_rect(static_cast<std::int64_t>(cell_x) * cell_pixels_.width,
+                     static_cast<std::int64_t>(cell_y) * cell_pixels_.height,
+                     static_cast<std::int64_t>(cell_x + cell_width) * cell_pixels_.width,
+                     static_cast<std::int64_t>(cell_y + 1) * cell_pixels_.height);
 }
 
-void VirtualDisplay::clear_pixel_rect(int left, int top, int right, int bottom) noexcept {
-    const int start_x = std::clamp(left, 0, raster_plane_.width());
-    const int start_y = std::clamp(top, 0, raster_plane_.height());
-    const int end_x = std::clamp(right, 0, raster_plane_.width());
-    const int end_y = std::clamp(bottom, 0, raster_plane_.height());
+void VirtualDisplay::clear_pixel_rect(std::int64_t left, std::int64_t top, std::int64_t right,
+                                      std::int64_t bottom) noexcept {
+    const int start_x = static_cast<int>(
+        std::clamp(left, std::int64_t{0}, static_cast<std::int64_t>(raster_plane_.width())));
+    const int start_y = static_cast<int>(
+        std::clamp(top, std::int64_t{0}, static_cast<std::int64_t>(raster_plane_.height())));
+    const int end_x = static_cast<int>(
+        std::clamp(right, std::int64_t{0}, static_cast<std::int64_t>(raster_plane_.width())));
+    const int end_y = static_cast<int>(
+        std::clamp(bottom, std::int64_t{0}, static_cast<std::int64_t>(raster_plane_.height())));
     for (int y = start_y; y < end_y; ++y)
         for (int x = start_x; x < end_x; ++x) raster_plane_.set_pixel(x, y, Image::Rgba{0, 0, 0, 0});
 }
@@ -527,11 +541,27 @@ void VirtualDisplay::scroll_rows(int rows) noexcept {
     raster_plane_ = std::move(next_raster);
 }
 
-void VirtualDisplay::plot_sixel_pixel(int x, int y, Rgba color) noexcept {
-    const int px = cursor_.position.x * cell_pixels_.width + x;
-    const int py = cursor_.position.y * cell_pixels_.height + y;
-    if (px < 0 || py < 0 || px >= raster_plane_.width() || py >= raster_plane_.height()) return;
-    raster_plane_.set_pixel(px, py, Image::Rgba{color.r, color.g, color.b, color.a});
+void VirtualDisplay::plot_sixel_run(int x, int y, int repeat, unsigned char bits, Rgba color) noexcept {
+    if (repeat <= 0 || bits == 0) return;
+
+    const std::int64_t origin_x = static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width + x;
+    const std::int64_t origin_y = static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height + y;
+    const std::int64_t plane_width = raster_plane_.width();
+    const std::int64_t plane_height = raster_plane_.height();
+    const std::int64_t first_column = std::max(std::int64_t{0}, -origin_x);
+    const std::int64_t end_column = std::min(static_cast<std::int64_t>(repeat), plane_width - origin_x);
+    if (first_column >= end_column) return;
+
+    for (int bit = 0; bit < 6; ++bit) {
+        if ((bits & (1U << bit)) == 0) continue;
+        const std::int64_t py = origin_y + bit;
+        if (py < 0 || py >= plane_height) continue;
+        for (std::int64_t column = first_column; column < end_column; ++column) {
+            const std::int64_t px = origin_x + column;
+            raster_plane_.set_pixel(static_cast<int>(px), static_cast<int>(py),
+                                    Image::Rgba{color.r, color.g, color.b, color.a});
+        }
+    }
 }
 
 bool VirtualDisplay::decode_sixel(std::string_view body) {
@@ -571,9 +601,8 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
         if (c >= 63 && c <= 126) {
             const unsigned char bits = static_cast<unsigned char>(c - 63);
             const Rgba color = sixel_palette_[static_cast<std::size_t>(selected_color)];
-            for (int bit = 0; bit < 6; ++bit)
-                if ((bits & (1U << bit)) != 0) plot_sixel_pixel(x, y + bit, color);
-            ++x;
+            plot_sixel_run(x, y, 1, bits, color);
+            x = advance_saturated(x, 1);
             ++pos;
             continue;
         }
@@ -635,11 +664,8 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
             }
             const unsigned char bits = static_cast<unsigned char>(data - 63);
             const Rgba color = sixel_palette_[static_cast<std::size_t>(selected_color)];
-            for (int column = 0; column < repeat; ++column) {
-                for (int bit = 0; bit < 6; ++bit)
-                    if ((bits & (1U << bit)) != 0) plot_sixel_pixel(x, y + bit, color);
-                ++x;
-            }
+            plot_sixel_run(x, y, repeat, bits, color);
+            x = advance_saturated(x, repeat);
             continue;
         }
         if (c == '"') {
@@ -663,10 +689,12 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
                     return false;
                 }
                 if (background_mode == 0)
-                    clear_pixel_rect(cursor_.position.x * cell_pixels_.width,
-                                     cursor_.position.y * cell_pixels_.height,
-                                     cursor_.position.x * cell_pixels_.width + raster_width,
-                                     cursor_.position.y * cell_pixels_.height + raster_height);
+                    clear_pixel_rect(static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width,
+                                     static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height,
+                                     static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width +
+                                         raster_width,
+                                     static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height +
+                                         raster_height);
             }
             continue;
         }

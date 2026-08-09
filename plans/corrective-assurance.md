@@ -53,8 +53,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **Implementation complete — gate pending** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | **Implementation complete — gate pending** | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | **Implementation complete — gate pending** | WP-32 | M3 headless/raster acceptance; screenshot gap |
-| 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Ready | WP-32A | M3 fuzz exit; verification standard |
-| 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | Blocked | WP-33 | M5/M6 catalog gaps |
+| 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | **Implementation complete — gate pending** | WP-32A | M3 fuzz exit; verification standard |
+| 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | Ready | WP-33 | M5/M6 catalog gaps |
 | 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | Blocked | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | Blocked | WP-34B | M6 remaining catalog gaps |
 | 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Blocked | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
