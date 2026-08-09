@@ -80,9 +80,8 @@ void Button::draw(scene::Painter& painter) {
     const int label_width = text::text_width(display_text_);
     const int centered = (w - label_width) / 2;
     const int label_x = std::max(label_indent, centered + (pressed_ ? 1 : 0));
-    std::string shown = display_text_;
     const int available = std::max(0, (pressed_ ? w : s) - label_x);
-    if (label_width > available) shown.resize(static_cast<std::size_t>(available));
+    const std::string shown = text::clip_to_width(display_text_, available);
     painter.draw_text(Point{label_x, face_rows / 2}, shown, face);
 
     // The bottom shadow row: two spacer cells, then the "▀" run under

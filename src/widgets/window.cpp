@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
 
 namespace ckv::widgets {
@@ -289,9 +290,8 @@ void Window::draw(scene::Painter& painter) {
         // and not what the convention actually does.
         const int reserved_for_controls = (b.width > 6) ? 10 : 4;  // both controls flank ~2 cells of margin each
         const int available = std::max(0, b.width - reserved_for_controls);
-        std::string shown = title_;
-        if (static_cast<int>(shown.size()) > available) shown.resize(static_cast<std::size_t>(available));
-        const int shown_width = static_cast<int>(shown.size());
+        const std::string shown = text::elide_to_width(title_, available);
+        const int shown_width = text::text_width(shown);
         const int start = (b.width - shown_width) / 2;
         if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
         painter.draw_text(Point{start, 0}, shown, title_style);

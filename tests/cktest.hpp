@@ -3,6 +3,8 @@
 // cktest — ckVision's minimal, dependency-free unit-test harness.
 #pragma once
 
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <vector>
 
@@ -39,12 +41,16 @@ inline void report_failure(const char* expr, const char* file, int line) {
 }
 
 inline int run_all() {
+    const char* const filter = std::getenv("CKTEST_FILTER");
+    std::size_t executed = 0;
     for (const Case& c : cases()) {
+        if (filter != nullptr && std::strstr(c.name, filter) == nullptr) continue;
         current() = c.name;
         c.fn();
+        ++executed;
     }
     if (failures() == 0) {
-        std::printf("cktest: %zu tests, all passed\n", cases().size());
+        std::printf("cktest: %zu tests, all passed\n", executed);
         return 0;
     }
     std::fprintf(stderr, "cktest: %d failure(s)\n", failures());

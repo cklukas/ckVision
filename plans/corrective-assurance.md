@@ -49,8 +49,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 5 | WP-27 — Run loop, terminal session, wake, modality, and presentation API | 4–6 pw | **Implementation complete — gate pending** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | **Implementation complete — gate pending** | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | **Implementation complete — gate pending** | WP-28 | D-023; M3 security exit |
-| 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Ready** | WP-29 | M1; cross-widget Unicode acceptance |
-| 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | Blocked | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
+| 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Implementation complete — gate pending** | WP-29 | M1; cross-widget Unicode acceptance |
+| 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **Ready** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | Blocked | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | Blocked (partial landing recorded below) | WP-32 | M3 headless/raster acceptance; screenshot gap |
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Blocked | WP-32A | M3 fuzz exit; verification standard |
@@ -978,6 +978,16 @@ WP-37/38 work.
 
 **Purpose.** Replace hand-curated partial coverage with a versioned,
 standards-derived text engine and prevent widgets from clipping UTF-8 by byte.
+
+**Implementation checkpoint (2026-08-09; package remains gate pending).**
+Unicode 15.1.0 property tables and all 1,187 official extended-grapheme
+conformance cases are generated reproducibly from published UCD files with
+pinned hashes. `clip_to_width` and `elide_to_width` provide the single
+grapheme/cell-safe truncation policy; Button, Window, Menu, StatusLine, Table,
+and Memo now use it or explicit grapheme storage. Targeted normal and ASan
+checks pass. The repository-wide test process still aborts in its pre-existing
+POSIX-terminal lifecycle path, so this package cannot be marked Done until
+WP-32 isolates that failure and all required platform gates are green.
 
 **Work.**
 

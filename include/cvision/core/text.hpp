@@ -35,6 +35,18 @@ int grapheme_width(std::string_view grapheme) noexcept;
 // Sums grapheme_width over every cluster in `text`.
 int text_width(std::string_view text) noexcept;
 
+// Returns the longest prefix of `text` that consists only of complete
+// grapheme clusters and occupies no more than `max_columns` terminal cells.
+// A non-positive width yields an empty string. This is the sole text-emitter
+// clipping primitive: callers must never truncate display text by bytes.
+std::string clip_to_width(std::string_view text, int max_columns);
+
+// Returns `text` unchanged when it fits. Otherwise returns a complete-
+// grapheme prefix followed by `marker` (U+2026 by default), constrained to
+// `max_columns` cells. If even `marker` cannot fit, it is itself clipped.
+std::string elide_to_width(std::string_view text, int max_columns,
+                           std::string_view marker = "\xE2\x80\xA6");
+
 // Replaces every C0/C1 control character (including CR/LF/Tab — a Cell
 // holds one grapheme, never a line; multi-line layout splits on '\n'
 // before this boundary) with U+FFFD, so hostile or accidental control

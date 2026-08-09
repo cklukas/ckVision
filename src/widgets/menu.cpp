@@ -192,11 +192,15 @@ void DropdownMenu::draw(scene::Painter& painter) {
             painter.hline(Point{0, i}, bounds().width, scene::LineStyle::Single, style);
         } else {
             const auto parsed = parse_mnemonic(item_source_text(item));
-            painter.draw_text(Point{1, i}, parsed.display, style);
+            int label_columns = std::max(0, bounds().width - 2);
             if (const auto hint = item_chord_hint(item)) {
                 const int hint_x = bounds().width - 1 - text::text_width(*hint);
-                const int label_end_x = 1 + text::text_width(parsed.display);
+                label_columns = std::max(0, hint_x - 2);
+                const int label_end_x = 1 + text::text_width(text::clip_to_width(parsed.display, label_columns));
+                painter.draw_text(Point{1, i}, text::clip_to_width(parsed.display, label_columns), style);
                 if (hint_x > label_end_x) painter.draw_text(Point{hint_x, i}, *hint, style);
+            } else {
+                painter.draw_text(Point{1, i}, text::clip_to_width(parsed.display, label_columns), style);
             }
         }
     }
@@ -351,8 +355,10 @@ void MenuBar::draw(scene::Painter& painter) {
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
     for (std::size_t i = 0; i < menus_.size(); ++i) {
         const int x = menu_bar_offset_for(menus_, i);
+        if (x >= bounds().width) break;
         const Style style = (active_ && i == highlighted_) ? theme.resolve(active_role_) : base;
-        painter.draw_text(Point{x, 0}, parse_mnemonic(menus_[i].label).display, style);
+        painter.draw_text(Point{x, 0},
+                          text::clip_to_width(parse_mnemonic(menus_[i].label).display, bounds().width - x), style);
     }
 }
 

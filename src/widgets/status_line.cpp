@@ -64,14 +64,14 @@ void StatusLine::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
 
-    const std::string hint = current_hint();
+    const std::string hint = text::clip_to_width(current_hint(), bounds().width);
     if (!hint.empty()) painter.draw_text(Point{0, 0}, hint, style);
 
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const int x = item_start_column(i);
         if (x >= bounds().width) break;
         if (i > 0) painter.draw_text(Point{x - kSeparatorWidth, 0}, " | ", style);
-        painter.draw_text(Point{x, 0}, effective_label(items_[i]), style);
+        painter.draw_text(Point{x, 0}, text::clip_to_width(effective_label(items_[i]), bounds().width - x), style);
     }
 }
 

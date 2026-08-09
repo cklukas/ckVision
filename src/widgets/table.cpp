@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/core/text.hpp"
 
 namespace ckv::widgets {
 
@@ -202,7 +203,7 @@ void Table::draw(scene::Painter& painter) {
         if (x >= bounds().width) break;
         std::string title = columns_[c].title;
         if (static_cast<int>(c) == sort_column_) title += sort_ascending_ ? " ^" : " v";
-        painter.draw_text(Point{x, 0}, title, header_style);
+        painter.draw_text(Point{x, 0}, text::clip_to_width(title, columns_[c].width), header_style);
     }
 
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
@@ -218,7 +219,8 @@ void Table::draw(scene::Painter& painter) {
             const int x = column_start_x(c);
             if (x >= bounds().width) break;
             const Style style = cell_style_hook_ ? cell_style_hook_(underlying, c, row_style) : row_style;
-            painter.draw_text(Point{x, row_i + 1}, rows_[underlying][c], style);
+            painter.draw_text(Point{x, row_i + 1},
+                              text::clip_to_width(rows_[underlying][c], columns_[c].width), style);
         }
     }
 }

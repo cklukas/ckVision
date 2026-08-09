@@ -198,10 +198,63 @@ CK_TEST(emoji_presentation_selector_forces_wide) {
     CK_CHECK(ckv::text::grapheme_width(heart_emoji) == 2);
 }
 
+CK_TEST(variation_selector_after_an_unpaired_regional_indicator_is_not_skipped) {
+    const std::string ri_with_vs16 = "\xF0\x9F\x87\xBA\xEF\xB8\x8F";
+    CK_CHECK(ckv::text::split_graphemes(ri_with_vs16).size() == 1);
+    CK_CHECK(ckv::text::grapheme_width(ri_with_vs16) == 2);
+}
+
 CK_TEST(text_presentation_selector_forces_narrow) {
     const std::string heart_text = cat({kHeart, kVS15});
     CK_CHECK(ckv::text::split_graphemes(heart_text).size() == 1);
     CK_CHECK(ckv::text::grapheme_width(heart_text) == 1);
+}
+
+// --- Grapheme-safe clipping --------------------------------------------------
+
+CK_TEST(clip_to_width_never_splits_a_combining_grapheme_or_a_wide_cell) {
+    const std::string text = cat({"A", kEAcute, kZhong, "B"});
+    CK_CHECK(ckv::text::clip_to_width(text, 2) == cat({"A", kEAcute}));
+    CK_CHECK(ckv::text::clip_to_width(text, 3) == cat({"A", kEAcute}));
+    CK_CHECK(ckv::text::clip_to_width(text, 4) == cat({"A", kEAcute, kZhong}));
+    CK_CHECK(ckv::text::text_width(ckv::text::clip_to_width(text, 4)) == 4);
+}
+
+CK_TEST(clip_to_width_keeps_emoji_sequences_atomic) {
+    const std::string text = cat({"A", kManZwjWomanZwjGirl, "B"});
+    CK_CHECK(ckv::text::clip_to_width(text, 2) == "A");
+    CK_CHECK(ckv::text::clip_to_width(text, 3) == cat({"A", kManZwjWomanZwjGirl}));
+    CK_CHECK(ckv::text::clip_to_width(text, 0).empty());
+}
+
+CK_TEST(full_unicode_properties_cover_script_marks_indic_conjuncts_and_rare_wide_characters) {
+    const std::string devanagari_ka_aa = "\xE0\xA4\x95\xE0\xA4\xBE";  // KA + vowel sign AA (SpacingMark)
+    const std::string hebrew_alef_sheva = "\xD7\x90\xD6\xB0";          // ALEF + SHEVA (Extend)
+    const std::string arabic_alef_fatha = "\xD8\xA7\xD9\x8E";          // ALEF + FATHA (Extend)
+    const std::string thai_ko_mai_tho = "\xE0\xB8\x81\xE0\xB9\x89";  // KO KAI + MAI THO (Extend)
+    const std::string devanagari_conjunct = "\xE0\xA4\x95\xE0\xA5\x8D\xE0\xA4\x95";
+    const std::string tangut = "\xF0\x97\x80\x80";  // U+17000, East_Asian_Width=W
+
+    CK_CHECK(ckv::text::split_graphemes(devanagari_ka_aa).size() == 1);
+    CK_CHECK(ckv::text::split_graphemes(hebrew_alef_sheva).size() == 1);
+    CK_CHECK(ckv::text::split_graphemes(arabic_alef_fatha).size() == 1);
+    CK_CHECK(ckv::text::split_graphemes(thai_ko_mai_tho).size() == 1);
+    CK_CHECK(ckv::text::split_graphemes(devanagari_conjunct).size() == 1);
+    CK_CHECK(ckv::text::codepoint_width(0x17000) == 2);
+    CK_CHECK(ckv::text::codepoint_width(0x00A1) == 1);  // East-Asian-Ambiguous remains narrow by policy.
+}
+
+CK_TEST(elide_to_width_reserves_cells_for_a_complete_marker) {
+    const std::string text = cat({"A", kEAcute, kZhong, "B"});
+    CK_CHECK(ckv::text::elide_to_width(text, 3) == cat({"A", kEAcute, "\xE2\x80\xA6"}));
+    CK_CHECK(ckv::text::text_width(ckv::text::elide_to_width(text, 3)) == 3);
+    CK_CHECK(ckv::text::elide_to_width(text, 1) == "\xE2\x80\xA6");
+}
+
+CK_TEST(clipping_malformed_utf8_is_bounded_and_does_not_crash) {
+    const std::string malformed = cat({"A", "\xE4\xB8", "B"});
+    CK_CHECK(ckv::text::clip_to_width(malformed, 1) == "A");
+    CK_CHECK(ckv::text::text_width(ckv::text::clip_to_width(malformed, 2)) == 2);
 }
 
 // --- Sanitization ------------------------------------------------------------

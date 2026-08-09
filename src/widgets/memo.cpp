@@ -301,12 +301,14 @@ void Memo::draw(scene::Painter& painter) {
         const auto& line = lines_[static_cast<std::size_t>(line_index)];
         int x = 0;
         for (std::size_t i = 0; i < line.size() && x < visible_width; ++i) {
+            const int grapheme_columns = text::grapheme_width(line[i]);
+            if (grapheme_columns > visible_width - x) break;
             Style style = base;
             const MemoPosition p{line_index, static_cast<int>(i)};
             if (selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
                 style.attrs |= Attr::Reverse;
             painter.draw_text(Point{x, row}, line[i], style);
-            x += text::grapheme_width(line[i]);
+            x += grapheme_columns;
         }
         if (has_focus_ && line_index == cursor_.line) {
             const int cursor_x = [&] {

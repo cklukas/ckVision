@@ -457,6 +457,21 @@ CK_TEST(draw_truncates_a_title_longer_than_the_available_space) {
     CK_CHECK(true);
 }
 
+CK_TEST(window_title_elision_never_splits_an_emoji_sequence) {
+    Fixture f;
+    Surface s(ckv::Size{14, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    const std::string family = "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9";
+    auto w = make_window(f, "A" + family + "BC");
+    w->set_bounds(Rect{0, 0, 14, 5});
+    Painter painter(s, Rect{0, 0, 14, 5});
+    w->draw(painter);
+
+    // Four title columns are available: A + the two-column sequence + U+2026.
+    CK_CHECK(s.at(ckv::Point{5, 0}).grapheme() == "A");
+    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == family);
+    CK_CHECK(s.at(ckv::Point{8, 0}).grapheme() == "\xE2\x80\xA6");
+}
+
 CK_TEST(the_title_is_centered_with_a_padding_space_on_each_side_not_left_aligned) {
     // Matches the windowed-desktop convention's own frame-drawing
     // algorithm (verified against the reference implementation's

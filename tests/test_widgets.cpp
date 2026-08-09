@@ -194,6 +194,22 @@ CK_TEST(button_draws_a_face_with_half_block_shadow_on_the_right_edge_and_bottom_
     CK_CHECK(s.at(ckv::Point{5, 1}).style() == f.theme.resolve(f.roles.button_shadow));
 }
 
+CK_TEST(button_clipping_keeps_combining_graphemes_intact) {
+    Fixture f;
+    Surface s = make_surface(7, 3);
+    Button button("A\x65\xCC\x81\xE4\xB8\xAD");  // A, e + combining acute, then a wide ideograph
+    button.set_context(f.ctx());
+    button.set_bounds(Rect{0, 0, 5, 2});
+    Painter painter(s, Rect{0, 0, 7, 3});
+    button.draw(painter);
+
+    // Three face columns are available. The final two-column ideograph cannot
+    // fit, while the preceding combining sequence remains one complete Cell.
+    CK_CHECK(s.at(ckv::Point{1, 0}).grapheme() == "A");
+    CK_CHECK(s.at(ckv::Point{2, 0}).grapheme() == "e\xCC\x81");
+    CK_CHECK(s.at(ckv::Point{3, 0}).grapheme() == " ");
+}
+
 CK_TEST(a_taller_button_uses_full_block_shadow_below_the_first_face_row) {
     Fixture f;
     Surface s = make_surface(14, 4);
