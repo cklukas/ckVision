@@ -85,7 +85,7 @@ differently at the cluster level:
 `sanitize_display_text` replaces every C0 control (`00`–`1F`), `DEL`
 (`7F`), and C1 control (`80`–`9F`) — plus any byte sequence that failed
 UTF-8 decoding — with U+FFFD. This is the text-to-Cell boundary
-neutralization required by DECISIONS.md D-023: hostile or accidental
+neutralization required by DECISIONS.md D-040: hostile or accidental
 control bytes in application-supplied display text can never reach the
 presenter as control data. Unlike bracketed-paste sanitization (which
 exempts tab and newline because paste inserts multi-line text), this

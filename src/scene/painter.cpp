@@ -47,7 +47,7 @@ void Painter::draw_text(Point pos, std::string_view text, Style style) {
             // no-op in practice, kept deliberately rather than adding
             // a bypass constructor: from_grapheme is the sole
             // sanctioned way to construct content-bearing cells
-            // (D-023's "enforced by type" guarantee stays uniform).
+            // (D-040's "enforced by type" guarantee stays uniform).
             surface_.set_cell(Point{x, abs_pos.y}, Cell::from_grapheme(grapheme, style));
             for (int c = 1; c < width; ++c)
                 surface_.set_cell(Point{x + c, abs_pos.y}, Cell::continuation(style));

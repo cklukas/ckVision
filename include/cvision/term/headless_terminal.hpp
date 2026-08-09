@@ -73,6 +73,9 @@ public:
     // --- Scripting interface (tests / recorded scripts) -------------
     void inject_bytes(std::string_view bytes, std::int64_t now_nanos);
     void inject_timeout_check(std::int64_t now_nanos);  // resolves a pending lone ESC, if due
+    // Models a definite terminal-input disconnect. Any partial paste is
+    // delivered as recovered text, never reinterpreted as keys.
+    void inject_input_disconnect();
     void inject_event(TerminalEvent event);
     void inject_capability_change(Capabilities caps);
     void set_capabilities(Capabilities caps) noexcept;

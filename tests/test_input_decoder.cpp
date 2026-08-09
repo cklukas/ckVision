@@ -6,6 +6,9 @@
 // and the documented paste-terminator protocol limitation.
 #include "cvision/term/input_decoder.hpp"
 
+#include <iterator>
+#include <optional>
+
 #include "cktest.hpp"
 
 using namespace ckv;
@@ -19,7 +22,11 @@ TextEvent as_text(const TerminalEvent& ev) { return std::get<TextEvent>(ev); }
 
 std::vector<TerminalEvent> decode_all(std::string_view bytes, Capabilities caps = baseline_capabilities()) {
     InputDecoder decoder(caps);
-    return decoder.feed(bytes, 0);
+    std::vector<TerminalEvent> events = decoder.feed(bytes, 0);
+    auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+    events.insert(events.end(), std::make_move_iterator(completed.begin()),
+                  std::make_move_iterator(completed.end()));
+    return events;
 }
 
 }  // namespace
@@ -411,8 +418,10 @@ CK_TEST(bracketed_paste_start_and_end_split_across_feeds) {
     CK_CHECK(part1.empty());
     CK_CHECK(decoder.in_paste());
     auto part2 = decoder.feed("lo\x1B[201~", 0);
-    CK_CHECK(part2.size() == 1);
-    CK_CHECK(as_text(part2[0]).text == "hello");
+    CK_CHECK(part2.empty());
+    auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+    CK_CHECK(completed.size() == 1);
+    CK_CHECK(as_text(completed[0]).text == "hello");
     CK_CHECK(!decoder.in_paste());
 }
 
@@ -423,8 +432,22 @@ CK_TEST(bracketed_paste_terminator_split_across_feeds_still_recognized) {
     auto part1 = decoder.feed("\x1B[200~content\x1B[201", 0);
     CK_CHECK(part1.empty());
     auto part2 = decoder.feed("~", 0);
-    CK_CHECK(part2.size() == 1);
-    CK_CHECK(as_text(part2[0]).text == "content");
+    CK_CHECK(part2.empty());
+    auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+    CK_CHECK(completed.size() == 1);
+    CK_CHECK(as_text(completed[0]).text == "content");
+}
+
+CK_TEST(bracketed_paste_candidate_exposes_its_exact_quiet_deadline) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[200~content\x1B[201~", 100).empty());
+    CK_CHECK(decoder.next_timeout_nanos() ==
+             std::optional<std::int64_t>{100 + kPasteTerminationQuietNanos});
+    CK_CHECK(decoder.poll_timeout(100 + kPasteTerminationQuietNanos - 1).empty());
+    const auto completed = decoder.poll_timeout(100 + kPasteTerminationQuietNanos);
+    CK_CHECK(completed.size() == 1);
+    CK_CHECK(as_text(completed.front()).text == "content");
+    CK_CHECK(!decoder.next_timeout_nanos().has_value());
 }
 
 CK_TEST(bracketed_paste_large_content_across_many_feeds) {
@@ -438,33 +461,72 @@ CK_TEST(bracketed_paste_large_content_across_many_feeds) {
         CK_CHECK(events.empty());
     }
     const auto final_events = decoder.feed("\x1B[201~", 0);
-    CK_CHECK(final_events.size() == 1);
-    CK_CHECK(as_text(final_events[0]).text == expected);
+    CK_CHECK(final_events.empty());
+    const auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+    CK_CHECK(completed.size() == 1);
+    CK_CHECK(as_text(completed[0]).text == expected);
 }
 
-CK_TEST(bracketed_paste_embedded_terminator_lookalike_splits_but_does_not_crash) {
-    // Documented protocol-level limitation (docs/input-decoder.md): if
-    // pasted content itself contains the literal terminator bytes, the
-    // paste splits there. This test pins the resulting BEHAVIOR (safe,
-    // deterministic, no crash, no misinterpretation as trusted paste
-    // text) rather than claiming the ambiguity is resolved.
+CK_TEST(bracketed_paste_embedded_terminator_is_recovered_as_paste_not_key_input) {
+    // An embedded end marker is indistinguishable from the final marker on
+    // the wire. The quiet-period policy therefore keeps bytes following the
+    // first candidate in paste recovery, rather than decoding them as keys.
     const auto events = decode_all(std::string_view("\x1B[200~before\x1B[201~after\x1B[201~"));
-    // "before" is one paste TextEvent; "after" was NOT inside paste
-    // framing (the fake terminator ended it), so its 5 letters decode
-    // as 5 ordinary Key::Char events, not as a second trusted paste —
-    // and definitely not as synthetic control sequences: whatever
-    // follows a split is decoded through the SAME scrutiny as normal
-    // typed input. The trailing stray "\x1B[201~" (no matching start)
-    // is silently swallowed, contributing no event.
-    CK_CHECK(events.size() == 6);
+    CK_CHECK(events.size() == 1);
     CK_CHECK(as_text(events[0]).from_paste);
-    CK_CHECK(as_text(events[0]).text == "before");
-    std::string after;
-    for (std::size_t i = 1; i < events.size(); ++i) {
-        CK_CHECK(std::holds_alternative<KeyEvent>(events[i]));
-        after += as_key(events[i]).chord.text;
+    CK_CHECK(as_text(events[0]).paste_recovered);
+    CK_CHECK(as_text(events[0]).text == "before\xEF\xBF\xBD[201~after");
+}
+
+CK_TEST(bracketed_paste_candidate_guard_absorbs_immediate_command_chords_across_each_byte_fragment) {
+    const std::string hostile = "\x1B[200~safe\x1B[201~\x11\x1B[201~";
+    for (std::size_t split = 0; split <= hostile.size(); ++split) {
+        InputDecoder decoder;
+        std::vector<TerminalEvent> events = decoder.feed(hostile.substr(0, split), 0);
+        const auto tail = decoder.feed(hostile.substr(split), 0);
+        events.insert(events.end(), tail.begin(), tail.end());
+        const auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+        events.insert(events.end(), completed.begin(), completed.end());
+        CK_CHECK(events.size() == 1);
+        CK_CHECK(std::holds_alternative<TextEvent>(events[0]));
+        CK_CHECK(as_text(events[0]).from_paste);
+        CK_CHECK(as_text(events[0]).paste_recovered);
+        CK_CHECK(as_text(events[0]).text == "safe\xEF\xBF\xBD[201~\xEF\xBF\xBD");
     }
-    CK_CHECK(after == "after");
+}
+
+CK_TEST(bracketed_paste_recovery_neutralizes_nested_markers_and_osc_tails) {
+    // The nested begin marker, OSC 52-looking sequence, and BEL all arrive
+    // after a candidate end. They must remain one recovered text event across
+    // every possible two-chunk backend read, never a capability/key event.
+    const std::string hostile =
+        "\x1B[200~before\x1B[201~\x1B[200~\x1B]52;c;payload\x07" "after\x1B[201~";
+    for (std::size_t split = 0; split <= hostile.size(); ++split) {
+        InputDecoder decoder;
+        std::vector<TerminalEvent> events = decoder.feed(hostile.substr(0, split), 0);
+        const auto tail = decoder.feed(hostile.substr(split), 0);
+        events.insert(events.end(), tail.begin(), tail.end());
+        const auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+        events.insert(events.end(), completed.begin(), completed.end());
+        CK_CHECK(events.size() == 1);
+        CK_CHECK(std::holds_alternative<TextEvent>(events[0]));
+        CK_CHECK(as_text(events[0]).from_paste);
+        CK_CHECK(as_text(events[0]).paste_recovered);
+        CK_CHECK(as_text(events[0]).text ==
+                 "before\xEF\xBF\xBD[201~\xEF\xBF\xBD[200~\xEF\xBF\xBD]52;c;payload\xEF\xBF\xBD"
+                 "after");
+    }
+}
+
+CK_TEST(bracketed_paste_disconnect_preserves_sanitized_text_as_recovery) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[200~partial\x1B[201~tail", 0).empty());
+    const auto events = decoder.abort_paste();
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(as_text(events[0]).from_paste);
+    CK_CHECK(as_text(events[0]).paste_recovered);
+    CK_CHECK(as_text(events[0]).text == "partialtail");
+    CK_CHECK(!decoder.in_paste());
 }
 
 // --- Probe responses -----------------------------------------------------------

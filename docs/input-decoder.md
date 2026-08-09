@@ -57,10 +57,11 @@ is deliberately deferred, and why — the same discipline as
   other profile consumes the complete report without exposing its payload as
   keyboard text.
 - **Bracketed paste** (`CSI 200~` ... `CSI 201~`): delivered as one
-  atomic, sanitized `TextEvent` (D-023's paste rule: C0 stripped except
-  tab/newline, C1 and malformed bytes replaced with U+FFFD). Large
-  pastes are accumulated without re-scanning already-confirmed-safe
-  bytes on every `feed()` call.
+  atomic, sanitized `TextEvent` (D-040's paste rule: C0 stripped except
+  tab/newline, C1 and malformed bytes replaced with U+FFFD). An end marker is
+  a candidate for 50 ms: bytes arriving before that quiet boundary remain
+  paste text, never ordinary key/mouse/OSC input. Large pastes are accumulated
+  without re-scanning already-confirmed-safe bytes on every `feed()` call.
 - **Focus events** (`CSI I` / `CSI O`).
 
 Focus events and bracketed paste are likewise accepted only when their
@@ -119,17 +120,27 @@ single-byte resync.
   codes or embedded text-as-codepoints fields, because the v1 `KeyEvent`
   contract has no representation for them. Other CSI subparameters remain
   folded for the narrow supported parser subset.
-- **The bracketed-paste terminator has an inherent, protocol-level
-  ambiguity this decoder cannot fully resolve**: if pasted clipboard
-  content itself contains the literal byte sequence `ESC[201~`, the
-  terminal emulator typically sends it verbatim (most emulators do not
-  escape accidental terminator-look-alike bytes within paste content),
-  and the decoder has no way to distinguish that from a genuine
-  end-of-paste marker. This is a known limitation of the bracketed-
-  paste protocol itself, not specific to this implementation — the
-  decoder does the best a receiving parser can do: split at the first
-  occurrence, sanitize whatever is classified as paste content, and
-  decode whatever follows as ordinary input (never as "still-trusted
-  paste text"). Applications pasting into contexts where injected
-  keystrokes could cause damage should not assume bracketed paste alone
-  is a complete defense.
+## Bracketed-paste trust boundary and recovery
+
+`CSI 201~` is an in-band delimiter. A pasted byte sequence can literally
+contain it, and the decoder cannot prove whether any occurrence closes the
+paste. The decoder therefore does **not** treat the first marker as immediate
+permission to interpret following bytes as keystrokes.
+
+It retains the newest candidate for `kPasteTerminationQuietNanos` (50 ms). A
+later byte before that deadline is recovered as paste text; a later end marker
+makes the earlier one visible as sanitized literal text (`U+FFFD[201~`). When
+the deadline expires, the newest marker closes the paste and the atomic
+`TextEvent` is emitted. `paste_recovered` is true for an ambiguous tail,
+multiple candidates, or disconnect. An input widget therefore visibly receives
+the recovered text and an application can surface an additional warning from
+that flag.
+
+This conservatively protects a normal clipboard stream, including arbitrary
+backend read fragmentation: immediate command chords, OSC terminators, and
+mouse reports after a look-alike marker remain paste data. It does not claim
+that a hostile party able to inject arbitrary terminal bytes *after* the quiet
+period has clipboard provenance. Such later bytes are normal terminal input;
+stronger confirmation requires an out-of-band host signal or application
+policy. On a definite terminal disconnect, `abort_paste()` emits the sanitized
+partial text as recovered paste rather than decoding it as commands.

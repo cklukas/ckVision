@@ -15,7 +15,7 @@ public:
     Cell() : grapheme_(" "), style_(), width_(1) {}
 
     // `grapheme` need not already be sanitized or a single verified
-    // cluster: this factory sanitizes it (DECISIONS.md D-023 — a Cell
+    // cluster: this factory sanitizes it (DECISIONS.md D-040 — a Cell
     // can never carry a raw control character regardless of caller
     // discipline) and keeps only the first resulting grapheme cluster,
     // since a Cell holds exactly one.

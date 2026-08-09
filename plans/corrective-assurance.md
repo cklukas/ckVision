@@ -48,7 +48,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Implementation complete — gate pending** | WP-25 | WP-4, WP-5 |
 | 5 | WP-27 — Run loop, terminal session, wake, modality, and presentation API | 4–6 pw | **In progress** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | **Implementation complete — gate pending** | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
-| 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | Blocked | WP-28 | D-023; M3 security exit |
+| 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | **Implementation complete — gate pending** | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | Blocked | WP-29 | M1; cross-widget Unicode acceptance |
 | 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | Blocked | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | Blocked | WP-31 | M0/M3/M4 cross-platform gates |
@@ -911,6 +911,31 @@ bytes into application commands.
   execution silently.
 - Keep C0/ESC/C1 and OSC safety at all text/output boundaries and add semantic
   tests that observe command handlers, not only decoded event types.
+
+**Implementation evidence (2026-08-09; local macOS).** D-040 replaces the
+impossible D-023 guarantee with a protocol-honest 50 ms candidate-end quiet
+boundary. `InputDecoder` keeps data received before that boundary in a
+sanitized paste `TextEvent`; a later candidate makes the earlier marker safe
+literal recovery text, and timeout or input disconnect returns the incomplete
+payload through that same safe path. The public recovery bit allows an
+application to present its own diagnostic without letting the decoder invent a
+command.
+
+`test_input_decoder.cpp` covers exact-deadline completion, embedded and nested
+delimiters, command chords, OSC-shaped bytes, every two-part fragmentation,
+and disconnect recovery. `test_headless_terminal.cpp` and
+`test_posix_terminal.cpp` exercise the terminal-facing timeout/disconnect
+paths. `test_paste_security.cpp` drives a focused `InputLine` through
+`Application::step`, proves that a `Ctrl+Q` placed after an embedded delimiter
+does not invoke its command handler, and asserts the recovered text in the
+captured styled-cell frame. Normal, ASan/UBSan, and TSan builds each passed all
+10 CTest gates and 1,368 aggregate test assertions; `git diff --check`, layer
+check plus self-test, and provenance check plus self-test also passed.
+
+This is implementation evidence, not a global acceptance claim. The decoder
+fuzz target and corpus reuse these semantic assertions when WP-33's portable
+fuzz infrastructure becomes available; the Windows/Linux matrix remains
+WP-37/38 work.
 
 **Acceptance.**
 

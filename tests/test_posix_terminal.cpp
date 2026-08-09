@@ -521,10 +521,16 @@ CK_TEST(modern_vt_profile_decodes_its_documented_focus_paste_and_cell_mouse_inpu
         ::close(acknowledge_fd);
     });
     ::usleep(50'000);  // let the child enter its profile-specific terminal poll
-    constexpr std::string_view kModernVtInput =
-        "\x1B[I\x1B[200~profile paste\x1B[201~\x1B[<0;10;20M";
-    CK_CHECK(::write(child.master_fd, kModernVtInput.data(), kModernVtInput.size()) ==
-             static_cast<ssize_t>(kModernVtInput.size()));
+    constexpr std::string_view kModernVtFocusAndPaste = "\x1B[I\x1B[200~profile paste\x1B[201~";
+    CK_CHECK(::write(child.master_fd, kModernVtFocusAndPaste.data(), kModernVtFocusAndPaste.size()) ==
+             static_cast<ssize_t>(kModernVtFocusAndPaste.size()));
+    // The candidate marker is deliberately held for the documented quiet
+    // period. A later independent mouse report therefore arrives after that
+    // safe boundary, rather than being a potentially hostile paste tail.
+    ::usleep(static_cast<useconds_t>(kPasteTerminationQuietNanos / 1'000 + 10'000));
+    constexpr std::string_view kModernVtMouse = "\x1B[<0;10;20M";
+    CK_CHECK(::write(child.master_fd, kModernVtMouse.data(), kModernVtMouse.size()) ==
+             static_cast<ssize_t>(kModernVtMouse.size()));
     const std::string output = read_until_contains(child.master_fd, "MODERN-VT-INPUT", 1'500);
     CK_CHECK(output.find("MODERN-VT-INPUT") != std::string::npos);
     acknowledge_output(child);

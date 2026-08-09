@@ -59,10 +59,13 @@ struct KeyEvent {
 
 // Composed IME/dead-key text, or the sanitized content of a bracketed
 // paste (paste sets `from_paste`; ARCHITECTURE.md §12 sanitization has
-// already run by the time this event exists).
+// already run by the time this event exists). `paste_recovered` reports
+// conservative recovery from ambiguous/incomplete paste framing: its text is
+// still safe paste text, never a sequence of synthetic key events.
 struct TextEvent {
     std::string text;
     bool from_paste = false;
+    bool paste_recovered = false;
 
     friend bool operator==(const TextEvent&, const TextEvent&) = default;
 };

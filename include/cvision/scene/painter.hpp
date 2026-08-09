@@ -82,7 +82,7 @@ public:
     // Writes `text` starting at `pos`, one row, left to right,
     // segmenting into grapheme clusters and honoring each cluster's
     // width (a wide cluster also writes a continuation cell after it).
-    // Sanitizes `text` first (D-023), so hostile input cannot reach the
+    // Sanitizes `text` first (D-040), so hostile input cannot reach the
     // surface as control data. A cluster that would only partially fit
     // within the clip's right edge is not drawn, and nothing after it
     // is drawn either — no partial wide glyphs, ever.

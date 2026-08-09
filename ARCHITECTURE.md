@@ -686,11 +686,14 @@ The trust model: bytes from the terminal and strings from application
 data (file names, log lines, document content) are both untrusted for
 *control* purposes.
 
-- **Paste sanitization**: bracketed-paste payloads are filtered in the
-  decoder before the atomic text event is formed — C0 controls stripped
-  except tab and newline, ESC and C1 stripped, embedded paste
-  terminators neutralized — so hostile clipboard content cannot inject
-  synthetic keys or sequences.
+- **Paste sanitization and recovery**: bracketed-paste payloads are filtered
+  in the decoder before the atomic text event is formed — C0 controls stripped
+  except tab and newline, ESC and C1 replaced. Because the protocol's end
+  marker is in-band, it is held for D-040's quiet period; bytes received before
+  that boundary remain sanitized paste text rather than synthetic keys,
+  sequences, or commands. `TextEvent::paste_recovered` exposes ambiguous or
+  interrupted recovery to applications. The boundary is deliberately not a
+  claim that arbitrarily delayed raw terminal bytes have clipboard provenance.
 - **Display-text neutralization**: the text-to-`Cell` boundary in core
   replaces C0/C1 controls in displayed strings, so a malicious file name
   rendered in a Label or list can never alter terminal state; the

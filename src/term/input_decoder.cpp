@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <iterator>
 #include <optional>
 
 #include "cvision/core/utf8.hpp"
@@ -115,7 +116,7 @@ std::optional<Key> tilde_key_from_number(int n) noexcept {
     }
 }
 
-// D-023's paste sanitization rule — distinct from
+// D-040's paste sanitization rule — distinct from
 // ckv::text::sanitize_display_text: tab and newline are exempt here
 // because paste inserts multi-line text, unlike a single-grapheme Cell.
 std::string sanitize_paste(std::string_view text) {
@@ -174,12 +175,32 @@ std::optional<double> parse_rgb_luminance(std::string_view pt) {
 }  // namespace
 
 std::vector<TerminalEvent> InputDecoder::feed(std::string_view data, std::int64_t now_nanos) {
+    std::vector<TerminalEvent> events;
+    if (auto completed = finish_paste_if_quiet(now_nanos)) events.push_back(std::move(*completed));
     pending_.append(data);
-    return drain(now_nanos);
+    std::vector<TerminalEvent> decoded = drain(now_nanos);
+    events.insert(events.end(), std::make_move_iterator(decoded.begin()), std::make_move_iterator(decoded.end()));
+    return events;
 }
 
 std::vector<TerminalEvent> InputDecoder::poll_timeout(std::int64_t now_nanos) {
-    return drain(now_nanos);
+    std::vector<TerminalEvent> events = drain(now_nanos);
+    if (auto completed = finish_paste_if_quiet(now_nanos)) events.push_back(std::move(*completed));
+    return events;
+}
+
+std::vector<TerminalEvent> InputDecoder::abort_paste() {
+    std::vector<TerminalEvent> events;
+    if (auto recovered = abort_active_paste()) events.push_back(std::move(*recovered));
+    pending_.clear();
+    esc_first_seen_nanos_ = -1;
+    discarding_unnegotiated_paste_ = false;
+    return events;
+}
+
+std::optional<std::int64_t> InputDecoder::next_timeout_nanos() const noexcept {
+    if (!in_paste_ || !paste_end_candidate_) return std::nullopt;
+    return paste_end_candidate_nanos_ + kPasteTerminationQuietNanos;
 }
 
 std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
@@ -250,7 +271,8 @@ bool InputDecoder::accepts_capability_update(const Capabilities& candidate) cons
 }
 
 InputDecoder::ParseResult InputDecoder::try_parse_one(std::string_view buf, std::int64_t now_nanos) {
-    if (in_paste_ || discarding_unnegotiated_paste_) return parse_paste_continuation(buf);
+    if (in_paste_ || discarding_unnegotiated_paste_)
+        return parse_paste_continuation(buf, now_nanos);
     const unsigned char b0 = static_cast<unsigned char>(buf[0]);
     if (b0 == 0x1B) return parse_escape(buf, now_nanos);
     return parse_utf8_or_control(buf);
@@ -415,6 +437,10 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             if (caps_.bracketed_paste) {
                 in_paste_ = true;
                 paste_accum_.clear();
+                paste_candidate_tail_.clear();
+                paste_end_candidate_ = false;
+                paste_end_candidate_nanos_ = -1;
+                paste_recovered_ = false;
             } else {
                 // A profile that did not request bracketed paste must not let
                 // a hostile or misconfigured terminal turn the bytes between
@@ -699,28 +725,95 @@ InputDecoder::ParseResult InputDecoder::parse_osc(std::string_view buf) {
     return {Status::Complete, consumed, std::nullopt, std::nullopt};
 }
 
-InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_view buf) {
+InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_view buf,
+                                                                  std::int64_t now_nanos) {
     static constexpr std::string_view kEndMarker = "\x1B[201~";
     const std::size_t end = buf.find(kEndMarker);
-    if (end == std::string_view::npos) {
-        const std::size_t tail_reserve = kEndMarker.size() - 1;
-        const std::size_t safe_len = buf.size() > tail_reserve ? buf.size() - tail_reserve : 0;
-        if (safe_len > 0) {
-            if (in_paste_) paste_accum_.append(buf.substr(0, safe_len));
-            return {Status::Complete, safe_len, std::nullopt, std::nullopt};
+    if (!in_paste_) {
+        if (end == std::string_view::npos) {
+            const std::size_t tail_reserve = kEndMarker.size() - 1;
+            const std::size_t safe_len = buf.size() > tail_reserve ? buf.size() - tail_reserve : 0;
+            return safe_len == 0 ? ParseResult{Status::Incomplete, 0, std::nullopt, std::nullopt}
+                                 : ParseResult{Status::Complete, safe_len, std::nullopt, std::nullopt};
         }
-        return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+        discarding_unnegotiated_paste_ = false;
+        return {Status::Complete, end + kEndMarker.size(), std::nullopt, std::nullopt};
     }
-    if (in_paste_) {
-        paste_accum_.append(buf.substr(0, end));
-        const std::string sanitized = sanitize_paste(paste_accum_);
-        paste_accum_.clear();
-        in_paste_ = false;
-        return {Status::Complete, end + kEndMarker.size(), TerminalEvent{TextEvent{sanitized, true}},
-                std::nullopt};
+
+    const auto append_data = [this](std::string_view text) {
+        if (paste_end_candidate_)
+            paste_candidate_tail_.append(text);
+        else
+            paste_accum_.append(text);
+    };
+
+    if (end != std::string_view::npos) {
+        if (paste_end_candidate_) {
+            // A newer candidate proves the old marker was literal paste data.
+            paste_accum_.append(kEndMarker);
+            paste_accum_.append(paste_candidate_tail_);
+            paste_candidate_tail_.clear();
+            paste_recovered_ = true;
+        }
+        paste_end_candidate_ = false;
+        append_data(buf.substr(0, end));
+        paste_end_candidate_ = true;
+        paste_end_candidate_nanos_ = now_nanos;
+        return {Status::Complete, end + kEndMarker.size(), std::nullopt, std::nullopt};
     }
-    discarding_unnegotiated_paste_ = false;
-    return {Status::Complete, end + kEndMarker.size(), std::nullopt, std::nullopt};
+
+    const std::size_t tail_reserve = kEndMarker.size() - 1;
+    const std::size_t safe_len = buf.size() > tail_reserve ? buf.size() - tail_reserve : 0;
+    if (safe_len == 0) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+    append_data(buf.substr(0, safe_len));
+    if (paste_end_candidate_) paste_recovered_ = true;
+    return {Status::Complete, safe_len, std::nullopt, std::nullopt};
+}
+
+std::optional<TerminalEvent> InputDecoder::finish_paste_if_quiet(std::int64_t now_nanos) {
+    if (!in_paste_ || !paste_end_candidate_ ||
+        now_nanos - paste_end_candidate_nanos_ < kPasteTerminationQuietNanos)
+        return std::nullopt;
+
+    // A partial next marker intentionally remains buffered by drain(). Once
+    // the current candidate's guard elapsed, that partial sequence belongs to
+    // the recovered paste too; leaving it for normal escape decoding would
+    // reopen the very command-injection path this guard closes.
+    if (!pending_.empty()) {
+        paste_candidate_tail_.append(pending_);
+        pending_.clear();
+        paste_recovered_ = true;
+    }
+    std::string recovered = std::move(paste_accum_);
+    recovered += paste_candidate_tail_;
+    const bool was_recovered = paste_recovered_ || !paste_candidate_tail_.empty();
+    paste_accum_.clear();
+    paste_candidate_tail_.clear();
+    in_paste_ = false;
+    paste_end_candidate_ = false;
+    paste_end_candidate_nanos_ = -1;
+    paste_recovered_ = false;
+    return TerminalEvent{TextEvent{sanitize_paste(recovered), true, was_recovered}};
+}
+
+std::optional<TerminalEvent> InputDecoder::abort_active_paste() {
+    if (!in_paste_) return std::nullopt;
+    if (!pending_.empty()) {
+        if (paste_end_candidate_)
+            paste_candidate_tail_.append(pending_);
+        else
+            paste_accum_.append(pending_);
+        pending_.clear();
+    }
+    std::string recovered = std::move(paste_accum_);
+    recovered += paste_candidate_tail_;
+    paste_accum_.clear();
+    paste_candidate_tail_.clear();
+    in_paste_ = false;
+    paste_end_candidate_ = false;
+    paste_end_candidate_nanos_ = -1;
+    paste_recovered_ = false;
+    return TerminalEvent{TextEvent{sanitize_paste(recovered), true, true}};
 }
 
 }  // namespace ckv::term

@@ -195,12 +195,7 @@ almost everywhere for good security reasons). In-app selection +
 clipboard export is the primary copy path because mouse reporting
 captures drags.
 
-**D-023 — Hostile content is neutralized at the boundaries.**
-Paste payloads are sanitized in the decoder (C0 except tab/newline
-stripped, ESC/C1 stripped, embedded paste terminators neutralized);
-displayed strings are control-neutralized at the text-to-Cell boundary;
-every OSC emission escapes or rejects terminator bytes. These are fuzz
-and golden targets, and M3 exit criteria (ARCHITECTURE §12).
+**D-023 — Superseded by D-040.**
 
 **D-024 — One sanctioned process-level facility: the session registry.**
 Fatal-signal restoration and tty-owned runtime signals (SIGWINCH,
@@ -553,6 +548,36 @@ it; an adapter may only depend downward. *Rejected:* `ui`-owned interfaces
 implemented by `term` (reverse dependency); a monolithic service locator
 (hidden global state and unnecessary coupling); treating terminal session I/O
 as a generic host service (obscures lifetime and wait/wake ownership).
+
+**D-040 — Bracketed-paste framing is a bounded recovery signal, not a
+cryptographic provenance proof.** The protocol carries both its end delimiter
+and pasted bytes in one undifferentiated byte stream. A literal `CSI 201~` in
+clipboard text is therefore indistinguishable from the terminal's real closing
+delimiter. No decoder can prove which occurrence was intended; D-023's former
+claim that embedded terminators are simply neutralized was false.
+
+ckVision holds every candidate end marker for a documented 50 ms quiet period.
+Bytes arriving before that period expires remain a sanitized `TextEvent` with
+`from_paste = true`; they cannot become `KeyEvent`, mouse, OSC, or command
+input. If a later candidate arrives, the earlier marker is rendered as safe
+literal replacement text and the final candidate is held again. An incomplete
+or disconnected paste likewise produces a recovered, sanitized paste text
+event. `TextEvent::paste_recovered` tells applications that the delivered text
+crossed this conservative recovery path, so they can show their own status if
+appropriate.
+
+The quiet period is deliberately a usability/security trade-off, not a trust
+oracle. After it expires, a later byte is ordinary terminal input; an entity
+that can inject arbitrary terminal bytes with chosen timing is outside the
+bracketed-paste protocol's attainable trust boundary. Applications requiring
+stronger provenance must obtain it from an out-of-band host input channel or
+require an application-specific confirmation. OSC output and displayed text
+remain separately sanitized at their boundaries.
+
+*Rejected:* delivering bytes after the first candidate as ordinary keys
+(silently turns common embedded-delimiter clipboard payloads into commands);
+claiming timing proves origin; dropping interrupted content (needlessly loses
+user text); and a decoder-only warning invisible to applications.
 
 ## Open
 

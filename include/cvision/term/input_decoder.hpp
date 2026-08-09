@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -19,6 +20,12 @@ namespace ckv::term {
 // press versus the start of a longer escape sequence, on legacy
 // keyboard-protocol profiles only.
 inline constexpr std::int64_t kEscTimeoutNanos = 50'000'000;  // 50 ms
+
+// A bracketed-paste end marker is in-band and can occur literally in pasted
+// bytes. A candidate marker becomes authoritative only after this quiet
+// interval. Bytes received before it expires remain sanitized paste text,
+// never ordinary key/command input. See docs/input-decoder.md and D-040.
+inline constexpr std::int64_t kPasteTerminationQuietNanos = 50'000'000;  // 50 ms
 
 // The backend owns whether a raw terminal capability reply is currently
 // authoritative. Keeping this admission decision inside the decoder prevents
@@ -45,6 +52,16 @@ public:
     // pending lone ESC once its quiet deadline has passed. Returns an
     // empty vector when there is nothing to resolve yet.
     std::vector<TerminalEvent> poll_timeout(std::int64_t now_nanos);
+
+    // Ends an interrupted paste without reinterpreting already-received bytes
+    // as keyboard input. A terminal backend calls this on a definite input
+    // disconnect; tests and deterministic hosts may use it to model one.
+    std::vector<TerminalEvent> abort_paste();
+
+    // The earliest decoder-owned deadline a backend must include in its wait.
+    // Currently this is the guarded bracketed-paste candidate; nullopt means
+    // no decoder state needs a timed wakeup.
+    std::optional<std::int64_t> next_timeout_nanos() const noexcept;
 
     void set_capabilities(Capabilities caps) noexcept {
         caps_ = caps;
@@ -100,15 +117,26 @@ private:
     ParseResult parse_csi(std::string_view buf);
     ParseResult parse_ss3(std::string_view buf);
     ParseResult parse_osc(std::string_view buf);
-    ParseResult parse_paste_continuation(std::string_view buf);
+    ParseResult parse_paste_continuation(std::string_view buf, std::int64_t now_nanos);
     ParseResult parse_utf8_or_control(std::string_view buf);
     bool accepts_capability_update(const Capabilities& candidate) const noexcept;
+    std::optional<TerminalEvent> finish_paste_if_quiet(std::int64_t now_nanos);
+    std::optional<TerminalEvent> abort_active_paste();
 
     std::string pending_;
     std::int64_t esc_first_seen_nanos_ = -1;
     bool in_paste_ = false;
     bool discarding_unnegotiated_paste_ = false;
     std::string paste_accum_;
+    // The most recent end marker is held out of paste_accum_ until its quiet
+    // period proves it is final. Bytes after it are kept separately: if a
+    // newer marker arrives, the old one becomes literal sanitized payload;
+    // if quiet wins, the old marker is discarded and the tail is delivered as
+    // recovered paste rather than as ordinary input.
+    bool paste_end_candidate_ = false;
+    std::int64_t paste_end_candidate_nanos_ = -1;
+    std::string paste_candidate_tail_;
+    bool paste_recovered_ = false;
     Capabilities caps_;
     // DECRPM 1016 and XTWINOPS 16 can arrive in either order. Keep the
     // reported mode separately until a positive cell-size reply makes pixel

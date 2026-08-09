@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // Demonstrates why Cell::from_grapheme's full control-character
-// neutralization (D-023) matters to the golden dump format itself: an
+// neutralization (D-040) matters to the golden dump format itself: an
 // un-neutralized control byte — a raw newline above all — embedded in a
 // grid row would corrupt this line-oriented format
 // (docs/golden-format.md).

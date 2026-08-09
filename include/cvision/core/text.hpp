@@ -39,7 +39,7 @@ int text_width(std::string_view text) noexcept;
 // holds one grapheme, never a line; multi-line layout splits on '\n'
 // before this boundary) with U+FFFD, so hostile or accidental control
 // bytes in application-supplied display text can never reach the
-// presenter as control data (DECISIONS.md D-023). Malformed UTF-8 is
+// presenter as control data (DECISIONS.md D-040). Malformed UTF-8 is
 // itself replaced per codepoint (see utf8::decode).
 std::string sanitize_display_text(std::string_view text);
 

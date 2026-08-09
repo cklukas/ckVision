@@ -637,7 +637,10 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
     // The probe window bounds reply acceptance, never the caller's wait.
     // Waking early merely to notice a missing reply would delay run()'s first
     // baseline frame — exactly what baseline-first presentation forbids.
-    const std::int64_t remaining_ns = deadline_nanos - now;
+    std::int64_t effective_deadline = deadline_nanos;
+    if (const auto decoder_deadline = decoder_.next_timeout_nanos())
+        effective_deadline = std::min(effective_deadline, *decoder_deadline);
+    const std::int64_t remaining_ns = effective_deadline - now;
     const int timeout_ms = remaining_ns <= 0 ? 0 : static_cast<int>(remaining_ns / 1'000'000);
 
     const int rc = ::poll(fds.data(), fds.size(), timeout_ms);
@@ -647,7 +650,10 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
             while (::read(self_pipe_read_, discard, sizeof(discard)) > 0) {
             }
         }
-        if (fds[0].revents & POLLIN) {
+        // A PTY peer can report its final EOF as POLLHUP without POLLIN.
+        // Attempt the read for either readiness form so D-040's disconnect
+        // recovery cannot depend on a platform-specific revents combination.
+        if (fds[0].revents & (POLLIN | POLLHUP)) {
             char buf[4096];
             const ssize_t n = ::read(input_fd_, buf, sizeof(buf));
             if (n > 0) {
@@ -660,6 +666,12 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
                 expire_capability_probes(observed_nanos);
                 append_decoded(decoder_.feed(std::string_view(buf, static_cast<std::size_t>(n)), observed_nanos),
                                observed_nanos);
+            } else if (n == 0) {
+                // EOF is a definite terminal-input disconnect. Preserve any
+                // partially received paste only as recovered TextEvent data;
+                // it must never fall through as ordinary key input after the
+                // stream boundary vanished (D-040).
+                append_decoded(decoder_.abort_paste(), clock_.now_nanos());
             }
         }
     } else if (rc == 0) {

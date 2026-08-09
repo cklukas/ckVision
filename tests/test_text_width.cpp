@@ -213,7 +213,7 @@ CK_TEST(sanitize_replaces_c0_and_c1_controls) {
 }
 
 CK_TEST(sanitize_replaces_tab_and_newline_too) {
-    // Unlike paste sanitization (D-023 exempts tab/newline there), the
+    // Unlike paste sanitization (D-040 exempts tab/newline there), the
     // Cell-boundary rule has no exception: a Cell holds one grapheme, not
     // a line.
     const std::string sanitized = ckv::text::sanitize_display_text("a\tb\nc");
@@ -252,4 +252,3 @@ CK_TEST(sanitize_leaves_ordinary_unicode_untouched) {
     const std::string text = cat({"caf", kEAcute, kZhong});
     CK_CHECK(ckv::text::sanitize_display_text(text) == text);
 }
-

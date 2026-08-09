@@ -46,7 +46,7 @@ CK_TEST(cell_from_grapheme_computes_width) {
 
 CK_TEST(cell_neutralizes_control_bytes_regardless_of_caller) {
     // A raw control byte handed to Cell must never survive into the
-    // stored grapheme (D-023), even if the caller forgot to sanitize.
+    // stored grapheme (D-040), even if the caller forgot to sanitize.
     const ckv::Cell cell = ckv::Cell::from_grapheme("\x07", ckv::Style{});
     CK_CHECK(cell.grapheme() != "\x07");
     CK_CHECK(cell.grapheme() == "\xEF\xBF\xBD");  // U+FFFD
@@ -77,4 +77,3 @@ CK_TEST(continuation_cell_is_distinguishable_from_a_lone_combining_mark) {
     CK_CHECK(!lone_mark.grapheme().empty());
     CK_CHECK(!lone_mark.is_continuation());
 }
-

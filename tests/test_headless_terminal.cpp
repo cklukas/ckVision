@@ -61,6 +61,7 @@ CK_TEST(headless_curated_profiles_reject_unrequested_raw_capability_refinement) 
 CK_TEST(headless_profile_changes_update_input_policy_before_later_scripted_bytes) {
     HeadlessTerminal term(Size{10, 10}, TerminalProfile::LinuxConsole);
     const Capabilities modern = capabilities_for_profile(TerminalProfile::ModernVt);
+    constexpr std::string_view kModernVtFocusAndPaste = "\x1B[I\x1B[200~profile transition\x1B[201~";
     constexpr std::string_view kModernVtExtensions =
         "\x1B[I\x1B[200~profile transition\x1B[201~\x1B[<0;10;20M";
 
@@ -68,7 +69,9 @@ CK_TEST(headless_profile_changes_update_input_policy_before_later_scripted_bytes
     // capability reply. The public report and decoder must both observe it
     // before the later bytes are interpreted.
     term.inject_capability_change(modern);
-    term.inject_bytes(kModernVtExtensions, 1'000);
+    term.inject_bytes(kModernVtFocusAndPaste, 1'000);
+    term.inject_timeout_check(1'000 + kPasteTerminationQuietNanos);
+    term.inject_bytes("\x1B[<0;10;20M", 1'000 + kPasteTerminationQuietNanos + 1);
     const auto upgraded_events = term.poll(1'000);
     CK_CHECK(upgraded_events.size() == 4);
     CK_CHECK(std::get<CapabilityChangedEvent>(upgraded_events[0]).capabilities == modern);
@@ -89,6 +92,19 @@ CK_TEST(headless_profile_changes_update_input_policy_before_later_scripted_bytes
     CK_CHECK(downgraded_events.size() == 1);
     CK_CHECK(std::get<CapabilityChangedEvent>(downgraded_events.front()).capabilities == conservative);
     CK_CHECK(term.capabilities() == conservative);
+}
+
+CK_TEST(headless_input_disconnect_recovers_a_partial_paste_without_key_events) {
+    HeadlessTerminal term(Size{10, 10});
+    term.inject_bytes("\x1B[200~partial\x1B[201~tail", 0);
+    term.inject_input_disconnect();
+
+    const auto events = term.poll(0);
+    CK_CHECK(events.size() == 1);
+    const auto& paste = std::get<TextEvent>(events.front());
+    CK_CHECK(paste.from_paste);
+    CK_CHECK(paste.paste_recovered);
+    CK_CHECK(paste.text == "partialtail");
 }
 
 CK_TEST(rejected_raw_capability_replies_cannot_affect_later_bytes_in_the_same_feed) {

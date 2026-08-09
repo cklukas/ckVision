@@ -42,6 +42,7 @@ add_executable(cvision_tests
     test_option_group.cpp
     test_overlay.cpp
     test_painter.cpp
+    test_paste_security.cpp
     test_platform_services.cpp
     test_posix_terminal.cpp
     test_presenter.cpp

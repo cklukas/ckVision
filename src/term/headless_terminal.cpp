@@ -47,4 +47,6 @@ void HeadlessTerminal::inject_timeout_check(std::int64_t now_nanos) {
     enqueue_decoded(decoder_.poll_timeout(now_nanos));
 }
 
+void HeadlessTerminal::inject_input_disconnect() { enqueue_decoded(decoder_.abort_paste()); }
+
 }  // namespace ckv::term
