@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/option_group.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -109,18 +106,11 @@ CK_TEST(on_changed_reports_the_index_and_new_state) {
 }
 
 CK_TEST(checked_out_of_range_index_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         CheckGroup group({"&A"});
         group.checked(5);
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(clicking_a_row_toggles_that_item) {

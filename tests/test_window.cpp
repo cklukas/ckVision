@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/window.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -131,19 +128,12 @@ CK_TEST(an_anchored_child_added_through_content_pane_keeps_its_corner_on_window_
 }
 
 CK_TEST(content_pane_on_a_window_whose_content_is_something_else_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         auto w = make_window(f);
         w->set_content(std::make_unique<View>());  // NOT an AnchorPane
         w->content_pane();
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Close protocol (vetoable) ----------------------------------------------
@@ -895,38 +885,24 @@ CK_TEST(an_offset_is_clamped_so_the_overlay_never_leaves_its_own_row) {
 }
 
 CK_TEST(a_second_overlay_at_an_already_occupied_slot_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         auto w = make_window(f);
         w->set_bounds(Rect{0, 0, 30, 10});
         w->add_frame_overlay(std::make_unique<FixedWidthView>(4), FrameSlot{});
         // Same default slot again.
         w->add_frame_overlay(std::make_unique<FixedWidthView>(3), FrameSlot{});
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(a_top_centered_or_filled_overlay_aborts_since_the_title_owns_that_position) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         auto w = make_window(f);
         w->set_bounds(Rect{0, 0, 30, 10});
         w->add_frame_overlay(std::make_unique<FixedWidthView>(4),
                               FrameSlot{.edge = Edge::Top, .alignment = ui::Alignment::Center});
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Size-hint-change propagation (M9/WP-16), now per-overlay -------------

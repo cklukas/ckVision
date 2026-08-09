@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/core/key.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 
 using ckv::format;
@@ -49,29 +46,15 @@ CK_TEST(key_from_name_returns_nullopt_for_an_unknown_name) {
 }
 
 CK_TEST(key_name_on_char_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         key_name(Key::Char);  // must abort: Key::Char has no fixed name
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(key_name_on_none_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         key_name(Key::None);  // must abort: not a real key
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- KeyChord::parse -------------------------------------------------------
@@ -161,14 +144,7 @@ CK_TEST(format_and_parse_round_trip_for_a_char_chord) {
 }
 
 CK_TEST(format_on_key_none_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         format(KeyChord{Key::None, Modifier::None, ""});  // must abort
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }

@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/view.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 #include "cvision/ui/context.hpp"
 
@@ -73,9 +70,7 @@ CK_TEST(remove_child_for_a_view_that_is_not_a_child_returns_null_and_changes_not
 }
 
 CK_TEST(adding_a_view_that_already_has_a_parent_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         View root1;
         View root2;
         View* observer = root1.add_child(std::make_unique<View>());
@@ -84,12 +79,7 @@ CK_TEST(adding_a_view_that_already_has_a_parent_aborts) {
         // two owners.
         auto second_owner = std::unique_ptr<View>(observer);
         root2.add_child(std::move(second_owner));
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(destroying_a_parent_destroys_its_children_deterministically) {

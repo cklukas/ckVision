@@ -10,3 +10,4 @@ add_custom_target(bench_smoke_run
 # Unlike a printed benchmark target, this deterministic scene budget gate is
 # a CTest failure when the checked cells-touched limits regress.
 add_test(NAME scene_budget_gate COMMAND cvision_bench)
+set_tests_properties(scene_budget_gate PROPERTIES LABELS "benchmark;budget" TIMEOUT 60)

@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/table.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -59,19 +56,12 @@ CK_TEST(setting_rows_places_the_cursor_on_the_first_row) {
 }
 
 CK_TEST(a_row_with_the_wrong_cell_count_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         auto table = make_table(f);
         table.set_columns({TableColumn{"A", 5, 3}, TableColumn{"B", 5, 3}});
         table.set_rows({{"only one cell"}});
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Sorting -----------------------------------------------------------
@@ -110,20 +100,13 @@ CK_TEST(sort_column_of_negative_one_restores_insertion_order) {
 }
 
 CK_TEST(sort_out_of_range_column_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         auto table = make_table(f);
         table.set_columns({TableColumn{"A", 5, 3}});
         table.set_rows({{"x"}});
         table.sort_by(5, true);
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(clicking_a_header_sorts_ascending_and_clicking_again_reverses_it) {

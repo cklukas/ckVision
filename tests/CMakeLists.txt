@@ -1,5 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
-add_executable(cvision_tests
+set(CKVISION_PORTABLE_TEST_SOURCES
     test_anchor_pane.cpp
     test_application.cpp
     test_application_render.cpp
@@ -45,7 +45,6 @@ add_executable(cvision_tests
     test_painter.cpp
     test_paste_security.cpp
     test_platform_services.cpp
-    test_posix_terminal.cpp
     test_presenter.cpp
     test_record_replay_terminal.cpp
     test_rect_ops.cpp
@@ -70,15 +69,19 @@ add_executable(cvision_tests
     test_window_activation_golden.cpp
     test_widgets.cpp
     test_window.cpp
-    test_window_list_dialog.cpp
-    main.cpp)
+    test_window_list_dialog.cpp)
+
+add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 target_link_libraries(cvision_tests PRIVATE ckvision::cvision)
 find_package(Threads REQUIRED)
 target_link_libraries(cvision_tests PRIVATE Threads::Threads)
 ckvision_strict(cvision_tests)
 
 if(UNIX)
-    target_sources(cvision_tests PRIVATE test_posix_filesystem.cpp)
+    set(CKVISION_POSIX_TEST_SOURCES
+        test_posix_filesystem.cpp
+        test_posix_terminal.cpp)
+    target_sources(cvision_tests PRIVATE ${CKVISION_POSIX_TEST_SOURCES})
 
     # Assertion contracts fork from their own single-threaded CTest process.
     # Forking from the monolithic test binary after its thread-owning cases have
@@ -87,35 +90,84 @@ if(UNIX)
     target_link_libraries(theme_assertion_contract PRIVATE ckvision::cvision)
     ckvision_strict(theme_assertion_contract)
     add_test(NAME theme_assertion_contract COMMAND theme_assertion_contract)
+    set_tests_properties(theme_assertion_contract PROPERTIES
+        LABELS "contract;platform;posix"
+        TIMEOUT 30)
 endif()
 
 # gallery_app only exists when CKVISION_BUILD_EXAMPLES is on (default,
 # but a build config could disable it) — the gallery smoke test is
 # additive, not required for the rest of the suite to be meaningful.
 if(TARGET gallery_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_gallery_smoke.cpp)
     target_sources(cvision_tests PRIVATE test_gallery_smoke.cpp)
     target_link_libraries(cvision_tests PRIVATE gallery_app)
 endif()
 
 if(TARGET filebrowser_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_filebrowser_smoke.cpp)
     target_sources(cvision_tests PRIVATE test_filebrowser_smoke.cpp)
     target_link_libraries(cvision_tests PRIVATE filebrowser_app)
 endif()
 
 if(TARGET hello_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hello_golden.cpp)
     target_sources(cvision_tests PRIVATE test_hello_golden.cpp)
     target_link_libraries(cvision_tests PRIVATE hello_app)
 endif()
 
 if(TARGET docgen_frame_svg)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_frame_svg.cpp)
     target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
     target_link_libraries(cvision_tests PRIVATE docgen_frame_svg)
     target_include_directories(cvision_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen)
 endif()
 
-add_test(NAME cvision_tests
-    COMMAND cvision_tests
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# A suite is one source file: its cases share focused setup, yet every suite
+# receives an independent process and bounded CTest timeout.  cktest also
+# accepts --case for the narrower rerun printed by a failing test's output.
+function(ckvision_add_test_suite source labels)
+    get_filename_component(suite_name ${source} NAME_WE)
+    add_test(NAME suite_${suite_name}
+        COMMAND cvision_tests --suite ${source}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(suite_${suite_name} PROPERTIES LABELS "${labels}" TIMEOUT 60)
+endfunction()
+
+function(ckvision_add_sharded_test_suites source labels shard_count)
+    get_filename_component(suite_name ${source} NAME_WE)
+    math(EXPR last_shard "${shard_count} - 1")
+    foreach(shard_index RANGE ${last_shard})
+        add_test(NAME suite_${suite_name}_${shard_index}
+            COMMAND cvision_tests --suite ${source} --shard ${shard_index}/${shard_count}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+        set_tests_properties(suite_${suite_name}_${shard_index} PROPERTIES
+            LABELS "${labels}"
+            TIMEOUT 30)
+    endforeach()
+endfunction()
+
+foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
+    set(test_labels "unit;portable")
+    if(test_source MATCHES "golden" OR test_source STREQUAL "test_frame_svg.cpp")
+        set(test_labels "golden;portable")
+    elseif(test_source MATCHES "smoke")
+        set(test_labels "script;portable")
+    endif()
+    ckvision_add_test_suite(${test_source} "${test_labels}")
+endforeach()
+
+if(UNIX)
+    foreach(test_source IN LISTS CKVISION_POSIX_TEST_SOURCES)
+        set(test_labels "platform;posix")
+        if(test_source STREQUAL "test_posix_terminal.cpp")
+            list(APPEND test_labels pty)
+            ckvision_add_sharded_test_suites(${test_source} "${test_labels}" 4)
+        else()
+            ckvision_add_test_suite(${test_source} "${test_labels}")
+        endif()
+    endforeach()
+endif()
 
 # Keep a human-inspectable rendering artifact beside the machine assertions.
 # This drives Presenter output through HeadlessTerminal's VT/Sixel decoder;
@@ -124,21 +176,21 @@ if(TARGET capture_gallery_screenshots)
     add_test(NAME gallery_visual_capture
         COMMAND capture_gallery_screenshots
                 ${CMAKE_BINARY_DIR}/test-artifacts/gallery)
-    set_tests_properties(gallery_visual_capture PROPERTIES LABELS "visual;artifact")
+    set_tests_properties(gallery_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
 if(TARGET capture_filebrowser_screenshots)
     add_test(NAME filebrowser_visual_capture
         COMMAND capture_filebrowser_screenshots
                 ${CMAKE_BINARY_DIR}/test-artifacts/filebrowser)
-    set_tests_properties(filebrowser_visual_capture PROPERTIES LABELS "visual;artifact")
+    set_tests_properties(filebrowser_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
 if(TARGET capture_hello_screenshots)
     add_test(NAME hello_visual_capture
         COMMAND capture_hello_screenshots
                 ${CMAKE_BINARY_DIR}/test-artifacts/hello)
-    set_tests_properties(hello_visual_capture PROPERTIES LABELS "visual;artifact")
+    set_tests_properties(hello_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
 # Python is build/CI tooling, not a library dependency (D-004 untouched).
@@ -146,13 +198,16 @@ endif()
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
+set_tests_properties(layer_check PROPERTIES LABELS "script;architecture" TIMEOUT 30)
 add_test(NAME layer_checker_self_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py --self-test)
+set_tests_properties(layer_checker_self_test PROPERTIES LABELS "script;architecture" TIMEOUT 30)
 
 # The M9 60-line Hello exit criterion (ROADMAP.md), wired for real:
 # never vanish silently, same reasoning as layer_check above.
 add_test(NAME hello_line_budget
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_hello_line_budget.py)
+set_tests_properties(hello_line_budget PROPERTIES LABELS "script;budget" TIMEOUT 30)
 
 # D-012/WP-23: scan every tracked and non-ignored text artifact for
 # prohibited source-fidelity claims, and separately prove that the checker
@@ -160,6 +215,13 @@ add_test(NAME hello_line_budget
 add_test(NAME provenance_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_provenance.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(provenance_check PROPERTIES LABELS "script;provenance" TIMEOUT 30)
 add_test(NAME provenance_checker_self_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_provenance.py
             --self-test)
+set_tests_properties(provenance_checker_self_test PROPERTIES LABELS "script;provenance" TIMEOUT 30)
+
+add_test(NAME test_inventory
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py
+            --test-dir ${CMAKE_BINARY_DIR})
+set_tests_properties(test_inventory PROPERTIES LABELS "script;ci" TIMEOUT 30)

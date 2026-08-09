@@ -51,7 +51,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | **Implementation complete — gate pending** | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Implementation complete — gate pending** | WP-29 | M1; cross-widget Unicode acceptance |
 | 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **Implementation complete — gate pending** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
-| 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | Blocked | WP-31 | M0/M3/M4 cross-platform gates |
+| 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | **Implementation complete — gate pending** | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | Blocked (partial landing recorded below) | WP-32 | M3 headless/raster acceptance; screenshot gap |
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Blocked | WP-32A | M3 fuzz exit; verification standard |
 | 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | Blocked | WP-33 | M5/M6 catalog gaps |
@@ -1157,6 +1157,37 @@ locatable instead of hiding all cases in one monolithic process.
   Applications with no race findings.
 - CI publishes counts by unit, script, golden, fuzz-corpus, sanitizer, and
   benchmark category.
+
+**Implementation closure (2026-08-09; gate pending).** `cktest` now identifies
+the defining source suite for every case and accepts exact case, suite, filter,
+and deterministic shard selection. Its contract-death primitive re-executes the
+selected case: POSIX validates `SIGABRT` after `exec`, while Windows uses a
+separate `CreateProcess` child and rejects the runner's own non-termination
+sentinel. Consequently, the portable test sources no longer include POSIX
+headers or call `fork`/`wait`; PTY and POSIX-filesystem coverage is compiled
+only on UNIX and labelled `platform;posix`, while portable assertion contracts
+continue to run on every target.
+
+CTest now registers bounded source suites rather than one monolithic test. The
+45-case PTY contract is deliberately split into four deterministic, 30-second
+shards, and each emitted `RUN source:case` line locates a crash inside a shard.
+The configured local inventory contains 90 CTest entries: 64 unit, 8 script,
+11 golden, 1 benchmark, 6 platform (including 4 PTY) and an explicit 0
+fuzz-corpus entries, the latter owned by WP-33. `report_test_inventory.py`
+publishes that same label-based inventory locally and into GitHub Actions job
+summaries. The release workflow exposes unit, scripted/policy, golden/visual,
+platform filesystem, POSIX PTY (or an explicit pending ConPTY note),
+fuzz-corpus inventory, benchmark, and sanitizer-support checks as separate
+named steps; Debug ASan/UBSan and TSan remain explicit Ubuntu jobs.
+
+Local macOS Release verification rebuilt `cvision_tests`, passed all 86
+non-PTY CTest entries, and passed all four PTY shards. Combined Debug
+ASan/UBSan and TSan rebuilds each passed focused post/wake and
+two-application-PTY paths; ASan/UBSan also passed the portable
+self-reexecuting assertion path. Full hosted macOS/Linux/Windows Release and
+sanitizer matrices, including the required full TSan race result, are still
+gate evidence; Windows ConPTY itself remains WP-37. This is therefore an
+implementation closure only, not an M0/M3/M4 acceptance claim.
 
 ### WP-32A — Dual-profile graphics virtual terminal and visual captures
 

@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/dock.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 
 using ckv::Rect;
@@ -178,16 +175,9 @@ CK_TEST(a_dock_relayouts_when_a_child_grows_its_own_hint_without_a_dock_resize) 
 }
 
 CK_TEST(a_second_child_docked_to_an_already_occupied_edge_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Dock dock(Rect{0, 0, 40, 20});
         dock.add_item(std::make_unique<View>(), DockEdge::Top);
         dock.add_item(std::make_unique<View>(), DockEdge::Top);
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }

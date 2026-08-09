@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/command.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 
 using ckv::Key;
@@ -90,17 +87,10 @@ CK_TEST(is_enabled_for_an_unregistered_command_is_true_absent_a_predicate) {
 }
 
 CK_TEST(set_enabled_predicate_on_an_unregistered_command_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         CommandRegistry reg;
         reg.set_enabled_predicate(kFileOpen, [] { return true; });  // must abort: never registered
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Keymap --------------------------------------------------------------
@@ -187,48 +177,27 @@ CK_TEST(chord_for_command_returns_nullopt_after_its_only_chord_is_unbound) {
 }
 
 CK_TEST(registering_a_command_with_kinvalidcommand_id_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         CommandRegistry reg;
         reg.register_command(kInvalidCommand, "Bogus");  // must abort
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Standard command set (M9/WP-12) ---------------------------------------
 
 CK_TEST(register_command_below_the_reserved_range_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         CommandRegistry reg;
         reg.register_command(1, "Sneaks into the reserved range");  // must abort
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(add_below_the_reserved_range_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         CommandRegistry reg;
         // must abort
         reg.add(CommandDescriptor{.id = 1, .title = "Sneaks into the reserved range"});
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(register_command_at_exactly_the_first_application_id_is_allowed) {
@@ -387,16 +356,9 @@ CK_TEST(add_with_no_handler_leaves_execute_a_no_op) {
 }
 
 CK_TEST(add_with_an_unparseable_chord_string_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         CommandRegistry reg;
         // must abort
         reg.add(CommandDescriptor{.id = kFileOpen, .title = "Open", .chord = "NotAChord"});
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }

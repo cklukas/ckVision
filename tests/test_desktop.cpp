@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/desktop.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include <functional>
 #include <set>
 
@@ -197,20 +194,13 @@ CK_TEST(activating_an_older_window_raises_it_to_the_front_and_reactivates_it) {
 }
 
 CK_TEST(activate_on_a_window_not_owned_by_this_desktop_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
         desktop.add_window(make_window(f));
         Window stray("stray");
         desktop.activate(&stray);  // must abort: not owned by this desktop
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Cycling ---------------------------------------------------------

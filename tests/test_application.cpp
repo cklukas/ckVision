@@ -8,9 +8,6 @@
 #include <mutex>
 #include <thread>
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/record_replay_terminal.hpp"
@@ -388,21 +385,14 @@ CK_TEST(set_focus_to_the_already_focused_view_is_a_no_op) {
 }
 
 CK_TEST(set_focus_to_a_non_focusable_view_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
         ManualClock clock;
         Application app(term, clock);
         auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
         // Never given FocusPolicy::TabStop — set_focus must abort.
         app.set_focus(a);
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(application_diagnostics_buffer_and_forward_to_an_owned_injected_sink) {
@@ -1132,21 +1122,14 @@ CK_TEST(post_interrupts_an_in_flight_terminal_wait_and_runs_on_the_owning_step) 
 }
 
 CK_TEST(run_until_called_from_a_dispatch_handler_aborts_before_it_can_start_a_nested_pump) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
         ManualClock clock;
         Application app(term, clock);
         auto* view = app.root().add_child(std::make_unique<ReentrantLoopView>(app));
         app.set_focus(view);
         app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- Modality (M9/WP-15, D-021) --------------------------------------------
@@ -1440,19 +1423,12 @@ CK_TEST(nested_modals_scope_to_the_innermost_and_popping_restores_each_level) {
 }
 
 CK_TEST(pop_modal_on_an_empty_stack_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
         ManualClock clock;
         Application app(term, clock);
         app.pop_modal();  // nothing was ever pushed — must abort
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 // --- F1 context help (D-027) -------------------------------------------

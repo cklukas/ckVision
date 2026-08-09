@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/dialog.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
@@ -37,35 +34,21 @@ struct Fixture {
 }  // namespace
 
 CK_TEST(materializing_an_empty_descriptor_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         DialogDescriptor descriptor;  // no fields, no buttons
         materialize_dialog(descriptor);
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(materializing_two_default_buttons_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
+    CK_EXPECT_ABORT({
         Fixture f;
         DialogDescriptor descriptor;
         descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
         descriptor.buttons.push_back(ButtonDescriptor{"Apply", true, nullptr});  // second default
         materialize_dialog(descriptor);
-        ::_exit(1);
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
+    });
 }
 
 CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
