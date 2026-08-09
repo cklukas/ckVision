@@ -382,6 +382,36 @@ CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
     CK_CHECK(f.app.current_frame().at(ckv::Point{12, 4}).style() == ckv::scene::default_dim(background));
 }
 
+CK_TEST(rapid_retained_window_and_dropdown_lifecycles_leave_no_stale_scene_content) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    Desktop* desktop = desktop_owned.get();
+    f.app.root().add_child(std::move(desktop_owned));
+    f.app.step(0);
+
+    for (int iteration = 0; iteration < 16; ++iteration) {
+        auto window_owned = std::make_unique<Window>("Transient");
+        window_owned->set_bounds(Rect{20, 2, 12, 6});
+        Window* window = desktop->add_window(std::move(window_owned));
+        f.app.step(0);
+
+        auto dropdown_owned = std::make_unique<DropdownMenu>(
+            std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false}});
+        dropdown_owned->set_bounds(Rect{4, 3, 6, 2});
+        ckv::ui::View* dropdown = desktop->add_popup(std::move(dropdown_owned));
+        f.app.step(0);
+
+        desktop->remove_popup(dropdown).reset();
+        f.app.step(0);
+        CK_CHECK(f.app.current_frame().at(ckv::Point{10, 4}).grapheme() == "░");
+
+        desktop->remove_window(window).reset();
+        f.app.step(0);
+        CK_CHECK(desktop->windows().empty());
+        CK_CHECK(desktop->popups().empty());
+    }
+}
+
 // --- Terminal too small (ARCHITECTURE.md §5 "Sizing policy", M10/WP-21) ---
 
 CK_TEST(terminal_too_small_is_false_at_a_normal_size) {

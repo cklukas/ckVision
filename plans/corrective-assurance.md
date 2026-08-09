@@ -1069,8 +1069,10 @@ CTest gates passed on `macos-26.5.2-arm64-m1-max-32g` under both
 `address,undefined` and `thread` sanitizers. This update rebuilt the normal,
 ASan/UBSan, and TSan test executables and passed retained-popup/menu-shadow,
 mouse-drag, invalidation-kind, and warmed allocation/raster regressions in
-each sanitizer mode; the normal visual, provenance, layer, and scene-budget
-CTest gates also pass. CI now runs both sanitizer configurations on Linux. The
+each sanitizer mode. A 16-cycle retained Window plus shadow-casting-dropdown
+open/remove stress test also passes under ASan/UBSan and TSan without stale
+scene content. The normal visual, provenance, layer, and scene-budget CTest
+gates also pass. CI now runs both sanitizer configurations on Linux. The
 required Linux and Windows host results remain WP-32/WP-37 matrix work; the
 pinned-host p99 procedure is recorded in `docs/performance.md`.
 
