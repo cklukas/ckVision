@@ -220,6 +220,12 @@ public:
     // glyphs from becoming junctions in this view's own frame.
     virtual void draw(scene::Painter& painter) { (void)painter; }
 
+    // Whether this view's retained layer casts the standard scene shadow.
+    // Ordinary views are planar; Window and drop-down menu surfaces opt in.
+    // A container that drives z-ordered painting applies the shadow after
+    // this child, so higher siblings still replace its coverage normally.
+    virtual bool casts_shadow() const noexcept { return false; }
+
     // Paints every child (in z-order: later children on top, matching
     // Application::topmost_view_at's convention), each through its own
     // isolated+translated+clipped Painter derived from `own_painter`

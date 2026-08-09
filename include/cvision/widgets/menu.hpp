@@ -85,6 +85,7 @@ public:
     SizeHint vertical_size_hint() const override;
 
     void draw(scene::Painter& painter) override;
+    bool casts_shadow() const noexcept override { return true; }
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;

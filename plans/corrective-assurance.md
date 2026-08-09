@@ -1047,29 +1047,32 @@ content invalidation or resize repaints exactly that popup backing. The public
 retained owner never has to guess whether its child called `invalidate()` or
 `set_bounds()`. The Compositor holds instance-owned damage scratch storage,
 resolves non-overlap damage once, and accepts a per-layer shadow clip so
-Desktop keeps window shadows inside its content area. Presenter reuses its
-output buffer and does not emit a repeated unchanged cursor state.
+Desktop keeps window and drop-down-menu shadows inside its content area.
+Presenter reuses its output buffer and does not emit a repeated unchanged
+cursor state.
 Deterministic counters expose window content repaints, cells composed, and
 bytes emitted; executable tests prove translation performs no content repaint,
 popup lifecycle/content semantics are preserved, resize repaints only the
-resized backing, and movement stays within its old/new rectangles and shadows.
-The scene benchmark now fails on steady-state or single-cell composition
-budget regressions. Test-executable allocation instrumentation now makes the
-warmed compositor/Presenter, dispatch, traversal, timer delivery, and posted
-work paths fail if they allocate; move tests also gate Presenter bytes. The
-remaining WP work is broader interaction/raster budget coverage and the
-named-host/sanitizer evidence required by the Acceptance section.
+resized backing, and real mouse dragging stays within its old/new rectangles
+and shadows. The scene benchmark now fails on steady-state, single-cell, or
+complete retained-window-move composition budget regressions (696 cells and
+6,144 Presenter bytes for the documented 30x10 non-overlapping move).
+Test-executable allocation instrumentation now makes the warmed compositor,
+raster layer movement, Presenter, dispatch, traversal, timer delivery, and
+posted-work paths fail if they allocate; move tests also gate Presenter bytes.
+The remaining WP work is the named-host/sanitizer evidence required by the
+Acceptance section.
 
 **Verification checkpoint (2026-08-09).** Before the popup lifecycle update,
 the complete 1,383-test suite plus visual, provenance, layer, and scene-budget
 CTest gates passed on `macos-26.5.2-arm64-m1-max-32g` under both
 `address,undefined` and `thread` sanitizers. This update rebuilt the normal,
-ASan/UBSan, and TSan test executables and passed the retained-popup,
-invalidation-kind, and warmed-allocation regressions in each sanitizer mode;
-the normal visual, provenance, layer, and scene-budget CTest gates also pass.
-CI now runs both sanitizer configurations on Linux. The required Linux and
-Windows host results remain WP-32/WP-37 matrix work; the pinned-host p99
-procedure is recorded in `docs/performance.md`.
+ASan/UBSan, and TSan test executables and passed retained-popup/menu-shadow,
+mouse-drag, invalidation-kind, and warmed allocation/raster regressions in
+each sanitizer mode; the normal visual, provenance, layer, and scene-budget
+CTest gates also pass. CI now runs both sanitizer configurations on Linux. The
+required Linux and Windows host results remain WP-32/WP-37 matrix work; the
+pinned-host p99 procedure is recorded in `docs/performance.md`.
 
 **Work.**
 

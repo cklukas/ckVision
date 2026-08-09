@@ -222,7 +222,7 @@ public:
     void enter_resize_mode();
     bool in_keyboard_mode() const noexcept { return keyboard_mode_ != KeyboardMode::None; }
 
-    bool casts_shadow() const noexcept { return true; }
+    bool casts_shadow() const noexcept override { return true; }
 
     // Desktop's retained-scene path owns the layer relationship; a Window
     // owns only its local backing store. Moving changes the layer position

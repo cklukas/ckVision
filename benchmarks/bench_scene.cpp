@@ -8,6 +8,11 @@
 #include "ckbench.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/window.hpp"
 
 using namespace ckv;
 using namespace ckv::scene;
@@ -51,6 +56,42 @@ bool run_scene_benchmarks() {
         sink += compositor.last_compose_cells_touched();
         if (compositor.last_compose_cells_touched() != 1) budgets_hold = false;
     });
+
+    // This is the complete retained interaction rather than a synthetic
+    // Layer move: the Window changes bounds, Desktop retains its local
+    // backing, Application constrains compositor damage, and Presenter emits
+    // the terminal diff. The two positions do not overlap, so two 30x10
+    // rectangles plus two 2x1 shadows give the exact 696-cell upper bound.
+    term::HeadlessTerminal terminal(Size{kWidth, kHeight});
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    const ui::StandardRoles roles = ui::intern_standard_roles(app.roles());
+    app.theme() = ui::make_classic_theme(app.roles(), roles);
+    auto desktop_owned = std::make_unique<widgets::Desktop>(Rect{}, app.theme(), roles.desktop_background);
+    widgets::Desktop* desktop = desktop_owned.get();
+    auto window_owned = std::make_unique<widgets::Window>("Benchmark Window");
+    window_owned->set_bounds(Rect{10, 5, 30, 10});
+    widgets::Window* retained_window = desktop->add_window(std::move(window_owned));
+    app.root().add_child(std::move(desktop_owned));
+    app.step(0);  // establish retained backing and Presenter history before measurement
+    const std::size_t initial_repaints = retained_window->content_repaint_count();
+    bool on_right = false;
+    constexpr std::size_t kMoveCellsBudget = 696;
+    constexpr std::size_t kMoveBytesBudget = 6144;
+    ckbench::run("retained_window_move", 500, [&] {
+        retained_window->set_bounds(Rect{on_right ? 10 : 130, 5, 30, 10});
+        on_right = !on_right;
+        terminal.clear_written();
+        app.step(0);
+        sink += app.last_compose_cells_touched();
+        if (retained_window->content_repaint_count() != initial_repaints ||
+            desktop->last_content_repaints() != 0 || app.last_compose_cells_touched() > kMoveCellsBudget ||
+            app.last_bytes_emitted() > kMoveBytesBudget)
+            budgets_hold = false;
+    });
+    std::printf("  (retained move: %zu cells, %zu bytes — budgets %zu/%zu)\n",
+                app.last_compose_cells_touched(), app.last_bytes_emitted(), kMoveCellsBudget,
+                kMoveBytesBudget);
 
     std::printf("checksum %zu\n", sink);
     if (!budgets_hold)

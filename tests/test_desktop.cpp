@@ -518,13 +518,10 @@ CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == background_style);
 }
 
-CK_TEST(a_window_that_does_not_cast_a_shadow_leaves_its_footprint_undimmed) {
-    // Every baseline Window currently declares casts_shadow() == true
-    // unconditionally — this test documents the OTHER branch (the
-    // dynamic_cast-fails / non-Window-child path in
-    // Desktop::paint_children) by using a plain View standing in where
-    // a window would be, proving non-Window children never crash or
-    // get spuriously shadowed.
+CK_TEST(a_non_shadow_casting_view_leaves_its_footprint_undimmed) {
+    // A plain View opts out of View::casts_shadow(). It remains a safe
+    // Desktop child and must not acquire a shadow merely by participating in
+    // the z-ordered paint pass.
     Fixture f;
     Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
     desktop.set_context(f.ctx());

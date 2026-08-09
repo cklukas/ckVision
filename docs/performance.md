@@ -4,13 +4,15 @@
 
 ckVision treats the machine-independent half of its performance charter as a
 correctness property. `scene_budget_gate` runs `cvision_bench` in CTest and
-fails if a warmed compositor touches a cell on an unchanged frame, or more
-than one cell after a single-cell content change. The instrumented
+fails if a warmed compositor touches a cell on an unchanged frame, more than
+one cell after a single-cell content change, or a complete retained Window
+move exceeds its 696-cell / 6,144-byte caps. The instrumented
 `warmed_*allocate_nothing*` tests replace allocation only inside the test
-executable and verify, after warm-up, that compositor, Presenter, focused and
-pointer dispatch, traversal, due-timer delivery, and posted-work draining
-perform no ordinary heap allocation. This instrumentation is test-only; it
-does not introduce a library global or alter client allocation behavior.
+executable and verify, after warm-up, that compositor, raster-layer movement,
+Presenter, focused and pointer dispatch, traversal, due-timer delivery, and
+posted-work draining perform no ordinary heap allocation. This instrumentation
+is test-only; it does not introduce a library global or alter client allocation
+behavior.
 
 `Application::last_compose_cells_touched()`,
 `Application::last_bytes_emitted()`, `Desktop::last_content_repaints()`, and
@@ -20,6 +22,8 @@ content and compose only the old/new window rectangles and their shadows; a
 resize may repaint only the resized Window's local backing. The same retained
 rule applies to popups: a same-size move is layer composition only, whereas
 their own content invalidation and a resize repaint that popup's backing.
+Window and drop-down-menu layers use the same binary shadow compositor rule;
+their shadows are included in the move damage bound and never compound.
 
 ## Pinned-host p99 procedure
 

@@ -10,7 +10,9 @@
 #include <new>
 
 #include "cktest.hpp"
+#include "cvision/core/image.hpp"
 #include "cvision/scene/compositor.hpp"
+#include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/presenter.hpp"
@@ -74,6 +76,36 @@ CK_TEST(warmed_compositor_and_presenter_allocate_nothing_for_an_unchanged_frame)
         CK_CHECK(allocations.count() == 0);
         CK_CHECK(presenter.last_bytes_emitted() == 0);
     }
+}
+
+CK_TEST(warmed_raster_layer_movement_updates_visibility_without_allocation) {
+    ckv::scene::Compositor compositor(ckv::Size{16, 4});
+    ckv::scene::Surface background(ckv::Size{16, 4});
+    compositor.compose({}, background);  // consume initial background damage
+
+    ckv::scene::Surface raster_layer(ckv::Size{4, 3});
+    ckv::scene::Painter painter(raster_layer, ckv::Rect{0, 0, 4, 3});
+    const auto image = std::make_shared<ckv::Image>(8, 6);
+    painter.draw_image(ckv::Rect{0, 0, 2, 2}, 1, image, [](ckv::scene::Painter& fallback) {
+        fallback.fill(ckv::Rect{0, 0, 2, 2}, ckv::Cell::from_grapheme("#", ckv::Style{}));
+    });
+    std::vector<ckv::scene::Layer> layers{{1, &raster_layer, ckv::Point{0, 0}, false}};
+
+    compositor.compose(layers, background);
+    layers.front().position = ckv::Point{8, 0};
+    compositor.compose(layers, background);  // grow and warm movement/raster-slice scratch
+    layers.front().position = ckv::Point{0, 0};
+    compositor.compose(layers, background);
+
+    {
+        AllocationScope allocations;
+        layers.front().position = ckv::Point{8, 0};
+        compositor.compose(layers, background);
+        CK_CHECK(allocations.count() == 0);
+    }
+    CK_CHECK(compositor.last_compose_cells_touched() == 24);  // old + new 4x3 layer rects
+    CK_CHECK(compositor.visible_rasters().size() == 1);
+    CK_CHECK(compositor.visible_rasters().front().full_anchor == (ckv::Rect{8, 0, 2, 2}));
 }
 
 CK_TEST(warmed_application_dispatch_focus_and_post_drain_allocate_nothing) {

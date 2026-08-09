@@ -13,6 +13,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::ManualClock;
@@ -23,6 +24,8 @@ using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::widgets::Label;
 using ckv::widgets::Desktop;
+using ckv::widgets::DropdownMenu;
+using ckv::widgets::MenuItem;
 using ckv::widgets::Window;
 
 namespace {
@@ -201,6 +204,36 @@ CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint)
     CK_CHECK(!f.term.written_bytes().empty());
 }
 
+CK_TEST(dragging_a_window_recomposes_without_repainting_its_retained_content) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
+    Desktop* desktop = desktop_owned.get();
+    auto window_owned = std::make_unique<Window>("Dragged");
+    window_owned->set_bounds(Rect{2, 2, 14, 6});
+    Window* window = desktop->add_window(std::move(window_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+    f.app.step(0);
+    const std::size_t original_repaints = window->content_repaint_count();
+
+    f.term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Down,
+                                        .button = ckv::MouseButton::Left,
+                                        .cell = ckv::Point{6, 2}});
+    f.app.step(0);
+
+    f.term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Move,
+                                        .button = ckv::MouseButton::Left,
+                                        .cell = ckv::Point{18, 2}});
+    f.term.clear_written();
+    f.app.step(0);
+
+    CK_CHECK(window->bounds() == (Rect{14, 2, 14, 6}));
+    CK_CHECK(window->content_repaint_count() == original_repaints);
+    CK_CHECK(desktop->last_content_repaints() == 0);
+    CK_CHECK(f.app.last_compose_cells_touched() <= 216);
+    CK_CHECK(f.app.last_bytes_emitted() > 0);
+    CK_CHECK(f.app.last_bytes_emitted() <= 2048);
+}
+
 CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {
     Fixture f;
     auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
@@ -304,6 +337,49 @@ CK_TEST(runtime_popup_attachment_and_removal_recompose_the_retained_scene) {
     f.app.step(0);
     CK_CHECK(desktop->last_content_repaints() == 0);
     CK_CHECK(f.app.current_frame().at(ckv::Point{7, 4}).grapheme() == "░");
+}
+
+CK_TEST(dropdown_menu_shadows_follow_the_retained_popup_layer) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    Desktop* desktop = desktop_owned.get();
+    auto dropdown_owned = std::make_unique<DropdownMenu>(
+        std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false}});
+    dropdown_owned->set_bounds(Rect{2, 2, 6, 2});
+    DropdownMenu* dropdown = desktop->add_popup(std::move(dropdown_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+
+    const ckv::Style background = f.app.theme().resolve(f.roles.desktop_background);
+    const ckv::Style shadow = ckv::scene::default_dim(background);
+    f.app.step(0);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{8, 3}).style() == shadow);
+
+    dropdown->set_bounds(Rect{18, 2, 6, 2});
+    f.app.step(0);
+    CK_CHECK(desktop->last_content_repaints() == 0);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{8, 3}).style() == background);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{24, 3}).style() == shadow);
+}
+
+CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    Desktop* desktop = desktop_owned.get();
+    auto window_owned = std::make_unique<Window>("Lower");
+    window_owned->set_bounds(Rect{2, 2, 10, 6});
+    desktop->add_window(std::move(window_owned));
+    auto dropdown_owned = std::make_unique<DropdownMenu>(
+        std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false}});
+    dropdown_owned->set_bounds(Rect{6, 3, 6, 2});
+    desktop->add_popup(std::move(dropdown_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+
+    const ckv::Style background = f.app.theme().resolve(f.roles.desktop_background);
+    f.app.step(0);
+    // (12,4) belongs to both right-hand shadow strips, while remaining
+    // outside both layer rectangles. The composed background must be dimmed
+    // once, not once per caster.
+    CK_CHECK(f.app.current_frame().at(ckv::Point{12, 4}).style() == ckv::scene::default_dim(background));
 }
 
 // --- Terminal too small (ARCHITECTURE.md §5 "Sizing policy", M10/WP-21) ---

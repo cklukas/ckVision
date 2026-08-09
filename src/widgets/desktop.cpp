@@ -508,8 +508,7 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
         View& child = *child_ptr;
         if (!paint_one_child(child, own_painter)) continue;  // invisible: nothing to shadow either
 
-        auto* window = dynamic_cast<Window*>(&child);
-        if (window == nullptr || !window->casts_shadow()) continue;
+        if (!child.casts_shadow()) continue;
 
         // Shadow is composited in DESKTOP-local space (own_painter's
         // own coordinate frame), not the window's translated space —
@@ -526,16 +525,16 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
 void Desktop::paint_retained(const scene::Painter& own_painter,
                              std::vector<scene::Layer>& layers) {
     last_content_repaints_ = 0;
+    const Rect desktop_bounds = absolute_bounds();
+    const Rect content = content_area();
+    const Rect shadow_clip{desktop_bounds.x + content.x, desktop_bounds.y + content.y,
+                           content.width, content.height};
     for (auto& child_ptr : children()) {
         ui::View& child = *child_ptr;
         if (!child.visible()) continue;
 
         if (auto* window = dynamic_cast<Window*>(&child)) {
             if (window->repaint_backing_if_needed()) ++last_content_repaints_;
-            const Rect desktop_bounds = absolute_bounds();
-            const Rect content = content_area();
-            const Rect shadow_clip{desktop_bounds.x + content.x, desktop_bounds.y + content.y,
-                                   content.width, content.height};
             layers.push_back(scene::Layer{window->compositor_layer_id_, &window->backing_surface(),
                                           Point{window->absolute_bounds().x,
                                                 window->absolute_bounds().y},
@@ -560,8 +559,8 @@ void Desktop::paint_retained(const scene::Painter& own_painter,
                 ++last_content_repaints_;
             }
             layers.push_back(scene::Layer{popup->second.compositor_layer_id, &backing,
-                                          Point{child.absolute_bounds().x, child.absolute_bounds().y}, false,
-                                          std::nullopt});
+                                          Point{child.absolute_bounds().x, child.absolute_bounds().y},
+                                          child.casts_shadow(), shadow_clip});
             continue;
         }
 
