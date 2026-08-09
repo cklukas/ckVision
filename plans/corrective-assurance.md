@@ -50,7 +50,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | **Implementation complete — gate pending** | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | **Implementation complete — gate pending** | WP-28 | D-023; M3 security exit |
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Implementation complete — gate pending** | WP-29 | M1; cross-widget Unicode acceptance |
-| 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **In progress — retained-scene foundation landed; budget closure remains** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
+| 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **Implementation complete — gate pending** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | Blocked | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | Blocked (partial landing recorded below) | WP-32 | M3 headless/raster acceptance; screenshot gap |
 | 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Blocked | WP-32A | M3 fuzz exit; verification standard |
@@ -1075,6 +1075,15 @@ scene content. The normal visual, provenance, layer, and scene-budget CTest
 gates also pass. CI now runs both sanitizer configurations on Linux. The
 required Linux and Windows host results remain WP-32/WP-37 matrix work; the
 pinned-host p99 procedure is recorded in `docs/performance.md`.
+
+**Implementation closure (2026-08-09; gate pending).** The WP-31 code work is
+complete: retained Window and popup backing lifecycles, content-versus-geometry
+damage provenance, retained menu shadows, composition/Presenter counters,
+failing scene and real-drag budgets, and warmed raster/dispatch/presentation
+allocation checks are all executable. This is deliberately not a milestone or
+release acceptance claim. The remaining named-host p99 capture automation and
+published platform matrix evidence belong to WP-32/WP-37; their eventual
+results remain required to accept the affected M2/M3/M4/M5 exits.
 
 **Work.**
 
