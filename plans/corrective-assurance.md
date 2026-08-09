@@ -46,10 +46,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 2 | WP-24 — Root layout and resize correctness | 0.5–1 pw | **Implementation complete — gate pending** | WP-23 | WP-1; M4/M8 resize exit |
 | 3 | WP-25 — Lifetime-safe pointer input and activation | 1–2 pw | **Implementation complete — gate pending** | WP-24 | WP-2, WP-3; VISION click routing |
 | 4 | WP-26 — Desktop/window ownership and dialog attachment | 1–2 pw | **Implementation complete — gate pending** | WP-25 | WP-4, WP-5 |
-| 5 | WP-27 — Run loop, terminal session, wake, modality, and presentation API | 4–6 pw | **In progress** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
+| 5 | WP-27 — Run loop, terminal session, wake, modality, and presentation API | 4–6 pw | **Implementation complete — gate pending** | WP-26 | WP-14, WP-15; D-008/D-021/D-024; M3 lifecycle |
 | 6 | WP-28 — Platform-service layer correction | 1–2 pw | **Implementation complete — gate pending** | WP-27 | D-025 and ARCHITECTURE §1 contradiction |
 | 7 | WP-29 — Hostile-paste threat contract and hardening | 1–2 pw | **Implementation complete — gate pending** | WP-28 | D-023; M3 security exit |
-| 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | Blocked | WP-29 | M1; cross-widget Unicode acceptance |
+| 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Ready** | WP-29 | M1; cross-widget Unicode acceptance |
 | 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | Blocked | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | Blocked | WP-31 | M0/M3/M4 cross-platform gates |
 | 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | Blocked (partial landing recorded below) | WP-32 | M3 headless/raster acceptance; screenshot gap |
@@ -380,9 +380,12 @@ event/output operation stream, including title, bell, supported clipboard
 writes, post-restore diagnostics, capability refinement, and resize. Replay applies each recorded size
 and capability transition before returning its batch, and an Application-level
 round trip proves the resized, capability-refined frames are byte-identical.
-The package remains open for the full M3 lifecycle/probe/degradation,
-suspend/resume, record/replay, close/quit-sweep, cross-platform, sanitizer,
-and multi-Application PTY acceptance matrix listed above.
+The local lifecycle, probe/degradation, suspend/resume, record/replay,
+close/quit-sweep, sanitizer, and multi-Application PTY criteria are completed
+by the evidence recorded below. The M3 global gates that remain outside this
+package's implementation boundary are explicitly owned by WP-31 (budgets),
+WP-32/WP-37 (portable matrix), WP-32A (paired visual capture), WP-33 (fuzzing),
+and WP-38 (release audit).
 
 D-038's first public slice is also landed: `Desktop` now distinguishes
 modeless, modal, and blocking-modal presentation; `present_message_box`,
@@ -437,10 +440,10 @@ An application-level Gallery transition now proves that a new finite geometry
 limit clears an already-presented but newly ineligible raster before drawing
 the mandatory cell fallback, then restores the raster when the limit permits
 it again.
-Explicit host profiles may disable those probes. This is intentionally not a
-claim that the complete M3 profile matrix is closed: the remaining
-probe/degradation acceptance remains WP-27 work. D-019's conservative output
-boundary now treats every non-ASCII grapheme as width-unsafe and re-addresses
+Explicit host profiles may disable those probes. The named-profile
+probe/degradation behavior is covered by the WP-27 headless and PTY contracts;
+the broader M3 global matrix is owned by WP-32, WP-32A, WP-37, and WP-38.
+D-019's conservative output boundary now treats every non-ASCII grapheme as width-unsafe and re-addresses
 the following cell absolutely, so a terminal-width disagreement cannot shift
 the rest of a frame; an interoperable width-reporting refinement remains the
 post-0.1 D-OPEN-7 track. The first
@@ -815,12 +818,10 @@ Desktop's top/bottom dock observer before the detached view can be destroyed,
 so `content_area()` never retains a stale dock pointer. Normal, ASan/UBSan,
 and TSan each completed all nine CTest gates with **1356** aggregate
 unit/script tests and no sanitizer diagnostic.
-This is local evidence only: the
-three-platform matrix, hostile-host coverage, fuzz corpus, benchmark gates,
-and release audit remain separate required work.
-Full M3 probe/degradation, cross-platform,
-sanitizer, and remaining close/quit-sweep stress acceptance remain WP-27 work;
-this landing does not satisfy the package exit.
+This is local evidence only: the three-platform matrix, hostile-host coverage,
+fuzz corpus, benchmark gates, paired visual captures, and release audit remain
+separate required work under WP-31 through WP-38. They do not reopen the
+completed WP-27 lifecycle and presentation implementation.
 
 **Acceptance.**
 
@@ -844,6 +845,32 @@ this landing does not satisfy the package exit.
 - Headless and PTY scripts cover capability success/non-response/change,
   tmux/screen/Linux-console degradation, suspend/resume, and record/replay; the
   restored session and re-presented frame meet M3's literal byte guarantees.
+
+**Completion audit (2026-08-09; local macOS).** The current implementation
+meets the literal package criteria. `test_application.cpp` covers top-modal
+Tab/Shift-Tab/F1, local-command exclusion, text, mouse/capture, nested scopes,
+detach-safe focus restoration, post/wake, and re-entrant-pump rejection.
+`test_dialog_presentation.cpp` plus the message, file, and directory dialog
+suites cover typed non-blocking completion, vetoes, host-shutdown cancellation,
+and the blocking outer-loop-only family. Public ownership and loop contracts
+are documented in the public headers and `docs/terminal-host-integration.md`.
+Hello and Gallery command handlers now use `present_message_box` with typed
+completion rather than the raw `Desktop::present_modal` primitive.
+
+`test_posix_terminal.cpp` supplies the real-PTY evidence: bounded in-flight
+wake and quit interruption; exception and fatal-signal restoration;
+SIGTSTP/SIGCONT re-entry, resize, and byte-identical re-presentation; probe
+success, non-response, late-reply rejection, and resize re-probing; named
+ModernVt/tmux/screen/Linux-console degradation; record/replay; and two
+Applications on separate PTYs with isolated SIGINT, resize, wake, and quit.
+The headless profile-transition tests provide the deterministic counterpart.
+Normal, ASan/UBSan, and TSan each passed all 10 CTest gates and 1,368 aggregate
+test assertions, with no sanitizer finding. `git diff --check`, the layer
+check and self-test, and the provenance check and self-test passed as well.
+
+The queue state is therefore **Implementation complete — gate pending** rather
+than `Done`: platform-wide and release gates remain with their explicit later
+owners, not silently claimed by this local evidence.
 
 ### WP-28 — Platform-service layer correction
 

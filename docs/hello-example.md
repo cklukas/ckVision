@@ -17,10 +17,11 @@ widget specification.
 ## Behavior contract
 
 - Alt+G opens a modal `Hello, World!` dialog.
-- The dialog contains the `How are you?` label and four independently
-  focusable dismiss buttons: Terrific, Ok, Lousy, and Cancel.
-- Esc and every button dismiss the dialog. While it is open, the background
-  Alt+X command is not active; it is restored after the dialog closes.
+- The dialog is an Info message box containing `How are you?` and its standard
+  Ok action.
+- Esc and Ok dismiss the dialog. While it is open, the background Alt+X command
+  is not active; it is restored after the dialog closes. The handler registers a
+  typed non-blocking completion without retaining a raw `Window*`.
 - Alt+X requests application exit, and F10 activates the menu bar.
 
 The design sources are VISION.md's one-screen application principle,

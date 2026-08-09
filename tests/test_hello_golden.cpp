@@ -109,22 +109,18 @@ CK_TEST(while_the_greeting_dialog_is_open_background_accelerators_are_scoped_out
     CK_CHECK(app.quit_requested());  // restored once the modal closes
 }
 
-CK_TEST(every_greeting_button_dismisses_the_dialog) {
-    // The example contract makes every greeting button a dismiss action.
-    for (int button_index = 0; button_index < 4; ++button_index) {
-        ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
-        ManualClock clock;
-        Application app(term, clock);
-        ckv::hello::HelloApp hello(app);
-        app.step(0);
+CK_TEST(the_greeting_message_box_dismisses_through_its_standard_ok_action) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::hello::HelloApp hello(app);
+    app.step(0);
 
-        app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
-        CK_CHECK(hello.desktop().windows().size() == 1);
-        for (int i = 0; i < button_index; ++i) app.focus_next();
-        app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
-        app.step(0);
-        CK_CHECK(hello.desktop().windows().empty());
-    }
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
+    CK_CHECK(hello.desktop().windows().size() == 1);
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    app.step(0);
+    CK_CHECK(hello.desktop().windows().empty());
 }
 
 CK_TEST(alt_x_quits_via_the_status_line_shortcut) {

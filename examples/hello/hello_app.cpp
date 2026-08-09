@@ -1,11 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "hello_app.hpp"
 
-#include "cvision/widgets/button.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/status_line.hpp"
-#include "cvision/widgets/static_text.hpp"
-#include "cvision/widgets/window.hpp"
 
 namespace ckv::hello {
 
@@ -25,28 +23,13 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     app_.commands().add({.id = kCmdQuit, .title = "E&xit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
 }
 
-// The example's non-blocking modal scope is D-021: a command handler
-// never starts a nested event loop; all four buttons and Esc dismiss
-// the dialog while background input remains inactive until it closes.
+// A command handler presents the typed, non-blocking standard dialog and
+// returns; completion is intentionally observed without retaining a Window.
 void HelloApp::greeting_box() {
-    auto window = std::make_unique<widgets::Window>("Hello, World!");
-    window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame, roles_.dialog_background);
-    window->set_bounds(Rect{25, 5, 30, 11}); widgets::Window* window_ptr = window.get();
-
-    auto* text = window->add(std::make_unique<widgets::StaticText>("How are you?")); text->set_bounds(Rect{3, 5, 12, 1});
-
-    widgets::Button* first_button = nullptr;
-    const char* const labels[] = {"Terrific", "Ok", "Lousy", "Cancel"};
-    for (int i = 0; i < 4; ++i) {
-        auto* raw = window->add(std::make_unique<widgets::Button>(labels[i]));
-        raw->set_bounds(Rect{16, 2 * i + 1, 12, 2});
-        if (first_button == nullptr) first_button = raw;
-        raw->on_press = [window_ptr] { window_ptr->close(); };
-    }
-
-    window->cancel_request = [window_ptr] { window_ptr->close(); };
-    window->on_closed = [window_ptr, this] { schedule_self_detach(*window_ptr, app_); };
-    desktop_->present_modal(widgets::WindowHandle{std::move(window), first_button}, app_);
+    auto greeting = widgets::present_message_box(app_, *desktop_, roles_,
+                                                  {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
+                                                   widgets::MessageBoxButtons::Ok});
+    greeting.set_completion_handler([](widgets::MessageBoxResult) {});
 }
 
 }  // namespace ckv::hello

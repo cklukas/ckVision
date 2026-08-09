@@ -63,9 +63,9 @@ void GalleryApp::build_menu_bar() {
                                                           widgets::MessageBoxKind::Info, "About Gallery",
                                                           "ckVision Gallery — a demonstration application.",
                                                           widgets::MessageBoxButtons::Ok};
-                                                      auto handle = widgets::make_message_box(
-                                                          descriptor, roles_, app_, app_.focused(), nullptr);
-                                                      desktop_->present_modal(std::move(handle), app_);
+                                                      auto presentation =
+                                                          widgets::present_message_box(app_, *desktop_, roles_, descriptor);
+                                                      presentation.set_completion_handler([](widgets::MessageBoxResult) {});
                                                   },
                                                   false});
     file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true});
@@ -111,8 +111,8 @@ void GalleryApp::build_controls_window() {
             widgets::MessageBoxKind::Info, "Greeting",
             name_input->text().empty() ? "Hello, stranger!" : "Hello, " + name_input->text() + "!",
             widgets::MessageBoxButtons::Ok};
-        auto handle = widgets::make_message_box(descriptor, roles_, *app_ptr, app_ptr->focused(), nullptr);
-        desktop->present_modal(std::move(handle), *app_ptr);
+        auto presentation = widgets::present_message_box(*app_ptr, *desktop, roles_, descriptor);
+        presentation.set_completion_handler([](widgets::MessageBoxResult) {});
     };
     content->add_child(std::move(greet));
 

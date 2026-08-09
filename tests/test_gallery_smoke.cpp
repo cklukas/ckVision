@@ -138,7 +138,7 @@ CK_TEST(alt_x_quits_via_the_status_lines_documented_shortcut) {
     CK_CHECK(f.app.quit_requested());
 }
 
-CK_TEST(clicking_greet_opens_a_message_box_that_renders_the_typed_name) {
+CK_TEST(clicking_greet_presents_and_completes_a_typed_message_box) {
     Fixture f;
     f.app.step(0);
     f.app.dispatch(ckv::TextEvent{"Grace", false});
@@ -154,6 +154,13 @@ CK_TEST(clicking_greet_opens_a_message_box_that_renders_the_typed_name) {
     f.app.step(0);
 
     CK_CHECK(f.term.written_bytes().find("Grace") != std::string::npos);
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.gallery.desktop().windows().size() == 3);
+
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    f.app.step(0);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.gallery.desktop().windows().size() == 2);
 }
 
 CK_TEST(the_image_window_content_reaches_the_terminal_as_sixel_data_under_full_capabilities) {
