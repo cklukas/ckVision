@@ -34,6 +34,18 @@ public:
     }
 };
 
+class CountingPopup final : public ckv::ui::View {
+public:
+    void draw(ckv::scene::Painter& painter) override {
+        ++draw_count;
+        painter.draw_text(ckv::Point{0, 0}, "P", ckv::Style{});
+    }
+
+    void change_content() { invalidate(); }
+
+    int draw_count = 0;
+};
+
 struct Fixture {
     ckv::term::HeadlessTerminal term{ckv::Size{40, 12}};
     ManualClock clock;
@@ -237,6 +249,61 @@ CK_TEST(retained_window_layers_preserve_foreground_frame_topology_through_move_a
     foreground->set_bounds(Rect{11, 3, 14, 8});
     f.app.step(0);
     CK_CHECK(f.app.current_frame().at(ckv::Point{11, 3}).grapheme() == "╔");
+}
+
+CK_TEST(moving_a_popup_recomposes_its_retained_backing_without_content_repaint) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    Desktop* desktop = desktop_owned.get();
+    auto popup_owned = std::make_unique<CountingPopup>();
+    popup_owned->set_bounds(Rect{2, 2, 8, 2});
+    ckv::ui::View* popup_child = popup_owned->add_child(std::make_unique<ckv::ui::View>());
+    CountingPopup* popup = desktop->add_popup(std::move(popup_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+
+    f.app.step(0);
+    CK_CHECK(popup->draw_count == 1);
+
+    popup->set_bounds(Rect{18, 2, 8, 2});
+    f.app.step(0);
+    CK_CHECK(popup->draw_count == 1);
+    CK_CHECK(desktop->last_content_repaints() == 0);
+
+    popup->change_content();
+    f.app.step(0);
+    CK_CHECK(popup->draw_count == 2);
+    CK_CHECK(desktop->last_content_repaints() == 1);
+
+    popup_child->invalidate();
+    f.app.step(0);
+    CK_CHECK(popup->draw_count == 3);
+    CK_CHECK(desktop->last_content_repaints() == 1);
+
+    popup->set_bounds(Rect{18, 2, 9, 3});
+    f.app.step(0);
+    CK_CHECK(popup->draw_count == 4);
+    CK_CHECK(desktop->last_content_repaints() == 1);
+}
+
+CK_TEST(runtime_popup_attachment_and_removal_recompose_the_retained_scene) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    Desktop* desktop = desktop_owned.get();
+    f.app.root().add_child(std::move(desktop_owned));
+    f.app.step(0);
+
+    auto popup_owned = std::make_unique<CountingPopup>();
+    popup_owned->set_bounds(Rect{7, 4, 8, 2});
+    CountingPopup* popup = desktop->add_popup(std::move(popup_owned));
+    f.app.step(0);
+    CK_CHECK(popup->draw_count == 1);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{7, 4}).grapheme() == "P");
+
+    std::unique_ptr<ckv::ui::View> detached = desktop->remove_popup(popup);
+    CK_CHECK(detached != nullptr);
+    f.app.step(0);
+    CK_CHECK(desktop->last_content_repaints() == 0);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{7, 4}).grapheme() == "░");
 }
 
 // --- Terminal too small (ARCHITECTURE.md §5 "Sizing policy", M10/WP-21) ---

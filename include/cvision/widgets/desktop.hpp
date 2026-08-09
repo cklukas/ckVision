@@ -260,9 +260,12 @@ private:
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
     void zoom_active_window();
-    void on_invalidated(Rect) override;
-    void on_descendant_invalidated(const ui::View& source, Rect) override;
+    void on_invalidated(Rect, ui::InvalidationKind) override;
+    void on_descendant_invalidated(const ui::View& source, Rect,
+                                   ui::InvalidationKind kind) override;
     static bool is_descendant_of(const ui::View& view, const ui::View* ancestor) noexcept;
+    void request_layer_recompose();
+    void raise_layer_to_front(ui::View* child);
 
     const ui::Theme& theme_;
     ui::RoleId background_role_;
@@ -272,11 +275,13 @@ private:
     struct PopupBacking {
         std::optional<scene::Surface> surface;
         int compositor_layer_id = 0;
+        bool dirty = true;
     };
     std::unordered_map<ui::View*, PopupBacking> popup_backings_;
     int next_compositor_layer_id_ = 1;
     std::size_t last_content_repaints_ = 0;
     bool retained_base_dirty_ = true;
+    bool structural_invalidation_ = false;
     ui::View* top_dock_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;

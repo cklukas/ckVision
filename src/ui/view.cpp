@@ -82,7 +82,7 @@ void View::set_bounds(Rect bounds) {
     const std::weak_ptr<void> self_liveness = lifetime_token();
     const Rect old_absolute = absolute_bounds();
     bounds_ = bounds;
-    invalidate();  // damage the new bounds
+    invalidate(Rect{0, 0, bounds_.width, bounds_.height}, InvalidationKind::Geometry);
     if (self_liveness.expired()) return;
     if (dirty_rect_sink_) dirty_rect_sink_(old_absolute);  // and the vacated old bounds
     if (self_liveness.expired()) return;
@@ -117,9 +117,13 @@ void View::set_enabled(bool enabled) {
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }
 
 void View::invalidate(Rect local_rect) {
-    on_invalidated(local_rect);
+    invalidate(local_rect, InvalidationKind::Content);
+}
+
+void View::invalidate(Rect local_rect, InvalidationKind kind) {
+    on_invalidated(local_rect, kind);
     for (View* ancestor = parent_; ancestor != nullptr; ancestor = ancestor->parent_)
-        ancestor->on_descendant_invalidated(*this, local_rect);
+        ancestor->on_descendant_invalidated(*this, local_rect, kind);
     if (!dirty_rect_sink_) return;
     const Rect absolute = absolute_bounds();
     dirty_rect_sink_(Rect{absolute.x + local_rect.x, absolute.y + local_rect.y, local_rect.width,

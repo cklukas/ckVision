@@ -46,6 +46,15 @@ enum class FocusPolicy {
     TabStop,   // focusable and included in Tab order
 };
 
+// Why a View's pixels are invalid. Retained containers use this to keep an
+// unchanged local backing through a translation while still repainting a
+// view whose own state asked for new pixels. Geometry is emitted only by
+// View::set_bounds(); public invalidate() calls always mean content damage.
+enum class InvalidationKind {
+    Content,
+    Geometry,
+};
+
 class View {
 public:
     explicit View(Rect bounds = {}) : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}) {}
@@ -334,10 +343,15 @@ protected:
     // Retained containers observe invalidation without changing the public
     // dirty-rect callback contract. The initiating view receives the first
     // hook, then each ancestor receives the descendant notification.
-    virtual void on_invalidated(Rect local_rect) { (void)local_rect; }
-    virtual void on_descendant_invalidated(const View& source, Rect source_local_rect) {
+    virtual void on_invalidated(Rect local_rect, InvalidationKind kind) {
+        (void)local_rect;
+        (void)kind;
+    }
+    virtual void on_descendant_invalidated(const View& source, Rect source_local_rect,
+                                           InvalidationKind kind) {
         (void)source;
         (void)source_local_rect;
+        (void)kind;
     }
 
     // Called by a subclass whenever its OWN horizontal_size_hint()/
@@ -378,6 +392,7 @@ private:
     void propagate_detach_sink(const DetachSink& sink);
     void propagate_context(Context context);
     void notify_detaching_recursive();  // fires detach_sink_ for `this` and every descendant, alive
+    void invalidate(Rect local_rect, InvalidationKind kind);
 
     View* parent_ = nullptr;
     std::vector<std::unique_ptr<View>> children_;

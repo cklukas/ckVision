@@ -10,6 +10,7 @@
 using ckv::Rect;
 using ckv::ui::Context;
 using ckv::ui::FocusPolicy;
+using ckv::ui::InvalidationKind;
 using ckv::ui::RoleRegistry;
 using ckv::ui::Theme;
 using ckv::ui::View;
@@ -23,6 +24,20 @@ public:
     int attach_count = 0;
     void draw(ckv::scene::Painter&) override { ++draws; }
     void on_attached() override { ++attach_count; }
+};
+
+class InvalidationSpyView final : public View {
+public:
+    int descendant_invalidations = 0;
+    InvalidationKind last_kind = InvalidationKind::Content;
+    const View* last_source = nullptr;
+
+protected:
+    void on_descendant_invalidated(const View& source, Rect, InvalidationKind kind) override {
+        ++descendant_invalidations;
+        last_source = &source;
+        last_kind = kind;
+    }
 };
 
 }  // namespace
@@ -194,6 +209,21 @@ CK_TEST(invalidate_local_rect_is_translated_into_absolute_space) {
     root.set_dirty_rect_sink([&](Rect r) { reported = r; });
     child->invalidate(Rect{2, 3, 4, 1});
     CK_CHECK(*reported == (Rect{10 + 5 + 2, 0 + 0 + 3, 4, 1}));
+}
+
+CK_TEST(retained_owners_can_distinguish_content_from_geometry_invalidation) {
+    InvalidationSpyView parent;
+    View* child = parent.add_child(std::make_unique<View>(Rect{1, 2, 3, 4}));
+
+    child->invalidate();
+    CK_CHECK(parent.descendant_invalidations == 1);
+    CK_CHECK(parent.last_source == child);
+    CK_CHECK(parent.last_kind == InvalidationKind::Content);
+
+    child->set_bounds(Rect{5, 6, 3, 4});
+    CK_CHECK(parent.descendant_invalidations == 2);
+    CK_CHECK(parent.last_source == child);
+    CK_CHECK(parent.last_kind == InvalidationKind::Geometry);
 }
 
 CK_TEST(set_dirty_rect_sink_on_a_parent_propagates_to_children_added_before_it) {

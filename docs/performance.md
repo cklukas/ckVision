@@ -17,7 +17,9 @@ does not introduce a library global or alter client allocation behavior.
 `Window::content_repaint_count()` are the deterministic per-frame counters
 used by interaction tests and benchmarks. A move must repaint no Window
 content and compose only the old/new window rectangles and their shadows; a
-resize may repaint only the resized Window's local backing.
+resize may repaint only the resized Window's local backing. The same retained
+rule applies to popups: a same-size move is layer composition only, whereas
+their own content invalidation and a resize repaint that popup's backing.
 
 ## Pinned-host p99 procedure
 

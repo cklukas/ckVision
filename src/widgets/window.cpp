@@ -223,9 +223,11 @@ void Window::on_resized() {
     relayout_frame_overlays();
 }
 
-void Window::on_invalidated(Rect) { backing_dirty_ = true; }
+void Window::on_invalidated(Rect, ui::InvalidationKind kind) {
+    if (kind == ui::InvalidationKind::Content) backing_dirty_ = true;
+}
 
-void Window::on_descendant_invalidated(const ui::View&, Rect) { backing_dirty_ = true; }
+void Window::on_descendant_invalidated(const ui::View&, Rect, ui::InvalidationKind) { backing_dirty_ = true; }
 
 bool Window::repaint_backing_if_needed() {
     const Size local_size{bounds().width, bounds().height};

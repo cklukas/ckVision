@@ -197,6 +197,7 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     }
     std::unique_ptr<ui::View> detached = ui::View::remove_child(window);
     CKV_ASSERT(detached != nullptr);  // was in windows_, so it must have been a child
+    request_layer_recompose();
 
     if (active_ == nullptr) {
         // The new topmost WINDOW, not necessarily children().back() —
@@ -242,7 +243,7 @@ void Desktop::activate(Window* window) {
     CKV_ASSERT(std::find(windows_.begin(), windows_.end(), window) != windows_.end());
     if (window == active_) return;
     if (active_ != nullptr) active_->set_active(false);
-    raise_to_front(window);
+    raise_layer_to_front(window);
     reraise_popups();  // keep every open popup above the window that just moved to front
     active_ = window;
     active_->set_active(true);
@@ -253,6 +254,7 @@ ui::View* Desktop::add_popup_impl(std::unique_ptr<ui::View> popup) {
     ui::View* raw = ui::View::add_child(std::move(popup));
     popups_.push_back(raw);  // already topmost: add_child appends to the end of children_
     popup_backings_.emplace(raw, PopupBacking{std::nullopt, next_compositor_layer_id_++});
+    request_layer_recompose();
     return raw;
 }
 
@@ -261,7 +263,9 @@ std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
     if (it == popups_.end()) return nullptr;
     popups_.erase(it);
     popup_backings_.erase(popup);
-    return ui::View::remove_child(popup);
+    std::unique_ptr<ui::View> detached = ui::View::remove_child(popup);
+    request_layer_recompose();
+    return detached;
 }
 
 std::unique_ptr<ui::View> Desktop::detach_child(ui::View* child) {
@@ -269,7 +273,7 @@ std::unique_ptr<ui::View> Desktop::detach_child(ui::View* child) {
 }
 
 void Desktop::reraise_popups() {
-    for (ui::View* popup : popups_) raise_to_front(popup);
+    for (ui::View* popup : popups_) raise_layer_to_front(popup);
 }
 
 void Desktop::activate_next() {
@@ -455,14 +459,40 @@ bool Desktop::is_descendant_of(const ui::View& view, const ui::View* ancestor) n
     return false;
 }
 
-void Desktop::on_invalidated(Rect) { retained_base_dirty_ = true; }
+void Desktop::on_invalidated(Rect, ui::InvalidationKind) {
+    if (!structural_invalidation_) retained_base_dirty_ = true;
+}
 
-void Desktop::on_descendant_invalidated(const ui::View& source, Rect) {
+void Desktop::request_layer_recompose() {
+    structural_invalidation_ = true;
+    invalidate();
+    structural_invalidation_ = false;
+}
+
+void Desktop::raise_layer_to_front(ui::View* child) {
+    structural_invalidation_ = true;
+    raise_to_front(child);
+    structural_invalidation_ = false;
+}
+
+void Desktop::on_descendant_invalidated(const ui::View& source, Rect, ui::InvalidationKind kind) {
     // Windows and popups have independent retained surfaces. Docked chrome
     // is composed into the base surface, so only it (or its descendants)
     // invalidates that surface.
-    if (is_descendant_of(source, top_dock_) || is_descendant_of(source, bottom_dock_))
+    if (is_descendant_of(source, top_dock_) || is_descendant_of(source, bottom_dock_)) {
         retained_base_dirty_ = true;
+        return;
+    }
+    // A popup's own geometry invalidation does not imply its local backing
+    // changed: a same-size translation is a layer-position change. Its child
+    // invalidations, on the other hand, change popup content and must repaint
+    // that one backing before the next compose.
+    for (ui::View* popup : popups_) {
+        if (!is_descendant_of(source, popup)) continue;
+        if (&source != popup || kind == ui::InvalidationKind::Content)
+            popup_backings_.at(popup).dirty = true;
+        return;
+    }
 }
 
 void Desktop::paint_children(const scene::Painter& own_painter) {
@@ -516,13 +546,19 @@ void Desktop::paint_retained(const scene::Painter& own_painter,
         const auto popup = popup_backings_.find(&child);
         if (popup != popup_backings_.end()) {
             const Size size{child.bounds().width, child.bounds().height};
-            if (!popup->second.surface || popup->second.surface->size() != size)
+            if (!popup->second.surface || popup->second.surface->size() != size) {
                 popup->second.surface.emplace(size);
+                popup->second.dirty = true;
+            }
             scene::Surface& backing = *popup->second.surface;
-            backing.clear_raster_regions();
-            scene::Painter popup_painter(backing, Rect{0, 0, size.width, size.height});
-            child.draw(popup_painter);
-            child.paint_children(popup_painter);
+            if (popup->second.dirty) {
+                backing.clear_raster_regions();
+                scene::Painter popup_painter(backing, Rect{0, 0, size.width, size.height});
+                child.draw(popup_painter);
+                child.paint_children(popup_painter);
+                popup->second.dirty = false;
+                ++last_content_repaints_;
+            }
             layers.push_back(scene::Layer{popup->second.compositor_layer_id, &backing,
                                           Point{child.absolute_bounds().x, child.absolute_bounds().y}, false,
                                           std::nullopt});

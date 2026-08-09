@@ -254,8 +254,9 @@ public:
     bool on_mouse(const MouseEvent& event) override;
 
 protected:
-    void on_invalidated(Rect local_rect) override;
-    void on_descendant_invalidated(const ui::View& source, Rect source_local_rect) override;
+    void on_invalidated(Rect local_rect, ui::InvalidationKind kind) override;
+    void on_descendant_invalidated(const ui::View& source, Rect source_local_rect,
+                                   ui::InvalidationKind kind) override;
 
 private:
     friend class Desktop;
