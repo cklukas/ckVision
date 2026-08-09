@@ -25,7 +25,7 @@ pixel-aware input in `term`, image widgets in `widgets`) — see §7.
 ├───────────────────────────────────────────────────────────────┤
 │  term      terminal backends, capabilities, input decoder,    │
 │            frame presenter, graphics encoders, platform       │
-│            services (filesystem, system clipboard bridge)     │
+│            adapters (filesystem, clock, clipboard export)     │
 ├───────────────────────────────────────────────────────────────┤
 │  core      geometry, text/width, color, style, cell, image,   │
 │            events, keys, error, clock — no I/O, no platform   │
@@ -41,9 +41,9 @@ reaches around a lower layer. No cycles, enforced by include checks in CI.
 
 Environment and platform access follow the same discipline: `core`,
 `scene`, `ui`, and `widgets` never read the environment, the filesystem,
-or the clock directly — backends receive the environment explicitly at
-construction, and applications consume platform services (filesystem,
-clock, clipboard bridge) through injected interfaces (§5, D-025).
+or the clock directly. Core owns the dependency-neutral contracts; term owns
+platform adapters and terminal-session I/O; applications and widgets receive
+the particular service instances they consume explicitly (§5, D-039).
 
 Namespace: `ckv::` (sub-namespaces per layer only where they pay for
 themselves). Public headers: `<cvision/...>`. CMake target:
@@ -136,8 +136,8 @@ event stream, frame presentation, clipboard write, title, notifications
 
 - **posix**: macOS and Linux. Raw-mode tty management, `poll`-based event
   loop with a self-pipe for cross-thread wakeups, SIGWINCH handling with
-  resize coalescing, suspend/resume (Ctrl-Z, SIGTSTP/SIGCONT) with full
-  state re-establishment.
+  resize coalescing, and SIGTSTP/SIGCONT session restoration with full frame
+  re-presentation. SIGINT policy belongs to the embedding host.
 - **windows**: Windows Terminal and ConPTY hosts, **VT-first** (D-020):
   VT processing on output, VT input mode feeding the same decoder as
   POSIX (kitty keyboard protocol and bracketed paste work where the host
@@ -152,11 +152,12 @@ event stream, frame presentation, clipboard write, title, notifications
   display implements only the documented VT subset Presenter emits plus the
   published Sixel grammar; unsupported output is a test failure, not ignored.
 - **record/replay**: wraps any backend; records an initial capability/size
-  snapshot, every event batch (including capability-probe responses), and
-  every observable terminal output operation (frame bytes, title, bell, and
-  supported clipboard write). Replay captures the same operation log so a
-  deterministic rerun can prove byte-for-byte and side-effect-for-side-effect
-  fidelity without consulting the original backend.
+  snapshot, every event batch (including capability-probe responses and
+  resize), and every observable terminal output operation (frame bytes, title,
+  bell, and supported clipboard write). Replay applies capability and size
+  changes before returning their recorded batch, then captures the same
+  operation log so a deterministic rerun can prove byte-for-byte and
+  side-effect-for-side-effect fidelity without consulting the original backend.
 
 **Session-state ledger and restoration.** Every mode the backend sets
 (alternate screen, raw mode, mouse modes, keyboard protocol pushes,
@@ -169,9 +170,10 @@ init and left on every exit path; the user's scrollback is never
 disturbed; suspend restores the primary screen and shell state until
 resume.
 
-**Capabilities.** No terminfo. A curated profile database (keyed on
-terminal identity supplied to the backend at construction) sets the
-baseline; runtime probes refine it; applications can force overrides.
+**Capabilities.** No terminfo. A curated profile database selected explicitly
+by the host at backend construction sets the baseline; runtime probes refine
+it; applications can force overrides. The library never inspects environment
+state to infer terminal identity.
 The lifecycle is explicit: the first frame ships immediately on the
 baseline profile — probing never blocks presentation; probe responses
 (DA1, XTGETTCAP, mode and color queries) arrive as typed events on the
@@ -236,13 +238,14 @@ the scene decided is visible, and library users never deal with emission
 order. All OSC emissions (title, OSC 52, OSC 8 targets) escape or reject
 embedded terminator bytes (§12).
 
-**Platform services.** The `term` layer also hosts the platform-backed
-implementations of the injectable service interfaces the upper layers
-consume: the filesystem model (used by file dialogs; scripted in-memory
-implementation for headless tests) and the system-clipboard bridge
-(OSC 52 write on VT terminals; full native clipboard read/write on
-Windows). Interfaces live where they are consumed (`ui`); platform code
-lives here (D-025).
+**Platform adapters.** `term` hosts platform-backed implementations of the
+core service contracts: a filesystem model used by file dialogs, a monotonic
+clock, and a terminal-session clipboard-export adapter. The corresponding
+interfaces do not live in `ui`: `term` could not implement an upward `ui`
+dependency. `Terminal` itself owns input polling, native wait handles, and
+wake because those are session resources, not generic services. A scripted
+in-memory implementation exists for each core contract used in deterministic
+tests (D-039).
 
 ## 5. ui — the framework
 
@@ -256,11 +259,13 @@ deterministic; no view outlives its parent. The tree roots in a
 `Desktop` (background + window management) under an `Application`.
 
 There is no global state in the library's design: `Application` owns the
-terminal, the scene, the focus, the command registry, the theme, the
-internal clipboard, the history registry, the platform services, and the
-event loop. Multiple applications in one process are supported — on
-distinct terminals; attaching two applications to one terminal is a
-documented contract violation. The single sanctioned process-level
+scene, focus, command registry, theme, internal clipboard, history registry,
+event loop, and its default terminal clipboard adapter. It explicitly borrows
+the terminal, clock, and any host-provided service; every such instance must
+outlive its consumer and distinct Applications use distinct terminal sessions
+and service instances. Multiple applications in one process are supported — on
+distinct terminals; attaching two applications to one terminal is a documented
+contract violation. The single sanctioned process-level
 facility is the async-signal-safe registry of live terminal sessions that
 fatal-signal handlers use to restore every attached tty (D-024).
 
@@ -275,8 +280,16 @@ before dispatch. Steady-state dispatch and paint allocate nothing.
 
 The loop is **embeddable by construction** (D-021): `run()` is a
 convenience over a public `step(deadline)` / `wake()` pair with an
-exported waitable handle, so a host can drive ckVision from its own
-poll/epoll/IOCP loop. Consequently, **modality is loop state, not nested
+exported borrowed wait-handle set and next timer deadline, so a host can drive
+ckVision from its own poll/epoll/IOCP loop without a duplicate wait. The POSIX
+set contains both terminal input and the application wake channel; deterministic
+backends have none. A blocking `run_until(done)` checks `done` only while no
+quit request has been observed: a request already present, or received during
+the preceding `step`, ends the loop before another application predicate call,
+and reports interruption rather than completion. A host request that interrupts
+a blocking standard-dialog convenience force-detaches its still-open dialog and
+returns its documented cancellation fallback; it is not routed through a
+vetoable user-close request. Consequently, **modality is loop state, not nested
 native loops**: a modal dialog pushes onto the modality stack, which
 scopes event routing (accelerators included) until it completes via
 callback/notification; a blocking convenience wrapper exists for
@@ -363,9 +376,11 @@ injected provider interface; the library defines no help file format.
   window geometry, z-order, zoom state, and history lists. The
   application owns storage and re-creates window content; the library
   defines no file format.
-- **Platform services**: the injected filesystem and clock interfaces
-  (D-025) — file dialogs enumerate through the filesystem interface,
-  which is why they golden-test headlessly against a scripted tree.
+- **Platform services**: `Clock`, `FileSystem`, and `ClipboardWriter` are
+  injected core contracts (D-039). File dialogs enumerate through the
+  filesystem interface, which is why they golden-test headlessly against a
+  scripted tree; Application's clipboard export uses its explicitly selected
+  bridge.
 - **Localization**: every string the library displays routes through a
   replaceable string table (§13).
 
@@ -388,7 +403,14 @@ mechanism behind every menu and dropdown in the library.
 keyboard close, window-list close, application quit — issues a close
 *request* that the content can veto or answer asynchronously (the
 standard unsaved-changes flow); application quit sweeps all windows
-through the same protocol. **Dialog accept** (default button, Enter) runs
+through the same protocol. A callback cannot recursively begin a second
+default quit sweep while that request is active: the original sweep alone
+observes later vetoes and decides whether to request application shutdown. If
+a close callback destroys its owning Desktop, that active sweep ends without a
+shutdown decision rather than dereferencing the departed owner.
+Nor can a close callback recursively invoke the same window's close protocol:
+the nested request is already accepted and is a no-op until the outer callback
+returns. **Dialog accept** (default button, Enter) runs
 validation across the dialog's controls; a failing validator vetoes the
 accept, receives focus, and reports through its normal error styling.
 Esc-cancel bypasses validation by definition.
@@ -565,12 +587,18 @@ tokens passed into application-owned worker code. The library itself
 creates no visible threads; backends may use internal threads for I/O but
 surface everything through the event stream on the owning thread.
 
-Signals are process-level by nature; the design confines them to the one
-sanctioned facility: an async-signal-safe registry of live terminal
-sessions (D-024). Runtime signals (SIGWINCH, SIGTSTP/SIGCONT) are routed
-to the session that owns the tty; fatal-signal handlers restore every
-registered tty from its precomputed ledger bytes (§4) before the process
-dies.
+Signals are process-level by nature; the design confines ckVision's own
+use of them to the one sanctioned facility: an async-signal-safe registry
+of live terminal sessions (D-024). The registry installs its process signal
+dispositions only for the lifetime of one or more live sessions, restoring the
+host dispositions after the final session ends. SIGWINCH only interrupts a POSIX poll;
+each session compares its own tty geometry, so a resize cannot be routed to
+another application. SIGTSTP restores every live terminal before the process
+stops; SIGCONT re-enters each session and queues an instance-local full
+re-presentation. SIGINT belongs to the embedding host and never mutates an
+`Application` from a signal handler. Fatal-signal handlers restore every
+registered tty from its precomputed ledger bytes (§4) before the process dies.
+The complete host protocol is documented in `docs/terminal-host-integration.md`.
 
 ## 10. Determinism and testing architecture
 
@@ -623,9 +651,9 @@ dies.
   instead of reading library source.
 
 The library reads no wall-clock time, no locale, and — in core, scene,
-ui, and widgets — no environment and no filesystem; the injected Clock
-and the injected filesystem interface are the two impurity boundaries,
-and tests script both.
+ui, and widgets — no environment and no filesystem. `Clock`, `FileSystem`,
+and `ClipboardWriter` are the injected impurity boundaries, and tests script
+each without platform access (D-039).
 
 ## 11. Errors and diagnostics
 

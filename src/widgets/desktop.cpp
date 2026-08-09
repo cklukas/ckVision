@@ -51,8 +51,49 @@ void Desktop::close_active_window() {
 }
 
 void Desktop::quit_sweep() {
-    for (auto it = windows_.rbegin(); it != windows_.rend(); ++it)
-        if (!(*it)->close()) return;  // vetoed: the sweep stops here, quit is cancelled
+    // close() enters application-defined code. A callback may execute kQuit
+    // again; restarting here would re-close the current window recursively
+    // and could let an inner sweep request shutdown before the outer request
+    // reaches a later veto. One active sweep is the complete user request.
+    const std::shared_ptr<QuitSweepState> sweep_state = quit_sweep_state_;
+    if (sweep_state->in_progress) return;
+    sweep_state->in_progress = true;
+    struct ResetSweepGuard {
+        std::shared_ptr<QuitSweepState> state;
+        ~ResetSweepGuard() { state->in_progress = false; }
+    } reset_sweep{sweep_state};
+
+    // The close callback may detach and destroy this Desktop itself. Retain a
+    // liveness observation separately from the object so no following loop
+    // iteration or shutdown request dereferences a departed owner.
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+
+    // close() is user-extensible: its callback can synchronously detach and
+    // destroy this Window (or another one). Iterate a stable front-to-back
+    // snapshot rather than windows_ itself. A raw pointer alone is not a
+    // sufficient identity: a callback can destroy an unvisited Window and
+    // allocate a new one at that exact address. Pair it with View's
+    // per-instance liveness token, then confirm the original still remains
+    // attached before touching it. Windows opened by a close callback were
+    // not present when the quit request began and are left for the host's
+    // imminent shutdown rather than being unexpectedly swept as re-entrant
+    // work.
+    struct WindowAtStart {
+        Window* window = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<WindowAtStart> windows_at_start;
+    windows_at_start.reserve(windows_.size());
+    for (Window* window : windows_)
+        windows_at_start.push_back(WindowAtStart{window, window->lifetime_token()});
+    for (auto it = windows_at_start.rbegin(); it != windows_at_start.rend(); ++it) {
+        if (it->liveness.expired()) continue;
+        Window* window = it->window;
+        if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) continue;
+        if (!window->close()) return;  // vetoed: the sweep stops here, quit is cancelled
+        if (desktop_liveness.expired()) return;
+    }
+    if (desktop_liveness.expired()) return;
     if (app_ != nullptr) app_->request_quit();
 }
 
@@ -82,15 +123,27 @@ ui::View* Desktop::add_child(std::unique_ptr<ui::View> child) {
 }
 
 Window* Desktop::present_modeless(WindowHandle handle, ui::Application& app) {
-    Window* window = add_window(std::move(handle.window));
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    Window* window = handle.window.get();
+    CKV_ASSERT(window != nullptr);
+    const std::weak_ptr<void> window_liveness = window->lifetime_token();
+    add_window(std::move(handle.window));
     app.set_focus(handle.initial_focus);
+    if (desktop_liveness.expired() || window_liveness.expired()) return nullptr;
+    if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) return nullptr;
     return window;
 }
 
 Window* Desktop::present_modal(WindowHandle handle, ui::Application& app) {
-    Window* window = add_window(std::move(handle.window));
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    Window* window = handle.window.get();
+    CKV_ASSERT(window != nullptr);
+    const std::weak_ptr<void> window_liveness = window->lifetime_token();
+    add_window(std::move(handle.window));
     app.push_modal(*window);
     app.set_focus(handle.initial_focus);
+    if (desktop_liveness.expired() || window_liveness.expired()) return nullptr;
+    if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) return nullptr;
     return window;
 }
 
@@ -99,15 +152,32 @@ void Desktop::exec_modal(ui::Application& app, WindowHandle handle) {
     // pumping here would recursively dispatch and make lifetime/routing
     // order unprovable. Callers in that context use present_modal instead.
     CKV_ASSERT(app.can_run_blocking());
-    Window* window = add_window(std::move(handle.window));
+    // The blocking pump crosses arbitrary application callbacks. A callback
+    // may detach and destroy either this Desktop or its modal Window, so retain
+    // their independent identity observations before entering the loop.
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    Window* window = handle.window.get();
+    CKV_ASSERT(window != nullptr);
+    const std::weak_ptr<void> window_liveness = window->lifetime_token();
+    add_window(std::move(handle.window));
     const ui::Application::ModalScopeId modal_scope = app.push_modal(*window);
     app.set_focus(handle.initial_focus);
-    app.run_until([this, window] {
+    const bool window_detached = app.run_until([this, desktop_liveness, window, window_liveness] {
+        if (desktop_liveness.expired() || window_liveness.expired()) return true;
         return std::find(windows_.begin(), windows_.end(), window) == windows_.end();
     });
+    // A host-requested shutdown is not a user close request: it has already
+    // selected loop termination, so a still-open blocking dialog must not
+    // remain attached and silently become modeless after this function
+    // returns. Keep the removed window alive until after detachment callbacks
+    // finish; those callbacks may inspect the exact modal-scope state.
+    std::unique_ptr<Window> shutdown_detached;
+    if (!window_detached && !desktop_liveness.expired() && !window_liveness.expired())
+        shutdown_detached = remove_window(window);
     // The Application detach sink removes a modal scope as soon as its
-    // Window detaches. A quit can end the pump while it is still open;
-    // pop exactly this scope, never an independently opened inner modal.
+    // Window detaches. Pop exactly this scope only if an unusual caller-owned
+    // detachment path left it present; never pop an independently opened
+    // inner modal.
     app.pop_modal(modal_scope);
 }
 
@@ -149,6 +219,10 @@ std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
         return std::unique_ptr<ui::View>(detached.release());
     }
     if (std::find(popups_.begin(), popups_.end(), child) != popups_.end()) return remove_popup(child);
+    // Docks participate in content_area(); clear their observers before the
+    // generic detach can enter user callbacks or destroy the dock.
+    if (child == top_dock_) top_dock_ = nullptr;
+    if (child == bottom_dock_) bottom_dock_ = nullptr;
     return ui::View::remove_child(child);
 }
 
@@ -239,13 +313,16 @@ Rect Desktop::content_area() const noexcept {
 }
 
 void Desktop::on_resized() {
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
     if (top_dock_ != nullptr) {
         const int h = std::max(1, top_dock_->vertical_size_hint().preferred);
         top_dock_->set_bounds(Rect{0, 0, bounds().width, h});
+        if (desktop_liveness.expired()) return;
     }
     if (bottom_dock_ != nullptr) {
         const int h = std::max(1, bottom_dock_->vertical_size_hint().preferred);
         bottom_dock_->set_bounds(Rect{0, bounds().height - h, bounds().width, h});
+        if (desktop_liveness.expired()) return;
     }
     const Rect area = content_area();
 
@@ -256,7 +333,19 @@ void Desktop::on_resized() {
     // zoomed() at all; AnchorEdges keeps each such window's current
     // distance to the right/bottom edges, using the area from the
     // PREVIOUS pass to know what that distance was.
-    for (Window* w : windows_) {
+    struct WindowHandle { Window* window; std::weak_ptr<void> liveness; };
+    std::vector<WindowHandle> windows;
+    windows.reserve(windows_.size());
+    for (Window* window : windows_)
+        windows.push_back(WindowHandle{window, window->lifetime_token()});
+    const auto current_window = [this](const WindowHandle& handle) {
+        return !handle.liveness.expired() &&
+               std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end();
+    };
+    for (const WindowHandle& handle : windows) {
+        if (desktop_liveness.expired()) return;
+        if (!current_window(handle)) continue;
+        Window* const w = handle.window;
         if (w->zoomed()) {
             w->refresh_zoom_area(area);
         } else if (w->grow_policy() == DesktopGrowPolicy::KeepFilling) {
@@ -277,38 +366,68 @@ void Desktop::on_resized() {
     // regardless of grow policy: the policy above only decides
     // whether/how a window grows, this still enforces the
     // never-unreachable floor unconditionally.
-    for (Window* w : windows_) w->reposition_within(area);
+    for (const WindowHandle& handle : windows) {
+        if (desktop_liveness.expired()) return;
+        if (!current_window(handle)) continue;
+        handle.window->reposition_within(area);
+    }
+    if (desktop_liveness.expired()) return;
     last_content_area_ = area;
 }
 
 void Desktop::tile() {
     if (windows_.empty()) return;
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    struct WindowHandle { Window* window; std::weak_ptr<void> liveness; };
+    std::vector<WindowHandle> windows;
+    windows.reserve(windows_.size());
+    for (Window* window : windows_)
+        windows.push_back(WindowHandle{window, window->lifetime_token()});
     const Rect area = content_area();
-    const int n = static_cast<int>(windows_.size());
+    const int n = static_cast<int>(windows.size());
     const int slice = area.width / n;
     int x = area.x;
     for (int i = 0; i < n; ++i) {
         const int width = (i == n - 1) ? (area.x + area.width - x) : slice;  // last slice absorbs any remainder
-        windows_[static_cast<std::size_t>(i)]->set_bounds(Rect{x, area.y, width, area.height});
+        const WindowHandle& handle = windows[static_cast<std::size_t>(i)];
+        if (desktop_liveness.expired()) return;
+        if (!handle.liveness.expired() &&
+            std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end())
+            handle.window->set_bounds(Rect{x, area.y, width, area.height});
         x += width;
     }
 }
 
 void Desktop::cascade() {
     if (windows_.empty()) return;
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    struct WindowHandle { Window* window; std::weak_ptr<void> liveness; };
+    std::vector<WindowHandle> windows;
+    windows.reserve(windows_.size());
+    for (Window* window : windows_)
+        windows.push_back(WindowHandle{window, window->lifetime_token()});
     const Rect area = content_area();
     const int width = std::max(10, area.width * 2 / 3);
     const int height = std::max(4, area.height * 2 / 3);
     const int max_x = std::max(0, area.width - width);
     const int max_y = std::max(0, area.height - height);
-    for (std::size_t i = 0; i < windows_.size(); ++i) {
+    for (std::size_t i = 0; i < windows.size(); ++i) {
         const int offset = static_cast<int>(i);
         const int x = area.x + (max_x == 0 ? 0 : (offset * 2) % (max_x + 1));
         const int y = area.y + (max_y == 0 ? 0 : (offset * 1) % (max_y + 1));
-        windows_[i]->set_bounds(Rect{x, y, width, height});
+        const WindowHandle& handle = windows[i];
+        if (desktop_liveness.expired()) return;
+        if (!handle.liveness.expired() &&
+            std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end())
+            handle.window->set_bounds(Rect{x, y, width, height});
     }
     // Cascade order should also become z-order: last window frontmost.
-    for (Window* w : windows_) raise_to_front(w);
+    for (const WindowHandle& handle : windows) {
+        if (desktop_liveness.expired()) return;
+        if (!handle.liveness.expired() &&
+            std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end())
+            raise_to_front(handle.window);
+    }
 }
 
 void Desktop::draw(scene::Painter& painter) {

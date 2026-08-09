@@ -215,6 +215,38 @@ CK_TEST(width_unsafe_run_still_correctly_stops_at_a_genuine_unchanged_gap) {
     CK_CHECK(term.written_bytes().find(";5H") != std::string_view::npos);
 }
 
+CK_TEST(an_ambiguous_width_profile_reestablishes_the_cursor_after_non_ascii_text) {
+    Capabilities caps = baseline_capabilities();
+    caps.ambiguous_width_is_wide = true;
+    HeadlessTerminal term(Size{3, 1}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, " ");
+    s.set_cell(Point{0, 0}, Cell::from_grapheme("\xC2\xB1", Style{}));  // ±, East-Asian Ambiguous
+    s.set_cell(Point{1, 0}, Cell::from_grapheme("Q", Style{}));
+
+    presenter.present(s.view(), CursorState{});
+
+    // The profile changes no logical Cell width. It does ensure an alternate
+    // terminal convention cannot displace the following cell: the next write
+    // begins from its logical absolute column rather than an assumed advance.
+    CK_CHECK(term.written_bytes().find("\x1B[1;2H") != std::string_view::npos);
+}
+
+CK_TEST(the_baseline_width_agreement_boundary_readdresses_after_cjk_text) {
+    HeadlessTerminal term(Size{3, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, " ");
+    s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE4\xB8\xAD", Style{}));  // 中
+    s.set_cell(Point{1, 0}, Cell::continuation(Style{}));
+    s.set_cell(Point{2, 0}, Cell::from_grapheme("Q", Style{}));
+
+    presenter.present(s.view(), CursorState{});
+
+    // CJK's logical width is two cells, but output must not assume that a
+    // particular terminal agrees. The trailing cell is addressed explicitly.
+    CK_CHECK(term.written_bytes().find("\x1B[1;3H") != std::string_view::npos);
+}
+
 // --- Cursor visibility ---------------------------------------------------------
 
 CK_TEST(visible_cursor_moves_there_and_shows_it) {
@@ -290,6 +322,24 @@ CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
         CK_CHECK(cell.style().bg == panel.bg);
     }
     CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 255);
+}
+
+CK_TEST(sixel_geometry_limit_preserves_the_mandatory_text_fallback) {
+    Capabilities caps = headless_sixel_profile();
+    caps.sixel_max_geometry = Size{4, 4};
+    HeadlessTerminal term(Size{5, 1}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(5, 1, ".");
+    constexpr std::string_view fallback = "[img]";
+    for (int x = 0; x < static_cast<int>(fallback.size()); ++x)
+        s.set_cell(Point{x, 0}, Cell::from_grapheme(fallback.substr(static_cast<std::size_t>(x), 1), Style{}));
+
+    const auto image = std::make_shared<Image>(8, 8);  // exceeds the verified 4×4 geometry limit
+    const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 5, 1}, Rect{0, 0, 5, 1}, image, true}};
+    presenter.present(s.view(), CursorState{}, rasters);
+
+    CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
+    CK_CHECK(term.written_bytes().find(fallback) != std::string_view::npos);
 }
 
 CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {

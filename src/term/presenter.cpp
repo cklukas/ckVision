@@ -97,17 +97,24 @@ void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth dept
     }
 }
 
-// D-019: a grapheme cluster the presenter cannot trust the terminal to
-// advance the cursor by exactly the library's own computed width for
-// (ZWJ sequences, emoji presentation/text selectors, and — broadly —
-// any supplementary-plane emoji content). After writing one, the
-// presenter re-establishes absolute cursor addressing rather than
-// trusting the believed cursor position.
+// D-019: without an interoperable terminal width-reporting protocol, only
+// ASCII has a sufficiently narrow, stable rendering contract to trust its
+// natural cursor advance. Every non-ASCII grapheme is therefore a cursor
+// barrier, including ordinary CJK text and precomposed accented letters—not
+// just the well-known ZWJ/variation-selector emoji cases. This leaves
+// ckVision's logical cell geometry unchanged; it merely re-establishes the
+// next position absolutely so a host disagreement corrupts at most the one
+// grapheme just emitted, never later cells in the frame.
+//
+// `ambiguous_width_is_wide` remains part of the public capability report for
+// hosts and applications that need to state their layout convention. It must
+// not relax this output-synchronization boundary until D-OPEN-7 supplies an
+// interoperable refinement protocol.
 bool is_width_unsafe(std::string_view grapheme) noexcept {
     std::size_t pos = 0;
     while (pos < grapheme.size()) {
         const char32_t cp = utf8::decode(grapheme, pos);
-        if (cp == 0x200D || cp == 0xFE0F || cp == 0xFE0E || cp >= 0x1F000) return true;
+        if (cp > 0x7F) return true;
     }
     return false;
 }
@@ -139,13 +146,31 @@ std::string sanitize_osc_text(std::string_view text) {
     return out;
 }
 
+bool Presenter::can_emit_raster_slice(const RasterSlice& slice) const noexcept {
+    const Capabilities& caps = terminal_.capabilities();
+    if (!caps.sixel_graphics || !slice.image || slice.image->empty() || slice.visible_rect.empty() ||
+        slice.full_anchor.empty())
+        return false;
+
+    const Rect& anchor = slice.full_anchor;
+    const Image& image = *slice.image;
+    const int crop_width = (slice.visible_rect.x + slice.visible_rect.width - anchor.x) * image.width() /
+                               anchor.width -
+                           (slice.visible_rect.x - anchor.x) * image.width() / anchor.width;
+    const int crop_height = (slice.visible_rect.y + slice.visible_rect.height - anchor.y) * image.height() /
+                                anchor.height -
+                            (slice.visible_rect.y - anchor.y) * image.height() / anchor.height;
+    if (crop_width <= 0 || crop_height <= 0) return false;
+    return (caps.sixel_max_geometry.width <= 0 || crop_width <= caps.sixel_max_geometry.width) &&
+           (caps.sixel_max_geometry.height <= 0 || crop_height <= caps.sixel_max_geometry.height);
+}
+
 Cell Presenter::presentation_cell(FrameView frame, Point p,
                                   const std::vector<RasterSlice>& rasters) const {
     const Cell& source = frame.at(p);
     if (terminal_.capabilities().sixel_graphics) {
         for (const RasterSlice& slice : rasters) {
-            if (slice.image && !slice.image->empty() && !slice.visible_rect.empty() &&
-                !slice.full_anchor.empty() && slice.visible_rect.contains(p)) {
+            if (can_emit_raster_slice(slice) && slice.visible_rect.contains(p)) {
                 // The fallback remains mandatory scene content, but it must
                 // not be emitted beneath an active opaque Sixel image. Keep
                 // its style so writing this blank also establishes the
@@ -254,7 +279,7 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
     if (!terminal_.capabilities().sixel_graphics) return;
 
     for (const RasterSlice& slice : rasters) {
-        if (slice.visible_rect.empty() || !slice.image) continue;
+        if (!can_emit_raster_slice(slice)) continue;
         const Rect& anchor = slice.full_anchor;
         if (anchor.width <= 0 || anchor.height <= 0) continue;
         const Image& image = *slice.image;
@@ -288,7 +313,7 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         // style happened to end the cell-diff traversal.
         out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
                             terminal_.capabilities().color_depth);
-        out += encode_sixel(cropped);
+        out += encode_sixel(cropped, terminal_.capabilities().sixel_color_registers);
     }
 }
 

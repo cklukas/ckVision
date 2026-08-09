@@ -9,7 +9,7 @@
 namespace ckv::term {
 namespace {
 
-std::uint8_t quantize_level(std::uint8_t c) noexcept {
+std::uint8_t quantize_level_6(std::uint8_t c) noexcept {
     constexpr std::uint8_t levels[6] = {0, 51, 102, 153, 204, 255};
     int best = 0;
     int best_dist = 256;
@@ -23,6 +23,36 @@ std::uint8_t quantize_level(std::uint8_t c) noexcept {
     return levels[best];
 }
 
+std::uint8_t quantize_level(std::uint8_t c, int levels) noexcept {
+    if (levels <= 1) return 0;
+    const int index = (static_cast<int>(c) * (levels - 1) + 127) / 255;
+    return static_cast<std::uint8_t>((index * 255 + (levels - 2) / 2) / (levels - 1));
+}
+
+std::array<int, 3> palette_dimensions(int max_colors) noexcept {
+    // Retain the established 6×6×6 fallback whenever it fits. For smaller
+    // verified limits, grow a balanced RGB grid one axis at a time without
+    // ever exceeding the terminal's register budget.
+    if (max_colors >= 216) return {6, 6, 6};
+    std::array<int, 3> dimensions{1, 1, 1};
+    int product = 1;
+    for (;;) {
+        int axis = -1;
+        for (int candidate = 0; candidate < 3; ++candidate) {
+            const int proposed = product / dimensions[static_cast<std::size_t>(candidate)] *
+                                 (dimensions[static_cast<std::size_t>(candidate)] + 1);
+            if (proposed > max_colors) continue;
+            if (axis < 0 || dimensions[static_cast<std::size_t>(candidate)] <
+                                dimensions[static_cast<std::size_t>(axis)])
+                axis = candidate;
+        }
+        if (axis < 0) return dimensions;
+        product = product / dimensions[static_cast<std::size_t>(axis)] *
+                  (dimensions[static_cast<std::size_t>(axis)] + 1);
+        ++dimensions[static_cast<std::size_t>(axis)];
+    }
+}
+
 int percent(std::uint8_t c) noexcept { return (static_cast<int>(c) * 100 + 127) / 255; }
 
 std::uint32_t pack(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
@@ -31,10 +61,11 @@ std::uint32_t pack(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
 
 }  // namespace
 
-std::string encode_sixel(const Image& image) {
+std::string encode_sixel(const Image& image, int max_color_registers) {
     if (image.empty()) return {};
     const int w = image.width();
     const int h = image.height();
+    const int max_colors = std::clamp(max_color_registers > 0 ? max_color_registers : 256, 1, 256);
 
     // Decide quantization mode: exact palette if <= 256 unique colors
     // appear (alpha is ignored — Sixel has no alpha channel), else a
@@ -47,7 +78,7 @@ std::string encode_sixel(const Image& image) {
             const Image::Rgba p = image.pixel(x, y);
             const std::uint32_t key = pack(p.r, p.g, p.b);
             if (exact_probe.find(key) == exact_probe.end()) {
-                if (exact_probe.size() >= 256) {
+                if (exact_probe.size() >= static_cast<std::size_t>(max_colors)) {
                     use_cube = true;
                     break;
                 }
@@ -56,15 +87,22 @@ std::string encode_sixel(const Image& image) {
         }
     }
 
+    const std::array<int, 3> dimensions = palette_dimensions(max_colors);
     std::map<std::uint32_t, int> palette;
     std::vector<int> pixel_index(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             Image::Rgba p = image.pixel(x, y);
             if (use_cube) {
-                p.r = quantize_level(p.r);
-                p.g = quantize_level(p.g);
-                p.b = quantize_level(p.b);
+                if (dimensions == std::array<int, 3>{6, 6, 6}) {
+                    p.r = quantize_level_6(p.r);
+                    p.g = quantize_level_6(p.g);
+                    p.b = quantize_level_6(p.b);
+                } else {
+                    p.r = quantize_level(p.r, dimensions[0]);
+                    p.g = quantize_level(p.g, dimensions[1]);
+                    p.b = quantize_level(p.b, dimensions[2]);
+                }
             }
             const std::uint32_t key = pack(p.r, p.g, p.b);
             const auto [it, inserted] = palette.try_emplace(key, static_cast<int>(palette.size()));

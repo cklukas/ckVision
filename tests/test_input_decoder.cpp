@@ -180,20 +180,37 @@ CK_TEST(shift_tab_and_focus_events) {
 
 CK_TEST(modify_other_keys_encoding) {
     // 27;5;13~ = Ctrl+Enter (codepoint 13)
-    const auto events = decode_all("\x1B[27;5;13~");
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::ModifyOtherKeys;
+    const auto events = decode_all("\x1B[27;5;13~", caps);
     CK_CHECK(events.size() == 1);
     CK_CHECK(as_key(events[0]).chord.key == Key::Enter);
     CK_CHECK(has_modifier(as_key(events[0]).chord.modifiers, Modifier::Ctrl));
 }
 
 CK_TEST(kitty_keyboard_protocol) {
-    auto plain = decode_all("\x1B[97u");  // 'a'
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    auto plain = decode_all("\x1B[97u", caps);  // 'a'
     CK_CHECK(as_key(plain[0]).chord.key == Key::Char);
     CK_CHECK(as_key(plain[0]).chord.text == "a");
 
-    auto with_mod = decode_all("\x1B[13;5u");  // Ctrl+Enter
+    auto with_mod = decode_all("\x1B[13;5u", caps);  // Ctrl+Enter
     CK_CHECK(as_key(with_mod[0]).chord.key == Key::Enter);
     CK_CHECK(has_modifier(as_key(with_mod[0]).chord.modifiers, Modifier::Ctrl));
+
+    auto repeated = decode_all("\x1B[97;1:2u", caps);
+    CK_CHECK(repeated.size() == 1);
+    CK_CHECK(as_key(repeated[0]).action == KeyAction::Repeat);
+
+    auto released = decode_all("\x1B[97;1:3u", caps);
+    CK_CHECK(released.size() == 1);
+    CK_CHECK(as_key(released[0]).action == KeyAction::Release);
+
+    // An unsupported transition must not degrade into a press and activate a
+    // command merely because this decoder does not understand it.
+    CK_CHECK(decode_all("\x1B[97;1:9u", caps).empty());
+    CK_CHECK(decode_all("\x1B[97;1;3u", caps).empty());
 }
 
 CK_TEST(overlong_numeric_parameter_saturates_instead_of_overflowing) {
@@ -201,9 +218,75 @@ CK_TEST(overlong_numeric_parameter_saturates_instead_of_overflowing) {
     // must not be undefined behavior (signed overflow); it saturates
     // and the sequence is still handled (recognized-but-out-of-range
     // kitty codepoint falls back to the replacement character).
-    const auto events = decode_all("\x1B[99999999999999999999u");
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    const auto events = decode_all("\x1B[99999999999999999999u", caps);
     CK_CHECK(events.size() == 1);
     CK_CHECK(as_key(events[0]).chord.key == Key::Char);
+}
+
+CK_TEST(keyboard_protocol_selection_gates_extended_key_decoding) {
+    // A legacy profile must swallow an unnegotiated extension rather than
+    // interpreting arbitrary terminal traffic as an application key.
+    CK_CHECK(decode_all("\x1B[97u").empty());
+    CK_CHECK(decode_all("\x1B[27;5;13~").empty());
+
+    Capabilities modify_other_keys = baseline_capabilities();
+    modify_other_keys.keyboard_protocol = KeyboardProtocol::ModifyOtherKeys;
+    CK_CHECK(decode_all("\x1B[97u", modify_other_keys).empty());
+
+    Capabilities kitty = baseline_capabilities();
+    kitty.keyboard_protocol = KeyboardProtocol::Kitty;
+    CK_CHECK(decode_all("\x1B[27;5;13~", kitty).empty());
+}
+
+CK_TEST(conservative_profiles_swallow_unnegotiated_focus_mouse_and_paste_streams) {
+    constexpr TerminalProfile profiles[] = {
+        TerminalProfile::TmuxConservative,
+        TerminalProfile::ScreenConservative,
+        TerminalProfile::LinuxConsole,
+    };
+    for (const TerminalProfile profile : profiles) {
+        InputDecoder decoder(capabilities_for_profile(profile));
+        CK_CHECK(decoder.feed("\x1B[I", 1'000).empty());
+        CK_CHECK(decoder.feed("\x1B[<0;10;20M", 1'001).empty());
+        CK_CHECK(decoder.feed("\x1B[200~must-not-reach-a-widget\x1B[201~", 1'002).empty());
+
+        // The terminating delimiter leaves ordinary input available again;
+        // the conservative policy does not poison subsequent real typing.
+        const auto text = decoder.feed("A", 1'003);
+        CK_CHECK(text.size() == 1);
+        CK_CHECK(as_key(text.front()).chord.text == "A");
+    }
+}
+
+CK_TEST(kitty_keyboard_protocol_delivers_a_bare_escape_without_legacy_delay) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    InputDecoder decoder(caps);
+    const auto events = decoder.feed("\x1B", 1'000);
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(as_key(events[0]).chord.key == Key::Escape);
+    CK_CHECK(decoder.poll_timeout(1'000 + kEscTimeoutNanos).empty());
+}
+
+CK_TEST(a_partial_pre_window_probe_reply_cannot_refine_the_next_capability_window) {
+    InputDecoder decoder;
+    // Keep a complete syntactic prefix of a DECRPM 1016 reply pending. The
+    // new capability window must retain it for byte-stream recovery but not
+    // combine its final byte with fresh-window evidence.
+    CK_CHECK(decoder.feed("\x1B[?1016;1$", 1'000).empty());
+    decoder.begin_capability_probe_window(baseline_capabilities());
+    CK_CHECK(decoder.feed("y", 1'001).empty());
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+
+    // A fresh metric alone cannot inherit the stale mode proof. Both pieces
+    // of evidence must now start after the boundary.
+    CK_CHECK(decoder.feed("\x1B[6;16;8t", 1'002).size() == 1);
+    CK_CHECK(decoder.capabilities().cell_pixels == (Size{8, 16}));
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+    CK_CHECK(decoder.feed("\x1B[?1016;1$y", 1'003).size() == 1);
+    CK_CHECK(decoder.capabilities().pixel_mouse);
 }
 
 // --- Mouse -------------------------------------------------------------------
@@ -217,6 +300,32 @@ CK_TEST(sgr_mouse_press_and_release) {
 
     auto release = decode_all("\x1B[<0;10;20m");
     CK_CHECK(as_mouse(release[0]).action == MouseAction::Up);
+}
+
+CK_TEST(x10_mouse_press_decodes_only_for_an_x10_profile) {
+    Capabilities caps = baseline_capabilities();
+    caps.mouse_protocol = MouseProtocol::X10;
+    InputDecoder decoder(caps);
+
+    // X10 is CSI M followed by button, x, and y bytes, each offset by 32.
+    CK_CHECK(decoder.feed("\x1B[M \x2A", 0).empty());
+    const auto events = decoder.feed("\x25", 0);
+    CK_CHECK(events.size() == 1);
+    const auto mouse = std::get<MouseEvent>(events.front());
+    CK_CHECK(mouse.button == MouseButton::Left);
+    CK_CHECK(mouse.action == MouseAction::Down);
+    CK_CHECK(mouse.cell == (Point{9, 4}));
+    CK_CHECK(!mouse.pixel.has_value());
+}
+
+CK_TEST(unnegotiated_x10_mouse_reports_do_not_leak_coordinate_bytes_as_text) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[M", 0).empty());
+    CK_CHECK(decoder.feed(" \x2A\x25", 0).empty());
+
+    const auto text = decoder.feed("A", 0);
+    CK_CHECK(text.size() == 1);
+    CK_CHECK(as_key(text.front()).chord.text == "A");
 }
 
 CK_TEST(sgr_mouse_motion_and_wheel) {
@@ -243,6 +352,21 @@ CK_TEST(sgr_pixel_mouse_reports_both_coordinate_spaces) {
     CK_CHECK(as_mouse(events[0]).pixel->x == 40);  // 1-based -> 0-based pixel
     CK_CHECK(as_mouse(events[0]).pixel->y == 32);
     CK_CHECK(as_mouse(events[0]).cell == (Point{40 / 8, 32 / 16}));  // derived from cell_pixels
+}
+
+CK_TEST(suppressed_sgr_mouse_reports_are_consumed_until_the_backend_establishes_their_coordinate_space) {
+    Capabilities caps = baseline_capabilities();
+    caps.mouse_protocol = MouseProtocol::SGR;
+    InputDecoder decoder(caps);
+    decoder.set_sgr_mouse_input_suppressed(true);
+    constexpr std::string_view report = "\x1B[<0;41;33M";
+
+    CK_CHECK(decoder.feed(report, 0).empty());
+
+    decoder.set_sgr_mouse_input_suppressed(false);
+    const auto events = decoder.feed(report, 0);
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(std::get<MouseEvent>(events.front()).cell == (Point{40, 32}));
 }
 
 CK_TEST(pixel_mouse_without_known_cell_pixels_degrades_gracefully) {
@@ -359,9 +483,36 @@ CK_TEST(osc_color_scheme_probe_light_with_st_terminator) {
     CK_CHECK(caps.color_scheme == ColorScheme::Light);
 }
 
+CK_TEST(osc_foreground_query_is_a_contrast_fallback_for_color_scheme) {
+    const auto events = decode_all("\x1B]10;rgb:0000/0000/0000\x07");
+    CK_CHECK(events.size() == 1);
+    const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    CK_CHECK(caps.color_scheme == ColorScheme::Light);
+}
+
+CK_TEST(osc_background_query_overrides_a_foreground_fallback_regardless_of_reply_order) {
+    const auto events = decode_all("\x1B]10;rgb:0000/0000/0000\x07\x1B]11;rgb:0000/0000/0000\x07");
+    CK_CHECK(events.size() == 2);
+    CK_CHECK(std::get<CapabilityChangedEvent>(events[0]).capabilities.color_scheme == ColorScheme::Light);
+    CK_CHECK(std::get<CapabilityChangedEvent>(events[1]).capabilities.color_scheme == ColorScheme::Dark);
+
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B]11;rgb:0000/0000/0000\x07", 0).size() == 1);
+    // A delayed foreground reply is lower-confidence evidence, so it may not
+    // overwrite an already observed background color.
+    CK_CHECK(decoder.feed("\x1B]10;rgb:ffff/ffff/ffff\x07", 0).empty());
+    CK_CHECK(decoder.capabilities().color_scheme == ColorScheme::Dark);
+}
+
 CK_TEST(osc_with_malformed_color_spec_is_swallowed_without_crash_or_bogus_update) {
     const auto events = decode_all("\x1B]11;not-a-color\x07");
     CK_CHECK(events.empty());
+}
+
+CK_TEST(osc_with_an_overlong_code_is_swallowed_without_signed_overflow) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B]999999999999999999999999;rgb:0000/0000/0000\x07", 0).empty());
+    CK_CHECK(decoder.capabilities() == baseline_capabilities());
 }
 
 CK_TEST(osc_injection_with_embedded_escape_does_not_corrupt_subsequent_decode) {
@@ -382,10 +533,119 @@ CK_TEST(decrpm_synchronized_output_mode_report) {
     CK_CHECK(caps.synchronized_output);
 }
 
-CK_TEST(da1_response_is_consumed_without_event_or_crash) {
-    const auto events = decode_all(std::string_view("\x1B[?62;1;6cA"));
-    CK_CHECK(events.size() == 1);  // only the trailing 'A'
-    CK_CHECK(as_key(events[0]).chord.text == "A");
+CK_TEST(decrpm_color_scheme_notification_mode_report) {
+    const auto events = decode_all("\x1B[?2031;1$y");
+    CK_CHECK(events.size() == 1);
+    const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    CK_CHECK(caps.color_scheme_notifications);
+}
+
+CK_TEST(color_scheme_notification_requires_prior_mode_2031_confirmation) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[?997;2n", 0).empty());
+    CK_CHECK(decoder.capabilities().color_scheme == ColorScheme::Unknown);
+    CK_CHECK(!decoder.capabilities().color_scheme_notifications);
+
+    const auto mode = decoder.feed("\x1B[?2031;1$y", 1);
+    CK_CHECK(mode.size() == 1);
+    CK_CHECK(decoder.capabilities().color_scheme_notifications);
+
+    const auto notification = decoder.feed("\x1B[?997;2n", 2);
+    CK_CHECK(notification.size() == 1);
+    CK_CHECK(decoder.capabilities().color_scheme == ColorScheme::Light);
+}
+
+CK_TEST(color_scheme_notification_is_authoritative_over_a_late_background_hint) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[?2031;1$y", 0).size() == 1);
+    const auto notification = decoder.feed("\x1B[?997;1n", 0);
+    CK_CHECK(notification.size() == 1);
+    CK_CHECK(decoder.feed("\x1B]11;rgb:ffff/ffff/ffff\x07", 0).empty());
+    CK_CHECK(decoder.capabilities().color_scheme == ColorScheme::Dark);
+    CK_CHECK(decoder.capabilities().color_scheme_notifications);
+}
+
+CK_TEST(xtwinops_cell_metrics_then_pixel_mode_refines_pixel_mouse_capability) {
+    InputDecoder decoder;
+    const auto metrics = decoder.feed("\x1B[6;16;8t", 0);
+    CK_CHECK(metrics.size() == 1);
+    const auto after_metrics = std::get<CapabilityChangedEvent>(metrics[0]).capabilities;
+    CK_CHECK(after_metrics.cell_pixels == (Size{8, 16}));
+    CK_CHECK(!after_metrics.pixel_mouse);
+
+    const auto mode = decoder.feed("\x1B[?1016;1$y", 0);
+    CK_CHECK(mode.size() == 1);
+    const auto final_caps = std::get<CapabilityChangedEvent>(mode[0]).capabilities;
+    CK_CHECK(final_caps.cell_pixels == (Size{8, 16}));
+    CK_CHECK(final_caps.pixel_mouse);
+}
+
+CK_TEST(pixel_mode_then_xtwinops_cell_metrics_refines_regardless_of_reply_order) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[?1016;1$y", 0).empty());
+
+    const auto metrics = decoder.feed("\x1B[6;24;12t", 0);
+    CK_CHECK(metrics.size() == 1);
+    const auto caps = std::get<CapabilityChangedEvent>(metrics[0]).capabilities;
+    CK_CHECK(caps.cell_pixels == (Size{12, 24}));
+    CK_CHECK(caps.pixel_mouse);
+}
+
+CK_TEST(pixel_mode_reset_disables_a_previous_probe_refinement) {
+    Capabilities initial = baseline_capabilities();
+    initial.cell_pixels = Size{8, 16};
+    initial.pixel_mouse = true;
+    InputDecoder decoder(initial);
+    const auto events = decoder.feed("\x1B[?1016;2$y", 0);
+    CK_CHECK(events.size() == 1);
+    const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    CK_CHECK(!caps.pixel_mouse);
+    CK_CHECK(caps.cell_pixels == (Size{8, 16}));
+}
+
+CK_TEST(malformed_or_zero_xtwinops_cell_metrics_do_not_refine_capabilities) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[6;0;8t", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[6;16;0t", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[4;16;8t", 0).empty());
+    CK_CHECK(decoder.capabilities().cell_pixels == Size{});
+}
+
+CK_TEST(da1_sixel_advertisement_refines_the_graphics_capability) {
+    const auto events = decode_all(std::string_view("\x1B[?62;1;4;6cA"));
+    CK_CHECK(events.size() == 2);
+    const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    CK_CHECK(caps.sixel_graphics);
+    CK_CHECK(as_key(events[1]).chord.text == "A");
+}
+
+CK_TEST(da1_without_sixel_evidence_does_not_disable_a_forced_graphics_profile) {
+    Capabilities forced = baseline_capabilities();
+    forced.sixel_graphics = true;
+    const auto events = decode_all("\x1B[?62;1;6c", forced);
+    CK_CHECK(events.empty());
+}
+
+CK_TEST(xtsmgraphics_refines_sixel_palette_and_geometry_limits) {
+    InputDecoder decoder;
+    const auto events = decoder.feed("\x1B[?1;0;16S\x1B[?2;0;640;480S", 0);
+    CK_CHECK(events.size() == 2);
+    const auto palette = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    const auto geometry = std::get<CapabilityChangedEvent>(events[1]).capabilities;
+    CK_CHECK(palette.sixel_color_registers == 16);
+    CK_CHECK(!palette.sixel_graphics);  // palette alone can also describe ReGIS
+    CK_CHECK(geometry.sixel_graphics);
+    CK_CHECK(geometry.sixel_color_registers == 16);
+    CK_CHECK(geometry.sixel_max_geometry == (Size{640, 480}));
+}
+
+CK_TEST(xtsmgraphics_error_or_malformed_geometry_does_not_refine_capabilities) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.feed("\x1B[?2;3;640;480S", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[?2;0;640S", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[?2;0;0;480S", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[?2;0;640;0S", 0).empty());
+    CK_CHECK(decoder.capabilities() == baseline_capabilities());
 }
 
 // --- Robustness sweep ----------------------------------------------------------

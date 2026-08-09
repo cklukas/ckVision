@@ -77,6 +77,47 @@ CK_TEST(an_ok_only_box_fires_ok_and_closes_when_its_button_is_pressed) {
     CK_CHECK(*result == MessageBoxResult::Ok);
 }
 
+CK_TEST(a_result_callback_may_destroy_its_message_box_before_the_factory_returns) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
+    Window* box = nullptr;
+    int results = 0;
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, [&](MessageBoxResult result) {
+        CK_CHECK(result == MessageBoxResult::Ok);
+        ++results;
+        std::unique_ptr<View> detached = app.root().remove_child(box);
+        CK_CHECK(detached.get() == box);
+        detached.reset();
+    });
+    box = static_cast<Window*>(app.root().add_child(std::move(handle.window)));
+    app.set_focus(handle.initial_focus);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(results == 1);
+}
+
+CK_TEST(a_message_box_result_callback_cannot_deliver_a_reentrant_second_result) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
+    Window* box = nullptr;
+    int results = 0;
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, [&](MessageBoxResult) {
+        ++results;
+        box->cancel_request();
+    });
+    box = static_cast<Window*>(app.root().add_child(std::move(handle.window)));
+    app.set_focus(handle.initial_focus);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(results == 1);
+}
+
 CK_TEST(escape_on_an_ok_only_box_is_equivalent_to_ok) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -271,6 +312,29 @@ CK_TEST(closing_the_box_schedules_its_own_removal_from_whatever_parented_it) {
     (void)window_ptr;
 }
 
+CK_TEST(a_deferred_self_detach_is_safe_if_the_closed_box_is_destroyed_first) {
+    // The normal close path posts its self-detach because the button callback
+    // is still executing. An embedding application may nevertheless destroy
+    // the closed box before the next turn; the stale post must become a
+    // harmless no-op rather than dereference its former Window address.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.", MessageBoxButtons::Ok};
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
+    Window* const box = static_cast<Window*>(app.root().add_child(std::move(handle.window)));
+    app.set_focus(handle.initial_focus);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    std::unique_ptr<View> externally_destroyed = app.root().remove_child(box);
+    CK_CHECK(externally_destroyed.get() == box);
+    externally_destroyed.reset();
+
+    app.step(0);  // drains the stale self-detach post under ASan
+    CK_CHECK(app.root().children().empty());
+}
+
 // --- Desktop::present_modeless (M8/WP-5) -----------------------------------
 //
 // present_modeless is the concise attach+focus convenience. Desktop's
@@ -416,6 +480,124 @@ CK_TEST(present_message_box_external_detach_uses_the_documented_escape_result) {
     CK_CHECK(completion_count == 1);
 }
 
+CK_TEST(present_message_box_quit_sweep_completes_with_its_escape_result_after_detach) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+
+    const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
+                                           MessageBoxButtons::OkCancel};
+    auto presentation = present_message_box(app, *desktop, roles, descriptor);
+
+    CK_CHECK(app.execute_command(ckv::ui::std_commands::kQuit));
+    CK_CHECK(app.quit_requested());
+    CK_CHECK(!presentation.completed());
+    app.step(0);
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result() == MessageBoxResult::Cancel);
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(a_vetoed_presented_message_box_remains_modal_until_a_later_close_succeeds) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+
+    auto presentation = present_message_box(
+        app, *desktop, roles,
+        MessageBoxDescriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?", MessageBoxButtons::OkCancel});
+    Window* const box = desktop->windows().back();
+    int close_requests = 0;
+    box->close_request = [&] {
+        ++close_requests;
+        return false;
+    };
+
+    CK_CHECK(!box->close());
+    CK_CHECK(close_requests == 1);
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(app.is_modal());
+    CK_CHECK(desktop->windows().size() == 1);
+
+    box->close_request = {};
+    CK_CHECK(box->close());
+    CK_CHECK(!presentation.completed());
+    app.step(0);
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result() == MessageBoxResult::Cancel);
+    CK_CHECK(!app.is_modal());
+    CK_CHECK(desktop->windows().empty());
+}
+
+CK_TEST(a_vetoed_presented_message_box_also_vetoes_its_quit_sweep) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+
+    auto presentation = present_message_box(
+        app, *desktop, roles,
+        MessageBoxDescriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?", MessageBoxButtons::OkCancel});
+    Window* const box = desktop->windows().back();
+    box->close_request = [] { return false; };
+
+    CK_CHECK(app.execute_command(ckv::ui::std_commands::kQuit));
+    CK_CHECK(!app.quit_requested());
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(app.is_modal());
+    CK_CHECK(desktop->windows().size() == 1);
+}
+
+CK_TEST(a_message_box_completion_handler_can_present_a_nested_modal_after_outer_detachment) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+
+    const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
+                                           MessageBoxButtons::Ok};
+    auto outer = present_message_box(app, *desktop, roles, descriptor);
+    std::optional<ckv::widgets::MessageBoxPresentation> inner;
+    outer.set_completion_handler([&](MessageBoxResult result) {
+        CK_CHECK(result == MessageBoxResult::Ok);
+        CK_CHECK(!app.is_modal());
+        // The outer window's focused button is already inside the subtree
+        // being detached. Completion must never expose that soon-to-die
+        // pointer to a nested presentation as its focus-restore target.
+        CK_CHECK(app.focused() == nullptr);
+        inner.emplace(present_message_box(app, *desktop, roles, descriptor));
+    });
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    app.step(0);
+    CK_CHECK(outer.completed());
+    CK_CHECK(inner.has_value());
+    CK_CHECK(app.is_modal());
+    CK_CHECK(desktop->windows().size() == 1);
+
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    app.step(0);
+    CK_CHECK(!app.is_modal());
+    CK_CHECK(desktop->windows().empty());
+}
+
 // --- exec_message_box (M9/WP-15, D-021's blocking convenience) -------------
 //
 // Unlike the tests above, these need `app`'s OWN theme/roles actually
@@ -488,4 +670,25 @@ CK_TEST(exec_message_box_restores_focus_to_whatever_was_focused_before_the_call)
 
     exec_message_box(app, *desktop, roles, descriptor);
     CK_CHECK(app.focused() == invoker);
+}
+
+CK_TEST(exec_message_box_host_quit_returns_fallback_and_detaches_the_open_box) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
+
+    MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Confirm", "Proceed?",
+                                     MessageBoxButtons::YesNoCancel};
+    app.post([&app] { app.request_quit(); });
+
+    const MessageBoxResult result = exec_message_box(app, *desktop, roles, descriptor);
+    CK_CHECK(result == MessageBoxResult::Cancel);
+    CK_CHECK(app.quit_requested());
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
 }

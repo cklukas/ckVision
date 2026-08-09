@@ -2,7 +2,7 @@
 //
 // File open/save dialog: path input with completion, file list,
 // directory navigation (plans/widgets.md M6c baseline "File open/
-// save"), enumerating through the injected FileSystem (D-025) so it
+// save"), enumerating through the injected FileSystem (D-039) so it
 // golden-tests headlessly against a scripted MemoryFileSystem.
 //
 // Scope note: "completion" here means selecting/activating a list
@@ -41,9 +41,10 @@ using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 // opened on a stale/nonexistent path degrades to an empty listing
 // rather than crashing — see FileSystem::list_directory's own
 // contract). `on_result` fires exactly once: with accepted=true and
-// the chosen path on OK, or accepted=false on Cancel/Esc. `fs` must
-// outlive the returned Window (the installed closures capture it by
-// reference). Desktop::present_modeless attaches the returned handle
+// the chosen path on OK, or accepted=false on Cancel/Esc. It may detach or
+// destroy the dialog; no factory-owned work touches the Window after it
+// returns. `fs` must outlive the returned Window (the installed closures
+// capture it by reference). Desktop::present_modeless attaches the returned handle
 // and focuses its initial_focus in one call; modal presentation is
 // explicit through Desktop::present_modal.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
@@ -56,5 +57,13 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 [[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, ui::Application& app,
                                                           Desktop& desktop, const ui::StandardRoles& roles);
+
+// Blocking convenience for an application that owns the outer loop. It uses
+// Desktop::exec_modal and therefore rejects calls from handlers, posts, and
+// timers where a nested dispatch pump would be unsafe. The non-blocking
+// present_file_dialog is the handler-safe alternative. A quit request that
+// ends the outer pump resolves to the same cancelled result as Esc.
+FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

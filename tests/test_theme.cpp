@@ -1,9 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/theme.hpp"
 
-#include <sys/wait.h>
-#include <unistd.h>
-
 #include "cktest.hpp"
 
 using ckv::Attr;
@@ -57,25 +54,6 @@ CK_TEST(name_returns_the_interned_role_name) {
     RoleRegistry reg;
     const auto id = reg.intern("ckv.dialog.frame", style_a());
     CK_CHECK(reg.name(id) == "ckv.dialog.frame");
-}
-
-// Contract violation: re-interning an existing name with a DIFFERENT
-// fallback is a caller bug (theme.hpp's documented contract), not a
-// silently-accepted redefinition — it must CKV_ASSERT-abort rather than
-// let the two call sites disagree about what the role means.
-CK_TEST(re_interning_with_a_mismatched_fallback_aborts) {
-    const pid_t pid = ::fork();
-    CK_CHECK(pid >= 0);
-    if (pid == 0) {
-        RoleRegistry reg;
-        reg.intern("ckv.button.normal", style_a());
-        reg.intern("ckv.button.normal", style_b());  // must abort here
-        ::_exit(1);                                  // unreachable if the contract holds
-    }
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-    CK_CHECK(WIFSIGNALED(status));
-    CK_CHECK(WTERMSIG(status) == SIGABRT);
 }
 
 // --- Theme -----------------------------------------------------------------

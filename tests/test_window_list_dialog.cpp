@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/window_list_dialog.hpp"
 
+#include <optional>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -18,6 +20,7 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::Desktop;
 using ckv::widgets::make_window_list_dialog;
+using ckv::widgets::present_window_list_dialog;
 using ckv::widgets::Window;
 
 namespace {
@@ -124,4 +127,30 @@ CK_TEST(a_desktop_with_no_windows_produces_a_dialog_that_does_not_crash_on_enter
     app.set_focus(handle.initial_focus);
     app.dispatch(key(Key::Enter));
     CK_CHECK(true);
+}
+
+CK_TEST(present_window_list_dialog_completes_after_modal_detachment) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
+                                                              roles.dialog_background));
+    desktop->add_window(make_window("Workspace"));
+
+    auto presentation = present_window_list_dialog(*desktop, app, roles);
+    std::optional<ckv::widgets::WindowListDialogResult> completion;
+    presentation.set_completion_handler(
+        [&](ckv::widgets::WindowListDialogResult result) { completion = result; });
+
+    CK_CHECK(app.is_modal());
+    app.dispatch(key(Key::Escape));
+    CK_CHECK(!presentation.completed());
+    app.step(0);
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result() == ckv::widgets::WindowListDialogResult::Closed);
+    CK_CHECK(completion == ckv::widgets::WindowListDialogResult::Closed);
+    CK_CHECK(!app.is_modal());
 }

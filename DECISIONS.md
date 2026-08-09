@@ -170,9 +170,18 @@ fidelity on the flagship host and forks the decoder).
 
 **D-021 — Modality is loop state; the loop is embeddable.**
 `run()` is a convenience over public `step(deadline)`/`wake()` with an
-exported waitable handle. Modal dialogs push a modality stack that
+exported borrowed set of wait handles and the next application timer deadline.
+The handle set contains every backend source that can make `step()` useful
+(POSIX terminal input and its wake channel; a future Windows backend supplies
+its native equivalent); deterministic backends expose an empty set. An
+embedding host waits on that set plus its own sources, then calls
+`step(clock.now_nanos())` on the owning thread. Modal dialogs push a modality stack that
 scopes event routing and complete via callback/notification; a blocking
-convenience exists for applications that own the loop. *Rejected:*
+convenience exists for applications that own the loop. A host `request_quit()`
+that ends a blocking standard-dialog convenience force-detaches its still-open
+dialog, removes its scope, and returns that factory's documented cancellation
+fallback; this is terminal shutdown, not a vetoable user close request.
+*Rejected:*
 nested native modal loops (hostile to embedding, re-entrancy hazards
 with `post()` and mid-modal destruction).
 
@@ -198,16 +207,24 @@ Fatal-signal restoration and tty-owned runtime signals (SIGWINCH,
 SIGTSTP/SIGCONT) cannot be instance members; they are served by a single
 async-signal-safe registry of live terminal sessions, each with its
 precomputed restore bytes from the session-state ledger. Everything else
-remains instance-owned (D-008). One application per terminal; N
-applications on N terminals is supported and tested.
+remains instance-owned (D-008). SIGTSTP restores every registered session
+before the process stops; SIGCONT restores raw mode and entry sequences for
+every session, then emits an instance-local capability-change event so each
+Application fully re-presents its frame. SIGINT remains host policy. One
+application per terminal; N applications on N terminals is supported and
+tested. The registry owns its handler dispositions only while at least one
+session is live: it snapshots the host dispositions before the first session
+and restores them after the last. The host must not replace those same
+dispositions while a ckVision terminal session is live. The supported POSIX.1-2017 baseline explicitly lists `tcsetattr` as
+async-signal-safe; registry atomics are required to be lock-free and are
+compile-time-asserted before any handler uses them. The registry also carries
+the immutable expression, source path, and line of a pending contract
+assertion: core publishes those static-lifetime fields before raising SIGABRT;
+the handler restores every live session and only then writes the complete
+diagnostic. This narrow termination seam is part of D-024, not a second global
+diagnostics facility.
 
-**D-025 — Platform impurities are injected interfaces.**
-The injectable Clock (D-002 era) is joined by an injectable filesystem
-interface (consumed by file dialogs; scripted in-memory implementation
-for headless goldens) and the system-clipboard bridge. Interfaces live
-in `ui`; platform implementations live in `term`; backends receive the
-environment explicitly at construction. `core`/`scene`/`ui`/`widgets`
-never touch environment, filesystem, or wall clock directly.
+**D-025 — Superseded by D-039.**
 
 **D-026 — No bidirectional reordering in 0.1.**
 Rendering is logical-order; terminal-side bidi is not compensated
@@ -260,7 +277,11 @@ over the standard command set (ids below 4096, D-013 — registered by
 a documented opt-out — an application can clear or replace any of it;
 a focused view consuming a key already preempts the keymap by routing
 order, so "Tab means something else here" needs no configuration at
-all. *Supersedes* the previous stance that the library deliberately
+all. The default Quit sweep is also non-reentrant: a `kQuit` execution
+triggered from one of that sweep's vetoable close callbacks is a no-op until
+the original sweep returns. The original front-to-back request retains sole
+authority over later vetoes and over whether it calls `request_quit()`.
+*Supersedes* the previous stance that the library deliberately
 binds nothing (recorded in example comments and docs/example-apps.md):
 that stance made every application re-implement the same table stakes
 and left VISION non-negotiable #7 (click-to-focus) unmet. *Rejected:*
@@ -483,20 +504,55 @@ silently chooses modality. A modal operation establishes its input scope before
 returning and that scope ends when its root detaches, so neither menu/status
 input nor background accelerators can leak into the interval.
 
-Every standard-dialog family supplies a non-blocking `present_*` convenience
-that returns a typed presentation handle. It reports one deterministic typed
-completion after the presented window has detached: an explicit button result
-wins; a close control, external detach, or quit uses that dialog family's
-documented cancellation result. Completion is therefore safe to use from a
-command handler and never starts a nested loop. The existing `exec_*` family is
-the outer-loop-only blocking wrapper over the same presentation path. Raw
-`Window*` observers remain appropriate for general application windows, not
-for obtaining standard-dialog results.
+Every standard-dialog family, including the generic descriptor dialog, supplies
+a non-blocking `present_*` convenience that returns a typed presentation
+handle. It reports one deterministic typed completion after the presented
+window has detached: an explicit accepted result wins; a close control,
+external detach, or quit uses that dialog family's documented cancellation
+result. Completion is therefore safe to use from a command handler and never
+starts a nested loop. The matching `exec_*` family is the outer-loop-only
+blocking wrapper over the same presentation path. Raw `Window*` observers
+remain appropriate for general application windows, not for obtaining
+standard-dialog results. A saved focus target is a per-instance lifetime
+capability, never an unchecked raw pointer retained across a modal interval.
 
 *Rejected:* a Boolean modal option (call sites conceal the consequential
 choice); callbacks that fire while the dialog is still attached (a callback can
 open a nested dialog against a stale scope); a future/promise or coroutine
 surface (would add scheduler or polling obligations contrary to D-002/D-009).
+
+**D-039 — Platform-service contracts live at the lowest dependency-valid
+layer.** The old D-025 rule put service interfaces in `ui` while requiring
+`term` to implement them. That is an upward dependency and is therefore
+impossible under the layer graph. Abstract contracts carrying only core value
+types live in `core`: `Clock`, `FileSystem`, and `ClipboardWriter`.
+Deterministic `ManualClock`, `MemoryFileSystem`, and `MemoryClipboardWriter`
+are ordinary in-memory instances, not global test switches. Platform adapters
+live in `term`: `PosixClock`, `PosixFileSystem`, and
+`TerminalClipboardWriter`; the latter deliberately adapts a specific
+`Terminal` session instead of making `Terminal` a general platform-services
+bag.
+
+Terminal input, wait handles, and wake remain the `term::Terminal` session
+contract: they cannot be a `ui` platform service because the terminal backend
+is the resource that owns those native handles. `ui::Application` receives a
+terminal and clock explicitly. It accepts an explicit `ClipboardWriter` for
+system export, or owns one `TerminalClipboardWriter` for its compact
+two-argument construction. A caller that supplies a bridge or filesystem
+retains it for the consuming application/widget lifetime and uses distinct
+instances for distinct applications. No service contract or implementation is
+a singleton, static default, environment lookup, or implicit cross-application
+channel.
+
+System clipboard import is not a service read: it enters as a terminal/native
+`TextEvent` marked as paste and is copied to Application's portable internal
+clipboard (D-022). This preserves the no-OSC-52-read security boundary.
+Future platform services follow the same rule: their abstract contract is
+placed in the lowest layer that can express its types and all consumers inject
+it; an adapter may only depend downward. *Rejected:* `ui`-owned interfaces
+implemented by `term` (reverse dependency); a monolithic service locator
+(hidden global state and unnecessary coupling); treating terminal session I/O
+as a generic host service (obscures lifetime and wait/wake ownership).
 
 ## Open
 

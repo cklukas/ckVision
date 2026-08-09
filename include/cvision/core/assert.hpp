@@ -3,12 +3,21 @@
 
 namespace ckv::detail {
 
+// D-024's POSIX implementation publishes this immutable assertion metadata
+// into its async-signal-safe terminal-session ledger before assertion_failed()
+// raises SIGABRT. It deliberately lives in the core-facing contract header:
+// core never includes a term header, while term (the allowed higher layer)
+// supplies the POSIX implementation.
+#if defined(CKVISION_HAS_POSIX_TERMINAL)
+void publish_assertion_failure(const char* expr, const char* file, int line) noexcept;
+#endif
+
 // Reports a failed contract check and terminates the process. The sole,
-// deliberate exception to "core performs no I/O" (ARCHITECTURE.md §1):
-// a contract violation is a program-termination event, not part of
-// core's normal control flow — DECISIONS.md D-011 requires it to "fail
-// fast, loudly, in all build types until 1.0", and a diagnostic write
-// immediately before abort() is what "loudly" means.
+// deliberate exception to "core performs no I/O" (ARCHITECTURE.md §1) is
+// the no-POSIX fallback below. On a PosixTerminal host, D-024 holds this
+// immutable metadata until its fatal handler restored every live session,
+// then emits it to stderr. A contract violation therefore remains loud
+// without writing into an active alternate-screen session.
 [[noreturn]] void assertion_failed(const char* expr, const char* file, int line) noexcept;
 
 }  // namespace ckv::detail

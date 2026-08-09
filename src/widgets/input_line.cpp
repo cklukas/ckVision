@@ -263,6 +263,16 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    // Terminals report ordinary typed characters as Key::Char events, whereas
+    // IMEs and bracketed paste arrive as TextEvent. Normalize the former at
+    // the editing boundary so both paths obey the same insertion, validation,
+    // mask, and selection contract. Alt/Ctrl/Super characters remain chords
+    // for command routing; Shift is part of normal text production.
+    if (event.chord.key == Key::Char && !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+        !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super))
+        return on_text(TextEvent{event.chord.text, false});
+
     // History recall is gated on !has_mask(): history_show() calls the
     // free-form set_text() directly, which would splice arbitrary
     // unmasked text into a masked field's fixed-length, class-

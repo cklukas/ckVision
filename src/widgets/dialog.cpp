@@ -1,8 +1,12 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/dialog.hpp"
 
+#include <optional>
+
 #include "cvision/core/assert.hpp"
 #include "cvision/ui/layout.hpp"
+#include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/dialog_presentation.hpp"
 
 namespace ckv::widgets {
 
@@ -39,6 +43,74 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescript
         return false;
     }
     return true;
+}
+
+struct DescriptorDialogCompletion {
+    std::weak_ptr<void> window_liveness;
+    std::optional<DialogResult> selected_result;
+    bool closed = false;
+};
+
+struct BuiltDescriptorDialog {
+    WindowHandle handle;
+    std::shared_ptr<DescriptorDialogCompletion> completion;
+};
+
+DialogResult accepted_result(const std::vector<InputLine*>& inputs) {
+    DialogResult result;
+    result.accepted = true;
+    result.values.reserve(inputs.size());
+    for (const InputLine* input : inputs) result.values.push_back(input->text());
+    return result;
+}
+
+BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const ui::StandardRoles& roles,
+                                              ui::Application& app, ui::View* restore_focus_to) {
+    auto retained_descriptor = std::make_shared<DialogDescriptor>(std::move(descriptor));
+    MaterializedDialog materialized = materialize_dialog(*retained_descriptor);
+    std::vector<InputLine*> inputs = materialized.inputs;
+    Button* const default_button = materialized.default_button;
+    ui::View* const initial_focus = materialized.initial_focus;
+
+    auto window = std::make_unique<Window>(retained_descriptor->title);
+    window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
+                              roles.dialog_background);
+    Window* const window_ptr = window.get();
+    auto completion = std::make_shared<DescriptorDialogCompletion>(
+        DescriptorDialogCompletion{window_ptr->lifetime_token(), std::nullopt, false});
+    const detail::DialogFocusRestore focus_restore{restore_focus_to};
+
+    window->set_content(std::move(materialized.root));
+    window->set_resizable(retained_descriptor->resizable);
+    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, default_button, &app]() {
+        // This closure is owned by Window itself. Retain everything needed
+        // after the descriptor callback before entering user code: that
+        // callback is allowed to detach and destroy its own Window, which
+        // destroys this std::function while it is executing.
+        const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
+        Window* const held_window = window_ptr;
+        if (!validate_inputs(inputs, *retained_descriptor, app)) return;
+        // Record before application code runs: a descriptor button handler
+        // may detach or destroy this Window synchronously, but its successful
+        // acceptance still has one stable typed result after detachment.
+        held_completion->selected_result = accepted_result(inputs);
+        if (default_button != nullptr && default_button->on_press) default_button->on_press();
+        if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
+    };
+    window->cancel_request = [window_ptr, completion]() {
+        const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
+        Window* const held_window = window_ptr;
+        if (!held_completion->window_liveness.expired()) held_window->close();
+    };
+    window->on_closed = [&app, focus_restore, window_ptr, completion]() {
+        const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
+        const detail::DialogFocusRestore held_focus_restore = focus_restore;
+        Window* const held_window = window_ptr;
+        held_completion->closed = true;
+        held_focus_restore.restore(app);
+        if (!held_completion->window_liveness.expired()) schedule_self_detach(*held_window, app);
+    };
+    return BuiltDescriptorDialog{WindowHandle{std::move(window), initial_focus}, std::move(completion)};
 }
 
 }  // namespace
@@ -113,30 +185,59 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     window.set_content(std::move(dialog.root));
     window.set_resizable(descriptor.resizable);
 
-    // Guards against the default button's OWN on_press closing the
-    // window itself (a natural pattern: "the OK button closes the
-    // dialog") — without this, accept_request's own window.close()
-    // afterward would double-fire on_closed (or, if the caller's
-    // on_press somehow destroyed the Window outright rather than just
-    // closing it, be a genuine use-after-free). on_closed already
-    // fires synchronously from close(), so by the time accept_request
-    // checks *alive after on_press returns, it correctly reflects
-    // whether on_press already closed the window.
-    auto alive = std::make_shared<bool>(true);
+    // A default-button callback may close, detach, or destroy its hosting
+    // window. Keep the close state and per-instance lifetime identity outside
+    // that Window so the accept path neither double-closes it nor dereferences
+    // a destroyed object after application code returns.
+    struct CloseState {
+        std::weak_ptr<void> window_liveness;
+        bool closed = false;
+    };
+    auto close_state = std::make_shared<CloseState>(CloseState{window.lifetime_token(), false});
+    const detail::DialogFocusRestore focus_restore{restore_focus_to};
 
-    window.accept_request = [&window, &app, inputs, &descriptor, default_button, alive]() {
+    window.accept_request = [&window, &app, inputs, &descriptor, default_button, close_state]() {
+        const std::shared_ptr<CloseState> held_close_state = close_state;
+        Window* const held_window = &window;
         if (!validate_inputs(inputs, descriptor, app)) return;  // veto: invalid field already took focus
         if (default_button != nullptr && default_button->on_press) default_button->on_press();
-        if (*alive) window.close();
+        if (!held_close_state->closed && !held_close_state->window_liveness.expired()) held_window->close();
     };
     window.cancel_request = [&window]() { window.close(); };  // Esc bypasses validation by definition
 
     auto previous_on_closed = window.on_closed;
-    window.on_closed = [&app, restore_focus_to, previous_on_closed, alive]() {
-        *alive = false;
-        if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
-        if (previous_on_closed) previous_on_closed();
+    window.on_closed = [&app, focus_restore, previous_on_closed, close_state]() {
+        const std::shared_ptr<CloseState> held_close_state = close_state;
+        const detail::DialogFocusRestore held_focus_restore = focus_restore;
+        const std::function<void()> held_previous_on_closed = previous_on_closed;
+        held_close_state->closed = true;
+        held_focus_restore.restore(app);
+        if (held_previous_on_closed) held_previous_on_closed();
     };
+}
+
+DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::Application& app,
+                                             Desktop& desktop, const ui::StandardRoles& roles) {
+    using Access = detail::DialogPresentationAccess<DialogResult>;
+    auto parts = Access::make();
+    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused());
+    auto previous_on_detached = std::move(built.handle.window->on_detached);
+    built.handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state,
+                                        completion = built.completion]() {
+        if (previous) previous();
+        if (completion->selected_result) Access::record(state, *completion->selected_result);
+        Access::finish(state, DialogResult{});
+    };
+    desktop.present_modal(std::move(built.handle), app);
+    return std::move(parts.presentation);
+}
+
+DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
+                         Desktop& desktop, const ui::StandardRoles& roles) {
+    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused());
+    const std::shared_ptr<DescriptorDialogCompletion> completion = built.completion;
+    desktop.exec_modal(app, std::move(built.handle));
+    return completion->selected_result.value_or(DialogResult{});
 }
 
 }  // namespace ckv::widgets

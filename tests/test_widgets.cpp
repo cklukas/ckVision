@@ -382,6 +382,19 @@ CK_TEST(typed_text_inserts_at_the_cursor) {
     CK_CHECK(input.text() == "hello world");
 }
 
+CK_TEST(character_key_events_use_the_same_insertion_path_as_text_events) {
+    Fixture f;
+    InputLine input;
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "a"}}));
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Shift, "B"}}));
+    CK_CHECK(input.text() == "aB");
+
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}}));
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "c"}}));
+    CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Super, "v"}}));
+    CK_CHECK(input.text() == "aB");
+}
+
 CK_TEST(backspace_at_start_of_field_is_a_no_op) {
     Fixture f;
     InputLine input;

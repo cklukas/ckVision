@@ -32,20 +32,19 @@ void HeadlessTerminal::set_capabilities(Capabilities caps) noexcept {
     display_.set_cell_pixels(effective_cell_pixels(caps));
 }
 
-void HeadlessTerminal::inject_bytes(std::string_view bytes, std::int64_t now_nanos) {
-    std::vector<TerminalEvent> decoded = decoder_.feed(bytes, now_nanos);
+void HeadlessTerminal::enqueue_decoded(std::vector<TerminalEvent> decoded) {
     for (auto& ev : decoded) {
         if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev)) set_capabilities(changed->capabilities);
         pending_events_.push_back(std::move(ev));
     }
 }
 
+void HeadlessTerminal::inject_bytes(std::string_view bytes, std::int64_t now_nanos) {
+    enqueue_decoded(decoder_.feed(bytes, now_nanos));
+}
+
 void HeadlessTerminal::inject_timeout_check(std::int64_t now_nanos) {
-    std::vector<TerminalEvent> decoded = decoder_.poll_timeout(now_nanos);
-    for (auto& ev : decoded) {
-        if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev)) set_capabilities(changed->capabilities);
-        pending_events_.push_back(std::move(ev));
-    }
+    enqueue_decoded(decoder_.poll_timeout(now_nanos));
 }
 
 }  // namespace ckv::term

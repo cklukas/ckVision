@@ -103,6 +103,19 @@ CK_TEST(typed_text_inserts_at_the_cursor) {
     CK_CHECK(memo.text() == "hello world");
 }
 
+CK_TEST(character_key_events_insert_text_but_modified_character_chords_do_not) {
+    Fixture f;
+    auto memo = make_memo(f);
+    CK_CHECK(memo.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "a"}}));
+    CK_CHECK(memo.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Shift, "B"}}));
+    CK_CHECK(memo.text() == "aB");
+
+    CK_CHECK(!memo.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}}));
+    CK_CHECK(!memo.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "c"}}));
+    CK_CHECK(!memo.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Super, "v"}}));
+    CK_CHECK(memo.text() == "aB");
+}
+
 CK_TEST(enter_splits_the_current_line_into_two) {
     Fixture f;
     auto memo = make_memo(f);

@@ -7,7 +7,10 @@
 // concrete backend.
 #pragma once
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -30,6 +33,22 @@ struct CapabilityChangedEvent {
 using TerminalEvent =
     std::variant<KeyEvent, MouseEvent, TextEvent, FocusEvent, ResizeEvent, CapabilityChangedEvent>;
 
+// A borrowed platform-native source a host may include in its own wait loop.
+// The handle set is empty for deterministic backends. A session-owning backend
+// exposes every source that can make poll() useful (for POSIX, terminal input
+// and the cross-thread wake channel); callers must neither close nor alter it.
+enum class WaitHandleKind : std::uint8_t {
+    PosixFileDescriptor,
+    WindowsHandle,
+};
+
+struct WaitHandle {
+    WaitHandleKind kind;
+    std::uintptr_t value;
+
+    friend bool operator==(const WaitHandle&, const WaitHandle&) = default;
+};
+
 class Terminal {
 public:
     virtual ~Terminal() = default;
@@ -43,6 +62,13 @@ public:
     // call (a batch), consistent with the ui-layer's batched loop.
     virtual std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) = 0;
 
+    // Returns a borrowed, allocation-free view of the backend sources a host
+    // may wait on before calling poll() or Application::step(). The returned
+    // view is valid only while this Terminal remains alive and its native
+    // session remains active. Empty is correct for non-blocking deterministic
+    // backends such as HeadlessTerminal and ReplayTerminal.
+    virtual std::span<const WaitHandle> wait_handles() const noexcept { return {}; }
+
     // Interrupts an in-flight poll(), if this backend can wait. This is
     // the cross-thread companion to ui::Application::post()/wake(): it
     // must be safe to call from a non-owning thread, must not deliver a
@@ -51,6 +77,33 @@ public:
     // Implementations return from poll() promptly and leave it to
     // Application to drain the posted work in its ordinary batch.
     virtual void wake() noexcept {}
+
+    // Ends any terminal session this backend owns. Application calls this
+    // exactly once during destruction, before flushing its buffered
+    // diagnostics; implementations must make it idempotent because the
+    // backend's own destructor performs the same final cleanup. Deterministic
+    // in-memory terminals own no external session and keep the default no-op.
+    virtual void restore() noexcept {}
+
+    // Emits one diagnostic only after restore() completed. The default is for
+    // terminal-less deterministic backends; session-owning backends may use
+    // their platform-native diagnostic channel. Application never writes
+    // stderr directly, preserving the ui/term impurity boundary.
+    virtual void write_diagnostic_after_restore(std::string_view message) noexcept {
+        std::fwrite(message.data(), 1, message.size(), stderr);
+    }
+
+    // Application event, draw, timer, posted-work, command, focus, and loop
+    // predicate callbacks are noexcept-in-effect (ARCHITECTURE.md §11).  The
+    // callback boundary calls this instead of permitting an exception to
+    // escape through an active terminal session. A backend that owns a live
+    // terminal session must override it to restore that session before it
+    // emits the diagnostic and terminates. The default is for deterministic
+    // in-memory backends, which own no external terminal state.
+    [[noreturn]] virtual void terminate_after_callback_failure() noexcept {
+        std::fputs("ckVision contract violation: application callback threw\n", stderr);
+        std::abort();
+    }
 
     // The sole output sink: raw bytes to the terminal. Presenter is
     // the only intended caller for frame content; title/bell/clipboard

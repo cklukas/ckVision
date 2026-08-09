@@ -13,6 +13,7 @@ add_executable(cvision_tests
     test_desktop.cpp
     test_desktop_dialog_golden.cpp
     test_dialog.cpp
+    test_dialog_presentation.cpp
     test_directory_picker.cpp
     test_dock.cpp
     test_file_dialog.cpp
@@ -41,6 +42,7 @@ add_executable(cvision_tests
     test_option_group.cpp
     test_overlay.cpp
     test_painter.cpp
+    test_platform_services.cpp
     test_posix_terminal.cpp
     test_presenter.cpp
     test_record_replay_terminal.cpp
@@ -74,6 +76,14 @@ ckvision_strict(cvision_tests)
 
 if(UNIX)
     target_sources(cvision_tests PRIVATE test_posix_filesystem.cpp)
+
+    # Assertion contracts fork from their own single-threaded CTest process.
+    # Forking from the monolithic test binary after its thread-owning cases have
+    # run is not sanitizer-safe and can turn the intended SIGABRT into SIGKILL.
+    add_executable(theme_assertion_contract test_theme_assertion_contract.cpp)
+    target_link_libraries(theme_assertion_contract PRIVATE ckvision::cvision)
+    ckvision_strict(theme_assertion_contract)
+    add_test(NAME theme_assertion_contract COMMAND theme_assertion_contract)
 endif()
 
 # gallery_app only exists when CKVISION_BUILD_EXAMPLES is on (default,
@@ -133,6 +143,8 @@ endif()
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
+add_test(NAME layer_checker_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py --self-test)
 
 # The M9 60-line Hello exit criterion (ROADMAP.md), wired for real:
 # never vanish silently, same reasoning as layer_check above.

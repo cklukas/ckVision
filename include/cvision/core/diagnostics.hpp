@@ -31,15 +31,19 @@ struct DiagnosticsEntry {
     std::string text;
 };
 
-// An in-memory sink for tests and headless use. Writing buffered
-// entries out (e.g. to stderr, only after terminal restoration) is a
-// term/ui-layer responsibility that does not exist yet (ARCHITECTURE.md
-// §11) — core performs no I/O at all (§1), so this type only ever
-// buffers; it never writes anywhere itself.
+// An in-memory sink for tests and headless use. Writing buffered entries out
+// after terminal restoration is intentionally a term/ui-layer responsibility;
+// core performs no I/O at all (§1), so this type only ever buffers.
 class BufferedDiagnostics final : public DiagnosticsSink {
 public:
     void log(LogLevel level, std::string_view message) noexcept override {
-        entries_.push_back(DiagnosticsEntry{level, std::string(message)});
+        // Diagnostics must never turn a recoverable observation into an
+        // allocation-triggered termination. The best-effort loss on memory
+        // exhaustion is explicit; the original operation remains intact.
+        try {
+            entries_.push_back(DiagnosticsEntry{level, std::string(message)});
+        } catch (...) {
+        }
     }
 
     const std::vector<DiagnosticsEntry>& entries() const noexcept { return entries_; }

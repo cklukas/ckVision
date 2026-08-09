@@ -189,20 +189,68 @@ std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
         if (r.status == Status::Incomplete) break;
         if (r.status == Status::Invalid) {
             pending_.erase(0, 1);
+            discard_capability_update_from_pending_sequence_ = false;
             continue;
         }
-        if (r.updated_caps) {
-            caps_ = *r.updated_caps;
-            events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+        const bool crossed_probe_window = discard_capability_update_from_pending_sequence_;
+        if (crossed_probe_window) {
+            // Some capability parsers retain auxiliary evidence while
+            // constructing their candidate update (notably DECRPM 1016's
+            // mode proof). The candidate is stale by construction, so reset
+            // every such parser-local fact to this window's accepted profile
+            // before processing later fresh replies.
+            set_capabilities(caps_);
+        } else if (r.updated_caps) {
+            const bool needs_fresh_geometry = sixel_geometry_required_ && r.updated_caps->sixel_graphics &&
+                                              (r.updated_caps->sixel_max_geometry.width <= 0 ||
+                                               r.updated_caps->sixel_max_geometry.height <= 0);
+            if (accepts_capability_update(*r.updated_caps) && !needs_fresh_geometry) {
+                if (*r.updated_caps != caps_) {
+                    caps_ = *r.updated_caps;
+                    events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+                }
+                if (sixel_geometry_required_ && caps_.sixel_graphics) sixel_geometry_required_ = false;
+            } else if (!needs_fresh_geometry) {
+                // Parsing a capability reply may update auxiliary evidence
+                // before producing its candidate (notably DECRPM 1016). A
+                // backend that rejects this reply must restore all decoder
+                // state now, before the next sequence from the same feed.
+                set_capabilities(caps_);
+            } else {
+                // DA1 is valid positive evidence at session start, but after
+                // a resize its lack of a current geometry tells us nothing
+                // about the new safe image bound. Consume it without changing
+                // unrelated decoder state; a following XTSMGRAPHICS geometry
+                // reply in this same read remains authoritative.
+            }
         }
         if (r.event) events.push_back(std::move(*r.event));
         pending_.erase(0, r.consumed);
+        discard_capability_update_from_pending_sequence_ = false;
     }
     return events;
 }
 
+bool InputDecoder::accepts_capability_update(const Capabilities& candidate) const noexcept {
+    switch (capability_update_policy_) {
+        case CapabilityUpdatePolicy::AcceptProbeRefinements:
+            return true;
+        case CapabilityUpdatePolicy::Reject:
+            return false;
+        case CapabilityUpdatePolicy::AcceptLiveColorSchemeNotifications: {
+            if (!caps_.color_scheme_notifications || !candidate.color_scheme_notifications ||
+                candidate.color_scheme == caps_.color_scheme)
+                return false;
+            Capabilities without_scheme = candidate;
+            without_scheme.color_scheme = caps_.color_scheme;
+            return without_scheme == caps_;
+        }
+    }
+    return false;
+}
+
 InputDecoder::ParseResult InputDecoder::try_parse_one(std::string_view buf, std::int64_t now_nanos) {
-    if (in_paste_) return parse_paste_continuation(buf);
+    if (in_paste_ || discarding_unnegotiated_paste_) return parse_paste_continuation(buf);
     const unsigned char b0 = static_cast<unsigned char>(buf[0]);
     if (b0 == 0x1B) return parse_escape(buf, now_nanos);
     return parse_utf8_or_control(buf);
@@ -246,6 +294,13 @@ InputDecoder::ParseResult InputDecoder::parse_utf8_or_control(std::string_view b
 
 InputDecoder::ParseResult InputDecoder::parse_escape(std::string_view buf, std::int64_t now_nanos) {
     if (buf.size() == 1) {
+        // Kitty's negotiated keyboard protocol encodes Escape itself as a
+        // CSI-u key event, so a bare ESC cannot be an Alt prefix. Deliver it
+        // immediately rather than injecting the legacy quiet-delay into a
+        // protocol that explicitly removes that ambiguity.
+        if (caps_.keyboard_protocol == KeyboardProtocol::Kitty)
+            return {Status::Complete, 1,
+                    TerminalEvent{KeyEvent{KeyChord{Key::Escape, Modifier::None, {}}}}, std::nullopt};
         if (esc_first_seen_nanos_ < 0) esc_first_seen_nanos_ = now_nanos;
         if (now_nanos - esc_first_seen_nanos_ >= kEscTimeoutNanos) {
             esc_first_seen_nanos_ = -1;
@@ -302,6 +357,31 @@ InputDecoder::ParseResult InputDecoder::parse_ss3(std::string_view buf) {
 }
 
 InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
+    // X10's mouse report is a six-byte CSI sequence whose three payload bytes
+    // are not CSI parameters. Recognize it before generic CSI parsing, both
+    // so an authorized X10 profile receives the press and so every other
+    // profile swallows the unsupported extension as one unit rather than
+    // leaking its coordinate bytes into normal text input.
+    if (buf.size() >= 3 && buf[2] == 'M') {
+        if (buf.size() < 6) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
+        if (caps_.mouse_protocol != MouseProtocol::X10)
+            return {Status::Complete, 6, std::nullopt, std::nullopt};
+
+        const int button_code = static_cast<unsigned char>(buf[3]) - 32;
+        const int x = static_cast<unsigned char>(buf[4]) - 32;
+        const int y = static_cast<unsigned char>(buf[5]) - 32;
+        if (button_code < 0 || button_code > 2 || x < 1 || y < 1)
+            return {Status::Complete, 6, std::nullopt, std::nullopt};
+
+        const MouseButton button = button_code == 0   ? MouseButton::Left
+                                   : button_code == 1 ? MouseButton::Middle
+                                                      : MouseButton::Right;
+        return {Status::Complete, 6,
+                TerminalEvent{MouseEvent{MouseAction::Down, button, Point{x - 1, y - 1}, std::nullopt,
+                                         Modifier::None}},
+                std::nullopt};
+    }
+
     std::size_t pos = 2;
     bool private_marker = false;
     char marker = 0;
@@ -312,8 +392,10 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         ++pos;
     }
     std::string param_str;
+    bool has_subparameter = false;
     while (pos < buf.size() && ((buf[pos] >= '0' && buf[pos] <= '9') || buf[pos] == ';' ||
                                  buf[pos] == ':')) {
+        has_subparameter = has_subparameter || buf[pos] == ':';
         param_str += (buf[pos] == ':' ? ';' : buf[pos]);
         ++pos;
     }
@@ -330,13 +412,22 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
 
     if (final_byte == '~') {
         if (params.size() >= 1 && params[0] == 200) {
-            in_paste_ = true;
-            paste_accum_.clear();
+            if (caps_.bracketed_paste) {
+                in_paste_ = true;
+                paste_accum_.clear();
+            } else {
+                // A profile that did not request bracketed paste must not let
+                // a hostile or misconfigured terminal turn the bytes between
+                // its delimiters into ordinary key/text input. Preserve the
+                // stream boundary but discard it as opaque unsupported input.
+                discarding_unnegotiated_paste_ = true;
+            }
             return {Status::Complete, consumed, std::nullopt, std::nullopt};
         }
         if (params.size() >= 1 && params[0] == 201)
             return {Status::Complete, consumed, std::nullopt, std::nullopt};  // stray end marker
-        if (params.size() == 3 && params[0] == 27) {
+        if (caps_.keyboard_protocol == KeyboardProtocol::ModifyOtherKeys && params.size() == 3 &&
+            params[0] == 27) {
             const Modifier mod = decode_modifier_param(params[1]);
             return {Status::Complete, consumed, TerminalEvent{KeyEvent{key_from_codepoint(params[2], mod)}},
                     std::nullopt};
@@ -350,11 +441,30 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         return {Status::Complete, consumed, std::nullopt, std::nullopt};
     }
 
-    if (final_byte == 'u') {
+    if (final_byte == 'u' && caps_.keyboard_protocol == KeyboardProtocol::Kitty) {
         if (!params.empty()) {
             const Modifier mod = params.size() >= 2 ? decode_modifier_param(params[1]) : Modifier::None;
+            KeyAction action = KeyAction::Press;
+            if (has_subparameter) {
+                // Kitty encodes the event type as the second subparameter of
+                // its modifiers field. The selected session mode requests
+                // that field; reject an unknown value instead of turning it
+                // into an activation by accident.
+                if (params.size() < 3) return {Status::Complete, consumed, std::nullopt, std::nullopt};
+                switch (params[2]) {
+                    case 1: action = KeyAction::Press; break;
+                    case 2: action = KeyAction::Repeat; break;
+                    case 3: action = KeyAction::Release; break;
+                    default: return {Status::Complete, consumed, std::nullopt, std::nullopt};
+                }
+            } else if (params.size() > 2) {
+                // The selected mode never emits a third top-level field.
+                // That shape belongs to an unsupported kitty extension, so
+                // do not silently reinterpret it as a press.
+                return {Status::Complete, consumed, std::nullopt, std::nullopt};
+            }
             return {Status::Complete, consumed,
-                    TerminalEvent{KeyEvent{key_from_codepoint(params[0], mod)}}, std::nullopt};
+                    TerminalEvent{KeyEvent{key_from_codepoint(params[0], mod), action}}, std::nullopt};
         }
         return {Status::Complete, consumed, std::nullopt, std::nullopt};
     }
@@ -377,14 +487,20 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         if (final_byte == 'Z')
             return {Status::Complete, consumed,
                     TerminalEvent{KeyEvent{KeyChord{Key::Tab, Modifier::Shift, {}}}}, std::nullopt};
-        if (final_byte == 'I')
+        if (final_byte == 'I' && caps_.focus_events)
             return {Status::Complete, consumed, TerminalEvent{FocusEvent{true}}, std::nullopt};
-        if (final_byte == 'O')
+        if (final_byte == 'O' && caps_.focus_events)
             return {Status::Complete, consumed, TerminalEvent{FocusEvent{false}}, std::nullopt};
     }
 
-    if (private_marker && marker == '<' && params.size() == 3 &&
+    if (caps_.mouse_protocol == MouseProtocol::SGR && private_marker && marker == '<' && params.size() == 3 &&
         (final_byte == 'M' || final_byte == 'm')) {
+        // SGR-pixel mode changes the meaning of x/y before the backend can
+        // safely expose it: mode 1016 is enabled while probing, but a
+        // DECRPM reply alone does not provide the cell metric. Do not guess
+        // that these are ordinary cell coordinates in that interval.
+        if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse)
+            return {Status::Complete, consumed, std::nullopt, std::nullopt};
         const bool is_press = (final_byte == 'M');
         const int cb = params[0];
         const int cx = params[1];
@@ -431,16 +547,90 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         return {Status::Complete, consumed, TerminalEvent{ev}, std::nullopt};
     }
 
-    if (private_marker && marker == '?' && final_byte == 'c')
-        return {Status::Complete, consumed, std::nullopt, std::nullopt};  // DA1: recognized, not parsed further (v1 scope)
+    if (private_marker && marker == '?' && final_byte == 'c') {
+        // Primary Device Attributes reports parameter 4 for Sixel graphics
+        // on DEC graphics terminals and xterm. This is positive evidence
+        // only: a terminal may omit the parameter despite a curated host
+        // profile knowing more, so DA1 never disables an already-forced
+        // graphics capability.
+        const bool advertises_sixel = std::find(params.begin(), params.end(), 4) != params.end();
+        if (advertises_sixel && !caps_.sixel_graphics) {
+            Capabilities updated = caps_;
+            updated.sixel_graphics = true;
+            return {Status::Complete, consumed, std::nullopt, updated};
+        }
+        return {Status::Complete, consumed, std::nullopt, std::nullopt};
+    }
+
+    if (private_marker && marker == '?' && final_byte == 'S') {
+        // XTSMGRAPHICS replies CSI ? Pi ; Ps ; Pv S. Pi=1 reports the
+        // Sixel color-register maximum; Pi=2 reports Sixel geometry in
+        // pixels. Ps=0 is the only successful result. A successful geometry
+        // reply is independent positive evidence that Sixel is configured.
+        if (params.size() >= 3 && params[1] == 0) {
+            Capabilities updated = caps_;
+            if (params[0] == 1 && params.size() == 3 && params[2] >= 0) {
+                updated.sixel_color_registers = params[2];
+                return {Status::Complete, consumed, std::nullopt, updated};
+            }
+            if (params[0] == 2 && params.size() == 4 && params[2] > 0 && params[3] > 0) {
+                updated.sixel_graphics = true;
+                updated.sixel_max_geometry = Size{params[2], params[3]};
+                return {Status::Complete, consumed, std::nullopt, updated};
+            }
+        }
+        return {Status::Complete, consumed, std::nullopt, std::nullopt};
+    }
 
     if (private_marker && marker == '?' && final_byte == 'y') {
+        if (params.size() == 2 && params[0] == 2031) {
+            // We enable DECSET 2031 before asking DECRQM. A set or
+            // permanently-set report therefore proves that this session can
+            // receive the documented unsolicited color-preference DSRs.
+            Capabilities updated = caps_;
+            updated.color_scheme_notifications = (params[1] == 1 || params[1] == 3);
+            return {Status::Complete, consumed, std::nullopt, updated};
+        }
         if (params.size() == 2 && params[0] == 2026) {
             Capabilities updated = caps_;
             updated.synchronized_output = (params[1] == 1 || params[1] == 3);
             return {Status::Complete, consumed, std::nullopt, updated};
         }
+        if (params.size() == 2 && params[0] == 1016) {
+            // The DECRPM reply proves that the SGR-pixel mode is active, but
+            // it does not give the pixel-to-cell mapping.  Preserve that
+            // fact until XTWINOPS 16 supplies a positive cell size; the two
+            // replies have no required delivery order.
+            pixel_mouse_mode_enabled_ = (params[1] == 1 || params[1] == 3);
+            Capabilities updated = caps_;
+            updated.pixel_mouse = pixel_mouse_mode_enabled_ && updated.cell_pixels.width > 0 &&
+                                  updated.cell_pixels.height > 0;
+            return {Status::Complete, consumed, std::nullopt, updated};
+        }
         return {Status::Complete, consumed, std::nullopt, std::nullopt};
+    }
+
+    if (private_marker && marker == '?' && final_byte == 'n' && params.size() == 2 && params[0] == 997 &&
+        (params[1] == 1 || params[1] == 2)) {
+        // Mode 2031 is the authority for this otherwise unsolicited DSR.
+        // Do not let the notification itself manufacture that authority:
+        // direct/headless decoding has no backend probe window to filter it.
+        if (!caps_.color_scheme_notifications) {
+            return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        }
+        Capabilities updated = caps_;
+        updated.color_scheme = (params[1] == 1) ? ColorScheme::Dark : ColorScheme::Light;
+        return {Status::Complete, consumed, std::nullopt, updated};
+    }
+
+    if (!private_marker && final_byte == 't' && params.size() == 3 && params[0] == 6 &&
+        params[1] > 0 && params[2] > 0) {
+        // XTWINOPS 16 replies CSI 6 ; height ; width t.  Size uses the
+        // library's conventional width/height ordering, hence [2], [1].
+        Capabilities updated = caps_;
+        updated.cell_pixels = Size{params[2], params[1]};
+        updated.pixel_mouse = pixel_mouse_mode_enabled_;
+        return {Status::Complete, consumed, std::nullopt, updated};
     }
 
     return {Status::Complete, consumed, std::nullopt, std::nullopt};  // unrecognized: swallow whole
@@ -479,12 +669,30 @@ InputDecoder::ParseResult InputDecoder::parse_osc(std::string_view buf) {
             ps = -1;
             break;
         }
+        if (ps > (INT_MAX - (c - '0')) / 10) {
+            ps = -1;
+            break;
+        }
         ps = ps * 10 + (c - '0');
     }
-    if (ps == 11) {
+    // Once DEC mode 2031 is established, its explicit dark/light preference
+    // is authoritative. Do not let delayed OSC 10/11 replies replace it.
+    if (ps == 11 && !caps_.color_scheme_notifications) {
         if (const auto luminance = parse_rgb_luminance(pt_str)) {
             Capabilities updated = caps_;
             updated.color_scheme = (*luminance < 0.5) ? ColorScheme::Dark : ColorScheme::Light;
+            color_scheme_from_osc11_ = true;
+            return {Status::Complete, consumed, std::nullopt, updated};
+        }
+    }
+    if (ps == 10 && !caps_.color_scheme_notifications && !color_scheme_from_osc11_) {
+        if (const auto luminance = parse_rgb_luminance(pt_str)) {
+            // OSC 10 reports the default foreground, not a color-scheme
+            // preference. Its contrast suggests the inverse background mode
+            // only when OSC 11 is unavailable; a later OSC 11 report replaces
+            // this lower-confidence fallback.
+            Capabilities updated = caps_;
+            updated.color_scheme = (*luminance < 0.5) ? ColorScheme::Light : ColorScheme::Dark;
             return {Status::Complete, consumed, std::nullopt, updated};
         }
     }
@@ -498,17 +706,21 @@ InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_vie
         const std::size_t tail_reserve = kEndMarker.size() - 1;
         const std::size_t safe_len = buf.size() > tail_reserve ? buf.size() - tail_reserve : 0;
         if (safe_len > 0) {
-            paste_accum_.append(buf.substr(0, safe_len));
+            if (in_paste_) paste_accum_.append(buf.substr(0, safe_len));
             return {Status::Complete, safe_len, std::nullopt, std::nullopt};
         }
         return {Status::Incomplete, 0, std::nullopt, std::nullopt};
     }
-    paste_accum_.append(buf.substr(0, end));
-    const std::string sanitized = sanitize_paste(paste_accum_);
-    paste_accum_.clear();
-    in_paste_ = false;
-    return {Status::Complete, end + kEndMarker.size(), TerminalEvent{TextEvent{sanitized, true}},
-            std::nullopt};
+    if (in_paste_) {
+        paste_accum_.append(buf.substr(0, end));
+        const std::string sanitized = sanitize_paste(paste_accum_);
+        paste_accum_.clear();
+        in_paste_ = false;
+        return {Status::Complete, end + kEndMarker.size(), TerminalEvent{TextEvent{sanitized, true}},
+                std::nullopt};
+    }
+    discarding_unnegotiated_paste_ = false;
+    return {Status::Complete, end + kEndMarker.size(), std::nullopt, std::nullopt};
 }
 
 }  // namespace ckv::term

@@ -50,6 +50,8 @@ public:
     // Explicit modeless standard-dialog presentation (D-038): attaches
     // through add_window (activation + z-order included) and focuses
     // handle.initial_focus, but leaves ordinary background input active.
+    // Returns nullptr if a focus callback synchronously detaches or destroys
+    // the new window before this operation returns.
     // Generic add_child is equally management-safe for a Window but
     // deliberately does not know WindowHandle's initial-focus choice.
     Window* present_modeless(WindowHandle handle, ui::Application& app);
@@ -58,7 +60,9 @@ public:
     // focuses like present_modeless, but pushes the Window onto the
     // Application modal stack before returning. The scope ends when
     // the Window detaches; standard-dialog present_* helpers provide
-    // typed completion rather than exposing this raw observer.
+    // typed completion rather than exposing this raw observer. Returns
+    // nullptr if a focus callback synchronously detaches or destroys the
+    // new window before this operation returns.
     Window* present_modal(WindowHandle handle, ui::Application& app);
 
     // The blocking sibling of present_modal (M9/WP-15, D-021's "blocking
@@ -67,7 +71,14 @@ public:
     // routing to it (Application::push_modal) and pumps
     // Application::step() — never a nested native loop — until the
     // window is no longer among windows() (it has closed and self-
-    // detached), popping the modal scope before returning. Doesn't
+    // detached), popping the modal scope before returning. If a host
+    // request_quit() interrupts that pump while the window is still
+    // attached, it force-detaches the window instead of consulting its
+    // vetoable user-close protocol; factory-level exec_* helpers then
+    // return their documented cancellation fallback. If arbitrary pump
+    // work removes this Desktop, the call returns after the detach path
+    // has removed its exact modal scope; it never dereferences the former
+    // Desktop or modal Window. Doesn't
     // interpret WHAT closed the window or produce any result of its
     // own: exec_message_box (and any future exec_dialog/
     // exec_file_dialog) captures its own typed result through the SAME
@@ -228,10 +239,12 @@ private:
     // sure" dialog a window's own close_request opens gets seen first;
     // the FIRST veto stops the sweep entirely (quit is cancelled — not
     // "close everything that didn't veto, then quit anyway"). Only
-    // calls Application::request_quit() if every window's close()
-    // returned true. close() never itself detaches a window — see
-    // Window::close()'s own doc comment — so this never mutates
-    // windows_ while iterating it.
+    // calls Application::request_quit() if every starting window's close()
+    // returned true. A user close callback may detach/destroy/reuse storage,
+    // so the implementation snapshots per-instance lifetime identity before
+    // iterating rather than assuming windows_ remains stable. A recursive
+    // default kQuit execution from one of those callbacks is a no-op: only
+    // the outer request may observe later vetoes or request shutdown.
     void quit_sweep();
     // kZoom's default handler: toggles the ACTIVE window's own zoom,
     // the same call its own zoom-control click already makes — a
@@ -247,6 +260,10 @@ private:
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
     std::vector<ui::CommandId> installed_default_handlers_;
+    struct QuitSweepState {
+        bool in_progress = false;
+    };
+    std::shared_ptr<QuitSweepState> quit_sweep_state_ = std::make_shared<QuitSweepState>();
     // content_area() as of the end of the previous on_resized() pass —
     // DesktopGrowPolicy::AnchorEdges needs the delta between the old
     // and new area to preserve each such window's right/bottom margin

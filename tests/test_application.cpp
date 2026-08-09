@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/application.hpp"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -12,6 +13,7 @@
 
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/term/record_replay_terminal.hpp"
 
 using ckv::KeyChord;
 using ckv::Key;
@@ -32,15 +34,21 @@ public:
         set_fills_root(false);
     }
     int key_events = 0;
+    int key_release_events = 0;
     int text_events = 0;
     int mouse_events = 0;
     int focus_gained = 0;
     int focus_lost = 0;
     bool consume_keys = false;
+    bool consume_key_releases = false;
 
     bool on_key(const ckv::KeyEvent&) override {
         ++key_events;
         return consume_keys;
+    }
+    bool on_key_release(const ckv::KeyEvent&) override {
+        ++key_release_events;
+        return consume_key_releases;
     }
     bool on_text(const ckv::TextEvent&) override {
         ++text_events;
@@ -62,6 +70,7 @@ class WaitableTerminal final : public ckv::term::Terminal {
 public:
     ckv::term::Capabilities capabilities() const noexcept override { return ckv::term::baseline_capabilities(); }
     ckv::Size size() const noexcept override { return ckv::Size{80, 24}; }
+    std::span<const ckv::term::WaitHandle> wait_handles() const noexcept override { return wait_handles_; }
 
     std::vector<ckv::term::TerminalEvent> poll(std::int64_t) override {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -94,11 +103,27 @@ public:
     }
 
 private:
+    std::array<ckv::term::WaitHandle, 2> wait_handles_ = {
+        ckv::term::WaitHandle{ckv::term::WaitHandleKind::PosixFileDescriptor, 41},
+        ckv::term::WaitHandle{ckv::term::WaitHandleKind::PosixFileDescriptor, 42},
+    };
     mutable std::mutex mutex_;
     std::condition_variable condition_;
     bool polling_ = false;
     bool woken_ = false;
     int wake_count_ = 0;
+};
+
+class ForwardingDiagnostics final : public ckv::DiagnosticsSink {
+public:
+    explicit ForwardingDiagnostics(std::vector<ckv::DiagnosticsEntry>& received) : received_(received) {}
+
+    void log(ckv::LogLevel level, std::string_view message) noexcept override {
+        received_.push_back(ckv::DiagnosticsEntry{level, std::string(message)});
+    }
+
+private:
+    std::vector<ckv::DiagnosticsEntry>& received_;
 };
 
 class ReentrantLoopView final : public View {
@@ -187,6 +212,24 @@ public:
 private:
     Application& app_;
     View& owner_;
+};
+
+class RootResizeSelfRemovingView final : public View {
+public:
+    explicit RootResizeSelfRemovingView(Application& app) : app_(app) {}
+
+    void on_resized() override {
+        if (!armed_) return;
+        std::unique_ptr<View> removed = app_.root().remove_child(this);
+        CK_CHECK(removed.get() == this);
+        removed.reset();
+    }
+
+    void arm() noexcept { armed_ = true; }
+
+private:
+    Application& app_;
+    bool armed_ = false;
 };
 
 }  // namespace
@@ -362,6 +405,23 @@ CK_TEST(set_focus_to_a_non_focusable_view_aborts) {
     CK_CHECK(WTERMSIG(status) == SIGABRT);
 }
 
+CK_TEST(application_diagnostics_buffer_and_forward_to_an_owned_injected_sink) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ckv::ManualClock clock;
+    std::vector<ckv::DiagnosticsEntry> received;
+    {
+        Application app(term, clock);
+        app.set_diagnostics_sink(std::make_unique<ForwardingDiagnostics>(received));
+        app.diagnostics().log(ckv::LogLevel::Warning, "probe timed out");
+        app.diagnostics().log(ckv::LogLevel::Error, "terminal write failed");
+    }
+    CK_CHECK(received.size() == 2);
+    CK_CHECK(received[0].level == ckv::LogLevel::Warning);
+    CK_CHECK(received[0].text == "probe timed out");
+    CK_CHECK(received[1].level == ckv::LogLevel::Error);
+    CK_CHECK(received[1].text == "terminal write failed");
+}
+
 // --- Key/text focus-chain dispatch ------------------------------------------
 
 CK_TEST(key_event_reaches_the_focused_view) {
@@ -373,6 +433,24 @@ CK_TEST(key_event_reaches_the_focused_view) {
     app.set_focus(a);
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));  // delivered but unconsumed
     CK_CHECK(a->key_events == 1);
+}
+
+CK_TEST(key_release_uses_the_dedicated_route_and_never_activates_a_command) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* probe = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    probe->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(probe);
+    constexpr ckv::ui::CommandId kEscape = ckv::ui::kFirstApplicationCommandId;
+    app.commands().register_command(kEscape, "Escape", "App", KeyChord{Key::Escape, Modifier::None, ""});
+    bool command_ran = false;
+    app.set_command_handler(kEscape, [&] { command_ran = true; });
+
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}, ckv::KeyAction::Release}));
+    CK_CHECK(probe->key_events == 0);
+    CK_CHECK(probe->key_release_events == 1);
+    CK_CHECK(!command_ran);
 }
 
 CK_TEST(unconsumed_key_walks_up_through_ancestors_until_one_consumes_it) {
@@ -686,6 +764,23 @@ CK_TEST(resize_event_updates_the_roots_bounds) {
     CK_CHECK(app.root().bounds() == (Rect{0, 0, 100, 40}));
 }
 
+CK_TEST(root_resize_layout_survives_a_child_that_destroys_itself_during_on_resized) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* self_removing = app.root().add(std::make_unique<RootResizeSelfRemovingView>(app));
+    auto* survivor = app.root().add(std::make_unique<View>());
+    self_removing->arm();  // the initial root-child layout above is intentionally harmless
+
+    CK_CHECK(app.dispatch(ckv::ResizeEvent{ckv::Size{100, 40}}));
+
+    // The first child erased itself from the live vector during its resize
+    // callback. The stable identity snapshot must still lay out its sibling.
+    CK_CHECK(app.root().children().size() == 1);
+    CK_CHECK(app.root().children().front().get() == survivor);
+    CK_CHECK(survivor->bounds() == (Rect{0, 0, 100, 40}));
+}
+
 // --- post() / step() --------------------------------------------------------
 
 CK_TEST(post_queues_work_that_step_runs_on_the_owning_thread) {
@@ -698,6 +793,15 @@ CK_TEST(post_queues_work_that_step_runs_on_the_owning_thread) {
     const bool did_work = app.step(0);
     CK_CHECK(ran);
     CK_CHECK(did_work);
+}
+
+CK_TEST(posting_an_empty_callback_is_a_harmless_no_op) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+
+    app.post({});
+    CK_CHECK(!app.step(0));
 }
 
 CK_TEST(step_with_no_events_and_no_posted_work_reports_no_work_done) {
@@ -794,6 +898,29 @@ CK_TEST(a_paste_event_still_reaches_the_focused_view_after_updating_the_clipboar
 }
 
 // --- Timers --------------------------------------------------------------
+
+CK_TEST(application_forwards_borrowed_wait_handles_and_reports_its_earliest_timer_deadline) {
+    WaitableTerminal inner;
+    ckv::term::RecordingTerminal terminal(inner);
+    ManualClock clock(1'000);
+    Application app(terminal, clock);
+
+    const auto handles = app.wait_handles();
+    CK_CHECK(handles.size() == 2);
+    CK_CHECK(handles[0] ==
+             (ckv::term::WaitHandle{ckv::term::WaitHandleKind::PosixFileDescriptor, 41}));
+    CK_CHECK(handles[1] ==
+             (ckv::term::WaitHandle{ckv::term::WaitHandleKind::PosixFileDescriptor, 42}));
+    CK_CHECK(!app.next_timer_deadline_nanos().has_value());
+
+    const auto later = app.start_timer(300, false, [] {});
+    const auto earlier = app.start_timer(100, false, [] {});
+    CK_CHECK(app.next_timer_deadline_nanos() == std::optional<std::int64_t>{1'100});
+    app.cancel_timer(earlier);
+    CK_CHECK(app.next_timer_deadline_nanos() == std::optional<std::int64_t>{1'300});
+    app.cancel_timer(later);
+    CK_CHECK(!app.next_timer_deadline_nanos().has_value());
+}
 
 CK_TEST(a_timer_does_not_fire_before_its_interval_elapses) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
@@ -895,6 +1022,25 @@ CK_TEST(request_quit_sets_quit_requested) {
     CK_CHECK(app.quit_requested());
 }
 
+CK_TEST(request_quit_interrupts_a_blocked_run_without_a_separate_wake) {
+    WaitableTerminal term;
+    ManualClock clock;
+    Application app(term, clock);
+    std::atomic<bool> returned{false};
+
+    std::thread run_thread([&] {
+        app.run();
+        returned.store(true, std::memory_order_release);
+    });
+    CK_CHECK(term.wait_until_polling());
+    app.request_quit();
+    run_thread.join();
+
+    CK_CHECK(app.quit_requested());
+    CK_CHECK(term.wake_count() == 1);
+    CK_CHECK(returned.load(std::memory_order_acquire));
+}
+
 CK_TEST(run_returns_immediately_without_stepping_if_quit_was_already_requested) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -925,6 +1071,42 @@ CK_TEST(run_until_returns_false_if_interrupted_by_a_quit_request) {
     });
     CK_CHECK(!finished);
     CK_CHECK(app.quit_requested());
+}
+
+CK_TEST(run_until_does_not_invoke_its_predicate_when_quit_is_already_requested) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.request_quit();
+
+    int checks = 0;
+    const bool finished = app.run_until([&] {
+        ++checks;
+        return true;
+    });
+
+    CK_CHECK(!finished);
+    CK_CHECK(checks == 0);
+}
+
+CK_TEST(run_until_does_not_invoke_its_predicate_after_a_timer_requests_quit) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.start_timer(1, false, [&] { app.request_quit(); });
+    clock.advance(1);
+
+    int checks = 0;
+    const bool finished = app.run_until([&] {
+        ++checks;
+        return false;
+    });
+
+    // The first completion check happens before the timer-bearing step. Once
+    // that step observes quit, no later check may transform interruption into
+    // normal completion or run caller code after shutdown has begun.
+    CK_CHECK(!finished);
+    CK_CHECK(checks == 1);
 }
 
 CK_TEST(post_interrupts_an_in_flight_terminal_wait_and_runs_on_the_owning_step) {
@@ -988,6 +1170,72 @@ CK_TEST(push_modal_confines_focus_traversal_to_the_modal_subtree) {
     CK_CHECK(app.focused() == inner_b);
     CK_CHECK(app.focus_next());  // wraps within the modal subtree, never reaching `background`
     CK_CHECK(app.focused() == inner_a);
+}
+
+CK_TEST(modal_default_keymap_keeps_traversal_and_help_inside_its_scope) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    background->set_help_context_key("background");
+    app.set_focus(background);
+
+    auto* modal = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* first = static_cast<ProbeView*>(modal->add_child(std::make_unique<ProbeView>()));
+    auto* second = static_cast<ProbeView*>(modal->add_child(std::make_unique<ProbeView>()));
+    first->set_focus_policy(FocusPolicy::TabStop);
+    second->set_focus_policy(FocusPolicy::TabStop);
+    first->set_help_context_key("modal.first");
+    app.push_modal(*modal);
+
+    // Drive the standard keymap through the terminal decoder, not direct
+    // focus helpers, so the test covers its actual modal dispatch boundary.
+    term.inject_bytes("\t", 1);
+    CK_CHECK(app.step(1));
+    CK_CHECK(app.focused() == first);
+    term.inject_bytes("\t", 2);
+    CK_CHECK(app.step(2));
+    CK_CHECK(app.focused() == second);
+    term.inject_bytes("\x1B[Z", 3);  // Shift+Tab
+    CK_CHECK(app.step(3));
+    CK_CHECK(app.focused() == first);
+
+    std::string help_key;
+    app.set_help_provider([&](const std::string& key) { help_key = key; });
+    term.inject_bytes("\x1BOP", 4);  // SS3 F1
+    CK_CHECK(app.step(4));
+    CK_CHECK(help_key == "modal.first");
+
+    constexpr ckv::ui::CommandId kBackgroundCommand = ckv::ui::kFirstApplicationCommandId;
+    app.commands().register_command(kBackgroundCommand, "Background", "App",
+                                    KeyChord{Key::Char, Modifier::Alt, "x"});
+    bool background_command_ran = false;
+    app.set_command_handler(kBackgroundCommand, [&] { background_command_ran = true; });
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}}));
+    CK_CHECK(!background_command_ran);
+    CK_CHECK(app.focused() == first);
+}
+
+CK_TEST(key_release_is_scoped_to_the_top_modal_and_never_reaches_a_command) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    auto* modal = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    modal->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(background);
+    app.push_modal(*modal);
+    constexpr ckv::ui::CommandId kEscape = ckv::ui::kFirstApplicationCommandId;
+    app.commands().register_command(kEscape, "Escape", "App", KeyChord{Key::Escape, Modifier::None, ""});
+    bool command_ran = false;
+    app.set_command_handler(kEscape, [&] { command_ran = true; });
+
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}, ckv::KeyAction::Release}));
+    CK_CHECK(background->key_release_events == 0);
+    CK_CHECK(modal->key_release_events == 1);
+    CK_CHECK(!command_ran);
 }
 
 CK_TEST(push_modal_confines_mouse_hit_testing_to_the_modal_subtree) {

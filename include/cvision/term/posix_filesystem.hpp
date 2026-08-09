@@ -1,8 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// The one concrete real-filesystem FileSystem (D-025), mirroring
+// The one concrete real-filesystem FileSystem (D-039), mirroring
 // PosixTerminal/PosixClock's pattern: core/ui/widgets never touch the
-// real filesystem (D-025's injected-impurity rule; core::FileSystem is
+// real filesystem (D-039's injected-impurity rule; core::FileSystem is
 // the abstract contract), so an application needs SOMETHING at the
 // term-layer boundary to inject when it actually wants to browse the
 // real disk (a File dialog, a directory tree, ...) rather than a

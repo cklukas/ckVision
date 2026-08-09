@@ -31,8 +31,28 @@ constexpr Capabilities headless_sixel_profile() noexcept {
 
 class HeadlessTerminal final : public Terminal {
 public:
-    explicit HeadlessTerminal(Size size, Capabilities caps = baseline_capabilities())
-        : size_(size), caps_(caps), decoder_(caps), display_(size, effective_cell_pixels(caps)) {}
+    // `enable_capability_probes` controls whether raw terminal replies fed by
+    // inject_bytes() may refine `caps`. It defaults on for an explicit custom
+    // capability value, which is useful for deterministic probe scripts.
+    // The named-profile overload below defaults it off, matching the POSIX
+    // profile constructor: a curated guarantee cannot be upgraded by
+    // unsolicited or unrequested terminal traffic.
+    explicit HeadlessTerminal(Size size, Capabilities caps = baseline_capabilities(),
+                              bool enable_capability_probes = true)
+        : size_(size),
+          caps_(caps),
+          decoder_(caps),
+          display_(size, effective_cell_pixels(caps)) {
+        decoder_.set_capability_update_policy(enable_capability_probes
+                                                  ? CapabilityUpdatePolicy::AcceptProbeRefinements
+                                                  : CapabilityUpdatePolicy::Reject);
+    }
+
+    // Mirrors PosixTerminal's explicit curated-profile construction. Runtime
+    // capability changes remain scriptable through inject_capability_change;
+    // only raw probe replies are rejected by default.
+    HeadlessTerminal(Size size, TerminalProfile profile)
+        : HeadlessTerminal(size, capabilities_for_profile(profile), /*enable_capability_probes=*/false) {}
 
     Capabilities capabilities() const noexcept override { return caps_; }
     Size size() const noexcept override { return size_; }
@@ -41,6 +61,7 @@ public:
     // queued by inject_bytes()/inject_event() since the last poll().
     std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
     void wake() noexcept override {}
+    void write_diagnostic_after_restore(std::string_view) noexcept override {}
 
     void write(std::string_view bytes) override;
     void set_title(std::string_view title) override { title_ = std::string(title); }
@@ -83,6 +104,8 @@ private:
     int bell_count_ = 0;
     std::string clipboard_;
     std::vector<TerminalEvent> pending_events_;
+
+    void enqueue_decoded(std::vector<TerminalEvent> decoded);
 };
 
 }  // namespace ckv::term

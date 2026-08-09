@@ -17,12 +17,27 @@ View* View::add_child(std::unique_ptr<View> child) {
     CKV_ASSERT(child != nullptr);
     CKV_ASSERT(child->parent_ == nullptr);  // no view may have two owners
     View* observer = child.get();
+    const std::weak_ptr<void> parent_liveness = lifetime_token();
+    const std::weak_ptr<void> child_liveness = observer->lifetime_token();
+    // A root attachment observer is application code. Retain its callable
+    // before any earlier attachment callback can destroy this parent.
+    const ChildAttachedSink attached = child_attached_sink_;
     child->parent_ = this;
     child->propagate_dirty_rect_sink(dirty_rect_sink_);
     child->propagate_detach_sink(detach_sink_);
-    child->propagate_context(context_);
     children_.push_back(std::move(child));
-    if (child_attached_sink_) child_attached_sink_(*observer);
+
+    // on_attached() is user code. The child must already be owned so its
+    // callback can detach itself normally; after that callback neither its
+    // observer nor this parent can be assumed to survive. Context is passed
+    // by value because this parent may disappear during the recursive walk.
+    observer->propagate_context(context_);
+    if (parent_liveness.expired() || child_liveness.expired() || observer->parent_ != this)
+        return nullptr;
+
+    if (attached) attached(*observer);
+    if (parent_liveness.expired() || child_liveness.expired() || observer->parent_ != this)
+        return nullptr;
     return observer;
 }
 
@@ -60,12 +75,21 @@ void View::raise_to_front(View* child) {
 
 void View::set_bounds(Rect bounds) {
     if (bounds == bounds_) return;
+    // Every hook below is application code. Preserve this View's identity
+    // before the first one runs: on_resized() may detach and destroy this
+    // object, in which case no later observer belongs to the former geometry
+    // transition.
+    const std::weak_ptr<void> self_liveness = lifetime_token();
     const Rect old_absolute = absolute_bounds();
     bounds_ = bounds;
     invalidate();  // damage the new bounds
+    if (self_liveness.expired()) return;
     if (dirty_rect_sink_) dirty_rect_sink_(old_absolute);  // and the vacated old bounds
+    if (self_liveness.expired()) return;
     on_resized();
+    if (self_liveness.expired()) return;
     if (on_bounds_changed) on_bounds_changed(bounds_);
+    if (self_liveness.expired()) return;
     if (bounds_changed_sink_) bounds_changed_sink_(bounds_);
 }
 
@@ -134,11 +158,29 @@ void View::propagate_detach_sink(const DetachSink& sink) {
 
 void View::set_detach_sink(DetachSink sink) { propagate_detach_sink(sink); }
 
-void View::propagate_context(const Context& context) {
+void View::propagate_context(Context context) {
+    const std::weak_ptr<void> self_liveness = lifetime_token();
     const bool newly_valid = !context_.valid() && context.valid();
     context_ = context;
     if (newly_valid) on_attached();
-    for (auto& child : children_) child->propagate_context(context);
+    if (self_liveness.expired()) return;
+
+    // A descendant's on_attached() can detach or destroy siblings, or this
+    // whole subtree. Snapshot per-instance identities before invoking any
+    // further callback and revalidate before each recursive propagation.
+    struct ChildHandle {
+        View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<ChildHandle> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_)
+        children.push_back(ChildHandle{child.get(), child->lifetime_token()});
+    for (const ChildHandle& child : children) {
+        if (self_liveness.expired()) return;
+        if (child.liveness.expired() || child.view->parent_ != this) continue;
+        child.view->propagate_context(context);
+    }
 }
 
 void View::set_context(const Context& context) { propagate_context(context); }

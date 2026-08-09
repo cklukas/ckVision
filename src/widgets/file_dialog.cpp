@@ -2,6 +2,7 @@
 #include "cvision/widgets/file_dialog.hpp"
 
 #include <algorithm>
+#include <optional>
 
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
@@ -16,6 +17,22 @@ using ui::Column;
 using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
+
+// Completion survives a result callback that detaches and destroys its
+// dialog. Marking it delivered before entering application code makes the
+// documented result callback contract robust against reentrant dismissal.
+struct FileDialogCompletion {
+    std::weak_ptr<void> window_liveness;
+    std::function<void(FileDialogResult)> on_result;
+    bool delivered = false;
+
+    void report(FileDialogResult result, Window* window) {
+        if (delivered) return;
+        delivered = true;
+        if (on_result) on_result(std::move(result));
+        if (!window_liveness.expired()) window->close();
+    }
+};
 }  // namespace
 
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
@@ -25,6 +42,10 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     Window* window_ptr = window.get();
+    const detail::DialogFocusRestore focus_restore{restore_focus_to};
+    const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
+    auto completion = std::make_shared<FileDialogCompletion>(
+        FileDialogCompletion{window_ptr->lifetime_token(), std::move(on_result)});
 
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
@@ -87,16 +108,18 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         }
     };
 
-    ok_ptr->on_press = [&fs, current_dir, path_field_ptr, window_ptr, on_result]() {
+    ok_ptr->on_press = [&fs, current_dir, path_field_ptr, window_ptr, completion]() {
         std::string chosen = path_field_ptr->text();
         if (chosen.empty()) return;  // nothing to accept
         if (chosen.front() != '/') chosen = fs.join(*current_dir, chosen);
-        if (on_result) on_result(FileDialogResult{true, chosen});
-        window_ptr->close();
+        Window* const window = window_ptr;
+        const std::shared_ptr<FileDialogCompletion> held_completion = completion;
+        held_completion->report(FileDialogResult{true, std::move(chosen)}, window);
     };
-    cancel_ptr->on_press = [window_ptr, on_result]() {
-        if (on_result) on_result(FileDialogResult{false, ""});
-        window_ptr->close();
+    cancel_ptr->on_press = [window_ptr, completion]() {
+        Window* const window = window_ptr;
+        const std::shared_ptr<FileDialogCompletion> held_completion = completion;
+        held_completion->report(FileDialogResult{}, window);
     };
     window_ptr->accept_request = [ok_ptr]() {
         if (ok_ptr->on_press) ok_ptr->on_press();
@@ -105,9 +128,12 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         if (cancel_ptr->on_press) cancel_ptr->on_press();
     };
 
-    window_ptr->on_closed = [&app, restore_focus_to, window_ptr]() {
-        if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
-        schedule_self_detach(*window_ptr, app);
+    window_ptr->on_closed = [&app, focus_restore, window_ptr, window_liveness]() {
+        const detail::DialogFocusRestore held_focus_restore = focus_restore;
+        const std::weak_ptr<void> held_window_liveness = window_liveness;
+        Window* const held_window = window_ptr;
+        held_focus_restore.restore(app);
+        if (!held_window_liveness.expired()) schedule_self_detach(*held_window, app);
     };
 
     return WindowHandle{std::move(window), list_ptr};
@@ -129,6 +155,18 @@ FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string init
     };
     desktop.present_modal(std::move(handle), app);
     return std::move(parts.presentation);
+}
+
+FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles) {
+    std::optional<FileDialogResult> result;
+    auto handle = make_file_dialog(mode, std::move(initial_directory), fs, roles, app, app.focused(),
+                                   [&result](FileDialogResult value) { result = std::move(value); });
+    desktop.exec_modal(app, std::move(handle));
+    // Every normal acceptance/cancellation path records a result before
+    // closing. If the host quits while the modal is still attached,
+    // exec_modal ends its pump and cancellation is the documented fallback.
+    return result.value_or(FileDialogResult{});
 }
 
 }  // namespace ckv::widgets

@@ -20,10 +20,20 @@ namespace ckv::term {
 // keyboard-protocol profiles only.
 inline constexpr std::int64_t kEscTimeoutNanos = 50'000'000;  // 50 ms
 
+// The backend owns whether a raw terminal capability reply is currently
+// authoritative. Keeping this admission decision inside the decoder prevents
+// a rejected reply from changing decode state for later bytes in the same OS
+// read (for example, a late pixel-mode reply followed by an SGR report).
+enum class CapabilityUpdatePolicy {
+    AcceptProbeRefinements,
+    AcceptLiveColorSchemeNotifications,
+    Reject,
+};
+
 class InputDecoder {
 public:
     explicit InputDecoder(Capabilities initial_caps = baseline_capabilities())
-        : caps_(initial_caps) {}
+        : caps_(initial_caps), pixel_mouse_mode_enabled_(initial_caps.pixel_mouse) {}
 
     // Feeds newly received bytes and returns however many complete
     // events could be decoded from them plus any previously buffered
@@ -36,7 +46,39 @@ public:
     // empty vector when there is nothing to resolve yet.
     std::vector<TerminalEvent> poll_timeout(std::int64_t now_nanos);
 
-    void set_capabilities(Capabilities caps) noexcept { caps_ = caps; }
+    void set_capabilities(Capabilities caps) noexcept {
+        caps_ = caps;
+        pixel_mouse_mode_enabled_ = caps.pixel_mouse;
+        color_scheme_from_osc11_ = false;
+    }
+    void set_capability_update_policy(CapabilityUpdatePolicy policy) noexcept {
+        capability_update_policy_ = policy;
+    }
+    // A backend that has enabled SGR-pixel mode but has not yet established
+    // its cell metric must consume SGR reports without delivering them as
+    // ordinary cell coordinates. This is a temporary protocol boundary, not
+    // a capability update policy: it prevents precision from being guessed
+    // while allowing complete probe replies in the same byte stream to make
+    // later reports deliverable.
+    void set_sgr_mouse_input_suppressed(bool suppressed) noexcept {
+        sgr_mouse_input_suppressed_ = suppressed;
+    }
+    // A resize invalidates a runtime XTSMGRAPHICS geometry limit. Until a
+    // fresh, finite geometry reply arrives, a DA1 advertisement alone must
+    // not re-enable raster output: its old limit may have been reduced by
+    // the new terminal window.
+    void require_verified_sixel_geometry(bool required) noexcept {
+        sixel_geometry_required_ = required;
+    }
+    // Starts a backend capability-probe window. If the previous read ended
+    // midway through one terminal sequence, preserve those bytes for normal
+    // input recovery but never let their eventual completion refine the new
+    // window's capabilities: terminal replies carry no request identifier.
+    void begin_capability_probe_window(Capabilities caps) noexcept {
+        set_capabilities(caps);
+        capability_update_policy_ = CapabilityUpdatePolicy::AcceptProbeRefinements;
+        discard_capability_update_from_pending_sequence_ = !pending_.empty();
+    }
     const Capabilities& capabilities() const noexcept { return caps_; }
 
     // True while a bracketed paste is being accumulated — exposed for
@@ -60,12 +102,28 @@ private:
     ParseResult parse_osc(std::string_view buf);
     ParseResult parse_paste_continuation(std::string_view buf);
     ParseResult parse_utf8_or_control(std::string_view buf);
+    bool accepts_capability_update(const Capabilities& candidate) const noexcept;
 
     std::string pending_;
     std::int64_t esc_first_seen_nanos_ = -1;
     bool in_paste_ = false;
+    bool discarding_unnegotiated_paste_ = false;
     std::string paste_accum_;
     Capabilities caps_;
+    // DECRPM 1016 and XTWINOPS 16 can arrive in either order. Keep the
+    // reported mode separately until a positive cell-size reply makes pixel
+    // coordinates usable by callers.
+    bool pixel_mouse_mode_enabled_ = false;
+    // `drain` stops only at one incomplete sequence, so at a probe-window
+    // boundary any pending bytes belong to exactly that pre-boundary sequence.
+    // The next completed sequence consumes this marker.
+    bool discard_capability_update_from_pending_sequence_ = false;
+    // OSC 10 is only a contrast-based fallback. A valid OSC 11 background
+    // report is direct evidence and must win even if replies are reordered.
+    bool color_scheme_from_osc11_ = false;
+    bool sgr_mouse_input_suppressed_ = false;
+    bool sixel_geometry_required_ = false;
+    CapabilityUpdatePolicy capability_update_policy_ = CapabilityUpdatePolicy::AcceptProbeRefinements;
 };
 
 }  // namespace ckv::term

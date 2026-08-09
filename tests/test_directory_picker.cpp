@@ -20,6 +20,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::make_directory_picker;
+using ckv::widgets::exec_directory_picker;
 using ckv::widgets::present_directory_picker;
 using ckv::widgets::Window;
 
@@ -155,6 +156,47 @@ CK_TEST(cancel_reports_accepted_false_with_an_empty_path) {
     CK_CHECK(chosen.empty());
 }
 
+CK_TEST(a_result_callback_may_destroy_its_directory_picker) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    Window* dialog = nullptr;
+    int results = 0;
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
+                                        [&](bool accepted, std::string path) {
+                                            CK_CHECK(!accepted);
+                                            CK_CHECK(path.empty());
+                                            ++results;
+                                            std::unique_ptr<ckv::ui::View> detached = app.root().remove_child(dialog);
+                                            CK_CHECK(detached.get() == dialog);
+                                        });
+    dialog = static_cast<Window*>(app.root().add_child(std::move(handle.window)));
+
+    dialog->cancel_request();
+    CK_CHECK(results == 1);
+}
+
+CK_TEST(a_directory_picker_result_callback_cannot_deliver_a_reentrant_second_result) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    Window* dialog = nullptr;
+    int results = 0;
+    auto handle = make_directory_picker(fs, "/a", f.roles, app, nullptr,
+                                        [&](bool, std::string) {
+                                            ++results;
+                                            dialog->cancel_request();
+                                        });
+    dialog = static_cast<Window*>(app.root().add_child(std::move(handle.window)));
+
+    dialog->cancel_request();
+    CK_CHECK(results == 1);
+}
+
 CK_TEST(files_are_excluded_from_the_tree_only_subdirectories_appear) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -218,5 +260,51 @@ CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
     CK_CHECK(presentation.result()->path == "/a");
     CK_CHECK(completion.has_value());
     CK_CHECK(completion->accepted);
+    CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(exec_directory_picker_returns_the_modal_result_without_leaving_a_window_attached) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    auto* desktop = app.root().add(std::move(desktop_owned));
+    auto fs = sample_fs();
+
+    app.post([desktop] { desktop->windows().back()->accept_request(); });
+    const auto accepted = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    CK_CHECK(accepted.accepted);
+    CK_CHECK(accepted.path == "/a");
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
+
+    app.post([desktop] { desktop->windows().back()->cancel_request(); });
+    const auto cancelled = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    CK_CHECK(!cancelled.accepted);
+    CK_CHECK(cancelled.path.empty());
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    auto* desktop = app.root().add(std::move(desktop_owned));
+    auto fs = sample_fs();
+    app.post([&app] { app.request_quit(); });
+
+    const auto result = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    CK_CHECK(!result.accepted);
+    CK_CHECK(result.path.empty());
+    CK_CHECK(app.quit_requested());
+    CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 }

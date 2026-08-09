@@ -26,6 +26,16 @@ enum class MouseAction : std::uint8_t {
     Wheel,
 };
 
+// A key press is the portable baseline. Kitty can additionally report
+// hardware repeat and release transitions; those are routed separately so
+// existing text controls and command bindings never mistake a release for a
+// second activation.
+enum class KeyAction : std::uint8_t {
+    Press,
+    Repeat,
+    Release,
+};
+
 // One mouse model, two native coordinate spaces (DECISIONS.md D-018):
 // `cell` is always present; `pixel` is present exactly when the
 // terminal reported pixel coordinates (SGR-Pixels). Never synthesized
@@ -42,6 +52,7 @@ struct MouseEvent {
 
 struct KeyEvent {
     KeyChord chord;
+    KeyAction action = KeyAction::Press;
 
     friend bool operator==(const KeyEvent&, const KeyEvent&) = default;
 };

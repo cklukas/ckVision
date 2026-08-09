@@ -101,6 +101,17 @@ CK_TEST(more_than_256_unique_colors_falls_back_to_the_quantized_cube) {
     CK_CHECK(!sixel.empty());
 }
 
+CK_TEST(verified_sixel_color_register_limit_bounds_the_emitted_palette) {
+    Image img(32, 1);
+    for (int x = 0; x < img.width(); ++x)
+        img.set_pixel(x, 0, Image::Rgba{static_cast<std::uint8_t>(x * 8),
+                                        static_cast<std::uint8_t>(255 - x * 8),
+                                        static_cast<std::uint8_t>(x * 4), 255});
+    const std::string sixel = encode_sixel(img, 4);
+    CK_CHECK(count_occurrences(sixel, ";2;") <= 4);
+    CK_CHECK(!sixel.empty());
+}
+
 CK_TEST(sixel_data_characters_stay_within_the_valid_range) {
     Image img(3, 3);
     img.set_pixel(0, 0, Image::Rgba{1, 2, 3, 255});

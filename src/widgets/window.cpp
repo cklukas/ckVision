@@ -95,8 +95,27 @@ void Window::set_max_size(Size max) noexcept {
 }
 
 bool Window::close() {
-    if (close_request && !close_request()) return false;  // vetoed
-    if (on_closed) on_closed();
+    // Both callbacks are application code. Treat a recursive request for this
+    // same Window as already accepted rather than entering either callback
+    // again; the outer request remains responsible for its final result.
+    const std::shared_ptr<CloseState> close_state = close_state_;
+    if (close_state->in_progress) return true;
+    close_state->in_progress = true;
+    struct ResetCloseGuard {
+        std::shared_ptr<CloseState> state;
+        ~ResetCloseGuard() { state->in_progress = false; }
+    } reset_close{close_state};
+
+    // Both callbacks may detach and destroy this Window. Retain callable
+    // values before crossing either user-code boundary, and use the
+    // per-instance token rather than this pointer to decide whether a later
+    // protocol stage still has an object to act upon.
+    const std::weak_ptr<void> window_liveness = lifetime_token();
+    const std::function<bool()> held_close_request = close_request;
+    const std::function<void()> held_on_closed = on_closed;
+    if (held_close_request && !held_close_request()) return false;  // vetoed
+    if (window_liveness.expired()) return true;
+    if (held_on_closed) held_on_closed();
     return true;
 }
 
@@ -392,14 +411,21 @@ void Window::clear_desktop_zoom_target() noexcept {
 }
 
 void schedule_self_detach(Window& window, ui::Application& app) {
-    app.post([&window]() {
+    // The post crosses an event-loop boundary. The caller may externally
+    // detach and destroy the closed Window before that turn runs, so retain
+    // only an identity observer alongside the raw address. The weak token is
+    // independent of tree attachment and rules out address reuse too.
+    Window* const window_ptr = &window;
+    const std::weak_ptr<void> window_liveness = window.lifetime_token();
+    app.post([window_ptr, window_liveness]() {
         // detach_child(), not remove_child(): if `parent` is a Desktop
-        // and `window` was added via add_window(), plain remove_child
+        // and `window_ptr` was added via add_window(), plain remove_child
         // would silently leave a dangling pointer in Desktop's own
         // windows_ bookkeeping — detach_child() is the polymorphic
         // entry point that gets this right regardless of what kind of
         // View actually parents this window.
-        if (ui::View* parent = window.parent()) parent->detach_child(&window);
+        if (window_liveness.expired()) return;
+        if (ui::View* parent = window_ptr->parent()) parent->detach_child(window_ptr);
     });
 }
 

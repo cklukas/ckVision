@@ -40,6 +40,7 @@ public:
 private:
     Cell presentation_cell(FrameView frame, Point p,
                            const std::vector<RasterSlice>& rasters) const;
+    bool can_emit_raster_slice(const RasterSlice& slice) const noexcept;
     std::string render_frame(FrameView frame, const std::vector<RasterSlice>& rasters);
     bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;

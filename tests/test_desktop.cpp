@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <functional>
 #include <set>
 
 #include "cktest.hpp"
@@ -42,6 +43,27 @@ struct Fixture {
 std::unique_ptr<Window> make_window(Fixture&, std::string title = "W") {
     return std::make_unique<Window>(std::move(title));
 }
+
+class ResizeSelfRemovingWindow final : public Window {
+public:
+    ResizeSelfRemovingWindow(Desktop& desktop, std::string title)
+        : Window(std::move(title)), desktop_(desktop) {}
+
+    void on_resized() override {
+        Window::on_resized();
+        if (!armed_) return;
+        std::unique_ptr<Window> detached = desktop_.remove_window(this);
+        CK_CHECK(detached.get() == this);
+        detached.reset();
+    }
+
+    void arm() noexcept { armed_ = true; }
+
+private:
+    Desktop& desktop_;
+    bool armed_ = false;
+};
+
 }  // namespace
 
 // --- Adding / removing / activation ------------------------------------
@@ -303,6 +325,28 @@ CK_TEST(tile_with_zero_windows_does_not_crash) {
     CK_CHECK(true);
 }
 
+CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) {
+    Fixture f;
+    const auto exercise = [&f](bool cascade) {
+        Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+        Window* survivor = desktop.add_window(make_window(f, "Survivor"));
+        auto self_removing = std::make_unique<ResizeSelfRemovingWindow>(desktop, "Self removing");
+        ResizeSelfRemovingWindow* self_removing_ptr = self_removing.get();
+        desktop.add_window(std::move(self_removing));
+        self_removing_ptr->arm();
+
+        if (cascade)
+            desktop.cascade();
+        else
+            desktop.tile();
+
+        CK_CHECK(desktop.windows().size() == 1);
+        CK_CHECK(desktop.windows().front() == survivor);
+    };
+    exercise(false);
+    exercise(true);
+}
+
 CK_TEST(cascade_makes_the_last_window_topmost) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
@@ -333,6 +377,23 @@ CK_TEST(draw_fills_the_background_without_crashing) {
     Painter painter(s, Rect{0, 0, 10, 5});
     desktop.draw(painter);
     CK_CHECK(true);
+}
+
+CK_TEST(desktop_resize_survives_a_window_that_destroys_itself_from_on_resized) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    auto self_removing = std::make_unique<ResizeSelfRemovingWindow>(desktop, "Self removing");
+    ResizeSelfRemovingWindow* self_removing_ptr = self_removing.get();
+    Window* survivor = desktop.add_window(make_window(f, "Survivor"));
+    desktop.add_window(std::move(self_removing));
+    self_removing_ptr->arm();
+
+    desktop.set_bounds(Rect{0, 0, 100, 40});
+
+    CK_CHECK(desktop.windows().size() == 1);
+    CK_CHECK(desktop.windows().front() == survivor);
+    CK_CHECK(survivor->bounds().width <= 100);
+    CK_CHECK(survivor->bounds().height <= 40);
 }
 
 // --- Popups ----------------------------------------------------------
@@ -557,6 +618,21 @@ CK_TEST(content_area_is_the_full_bounds_when_nothing_is_docked) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
     CK_CHECK(desktop.content_area() == (Rect{0, 0, 60, 24}));
+}
+
+CK_TEST(removing_a_docked_view_clears_the_desktops_content_area_observer) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    auto dock = std::make_unique<ckv::ui::View>();
+    dock->set_preferred_size(ckv::Size{80, 2});
+    ckv::ui::View* const dock_ptr = desktop.dock_top(std::move(dock));
+    CK_CHECK(desktop.content_area() == (Rect{0, 2, 80, 22}));
+
+    std::unique_ptr<ckv::ui::View> detached = desktop.remove_child(dock_ptr);
+    CK_CHECK(detached.get() == dock_ptr);
+    detached.reset();
+    CK_CHECK(desktop.top_dock() == nullptr);
+    CK_CHECK(desktop.content_area() == (Rect{0, 0, 80, 24}));
 }
 
 CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
@@ -882,6 +958,17 @@ struct AttachedFixture {
         desktop = static_cast<Desktop*>(app.root().add_child(std::move(owned)));
     }
 };
+
+class FocusLossProbe final : public ui::View {
+public:
+    FocusLossProbe() { set_focus_policy(ui::FocusPolicy::TabStop); }
+
+    void on_focus(const ckv::FocusEvent& event) override {
+        if (!event.gained && on_focus_lost) on_focus_lost();
+    }
+
+    std::function<void()> on_focus_lost;
+};
 }  // namespace
 
 CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_default) {
@@ -893,6 +980,36 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kTile));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kCascade));
+}
+
+CK_TEST(nonblocking_presentation_returns_null_when_focus_loss_removes_its_new_window) {
+    AttachedFixture af;
+    auto focus = std::make_unique<FocusLossProbe>();
+    FocusLossProbe* focus_ptr = focus.get();
+    af.app.root().add_child(std::move(focus));
+    af.app.set_focus(focus_ptr);
+
+    auto modeless = make_window(af.f, "modeless");
+    Window* modeless_ptr = modeless.get();
+    focus_ptr->on_focus_lost = [&] {
+        std::unique_ptr<Window> detached = af.desktop->remove_window(modeless_ptr);
+        CK_CHECK(detached.get() == modeless_ptr);
+        detached.reset();
+    };
+    CK_CHECK(af.desktop->present_modeless(WindowHandle{std::move(modeless), nullptr}, af.app) == nullptr);
+    CK_CHECK(af.desktop->windows().empty());
+
+    af.app.set_focus(focus_ptr);
+    auto modal = make_window(af.f, "modal");
+    Window* modal_ptr = modal.get();
+    focus_ptr->on_focus_lost = [&] {
+        std::unique_ptr<Window> detached = af.desktop->remove_window(modal_ptr);
+        CK_CHECK(detached.get() == modal_ptr);
+        detached.reset();
+    };
+    CK_CHECK(af.desktop->present_modal(WindowHandle{std::move(modal), nullptr}, af.app) == nullptr);
+    CK_CHECK(af.desktop->windows().empty());
+    CK_CHECK(!af.app.is_modal());
 }
 
 CK_TEST(terminal_mouse_zoom_and_restore_track_the_desktop_after_a_resize) {
@@ -1047,6 +1164,125 @@ CK_TEST(kquit_default_stops_at_the_first_veto_and_does_not_request_quit) {
     CK_CHECK(!af.app.quit_requested());
 }
 
+CK_TEST(kquit_default_remains_safe_when_each_close_detaches_its_window) {
+    AttachedFixture af;
+    Window* first = af.desktop->add_window(make_window(af.f));
+    Window* second = af.desktop->add_window(make_window(af.f));
+    int closed_count = 0;
+    first->on_closed = [&] {
+        ++closed_count;
+        CK_CHECK(af.desktop->remove_window(first) != nullptr);
+    };
+    second->on_closed = [&] {
+        ++closed_count;
+        CK_CHECK(af.desktop->remove_window(second) != nullptr);
+    };
+
+    af.app.commands().execute(ui::std_commands::kQuit);
+    CK_CHECK(closed_count == 2);
+    CK_CHECK(af.desktop->windows().empty());
+    CK_CHECK(af.app.quit_requested());
+}
+
+CK_TEST(close_request_may_destroy_its_window_without_a_post_callback_use_after_free) {
+    AttachedFixture af;
+    Window* window = af.desktop->add_window(make_window(af.f, "self-destroying"));
+    bool on_closed_called = false;
+    window->close_request = [&] {
+        std::unique_ptr<Window> detached = af.desktop->remove_window(window);
+        CK_CHECK(detached.get() == window);
+        detached.reset();
+        return true;
+    };
+    window->on_closed = [&] { on_closed_called = true; };
+
+    // The raw observer ends at the member-call boundary. Under ASan this
+    // proves close() does not read either callback member after close_request
+    // has destroyed the instance.
+    CK_CHECK(window->close());
+    CK_CHECK(!on_closed_called);
+    CK_CHECK(af.desktop->windows().empty());
+}
+
+CK_TEST(kquit_default_skips_destroyed_starters_and_never_sweeps_a_reentrant_replacement) {
+    AttachedFixture af;
+    Window* first = af.desktop->add_window(make_window(af.f, "first"));
+    Window* middle = af.desktop->add_window(make_window(af.f, "middle"));
+    Window* top = af.desktop->add_window(make_window(af.f, "top"));
+    Window* replacement = nullptr;
+    int first_closed = 0;
+    int top_closed = 0;
+    int replacement_close_requests = 0;
+
+    first->on_closed = [&] {
+        ++first_closed;
+        CK_CHECK(af.desktop->remove_window(first) != nullptr);
+    };
+    top->on_closed = [&] {
+        ++top_closed;
+        // This is the difficult re-entrant case: invalidate an unvisited
+        // snapshot entry, force the live vector to change shape, and add a
+        // new window while close() is still on the stack.
+        CK_CHECK(af.desktop->remove_window(middle) != nullptr);
+        replacement = af.desktop->add_window(make_window(af.f, "replacement"));
+        replacement->close_request = [&] {
+            ++replacement_close_requests;
+            return true;
+        };
+        CK_CHECK(af.desktop->remove_window(top) != nullptr);
+    };
+
+    CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    CK_CHECK(top_closed == 1);
+    CK_CHECK(first_closed == 1);
+    CK_CHECK(replacement_close_requests == 0);
+    CK_CHECK(af.desktop->windows().size() == 1);
+    CK_CHECK(af.desktop->windows().front() == replacement);
+    CK_CHECK(af.app.quit_requested());
+}
+
+CK_TEST(kquit_default_ignores_a_recursive_quit_from_a_close_callback) {
+    AttachedFixture af;
+    Window* first = af.desktop->add_window(make_window(af.f, "first"));
+    Window* veto = af.desktop->add_window(make_window(af.f, "veto"));
+    Window* top = af.desktop->add_window(make_window(af.f, "top"));
+    int top_close_calls = 0;
+    int veto_calls = 0;
+    int first_close_calls = 0;
+
+    // The front-most close callback invokes the same default command again.
+    // Without the sweep guard that recursively re-enters top->close() before
+    // the outer sweep can reach the next window's veto.
+    top->on_closed = [&] {
+        ++top_close_calls;
+        CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    };
+    veto->close_request = [&] {
+        ++veto_calls;
+        return false;
+    };
+    first->on_closed = [&] { ++first_close_calls; };
+
+    CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    CK_CHECK(top_close_calls == 1);
+    CK_CHECK(veto_calls == 1);
+    CK_CHECK(first_close_calls == 0);
+    CK_CHECK(!af.app.quit_requested());
+}
+
+CK_TEST(kquit_default_survives_a_close_callback_that_destroys_its_desktop) {
+    AttachedFixture af;
+    Window* top = af.desktop->add_window(make_window(af.f, "top"));
+    top->on_closed = [&] {
+        std::unique_ptr<ui::View> detached = af.app.root().remove_child(af.desktop);
+        CK_CHECK(detached.get() == af.desktop);
+        detached.reset();
+    };
+
+    CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    CK_CHECK(!af.app.quit_requested());
+}
+
 // --- kZoom/kNextWindow/kPreviousWindow/kTile/kCascade default handlers
 // (M10/WP-13 completion, D-029) — thin wiring proofs only: the underlying
 // Window::toggle_zoom/Desktop::activate_next/activate_previous/tile/
@@ -1184,24 +1420,72 @@ CK_TEST(exec_modal_is_not_disrupted_by_an_unrelated_windows_close_during_the_pum
     CK_CHECK(af.desktop->windows().empty());  // `other` and the modal both ended up closed
 }
 
-CK_TEST(exec_modal_returns_promptly_if_quit_is_requested_before_the_window_closes) {
-    // Without this, a SIGINT delivered while an exec_* call is blocked
-    // (run()'s own SIGINT handler just sets the atomic flag, M9/WP-14)
-    // would leave the process stuck forever inside the pump — nothing
-    // would ever satisfy "the window closed," and step()/wake() alone
-    // have no way to interrupt a poll() that's waiting on terminal
-    // input which will never arrive. run_until()'s own
-    // quit_requested() check is what prevents this hang.
+CK_TEST(exec_modal_survives_a_posted_callback_that_destroys_its_desktop) {
+    AttachedFixture af;
+    auto modal = make_window(af.f, "Original");
+    bool desktop_destroyed = false;
+    af.app.post([&] {
+        std::unique_ptr<ui::View> detached = af.app.root().remove_child(af.desktop);
+        CK_CHECK(detached.get() == af.desktop);
+        detached.reset();
+        desktop_destroyed = true;
+    });
+
+    // ASan exercises the completion predicate after the posted callback. The
+    // call must return through Application's normal scope cleanup without
+    // reading the destroyed Desktop's window vector.
+    af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
+
+    CK_CHECK(desktop_destroyed);
+    CK_CHECK(!af.app.is_modal());
+}
+
+CK_TEST(exec_modal_host_quit_force_detaches_the_open_window_without_a_close_veto) {
+    // A host shutdown request can arrive while an exec_* call is blocked.
+    // It must end the pump and cannot leave an ordinary window attached but
+    // silently modeless. This is intentionally not a user close request, so
+    // a content veto must never run.
     AttachedFixture af;
     auto modal = make_window(af.f);
     Window* modal_ptr = modal.get();
     modal->on_closed = [modal_ptr, &af] { schedule_self_detach(*modal_ptr, af.app); };
+    int close_veto_calls = 0;
+    modal->close_request = [&] {
+        ++close_veto_calls;
+        return false;
+    };
 
     af.app.post([&] { af.app.request_quit(); });  // never actually dismisses the modal
 
     af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
 
     CK_CHECK(af.app.quit_requested());
-    CK_CHECK(!af.app.is_modal());  // pop_modal still ran even though the window never closed
-    CK_CHECK(af.desktop->windows().size() == 1);  // the modal is still attached — never dismissed
+    CK_CHECK(close_veto_calls == 0);
+    CK_CHECK(!af.app.is_modal());
+    CK_CHECK(af.desktop->windows().empty());
+}
+
+CK_TEST(exec_modal_host_quit_never_pops_a_reentrant_replacement_modal) {
+    AttachedFixture af;
+    auto modal = make_window(af.f, "Original");
+    Window* replacement = nullptr;
+    modal->on_detached = [&] {
+        auto next = make_window(af.f, "Replacement");
+        replacement = af.desktop->present_modal(WindowHandle{std::move(next), nullptr}, af.app);
+    };
+    af.app.post([&] { af.app.request_quit(); });
+
+    af.desktop->exec_modal(af.app, WindowHandle{std::move(modal), nullptr});
+
+    // Removing the original scope invokes its detachment callback. That
+    // callback is allowed to establish a newer scope; exec_modal's cleanup
+    // must target its retained identity rather than popping the replacement.
+    CK_CHECK(replacement != nullptr);
+    CK_CHECK(af.desktop->windows().size() == 1);
+    CK_CHECK(af.desktop->windows().front() == replacement);
+    CK_CHECK(af.app.is_modal());
+
+    std::unique_ptr<Window> detached = af.desktop->remove_window(replacement);
+    CK_CHECK(detached.get() == replacement);
+    CK_CHECK(!af.app.is_modal());
 }

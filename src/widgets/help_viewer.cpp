@@ -31,6 +31,8 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     Window* window_ptr = window.get();
+    const detail::DialogFocusRestore focus_restore{restore_focus_to};
+    const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
 
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
@@ -94,9 +96,12 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     window_ptr->cancel_request = [close_ptr]() {
         if (close_ptr->on_press) close_ptr->on_press();
     };
-    window_ptr->on_closed = [&app, restore_focus_to, window_ptr]() {
-        if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
-        schedule_self_detach(*window_ptr, app);
+    window_ptr->on_closed = [&app, focus_restore, window_ptr, window_liveness]() {
+        const detail::DialogFocusRestore held_focus_restore = focus_restore;
+        const std::weak_ptr<void> held_window_liveness = window_liveness;
+        Window* const held_window = window_ptr;
+        held_focus_restore.restore(app);
+        if (!held_window_liveness.expired()) schedule_self_detach(*held_window, app);
     };
 
     return WindowHandle{std::move(window), text_view_ptr};

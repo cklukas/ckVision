@@ -56,11 +56,13 @@ update, never automatic):
 | 8 | `&Window List` | Window | — |
 | 9 | `Menu` | Window | F10 |
 | 10 | `Help` | System | F1 |
+| 11 | `Next Field` | Window | Tab |
+| 12 | `Previous Field` | Window | Shift+Tab |
 
 The `CommandId` constants themselves
 (`ckv::ui::std_commands::kQuit`, `kClose`, `kZoom`, `kNextWindow`,
 `kPreviousWindow`, `kTile`, `kCascade`, `kWindowList`, `kMenu`,
-`kHelp`, in that id order) are what application code actually
+`kHelp`, `kFocusNext`, `kFocusPrevious`, in that id order) are what application code actually
 references — this table exists to make the wording, grouping, and
 chord choices reviewable in one place, not as a numeric contract an
 application should hard-code.
@@ -96,6 +98,13 @@ application should hard-code.
   is observable through the provider callback, not through
   `Application::dispatch`'s return value — the same way every other
   standard chord already works.
+- **Modal scope preserves field navigation and context help.** After a
+  modal control and its ancestors decline a key, `kFocusNext`,
+  `kFocusPrevious`, and `kHelp` remain available: Tab and Shift-Tab traverse
+  only the active modal subtree, while F1 resolves the focused modal control's
+  help context. Every other standard command and every application-defined
+  accelerator remains blocked until the modal scope ends; in particular F10,
+  window commands, and Alt+X cannot reach background UI.
 - **`kClose`/`kQuit`'s default handlers** (M9/WP-15) are installed by
   `Desktop::on_attached()` — but only if nothing has claimed the id
   yet (`CommandRegistry::has_handler`), the same guarded pattern
@@ -106,4 +115,9 @@ application should hard-code.
   (`ARCHITECTURE.md` §5 "application quit sweeps all windows through
   the same protocol"). Modal scoping (`Application::push_modal`)
   suppresses both while a modal dialog is open, the same as any other
-  standard chord.
+  standard chord. The sweep snapshots the instances present when it begins:
+  a close callback may detach or replace windows, but a newly presented
+  replacement is not unexpectedly closed as part of that original request.
+  If such a callback executes `kQuit` again, the nested default request is a
+  no-op; the original sweep remains the sole authority for later vetoes and
+  the final shutdown decision.

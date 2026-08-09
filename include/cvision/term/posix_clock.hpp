@@ -1,11 +1,11 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// The one concrete real-time Clock (D-025): core/scene/ui/widgets never
+// The one concrete real-time Clock (D-039): core/scene/ui/widgets never
 // read wall-clock time directly, so applications need SOMETHING at the
 // term-layer boundary to inject. PosixClock is that something on
-// POSIX hosts — CLOCK_MONOTONIC, the same source PosixTerminal's own
-// internal timing already uses, so an application's timers and the
-// terminal's own read-timeout math agree on what "now" means.
+// POSIX hosts — CLOCK_MONOTONIC. The application passes this same
+// instance to PosixTerminal, so application timers and terminal
+// read/probe deadline math agree on what "now" means.
 #pragma once
 
 #include "cvision/core/clock.hpp"

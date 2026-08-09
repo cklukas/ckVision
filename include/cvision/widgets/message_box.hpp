@@ -45,8 +45,10 @@ struct MessageBoxDescriptor {
 // default — Enter anywhere in the box activates it. Esc activates
 // Cancel/No where present; for a bare Ok box, Esc is equivalent to Ok
 // (dismissing an alert), matching common convention. `on_result` fires
-// exactly once, whichever button (or Esc) closes the box. On close,
-// focus restores to `restore_focus_to` if it is still focusable.
+// exactly once, whichever button (or Esc) closes the box. It may detach or
+// destroy the box; no factory-owned work touches the Window after the callback
+// returns. On close, focus restores to `restore_focus_to` only if that exact
+// view is still alive and focusable.
 //
 // Deliberately does NOT call Application::set_focus itself (unlike
 // materialize_dialog, which reports initial_focus the same way): doing

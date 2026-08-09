@@ -1,9 +1,12 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/help_viewer.hpp"
 
+#include <optional>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -17,6 +20,7 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::HelpTopic;
 using ckv::widgets::make_help_viewer;
+using ckv::widgets::present_help_viewer;
 using ckv::widgets::MemoryHelpProvider;
 using ckv::widgets::Window;
 
@@ -157,4 +161,29 @@ CK_TEST(a_topic_with_no_links_produces_an_empty_link_list_without_crashing) {
     app.focus_next();               // text view -> links list (empty)
     app.dispatch(key(Key::Enter));  // must not crash on an empty list
     (void)window_ptr;
+}
+
+CK_TEST(present_help_viewer_completes_after_modal_detachment) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(
+        ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+    auto provider = sample_provider();
+
+    auto presentation = present_help_viewer(provider, "intro", app, *desktop, roles);
+    std::optional<ckv::widgets::HelpViewerResult> completion;
+    presentation.set_completion_handler([&](ckv::widgets::HelpViewerResult result) { completion = result; });
+
+    CK_CHECK(app.is_modal());
+    app.dispatch(key(Key::Escape));
+    CK_CHECK(!presentation.completed());
+    app.step(0);
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result() == ckv::widgets::HelpViewerResult::Closed);
+    CK_CHECK(completion == ckv::widgets::HelpViewerResult::Closed);
+    CK_CHECK(!app.is_modal());
 }

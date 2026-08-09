@@ -10,7 +10,7 @@
 //
 // Scope note: Canvas does NOT query terminal cell-pixel metrics
 // itself — core/ui/widgets never touch the environment directly
-// (D-025's injected-impurity discipline extends here too), so
+// (D-039's injected-impurity discipline extends here too), so
 // "redraw on resize" means the OWNER calls set_pixel_size() with
 // (cell box × cell metrics) computed from the term layer's own
 // capability data whenever either changes; Canvas's own on_resized()

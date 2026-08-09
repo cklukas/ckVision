@@ -71,6 +71,9 @@ private:
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to);
 
+// Presents help modally without a nested loop. Completion occurs only after
+// detachment; close, external detach, and quit all resolve to Closed because
+// the viewer returns no separate selection value.
 [[nodiscard]] HelpViewerPresentation present_help_viewer(const HelpProvider& provider,
                                                           std::string initial_topic_key, ui::Application& app,
                                                           Desktop& desktop, const ui::StandardRoles& roles);

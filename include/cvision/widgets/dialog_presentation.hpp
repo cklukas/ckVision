@@ -11,12 +11,32 @@
 #include <utility>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
 
 namespace detail {
 template <class Result>
 struct DialogPresentationAccess;
+
+// A dialog may outlive the view that had focus when it was presented. Keep
+// both its address and per-instance lifetime identity, so close completion
+// can restore focus only when that exact former view still exists. The final
+// scope and attachment checks remain Application's responsibility because it
+// owns modal routing and focus eligibility.
+class DialogFocusRestore {
+public:
+    explicit DialogFocusRestore(ui::View* view) noexcept
+        : view_(view), liveness_(view != nullptr ? view->lifetime_token() : std::weak_ptr<void>{}) {}
+
+    void restore(ui::Application& app) const {
+        if (!liveness_.expired() && view_ != nullptr && view_->focusable()) app.set_focus(view_);
+    }
+
+private:
+    ui::View* view_ = nullptr;
+    std::weak_ptr<void> liveness_;
+};
 }
 
 template <class Result>

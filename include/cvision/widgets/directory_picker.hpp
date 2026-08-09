@@ -39,7 +39,8 @@ using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 // picker with just the root node and no children otherwise, same
 // "empty rather than an error" contract as FileSystem::list_directory
 // itself). `on_result` fires exactly once: true and the chosen path on
-// OK, false and an empty path on Cancel/Esc. `fs` must outlive the
+// OK, false and an empty path on Cancel/Esc. It may detach or destroy the
+// dialog; no factory-owned work touches the Window after it returns. `fs` must outlive the
 // returned Window (the tree is built once from it at construction —
 // no closure keeps a live reference afterward, unlike file_dialog.hpp).
 // Desktop::present_modeless attaches the returned handle and focuses
@@ -55,5 +56,14 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 [[nodiscard]] DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
                                                                     ui::Application& app, Desktop& desktop,
                                                                     const ui::StandardRoles& roles);
+
+// Blocking convenience for an application that owns the outer loop. It uses
+// Desktop::exec_modal and therefore rejects calls from handlers, posts, and
+// timers where a nested dispatch pump would be unsafe. The non-blocking
+// present_directory_picker is the handler-safe alternative. A quit request
+// that ends the outer pump resolves to the same cancelled result as Esc.
+DirectoryPickerResult exec_directory_picker(const FileSystem& fs, std::string root_path,
+                                            ui::Application& app, Desktop& desktop,
+                                            const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

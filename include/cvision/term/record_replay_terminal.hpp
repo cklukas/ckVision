@@ -3,7 +3,8 @@
 // Record/replay backend (ARCHITECTURE.md §4): wraps any Terminal,
 // recording the event stream (including capability-probe responses,
 // since CapabilityChangedEvent flows through poll() like any other
-// event) and presented bytes for deterministic replay and debugging.
+// event), presented bytes, and post-restore diagnostics for deterministic
+// replay and debugging.
 #pragma once
 
 #include <string>
@@ -33,7 +34,12 @@ struct RecordedClipboard {
     std::string text;
     friend bool operator==(const RecordedClipboard&, const RecordedClipboard&) = default;
 };
-using RecordedEntry = std::variant<RecordedEvents, RecordedWrite, RecordedTitle, RecordedBell, RecordedClipboard>;
+struct RecordedDiagnostic {
+    std::string message;
+    friend bool operator==(const RecordedDiagnostic&, const RecordedDiagnostic&) = default;
+};
+using RecordedEntry =
+    std::variant<RecordedEvents, RecordedWrite, RecordedTitle, RecordedBell, RecordedClipboard, RecordedDiagnostic>;
 
 // Wraps `inner`, forwarding every call to it while appending a
 // RecordedEntry for each poll() batch (even empty ones, so replay can
@@ -47,6 +53,7 @@ public:
 
     Capabilities capabilities() const noexcept override { return inner_.capabilities(); }
     Size size() const noexcept override { return inner_.size(); }
+    std::span<const WaitHandle> wait_handles() const noexcept override { return inner_.wait_handles(); }
 
     std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override {
         std::vector<TerminalEvent> events = inner_.poll(deadline_nanos);
@@ -54,6 +61,20 @@ public:
         return events;
     }
     void wake() noexcept override { inner_.wake(); }
+    void restore() noexcept override { inner_.restore(); }
+    void write_diagnostic_after_restore(std::string_view message) noexcept override {
+        inner_.write_diagnostic_after_restore(message);
+        // Terminal diagnostics are explicitly best-effort and noexcept: an
+        // exhausted recorder must not turn a recoverable warning into process
+        // termination after the terminal has already been restored.
+        try {
+            log_.push_back(RecordedEntry{RecordedDiagnostic{std::string(message)}});
+        } catch (...) {
+        }
+    }
+    [[noreturn]] void terminate_after_callback_failure() noexcept override {
+        inner_.terminate_after_callback_failure();
+    }
 
     void write(std::string_view bytes) override {
         inner_.write(bytes);
@@ -103,9 +124,12 @@ public:
         while (cursor_ < recording_.size()) {
             const RecordedEntry& entry = recording_[cursor_++];
             if (const auto* events = std::get_if<RecordedEvents>(&entry)) {
-                for (const TerminalEvent& ev : events->events)
+                for (const TerminalEvent& ev : events->events) {
                     if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev))
                         caps_ = changed->capabilities;
+                    else if (const auto* resize = std::get_if<ResizeEvent>(&ev))
+                        size_ = resize->cells;
+                }
                 replayed_.push_back(RecordedEntry{*events});
                 return events->events;
             }
@@ -132,12 +156,20 @@ public:
         clipboard_ = std::string(text);
         replayed_.push_back(RecordedEntry{RecordedClipboard{clipboard_}});
     }
+    void write_diagnostic_after_restore(std::string_view message) noexcept override {
+        try {
+            diagnostics_.append(message);
+            replayed_.push_back(RecordedEntry{RecordedDiagnostic{std::string(message)}});
+        } catch (...) {
+        }
+    }
 
     std::string_view written_bytes() const noexcept { return written_; }
     void clear_written() noexcept { written_.clear(); }
     const std::string& title() const noexcept { return title_; }
     int bell_count() const noexcept { return bell_count_; }
     const std::string& clipboard() const noexcept { return clipboard_; }
+    std::string_view diagnostic_bytes() const noexcept { return diagnostics_; }
     bool exhausted() const noexcept { return cursor_ >= recording_.size(); }
     const std::vector<RecordedEntry>& replayed() const noexcept { return replayed_; }
     bool matches_recording() const noexcept { return replayed_ == recording_; }
@@ -151,6 +183,7 @@ private:
     std::string title_;
     int bell_count_ = 0;
     std::string clipboard_;
+    std::string diagnostics_;
     std::vector<RecordedEntry> replayed_;
 };
 

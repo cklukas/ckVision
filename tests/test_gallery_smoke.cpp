@@ -188,6 +188,34 @@ CK_TEST(the_same_gallery_frame_uses_only_the_cell_fallback_without_graphics) {
     (void)gallery;
 }
 
+CK_TEST(conservative_multiplexer_and_console_profiles_render_the_same_gallery_fallback) {
+    using ckv::term::TerminalProfile;
+    constexpr TerminalProfile profiles[] = {
+        TerminalProfile::TmuxConservative,
+        TerminalProfile::ScreenConservative,
+        TerminalProfile::LinuxConsole,
+    };
+    for (const TerminalProfile profile : profiles) {
+        ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, profile);
+        ManualClock clock;
+        Application app(term, clock);
+        ckv::gallery::GalleryApp gallery(app);
+
+        app.step(0);
+        CK_CHECK(term.written_bytes().find("\x1B" "P") == std::string::npos);
+        CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
+        CK_CHECK(!term.display().has_raster_pixels());
+
+        // Exercise the selected terminal profile end to end. Dispatching a
+        // TextEvent here would bypass the decoder and could not prove that
+        // conservative profiles still preserve ordinary keyboard input.
+        term.inject_bytes("Profile", clock.now_nanos());
+        CK_CHECK(app.step(clock.now_nanos()));
+        CK_CHECK(gallery.name_input()->text() == "Profile");
+        (void)gallery;
+    }
+}
+
 CK_TEST(runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pixels) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_sixel_profile());
     ManualClock clock;
@@ -202,6 +230,34 @@ CK_TEST(runtime_graphics_capability_changes_remove_and_restore_virtual_raster_pi
     CK_CHECK(!term.display().has_raster_pixels());
 
     term.inject_capability_change(ckv::term::headless_sixel_profile());
+    app.step(0);
+    CK_CHECK(term.display().has_raster_pixels());
+    (void)gallery;
+}
+
+CK_TEST(runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell_fallback) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_sixel_profile());
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::gallery::GalleryApp gallery(app);
+
+    app.step(0);
+    CK_CHECK(term.display().has_raster_pixels());
+
+    // The gallery image is 64x32 pixels. Graphics capability itself remains
+    // true, but a newly learned finite terminal limit makes that raster
+    // ineligible. CapabilityChangedEvent must force a complete re-present so
+    // no old pixels survive underneath the mandatory cell fallback.
+    ckv::term::Capabilities too_small = term.capabilities();
+    too_small.sixel_max_geometry = ckv::Size{63, 32};
+    term.inject_capability_change(too_small);
+    app.step(0);
+    CK_CHECK(!term.display().has_raster_pixels());
+    CK_CHECK(term.written_bytes().find("[image]") != std::string::npos);
+
+    ckv::term::Capabilities restored = too_small;
+    restored.sixel_max_geometry = ckv::Size{64, 32};
+    term.inject_capability_change(restored);
     app.step(0);
     CK_CHECK(term.display().has_raster_pixels());
     (void)gallery;

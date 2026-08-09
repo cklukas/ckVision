@@ -58,9 +58,20 @@ public:
     View* parent() const noexcept { return parent_; }
     const std::vector<std::unique_ptr<View>>& children() const noexcept { return children_; }
 
-    // Returns a non-owning observer pointer to the child just added.
-    // The type-erased primitive every other insertion form below is
-    // built on.
+    // A non-owning identity token for code that must retain a View observer
+    // across a user callback. An expired token proves that this particular
+    // View instance was destroyed; it therefore also distinguishes a later
+    // object allocated at the same address. It grants no ownership or access
+    // to the View and is intentionally independent of tree attachment.
+    std::weak_ptr<void> lifetime_token() const noexcept { return liveness_; }
+
+    // Returns a non-owning observer pointer to the child just added, or
+    // nullptr when an on_attached() / root attachment callback synchronously
+    // detached or destroyed that child (or this parent). The type-erased
+    // primitive every other insertion form below is built on. The child is
+    // linked into the ownership tree before its context callback runs, so an
+    // attachment callback can use ordinary remove_child() rather than
+    // observing a half-attached tree.
     virtual View* add_child(std::unique_ptr<View> child);
 
     // Typed insertion (M9/WP-9): adds `child` and returns it back as
@@ -115,7 +126,8 @@ public:
     // Hook for containers (Row/Column/Grid/Dock) that must relayout
     // their children whenever their own bounds change size. Called
     // after bounds_ is updated and this view's own invalidation has
-    // already been reported; the default does nothing.
+    // already been reported; the default does nothing. It may detach
+    // or destroy this View; in that case no later bounds observer runs.
     virtual void on_resized() {}
 
     // Fired after on_resized(), with this view's NEW bounds (local —
@@ -267,7 +279,11 @@ public:
     // --- Events (ARCHITECTURE.md §5 "Events") ---------------------------
     // Each returns true if it consumed the event (stopping the route).
 
+    // Press and repeat use the ordinary key path. Release has a dedicated
+    // hook so existing controls cannot accidentally perform their press
+    // behavior a second time when a kitty-enabled terminal reports it.
     virtual bool on_key(const KeyEvent&) { return false; }
+    virtual bool on_key_release(const KeyEvent&) { return false; }
     virtual bool on_text(const TextEvent&) { return false; }
     virtual bool on_mouse(const MouseEvent&) { return false; }
     virtual void on_focus(const FocusEvent&) {}
@@ -339,7 +355,7 @@ private:
 
     void propagate_dirty_rect_sink(const DirtyRectSink& sink);
     void propagate_detach_sink(const DetachSink& sink);
-    void propagate_context(const Context& context);
+    void propagate_context(Context context);
     void notify_detaching_recursive();  // fires detach_sink_ for `this` and every descendant, alive
 
     View* parent_ = nullptr;

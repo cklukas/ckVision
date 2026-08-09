@@ -22,12 +22,16 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
 #include "cvision/core/clock.hpp"
+#include "cvision/core/clipboard.hpp"
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
@@ -64,6 +68,12 @@ inline constexpr Size kHardFloorSize{20, 6};
 class Application {
 public:
     Application(term::Terminal& terminal, Clock& clock);
+    // Explicit host composition: the injected bridge receives portable
+    // clipboard exports. Its lifetime must cover this Application. The
+    // two-argument convenience constructor instead owns a terminal-backed
+    // bridge for this Application instance.
+    Application(term::Terminal& terminal, Clock& clock, ClipboardWriter& clipboard_writer);
+    ~Application();
 
     View& root() noexcept { return root_; }
     const View& root() const noexcept { return root_; }
@@ -100,13 +110,24 @@ public:
 
     HistoryRegistry& history() noexcept { return history_; }
 
+    // --- Diagnostics (ARCHITECTURE.md §11) -------------------------------
+    //
+    // Every Application owns an in-memory diagnostic buffer. Applications
+    // may additionally inject an observing sink (transferring ownership) for
+    // structured host logging; messages are always retained in the owned
+    // buffer too, then emitted through Terminal only after this Application
+    // has restored its session during destruction. This avoids stderr output
+    // corrupting an alternate-screen UI while preserving a no-global,
+    // per-application observation seam.
+    DiagnosticsSink& diagnostics() noexcept;
+    void set_diagnostics_sink(std::unique_ptr<DiagnosticsSink> sink);
+
     // --- Internal clipboard (ARCHITECTURE.md §5, D-022) -------------------
     //
     // Always backs widget cut/copy/paste (in-app selection + export is
     // the primary copy path — mouse reporting captures drags). Writes
-    // through to the terminal's system clipboard on a best-effort basis;
-    // Terminal::write_clipboard is documented as a no-op when the
-    // capability is absent, so this never branches on it itself. System
+    // through to the injected ClipboardWriter on a best-effort basis;
+    // the bridge itself decides whether its host supports export. System
     // *import* only ever arrives as a TerminalEvent's TextEvent with
     // from_paste set, which dispatch() also mirrors into this clipboard
     // before routing it onward — never OSC 52 read (D-022).
@@ -200,8 +221,8 @@ public:
     // --- Cross-thread posting --------------------------------------------
 
     // Thread-safe; queues `fn` to run on the owning thread during the
-    // next step(). The only sanctioned way another thread touches this
-    // Application (ARCHITECTURE.md §5, §9).
+    // next step(). An empty callback is a no-op. The only sanctioned way
+    // another thread touches this Application (ARCHITECTURE.md §5, §9).
     void post(std::function<void()> fn);
 
     // --- The embeddable loop (D-021) --------------------------------------
@@ -224,6 +245,18 @@ public:
     // Damage-rect-scoped painting is a real follow-on, not a
     // correctness gap.
     bool step(std::int64_t deadline_nanos);
+
+    // D-021 external-loop integration. The view is borrowed from the terminal
+    // backend and contains every native source that can make step() useful;
+    // it is valid only while that terminal session is alive. A host waits on
+    // it alongside its own sources, then calls step(clock.now_nanos()).
+    std::span<const term::WaitHandle> wait_handles() const noexcept { return terminal_.wait_handles(); }
+
+    // The earliest application-owned timer deadline, if any. Combine this
+    // with the host's own deadline when waiting on wait_handles(); application
+    // state remains confined to the owning thread, so this query is likewise
+    // owning-thread-only.
+    std::optional<std::int64_t> next_timer_deadline_nanos() const noexcept;
 
     // Forces the next paint to redraw and re-present the whole frame
     // (e.g. after a runtime theme switch, which invalidates every
@@ -250,9 +283,10 @@ public:
 
     // Steps repeatedly, at run()'s own cadence, until either `done()`
     // returns true or quit_requested() does — whichever comes first —
-    // and returns done()'s own final value, so a caller can tell
-    // "completed normally" from "interrupted by a quit request" (e.g.
-    // Ctrl+C arriving while blocked). This is the shared primitive
+    // and returns true only for normal completion. A request already
+    // present, or observed during a step, returns false before another
+    // `done()` invocation; a host shutdown therefore cannot be reported
+    // as normal completion. This is the shared primitive
     // run() itself is built on (done = []{ return false; }, so only
     // quit_requested() ends it) and that every widgets::exec_* modal
     // convenience (M9/WP-15, D-021) uses to block without a nested
@@ -275,14 +309,17 @@ public:
     // searches only within it — a click outside is simply not delivered,
     // never falls through to whatever is underneath; Tab/Shift-Tab
     // traversal only cycles views within it; and the keyboard-
-    // accelerator command-keymap fallback is suppressed entirely (only
-    // the focus chain's own on_key delivery still runs, and only up
-    // through modal_root itself — e.g. Window::on_key's accept_request/
-    // cancel_request wiring — never past it to whatever it's nested
-    // inside). A stack, not a single slot, so a modal opening a second
-    // modal on top of it (VISION.md's "nested modality") scopes
-    // correctly to the innermost one without either side needing to
-    // know about the other.
+    // accelerator command-keymap fallback permits only the scope-safe
+    // standard commands kFocusNext, kFocusPrevious, and kHelp after
+    // the focus chain declines a key. Those commands operate through
+    // the active scope/current focus only. Every other command (menu,
+    // window, quit, and application-defined accelerators) is excluded;
+    // the focus chain itself runs only up through modal_root — e.g.
+    // Window::on_key's accept_request/cancel_request wiring — never
+    // past it to whatever it is nested inside. A stack, not a single
+    // slot, so a modal opening a second modal on top of it (VISION.md's
+    // "nested modality") scopes correctly to the innermost one without
+    // either side needing to know about the other.
     //
     // widgets::exec_modal (and every exec_* built on it) is the
     // sanctioned way most applications reach this — push/pop is public
@@ -313,17 +350,28 @@ public:
 
     bool is_modal() const noexcept { return !modal_stack_.empty(); }
 
-    // Makes run()'s next loop check return promptly. Also callable
-    // directly regardless of whether run() is in use at all — e.g.
-    // from a Quit command's own handler — it is a plain flag, not
-    // coupled to run() having been called. Backed by std::atomic
-    // (relaxed ordering — the flag needs no synchronization with any
-    // other state), so an injected host policy may safely request a
-    // shutdown while another owning-thread operation is checking it.
-    void request_quit() noexcept { quit_requested_.store(true, std::memory_order_relaxed); }
+    // Requests loop shutdown and wakes a currently blocked terminal wait.
+    // Also callable directly regardless of whether run() is in use at all —
+    // e.g. from a Quit command's own handler — it is a plain flag, not
+    // coupled to run() having been called. Backed by std::atomic (relaxed
+    // ordering — the flag needs no synchronization with any other state), so
+    // an injected host policy may safely request shutdown from another thread
+    // without separately remembering to call wake().
+    void request_quit() noexcept;
     bool quit_requested() const noexcept { return quit_requested_.load(std::memory_order_relaxed); }
 
 private:
+    class ApplicationDiagnostics final : public DiagnosticsSink {
+    public:
+        void log(LogLevel level, std::string_view message) noexcept override;
+        void set_observer(std::unique_ptr<DiagnosticsSink> sink);
+        void flush_after_terminal_restore(term::Terminal& terminal) noexcept;
+
+    private:
+        BufferedDiagnostics buffered_;
+        std::unique_ptr<DiagnosticsSink> observer_;
+    };
+
     struct ViewHandle {
         View* view = nullptr;
         std::weak_ptr<void> liveness;
@@ -355,8 +403,15 @@ private:
     void paint_and_present();
     void paint_too_small_state(scene::Painter& painter, Size current_size) const;
 
+    Application(term::Terminal& terminal, Clock& clock,
+                std::unique_ptr<ClipboardWriter> owned_clipboard_writer,
+                ClipboardWriter* borrowed_clipboard_writer);
+
     term::Terminal& terminal_;
     Clock& clock_;
+    std::unique_ptr<ClipboardWriter> owned_clipboard_writer_;
+    ClipboardWriter& clipboard_writer_;
+    ApplicationDiagnostics diagnostics_;
     // Declared (and therefore constructed) before root_, and — the
     // reason this order matters, not just convention — destroyed
     // AFTER it: every widget in the tree holds a Context pointing at

@@ -11,14 +11,16 @@
 // around exactly that same, already-tested object graph.
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
+#include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
 
 #include "gallery_app.hpp"
 
 int main() {
-    ckv::term::PosixTerminal terminal;
     ckv::term::PosixClock clock;
-    ckv::ui::Application app(terminal, clock);
+    ckv::term::PosixTerminal terminal(clock);
+    ckv::term::TerminalClipboardWriter clipboard(terminal);
+    ckv::ui::Application app(terminal, clock, clipboard);
     ckv::gallery::GalleryApp gallery(app);
     app.run();
     return 0;

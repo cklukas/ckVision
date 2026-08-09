@@ -2,6 +2,7 @@
 #include "cvision/widgets/file_dialog.hpp"
 
 #include <optional>
+#include <string>
 
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -21,6 +22,7 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::FileDialogMode;
 using ckv::widgets::FileDialogResult;
+using ckv::widgets::exec_file_dialog;
 using ckv::widgets::make_file_dialog;
 using ckv::widgets::present_file_dialog;
 
@@ -177,6 +179,47 @@ CK_TEST(cancel_fires_on_result_with_accepted_false_and_an_empty_path) {
     CK_CHECK(result.path.empty());
 }
 
+CK_TEST(a_result_callback_may_destroy_its_file_dialog) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    ckv::widgets::Window* dialog = nullptr;
+    int results = 0;
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
+                                   [&](FileDialogResult result) {
+                                       CK_CHECK(!result.accepted);
+                                       CK_CHECK(result.path.empty());
+                                       ++results;
+                                       std::unique_ptr<ckv::ui::View> detached = app.root().remove_child(dialog);
+                                       CK_CHECK(detached.get() == dialog);
+                                   });
+    dialog = static_cast<ckv::widgets::Window*>(app.root().add_child(std::move(handle.window)));
+
+    dialog->cancel_request();
+    CK_CHECK(results == 1);
+}
+
+CK_TEST(a_file_dialog_result_callback_cannot_deliver_a_reentrant_second_result) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    ckv::widgets::Window* dialog = nullptr;
+    int results = 0;
+    auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
+                                   [&](FileDialogResult) {
+                                       ++results;
+                                       dialog->cancel_request();
+                                   });
+    dialog = static_cast<ckv::widgets::Window*>(app.root().add_child(std::move(handle.window)));
+
+    dialog->cancel_request();
+    CK_CHECK(results == 1);
+}
+
 CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -220,5 +263,86 @@ CK_TEST(present_file_dialog_completes_after_its_modal_window_detaches) {
     CK_CHECK(presentation.result()->path == "/home/user");
     CK_CHECK(completion.has_value());
     CK_CHECK(completion->accepted);
+    CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(presented_file_dialog_accepts_a_terminal_typed_path_inside_its_modal_scope) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    auto* desktop = app.root().add(std::move(desktop_owned));
+    auto fs = sample_fs();
+
+    auto presentation = present_file_dialog(FileDialogMode::Save, "/home/user", fs, app, *desktop, roles);
+    CK_CHECK(app.is_modal());
+
+    // The initial focus is the file list. Drive Shift+Tab, Home, Delete,
+    // ordinary text, and Enter as one terminal-read batch. This validates
+    // the real decoder → modal router → InputLine → Window accept path, not
+    // a direct TextEvent or factory callback.
+    constexpr std::string_view kEraseInitialPath =
+        "\x1B[3~\x1B[3~\x1B[3~\x1B[3~\x1B[3~\x1B[3~\x1B[3~\x1B[3~\x1B[3~\x1B[3~";
+    term.inject_bytes("\x1B[Z\x1B[H" + std::string(kEraseInitialPath) + "newfile.txt\r", 1);
+    CK_CHECK(app.step(1));
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result().has_value());
+    CK_CHECK(presentation.result()->accepted);
+    CK_CHECK(presentation.result()->path == "/home/user/newfile.txt");
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(exec_file_dialog_returns_the_modal_result_without_leaving_a_window_attached) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    auto* desktop = app.root().add(std::move(desktop_owned));
+    auto fs = sample_fs();
+
+    // The outer-loop convenience pumps Application::step itself, so the
+    // scripted dismissal is queued before entry and runs in that first step.
+    app.post([desktop] { desktop->windows().back()->accept_request(); });
+    const FileDialogResult accepted = exec_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
+    CK_CHECK(accepted.accepted);
+    CK_CHECK(accepted.path == "/home/user");
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
+
+    app.post([desktop] { desktop->windows().back()->cancel_request(); });
+    const FileDialogResult cancelled =
+        exec_file_dialog(FileDialogMode::Save, "/home/user", fs, app, *desktop, roles);
+    CK_CHECK(!cancelled.accepted);
+    CK_CHECK(cancelled.path.empty());
+    CK_CHECK(desktop->windows().empty());
+    CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(exec_file_dialog_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto desktop_owned =
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+    auto* desktop = app.root().add(std::move(desktop_owned));
+    auto fs = sample_fs();
+    app.post([&app] { app.request_quit(); });
+
+    const FileDialogResult result =
+        exec_file_dialog(FileDialogMode::Open, "/home/user", fs, app, *desktop, roles);
+    CK_CHECK(!result.accepted);
+    CK_CHECK(result.path.empty());
+    CK_CHECK(app.quit_requested());
+    CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 }

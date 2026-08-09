@@ -155,7 +155,12 @@ public:
     // nothing else happens). Otherwise on_closed fires so the owner
     // (Desktop) can remove/destroy this window. close() never destroys
     // the window itself — lifetime stays with whoever owns it in the
-    // View tree.
+    // View tree. A recursive close() from either callback is accepted as
+    // an idempotent no-op until the outer close request returns, so one
+    // user request cannot re-enter its own callbacks. A close_request may
+    // exceptionally detach and destroy its Window; a true return then
+    // completes that close without running on_closed, because there is no
+    // remaining instance or owner for a later protocol stage.
     std::function<bool()> close_request;
     std::function<void()> on_closed;
     bool close();
@@ -244,6 +249,12 @@ private:
 
     enum class KeyboardMode { None, Move, Resize };
     enum class DragKind { None, Move, Resize };
+    // close() callbacks may detach and destroy their Window. The close state
+    // therefore has independent lifetime; close() retains it on its stack
+    // until its final reset is complete.
+    struct CloseState {
+        bool in_progress = false;
+    };
 
     Rect frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept;
     void relayout_frame_overlays() noexcept;
@@ -270,6 +281,7 @@ private:
     bool active_ = false;
     bool movable_ = true;
     bool resizable_ = true;
+    std::shared_ptr<CloseState> close_state_ = std::make_shared<CloseState>();
     Size min_size_{10, 4};
     Size max_size_{0, 0};
 
@@ -312,8 +324,8 @@ struct WindowHandle {
 // directory picker, help viewer) to actually detach and destroy itself
 // once its own on_closed fires, rather than lingering forever in its
 // parent's child list after Close/Cancel. A no-op if `window` has
-// already been detached (parent() is null) by the time the posted work
-// runs.
+// already been detached (parent() is null), or was detached and destroyed,
+// by the time the posted work runs.
 void schedule_self_detach(Window& window, ui::Application& app);
 
 }  // namespace ckv::widgets

@@ -22,6 +22,14 @@ using ckv::ui::make_classic_theme;
 using ckv::widgets::Label;
 
 namespace {
+class ColorProbe final : public ckv::ui::View {
+public:
+    void draw(ckv::scene::Painter& painter) override {
+        painter.draw_text(ckv::Point{0, 0}, "C",
+                          ckv::Style{ckv::Color::rgb(17, 34, 51), ckv::Color::rgb(68, 85, 102), ckv::Attr{}});
+    }
+};
+
 struct Fixture {
     ckv::term::HeadlessTerminal term{ckv::Size{40, 12}};
     ManualClock clock;
@@ -46,6 +54,50 @@ CK_TEST(a_second_step_with_nothing_invalidated_writes_no_further_bytes) {
     f.term.clear_written();
     f.app.step(0);
     CK_CHECK(f.term.written_bytes().empty());
+}
+
+CK_TEST(a_live_color_scheme_capability_change_forces_a_full_represent) {
+    Fixture f;
+    f.app.step(0);
+    f.term.clear_written();
+
+    ckv::term::Capabilities updated = f.term.capabilities();
+    updated.color_scheme = ckv::term::ColorScheme::Dark;
+    updated.color_scheme_notifications = true;
+    f.term.inject_capability_change(updated);
+
+    CK_CHECK(f.app.step(0));
+    // A scheme change can alter every resolved role. Application must reset
+    // the presenter rather than trusting an unchanged cell diff, so the
+    // terminal receives a complete current frame even for an otherwise idle
+    // view tree.
+    CK_CHECK(!f.term.written_bytes().empty());
+}
+
+CK_TEST(a_runtime_color_depth_downgrade_reencodes_the_entire_application_frame) {
+    ckv::term::Capabilities truecolor = ckv::term::baseline_capabilities();
+    truecolor.color_depth = ckv::term::ColorDepth::TrueColor;
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 12}, truecolor};
+    ManualClock clock;
+    Application app{term, clock};
+    auto probe = std::make_unique<ColorProbe>();
+    probe->set_bounds(Rect{0, 0, 1, 1});
+    app.root().add_child(std::move(probe));
+
+    app.step(0);
+    CK_CHECK(term.written_bytes().find("38;2;17;34;51") != std::string::npos);
+    CK_CHECK(term.written_bytes().find("48;2;68;85;102") != std::string::npos);
+    term.clear_written();
+
+    ckv::term::Capabilities mono = truecolor;
+    mono.color_depth = ckv::term::ColorDepth::Mono16;
+    term.inject_capability_change(mono);
+    CK_CHECK(app.step(0));
+    // The application's capability-change route invalidates Presenter before
+    // it paints. An unchanged view must therefore be re-encoded under the
+    // downgraded palette instead of retaining truecolor bytes in the host.
+    CK_CHECK(term.written_bytes().find("38;2;") == std::string::npos);
+    CK_CHECK(term.written_bytes().find("48;2;") == std::string::npos);
 }
 
 CK_TEST(a_label_actually_renders_its_text_into_the_presented_frame) {

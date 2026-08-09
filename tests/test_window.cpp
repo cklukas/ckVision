@@ -177,6 +177,25 @@ CK_TEST(a_close_request_returning_true_proceeds_to_on_closed) {
     CK_CHECK(closed);
 }
 
+CK_TEST(a_recursive_close_from_a_close_callback_is_an_idempotent_no_op) {
+    Fixture f;
+    auto w = make_window(f);
+    int close_requests = 0;
+    int closed_calls = 0;
+    w->close_request = [&] {
+        ++close_requests;
+        return true;
+    };
+    w->on_closed = [&] {
+        ++closed_calls;
+        CK_CHECK(w->close());
+    };
+
+    CK_CHECK(w->close());
+    CK_CHECK(close_requests == 1);
+    CK_CHECK(closed_calls == 1);
+}
+
 CK_TEST(clicking_the_close_control_invokes_close) {
     Fixture f;
     auto w = make_window(f);

@@ -2,6 +2,7 @@
 #include "cvision/widgets/directory_picker.hpp"
 
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
 
 #include "cvision/ui/layout.hpp"
@@ -43,6 +44,22 @@ void record_paths(const FileSystem& fs, TreeNode& node, const std::string& path,
     for (auto& child : node.children) record_paths(fs, child, fs.join(path, child.label), out);
 }
 
+// Completion state must outlive the dialog because user result callbacks may
+// detach and destroy it. The early single-shot mark also rejects a callback's
+// reentrant attempt to accept or cancel the same picker.
+struct DirectoryPickerCompletion {
+    std::weak_ptr<void> window_liveness;
+    std::function<void(bool, std::string)> on_result;
+    bool delivered = false;
+
+    void report(bool accepted, std::string path, Window* window) {
+        if (delivered) return;
+        delivered = true;
+        if (on_result) on_result(accepted, std::move(path));
+        if (!window_liveness.expired()) window->close();
+    }
+};
+
 }  // namespace
 
 WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, const ui::StandardRoles& roles,
@@ -52,6 +69,10 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     Window* window_ptr = window.get();
+    const detail::DialogFocusRestore focus_restore{restore_focus_to};
+    const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
+    auto completion = std::make_shared<DirectoryPickerCompletion>(
+        DirectoryPickerCompletion{window_ptr->lifetime_token(), std::move(on_result)});
 
     // record_paths() must run AFTER root is in its final resting place
     // (inside `roots`, the vector that gets moved into TreeView) — its
@@ -83,18 +104,20 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 
     window->set_content(std::move(column));
 
-    select_ptr->on_press = [tree_ptr, path_of, root_path, window_ptr, on_result]() {
+    select_ptr->on_press = [tree_ptr, path_of, root_path, window_ptr, completion]() {
         std::string chosen = root_path;
         if (const TreeNode* selected = tree_ptr->selected()) {
             auto it = path_of->find(selected);
             if (it != path_of->end()) chosen = it->second;
         }
-        if (on_result) on_result(true, chosen);
-        window_ptr->close();
+        Window* const window = window_ptr;
+        const std::shared_ptr<DirectoryPickerCompletion> held_completion = completion;
+        held_completion->report(true, std::move(chosen), window);
     };
-    cancel_ptr->on_press = [window_ptr, on_result]() {
-        if (on_result) on_result(false, "");
-        window_ptr->close();
+    cancel_ptr->on_press = [window_ptr, completion]() {
+        Window* const window = window_ptr;
+        const std::shared_ptr<DirectoryPickerCompletion> held_completion = completion;
+        held_completion->report(false, "", window);
     };
     window_ptr->accept_request = [select_ptr]() {
         if (select_ptr->on_press) select_ptr->on_press();
@@ -102,9 +125,12 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
     window_ptr->cancel_request = [cancel_ptr]() {
         if (cancel_ptr->on_press) cancel_ptr->on_press();
     };
-    window_ptr->on_closed = [&app, restore_focus_to, window_ptr]() {
-        if (restore_focus_to != nullptr && restore_focus_to->focusable()) app.set_focus(restore_focus_to);
-        schedule_self_detach(*window_ptr, app);
+    window_ptr->on_closed = [&app, focus_restore, window_ptr, window_liveness]() {
+        const detail::DialogFocusRestore held_focus_restore = focus_restore;
+        const std::weak_ptr<void> held_window_liveness = window_liveness;
+        Window* const held_window = window_ptr;
+        held_focus_restore.restore(app);
+        if (!held_window_liveness.expired()) schedule_self_detach(*held_window, app);
     };
 
     return WindowHandle{std::move(window), tree_ptr};
@@ -127,6 +153,20 @@ DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::
     };
     desktop.present_modal(std::move(handle), app);
     return std::move(parts.presentation);
+}
+
+DirectoryPickerResult exec_directory_picker(const FileSystem& fs, std::string root_path,
+                                            ui::Application& app, Desktop& desktop,
+                                            const ui::StandardRoles& roles) {
+    std::optional<DirectoryPickerResult> result;
+    auto handle = make_directory_picker(
+        fs, std::move(root_path), roles, app, app.focused(),
+        [&result](bool accepted, std::string path) { result = DirectoryPickerResult{accepted, std::move(path)}; });
+    desktop.exec_modal(app, std::move(handle));
+    // Every normal selection/cancellation path records a result before
+    // closing. If the host quits while the modal is still attached,
+    // exec_modal ends its pump and cancellation is the documented fallback.
+    return result.value_or(DirectoryPickerResult{});
 }
 
 }  // namespace ckv::widgets

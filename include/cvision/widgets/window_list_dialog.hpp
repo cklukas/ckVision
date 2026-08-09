@@ -37,6 +37,9 @@ using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
                                       ui::View* restore_focus_to);
 
+// Presents the list modally without a nested loop. Completion occurs only
+// after detachment; activation, close, external detach, and quit all resolve
+// to Closed because this dialog returns no separate selection value.
 [[nodiscard]] WindowListDialogPresentation present_window_list_dialog(Desktop& desktop, ui::Application& app,
                                                                        const ui::StandardRoles& roles);
 

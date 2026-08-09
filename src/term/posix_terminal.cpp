@@ -1,9 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// `deadline_nanos` in poll() is interpreted as CLOCK_MONOTONIC
-// nanoseconds — this backend's own notion of "now" (D-025: platform
-// backends are exactly where real time is allowed to enter the
-// system). Use monotonic_now_nanos() to construct a valid deadline.
+// `deadline_nanos` in poll() is interpreted on the injected monotonic
+// Clock shared with the owning Application. Platform time enters through
+// PosixClock at construction, never through a hidden backend read.
 #include "cvision/term/posix_terminal.hpp"
 
 #include <fcntl.h>
@@ -11,25 +10,19 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstring>
+#include <cstdlib>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/term/presenter.hpp"  // sanitize_osc_text
 
 namespace ckv::term {
 namespace {
-
-std::int64_t monotonic_now_nanos_impl() noexcept {
-    struct timespec ts{};
-    ::clock_gettime(CLOCK_MONOTONIC, &ts);
-    return static_cast<std::int64_t>(ts.tv_sec) * 1'000'000'000LL + ts.tv_nsec;
-}
 
 // --- D-024: the one sanctioned process-level facility --------------------
 //
@@ -54,16 +47,125 @@ constexpr int kFree = 0;
 constexpr int kClaiming = 1;
 constexpr int kReady = 2;
 
+static_assert(std::atomic<int>::is_always_lock_free,
+              "D-024 signal-handler state requires lock-free atomic<int>");
+static_assert(std::atomic<bool>::is_always_lock_free,
+              "D-024 signal-handler state requires lock-free atomic<bool>");
+static_assert(std::atomic<const char*>::is_always_lock_free,
+              "D-024 assertion-diagnostic pointers require lock-free atomic<const char*>");
+static_assert(std::atomic<std::size_t>::is_always_lock_free,
+              "D-024 assertion-diagnostic sizes require lock-free atomic<size_t>");
+
+std::string make_session_enter_sequence(const Capabilities& caps, bool enable_capability_probes) {
+    std::string sequence{"\x1B[?1049h"};
+    // Kitty's keyboard protocol has a real session stack: push the current
+    // enhancement flags, then select disambiguation plus event-type reports.
+    // Its matching pop in the restore sequence below returns precisely to the
+    // host's prior keyboard state. Do not similarly force xterm
+    // modifyOtherKeys here: its public setting has no corresponding
+    // save/restore stack, so a library cannot restore an arbitrary host level
+    // exactly. A ModifyOtherKeys capability remains an explicit host promise.
+    if (caps.keyboard_protocol == KeyboardProtocol::Kitty) sequence += "\x1B[>3u";
+    switch (caps.mouse_protocol) {
+        case MouseProtocol::None: break;
+        case MouseProtocol::X10: sequence += "\x1B[?9h"; break;
+        case MouseProtocol::SGR:
+            sequence += "\x1B[?1002h\x1B[?1006h";
+            // Only a trusted explicit pixel profile enters this mode with the
+            // session. A probing session enables it at the start of each
+            // bounded probe window, so a failed probe can reset it and a
+            // later resize probe can establish it again.
+            if (caps.pixel_mouse) sequence += "\x1B[?1016h";
+            break;
+    }
+    if (caps.bracketed_paste) sequence += "\x1B[?2004h";
+    if (caps.focus_events) sequence += "\x1B[?1004h";
+    // Mode 2031 opts into unsolicited color-preference notifications. It is
+    // probe policy rather than a baseline capability: curated profiles keep
+    // their explicit contracts by disabling probes, and the mode is exposed
+    // only after positive DECRQM/DSR evidence.
+    if (enable_capability_probes) sequence += "\x1B[?2031h";
+    return sequence;
+}
+
+std::string make_session_restore_sequence(const Capabilities& caps, bool enable_capability_probes) {
+    std::string sequence;
+    switch (caps.mouse_protocol) {
+        case MouseProtocol::None: break;
+        case MouseProtocol::X10: sequence += "\x1B[?9l"; break;
+        case MouseProtocol::SGR:
+            // 1002 and 1006 are the only SGR modes the session always
+            // enters. Do not reset 1000 merely because it is another mouse
+            // tracking protocol: ckVision never set it. Likewise, 1016 is
+            // entered only for an explicit pixel profile or a probe window,
+            // so a non-probing cell-mouse session must leave it untouched.
+            sequence += "\x1B[?1002l\x1B[?1006l";
+            if (caps.pixel_mouse || enable_capability_probes) sequence += "\x1B[?1016l";
+            break;
+    }
+    if (caps.bracketed_paste) sequence += "\x1B[?2004l";
+    if (caps.focus_events) sequence += "\x1B[?1004l";
+    // The capability probe temporarily enables mode 2026 before asking
+    // DECRQM, then resets it immediately. Keep this reset in the session
+    // ledger too: a fatal signal between those bytes must never leave the
+    // host holding synchronized output.
+    if (enable_capability_probes) sequence += "\x1B[?2026l";
+    if (enable_capability_probes) sequence += "\x1B[?2031l";
+    if (caps.keyboard_protocol == KeyboardProtocol::Kitty) sequence += "\x1B[<u";
+    sequence += "\x1B[?25h\x1B[0m\x1B[?1049l";
+    return sequence;
+}
+
+// OSC 10/11 ask for the terminal's dynamic text foreground/background. The
+// background is the initial Dark/Light hint; foreground is a contrast fallback
+// only when no background reply arrives. The probe briefly enables mode 2026
+// before DECRQM so a set report proves synchronized-output support without
+// delaying the baseline frame. DECRQM also checks mode 1016 (SGR-pixel mouse)
+// and our enabled mode 2031 (live color-preference notifications). Primary DA
+// advertises parameter 4 when Sixel graphics are available;
+// XTSMGRAPHICS requests the Sixel color-register and geometry limits; XTWINOPS
+// 16 reports the character-cell pixel size. InputDecoder turns changed replies
+// into CapabilityChangedEvent values.
+constexpr std::string_view kCapabilityProbeSequence =
+    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t";
+constexpr std::int64_t kCapabilityProbeTimeoutNanos = 250'000'000LL;
+
 struct SessionRecord {
     std::atomic<int> state{kFree};
-    int fd = -1;
+    int output_fd = -1;
+    int input_fd = -1;
     struct termios original_termios{};
+    struct termios raw_termios{};
+    char enter_bytes[kRestoreBufSize]{};
+    std::size_t enter_len = 0;
     char restore_bytes[kRestoreBufSize]{};
     std::size_t restore_len = 0;
+    std::atomic<bool> resumed{false};
 };
 
 SessionRecord g_sessions[kMaxSessions];
-std::atomic<bool> g_handlers_installed{false};
+constexpr std::array<int, 8> kManagedSignals = {
+    SIGSEGV,
+    SIGABRT,
+    SIGBUS,
+    SIGILL,
+    SIGFPE,
+    SIGWINCH,
+    SIGTSTP,
+    SIGCONT,
+};
+std::array<struct sigaction, kManagedSignals.size()> g_saved_signal_actions{};
+std::atomic_flag g_signal_action_lock = ATOMIC_FLAG_INIT;
+int g_live_session_count = 0;  // guarded by g_signal_action_lock
+std::atomic<bool> g_callback_failure{false};
+std::atomic<const char*> g_assertion_expr{nullptr};
+std::atomic<const char*> g_assertion_file{nullptr};
+std::atomic<std::size_t> g_assertion_expr_size{0};
+std::atomic<std::size_t> g_assertion_file_size{0};
+std::atomic<int> g_assertion_line{0};
+
+constexpr char kCallbackFailureDiagnostic[] = "ckVision contract violation: application callback threw\n";
+constexpr char kContractViolationPrefix[] = "ckVision contract violation: ";
 
 // SIGWINCH has no terminal-session identity.  Its sole purpose here is
 // therefore to interrupt a blocked poll() promptly; every PosixTerminal
@@ -72,50 +174,150 @@ std::atomic<bool> g_handlers_installed{false};
 // in another session.
 extern "C" void on_sigwinch(int) {}
 
-// Async-signal-safe restore: write() is guaranteed safe. tcsetattr is
-// NOT on POSIX's async-signal-safe function list, but is relied upon
-// by essentially every real terminal-handling library (readline,
-// ncurses, and this codebase) for exactly this purpose in practice,
-// absent any signal-safe alternative for restoring cooked mode. This
-// is a documented, deliberate, honest exception, not an oversight.
-// std::atomic operations on a lock-free int are likewise not on the
-// POSIX async-signal-safe list in the letter of the standard, but —
-// like tcsetattr — compile to plain load/store-with-barrier
-// instructions with no syscalls or blocking, and are the only
-// practical way to avoid finding (a)/(b) above.
+void restore_session(SessionRecord& session) noexcept {
+    ::write(session.output_fd, session.restore_bytes, session.restore_len);
+    ::tcsetattr(session.input_fd, TCSANOW, &session.original_termios);
+}
+
+void write_decimal(int value) noexcept {
+    char digits[16];
+    std::size_t count = 0;
+    unsigned int magnitude = value < 0 ? static_cast<unsigned int>(-(value + 1)) + 1U
+                                       : static_cast<unsigned int>(value);
+    do {
+        digits[count++] = static_cast<char>('0' + magnitude % 10U);
+        magnitude /= 10U;
+    } while (magnitude != 0U);
+    while (count != 0U) ::write(STDERR_FILENO, &digits[--count], 1);
+}
+
+void write_assertion_diagnostic() noexcept {
+    const char* const expr = g_assertion_expr.load(std::memory_order_acquire);
+    if (expr == nullptr) return;
+    const char* const file = g_assertion_file.load(std::memory_order_relaxed);
+    const std::size_t expr_size = g_assertion_expr_size.load(std::memory_order_relaxed);
+    const std::size_t file_size = g_assertion_file_size.load(std::memory_order_relaxed);
+    const int line = g_assertion_line.load(std::memory_order_relaxed);
+    ::write(STDERR_FILENO, kContractViolationPrefix, sizeof(kContractViolationPrefix) - 1);
+    ::write(STDERR_FILENO, expr, expr_size);
+    ::write(STDERR_FILENO, " (", 2);
+    if (file != nullptr) ::write(STDERR_FILENO, file, file_size);
+    ::write(STDERR_FILENO, ":", 1);
+    write_decimal(line);
+    ::write(STDERR_FILENO, ")\n", 2);
+}
+
+// D-024's handler path uses only POSIX.1-2017 async-signal-safe operations:
+// write(), tcsetattr(), signal/raise/kill, and lock-free atomic accesses. The
+// two static assertions above make the atomic premise a build requirement
+// rather than a platform assumption.
 extern "C" void fatal_signal_handler(int sig) {
     for (SessionRecord& s : g_sessions) {
         if (s.state.load(std::memory_order_acquire) != kReady) continue;
-        ::write(s.fd, s.restore_bytes, s.restore_len);
-        ::tcsetattr(s.fd, TCSANOW, &s.original_termios);
+        restore_session(s);
     }
+    // A callback failure reaches this handler through std::abort().  The
+    // diagnostic deliberately follows restoration of EVERY live session: a
+    // process may own multiple distinct terminals, and writing it while even
+    // one remains in its alternate screen would violate the §11 guarantee.
+    if (g_assertion_expr.load(std::memory_order_acquire) != nullptr)
+        write_assertion_diagnostic();
+    else if (g_callback_failure.load(std::memory_order_acquire))
+        ::write(STDERR_FILENO, kCallbackFailureDiagnostic, sizeof(kCallbackFailureDiagnostic) - 1);
     ::signal(sig, SIG_DFL);
     ::raise(sig);
 }
 
-void install_handlers_once() {
-    bool expected = false;
-    if (!g_handlers_installed.compare_exchange_strong(expected, true)) return;
+extern "C" void on_sigtstp(int) {
+    for (SessionRecord& session : g_sessions)
+        if (session.state.load(std::memory_order_acquire) == kReady) restore_session(session);
+    ::signal(SIGTSTP, SIG_DFL);
 
-    struct sigaction fatal{};
-    fatal.sa_handler = &fatal_signal_handler;
-    sigemptyset(&fatal.sa_mask);
-    fatal.sa_flags = 0;
-    for (const int sig : {SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE}) ::sigaction(sig, &fatal, nullptr);
+    // SIGTSTP is automatically blocked while this handler runs. Unblock it
+    // before sending it again, otherwise it remains pending until after we
+    // reinstall this handler and recursively enters us instead of stopping.
+    sigset_t suspend_signal{};
+    sigemptyset(&suspend_signal);
+    sigaddset(&suspend_signal, SIGTSTP);
+    ::sigprocmask(SIG_UNBLOCK, &suspend_signal, nullptr);
+    ::kill(::getpid(), SIGTSTP);
 
-    struct sigaction winch{};
-    winch.sa_handler = &on_sigwinch;
-    sigemptyset(&winch.sa_mask);
-    winch.sa_flags = 0;
-    ::sigaction(SIGWINCH, &winch, nullptr);
+    // If the default stop was ignored (for example, an orphaned process
+    // group), no SIGCONT arrives to reinstall us. Keep future suspends live.
+    ::signal(SIGTSTP, &on_sigtstp);
+}
+
+extern "C" void on_sigcont(int) {
+    for (SessionRecord& session : g_sessions) {
+        if (session.state.load(std::memory_order_acquire) != kReady) continue;
+        ::tcsetattr(session.input_fd, TCSANOW, &session.raw_termios);
+        ::write(session.output_fd, session.enter_bytes, session.enter_len);
+        session.resumed.store(true, std::memory_order_release);
+    }
+    ::signal(SIGTSTP, &on_sigtstp);
+}
+
+struct sigaction make_signal_action(void (*handler)(int)) {
+    struct sigaction action{};
+    action.sa_handler = handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    return action;
+}
+
+bool install_session_handlers_unlocked() noexcept {
+    const std::array<struct sigaction, kManagedSignals.size()> actions = {
+        make_signal_action(&fatal_signal_handler),
+        make_signal_action(&fatal_signal_handler),
+        make_signal_action(&fatal_signal_handler),
+        make_signal_action(&fatal_signal_handler),
+        make_signal_action(&fatal_signal_handler),
+        make_signal_action(&on_sigwinch),
+        make_signal_action(&on_sigtstp),
+        make_signal_action(&on_sigcont),
+    };
+    std::size_t installed = 0;
+    for (; installed < kManagedSignals.size(); ++installed) {
+        if (::sigaction(kManagedSignals[installed], &actions[installed], &g_saved_signal_actions[installed]) != 0)
+            break;
+    }
+    if (installed == kManagedSignals.size()) return true;
+    while (installed != 0) {
+        --installed;
+        ::sigaction(kManagedSignals[installed], &g_saved_signal_actions[installed], nullptr);
+    }
+    return false;
+}
+
+void restore_session_handlers_unlocked() noexcept {
+    for (std::size_t i = 0; i < kManagedSignals.size(); ++i)
+        ::sigaction(kManagedSignals[i], &g_saved_signal_actions[i], nullptr);
+}
+
+bool retain_session_handlers() noexcept {
+    while (g_signal_action_lock.test_and_set(std::memory_order_acquire)) {}
+    const bool installed = g_live_session_count != 0 || install_session_handlers_unlocked();
+    if (installed) ++g_live_session_count;
+    g_signal_action_lock.clear(std::memory_order_release);
+    return installed;
+}
+
+void release_session_handlers() noexcept {
+    while (g_signal_action_lock.test_and_set(std::memory_order_acquire)) {}
+    CKV_ASSERT(g_live_session_count > 0);
+    --g_live_session_count;
+    if (g_live_session_count == 0) restore_session_handlers_unlocked();
+    g_signal_action_lock.clear(std::memory_order_release);
 }
 
 // Returns the claimed slot index, or -1 if every slot is in use — a
-// contract violation the caller CKV_ASSERTs on. Growing
-// kEnterSequence/kRestoreSequence past kRestoreBufSize is likewise a
-// contract violation caught here, loudly, rather than silently
+// contract violation the caller CKV_ASSERTs on. Growing a generated session
+// sequence past kRestoreBufSize is likewise a contract violation caught here,
+// loudly, rather than silently
 // truncating a future crash's restore sequence.
-int register_session(int fd, const struct termios& original, std::string_view restore_bytes) {
+int register_session(int output_fd, int input_fd, const struct termios& original, const struct termios& raw,
+                     std::string_view enter_bytes, std::string_view restore_bytes) {
+    CKV_ASSERT(enter_bytes.size() <= kRestoreBufSize);
     CKV_ASSERT(restore_bytes.size() <= kRestoreBufSize);
     for (int i = 0; i < kMaxSessions; ++i) {
         int expected = kFree;
@@ -124,10 +326,15 @@ int register_session(int fd, const struct termios& original, std::string_view re
         // Exclusively claimed: no other thread can also win this slot.
         // Safe to populate before publishing kReady.
         SessionRecord& s = g_sessions[i];
-        s.fd = fd;
+        s.output_fd = output_fd;
+        s.input_fd = input_fd;
         s.original_termios = original;
+        s.raw_termios = raw;
+        s.enter_len = enter_bytes.size();
+        std::memcpy(s.enter_bytes, enter_bytes.data(), s.enter_len);
         s.restore_len = restore_bytes.size();
         std::memcpy(s.restore_bytes, restore_bytes.data(), s.restore_len);
+        s.resumed.store(false, std::memory_order_relaxed);
         s.state.store(kReady, std::memory_order_release);
         return i;
     }
@@ -137,22 +344,8 @@ int register_session(int fd, const struct termios& original, std::string_view re
 void unregister_session(int slot) noexcept {
     if (slot < 0) return;
     g_sessions[slot].state.store(kFree, std::memory_order_release);
+    release_session_handlers();
 }
-
-constexpr std::string_view kEnterSequence =
-    "\x1B[?1049h"   // alternate screen, save cursor
-    "\x1B[?1002h"    // button-event mouse tracking
-    "\x1B[?1006h"    // SGR mouse encoding
-    "\x1B[?2004h"    // bracketed paste
-    "\x1B[?1004h";   // focus reporting
-
-constexpr std::string_view kRestoreSequence =
-    "\x1B[?1000l\x1B[?1002l\x1B[?1006l\x1B[?1016l"  // mouse modes off
-    "\x1B[?2004l"                                     // bracketed paste off
-    "\x1B[?1004l"                                     // focus reporting off
-    "\x1B[?25h"                                        // cursor visible
-    "\x1B[0m"                                           // style reset
-    "\x1B[?1049l";                                       // leave alternate screen, restore cursor
 
 void write_all(int fd, std::string_view bytes) {
     std::size_t off = 0;
@@ -160,6 +353,20 @@ void write_all(int fd, std::string_view bytes) {
         const ssize_t n = ::write(fd, bytes.data() + off, bytes.size() - off);
         if (n < 0) {
             if (errno == EINTR) continue;
+            // An embedding host may use a non-blocking PTY endpoint while
+            // consuming its other side asynchronously. Normal terminal I/O
+            // still has to deliver complete frame and session sequences, so
+            // wait for writability and retry instead of silently truncating
+            // output on backpressure. The D-024 signal handler intentionally
+            // does not call this helper: poll() is not async-signal-safe.
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                struct pollfd writable{fd, POLLOUT, 0};
+                int ready = 0;
+                do {
+                    ready = ::poll(&writable, 1, -1);
+                } while (ready < 0 && errno == EINTR);
+                if (ready > 0 && (writable.revents & POLLOUT)) continue;
+            }
             break;  // fd gone / unwritable: nothing more we can do here
         }
         off += static_cast<std::size_t>(n);
@@ -200,12 +407,38 @@ std::string base64_encode(std::string_view data) {
 
 }  // namespace
 
-PosixTerminal::PosixTerminal(int output_fd, int input_fd, Capabilities initial_caps)
-    : output_fd_(output_fd),
+void publish_assertion_failure_to_session(const char* expr, const char* file, int line) noexcept {
+    // D-024's handler may only read immutable objects. Macro string literals
+    // and __FILE__ have static storage duration, and publishing `expr` last
+    // makes the preceding file/line stores visible to the SIGABRT handler.
+    g_assertion_file.store(file, std::memory_order_relaxed);
+    g_assertion_file_size.store(std::strlen(file), std::memory_order_relaxed);
+    g_assertion_line.store(line, std::memory_order_relaxed);
+    g_assertion_expr_size.store(std::strlen(expr), std::memory_order_relaxed);
+    g_assertion_expr.store(expr, std::memory_order_release);
+}
+
+}  // namespace ckv::term
+
+namespace ckv::detail {
+
+void publish_assertion_failure(const char* expr, const char* file, int line) noexcept {
+    term::publish_assertion_failure_to_session(expr, file, line);
+}
+
+}  // namespace ckv::detail
+
+namespace ckv::term {
+
+PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Capabilities initial_caps,
+                             bool enable_capability_probes)
+    : clock_(clock),
+      output_fd_(output_fd),
       input_fd_(input_fd),
       caps_(initial_caps),
       decoder_(initial_caps),
-      last_size_(size()) {
+      last_size_(size()),
+      capability_probes_enabled_(enable_capability_probes) {
     // Establish the wake channel before touching the terminal.  A failed
     // construction must leave the caller's terminal entirely unchanged;
     // creating the pipe first makes that guarantee hold even when the OS
@@ -216,9 +449,16 @@ PosixTerminal::PosixTerminal(int output_fd, int input_fd, Capabilities initial_c
     CKV_ASSERT(::fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK) == 0);
     self_pipe_read_ = pipe_fds[0];
     self_pipe_write_ = pipe_fds[1];
+    wait_handles_[0] = WaitHandle{WaitHandleKind::PosixFileDescriptor,
+                                  static_cast<std::uintptr_t>(input_fd_)};
+    wait_handles_[1] = WaitHandle{WaitHandleKind::PosixFileDescriptor,
+                                  static_cast<std::uintptr_t>(self_pipe_read_)};
+    wait_handle_count_ = wait_handles_.size();
 
     struct termios original{};
     CKV_ASSERT(::tcgetattr(input_fd_, &original) == 0);
+    struct termios raw = original;
+    ::cfmakeraw(&raw);
 
     // Register BEFORE mutating any OS state (raw mode, alternate
     // screen). If every registry slot is already in use, CKV_ASSERT
@@ -229,23 +469,20 @@ PosixTerminal::PosixTerminal(int output_fd, int input_fd, Capabilities initial_c
     // raw and alternate-screened with no destructor ever running to
     // undo it, breaking the "restoration guaranteed on every exit
     // path" promise for exactly the path meant to guarantee it.
-    session_slot_ = register_session(input_fd_, original, kRestoreSequence);
+    const std::string session_enter = make_session_enter_sequence(caps_, capability_probes_enabled_);
+    const std::string session_restore = make_session_restore_sequence(caps_, capability_probes_enabled_);
+    session_slot_ = register_session(output_fd_, input_fd_, original, raw, session_enter, session_restore);
     CKV_ASSERT(session_slot_ >= 0);
-    install_handlers_once();
+    CKV_ASSERT(retain_session_handlers());
 
-    struct termios raw = original;
-    ::cfmakeraw(&raw);
     CKV_ASSERT(::tcsetattr(input_fd_, TCSANOW, &raw) == 0);
 
-    write_all(output_fd_, kEnterSequence);
+    write_all(output_fd_, session_enter);
+    begin_capability_probes();
 }
 
 PosixTerminal::~PosixTerminal() {
-    write_all(output_fd_, kRestoreSequence);
-    if (session_slot_ >= 0) {
-        ::tcsetattr(input_fd_, TCSANOW, &g_sessions[session_slot_].original_termios);
-        unregister_session(session_slot_);
-    }
+    restore();
     if (self_pipe_read_ >= 0) ::close(self_pipe_read_);
     if (self_pipe_write_ >= 0) ::close(self_pipe_write_);
 }
@@ -256,13 +493,137 @@ Size PosixTerminal::size() const noexcept {
     return Size{ws.ws_col, ws.ws_row};
 }
 
+void PosixTerminal::begin_capability_probes() {
+    if (!capability_probes_enabled_) {
+        configure_decoder_capability_update_policy();
+        synchronize_sgr_mouse_input_policy();
+        return;
+    }
+    // Capability replies carry no request identifier.  A fresh window must
+    // therefore discard any partially accumulated probe evidence from the
+    // preceding one; otherwise a late DECRPM 1016 could be paired with a
+    // future XTWINOPS reply and falsely enable pixel coordinates.
+    decoder_.begin_capability_probe_window(caps_);
+    synchronize_sgr_mouse_input_policy();
+    // Enable mode 1016 for this window before querying it. A prior failed
+    // window resets the mode, so this must happen on every re-probe rather
+    // than only at session construction.
+    if (caps_.mouse_protocol == MouseProtocol::SGR && !caps_.pixel_mouse)
+        write_all(output_fd_, "\x1B[?1016h");
+    write_all(output_fd_, kCapabilityProbeSequence);
+    probe_deadline_nanos_ = clock_.now_nanos() + kCapabilityProbeTimeoutNanos;
+}
+
+void PosixTerminal::configure_decoder_capability_update_policy() noexcept {
+    if (probe_deadline_nanos_ >= 0) {
+        decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptProbeRefinements);
+    } else if (caps_.color_scheme_notifications) {
+        decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptLiveColorSchemeNotifications);
+    } else {
+        decoder_.set_capability_update_policy(CapabilityUpdatePolicy::Reject);
+    }
+}
+
+void PosixTerminal::synchronize_sgr_mouse_input_policy() noexcept {
+    // While mode 1016 is in use but its metric has not been proved, a report's
+    // numbers have no unambiguous interpretation. Consume rather than
+    // delivering a potentially dangerous click at the wrong cell.
+    decoder_.set_sgr_mouse_input_suppressed(capability_probes_enabled_ &&
+                                            caps_.mouse_protocol == MouseProtocol::SGR &&
+                                            !caps_.pixel_mouse);
+}
+
+void PosixTerminal::finish_capability_probes() {
+    probe_deadline_nanos_ = -1;
+    decoder_.set_capabilities(caps_);
+    // If mode 1016 did not become a usable capability, return the terminal to
+    // ordinary SGR cell coordinates before accepting subsequent mouse input.
+    // Keeping the mode enabled would make a late pixel report look like a
+    // large cell coordinate after the probe fence closes.
+    if (caps_.mouse_protocol == MouseProtocol::SGR && !caps_.pixel_mouse)
+        write_all(output_fd_, "\x1B[?1016l");
+    configure_decoder_capability_update_policy();
+    decoder_.set_sgr_mouse_input_suppressed(false);
+    decoder_.require_verified_sixel_geometry(false);
+}
+
+bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
+    if (!capability_probes_enabled_) return false;
+
+    const bool has_pixel_evidence = caps_.cell_pixels.width != 0 || caps_.cell_pixels.height != 0 ||
+                                    caps_.pixel_mouse;
+    const bool has_graphics_evidence = caps_.sixel_graphics || caps_.sixel_color_registers != 0 ||
+                                       caps_.sixel_max_geometry.width != 0 || caps_.sixel_max_geometry.height != 0;
+    if (!has_pixel_evidence && !has_graphics_evidence) return false;
+
+    // A resize can also mean a font or display-scale change. Retaining the
+    // old conversion would turn SGR-pixel coordinates into wrong cells until
+    // XTWINOPS 16 answers. The new probe window must establish both the cell
+    // metric and DECRPM 1016 again; set_capabilities resets the decoder's
+    // separately remembered mode proof for exactly that reason.
+    caps_.cell_pixels = {};
+    caps_.pixel_mouse = false;
+    // XTSMGRAPHICS maximum geometry is the minimum of its graphics limit and
+    // the terminal window (xterm control-sequences reference). Retaining a
+    // runtime result across a resize could therefore emit an image larger
+    // than the newly allowed geometry. Fall back to cells until a fresh
+    // finite geometry reply re-establishes graphics for this window.
+    caps_.sixel_graphics = false;
+    caps_.sixel_color_registers = 0;
+    caps_.sixel_max_geometry = {};
+    decoder_.set_capabilities(caps_);
+    if (has_graphics_evidence) decoder_.require_verified_sixel_geometry(true);
+    return true;
+}
+
 std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
     std::vector<TerminalEvent> events;
+    if (session_slot_ >= 0 &&
+        g_sessions[session_slot_].resumed.exchange(false, std::memory_order_acq_rel)) {
+        invalidate_resize_dependent_capabilities();
+        begin_capability_probes();
+        // A terminal can be resized while this process is stopped. Observe
+        // that instance-local geometry before reporting the resume-triggered
+        // capability change: Application dispatches a whole poll batch before
+        // painting, so the first restored frame then has both the current
+        // size and the renewed presentation policy rather than flashing an
+        // old-sized frame for one step.
+        const Size observed = size();
+        if (observed != last_size_) {
+            last_size_ = observed;
+            events.push_back(TerminalEvent{ResizeEvent{observed}});
+        }
+        events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+        return events;
+    }
+    const auto expire_capability_probes = [this](std::int64_t now_nanos) {
+        if (probe_deadline_nanos_ >= 0 && now_nanos >= probe_deadline_nanos_)
+            finish_capability_probes();
+    };
+    const auto append_decoded = [this, &events, &expire_capability_probes](std::vector<TerminalEvent> decoded,
+                                                                            std::int64_t observed_nanos) {
+        expire_capability_probes(observed_nanos);
+        for (auto& ev : decoded) {
+            if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev)) {
+                // InputDecoder emits only backend-authorized capability
+                // changes, so this state update cannot retroactively make a
+                // stale reply influence later bytes from the same read.
+                caps_ = changed->capabilities;
+                synchronize_sgr_mouse_input_policy();
+                events.push_back(std::move(ev));
+                continue;
+            }
+            events.push_back(std::move(ev));
+        }
+    };
     const auto collect_resize = [this, &events] {
         const Size observed = size();
         if (observed == last_size_) return;
         last_size_ = observed;
+        const bool invalidated = invalidate_resize_dependent_capabilities();
+        begin_capability_probes();
         events.push_back(TerminalEvent{ResizeEvent{observed}});
+        if (invalidated) events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
     };
     // This deliberately compares on every poll rather than consuming a
     // process-global SIGWINCH flag.  Signals carry no PTY identity; a
@@ -271,7 +632,11 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
     if (!events.empty()) return events;
 
     std::array<struct pollfd, 2> fds{{{input_fd_, POLLIN, 0}, {self_pipe_read_, POLLIN, 0}}};
-    const std::int64_t now = monotonic_now_nanos_impl();
+    const std::int64_t now = clock_.now_nanos();
+    expire_capability_probes(now);
+    // The probe window bounds reply acceptance, never the caller's wait.
+    // Waking early merely to notice a missing reply would delay run()'s first
+    // baseline frame — exactly what baseline-first presentation forbids.
     const std::int64_t remaining_ns = deadline_nanos - now;
     const int timeout_ms = remaining_ns <= 0 ? 0 : static_cast<int>(remaining_ns / 1'000'000);
 
@@ -286,19 +651,21 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
             char buf[4096];
             const ssize_t n = ::read(input_fd_, buf, sizeof(buf));
             if (n > 0) {
-                std::vector<TerminalEvent> decoded =
-                    decoder_.feed(std::string_view(buf, static_cast<std::size_t>(n)),
-                                  monotonic_now_nanos_impl());
-                for (auto& ev : decoded) {
-                    if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev))
-                        caps_ = changed->capabilities;
-                    events.push_back(std::move(ev));
-                }
+                const std::int64_t observed_nanos = clock_.now_nanos();
+                // Admission is a decoding policy, not a post-processing
+                // filter. Select the policy at the instant these bytes were
+                // observed, before InputDecoder sees the first sequence, so
+                // a late reply cannot influence a following event in this
+                // same read.
+                expire_capability_probes(observed_nanos);
+                append_decoded(decoder_.feed(std::string_view(buf, static_cast<std::size_t>(n)), observed_nanos),
+                               observed_nanos);
             }
         }
     } else if (rc == 0) {
-        std::vector<TerminalEvent> decoded = decoder_.poll_timeout(monotonic_now_nanos_impl());
-        for (auto& ev : decoded) events.push_back(std::move(ev));
+        const std::int64_t observed_nanos = clock_.now_nanos();
+        expire_capability_probes(observed_nanos);
+        append_decoded(decoder_.poll_timeout(observed_nanos), observed_nanos);
     } else if (errno == EINTR) {
         // A SIGWINCH may have arrived between the first observation and
         // poll(). Observe again so this very call reports its own session's
@@ -306,6 +673,33 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
         collect_resize();
     }
     return events;
+}
+
+void PosixTerminal::restore() noexcept {
+    if (session_slot_ < 0) return;
+    SessionRecord& session = g_sessions[session_slot_];
+    write_all(output_fd_, std::string_view(session.restore_bytes, session.restore_len));
+    ::tcsetattr(input_fd_, TCSANOW, &session.original_termios);
+    unregister_session(session_slot_);
+    session_slot_ = -1;
+    wait_handle_count_ = 0;
+}
+
+void PosixTerminal::write_diagnostic_after_restore(std::string_view message) noexcept {
+    std::size_t written = 0;
+    while (written < message.size()) {
+        const ssize_t result = ::write(STDERR_FILENO, message.data() + written, message.size() - written);
+        if (result <= 0) return;
+        written += static_cast<std::size_t>(result);
+    }
+}
+
+[[noreturn]] void PosixTerminal::terminate_after_callback_failure() noexcept {
+    // This is handler-visible D-024 state.  bool is statically required to
+    // be lock-free above, and the fixed diagnostic lives for the process, so
+    // the fatal handler needs neither allocation nor non-signal-safe work.
+    g_callback_failure.store(true, std::memory_order_release);
+    std::abort();
 }
 
 void PosixTerminal::write(std::string_view bytes) { write_all(output_fd_, bytes); }
@@ -325,7 +719,5 @@ void PosixTerminal::wake() noexcept {
     const char byte = 0;
     ::write(self_pipe_write_, &byte, 1);
 }
-
-std::int64_t PosixTerminal::monotonic_now_nanos() noexcept { return monotonic_now_nanos_impl(); }
 
 }  // namespace ckv::term

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // The library's only filesystem access (ARCHITECTURE.md §5 "Platform
-// services", D-025): file dialogs enumerate through this interface,
+// services", D-039): file dialogs enumerate through this interface,
 // never touch the real filesystem directly, and so golden-test
 // headlessly against a scripted in-memory tree. Mirrors Clock's own
 // injected-impurity pattern (core/clock.hpp) — production code

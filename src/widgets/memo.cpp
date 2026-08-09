@@ -154,6 +154,16 @@ void Memo::on_resized() {
 }
 
 bool Memo::on_key(const KeyEvent& event) {
+    // Terminals report ordinary typed characters as Key::Char events, whereas
+    // IMEs and bracketed paste arrive as TextEvent. Keep both ingress paths at
+    // the editable-control boundary so insertion has one implementation.
+    // Alt/Ctrl/Super characters remain chords for command routing; Shift is
+    // part of normal text production.
+    if (event.chord.key == Key::Char && !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+        !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super))
+        return on_text(TextEvent{event.chord.text, false});
+
     const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
     switch (event.chord.key) {
         case Key::Left: {

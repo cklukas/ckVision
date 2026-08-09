@@ -44,7 +44,7 @@ are lexical guards, not a substitute for this review.
 - Determinism: no wall-clock reads and no locale in library code; no
   environment, filesystem, or clock access in core/scene/ui/widgets —
   platform impurities enter only through injected interfaces and
-  explicit backend construction (D-025); identical inputs must yield
+  explicit backend construction (D-039); identical inputs must yield
   byte-identical frames on every platform.
 - The performance charter (ARCHITECTURE.md §8) is part of correctness:
   budget regressions are failures.

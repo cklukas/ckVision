@@ -90,6 +90,16 @@ CK_TEST(destroying_a_parent_destroys_its_children_deterministically) {
     CK_CHECK(destroyed == 2);
 }
 
+CK_TEST(a_views_lifetime_token_expires_with_that_specific_view_instance) {
+    std::weak_ptr<void> token;
+    {
+        auto view = std::make_unique<View>();
+        token = view->lifetime_token();
+        CK_CHECK(!token.expired());
+    }
+    CK_CHECK(token.expired());
+}
+
 // --- Geometry ----------------------------------------------------------
 
 CK_TEST(absolute_bounds_of_a_root_view_equals_its_own_bounds) {
@@ -333,6 +343,46 @@ CK_TEST(add_child_propagates_the_parents_existing_context_to_the_new_child) {
     auto* child = static_cast<RecordingView*>(root.add_child(std::make_unique<RecordingView>()));
     CK_CHECK(child->context().valid());
     CK_CHECK(child->attach_count == 1);
+}
+
+CK_TEST(on_attached_may_detach_and_destroy_the_new_child_without_leaving_a_dangling_observer) {
+    struct SelfDestroyingOnAttach final : View {
+        void on_attached() override {
+            std::unique_ptr<View> detached = parent()->remove_child(this);
+            CK_CHECK(detached.get() == this);
+            detached.reset();
+        }
+    };
+
+    ContextFixture f;
+    View root;
+    root.set_context(f.ctx);
+
+    CK_CHECK(root.add_child(std::make_unique<SelfDestroyingOnAttach>()) == nullptr);
+    CK_CHECK(root.children().empty());
+}
+
+CK_TEST(on_attached_may_destroy_its_own_parent_without_add_child_reusing_the_dead_tree) {
+    struct DestroyingParentOnAttach final : View {
+        void on_attached() override {
+            View* const owner = parent();
+            View* const root = owner->parent();
+            std::unique_ptr<View> detached = root->remove_child(owner);
+            CK_CHECK(detached.get() == owner);
+            detached.reset();
+        }
+    };
+
+    ContextFixture f;
+    View root;
+    root.set_context(f.ctx);
+    View* const owner = root.add_child(std::make_unique<View>());
+
+    // The child destroys `owner` while owner->add_child() is in its context
+    // propagation path. A safe attachment operation reports no observer and
+    // leaves root with no departed subtree.
+    CK_CHECK(owner->add_child(std::make_unique<DestroyingParentOnAttach>()) == nullptr);
+    CK_CHECK(root.children().empty());
 }
 
 CK_TEST(add_child_before_the_parent_has_a_context_leaves_the_child_unattached) {
