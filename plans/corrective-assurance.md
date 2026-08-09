@@ -52,8 +52,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 8 | WP-30 — Unicode conformance and grapheme-safe clipping | 3–5 pw | **Implementation complete — gate pending** | WP-29 | M1; cross-widget Unicode acceptance |
 | 9 | WP-31 — Damage, paint provenance, backing stores, and enforceable budgets | 4–6 pw | **Implementation complete — gate pending** | WP-30 | D-010/D-036/D-037; M2/M4/M5 scene and performance exits |
 | 10 | WP-32 — Portable, isolated test and CI infrastructure | 2–3 pw | **Implementation complete — gate pending** | WP-31 | M0/M3/M4 cross-platform gates |
-| 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | Blocked (partial landing recorded below) | WP-32 | M3 headless/raster acceptance; screenshot gap |
-| 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Blocked | WP-32A | M3 fuzz exit; verification standard |
+| 11 | WP-32A — Dual-profile graphics virtual terminal and visual captures | 2–4 pw | **Implementation complete — gate pending** | WP-32 | M3 headless/raster acceptance; screenshot gap |
+| 12 | WP-33 — Fuzzing and sanitizer program | 1–2 pw | Ready | WP-32A | M3 fuzz exit; verification standard |
 | 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | Blocked | WP-33 | M5/M6 catalog gaps |
 | 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | Blocked | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | Blocked | WP-34B | M6 remaining catalog gaps |
@@ -1247,10 +1247,46 @@ initial green tests:
 - split raw-byte, symbolic-scene, and decoded-visual checks into independently
   reported categories under WP-32, publish their artifact inventory in CI, and
   prove the required macOS/Linux/Windows plus sanitizer matrix;
-- review the generated semantic visual diff and only then promote this package
-  according to D-034. Until every Acceptance item below holds, keep WP-32A
-  `Blocked`/later `In progress`, never `Done` or `Implementation complete —
-  gate pending`.
+- review the generated semantic visual diff before D-034 promotion. Once the
+  package-specific implementation and evidence below hold, use
+  `Implementation complete — gate pending`; WP-33, WP-32/WP-37, and WP-38 own
+  the remaining fuzz, hosted-matrix, and final-promotion evidence.
+
+**Implementation update (2026-08-09).** WP-32A is now in progress with the
+previously missing local implementation and executable evidence landed:
+
+- the virtual display models ED/EL, SU/SD, synchronized-output visibility,
+  wide-cell-aware erase, opaque Sixel overwrite, resize clearing, clipping,
+  multiple rasters, and malformed/repeat/CSI-limit rejection;
+- Presenter tracks active raster coverage across frames, forcing the old and
+  new coverage to repaint when a raster moves, changes, or disappears so the
+  exact terminal bytes clear stale virtual pixels;
+- hash-pinned pixel-plane fixtures cover hand-authored protocol overwrite,
+  scroll, clipping, multiple-raster, and resize cases, while an independent
+  Presenter-to-virtual-display fixture covers proportional partial occlusion;
+- paired Gallery Sixel/NoGraphics visual fixtures, byte-stream corruption,
+  capability restoration, and the raw-byte / symbolic-scene / decoded-visual
+  CTest and CI categories are executable; and
+- the accepted VT/Sixel subset and parser bounds are reference-documented.
+
+This is not an acceptance or milestone-closure claim. WP-33 still owns the
+fuzz corpus, WP-32/WP-37 own the full hosted cross-platform evidence, and
+D-034 promotion still requires the generated semantic visual-diff review.
+
+**Evidence record (2026-08-09).** The full local CTest matrix passed **92/92**:
+13 golden, 5 decoded-visual, 1 raw-byte, 1 symbolic-scene, 4 PTY, 1 benchmark,
+and 6 platform-labelled suites. `suite_test_virtual_display`,
+`suite_test_virtual_display_visual_golden`, `suite_test_presenter`, and
+`suite_test_gallery_visual_golden` cover the new state, protocol, raw-byte,
+paired-profile, corruption, documentation-SVG, and re-presentation contracts.
+The focused visual paths also passed macOS Release, ASan, and TSan builds; the
+examples-disabled test configuration builds without Gallery/docgen test
+dependencies. Generated Sixel and NoGraphics Gallery SVGs were rendered and
+reviewed: the first contains the expected gradient raster and the second the
+mandatory `[image]` cell fallback with no raster plane. `layer_check`,
+`provenance_check`, their self-tests, the budget gate, and `git diff --check`
+were green. This record establishes package-specific implementation evidence;
+it does not substitute for the remaining owners' global gates.
 
 **Work.**
 

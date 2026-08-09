@@ -392,6 +392,27 @@ CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
     CK_CHECK(move_pos < dcs_pos);
 }
 
+CK_TEST(moving_an_active_raster_repaints_its_old_cells_and_removes_stale_virtual_pixels) {
+    HeadlessTerminal term(Size{4, 1}, headless_sixel_profile());
+    Presenter presenter(term);
+    Surface surface = make_surface(4, 1, " ");
+    auto image = std::make_shared<Image>(9, 18);
+    for (int y = 0; y < image->height(); ++y)
+        for (int x = 0; x < image->width(); ++x) image->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
+
+    presenter.present(surface.view(), CursorState{},
+                      {{1, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, image, true}});
+    CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 255);
+    term.clear_written();
+
+    presenter.present(surface.view(), CursorState{},
+                      {{1, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, image, true}});
+    CK_CHECK(!term.written_bytes().empty());
+    CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 0);
+    CK_CHECK(term.display().raster_plane().pixel(18, 0).r == 255);
+    CK_CHECK(term.display().raster_plane().pixel(18, 0).a == 255);
+}
+
 // --- OSC safety ------------------------------------------------------------------
 
 CK_TEST(sanitize_osc_text_strips_embedded_terminator_bytes) {

@@ -29,9 +29,13 @@ public:
         return Size{size_.width * cell_pixels_.width, size_.height * cell_pixels_.height};
     }
 
-    FrameView frame() const noexcept { return FrameView(cells_.data(), size_); }
-    const Image& raster_plane() const noexcept { return raster_plane_; }
-    CursorState cursor() const noexcept { return cursor_; }
+    FrameView frame() const noexcept {
+        return FrameView((synchronized_output_ ? visible_cells_ : cells_).data(), size_);
+    }
+    const Image& raster_plane() const noexcept {
+        return synchronized_output_ ? visible_raster_plane_ : raster_plane_;
+    }
+    CursorState cursor() const noexcept { return synchronized_output_ ? visible_cursor_ : cursor_; }
 
     bool has_raster_pixels() const noexcept;
     bool valid() const noexcept { return error_.empty(); }
@@ -74,8 +78,14 @@ private:
     bool decode_sixel(std::string_view body);
     bool apply_sgr(const std::vector<int>& params);
     void put_grapheme(std::string_view grapheme);
+    void erase_cells(int left, int top, int right, int bottom) noexcept;
+    void scroll_rows(int rows) noexcept;
     void clear_cell_pixels(int cell_x, int cell_y, int cell_width = 1) noexcept;
+    void clear_pixel_rect(int left, int top, int right, int bottom) noexcept;
     void plot_sixel_pixel(int x, int y, Rgba color) noexcept;
+    void begin_synchronized_output();
+    void end_synchronized_output() noexcept;
+    void discard_synchronized_snapshot() noexcept;
 
     Size size_;
     Size cell_pixels_;
@@ -83,6 +93,10 @@ private:
     Image raster_plane_;
     CursorState cursor_;
     Style style_;
+    bool synchronized_output_ = false;
+    std::vector<Cell> visible_cells_;
+    Image visible_raster_plane_;
+    CursorState visible_cursor_;
 
     ParseState state_ = ParseState::Ground;
     std::string text_buffer_;

@@ -79,6 +79,32 @@ the encoder-produced pixel extent must be fully opaque. The symbolic dump
 remains intentionally diff-friendly; the decoded visual capture tests the
 protocol path it cannot.
 
+## Virtual-display protocol subset
+
+The virtual display is an intentionally bounded test decoder, not a general
+terminal emulator. It accepts only output forms that `Presenter` is permitted
+to emit: ECMA-48 CUP (`CSI H` and `CSI f`), SGR (`CSI m`), ED/EL (`CSI J` and
+`CSI K`), SU/SD (`CSI S` and `CSI T`), and private cursor and synchronized
+output modes (`CSI ?25 h/l`, `CSI ?2026 h/l`). It handles printable UTF-8
+graphemes and rejects every other C0, ESC, CSI, and DCS form.
+
+Its DCS form is published Sixel only: numeric DCS parameters with background
+mode 0 or 1; color-register selection and HLS-free RGB definition (`#`);
+raster attributes (`"`); repeat (`!`); carriage return (`$`); new sixel row
+(`-`); and data bytes `?` through `~`. Raster pixels are clipped to the fixed
+terminal pixel plane. Background mode 0 clears the declared raster extent
+before painting, so a smaller replacement cannot leave stale pixels. Text,
+erase, scroll, resize, and re-presentation clear or move their corresponding
+pixel coverage deterministically.
+
+Parser limits are part of the capture contract: CSI input is limited to 256
+bytes, text and DCS input to 16 MiB, and a Sixel repeat to 1,000,000 columns.
+An incomplete, malformed, unsupported, or over-limit stream invalidates the
+capture rather than producing a plausible partial image. WP-33 owns fuzzing
+this incremental parser; the hand-authored fixtures in
+`tests/test_virtual_display*.cpp` cover its accepted subset and rejection
+boundaries before that fuzz corpus exists.
+
 ## Example
 
 ```

@@ -109,9 +109,10 @@ VirtualDisplay::VirtualDisplay(Size cells, Size cell_pixels)
 }
 
 bool VirtualDisplay::has_raster_pixels() const noexcept {
-    for (int y = 0; y < raster_plane_.height(); ++y)
-        for (int x = 0; x < raster_plane_.width(); ++x)
-            if (raster_plane_.pixel(x, y).a != 0) return true;
+    const Image& plane = raster_plane();
+    for (int y = 0; y < plane.height(); ++y)
+        for (int x = 0; x < plane.width(); ++x)
+            if (plane.pixel(x, y).a != 0) return true;
     return false;
 }
 
@@ -244,6 +245,51 @@ bool VirtualDisplay::handle_csi(char final_byte) {
         return apply_sgr(params);
     }
 
+    if (final_byte == 'J' || final_byte == 'K') {
+        bool ok = false;
+        const std::vector<int> params = parse_csi_params(control_buffer_, ok);
+        if (!ok || params.size() > 1) {
+            fail("invalid erase CSI sequence");
+            return false;
+        }
+        const int mode = params.empty() ? 0 : params[0];
+        if (mode < 0 || mode > (final_byte == 'J' ? 3 : 2)) {
+            fail("unsupported erase CSI mode");
+            return false;
+        }
+        if (final_byte == 'J') {
+            if (mode == 0)
+                erase_cells(cursor_.position.x, cursor_.position.y, size_.width, size_.height);
+            else if (mode == 1)
+                erase_cells(0, 0, cursor_.position.x + 1, cursor_.position.y + 1);
+            else
+                erase_cells(0, 0, size_.width, size_.height);
+        } else if (mode == 0) {
+            erase_cells(cursor_.position.x, cursor_.position.y, size_.width, cursor_.position.y + 1);
+        } else if (mode == 1) {
+            erase_cells(0, cursor_.position.y, cursor_.position.x + 1, cursor_.position.y + 1);
+        } else {
+            erase_cells(0, cursor_.position.y, size_.width, cursor_.position.y + 1);
+        }
+        return true;
+    }
+
+    if (final_byte == 'S' || final_byte == 'T') {
+        bool ok = false;
+        const std::vector<int> params = parse_csi_params(control_buffer_, ok);
+        if (!ok || params.size() > 1) {
+            fail("invalid scroll CSI sequence");
+            return false;
+        }
+        const int count = params.empty() || params[0] == 0 ? 1 : params[0];
+        if (count < 0) {
+            fail("invalid scroll count");
+            return false;
+        }
+        scroll_rows(final_byte == 'S' ? count : -count);
+        return true;
+    }
+
     if (final_byte == 'h' || final_byte == 'l') {
         if (control_buffer_.empty() || control_buffer_[0] != '?') {
             fail("unsupported non-private mode sequence");
@@ -255,8 +301,14 @@ bool VirtualDisplay::handle_csi(char final_byte) {
             fail("unsupported private mode sequence");
             return false;
         }
-        if (params[0] == 25) cursor_.visible = (final_byte == 'h');
-        return true;  // synchronized-output mode has no partial-frame exposure here
+        if (params[0] == 25) {
+            cursor_.visible = (final_byte == 'h');
+        } else if (final_byte == 'h') {
+            begin_synchronized_output();
+        } else {
+            end_synchronized_output();
+        }
+        return true;
     }
 
     fail("unsupported CSI final byte in virtual display");
@@ -408,12 +460,71 @@ void VirtualDisplay::put_grapheme(std::string_view grapheme) {
 }
 
 void VirtualDisplay::clear_cell_pixels(int cell_x, int cell_y, int cell_width) noexcept {
-    const int start_x = std::max(0, cell_x * cell_pixels_.width);
-    const int start_y = std::max(0, cell_y * cell_pixels_.height);
-    const int end_x = std::min(raster_plane_.width(), (cell_x + cell_width) * cell_pixels_.width);
-    const int end_y = std::min(raster_plane_.height(), (cell_y + 1) * cell_pixels_.height);
+    clear_pixel_rect(cell_x * cell_pixels_.width, cell_y * cell_pixels_.height,
+                     (cell_x + cell_width) * cell_pixels_.width, (cell_y + 1) * cell_pixels_.height);
+}
+
+void VirtualDisplay::clear_pixel_rect(int left, int top, int right, int bottom) noexcept {
+    const int start_x = std::clamp(left, 0, raster_plane_.width());
+    const int start_y = std::clamp(top, 0, raster_plane_.height());
+    const int end_x = std::clamp(right, 0, raster_plane_.width());
+    const int end_y = std::clamp(bottom, 0, raster_plane_.height());
     for (int y = start_y; y < end_y; ++y)
         for (int x = start_x; x < end_x; ++x) raster_plane_.set_pixel(x, y, Image::Rgba{0, 0, 0, 0});
+}
+
+void VirtualDisplay::erase_cells(int left, int top, int right, int bottom) noexcept {
+    left = std::clamp(left, 0, size_.width);
+    top = std::clamp(top, 0, size_.height);
+    right = std::clamp(right, 0, size_.width);
+    bottom = std::clamp(bottom, 0, size_.height);
+    if (left >= right || top >= bottom) return;
+
+    for (int y = top; y < bottom; ++y) {
+        int row_left = left;
+        int row_right = right;
+        if (row_left > 0 && cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                                    static_cast<std::size_t>(row_left)]
+                                .is_continuation())
+            --row_left;
+        if (row_right < size_.width &&
+            cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                   static_cast<std::size_t>(row_right)]
+                .is_continuation())
+            ++row_right;
+        for (int x = row_left; x < row_right; ++x)
+            cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                   static_cast<std::size_t>(x)] =
+                Cell::from_grapheme(" ", style_);
+        clear_cell_pixels(row_left, y, row_right - row_left);
+    }
+}
+
+void VirtualDisplay::scroll_rows(int rows) noexcept {
+    if (rows == 0 || size_.height == 0) return;
+    const int shift = std::min(std::abs(rows), size_.height);
+    std::vector<Cell> next(static_cast<std::size_t>(size_.width) * static_cast<std::size_t>(size_.height),
+                           Cell::from_grapheme(" ", style_));
+    Image next_raster(raster_plane_.width(), raster_plane_.height());
+    const int pixel_shift = shift * cell_pixels_.height;
+    for (int y = 0; y < size_.height; ++y) {
+        const int source_y = rows > 0 ? y + shift : y - shift;
+        if (source_y < 0 || source_y >= size_.height) continue;
+        for (int x = 0; x < size_.width; ++x)
+            next[static_cast<std::size_t>(y) * static_cast<std::size_t>(size_.width) +
+                 static_cast<std::size_t>(x)] =
+                cells_[static_cast<std::size_t>(source_y) * static_cast<std::size_t>(size_.width) +
+                       static_cast<std::size_t>(x)];
+        const int source_pixel_y = rows > 0 ? y * cell_pixels_.height + pixel_shift
+                                            : y * cell_pixels_.height - pixel_shift;
+        if (source_pixel_y < 0 || source_pixel_y + cell_pixels_.height > raster_plane_.height()) continue;
+        for (int py = 0; py < cell_pixels_.height; ++py)
+            for (int px = 0; px < raster_plane_.width(); ++px)
+                next_raster.set_pixel(px, y * cell_pixels_.height + py,
+                                      raster_plane_.pixel(px, source_pixel_y + py));
+    }
+    cells_ = std::move(next);
+    raster_plane_ = std::move(next_raster);
 }
 
 void VirtualDisplay::plot_sixel_pixel(int x, int y, Rgba color) noexcept {
@@ -437,9 +548,23 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
         }
     }
 
+    bool params_ok = false;
+    const std::vector<int> dcs_params = parse_csi_params(body.substr(0, q), params_ok);
+    if (!params_ok || dcs_params.size() > 3) {
+        fail("invalid Sixel DCS parameters");
+        return false;
+    }
+    const int background_mode = dcs_params.size() > 1 ? dcs_params[1] : 0;
+    if (background_mode != 0 && background_mode != 1) {
+        fail("unsupported Sixel background mode");
+        return false;
+    }
+
     int x = 0;
     int y = 0;
     int selected_color = 0;
+    int raster_width = 0;
+    int raster_height = 0;
     std::size_t pos = q + 1;
     while (pos < body.size()) {
         const unsigned char c = static_cast<unsigned char>(body[pos]);
@@ -519,16 +644,29 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
         }
         if (c == '"') {
             ++pos;
-            int fields = 0;
-            while (pos < body.size() && fields < 4) {
-                int ignored = 0;
-                if (!parse_unsigned(body, pos, ignored)) {
+            std::array<int, 4> fields{};
+            int field_count = 0;
+            while (pos < body.size() && field_count < 4) {
+                if (!parse_unsigned(body, pos, fields[static_cast<std::size_t>(field_count)])) {
                     fail("invalid Sixel raster attribute");
                     return false;
                 }
-                ++fields;
+                ++field_count;
                 if (pos >= body.size() || body[pos] != ';') break;
                 ++pos;
+            }
+            if (field_count == 4) {
+                raster_width = fields[2];
+                raster_height = fields[3];
+                if (raster_width <= 0 || raster_height <= 0) {
+                    fail("invalid Sixel raster dimensions");
+                    return false;
+                }
+                if (background_mode == 0)
+                    clear_pixel_rect(cursor_.position.x * cell_pixels_.width,
+                                     cursor_.position.y * cell_pixels_.height,
+                                     cursor_.position.x * cell_pixels_.width + raster_width,
+                                     cursor_.position.y * cell_pixels_.height + raster_height);
             }
             continue;
         }
@@ -541,12 +679,14 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
 
 void VirtualDisplay::resize(Size cells) {
     size_ = Size{std::max(0, cells.width), std::max(0, cells.height)};
+    discard_synchronized_snapshot();
     clear();
 }
 
 void VirtualDisplay::set_cell_pixels(Size cell_pixels) {
     const Size normalized{std::max(1, cell_pixels.width), std::max(1, cell_pixels.height)};
     if (normalized == cell_pixels_) return;
+    discard_synchronized_snapshot();
     cell_pixels_ = normalized;
     raster_plane_ = Image(size_.width * cell_pixels_.width, size_.height * cell_pixels_.height);
 }
@@ -563,6 +703,27 @@ void VirtualDisplay::clear() {
     error_.clear();
     sixel_palette_.fill(Rgba{});
     sixel_palette_defined_.fill(false);
+    discard_synchronized_snapshot();
+}
+
+void VirtualDisplay::begin_synchronized_output() {
+    if (synchronized_output_) return;
+    visible_cells_ = cells_;
+    visible_raster_plane_ = raster_plane_;
+    visible_cursor_ = cursor_;
+    synchronized_output_ = true;
+}
+
+void VirtualDisplay::end_synchronized_output() noexcept {
+    if (!synchronized_output_) return;
+    discard_synchronized_snapshot();
+}
+
+void VirtualDisplay::discard_synchronized_snapshot() noexcept {
+    synchronized_output_ = false;
+    visible_cells_.clear();
+    visible_raster_plane_ = Image{};
+    visible_cursor_ = CursorState{};
 }
 
 }  // namespace ckv::term

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -46,21 +47,35 @@ public:
     std::size_t last_bytes_emitted() const noexcept { return last_bytes_emitted_; }
 
 private:
+    struct ActiveRaster {
+        RasterSlice slice;
+        std::uint64_t fingerprint = 0;
+    };
+
     Cell presentation_cell(FrameView frame, Point p,
-                           const std::vector<RasterSlice>& rasters) const;
+                           const std::vector<ActiveRaster>& rasters) const;
     bool can_emit_raster_slice(const RasterSlice& slice) const noexcept;
-    void render_frame(FrameView frame, const std::vector<RasterSlice>& rasters, std::string& out);
+    void render_frame(FrameView frame, const std::vector<ActiveRaster>& rasters,
+                      bool raster_coverage_changed, std::string& out);
     bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
     void emit_style(std::string& out, const Style& style) const;
-    void emit_raster_slices(std::string& out, FrameView frame,
-                            const std::vector<RasterSlice>& rasters) const;
+    void emit_raster_slices(std::string& out, FrameView frame, const std::vector<ActiveRaster>& rasters) const;
+    static std::uint64_t image_fingerprint(const Image& image) noexcept;
+    static bool same_rasters(const std::vector<ActiveRaster>& lhs,
+                             const std::vector<ActiveRaster>& rhs) noexcept;
+    bool raster_coverage_contains(Point point, const std::vector<ActiveRaster>& rasters) const noexcept;
 
     Terminal& terminal_;
     std::vector<Cell> previous_cells_;
     std::string output_buffer_;
     Size previous_size_;
     std::optional<CursorState> previous_cursor_;
+    // Reused scratch storage avoids repeated allocation for raster-state
+    // tracking while retaining the previous frame's coverage for stale-pixel
+    // removal.
+    std::vector<ActiveRaster> active_rasters_;
+    std::vector<ActiveRaster> previous_active_rasters_;
     bool force_full_ = true;
     std::size_t last_bytes_emitted_ = 0;
 };

@@ -65,6 +65,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_utf8.cpp
     test_version.cpp
     test_virtual_display.cpp
+    test_virtual_display_visual_golden.cpp
     test_view.cpp
     test_window_activation_golden.cpp
     test_widgets.cpp
@@ -99,8 +100,12 @@ endif()
 # but a build config could disable it) — the gallery smoke test is
 # additive, not required for the rest of the suite to be meaningful.
 if(TARGET gallery_app)
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_gallery_smoke.cpp)
-    target_sources(cvision_tests PRIVATE test_gallery_smoke.cpp)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES
+        test_gallery_smoke.cpp
+        test_gallery_visual_golden.cpp)
+    target_sources(cvision_tests PRIVATE
+        test_gallery_smoke.cpp
+        test_gallery_visual_golden.cpp)
     target_link_libraries(cvision_tests PRIVATE gallery_app)
 endif()
 
@@ -151,8 +156,20 @@ foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     set(test_labels "unit;portable")
     if(test_source MATCHES "golden" OR test_source STREQUAL "test_frame_svg.cpp")
         set(test_labels "golden;portable")
+        if(test_source STREQUAL "test_gallery_visual_golden.cpp" OR
+           test_source STREQUAL "test_virtual_display_visual_golden.cpp")
+            list(APPEND test_labels visual)
+        endif()
     elseif(test_source MATCHES "smoke")
         set(test_labels "script;portable")
+    endif()
+    if(test_source STREQUAL "test_presenter.cpp")
+        list(APPEND test_labels raw-byte)
+    elseif(test_source STREQUAL "test_golden_capture.cpp")
+        list(APPEND test_labels symbolic-scene)
+    elseif(test_source STREQUAL "test_virtual_display.cpp" OR
+           test_source STREQUAL "test_virtual_display_visual_golden.cpp")
+        list(APPEND test_labels visual-protocol)
     endif()
     ckvision_add_test_suite(${test_source} "${test_labels}")
 endforeach()

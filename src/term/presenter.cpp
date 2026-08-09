@@ -166,17 +166,15 @@ bool Presenter::can_emit_raster_slice(const RasterSlice& slice) const noexcept {
 }
 
 Cell Presenter::presentation_cell(FrameView frame, Point p,
-                                  const std::vector<RasterSlice>& rasters) const {
+                                  const std::vector<ActiveRaster>& rasters) const {
     const Cell& source = frame.at(p);
-    if (terminal_.capabilities().sixel_graphics) {
-        for (const RasterSlice& slice : rasters) {
-            if (can_emit_raster_slice(slice) && slice.visible_rect.contains(p)) {
-                // The fallback remains mandatory scene content, but it must
-                // not be emitted beneath an active opaque Sixel image. Keep
-                // its style so writing this blank also establishes the
-                // surrounding panel/window background before the DCS.
-                return Cell::from_grapheme(" ", source.style());
-            }
+    for (const ActiveRaster& raster : rasters) {
+        if (raster.slice.visible_rect.contains(p)) {
+            // The fallback remains mandatory scene content, but it must not
+            // be emitted beneath an active opaque Sixel image. Keep its
+            // style so writing this blank also establishes the surrounding
+            // panel/window background before the DCS.
+            return Cell::from_grapheme(" ", source.style());
         }
     }
     return source;
@@ -198,8 +196,8 @@ void Presenter::emit_cursor_move(std::string& out, int x, int y) const {
     out += 'H';
 }
 
-void Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& rasters,
-                             std::string& out) {
+void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& rasters,
+                             bool raster_coverage_changed, std::string& out) {
     const Size size = frame.size();
     const ColorDepth depth = terminal_.capabilities().color_depth;
 
@@ -211,7 +209,11 @@ void Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& ra
         int x = 0;
         while (x < size.width) {
             const Cell first = presentation_cell(frame, Point{x, y}, rasters);
-            if (!cell_changed(first, size, Point{x, y})) {
+            const Point point{x, y};
+            const bool raster_dirty = raster_coverage_changed &&
+                                      (raster_coverage_contains(point, rasters) ||
+                                       raster_coverage_contains(point, previous_active_rasters_));
+            if (!raster_dirty && !cell_changed(first, size, point)) {
                 ++x;
                 continue;
             }
@@ -230,7 +232,11 @@ void Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& ra
                     ++run_end;
                     continue;
                 }
-                if (run_end != x && !cell_changed(c, size, Point{run_end, y})) break;
+                const Point run_point{run_end, y};
+                const bool run_raster_dirty = raster_coverage_changed &&
+                                              (raster_coverage_contains(run_point, rasters) ||
+                                               raster_coverage_contains(run_point, previous_active_rasters_));
+                if (run_end != x && !run_raster_dirty && !cell_changed(c, size, run_point)) break;
                 const bool this_unsafe = is_width_unsafe(c.grapheme());
                 ++run_end;
                 if (this_unsafe) {
@@ -272,13 +278,11 @@ void Presenter::render_frame(FrameView frame, const std::vector<RasterSlice>& ra
 }
 
 void Presenter::emit_raster_slices(std::string& out, FrameView frame,
-                                   const std::vector<RasterSlice>& rasters) const {
+                                   const std::vector<ActiveRaster>& rasters) const {
     // No graphics capability: the fallback cells the cell-diff pass
     // already rendered are the whole story — nothing more to emit.
-    if (!terminal_.capabilities().sixel_graphics) return;
-
-    for (const RasterSlice& slice : rasters) {
-        if (!can_emit_raster_slice(slice)) continue;
+    for (const ActiveRaster& active : rasters) {
+        const RasterSlice& slice = active.slice;
         const Rect& anchor = slice.full_anchor;
         if (anchor.width <= 0 || anchor.height <= 0) continue;
         const Image& image = *slice.image;
@@ -316,12 +320,50 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
     }
 }
 
+std::uint64_t Presenter::image_fingerprint(const Image& image) noexcept {
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    constexpr std::uint64_t prime = 0x100000001b3ULL;
+    const std::size_t bytes = static_cast<std::size_t>(image.stride()) * static_cast<std::size_t>(image.height());
+    for (std::size_t index = 0; index < bytes; ++index) {
+        hash ^= image.data()[index];
+        hash *= prime;
+    }
+    return hash;
+}
+
+bool Presenter::same_rasters(const std::vector<ActiveRaster>& lhs,
+                             const std::vector<ActiveRaster>& rhs) noexcept {
+    if (lhs.size() != rhs.size()) return false;
+    for (std::size_t index = 0; index < lhs.size(); ++index) {
+        const RasterSlice& a = lhs[index].slice;
+        const RasterSlice& b = rhs[index].slice;
+        if (a.id != b.id || !(a.visible_rect == b.visible_rect) || !(a.full_anchor == b.full_anchor) ||
+            a.image.get() != b.image.get() || lhs[index].fingerprint != rhs[index].fingerprint)
+            return false;
+    }
+    return true;
+}
+
+bool Presenter::raster_coverage_contains(Point point, const std::vector<ActiveRaster>& rasters) const noexcept {
+    for (const ActiveRaster& raster : rasters)
+        if (raster.slice.visible_rect.contains(point)) return true;
+    return false;
+}
+
 void Presenter::present(FrameView frame, CursorState cursor,
                          const std::vector<RasterSlice>& rasters) {
+    active_rasters_.clear();
+    if (active_rasters_.capacity() < rasters.size()) active_rasters_.reserve(rasters.size());
+    for (const RasterSlice& slice : rasters) {
+        if (!can_emit_raster_slice(slice)) continue;
+        active_rasters_.push_back(ActiveRaster{slice, image_fingerprint(*slice.image)});
+    }
+    const bool raster_coverage_changed = !same_rasters(active_rasters_, previous_active_rasters_);
+
     std::string& out = output_buffer_;
     out.clear();
-    render_frame(frame, rasters, out);
-    emit_raster_slices(out, frame, rasters);
+    render_frame(frame, active_rasters_, raster_coverage_changed, out);
+    emit_raster_slices(out, frame, active_rasters_);
 
     if (force_full_ || !previous_cursor_ || cursor != *previous_cursor_) {
         if (cursor.visible) {
@@ -349,9 +391,12 @@ void Presenter::present(FrameView frame, CursorState cursor,
         for (int x = 0; x < frame.size().width; ++x)
             previous_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.size().width) +
                              static_cast<std::size_t>(x)] =
-                presentation_cell(frame, Point{x, y}, rasters);
+                             presentation_cell(frame, Point{x, y}, active_rasters_);
     previous_size_ = frame.size();
     previous_cursor_ = cursor;
+    if (previous_active_rasters_.capacity() < active_rasters_.size())
+        previous_active_rasters_.reserve(active_rasters_.size());
+    previous_active_rasters_ = active_rasters_;
     force_full_ = false;
 }
 

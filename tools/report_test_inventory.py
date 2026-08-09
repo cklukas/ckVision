@@ -9,7 +9,18 @@ import sys
 from pathlib import Path
 
 
-CATEGORIES = ("unit", "script", "golden", "fuzz-corpus", "benchmark", "platform", "pty")
+CATEGORIES = (
+    "unit",
+    "script",
+    "golden",
+    "raw-byte",
+    "symbolic-scene",
+    "visual",
+    "fuzz-corpus",
+    "benchmark",
+    "platform",
+    "pty",
+)
 
 
 def labels_for(test):

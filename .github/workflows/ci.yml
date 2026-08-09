@@ -23,6 +23,12 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure -L script
       - name: Test golden and visual gates
         run: ctest --test-dir build -C Release --output-on-failure -L golden
+      - name: Test raw-byte Presenter assertions
+        run: ctest --test-dir build -C Release --output-on-failure -L raw-byte
+      - name: Test symbolic-scene raster goldens
+        run: ctest --test-dir build -C Release --output-on-failure -L symbolic-scene
+      - name: Test decoded visual goldens
+        run: ctest --test-dir build -C Release --output-on-failure -L visual
       - name: Test platform assertion and filesystem contracts
         run: ctest --test-dir build -C Release --output-on-failure -R '^(theme_assertion_contract|suite_test_posix_filesystem)$'
       - name: Test POSIX PTY contracts
