@@ -19,21 +19,31 @@
 
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/command_presentation.hpp"
 
 namespace ckv::widgets {
 
 using ui::SizeHint;
 
 struct StatusLineItem {
+    StatusLineItem() = default;
+    StatusLineItem(std::string item_label, ui::CommandId command_id = ui::kInvalidCommand,
+                   int item_priority = 0)
+        : label(std::move(item_label)), command(command_id), priority(item_priority) {}
+    explicit StatusLineItem(CommandPresentation command_presentation, int item_priority = 0)
+        : priority(item_priority), presentation(std::move(command_presentation)) {}
+
     std::string label;
     ui::CommandId command = ui::kInvalidCommand;
     int priority = 0;  // higher priority survives first on narrow status lines
+    CommandPresentation presentation;
 };
 
 // Resolves its own theme role from context() once attached (M9
@@ -46,6 +56,7 @@ public:
     StatusLine();
 
     void set_role_override(ui::RoleId role) noexcept { role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
     void set_items(std::vector<StatusLineItem> items);
     const std::vector<StatusLineItem>& items() const noexcept { return items_; }
@@ -71,6 +82,8 @@ private:
     // (when it references a command) "{chord} {title}" composed live
     // from the registry, e.g. "Alt+X Quit".
     std::string effective_label(const StatusLineItem& item) const;
+    ui::CommandId item_command(const StatusLineItem& item) const noexcept;
+    bool item_available(const StatusLineItem& item) const;
     int item_start_column(std::size_t index) const;
     struct LaidOutItem {
         std::size_t index = 0;
@@ -82,6 +95,7 @@ private:
     std::vector<StatusLineItem> items_;
     std::function<std::string(const std::string&)> hint_provider_;
     ui::RoleId role_ = ui::kInvalidRole;
+    ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

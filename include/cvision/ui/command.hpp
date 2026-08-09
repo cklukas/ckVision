@@ -8,9 +8,11 @@
 // reasoning behind each — in docs/standard-commands.md.
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -95,6 +97,7 @@ struct CommandInfo {
     std::string title;
     std::string category;
     std::optional<KeyChord> default_chord;
+    std::string context;
 };
 
 // One-call registration (M9/WP-10): the designated-initializer form of
@@ -118,26 +121,28 @@ struct CommandDescriptor {
     CommandId id = kInvalidCommand;
     std::string title;
     std::string category;
+    std::string context;
     // Canonical spelling (KeyChord::parse), e.g. "Alt+G"; empty means
     // no default chord.
     std::string chord;
     std::function<void()> handler;
 };
 
-// Instance-owned (D-008). Enablement is a per-command predicate
-// (checked on demand, e.g. before dispatch or when rendering a menu
-// item in M5) rather than a full named-context stack — a context stack
-// is a natural future extension of the same predicate hook once real
-// menus exist to observe it; M4 has no menu system yet to need one.
+// Instance-owned (D-008). Enablement is a per-command predicate, and named
+// contexts are explicit per-Application state: pushed scopes plus focused-view
+// ancestry decide whether a context-bound command is available.
 class CommandRegistry {
 public:
+    using ContextScopeId = std::uint64_t;
+
     // CKV_ASSERT if id falls inside the reserved std_commands range
     // (M9/WP-12) — that range is populated exactly once, by
     // Application's constructor calling register_standard_commands()
     // below; application code always registers at
     // kFirstApplicationCommandId or above.
     void register_command(CommandId id, std::string title, std::string category = {},
-                           std::optional<KeyChord> default_chord = {});
+                           std::optional<KeyChord> default_chord = {},
+                           std::string context = {});
 
     // Equivalent to register_command(descriptor.id, descriptor.title,
     // descriptor.category, parsed-chord) followed by
@@ -163,8 +168,20 @@ public:
     // itself is an unordered_map and gives no ordering guarantee).
     std::vector<CommandInfo> all() const;
 
+    // Retracts a command definition and every behavior path owned by that
+    // command id: metadata, enablement predicate, handler, and key bindings.
+    // Existing menu/status entries that still reference the id become inert
+    // until the application registers it again.
+    void retract_command(CommandId id);
+
+    void set_command_context(CommandId id, std::string context);
+    ContextScopeId push_context(std::string context);
+    bool pop_context(ContextScopeId id);
+    bool context_active(std::string_view context) const noexcept;
+
     void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
     bool is_enabled(CommandId id) const;  // true if no predicate registered
+    bool is_available(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
 
     // The active keymap: chord -> command. Rebindable at runtime;
     // binding the same chord again replaces the previous command.
@@ -196,19 +213,22 @@ public:
     bool has_handler(CommandId id) const;
     // Invokes id's handler if one is registered AND is_enabled(id).
     // Returns true if the handler ran.
-    bool execute(CommandId id);
+    bool execute(CommandId id, const std::vector<std::string>& focus_contexts = {});
 
 private:
     // The shared core of register_command()/register_standard_commands()
     // — no reserved-range check, since register_standard_commands()'s
     // whole job is populating that range.
     void register_command_internal(CommandId id, std::string title, std::string category,
-                                    std::optional<KeyChord> default_chord);
+                                    std::optional<KeyChord> default_chord,
+                                    std::string context);
 
     std::unordered_map<CommandId, CommandInfo> commands_;
     std::unordered_map<CommandId, std::function<bool()>> enabled_predicates_;
     std::unordered_map<CommandId, std::function<void()>> handlers_;
     std::vector<std::pair<KeyChord, CommandId>> keymap_;
+    std::vector<std::pair<ContextScopeId, std::string>> active_contexts_;
+    ContextScopeId next_context_scope_id_ = 1;
 };
 
 }  // namespace ckv::ui

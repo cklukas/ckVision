@@ -191,7 +191,7 @@ CK_TEST(present_help_viewer_completes_after_modal_detachment) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(
-        ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+        ckv::Rect{0, 0, 80, 24}));
     auto provider = sample_provider();
 
     auto presentation = present_help_viewer(provider, "intro", app, *desktop, roles);

@@ -65,8 +65,8 @@ void DropdownMenu::on_attached() {
 bool DropdownMenu::item_enabled(std::size_t index) const {
     const MenuItem& item = items_[index];
     if (item.separator) return false;
-    if (item.command != ui::kInvalidCommand)
-        return context().app->commands().is_enabled(item.command);
+    if (item_command(item) != ui::kInvalidCommand)
+        return context().app->command_available(item_command(item));
     return true;
 }
 
@@ -91,7 +91,7 @@ void DropdownMenu::activate(int index) {
     // may destroy `this` (e.g. MenuBar::close_dropdown() removes this
     // popup from its owning Desktop) — nothing below may read a member
     // (or call context()) on `this` after that point.
-    const ui::CommandId command = items_[static_cast<std::size_t>(index)].command;
+    const ui::CommandId command = item_command(items_[static_cast<std::size_t>(index)]);
     const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].on_activate;
     ui::Application& app = *context().app;
     dismiss_chain();
@@ -165,18 +165,29 @@ bool DropdownMenu::has_submenu_column() const noexcept {
 }
 
 std::string DropdownMenu::item_source_text(const MenuItem& item) const {
-    if (item.command != ui::kInvalidCommand) {
-        if (const ui::CommandInfo* info = context().app->commands().find(item.command))
-            return info->title;
-    }
-    return item.label;
+    return item_presentation_label(item);
 }
 
 std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) const {
-    if (item.command == ui::kInvalidCommand) return std::nullopt;
-    const auto chord = context().app->commands().chord_for_command(item.command);
+    const ui::CommandId command = item_command(item);
+    if (command == ui::kInvalidCommand) return std::nullopt;
+    const auto chord = context().app->commands().chord_for_command(command);
     if (!chord) return std::nullopt;
     return format(*chord);
+}
+
+ui::CommandId DropdownMenu::item_command(const MenuItem& item) const noexcept {
+    return item.presentation.command != ui::kInvalidCommand ? item.presentation.command : item.command;
+}
+
+std::string DropdownMenu::item_presentation_label(const MenuItem& item) const {
+    if (!item.presentation.label.empty()) return item.presentation.label;
+    const ui::CommandId command = item_command(item);
+    if (command != ui::kInvalidCommand) {
+        if (const ui::CommandInfo* info = context().app->commands().find(command))
+            return info->title;
+    }
+    return item.label;
 }
 
 SizeHint DropdownMenu::horizontal_size_hint() const {
@@ -313,6 +324,18 @@ MenuBar::~MenuBar() {
     close_dropdown();
     if (installed_default_menu_handler_ && app_ != nullptr)
         app_->commands().set_handler(ui::std_commands::kMenu, nullptr);
+}
+
+void MenuBar::set_menus(std::vector<MenuBarItem> menus) {
+    close_dropdown();
+    menus_ = std::move(menus);
+    if (menus_.empty()) {
+        highlighted_ = 0;
+    } else if (highlighted_ >= menus_.size()) {
+        highlighted_ = menus_.size() - 1;
+    }
+    invalidate();
+    size_hint_changed();
 }
 
 void MenuBar::on_attached() {

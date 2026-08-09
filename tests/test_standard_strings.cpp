@@ -39,7 +39,7 @@ struct Fixture {
     ManualClock clock;
     Application app{terminal, clock};
     StandardRoles roles = intern_standard_roles(app.roles());
-    Desktop desktop{Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background};
+    Desktop desktop{Rect{0, 0, 80, 24}};
 
     Fixture() {
         app.theme() = make_classic_theme(app.roles(), roles);

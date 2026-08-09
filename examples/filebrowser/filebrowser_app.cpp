@@ -49,7 +49,7 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     : app_(app), fs_(fs), root_path_(std::move(root_path)), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
-    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
+    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
@@ -72,15 +72,18 @@ void FileBrowserApp::build_menu_bar() {
     // all render live from the registration above.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false, {}, {}});
+    file_menu.items.push_back(widgets::MenuItem{
+        widgets::CommandPresentation{ui::std_commands::kQuit}});
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
     menu_ = desktop_->dock_top(std::move(menu));
 
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", ui::std_commands::kFocusNext, 0}, {"", ui::std_commands::kQuit, 0}});
+    status->set_items({widgets::StatusLineItem{
+                           widgets::CommandPresentation{ui::std_commands::kFocusNext}},
+                       widgets::StatusLineItem{
+                           widgets::CommandPresentation{ui::std_commands::kQuit}}});
     desktop_->dock_bottom(std::move(status));
 }
 
@@ -130,8 +133,7 @@ void FileBrowserApp::build_window() {
     // exists for, applied here to "current directory" instead.
     auto path_label = std::make_unique<widgets::Label>(root_path_);
     path_label->set_role_override(roles_.static_text, roles_.label_mnemonic);  // static-text styling, not a form label
-    path_label_ = static_cast<widgets::Label*>(
-        window->add_frame_overlay(std::move(path_label), widgets::FrameSlot{}));
+    path_label_ = window->add_frame_overlay(std::move(path_label), widgets::FrameSlot{});
 
     window_ = desktop_->add_window(std::move(window));
     refresh_file_list_for_selected_node();

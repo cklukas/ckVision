@@ -18,6 +18,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 
 #include <unordered_map>
 #include <vector>
@@ -135,9 +136,13 @@ public:
     // answer Row/Column/Grid/Dock give for anything beyond their own
     // scope). Unlike content(), unset overlays are the common case, so
     // there is no "must call this" contract — a plain Window with none
-    // behaves exactly as before this existed. Returns the observer
-    // pointer (matches add_child's own contract).
-    ui::View* add_frame_overlay(std::unique_ptr<ui::View> view, FrameSlot slot);
+    // behaves exactly as before this existed. Typed insertion returns the
+    // concrete observer pointer, same as View::add/Desktop::dock_*.
+    template <class T>
+    T* add_frame_overlay(std::unique_ptr<T> view, FrameSlot slot) {
+        static_assert(std::is_base_of_v<ui::View, T>, "T must derive from ui::View");
+        return static_cast<T*>(add_frame_overlay_impl(std::move(view), slot));
+    }
     // Detaches a specific overlay, returning ownership (nullptr if
     // `view` is not a currently-attached overlay of this window).
     std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
@@ -291,6 +296,7 @@ private:
 
     ui::View* content_ = nullptr;
     std::unordered_map<ui::View*, FrameSlot> frame_overlays_;
+    ui::View* add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSlot slot);
 
     bool active_ = false;
     bool movable_ = true;

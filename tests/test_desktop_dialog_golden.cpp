@@ -41,7 +41,7 @@ struct DialogScript {
     DialogScript() {
         app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
         auto desktop_owned =
-            std::make_unique<ckv::widgets::Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+            std::make_unique<ckv::widgets::Desktop>(app.root().bounds());
         desktop = desktop_owned.get();
         app.root().add_child(std::move(desktop_owned));
 

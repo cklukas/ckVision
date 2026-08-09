@@ -239,6 +239,13 @@ cmake --build build -j8
 
 ## Adding another example
 
+New examples should follow the WP-35 public-surface rules enforced by
+`example_hygiene`: construct Desktop through context rather than theme/role
+constructor plumbing, use typed insertion surfaces instead of
+`static_cast<widgets::...>`, declare each command id/chord once, and use
+`widgets::CommandPresentation` when a menu or status surface needs
+surface-specific wording for the same command.
+
 1. `examples/<name>/<name>_app.{hpp,cpp}` — the object graph, taking
    `ui::Application&` in its constructor, exposing whatever accessors
    a headless test needs (see `gallery_app.hpp`'s own accessor list for

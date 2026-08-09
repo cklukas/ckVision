@@ -52,7 +52,7 @@ struct ActivationScript {
 
     ActivationScript() {
         app.theme() = make_classic_theme(app.roles(), roles);
-        auto desktop_owner = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+        auto desktop_owner = std::make_unique<Desktop>(app.root().bounds());
         desktop = desktop_owner.get();
         app.root().add_child(std::move(desktop_owner));
 

@@ -61,7 +61,7 @@ struct Fixture {
     Fixture() {
         app.theme() = make_classic_theme(app.roles(), roles);
         desktop = app.root().add(
-            std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+            std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
     }
 };
 

@@ -57,8 +57,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 13 | WP-34A — Chrome, menus, and standard-dialog catalog closure | 2–3 pw | **Implementation complete — gate pending** | WP-33 | M5/M6 catalog gaps |
 | 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | **Implementation complete — gate pending** | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | **Implementation complete — gate pending** | WP-34B | M6 remaining catalog gaps |
-| 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | Ready | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
-| 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Blocked | WP-35 | WP-16, WP-18…WP-22; M10 exit |
+| 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | **Implementation complete — gate pending** | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
+| 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Ready | WP-35 | WP-16, WP-18…WP-22; M10 exit |
 | 18 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
 | 19 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
 
@@ -1600,6 +1600,17 @@ documented exceptions to literal criteria.
   or loop-control capability was lost.
 - The public construction examples meet VISION's one-screen/sane-defaults bar
   without exceptions hidden in status notes.
+
+**Implementation evidence.** WP-35 added per-subtree theme override through
+`ui::View`, removed Desktop's theme/role constructor plumbing, added named
+command contexts with explicit push/pop activation and focus-ancestry
+activation, command retraction, menu/status `CommandPresentation`,
+`widgets::ApplicationShell`, typed frame-overlay insertion, live
+`MenuBar::set_menus`, and disabled status-line rendering. `examples/hello`
+now uses the shell helper and presents one quit command as `Exit` in File and
+`Quit` in status; filebrowser uses typed frame overlays and command
+presentation. Evidence is concentrated in `tests/test_wp35.cpp`, refreshed
+hello goldens, `example_hygiene`, and `hello_line_budget`.
 
 ### WP-36 — Layout, dialog, and tree literal acceptance
 

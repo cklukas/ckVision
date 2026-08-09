@@ -62,7 +62,7 @@ ui::AnchorPane& Window::content_pane() {
     return *pane;
 }
 
-ui::View* Window::add_frame_overlay(std::unique_ptr<ui::View> view, FrameSlot slot) {
+ui::View* Window::add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSlot slot) {
     CKV_ASSERT(view != nullptr);
     // Top's Center/Fill are the title's own position — see FrameSlot's
     // own doc comment for why this is a hard contract, not an implicit

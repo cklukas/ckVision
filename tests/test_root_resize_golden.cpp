@@ -52,7 +52,7 @@ struct ResizeScript {
 
     ResizeScript() {
         app.theme() = make_classic_theme(app.roles(), roles);
-        auto owned_desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+        auto owned_desktop = std::make_unique<Desktop>(app.root().bounds());
         desktop = owned_desktop.get();
         app.root().add_child(std::move(owned_desktop));
         desktop->dock_top(std::make_unique<ckv::ui::View>());

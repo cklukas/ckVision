@@ -49,7 +49,7 @@ public:
         std::vector<WindowSnapshot> windows;
     };
 
-    Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role);
+    explicit Desktop(Rect bounds = {});
     ~Desktop() override;
 
     // Adds `window`, activating it (raising to front, deactivating any
@@ -289,8 +289,7 @@ private:
     void request_layer_recompose();
     void raise_layer_to_front(ui::View* child);
 
-    const ui::Theme& theme_;
-    ui::RoleId background_role_;
+    ui::RoleId background_role_ = ui::kInvalidRole;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     Window* active_ = nullptr;
     std::vector<ui::View*> popups_;

@@ -168,7 +168,7 @@ CK_TEST(golden_z_order_keeps_foreground_frame_topology_independent_of_background
     ui::RoleRegistry registry;
     const ui::StandardRoles roles = ui::intern_standard_roles(registry);
     const ui::Theme theme = ui::make_classic_theme(registry, roles);
-    widgets::Desktop desktop(Rect{0, 0, 26, 12}, theme, roles.dialog_background);
+    widgets::Desktop desktop(Rect{0, 0, 26, 12});
     desktop.set_context(ui::Context{&theme, &registry, nullptr});
 
     widgets::Window* background =

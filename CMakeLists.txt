@@ -41,6 +41,7 @@ add_library(cvision
     src/ui/standard_roles.cpp
     src/ui/theme.cpp
     src/ui/view.cpp
+    src/widgets/application_shell.cpp
     src/widgets/button.cpp
     src/widgets/canvas.cpp
     src/widgets/combo_box.cpp

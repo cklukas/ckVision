@@ -240,7 +240,7 @@ CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24});
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
 
@@ -270,7 +270,7 @@ CK_TEST(exec_directory_picker_returns_the_modal_result_without_leaving_a_window_
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24});
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
 
@@ -296,7 +296,7 @@ CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_op
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 80, 24});
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
     app.post([&app] { app.request_quit(); });

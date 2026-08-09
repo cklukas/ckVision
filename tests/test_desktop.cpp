@@ -67,7 +67,7 @@ private:
 
 CK_TEST(adding_a_window_activates_it) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     CK_CHECK(desktop.active_window() == w);
     CK_CHECK(w->active());
@@ -75,7 +75,7 @@ CK_TEST(adding_a_window_activates_it) {
 
 CK_TEST(adding_a_second_window_activates_it_and_deactivates_the_first) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     CK_CHECK(desktop.active_window() == b);
@@ -85,7 +85,7 @@ CK_TEST(adding_a_second_window_activates_it_and_deactivates_the_first) {
 
 CK_TEST(a_newly_added_window_becomes_the_topmost_child) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     CK_CHECK(desktop.children().back().get() == b);
@@ -96,7 +96,7 @@ CK_TEST(a_newly_added_window_becomes_the_topmost_child) {
 
 CK_TEST(on_descendant_mouse_down_activates_and_raises_the_owning_window_for_a_deep_descendant) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* back = desktop.add_window(make_window(f, "Back"));
     auto content = std::make_unique<ckv::ui::View>();
     ckv::ui::View* deep_leaf = content->add_child(std::make_unique<ckv::ui::View>());
@@ -115,7 +115,7 @@ CK_TEST(on_descendant_mouse_down_activates_and_raises_the_owning_window_for_a_de
 
 CK_TEST(on_descendant_mouse_down_activates_the_window_itself_when_target_is_the_window) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* back = desktop.add_window(make_window(f, "Back"));
     desktop.add_window(make_window(f, "Front"));
 
@@ -126,7 +126,7 @@ CK_TEST(on_descendant_mouse_down_activates_the_window_itself_when_target_is_the_
 
 CK_TEST(on_descendant_mouse_down_is_a_no_op_for_a_view_outside_any_owned_window) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
 
     ckv::ui::View stray;  // detached: not inside the desktop's tree at all
@@ -136,14 +136,14 @@ CK_TEST(on_descendant_mouse_down_is_a_no_op_for_a_view_outside_any_owned_window)
 
 CK_TEST(remove_window_for_a_window_not_owned_by_this_desktop_returns_null) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window stray("stray");
     CK_CHECK(desktop.remove_window(&stray) == nullptr);
 }
 
 CK_TEST(removing_the_active_window_activates_the_new_topmost_remaining_window) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     CK_CHECK(desktop.active_window() == b);
@@ -154,7 +154,7 @@ CK_TEST(removing_the_active_window_activates_the_new_topmost_remaining_window) {
 
 CK_TEST(removing_the_last_window_leaves_no_active_window) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     desktop.remove_window(a);
     CK_CHECK(desktop.active_window() == nullptr);
@@ -163,7 +163,7 @@ CK_TEST(removing_the_last_window_leaves_no_active_window) {
 
 CK_TEST(removing_an_inactive_window_does_not_disturb_the_active_one) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));  // b is active
     desktop.remove_window(a);
@@ -173,7 +173,7 @@ CK_TEST(removing_an_inactive_window_does_not_disturb_the_active_one) {
 
 CK_TEST(activate_on_an_already_active_window_is_a_no_op) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     int calls = 0;
     a->set_dirty_rect_sink([&](Rect) { ++calls; });
@@ -183,7 +183,7 @@ CK_TEST(activate_on_an_already_active_window_is_a_no_op) {
 
 CK_TEST(activating_an_older_window_raises_it_to_the_front_and_reactivates_it) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     desktop.activate(a);
@@ -196,7 +196,7 @@ CK_TEST(activating_an_older_window_raises_it_to_the_front_and_reactivates_it) {
 CK_TEST(activate_on_a_window_not_owned_by_this_desktop_aborts) {
     CK_EXPECT_ABORT({
         Fixture f;
-        Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+        Desktop desktop(Rect{0, 0, 80, 24});
         desktop.add_window(make_window(f));
         Window stray("stray");
         desktop.activate(&stray);  // must abort: not owned by this desktop
@@ -207,7 +207,7 @@ CK_TEST(activate_on_a_window_not_owned_by_this_desktop_aborts) {
 
 CK_TEST(activate_next_and_previous_are_no_ops_with_zero_or_one_window) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.activate_next();  // zero windows
     CK_CHECK(desktop.active_window() == nullptr);
     Window* a = desktop.add_window(make_window(f));
@@ -217,7 +217,7 @@ CK_TEST(activate_next_and_previous_are_no_ops_with_zero_or_one_window) {
 
 CK_TEST(activate_next_visits_every_window_exactly_once_before_repeating) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));  // active
@@ -232,7 +232,7 @@ CK_TEST(activate_next_visits_every_window_exactly_once_before_repeating) {
 
 CK_TEST(activate_previous_is_the_exact_reverse_of_activate_next) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));
@@ -248,7 +248,7 @@ CK_TEST(cycling_still_visits_every_window_after_an_out_of_order_activation) {
     // stuck cycling only the top two windows once activation itself
     // perturbs z-order — this exercises exactly that scenario.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));
@@ -264,7 +264,7 @@ CK_TEST(cycling_still_visits_every_window_after_an_out_of_order_activation) {
 
 CK_TEST(select_by_number_activates_the_nth_window_in_insertion_order) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     desktop.add_window(make_window(f));
     desktop.select_by_number(1);
@@ -273,7 +273,7 @@ CK_TEST(select_by_number_activates_the_nth_window_in_insertion_order) {
 
 CK_TEST(select_by_number_out_of_range_is_a_harmless_no_op) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     desktop.select_by_number(0);   // below range
     CK_CHECK(desktop.active_window() == a);
@@ -283,7 +283,7 @@ CK_TEST(select_by_number_out_of_range_is_a_harmless_no_op) {
 
 CK_TEST(snapshot_restore_recovers_window_geometry_zoom_active_state_and_z_order) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f, "A"));
     Window* b = desktop.add_window(make_window(f, "B"));
     Window* c = desktop.add_window(make_window(f, "C"));
@@ -317,7 +317,7 @@ CK_TEST(snapshot_restore_recovers_window_geometry_zoom_active_state_and_z_order)
 
 CK_TEST(snapshot_restore_ignores_windows_that_have_left_the_desktop) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f, "A"));
     Window* b = desktop.add_window(make_window(f, "B"));
     const Desktop::Snapshot snapshot = desktop.snapshot();
@@ -336,7 +336,7 @@ CK_TEST(snapshot_restore_ignores_windows_that_have_left_the_desktop) {
 
 CK_TEST(tile_divides_the_desktop_width_evenly_among_windows_with_no_overlap_or_gap) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 90, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 90, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));
@@ -348,7 +348,7 @@ CK_TEST(tile_divides_the_desktop_width_evenly_among_windows_with_no_overlap_or_g
 
 CK_TEST(tile_with_a_width_not_evenly_divisible_gives_the_remainder_to_the_last_window) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 10, 24}, f.theme, f.roles.dialog_background);  // 10 / 3 = 3 remainder 1
+    Desktop desktop(Rect{0, 0, 10, 24});  // 10 / 3 = 3 remainder 1
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));
@@ -361,7 +361,7 @@ CK_TEST(tile_with_a_width_not_evenly_divisible_gives_the_remainder_to_the_last_w
 
 CK_TEST(tile_with_zero_windows_does_not_crash) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.tile();
     CK_CHECK(true);
 }
@@ -369,7 +369,7 @@ CK_TEST(tile_with_zero_windows_does_not_crash) {
 CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) {
     Fixture f;
     const auto exercise = [&f](bool cascade) {
-        Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+        Desktop desktop(Rect{0, 0, 80, 24});
         Window* survivor = desktop.add_window(make_window(f, "Survivor"));
         auto self_removing = std::make_unique<ResizeSelfRemovingWindow>(desktop, "Self removing");
         ResizeSelfRemovingWindow* self_removing_ptr = self_removing.get();
@@ -390,7 +390,7 @@ CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) 
 
 CK_TEST(cascade_makes_the_last_window_topmost) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     desktop.cascade();
@@ -399,7 +399,7 @@ CK_TEST(cascade_makes_the_last_window_topmost) {
 
 CK_TEST(cascade_keeps_every_window_within_the_desktop_bounds) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     for (int i = 0; i < 5; ++i) desktop.add_window(make_window(f));
     desktop.cascade();
@@ -413,7 +413,8 @@ CK_TEST(cascade_keeps_every_window_within_the_desktop_bounds) {
 
 CK_TEST(draw_fills_the_background_without_crashing) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 10, 5}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 10, 5});
+    desktop.set_context(f.ctx());
     Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 10, 5});
     desktop.draw(painter);
@@ -422,7 +423,7 @@ CK_TEST(draw_fills_the_background_without_crashing) {
 
 CK_TEST(desktop_resize_survives_a_window_that_destroys_itself_from_on_resized) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     auto self_removing = std::make_unique<ResizeSelfRemovingWindow>(desktop, "Self removing");
     ResizeSelfRemovingWindow* self_removing_ptr = self_removing.get();
     Window* survivor = desktop.add_window(make_window(f, "Survivor"));
@@ -441,7 +442,7 @@ CK_TEST(desktop_resize_survives_a_window_that_destroys_itself_from_on_resized) {
 
 CK_TEST(a_popup_is_added_above_every_window_regardless_of_add_order) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window(f));
     desktop.add_window(make_window(f));
     ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
@@ -450,7 +451,7 @@ CK_TEST(a_popup_is_added_above_every_window_regardless_of_add_order) {
 
 CK_TEST(activating_a_window_while_a_popup_is_open_does_not_bury_the_popup) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
@@ -463,14 +464,14 @@ CK_TEST(activating_a_window_while_a_popup_is_open_does_not_bury_the_popup) {
 
 CK_TEST(remove_popup_for_a_view_not_currently_a_popup_returns_null) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     ckv::ui::View stray;
     CK_CHECK(desktop.remove_popup(&stray) == nullptr);
 }
 
 CK_TEST(removing_a_popup_returns_ownership_and_it_no_longer_appears_in_popups) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
     auto owned = desktop.remove_popup(popup);
     CK_CHECK(owned.get() == popup);
@@ -479,7 +480,7 @@ CK_TEST(removing_a_popup_returns_ownership_and_it_no_longer_appears_in_popups) {
 
 CK_TEST(removing_the_active_window_while_a_popup_is_open_still_activates_the_next_window_not_the_popup) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));  // b is active
     desktop.add_popup(std::make_unique<ckv::ui::View>());
@@ -490,7 +491,7 @@ CK_TEST(removing_the_active_window_while_a_popup_is_open_still_activates_the_nex
 
 CK_TEST(multiple_popups_stack_in_the_order_they_were_added) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window(f));
     ckv::ui::View* first = desktop.add_popup(std::make_unique<ckv::ui::View>());
     ckv::ui::View* second = desktop.add_popup(std::make_unique<ckv::ui::View>());
@@ -502,7 +503,7 @@ CK_TEST(multiple_popups_stack_in_the_order_they_were_added) {
 
 CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 10, 4});
@@ -515,7 +516,7 @@ CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
 
     const auto footprints = ckv::scene::shadow_footprint(w->bounds(), ckv::scene::ShadowSpec{});
     CK_CHECK(!footprints.empty());
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     for (const Rect& fp : footprints) {
         const ckv::Point sample{fp.x, fp.y};
         CK_CHECK(!(surface.at(sample).style() == background_style));
@@ -525,7 +526,7 @@ CK_TEST(a_shadow_casting_windows_footprint_is_dimmed_on_the_desktop) {
 
 CK_TEST(overlapping_window_shadows_dim_the_desktop_exactly_once) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     Window* first = desktop.add_window(make_window(f, "First"));
     first->set_bounds(Rect{2, 2, 5, 3});
@@ -537,14 +538,14 @@ CK_TEST(overlapping_window_shadows_dim_the_desktop_exactly_once) {
     desktop.draw(painter);
     desktop.paint_children(painter);
 
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     CK_CHECK(surface.at(ckv::Point{8, 3}).style() ==
              ckv::scene::default_dim(background_style));
 }
 
 CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 10, 4});
@@ -554,7 +555,7 @@ CK_TEST(cells_outside_any_shadow_footprint_are_not_dimmed) {
     desktop.draw(painter);
     desktop.paint_children(painter);
 
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     // Far corner of the desktop, well outside the window's shadow reach.
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == background_style);
 }
@@ -564,7 +565,7 @@ CK_TEST(a_non_shadow_casting_view_leaves_its_footprint_undimmed) {
     // Desktop child and must not acquire a shadow merely by participating in
     // the z-ordered paint pass.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     auto plain = std::make_unique<ckv::ui::View>(Rect{5, 5, 10, 4});
     desktop.add_child(std::move(plain));
@@ -574,7 +575,7 @@ CK_TEST(a_non_shadow_casting_view_leaves_its_footprint_undimmed) {
     desktop.draw(painter);
     desktop.paint_children(painter);  // must not crash on a non-Window child
 
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     CK_CHECK(surface.at(ckv::Point{17, 6}).style() == background_style);  // where a shadow WOULD be
 }
 
@@ -584,7 +585,7 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
     // AFTER window A's shadow is applied, must show ITS OWN content —
     // undimmed — even where A's shadow footprint overlaps B.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     Window* a = desktop.add_window(make_window(f));
     a->set_bounds(Rect{2, 2, 10, 4});  // shadow footprint includes column 12-13, rows 3-6
@@ -599,13 +600,13 @@ CK_TEST(a_higher_window_painted_afterward_is_not_dimmed_by_a_lower_windows_shado
 
     // Inside b's frame (its own border style), not the dimmed
     // dialog_background shadow style.
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     CK_CHECK(!(surface.at(ckv::Point{12, 3}).style() == ckv::scene::default_dim(background_style)));
 }
 
 CK_TEST(a_foreground_window_frame_does_not_merge_with_a_background_window_frame) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
 
     Window* background = desktop.add_window(make_window(f, "Background"));
@@ -630,7 +631,7 @@ CK_TEST(a_foreground_window_frame_does_not_merge_with_a_background_window_frame)
 
 CK_TEST(dock_top_positions_the_view_at_row_zero_full_width) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     auto* bar = desktop.dock_top(std::make_unique<ckv::ui::View>());
     CK_CHECK(bar->bounds() == (Rect{0, 0, 60, 1}));
     CK_CHECK(desktop.top_dock() == bar);
@@ -638,7 +639,7 @@ CK_TEST(dock_top_positions_the_view_at_row_zero_full_width) {
 
 CK_TEST(dock_bottom_positions_the_view_at_the_last_row_full_width) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     auto* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     CK_CHECK(status->bounds() == (Rect{0, 23, 60, 1}));
     CK_CHECK(desktop.bottom_dock() == status);
@@ -646,7 +647,7 @@ CK_TEST(dock_bottom_positions_the_view_at_the_last_row_full_width) {
 
 CK_TEST(content_area_excludes_both_docks) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     desktop.dock_top(std::make_unique<ckv::ui::View>());
     desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     CK_CHECK(desktop.content_area() == (Rect{0, 1, 60, 22}));
@@ -654,13 +655,13 @@ CK_TEST(content_area_excludes_both_docks) {
 
 CK_TEST(content_area_is_the_full_bounds_when_nothing_is_docked) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     CK_CHECK(desktop.content_area() == (Rect{0, 0, 60, 24}));
 }
 
 CK_TEST(removing_a_docked_view_clears_the_desktops_content_area_observer) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     auto dock = std::make_unique<ckv::ui::View>();
     dock->set_preferred_size(ckv::Size{80, 2});
     ckv::ui::View* const dock_ptr = desktop.dock_top(std::move(dock));
@@ -675,7 +676,7 @@ CK_TEST(removing_a_docked_view_clears_the_desktops_content_area_observer) {
 
 CK_TEST(resizing_the_desktop_repositions_both_docks_to_the_new_edges) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     auto* bar = desktop.dock_top(std::make_unique<ckv::ui::View>());
     auto* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     desktop.set_bounds(Rect{0, 0, 100, 40});
@@ -704,7 +705,7 @@ private:
 
 CK_TEST(a_docked_views_own_height_change_repositions_it_without_a_desktop_resize) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     auto* status = desktop.dock_bottom(std::make_unique<MutableHeightView>(1));
     CK_CHECK(status->bounds() == (Rect{0, 23, 60, 1}));
 
@@ -715,7 +716,7 @@ CK_TEST(a_docked_views_own_height_change_repositions_it_without_a_desktop_resize
 
 CK_TEST(a_docked_views_own_height_change_re_clamps_windows_against_the_shrunk_content_area) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 20, 15, 4});  // bottom edge at row 24, the very last row
     auto* status = desktop.dock_bottom(std::make_unique<MutableHeightView>(1));
@@ -730,7 +731,7 @@ CK_TEST(a_docked_views_own_height_change_re_clamps_windows_against_the_shrunk_co
 
 CK_TEST(a_zoomed_window_refills_the_content_area_after_the_desktop_grows) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 20, 10});
     w->toggle_zoom(desktop.content_area());
@@ -744,7 +745,7 @@ CK_TEST(a_zoomed_window_refills_the_content_area_after_the_desktop_grows) {
 
 CK_TEST(a_keep_filling_window_tracks_desktop_growth_without_being_zoomed) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_grow_policy(ckv::widgets::DesktopGrowPolicy::KeepFilling);
 
@@ -756,7 +757,7 @@ CK_TEST(a_keep_filling_window_tracks_desktop_growth_without_being_zoomed) {
 
 CK_TEST(an_anchor_edges_window_keeps_its_margin_to_the_right_and_bottom_edges_as_the_desktop_grows) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_grow_policy(ckv::widgets::DesktopGrowPolicy::AnchorEdges);
     w->set_bounds(Rect{5, 5, 20, 10});  // right margin 80-25=55, bottom margin 24-15=9
@@ -771,7 +772,7 @@ CK_TEST(an_anchor_edges_window_keeps_its_margin_to_the_right_and_bottom_edges_as
 
 CK_TEST(a_none_policy_window_is_only_clamped_on_shrink_never_grown) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 5, 20, 10});  // default grow policy: None
 
@@ -782,7 +783,7 @@ CK_TEST(a_none_policy_window_is_only_clamped_on_shrink_never_grown) {
 
 CK_TEST(shrinking_the_desktop_pulls_a_window_back_into_the_new_content_area) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{60, 15, 15, 6});  // reachable in the original 80x24 desktop
     desktop.set_bounds(Rect{0, 0, 40, 24});
@@ -791,7 +792,7 @@ CK_TEST(shrinking_the_desktop_pulls_a_window_back_into_the_new_content_area) {
 
 CK_TEST(docking_a_status_line_shrinks_the_content_area_and_clamps_windows_out_of_it) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* w = desktop.add_window(make_window(f));
     w->set_bounds(Rect{5, 20, 15, 4});  // bottom edge at row 24, the very last row
     desktop.dock_bottom(std::make_unique<ckv::ui::View>());  // now occupies row 23
@@ -800,7 +801,7 @@ CK_TEST(docking_a_status_line_shrinks_the_content_area_and_clamps_windows_out_of
 
 CK_TEST(tile_places_windows_within_the_content_area_not_under_the_docked_chrome) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     desktop.dock_top(std::make_unique<ckv::ui::View>());
     desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     Window* a = desktop.add_window(make_window(f));
@@ -813,7 +814,7 @@ CK_TEST(tile_places_windows_within_the_content_area_not_under_the_docked_chrome)
 
 CK_TEST(cascade_places_windows_within_the_content_area_not_under_the_docked_chrome) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 60, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 60, 24});
     desktop.dock_top(std::make_unique<ckv::ui::View>());
     Window* w = desktop.add_window(make_window(f));
     desktop.cascade();
@@ -828,7 +829,7 @@ CK_TEST(a_window_maximized_to_the_content_area_does_not_shadow_the_docked_status
     // status line, so that strip used to land ON the status line and
     // dim it. Shadows must clip to content_area(), not the full desktop.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     ckv::ui::View* status = desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     Window* w = desktop.add_window(make_window(f));
@@ -840,7 +841,7 @@ CK_TEST(a_window_maximized_to_the_content_area_does_not_shadow_the_docked_status
     desktop.draw(painter);
     desktop.paint_children(painter);
 
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     for (int x = 0; x < 40; ++x)
         CK_CHECK(surface.at(ckv::Point{x, status->bounds().y}).style() == background_style);
 }
@@ -849,7 +850,7 @@ CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_
     // The fix must not over-clip: shadow rows that fall WITHIN
     // content_area() (not on the footer itself) still dim normally.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     desktop.dock_bottom(std::make_unique<ckv::ui::View>());
     Window* w = desktop.add_window(make_window(f));
@@ -862,7 +863,7 @@ CK_TEST(a_window_maximized_to_the_content_area_still_shadows_normally_above_the_
 
     const auto footprints = ckv::scene::shadow_footprint(w->bounds(), ckv::scene::ShadowSpec{});
     CK_CHECK(!footprints.empty());
-    const ckv::Style background_style = f.theme.resolve(f.roles.dialog_background);
+    const ckv::Style background_style = f.theme.resolve(f.roles.desktop_background);
     for (const Rect& fp : footprints)
         CK_CHECK(surface.at(ckv::Point{fp.x, fp.y}).style() == ckv::scene::default_dim(background_style));
 }
@@ -876,7 +877,7 @@ CK_TEST(detach_child_on_a_window_added_via_add_window_also_removes_it_from_windo
     // Desktop::windows_), that silently left a DANGLING pointer in
     // windows_ forever once the Window itself was destroyed.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     Window* w = desktop.add_window(make_window(f));
     CK_CHECK(desktop.windows().size() == 1);
@@ -888,7 +889,7 @@ CK_TEST(detach_child_on_a_window_added_via_add_window_also_removes_it_from_windo
 
 CK_TEST(detach_child_on_a_popup_added_via_add_popup_also_removes_it_from_popups) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     ckv::ui::View* popup = desktop.add_popup(std::make_unique<ckv::ui::View>());
     CK_CHECK(desktop.popups().size() == 1);
@@ -900,7 +901,7 @@ CK_TEST(detach_child_on_a_popup_added_via_add_popup_also_removes_it_from_popups)
 
 CK_TEST(detach_child_on_a_plain_child_falls_back_to_ordinary_removal) {
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     ckv::ui::View* plain = desktop.add_child(std::make_unique<ckv::ui::View>());
     CK_CHECK(desktop.children().size() == 1);
@@ -914,7 +915,7 @@ CK_TEST(a_direct_window_attachment_uses_the_same_desktop_management_path_as_add_
     // View's generic public insertion is dynamically dispatched.  No
     // direct Window child may bypass Desktop's ownership/bookkeeping.
     Fixture f;
-    Desktop desktop(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 40, 20});
     desktop.set_context(f.ctx());
     ui::View& generic_parent = desktop;
     Window* w = static_cast<Window*>(generic_parent.add_child(make_window(f)));
@@ -935,7 +936,7 @@ CK_TEST(a_window_retained_after_detaching_and_destroying_its_desktop_cannot_reac
     // old captured-Desktop callback: the retained Window still exposes
     // its normal mouse API, but must fall back to its own safe bounds.
     Fixture f;
-    auto desktop = std::make_unique<Desktop>(Rect{0, 0, 40, 20}, f.theme, f.roles.dialog_background);
+    auto desktop = std::make_unique<Desktop>(Rect{0, 0, 40, 20});
     Window* raw = desktop->add_window(make_window(f));
     raw->set_bounds(Rect{5, 5, 20, 10});
     std::unique_ptr<Window> retained = desktop->remove_window(raw);
@@ -954,7 +955,7 @@ CK_TEST(removing_a_modal_window_through_the_generic_desktop_api_clears_modal_rou
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+        std::make_unique<Desktop>(app.root().bounds());
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
     Window* modal = desktop->add_window(std::make_unique<Window>("Modal"));
     app.push_modal(*modal);
@@ -991,8 +992,7 @@ struct AttachedFixture {
     // `app_.theme() = make_classic_theme(app_.roles(), roles_);`.
     AttachedFixture() {
         app.theme() = make_classic_theme(app.roles(), roles);
-        auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
-                                                roles.dialog_background);
+        auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
         desktop = static_cast<Desktop*>(app.root().add_child(std::move(owned)));
     }
 };
@@ -1090,8 +1090,7 @@ CK_TEST(a_pre_existing_kclose_handler_is_not_overridden_by_attaching_a_desktop) 
 
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
-    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
-                                            roles.dialog_background);
+    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     app.root().add_child(std::move(owned));
 
     app.commands().execute(ui::std_commands::kClose);
@@ -1107,8 +1106,7 @@ CK_TEST(a_pre_existing_kquit_handler_is_not_overridden_by_attaching_a_desktop) {
 
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
-    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
-                                            roles.dialog_background);
+    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     app.root().add_child(std::move(owned));
 
     app.commands().execute(ui::std_commands::kQuit);
@@ -1129,7 +1127,7 @@ CK_TEST(a_pre_existing_ktile_handler_is_not_overridden_by_attaching_a_desktop) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     app.root().add_child(std::move(owned));
 
     app.commands().execute(ui::std_commands::kTile);

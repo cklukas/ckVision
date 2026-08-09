@@ -9,20 +9,23 @@ description: The ckVision-owned behavior contract and verification evidence for 
 # Hello Example
 
 `examples/hello` is a compact ckVision integration example. It is authored
-and specified inside this repository: a desktop with menu and status chrome,
-a greeting command, and a modal dialog. It is deliberately small enough to
-exercise ordinary public application construction without becoming a second
-widget specification.
+and specified inside this repository: an application shell with Desktop, File
+menu, status line, a greeting command, and a modal dialog. It is deliberately
+small enough to exercise ordinary public application construction without
+becoming a second widget specification.
 
 ## Behavior contract
 
 - Alt+G opens a modal `Hello, World!` dialog.
+- F10 activates the `File` menu. The same quit command presents as `Exit` in
+  that menu and `Quit` in the status line; both surfaces execute the one
+  registered handler.
 - The dialog is an Info message box containing `How are you?` and its standard
   Ok action.
 - Esc and Ok dismiss the dialog. While it is open, the background Alt+X command
   is not active; it is restored after the dialog closes. The handler registers a
   typed non-blocking completion without retaining a raw `Window*`.
-- Alt+X requests application exit, and F10 activates the menu bar.
+- Alt+X requests application exit.
 
 The design sources are VISION.md's one-screen application principle,
 DECISIONS.md D-012/D-014/D-021, and ROADMAP.md M9. The authoritative visual
@@ -34,9 +37,11 @@ external application.
 `tests/test_hello_golden.cpp` drives the real public application path and
 checks the initial and dialog frames against `tests/golden/hello_initial.dump`
 and `tests/golden/hello_greeting.dump`. It separately verifies modal command
-scoping, button dismissal, and the exit shortcut. The `hello_line_budget`
-CTest gate counts non-comment, non-blank lines across the three example source
-files and fails above the 60-line M9 limit.
+scoping, button dismissal, and the exit shortcut. `tests/test_wp35.cpp` covers
+the command-presentation split, application shell helper, context activation,
+command retraction, and per-subtree theme override. The `hello_line_budget`
+and `example_hygiene` CTest gates keep the example under the 60-line M9 limit
+and reject old constructor-plumbing/cast/duplicate-command patterns.
 
 `tools/docgen/capture_hello_screenshots.cpp` drives the same path to produce
 the screenshots included with the example applications documentation.

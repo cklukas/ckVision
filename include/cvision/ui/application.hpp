@@ -213,6 +213,7 @@ public:
     // add() — but execute_command on an id with neither a handler nor
     // a registration is a no-op.
     void set_command_handler(CommandId id, std::function<void()> handler);
+    bool command_available(CommandId id);
     bool execute_command(CommandId id);
 
     // --- Dispatch (ARCHITECTURE.md §5 "Events") --------------------------
@@ -396,6 +397,7 @@ private:
     static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
     const std::vector<View*>& focusable_views();
+    const std::vector<std::string>& focused_command_contexts();
     // The innermost active modal, or nullptr if none — the single spot
     // dispatch()/topmost_view_at()/focusable_views() all consult to
     // scope routing (see push_modal's own doc comment above).
@@ -453,6 +455,7 @@ private:
     std::vector<ViewHandle> dispatch_route_scratch_;
     std::vector<ViewHandle> mouse_capture_route_scratch_;
     std::vector<View*> focus_scratch_;
+    std::vector<std::string> command_context_scratch_;
     ModalScopeId next_modal_scope_id_ = 1;
     std::optional<ViewHandle> pending_modal_focus_restore_;
 

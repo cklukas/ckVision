@@ -16,19 +16,33 @@ StatusLine::StatusLine() = default;
 
 void StatusLine::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
+    if (disabled_role_ == ui::kInvalidRole)
+        disabled_role_ = context().roles->find("ckv.statusline.disabled");
 }
 
 std::string StatusLine::effective_label(const StatusLineItem& item) const {
-    if (item.command == ui::kInvalidCommand) return item.label;
-    const ui::CommandInfo* info = context().app->commands().find(item.command);
-    if (info == nullptr) return item.label;
+    const ui::CommandId command = item_command(item);
+    if (command == ui::kInvalidCommand) return item.label;
+    const ui::CommandInfo* info = context().app->commands().find(command);
+    if (info == nullptr) return item.presentation.label.empty() ? item.label : item.presentation.label;
     // Menu titles may carry a '&' mnemonic marker for menus to parse;
     // the status line never navigates by letter, so it always strips
     // one rather than leaking the raw character into the rendered text.
-    std::string text = parse_mnemonic(info->title).display;
-    if (const auto chord = context().app->commands().chord_for_command(item.command))
+    std::string text = parse_mnemonic(item.presentation.label.empty() ? info->title
+                                                                      : item.presentation.label)
+                           .display;
+    if (const auto chord = context().app->commands().chord_for_command(command))
         text = format(*chord) + " " + text;
     return text;
+}
+
+ui::CommandId StatusLine::item_command(const StatusLineItem& item) const noexcept {
+    return item.presentation.command != ui::kInvalidCommand ? item.presentation.command : item.command;
+}
+
+bool StatusLine::item_available(const StatusLineItem& item) const {
+    const ui::CommandId command = item_command(item);
+    return command == ui::kInvalidCommand || context().app->command_available(command);
 }
 
 void StatusLine::set_items(std::vector<StatusLineItem> items) {
@@ -113,9 +127,12 @@ void StatusLine::draw(scene::Painter& painter) {
     const std::vector<LaidOutItem> layout = visible_items();
     for (std::size_t position = 0; position < layout.size(); ++position) {
         const LaidOutItem& item = layout[position];
+        const Style item_style =
+            item_available(items_[item.index]) ? style : context().theme->resolve(disabled_role_);
         if (position > 0) painter.draw_text(Point{item.x - kSeparatorWidth, 0}, " | ", style);
         painter.draw_text(Point{item.x, 0},
-                          text::clip_to_width(effective_label(items_[item.index]), bounds().width - item.x), style);
+                          text::clip_to_width(effective_label(items_[item.index]), bounds().width - item.x),
+                          item_style);
     }
 }
 
@@ -129,8 +146,8 @@ bool StatusLine::on_mouse(const MouseEvent& event) {
         if (x < 0) continue;
         const int w = text::text_width(effective_label(items_[i]));
         if (local_x >= x && local_x < x + w) {
-            if (items_[i].command != ui::kInvalidCommand)
-                context().app->execute_command(items_[i].command);
+            if (item_command(items_[i]) != ui::kInvalidCommand && item_available(items_[i]))
+                context().app->execute_command(item_command(items_[i]));
             return true;
         }
     }

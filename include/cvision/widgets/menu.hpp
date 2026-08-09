@@ -24,12 +24,14 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/command_presentation.hpp"
 #include "cvision/widgets/desktop.hpp"
 
 namespace ckv::widgets {
@@ -44,12 +46,33 @@ enum class MenuItemCheck {
 };
 
 struct MenuItem {
+    MenuItem() = default;
+    MenuItem(std::string item_label, ui::CommandId command_id = ui::kInvalidCommand,
+             std::function<void()> activation = {}, bool is_separator = false,
+             MenuItemCheck check_state = MenuItemCheck::None,
+             std::vector<MenuItem> child_items = {},
+             CommandPresentation command_presentation = {})
+        : label(std::move(item_label)),
+          command(command_id),
+          on_activate(std::move(activation)),
+          separator(is_separator),
+          check(check_state),
+          submenu(std::move(child_items)),
+          presentation(std::move(command_presentation)) {}
+    explicit MenuItem(CommandPresentation command_presentation,
+                      MenuItemCheck check_state = MenuItemCheck::None,
+                      std::vector<MenuItem> child_items = {})
+        : check(check_state),
+          submenu(std::move(child_items)),
+          presentation(std::move(command_presentation)) {}
+
     std::string label;                     // may carry a '&' mnemonic; ignored if separator
     ui::CommandId command = ui::kInvalidCommand;  // if set, activation calls app.execute_command(command)
     std::function<void()> on_activate;     // used when command == kInvalidCommand
     bool separator = false;                // a divider: never highlighted, navigated to, or activated
     MenuItemCheck check = MenuItemCheck::None;
     std::vector<MenuItem> submenu;
+    CommandPresentation presentation;
 };
 
 // Resolves its own theme roles from context() once attached (M9
@@ -117,6 +140,8 @@ private:
     void dismiss_chain();
     bool has_check_column() const noexcept;
     bool has_submenu_column() const noexcept;
+    ui::CommandId item_command(const MenuItem& item) const noexcept;
+    std::string item_presentation_label(const MenuItem& item) const;
 
     std::vector<MenuItem> items_;
     int highlighted_ = -1;
@@ -171,6 +196,9 @@ public:
     // focused before activate() was called.
     void deactivate();
     bool active() const noexcept { return active_; }
+
+    void set_menus(std::vector<MenuBarItem> menus);
+    const std::vector<MenuBarItem>& menus() const noexcept { return menus_; }
 
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;

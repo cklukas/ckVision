@@ -114,6 +114,24 @@ void View::set_enabled(bool enabled) {
     invalidate();
 }
 
+void View::set_theme_override(Theme theme) {
+    theme_override_ = std::make_unique<Theme>(std::move(theme));
+    if (context_.valid()) {
+        Context override_context = context_;
+        override_context.theme = theme_override_.get();
+        propagate_context(override_context);
+    }
+    invalidate();
+}
+
+void View::clear_theme_override() {
+    if (theme_override_ == nullptr) return;
+    theme_override_.reset();
+    if (parent_ != nullptr)
+        propagate_context(parent_->context_);
+    invalidate();
+}
+
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }
 
 void View::invalidate(Rect local_rect) {
@@ -181,6 +199,8 @@ void View::set_detach_sink(DetachSink sink) { propagate_detach_sink(sink); }
 void View::propagate_context(Context context) {
     const std::weak_ptr<void> self_liveness = lifetime_token();
     const bool newly_valid = !context_.valid() && context.valid();
+    if (theme_override_ != nullptr)
+        context.theme = theme_override_.get();
     context_ = context;
     if (newly_valid) on_attached();
     if (self_liveness.expired()) return;

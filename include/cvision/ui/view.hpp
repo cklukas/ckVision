@@ -211,6 +211,13 @@ public:
     bool enabled() const noexcept { return enabled_; }
     void set_enabled(bool enabled);
 
+    // Overrides the propagated theme for this view and all descendants. This
+    // is the per-window/theme-scope mechanism: a Window can switch to Dark or
+    // Mono without reconstructing its controls or changing any constructor
+    // signature. Clearing the override restores the parent/Application theme.
+    void set_theme_override(Theme theme);
+    void clear_theme_override();
+
     // --- Painting / invalidation ---------------------------------------
 
     // Paints this view's own content only (children are painted
@@ -345,6 +352,17 @@ public:
     // ancestors (this view's own key wins if set).
     const std::string* resolve_help_context_key() const noexcept;
 
+    // --- Command context (M9/WP-13) ------------------------------------
+    //
+    // A focused view can declare the named command context that should be
+    // active for commands routed through its focus ancestry. Applications can
+    // also push explicit contexts on CommandRegistry for non-focus-driven
+    // scopes. The two sources compose: a command whose metadata names a
+    // context is available when either source currently names it.
+    const std::optional<std::string>& command_context() const noexcept { return command_context_; }
+    void set_command_context(std::string context) { command_context_ = std::move(context); }
+    void clear_command_context() noexcept { command_context_.reset(); }
+
 protected:
     // Retained containers observe invalidation without changing the public
     // dirty-rect callback contract. The initiating view receives the first
@@ -408,7 +426,9 @@ private:
     bool enabled_ = true;
     FocusPolicy focus_policy_ = FocusPolicy::None;
     bool fills_root_ = true;
+    std::unique_ptr<Theme> theme_override_;
     std::optional<std::string> help_context_key_;
+    std::optional<std::string> command_context_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;
     BoundsChangedSink bounds_changed_sink_;

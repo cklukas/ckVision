@@ -377,7 +377,7 @@ CK_TEST(present_modeless_attaches_the_box_active_and_focused_over_an_already_act
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* background = desktop.add_window(std::make_unique<Window>("Background"));
     CK_CHECK(background->active());
 
@@ -402,7 +402,7 @@ CK_TEST(generic_desktop_attachment_of_a_message_box_preserves_window_management_
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     auto background_owned = std::make_unique<Window>("Background");
@@ -445,7 +445,7 @@ CK_TEST(present_message_box_scopes_input_immediately_and_completes_after_detach)
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     bool background_command_ran = false;
@@ -489,7 +489,7 @@ CK_TEST(present_message_box_external_detach_uses_the_documented_escape_result) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
@@ -518,7 +518,7 @@ CK_TEST(present_message_box_quit_sweep_completes_with_its_escape_result_after_de
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto* desktop = app.root().add(
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
                                            MessageBoxButtons::OkCancel};
@@ -542,7 +542,7 @@ CK_TEST(a_vetoed_presented_message_box_remains_modal_until_a_later_close_succeed
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto* desktop = app.root().add(
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
     auto presentation = present_message_box(
         app, *desktop, roles,
@@ -578,7 +578,7 @@ CK_TEST(a_vetoed_presented_message_box_also_vetoes_its_quit_sweep) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto* desktop = app.root().add(
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
     auto presentation = present_message_box(
         app, *desktop, roles,
@@ -600,7 +600,7 @@ CK_TEST(a_message_box_completion_handler_can_present_a_nested_modal_after_outer_
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto* desktop = app.root().add(
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background));
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
                                            MessageBoxButtons::Ok};
@@ -647,7 +647,7 @@ CK_TEST(exec_message_box_returns_the_pressed_result_in_a_headless_script) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
@@ -670,7 +670,7 @@ CK_TEST(exec_message_box_returns_the_escape_result_when_dismissed_via_esc) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Confirm", "Proceed?",
@@ -688,7 +688,7 @@ CK_TEST(exec_message_box_restores_focus_to_whatever_was_focused_before_the_call)
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     auto* invoker = app.root().add_child(std::make_unique<View>());
@@ -710,7 +710,7 @@ CK_TEST(exec_message_box_host_quit_returns_fallback_and_detaches_the_open_box) {
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(), roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Confirm", "Proceed?",

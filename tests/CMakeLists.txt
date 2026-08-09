@@ -72,6 +72,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_virtual_display_visual_golden.cpp
     test_view.cpp
     test_window_activation_golden.cpp
+    test_wp35.cpp
     test_widgets.cpp
     test_window.cpp
     test_window_list_dialog.cpp)
@@ -229,6 +230,10 @@ set_tests_properties(layer_checker_self_test PROPERTIES LABELS "script;architect
 add_test(NAME hello_line_budget
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_hello_line_budget.py)
 set_tests_properties(hello_line_budget PROPERTIES LABELS "script;budget" TIMEOUT 30)
+
+add_test(NAME example_hygiene
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_example_hygiene.py)
+set_tests_properties(example_hygiene PROPERTIES LABELS "script;api" TIMEOUT 30)
 
 # D-012/WP-23: scan every tracked and non-ignored text artifact for
 # prohibited source-fidelity claims, and separately prove that the checker

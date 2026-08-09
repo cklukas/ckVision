@@ -176,7 +176,7 @@ CK_TEST(a_resize_event_grows_the_backing_surface_and_forces_a_full_repaint) {
 
 CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto window_owned = std::make_unique<Window>("Retained");
     window_owned->set_bounds(Rect{2, 2, 14, 6});
@@ -206,7 +206,7 @@ CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint)
 
 CK_TEST(dragging_a_window_recomposes_without_repainting_its_retained_content) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto window_owned = std::make_unique<Window>("Dragged");
     window_owned->set_bounds(Rect{2, 2, 14, 6});
@@ -236,7 +236,7 @@ CK_TEST(dragging_a_window_recomposes_without_repainting_its_retained_content) {
 
 CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.dialog_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto first_owned = std::make_unique<Window>("First");
     first_owned->set_bounds(Rect{2, 2, 12, 6});
@@ -260,7 +260,7 @@ CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {
 
 CK_TEST(retained_window_layers_preserve_foreground_frame_topology_through_move_and_resize) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto background_owned = std::make_unique<Window>("Back");
     background_owned->set_bounds(Rect{2, 2, 14, 4});
@@ -286,7 +286,7 @@ CK_TEST(retained_window_layers_preserve_foreground_frame_topology_through_move_a
 
 CK_TEST(moving_a_popup_recomposes_its_retained_backing_without_content_repaint) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto popup_owned = std::make_unique<CountingPopup>();
     popup_owned->set_bounds(Rect{2, 2, 8, 2});
@@ -320,7 +320,7 @@ CK_TEST(moving_a_popup_recomposes_its_retained_backing_without_content_repaint) 
 
 CK_TEST(runtime_popup_attachment_and_removal_recompose_the_retained_scene) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     f.app.root().add_child(std::move(desktop_owned));
     f.app.step(0);
@@ -341,7 +341,7 @@ CK_TEST(runtime_popup_attachment_and_removal_recompose_the_retained_scene) {
 
 CK_TEST(dropdown_menu_shadows_follow_the_retained_popup_layer) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto dropdown_owned = std::make_unique<DropdownMenu>(
         std::vector<MenuItem>{{"&Open", ckv::ui::kInvalidCommand, nullptr, false, {}, {}}});
@@ -363,7 +363,7 @@ CK_TEST(dropdown_menu_shadows_follow_the_retained_popup_layer) {
 
 CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     auto window_owned = std::make_unique<Window>("Lower");
     window_owned->set_bounds(Rect{2, 2, 10, 6});
@@ -384,7 +384,7 @@ CK_TEST(window_and_dropdown_shadows_form_one_retained_binary_union) {
 
 CK_TEST(rapid_retained_window_and_dropdown_lifecycles_leave_no_stale_scene_content) {
     Fixture f;
-    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
     Desktop* desktop = desktop_owned.get();
     f.app.root().add_child(std::move(desktop_owned));
     f.app.step(0);

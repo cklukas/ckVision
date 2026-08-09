@@ -20,7 +20,7 @@ namespace ckv::gallery {
 GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
-    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds(), app_.theme(), roles_.desktop_background);
+    auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
@@ -28,8 +28,10 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // (M9/WP-11) — title (with mnemonic), chord hint, and enablement
     // all render live from the registration below.
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_role_override(roles_.menu_bar_normal);
-    status->set_items({{"", ui::std_commands::kMenu, 0}, {"", ui::std_commands::kQuit, 0}});
+    status->set_items({widgets::StatusLineItem{
+                           widgets::CommandPresentation{ui::std_commands::kMenu}},
+                       widgets::StatusLineItem{
+                           widgets::CommandPresentation{ui::std_commands::kQuit}}});
     // dock_bottom (not add_child + a one-time set_bounds) keeps the
     // status line pinned to the last row across every future terminal
     // resize — Desktop::on_resized() re-derives its position from
@@ -69,12 +71,15 @@ void GalleryApp::build_menu_bar() {
                                                   },
                                                   false, {}, {}});
     file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true, {}, {}});
-    file_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kQuit, nullptr, false, {}, {}});
+    file_menu.items.push_back(
+        widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}});
     menus.push_back(std::move(file_menu));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kTile, nullptr, false, {}, {}});
-    window_menu.items.push_back(widgets::MenuItem{"", ui::std_commands::kCascade, nullptr, false, {}, {}});
+    window_menu.items.push_back(
+        widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kTile}});
+    window_menu.items.push_back(
+        widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kCascade}});
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

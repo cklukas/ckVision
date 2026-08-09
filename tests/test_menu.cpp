@@ -392,7 +392,7 @@ struct MenuBarFixture {
     ManualClock clock;
     Application app{term, clock};
     Fixture f;
-    Desktop desktop{Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background};
+    Desktop desktop{Rect{0, 0, 80, 24}};
 
     MenuBarFixture() { desktop.set_context(ui::Context{&f.theme, &f.registry, &app}); }
 };
@@ -441,7 +441,7 @@ CK_TEST(clicking_the_bar_to_open_it_still_restores_the_true_prior_focus_on_escap
     // stays off of root() (matching every other test here), so this
     // uses its own throwaway Desktop instead of reaching for it.
     auto desktop_owned =
-        std::make_unique<Desktop>(Rect{0, 0, 80, 24}, mf.f.theme, mf.f.roles.dialog_background);
+        std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(mf.app.root().add_child(std::move(desktop_owned)));
 
     auto bar_owned = std::make_unique<MenuBar>(

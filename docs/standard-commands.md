@@ -30,12 +30,13 @@ lets:
   appears and render consistent title/chord/enablement (M9/WP-11) no
   matter which application built it.
 
-An application that needs different wording for the same concept can keep
-its own command in the application range instead of referencing the standard
-one. `examples/hello` does this for its "Exit" command. That is a legitimate,
-expected choice, not a workaround: the reserved range's titles are fixed (only
-`register_standard_commands()` can populate that range), precisely so that
-referencing a standard id always means the same thing everywhere.
+Menu and status entries may also use `widgets::CommandPresentation` to give a
+surface-specific label or mnemonic while still referencing the same
+`CommandId`. That is how `examples/hello` presents one application quit
+command as `Exit` in the File menu and `Quit` in the status line without a
+second handler, chord, enablement rule, or command identity. An application
+should create a separate application-range command only when the concept
+itself is different, not merely when one surface needs different wording.
 
 ## The set
 
@@ -103,8 +104,17 @@ application should hard-code.
   `kFocusPrevious`, and `kHelp` remain available: Tab and Shift-Tab traverse
   only the active modal subtree, while F1 resolves the focused modal control's
   help context. Every other standard command and every application-defined
-  accelerator remains blocked until the modal scope ends; in particular F10,
-  window commands, and Alt+X cannot reach background UI.
+  accelerator remains blocked until the modal scope ends unless that
+  application command declares a named context that is active in the modal's
+  focused ancestry. This allows modal-local commands while still preventing
+  F10, window commands, Alt+X, and other background UI accelerators from
+  leaking through.
+- **Named command contexts** live in `CommandRegistry` metadata and can be
+  activated by explicit push/pop scopes or by a focused view's ancestry
+  (`View::set_command_context`). A context-bound command is unavailable until
+  one of those sources names its context. `CommandRegistry::retract_command`
+  removes the command's metadata, handler, enablement predicate, and key
+  bindings together so stale menu/status references become inert.
 - **`kClose`/`kQuit`'s default handlers** (M9/WP-15) are installed by
   `Desktop::on_attached()` — but only if nothing has claimed the id
   yet (`CommandRegistry::has_handler`), the same guarded pattern

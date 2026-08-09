@@ -67,6 +67,7 @@ struct StandardRoles {
     RoleId canvas_fallback;  // Canvas's no-graphics-capability text fallback
     RoleId text_view_text;
     RoleId status_line_normal;
+    RoleId status_line_disabled;
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
 };

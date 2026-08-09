@@ -42,9 +42,9 @@ CK_TEST(a_headless_terminal_resize_repins_docked_desktop_chrome_and_reclamps_win
     ckv::term::HeadlessTerminal term(Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    const StandardRoles roles = install_standard_theme(app);
+    install_standard_theme(app);
 
-    auto desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+    auto desktop = std::make_unique<Desktop>(app.root().bounds());
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 
@@ -168,9 +168,9 @@ CK_TEST(clicking_deep_content_in_a_background_window_raises_and_activates_it_thr
     ckv::term::HeadlessTerminal term(Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    const StandardRoles roles = install_standard_theme(app);
+    install_standard_theme(app);
 
-    auto desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+    auto desktop = std::make_unique<Desktop>(app.root().bounds());
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 
@@ -211,9 +211,9 @@ CK_TEST(clicking_the_desktops_own_background_does_not_change_which_window_is_act
     ckv::term::HeadlessTerminal term(Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    const StandardRoles roles = install_standard_theme(app);
+    install_standard_theme(app);
 
-    auto desktop = std::make_unique<Desktop>(app.root().bounds(), app.theme(), roles.desktop_background);
+    auto desktop = std::make_unique<Desktop>(app.root().bounds());
     Desktop* desktop_ptr = desktop.get();
     app.root().add_child(std::move(desktop));
 

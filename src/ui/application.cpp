@@ -318,6 +318,20 @@ const std::vector<View*>& Application::focusable_views() {
     return out;
 }
 
+const std::vector<std::string>& Application::focused_command_contexts() {
+    std::vector<std::string>& out = command_context_scratch_;
+    out.clear();
+    View* const scope_root = modal_root();
+    View* start = focused_;
+    if (scope_root != nullptr && (start == nullptr || !is_ancestor_of(*scope_root, *start)))
+        start = scope_root;
+    for (View* view = start; view != nullptr; view = view->parent()) {
+        if (view->command_context()) out.push_back(*view->command_context());
+        if (view == scope_root) break;
+    }
+    return out;
+}
+
 bool Application::focus_next() {
     const std::vector<View*>& views = focusable_views();
     if (views.empty())
@@ -395,9 +409,13 @@ void Application::set_command_handler(CommandId id, std::function<void()> handle
     commands_.set_handler(id, std::move(handler));
 }
 
+bool Application::command_available(CommandId id) {
+    return commands_.is_available(id, focused_command_contexts());
+}
+
 bool Application::execute_command(CommandId id) {
     try {
-        return commands_.execute(id);
+        return commands_.execute(id, focused_command_contexts());
     } catch (...) {
         terminal_.terminate_after_callback_failure();
     }
@@ -459,7 +477,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                                 return true;
                         if (e.action == KeyAction::Release) return false;
                         if (auto id = commands_.command_for_key(e.chord))
-                            return execute_command(*id);
+                            return commands_.execute(*id, focused_command_contexts());
                         return false;
                     }
                     std::vector<ViewHandle>& route = dispatch_route_scratch_;
@@ -483,8 +501,15 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // older controls would interpret as a second press.
                     if (e.action == KeyAction::Release) return false;
                     if (scope_root != nullptr) {
-                        if (auto id = commands_.command_for_key(e.chord); id && is_modal_scope_command(*id))
-                            return execute_command(*id);
+                        if (auto id = commands_.command_for_key(e.chord)) {
+                            const std::vector<std::string>& contexts = focused_command_contexts();
+                            const CommandInfo* info = commands_.find(*id);
+                            const bool modal_context_command =
+                                info != nullptr && !info->context.empty() &&
+                                commands_.is_available(*id, contexts);
+                            if (is_modal_scope_command(*id) || modal_context_command)
+                                return commands_.execute(*id, contexts);
+                        }
                         return false;
                     }
                     // F1 context help (D-027) routes through std_commands::
@@ -493,7 +518,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // is exactly the old F1-specific logic this branch used
                     // to run inline.
                     if (auto id = commands_.command_for_key(e.chord))
-                        return execute_command(*id);
+                        return commands_.execute(*id, focused_command_contexts());
                     return false;
                 } else if constexpr (std::is_same_v<T, TextEvent>) {
                     if (e.from_paste)

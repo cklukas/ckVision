@@ -8,8 +8,7 @@
 
 namespace ckv::widgets {
 
-Desktop::Desktop(Rect bounds, const ui::Theme& theme, ui::RoleId background_role)
-    : View(bounds), theme_(theme), background_role_(background_role) {
+Desktop::Desktop(Rect bounds) : View(bounds) {
     last_content_area_ = content_area();
 }
 
@@ -31,6 +30,8 @@ void Desktop::install_default_handler(ui::CommandId id, std::function<void()> ha
 }
 
 void Desktop::on_attached() {
+    if (background_role_ == ui::kInvalidRole)
+        background_role_ = context().roles->find("ckv.desktop.background");
     app_ = context().app;
     if (app_ == nullptr) return;
     install_default_handler(ui::std_commands::kClose, [this] { close_active_window(); });
@@ -496,7 +497,7 @@ void Desktop::draw(scene::Painter& painter) {
     // panel even under a color scheme where the two happen to share a
     // hue).
     painter.fill(Rect{0, 0, bounds().width, bounds().height},
-                  Cell::from_grapheme("░", theme_.resolve(background_role_)));
+                  Cell::from_grapheme("░", context().theme->resolve(background_role_)));
 }
 
 void Desktop::draw_retained(scene::Painter& painter) {

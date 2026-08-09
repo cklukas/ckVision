@@ -43,7 +43,7 @@ CK_TEST(the_dialogs_list_contains_every_windows_current_title_in_order) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window("Alpha"));
     desktop.add_window(make_window("Beta"));
 
@@ -57,7 +57,7 @@ CK_TEST(activating_a_row_switches_the_desktops_active_window_and_closes_the_dial
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     Window* alpha = desktop.add_window(make_window("Alpha"));
     desktop.add_window(make_window("Beta"));  // Beta is active after being added second
     CK_CHECK(desktop.active_window() != alpha);
@@ -81,7 +81,7 @@ CK_TEST(type_ahead_selects_a_matching_window_before_activation) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window("Alpha"));
     Window* beta = desktop.add_window(make_window("Beta"));
     Window* gamma = desktop.add_window(make_window("Gamma"));
@@ -108,7 +108,7 @@ CK_TEST(the_close_button_dismisses_without_changing_the_active_window) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window("Alpha"));
     Window* beta = desktop.add_window(make_window("Beta"));
 
@@ -134,7 +134,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_dialog) {
     auto* invoker = app.root().add_child(std::make_unique<ckv::ui::View>());
     invoker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
 
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window("Alpha"));
 
     auto handle = make_window_list_dialog(desktop, f.roles, app, invoker);
@@ -150,7 +150,7 @@ CK_TEST(a_desktop_with_no_windows_produces_a_dialog_that_does_not_crash_on_enter
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    Desktop desktop(Rect{0, 0, 80, 24}, f.theme, f.roles.dialog_background);
+    Desktop desktop(Rect{0, 0, 80, 24});
 
     auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
     app.root().add_child(std::move(handle.window));
@@ -165,8 +165,7 @@ CK_TEST(present_window_list_dialog_completes_after_modal_detachment) {
     Application app(term, clock);
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
-    auto* desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}, app.theme(),
-                                                              roles.dialog_background));
+    auto* desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
     desktop->add_window(make_window("Workspace"));
 
     auto presentation = present_window_list_dialog(*desktop, app, roles);
