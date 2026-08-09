@@ -43,7 +43,8 @@ struct MessageBoxDescriptor {
 // each set (Ok for Ok/OkCancel, Yes for YesNo/YesNoCancel) is the
 // default — Enter anywhere in the box activates it. Esc activates
 // Cancel/No where present; for a bare Ok box, Esc is equivalent to Ok
-// (dismissing an alert), matching common convention. `on_result` fires
+// (dismissing an alert), matching common convention. The returned standard
+// dialog window is non-resizable by default. `on_result` fires
 // exactly once, whichever button (or Esc) closes the box. It may detach or
 // destroy the box; no factory-owned work touches the Window after the callback
 // returns. On close, focus restores to `restore_focus_to` only if that exact

@@ -173,6 +173,17 @@ private:
     int w_;
     int h_;
 };
+
+class HeightForWidthView : public View {
+public:
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return {0, 10, ckv::ui::kUnboundedExtent};
+    }
+    ckv::ui::SizeHint vertical_size_hint() const override {
+        return {1, 1, ckv::ui::kUnboundedExtent};
+    }
+    int height_for_width(int width) const override { return width <= 5 ? 4 : 2; }
+};
 }  // namespace
 
 CK_TEST(a_rows_horizontal_hint_sums_its_children_plus_spacing) {
@@ -209,6 +220,28 @@ CK_TEST(a_fixed_policy_row_nested_in_a_column_receives_its_aggregated_height) {
     row->add_item(std::make_unique<HintedView>(10, 2));
     auto* row_ptr = column.add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     CK_CHECK(row_ptr->bounds().height == 2);
+}
+
+CK_TEST(a_row_uses_child_height_for_allocated_width_on_the_cross_axis) {
+    Row row(Rect{0, 0, 5, 10});
+    auto* child = row.add_item(std::make_unique<HeightForWidthView>(),
+                               LayoutSpec{SizePolicy::Expanding, 1, Alignment::Start});
+    CK_CHECK(child->bounds() == (Rect{0, 0, 5, 4}));
+
+    row.set_bounds(Rect{0, 0, 10, 10});
+
+    CK_CHECK(child->bounds() == (Rect{0, 0, 10, 2}));
+}
+
+CK_TEST(a_column_uses_child_height_for_its_resolved_cross_axis_width) {
+    Column column(Rect{0, 0, 5, 20});
+    auto* child = column.add_item(std::make_unique<HeightForWidthView>(),
+                                  LayoutSpec{SizePolicy::Fixed, 1, Alignment::Fill});
+    CK_CHECK(child->bounds() == (Rect{0, 0, 5, 4}));
+
+    column.set_bounds(Rect{0, 0, 10, 20});
+
+    CK_CHECK(child->bounds() == (Rect{0, 0, 10, 2}));
 }
 
 CK_TEST(an_empty_container_reports_zero_preferred_size_without_crashing) {

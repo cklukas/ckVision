@@ -59,6 +59,17 @@ private:
     int w_;
     int h_;
 };
+
+class HeightForWidthView : public View {
+public:
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return {0, 10, ckv::ui::kUnboundedExtent};
+    }
+    ckv::ui::SizeHint vertical_size_hint() const override {
+        return {1, 1, ckv::ui::kUnboundedExtent};
+    }
+    int height_for_width(int width) const override { return width <= 5 ? 4 : 2; }
+};
 }  // namespace
 
 CK_TEST(a_single_cell_child_defaults_to_filling_its_whole_cell) {
@@ -105,6 +116,17 @@ CK_TEST(a_center_aligned_child_is_centered_on_both_axes_within_its_cell) {
                          .vertical_alignment = Alignment::Center};
     auto* child = grid.add_item(std::make_unique<HintedView>(4, 6), spec);
     CK_CHECK(child->bounds() == (Rect{13, 7, 4, 6}));  // 10 + (10-4)/2, 0 + (20-6)/2
+}
+
+CK_TEST(a_grid_cell_uses_child_height_for_its_resolved_width) {
+    Grid grid(Rect{0, 0, 5, 10}, 1, 1);
+    const GridSpec spec{.row = 0, .column = 0, .vertical_alignment = Alignment::Start};
+    auto* child = grid.add_item(std::make_unique<HeightForWidthView>(), spec);
+    CK_CHECK(child->bounds() == (Rect{0, 0, 5, 4}));
+
+    grid.set_bounds(Rect{0, 0, 10, 10});
+
+    CK_CHECK(child->bounds() == (Rect{0, 0, 10, 2}));
 }
 
 CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_spec) {

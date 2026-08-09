@@ -58,7 +58,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 14 | WP-34B — Controls, editing, selection, and scrolling closure | 3–4 pw | **Implementation complete — gate pending** | WP-34A | M4/M6 control gaps |
 | 15 | WP-34C — Data, media, help, file, and catalog closure | 3–5 pw | **Implementation complete — gate pending** | WP-34B | M6 remaining catalog gaps |
 | 16 | WP-35 — Theme, command presentation, composition, and example ergonomics closure | 4–6 pw | **Implementation complete — gate pending** | WP-34C | WP-6…WP-13, WP-17 and unfinished WP-10 |
-| 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | Ready | WP-35 | WP-16, WP-18…WP-22; M10 exit |
+| 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | **Implementation complete — gate pending** | WP-35 | WP-16, WP-18…WP-22; M10 exit |
 | 18 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
 | 19 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
 
@@ -126,13 +126,13 @@ historical status labels in `api-ergonomics-review-2.md`.
 | WP-13 | Reopened — named command contexts remain incomplete and default traversal fails inside the current modal boundary | WP-27, WP-35 |
 | WP-14 | Reopened — `run()` uses unsanctioned process-global Application state and wake cannot interrupt an in-flight wait | WP-27 |
 | WP-15 | Implementation complete — the shared blocking-modal guard, modal routing/focus lifetime repair, and message/file/directory `exec_*` conveniences are covered locally; WP-27/38 retain lifecycle and global-matrix acceptance | WP-27, WP-38 |
-| WP-16 | Reopened — height-for-width propagation exists but containers do not make wrapped height visibly effective | WP-36 |
+| WP-16 | Implementation complete — Row, Column, Grid, Dock, and hosted dialog content consume height-for-width through executable layout acceptance; final global gate remains | WP-36 |
 | WP-17 | Reopened — the former provenance and line-limit contradiction were repaired by WP-23; remaining example integration acceptance is owned by WP-35 | WP-35 |
-| WP-18 | Reopened — the required resized-dialog interaction and appearance golden were replaced by narrower geometry assertions | WP-36 |
-| WP-19 | Reopened — container implementation requires literal scripted/golden/reference acceptance | WP-36 |
-| WP-20 | Reopened — overlay coexistence/resize/size-hint behavior requires the specified end-to-end appearance evidence | WP-36 |
-| WP-21 | Reopened — the shrink-storm/recovery script and complete dialog-default application remain to be demonstrated | WP-36 |
-| WP-22 | Reopened — lazy filesystem behavior, Splitter use, and unchanged-observable-behavior evidence require the specified integrated acceptance | WP-36 |
+| WP-18 | Implementation complete — resized hosted-dialog wrapping is covered in WP-36 acceptance; root resize goldens remain the visual baseline | WP-36 |
+| WP-19 | Implementation complete — Row/Column/Grid/Dock height-for-width regressions and existing container suites cover the local implementation; final global gate remains | WP-36 |
+| WP-20 | Implementation complete — frame-overlay and overlay behavior remain covered by their suites; WP-36 adds application-frame shrink/recovery evidence | WP-36 |
+| WP-21 | Implementation complete — WP-36 shrink-storm script drives full/degraded/too-small/recovered frames with deterministic focus, chrome, and damage evidence | WP-36 |
+| WP-22 | Implementation complete — filebrowser lazy expansion, injected filesystem, Splitter interaction, payloads, callbacks, navigation, and observable frames are covered locally | WP-36 |
 
 ## Corrective work packages
 
@@ -1641,6 +1641,21 @@ unit assertions as substitutes for scripts, goldens, and visible behavior.
   meet the literal M10 exit with scripts for behavior and goldens for appearance.
 - Every container/model feature has public reference documentation and a
   gallery/filebrowser demonstration where relevant.
+
+**Implementation evidence.** WP-36 makes width-dependent height participate in
+`ui::Row`, `ui::Column`, `ui::Grid`, and `ui::Dock` through the internal layout
+metric helper, so `StaticText::height_for_width()` affects actual child bounds
+instead of remaining a widget-only query. The standard message, file,
+directory-picker, help-viewer, and window-list factories now explicitly build
+non-resizable dialog windows, matching descriptor dialogs' default. Acceptance
+is concentrated in `tests/test_wp36.cpp`: hosted dialog wrapping reallocates
+height across resize frames; every standard dialog factory is checked for the
+fixed-size default; descriptor validation veto and Esc cancel run through real
+Window hooks; and a repeated full/degraded/too-small/recovered shrink storm
+proves deterministic frames, focus, chrome, damage, and recovery. Lower-level
+regression evidence lives in `suite_test_layout`, `suite_test_grid`, and
+`suite_test_dock`; filebrowser lazy expansion/Splitter/payload/callback
+evidence remains in `suite_test_filebrowser_smoke`.
 
 ### WP-37 — Windows backend and three-platform matrix
 

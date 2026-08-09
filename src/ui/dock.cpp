@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/ui/layout_metrics.hpp"
 
 namespace ckv::ui {
 
@@ -80,8 +81,8 @@ void Dock::relayout() {
     }
 
     DockEdgeExtents edges;
-    if (top != nullptr) edges.top = top->vertical_size_hint().preferred;
-    if (bottom != nullptr) edges.bottom = bottom->vertical_size_hint().preferred;
+    if (top != nullptr) edges.top = detail::preferred_height_for_width(*top, bounds().width);
+    if (bottom != nullptr) edges.bottom = detail::preferred_height_for_width(*bottom, bounds().width);
     if (left != nullptr) edges.left = left->horizontal_size_hint().preferred;
     if (right != nullptr) edges.right = right->horizontal_size_hint().preferred;
 

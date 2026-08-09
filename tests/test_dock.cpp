@@ -78,6 +78,17 @@ private:
     int w_;
     int h_;
 };
+
+class HeightForWidthView : public View {
+public:
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return {0, 10, ckv::ui::kUnboundedExtent};
+    }
+    ckv::ui::SizeHint vertical_size_hint() const override {
+        return {1, 1, ckv::ui::kUnboundedExtent};
+    }
+    int height_for_width(int width) const override { return width <= 5 ? 4 : 2; }
+};
 }  // namespace
 
 CK_TEST(a_center_only_child_fills_the_whole_dock) {
@@ -90,6 +101,19 @@ CK_TEST(a_top_child_is_sized_to_its_own_preferred_height_full_width) {
     Dock dock(Rect{0, 0, 40, 20});
     auto* child = dock.add_item(std::make_unique<HintedView>(0, 4), DockEdge::Top);
     CK_CHECK(child->bounds() == (Rect{0, 0, 40, 4}));
+}
+
+CK_TEST(a_top_child_uses_height_for_the_docks_current_width) {
+    Dock dock(Rect{0, 0, 5, 10});
+    auto* top = dock.add_item(std::make_unique<HeightForWidthView>(), DockEdge::Top);
+    auto* center = dock.add_item(std::make_unique<View>(), DockEdge::Center);
+    CK_CHECK(top->bounds() == (Rect{0, 0, 5, 4}));
+    CK_CHECK(center->bounds() == (Rect{0, 4, 5, 6}));
+
+    dock.set_bounds(Rect{0, 0, 10, 10});
+
+    CK_CHECK(top->bounds() == (Rect{0, 0, 10, 2}));
+    CK_CHECK(center->bounds() == (Rect{0, 2, 10, 8}));
 }
 
 CK_TEST(all_five_slots_together_match_the_pure_function_result) {

@@ -73,6 +73,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_view.cpp
     test_window_activation_golden.cpp
     test_wp35.cpp
+    test_wp36.cpp
     test_widgets.cpp
     test_window.cpp
     test_window_list_dialog.cpp)

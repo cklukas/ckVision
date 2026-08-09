@@ -72,6 +72,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto window = std::make_unique<Window>(strings.help_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
+    window->set_resizable(false);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();

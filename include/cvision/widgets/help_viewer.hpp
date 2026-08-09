@@ -67,7 +67,8 @@ private:
 // capture it by reference, matching file_dialog's own FileSystem
 // contract). Desktop::present_modeless attaches the returned handle
 // and focuses its initial_focus in one call; modal presentation is
-// explicit through Desktop::present_modal.
+// explicit through Desktop::present_modal. The returned standard dialog window
+// is non-resizable by default.
 WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
                                const StandardStrings& strings = english_standard_strings());

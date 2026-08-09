@@ -12,8 +12,10 @@
 // retired fill-only cross-axis limitation set (see layout.hpp). A
 // child may still SPAN multiple consecutive rows/columns, and is
 // positioned within its spanned cell via the same Alignment values
-// Row/Column use (Fill/Start/Center/End) — hence no separate alignment
-// enum here, per layout.hpp's own doc comment.
+// Row/Column use (Fill/Start/Center/End). Once the child's cell width is
+// resolved, vertical Start/Center/End placement uses height_for_width(width)
+// for wrapped content — hence no separate alignment or wrapping enum here,
+// per layout.hpp's own doc comment.
 //
 // Grid does not aggregate its children's size hints into its own
 // (unlike Row/Column): a grid's own size is normally given explicitly

@@ -9,12 +9,13 @@
 // distinct layout algorithm; this file stays scoped to the linear,
 // main-axis-plus-cross-axis case.
 //
-// Cross-axis sizing (M10/WP-19): a child's own cross-axis extent
+// Cross-axis sizing (M10/WP-19/WP-36): a child's own cross-axis extent
 // defaults to filling the container (Alignment::Fill, matching every
 // Row/Column built before this landed) — LayoutSpec::alignment opts a
-// child OUT into Start/Center/End, sized to its own cross-axis
-// preferred hint instead, clamped to fit within whatever margins
-// leave available.
+// child OUT into Start/Center/End, sized to its own cross-axis preferred
+// extent instead. For vertical extent after a width is known, that preferred
+// extent includes View::height_for_width(width), so wrapped text participates
+// in actual placement rather than remaining a widget-only query.
 #pragma once
 
 #include <unordered_map>

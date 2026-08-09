@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/ui/layout_metrics.hpp"
 
 namespace ckv::ui {
 
@@ -87,9 +88,9 @@ void Grid::relayout() {
         const auto [cell_y, cell_height] = span_extent(rows, spec.row, spec.row_span);
 
         const int preferred_w = child->horizontal_size_hint().preferred;
-        const int preferred_h = child->vertical_size_hint().preferred;
         const auto [x, width] =
             align_cross_axis(cell_width, preferred_w, spec.horizontal_alignment, 0, 0);
+        const int preferred_h = detail::preferred_height_for_width(*child, width);
         const auto [y, height] =
             align_cross_axis(cell_height, preferred_h, spec.vertical_alignment, 0, 0);
 

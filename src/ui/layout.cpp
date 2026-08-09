@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/ui/layout_metrics.hpp"
 
 namespace ckv::ui {
 
@@ -180,7 +181,7 @@ void Row::relayout() {
     for (std::size_t i = 0; i < children().size(); ++i) {
         View& child = *children()[i];
         const LayoutSpec spec = spec_for(child, specs_);
-        const int preferred = child.vertical_size_hint().preferred;
+        const int preferred = detail::preferred_height_for_width(child, sizes[i].second);
         const auto [cross_offset, cross_extent] = align_cross_axis(
             bounds().height, preferred, spec.alignment, spec.margin_before, spec.margin_after);
         child.set_bounds(Rect{sizes[i].first, cross_offset, sizes[i].second, cross_extent});
@@ -214,7 +215,17 @@ void Column::set_spacing(int spacing) {
 void Column::relayout() {
     std::vector<LayoutChild> layout_children;
     layout_children.reserve(children().size());
-    for (const auto& child : children()) layout_children.push_back(child_layout(*child, specs_, false));
+    for (const auto& child : children()) {
+        const LayoutSpec spec = spec_for(*child, specs_);
+        const int preferred_width = child->horizontal_size_hint().preferred;
+        const auto [cross_offset, cross_extent] = align_cross_axis(
+            bounds().width, preferred_width, spec.alignment, spec.margin_before, spec.margin_after);
+        (void)cross_offset;
+        const SizeHint vertical = child->vertical_size_hint();
+        layout_children.push_back(
+            LayoutChild{vertical.min, detail::preferred_height_for_width(*child, cross_extent),
+                        spec.policy, spec.weight});
+    }
 
     const auto sizes = distribute_main_axis(layout_children, bounds().height, spacing_);
     for (std::size_t i = 0; i < children().size(); ++i) {

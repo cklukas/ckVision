@@ -19,6 +19,7 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
     auto window = std::make_unique<Window>(strings.window_list_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
+    window->set_resizable(false);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();

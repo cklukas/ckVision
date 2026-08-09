@@ -34,7 +34,8 @@ using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 // Window (the installed closures capture it by reference).
 // Desktop::present_modeless attaches the returned handle and focuses
 // its initial_focus in one call; modal presentation is explicit through
-// Desktop::present_modal.
+// Desktop::present_modal. The returned standard dialog window is
+// non-resizable by default.
 WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& roles, ui::Application& app,
                                       ui::View* restore_focus_to,
                                       const StandardStrings& strings = english_standard_strings());

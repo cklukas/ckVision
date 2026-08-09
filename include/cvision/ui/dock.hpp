@@ -9,7 +9,9 @@
 // menu-bar mechanism serves a narrower, already-shipped purpose and is
 // left exactly as it is).
 //
-// At most one child per edge (including Center) — a caller wanting
+// Top/Bottom edge heights use the edge child's height_for_width(dock width),
+// so wrapped content can reserve its natural strip height after the dock width
+// is known. At most one child per edge (including Center) — a caller wanting
 // several views on the same edge nests a Row/Column there, the same
 // "compose smaller primitives" answer Row/Column give for anything
 // beyond their own scope. Reservation order is fixed and canonical
