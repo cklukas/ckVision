@@ -24,6 +24,7 @@ add_executable(cvision_tests
     test_golden_hostile_content.cpp
     test_grid.cpp
     test_headless_terminal.cpp
+    test_hot_path_allocations.cpp
     test_help_viewer.cpp
     test_history.cpp
     test_image.cpp

@@ -1,0 +1,112 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+//
+// WP-31 allocation gates. The process-wide replacement lives only in the
+// test executable; library state remains instance-owned. It counts ordinary
+// allocations while a narrow owning-thread scope is active, after each path
+// has been warmed to its established scene/topology capacity.
+#include <atomic>
+#include <cstddef>
+#include <cstdlib>
+#include <new>
+
+#include "cktest.hpp"
+#include "cvision/scene/compositor.hpp"
+#include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/term/presenter.hpp"
+#include "cvision/ui/application.hpp"
+
+namespace {
+
+std::atomic<bool> allocation_measurement_active{false};
+std::atomic<std::size_t> measured_allocations{0};
+
+void* counted_allocate(std::size_t size) {
+    if (allocation_measurement_active.load(std::memory_order_relaxed))
+        measured_allocations.fetch_add(1, std::memory_order_relaxed);
+    if (void* memory = std::malloc(size == 0 ? 1 : size)) return memory;
+    throw std::bad_alloc{};
+}
+
+class AllocationScope {
+public:
+    AllocationScope() {
+        measured_allocations.store(0, std::memory_order_relaxed);
+        allocation_measurement_active.store(true, std::memory_order_relaxed);
+    }
+    ~AllocationScope() { allocation_measurement_active.store(false, std::memory_order_relaxed); }
+
+    std::size_t count() const noexcept { return measured_allocations.load(std::memory_order_relaxed); }
+};
+
+class InputProbe final : public ckv::ui::View {
+public:
+    bool on_key(const ckv::KeyEvent&) override { return true; }
+    bool on_mouse(const ckv::MouseEvent&) override { return true; }
+};
+
+}  // namespace
+
+void* operator new(std::size_t size) { return counted_allocate(size); }
+void* operator new[](std::size_t size) { return counted_allocate(size); }
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete[](void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
+
+CK_TEST(warmed_compositor_and_presenter_allocate_nothing_for_an_unchanged_frame) {
+    ckv::scene::Compositor compositor(ckv::Size{8, 4});
+    ckv::scene::Surface background(ckv::Size{8, 4});
+    compositor.compose({}, background);
+    {
+        AllocationScope allocations;
+        compositor.compose({}, background);
+        CK_CHECK(allocations.count() == 0);
+    }
+
+    ckv::term::HeadlessTerminal terminal(ckv::Size{8, 4});
+    ckv::term::Presenter presenter(terminal);
+    presenter.present(compositor.frame().view(), ckv::CursorState{});
+    terminal.clear_written();
+    {
+        AllocationScope allocations;
+        presenter.present(compositor.frame().view(), ckv::CursorState{});
+        CK_CHECK(allocations.count() == 0);
+        CK_CHECK(presenter.last_bytes_emitted() == 0);
+    }
+}
+
+CK_TEST(warmed_application_dispatch_focus_and_post_drain_allocate_nothing) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{20, 6});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    auto probe_owned = std::make_unique<InputProbe>();
+    InputProbe* const probe = probe_owned.get();
+    probe->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    app.root().add_child(std::move(probe_owned));
+    app.step(0);
+    app.set_focus(probe);
+
+    const ckv::KeyEvent key{ckv::KeyChord{ckv::Key::Tab, ckv::Modifier::None, ""}};
+    const ckv::MouseEvent mouse{.action = ckv::MouseAction::Down,
+                                .button = ckv::MouseButton::Left,
+                                .cell = ckv::Point{0, 0}};
+    app.dispatch(key);       // route scratch warm-up
+    app.dispatch(mouse);     // capture-route scratch warm-up
+    app.focus_next();        // focus traversal scratch warm-up
+    app.post([] {});
+    app.step(0);             // posted-work scratch warm-up
+    app.start_timer(1, false, [] {});
+    clock.advance(1);
+    app.step(clock.now_nanos());  // due-callback scratch warm-up
+
+    app.post([] {});         // enqueue is intentionally outside the drain measurement
+    app.start_timer(1, false, [] {});
+    clock.advance(1);
+    AllocationScope allocations;
+    app.dispatch(key);
+    app.dispatch(mouse);
+    app.focus_next();
+    app.step(clock.now_nanos());
+    CK_CHECK(allocations.count() == 0);
+}

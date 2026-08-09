@@ -1048,9 +1048,19 @@ window content repaints, cells composed, and bytes emitted; executable tests
 prove translation performs no content repaint, resize repaints only the
 resized Window, and movement stays within its old/new rectangles and shadows.
 The scene benchmark now fails on steady-state or single-cell composition
-budget regressions. The remaining WP work is allocation accounting across all
-hot paths, complete counter/budget coverage (including presenter bytes), and
-the named-host/sanitizer evidence required by the Acceptance section.
+budget regressions. Test-executable allocation instrumentation now makes the
+warmed compositor/Presenter, dispatch, traversal, timer delivery, and posted
+work paths fail if they allocate; move tests also gate Presenter bytes. The
+remaining WP work is broader interaction/raster budget coverage and the
+named-host/sanitizer evidence required by the Acceptance section.
+
+**Verification checkpoint (2026-08-09).** On
+`macos-26.5.2-arm64-m1-max-32g`, the complete 1,383-test suite plus visual,
+provenance, layer, and scene-budget CTest gates passed under both
+`address,undefined` and `thread` sanitizers. CI now runs both sanitizer
+configurations on Linux. The required Linux and Windows host results remain
+WP-32/WP-37 matrix work; the pinned-host p99 procedure is recorded in
+`docs/performance.md`.
 
 **Work.**
 

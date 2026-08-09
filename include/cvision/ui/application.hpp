@@ -238,20 +238,12 @@ public:
     // Polls the terminal up to `deadline_nanos` (clamped earlier if a
     // timer is due sooner), dispatches everything received, runs every
     // due timer, drains posted work, and — only if any of that
-    // invalidated the tree — paints the whole tree into an off-screen
-    // Surface and presents it (ARCHITECTURE.md §5's "one frame per
-    // batch"). Returns true if any event was dispatched, any timer
-    // fired, or posted work ran.
-    //
-    // v1 scope note: painting is whole-tree, not damage-rect-limited —
-    // every View under an invalidated subtree redraws every frame that
-    // has ANY damage anywhere. Presenter's own cell-by-cell diff still
-    // guarantees the terminal only ever receives bytes for cells that
-    // actually changed, so this does not cost extra terminal I/O; it
-    // costs extra Painter calls into the off-screen Surface, which is
-    // measured (ckvision_bench) rather than assumed acceptable.
-    // Damage-rect-scoped painting is a real follow-on, not a
-    // correctness gap.
+    // invalidated the tree — paints the retained base/layer scene and
+    // presents it (ARCHITECTURE.md §5's "one frame per batch"). Window
+    // translation is composition-only; a Window repaint is confined to its
+    // dirty local backing. Surface damage further limits compositor work and
+    // Presenter emits only changed terminal bytes. Returns true if any event
+    // was dispatched, any timer fired, or posted work ran.
     bool step(std::int64_t deadline_nanos);
 
     // D-021 external-loop integration. The view is borrowed from the terminal
@@ -398,8 +390,9 @@ private:
     void restore_modal_focus_if_needed();
 
     View* topmost_view_at(Point absolute_point) noexcept;
+    static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
     static void collect_focusable(View& view, std::vector<View*>& out);
-    std::vector<View*> focusable_views() const;
+    const std::vector<View*>& focusable_views();
     // The innermost active modal, or nullptr if none — the single spot
     // dispatch()/topmost_view_at()/focusable_views() all consult to
     // scope routing (see push_modal's own doc comment above).
@@ -450,6 +443,13 @@ private:
     View* mouse_capture_ = nullptr;
     View* input_capture_ = nullptr;
     std::vector<ModalScope> modal_stack_;
+    // Reused only on the owning thread. These preserve Application's
+    // callback-safe snapshot semantics while keeping an already-warmed event
+    // and focus path free of transient heap allocation.
+    std::vector<ViewHandle> root_layout_scratch_;
+    std::vector<ViewHandle> dispatch_route_scratch_;
+    std::vector<ViewHandle> mouse_capture_route_scratch_;
+    std::vector<View*> focus_scratch_;
     ModalScopeId next_modal_scope_id_ = 1;
     std::optional<ViewHandle> pending_modal_focus_restore_;
 
@@ -467,10 +467,12 @@ private:
         std::function<void()> callback;
     };
     std::vector<Timer> timers_;
+    std::vector<std::function<void()>> due_callback_scratch_;
     TimerId next_timer_id_ = 1;
 
     std::mutex post_mutex_;
     std::vector<std::function<void()>> posted_;
+    std::vector<std::function<void()>> posted_work_scratch_;
     bool wake_requested_ = false;
 };
 

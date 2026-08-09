@@ -120,6 +120,7 @@ maps every reopened milestone to them.
 | [plans/corrective-assurance.md](plans/corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-38 corrective acceptance |
 | [docs/example-apps.md](docs/example-apps.md) | Example applications: what each one demonstrates, how it's tested, generated screenshots |
 | [docs/hello-example.md](docs/hello-example.md) | Hello behavior contract, golden evidence, and 60-line gate |
+| [docs/performance.md](docs/performance.md) | Deterministic allocation/cost gates and the pinned-host p99 procedure |
 | [plans/clean-room-derivation.md](plans/clean-room-derivation.md) | D-012 clean-room derivation record for rewritten material |
 | [AGENTS.md](AGENTS.md) | Engineering standard for working in this repository |
 

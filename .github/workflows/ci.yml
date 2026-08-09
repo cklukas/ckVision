@@ -22,10 +22,14 @@ jobs:
 
   sanitize:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address,undefined, thread]
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCKVISION_SANITIZE=address,undefined
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCKVISION_SANITIZE=${{ matrix.sanitizer }}
       - name: Build
         run: cmake --build build
       - name: Test

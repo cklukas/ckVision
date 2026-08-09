@@ -203,7 +203,8 @@ void Application::layout_root_children() {
     // destroy itself or another root child. Snapshot exact identities before
     // entering any such callback; each remaining direct child still receives
     // this resize, while a departed or reparented one is simply skipped.
-    std::vector<ViewHandle> children;
+    std::vector<ViewHandle>& children = root_layout_scratch_;
+    children.clear();
     children.reserve(root_.children().size());
     for (const auto& child : root_.children())
         children.push_back(make_view_handle(*child));
@@ -309,15 +310,16 @@ void Application::collect_focusable(View& view, std::vector<View*>& out) {
         collect_focusable(*child, out);
 }
 
-std::vector<View*> Application::focusable_views() const {
-    std::vector<View*> out;
+const std::vector<View*>& Application::focusable_views() {
+    std::vector<View*>& out = focus_scratch_;
+    out.clear();
     View& start = modal_stack_.empty() ? const_cast<View&>(root_) : *modal_stack_.back().root;
     collect_focusable(start, out);
     return out;
 }
 
 bool Application::focus_next() {
-    const std::vector<View*> views = focusable_views();
+    const std::vector<View*>& views = focusable_views();
     if (views.empty())
         return false;
     if (focused_ == nullptr) {
@@ -340,7 +342,7 @@ bool Application::focus_next() {
 }
 
 bool Application::focus_previous() {
-    const std::vector<View*> views = focusable_views();
+    const std::vector<View*>& views = focusable_views();
     if (views.empty())
         return false;
     if (focused_ == nullptr) {
@@ -407,16 +409,6 @@ View* Application::topmost_view_at(Point absolute_point) noexcept {
     // SIBLINGS that overlap the point, the first match (topmost)
     // stops the scan — a later, lower sibling that also happens to
     // contain the point must never overwrite an already-found result.
-    std::function<View*(View&)> visit = [&](View& v) -> View* {
-        if (!v.visible())
-            return nullptr;
-        if (!contains(v.absolute_bounds(), absolute_point))
-            return nullptr;
-        for (auto it = v.children().rbegin(); it != v.children().rend(); ++it)
-            if (View* hit = visit(**it))
-                return hit;
-        return &v;
-    };
     // Modal scoping (M9/WP-15): while a modal is active, the search
     // starts AT it rather than at root_ — a click that lands outside
     // its own bounds (or on a sibling window entirely) simply never
@@ -425,7 +417,16 @@ View* Application::topmost_view_at(Point absolute_point) noexcept {
     // every mouse-routing decision in dispatch() keys off this
     // function's result.
     View* const scope_root = modal_root();
-    return visit(scope_root != nullptr ? *scope_root : root_);
+    return topmost_view_at_recursive(scope_root != nullptr ? *scope_root : root_, absolute_point);
+}
+
+View* Application::topmost_view_at_recursive(View& view, Point absolute_point) noexcept {
+    if (!view.visible() || !contains(view.absolute_bounds(), absolute_point))
+        return nullptr;
+    for (auto it = view.children().rbegin(); it != view.children().rend(); ++it)
+        if (View* hit = topmost_view_at_recursive(**it, absolute_point))
+            return hit;
+    return &view;
 }
 
 bool Application::dispatch(const term::TerminalEvent& event) {
@@ -461,7 +462,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             return execute_command(*id);
                         return false;
                     }
-                    std::vector<ViewHandle> route;
+                    std::vector<ViewHandle>& route = dispatch_route_scratch_;
+                    route.clear();
                     for (View* v = start; v != nullptr; v = v->parent()) {
                         route.push_back(make_view_handle(*v));
                         if (v == scope_root)
@@ -508,7 +510,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                                 return true;
                         return false;
                     }
-                    std::vector<ViewHandle> route;
+                    std::vector<ViewHandle>& route = dispatch_route_scratch_;
+                    route.clear();
                     for (View* v = start; v != nullptr; v = v->parent()) {
                         route.push_back(make_view_handle(*v));
                         if (v == scope_root)
@@ -566,7 +569,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         // route entry and the original target is revalidated just
                         // before use; detachment, destruction, or reparenting
                         // ends this old route deterministically.
-                        std::vector<ViewHandle> capture_route;
+                        std::vector<ViewHandle>& capture_route = mouse_capture_route_scratch_;
+                        capture_route.clear();
                         for (View* ancestor = target->parent(); ancestor != nullptr;
                              ancestor = ancestor->parent())
                             capture_route.push_back(make_view_handle(*ancestor));
@@ -677,7 +681,8 @@ bool Application::step(std::int64_t deadline_nanos) {
         }
 
         const std::int64_t now = clock_.now_nanos();
-        std::vector<std::function<void()>> due_callbacks;
+        std::vector<std::function<void()>>& due_callbacks = due_callback_scratch_;
+        due_callbacks.clear();
         for (auto it = timers_.begin(); it != timers_.end();) {
             if (it->next_fire_nanos > now) {
                 ++it;
@@ -697,7 +702,8 @@ bool Application::step(std::int64_t deadline_nanos) {
                 fn();
         }
 
-        std::vector<std::function<void()>> work;
+        std::vector<std::function<void()>>& work = posted_work_scratch_;
+        work.clear();
         {
             std::lock_guard<std::mutex> lock(post_mutex_);
             work.swap(posted_);

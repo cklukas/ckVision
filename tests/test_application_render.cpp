@@ -183,6 +183,9 @@ CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint)
     // below the 40x12 desktop and catches a hidden base/full-frame repaint.
     CK_CHECK(f.app.last_compose_cells_touched() <= 216);
     CK_CHECK(f.app.last_bytes_emitted() > 0);
+    // A full 40x12 repaint is far larger. This captures the Presenter side
+    // of the move budget as well as the compositor cells-touched bound.
+    CK_CHECK(f.app.last_bytes_emitted() <= 2048);
     CK_CHECK(!f.term.written_bytes().empty());
 }
 
@@ -208,6 +211,32 @@ CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {
     CK_CHECK(first->content_repaint_count() == first_repaints + 1);
     CK_CHECK(second->content_repaint_count() == second_repaints);
     CK_CHECK(desktop->last_content_repaints() == 1);
+}
+
+CK_TEST(retained_window_layers_preserve_foreground_frame_topology_through_move_and_resize) {
+    Fixture f;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{}, f.app.theme(), f.roles.desktop_background);
+    Desktop* desktop = desktop_owned.get();
+    auto background_owned = std::make_unique<Window>("Back");
+    background_owned->set_bounds(Rect{2, 2, 14, 4});
+    desktop->add_window(std::move(background_owned));
+    auto foreground_owned = std::make_unique<Window>("Front");
+    foreground_owned->set_bounds(Rect{12, 3, 12, 7});
+    Window* foreground = desktop->add_window(std::move(foreground_owned));
+    f.app.root().add_child(std::move(desktop_owned));
+
+    f.app.step(0);
+    // The foreground Window's isolated backing provides its exact corner;
+    // it must never merge with the lower Window's vertical border.
+    CK_CHECK(f.app.current_frame().at(ckv::Point{12, 3}).grapheme() == "╔");
+
+    foreground->set_bounds(Rect{11, 3, 12, 7});
+    f.app.step(0);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{11, 3}).grapheme() == "╔");
+
+    foreground->set_bounds(Rect{11, 3, 14, 8});
+    f.app.step(0);
+    CK_CHECK(f.app.current_frame().at(ckv::Point{11, 3}).grapheme() == "╔");
 }
 
 // --- Terminal too small (ARCHITECTURE.md §5 "Sizing policy", M10/WP-21) ---
