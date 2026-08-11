@@ -23,6 +23,7 @@ void Window::on_attached() {
     if (title_active_role_ == ui::kInvalidRole) title_active_role_ = context().roles->find("ckv.window.title.active");
     if (title_inactive_role_ == ui::kInvalidRole)
         title_inactive_role_ = context().roles->find("ckv.window.title.inactive");
+    if (control_role_ == ui::kInvalidRole) control_role_ = context().roles->find("ckv.window.control");
 }
 
 void Window::on_detaching() {
@@ -48,6 +49,35 @@ std::unique_ptr<ui::View> Window::set_content(std::unique_ptr<ui::View> content)
         content_->set_bounds(content_rect());
     }
     return previous;
+}
+
+ui::SizeHint Window::horizontal_size_hint() const {
+    // draw() reserves ten columns for the close/zoom controls and their
+    // padding before it places a title.  Include that exact budget here so a
+    // freshly presented standard dialog never immediately elides its title.
+    const int title_width = text::text_width(title_) + 10;
+    if (content_ == nullptr) return ui::SizeHint{min_size_.width, std::max(min_size_.width, title_width),
+                                                  ui::kUnboundedExtent};
+    const ui::SizeHint content = content_->horizontal_size_hint();
+    const int minimum = std::max(min_size_.width, content.min + 2);
+    const int preferred = std::max({minimum, content.preferred + 2, title_width});
+    const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + 2;
+    return ui::SizeHint{minimum, preferred, std::max(preferred, maximum)};
+}
+
+ui::SizeHint Window::vertical_size_hint() const {
+    if (content_ == nullptr) return ui::SizeHint{min_size_.height, min_size_.height, ui::kUnboundedExtent};
+    const ui::SizeHint content = content_->vertical_size_hint();
+    const int minimum = std::max(min_size_.height, content.min + 2);
+    const int preferred = std::max(minimum, content.preferred + 2);
+    const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + 2;
+    return ui::SizeHint{minimum, preferred, std::max(preferred, maximum)};
+}
+
+int Window::height_for_width(int width) const {
+    const int content_width = std::max(0, width - 2);
+    const int content_height = content_ != nullptr ? content_->height_for_width(content_width) : 0;
+    return std::max(vertical_size_hint().min, content_height + 2);
 }
 
 ui::AnchorPane& Window::content_pane() {
@@ -288,6 +318,11 @@ void Window::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const Style frame_style = theme.resolve(frame_role);
     const Style title_style = theme.resolve(title_role);
+    // A control contributes its foreground/attributes only. Its background
+    // must remain the active or inactive frame beneath it, including when a
+    // dialog overrides the window's chrome roles.
+    const Style control_role_style = theme.resolve(control_role_);
+    const Style control_style{control_role_style.fg, frame_style.bg, frame_style.attrs | control_role_style.attrs};
 
     // The interior fills with the SAME style as the frame — matching
     // the convention's own "the window's palette is uniform across
@@ -319,7 +354,10 @@ void Window::draw(scene::Painter& painter) {
         // corner column (b.width - 1) — this must end one column short
         // of the corner, matching the close control's own symmetric
         // margin on the left.
-        painter.draw_text(Point{b.width - 4, 0}, zoomed_ ? "[↕]" : "[↑]", frame_style);
+        const int control_x = b.width - 4;
+        painter.draw_text(Point{control_x, 0}, "[", frame_style);
+        painter.draw_text(Point{control_x + 1, 0}, maximized() ? "↕" : "↑", control_style);
+        painter.draw_text(Point{control_x + 2, 0}, "]", frame_style);
     }
     if (b.width > 8) {
         // Centered, with a one-cell padding space on each side. The

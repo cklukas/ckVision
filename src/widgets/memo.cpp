@@ -13,6 +13,13 @@ namespace {
 bool position_less(const MemoPosition& a, const MemoPosition& b) noexcept {
     return a.line != b.line ? a.line < b.line : a.column < b.column;
 }
+
+bool word_grapheme(std::string_view grapheme) noexcept {
+    if (grapheme.empty()) return false;
+    const unsigned char value = static_cast<unsigned char>(grapheme.front());
+    return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
+           (value >= '0' && value <= '9') || value == '_';
+}
 }  // namespace
 
 Memo::Memo() {
@@ -80,6 +87,60 @@ std::pair<MemoPosition, MemoPosition> Memo::selection_range() const noexcept {
     if (!selection_anchor_) return {cursor_, cursor_};
     return position_less(*selection_anchor_, cursor_) ? std::make_pair(*selection_anchor_, cursor_)
                                                         : std::make_pair(cursor_, *selection_anchor_);
+}
+
+MemoPosition Memo::previous_word(MemoPosition from) const noexcept {
+    MemoPosition position = clamp_position(from);
+    const auto previous = [this](MemoPosition value) {
+        if (value.column > 0) {
+            --value.column;
+        } else if (value.line > 0) {
+            --value.line;
+            value.column = line_length(value.line);
+        }
+        return value;
+    };
+    const auto at_word = [this](MemoPosition value) {
+        return value.column < line_length(value.line) &&
+               word_grapheme(lines_[static_cast<std::size_t>(value.line)][static_cast<std::size_t>(value.column)]);
+    };
+    while (position.line != 0 || position.column != 0) {
+        const MemoPosition prior = previous(position);
+        if (at_word(prior)) break;
+        position = prior;
+    }
+    while (position.line != 0 || position.column != 0) {
+        const MemoPosition prior = previous(position);
+        if (!at_word(prior)) break;
+        position = prior;
+    }
+    return position;
+}
+
+MemoPosition Memo::next_word(MemoPosition from) const noexcept {
+    MemoPosition position = clamp_position(from);
+    const auto next = [this](MemoPosition value) {
+        if (value.column < line_length(value.line)) {
+            ++value.column;
+        } else if (value.line + 1 < static_cast<int>(lines_.size())) {
+            ++value.line;
+            value.column = 0;
+        }
+        return value;
+    };
+    const auto at_word = [this](MemoPosition value) {
+        return value.column < line_length(value.line) &&
+               word_grapheme(lines_[static_cast<std::size_t>(value.line)][static_cast<std::size_t>(value.column)]);
+    };
+    while (position.line < static_cast<int>(lines_.size()) - 1 || position.column < line_length(position.line)) {
+        if (!at_word(position)) break;
+        position = next(position);
+    }
+    while (position.line < static_cast<int>(lines_.size()) - 1 || position.column < line_length(position.line)) {
+        if (at_word(position)) break;
+        position = next(position);
+    }
+    return position;
 }
 
 void Memo::record_undo_state() {
@@ -301,6 +362,16 @@ void Memo::on_resized() {
 
 bool Memo::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
+    const bool has_ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
+    const bool has_shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const bool has_alt_or_super = has_modifier(event.chord.modifiers, Modifier::Alt) ||
+                                  has_modifier(event.chord.modifiers, Modifier::Super);
+    if (event.chord.key == Key::Insert && !has_alt_or_super) {
+        if (has_ctrl) return copy_selection_to_clipboard();
+        if (has_shift) return paste_from_clipboard();
+    }
+    if (event.chord.key == Key::Delete && has_shift && !has_ctrl && !has_alt_or_super)
+        return cut_selection_to_clipboard();
     if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Alt) &&
         !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
@@ -321,11 +392,13 @@ bool Memo::on_key(const KeyEvent& event) {
         !has_modifier(event.chord.modifiers, Modifier::Super))
         return on_text(TextEvent{event.chord.text, false});
 
-    const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const bool shift = has_shift;
+    const bool control = has_ctrl;
     switch (event.chord.key) {
         case Key::Left: {
             MemoPosition p = cursor_;
-            if (p.column > 0)
+            if (control) p = previous_word(p);
+            else if (p.column > 0)
                 --p.column;
             else if (p.line > 0) {
                 --p.line;
@@ -336,7 +409,8 @@ bool Memo::on_key(const KeyEvent& event) {
         }
         case Key::Right: {
             MemoPosition p = cursor_;
-            if (p.column < line_length(p.line))
+            if (control) p = next_word(p);
+            else if (p.column < line_length(p.line))
                 ++p.column;
             else if (p.line < static_cast<int>(lines_.size()) - 1) {
                 ++p.line;
@@ -364,10 +438,13 @@ bool Memo::on_key(const KeyEvent& event) {
             return true;
         }
         case Key::Home:
-            move_cursor(MemoPosition{cursor_.line, 0}, shift);
+            move_cursor(control ? MemoPosition{0, 0} : MemoPosition{cursor_.line, 0}, shift);
             return true;
         case Key::End:
-            move_cursor(MemoPosition{cursor_.line, line_length(cursor_.line)}, shift);
+            move_cursor(control ? MemoPosition{static_cast<int>(lines_.size()) - 1,
+                                               line_length(static_cast<int>(lines_.size()) - 1)}
+                                : MemoPosition{cursor_.line, line_length(cursor_.line)},
+                        shift);
             return true;
         case Key::PageUp: {
             MemoPosition p = cursor_;
@@ -391,11 +468,14 @@ bool Memo::on_key(const KeyEvent& event) {
             if (selection_anchor_) {
                 record_undo_state();
                 erase_selection();
-            } else if (cursor_.column > 0) {
+            } else if (cursor_.column > 0 || cursor_.line > 0) {
                 record_undo_state();
-                lines_[static_cast<std::size_t>(cursor_.line)].erase(
-                    lines_[static_cast<std::size_t>(cursor_.line)].begin() + cursor_.column - 1);
-                --cursor_.column;
+                const MemoPosition target = control ? previous_word(cursor_) :
+                    (cursor_.column > 0 ? MemoPosition{cursor_.line, cursor_.column - 1}
+                                        : MemoPosition{cursor_.line - 1, line_length(cursor_.line - 1)});
+                selection_anchor_ = cursor_;
+                cursor_ = target;
+                erase_selection();
             } else if (cursor_.line > 0) {
                 record_undo_state();
                 const int prev_len = line_length(cursor_.line - 1);
@@ -413,10 +493,15 @@ bool Memo::on_key(const KeyEvent& event) {
             if (selection_anchor_) {
                 record_undo_state();
                 erase_selection();
-            } else if (cursor_.column < line_length(cursor_.line)) {
+            } else if (cursor_.column < line_length(cursor_.line) ||
+                       cursor_.line < static_cast<int>(lines_.size()) - 1) {
                 record_undo_state();
-                lines_[static_cast<std::size_t>(cursor_.line)].erase(
-                    lines_[static_cast<std::size_t>(cursor_.line)].begin() + cursor_.column);
+                const MemoPosition target = control ? next_word(cursor_) :
+                    (cursor_.column < line_length(cursor_.line) ? MemoPosition{cursor_.line, cursor_.column + 1}
+                                                                 : MemoPosition{cursor_.line + 1, 0});
+                selection_anchor_ = cursor_;
+                cursor_ = target;
+                erase_selection();
             } else if (cursor_.line < static_cast<int>(lines_.size()) - 1) {
                 record_undo_state();
                 for (auto& g : lines_[static_cast<std::size_t>(cursor_.line + 1)])

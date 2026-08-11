@@ -163,6 +163,24 @@ void View::paint_children(const scene::Painter& own_painter) {
     for (auto& child : children_) paint_one_child(*child, own_painter);
 }
 
+void View::notify_terminal_subsession_changed(const core::TerminalSubsession& session) {
+    on_terminal_subsession_changed(session);
+    const std::weak_ptr<void> self_liveness = lifetime_token();
+    struct ChildHandle {
+        View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<ChildHandle> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_)
+        children.push_back(ChildHandle{child.get(), child->lifetime_token()});
+    for (const ChildHandle& child : children) {
+        if (self_liveness.expired()) return;
+        if (child.liveness.expired() || child.view->parent_ != this) continue;
+        child.view->notify_terminal_subsession_changed(session);
+    }
+}
+
 void View::paint_retained(const scene::Painter& own_painter,
                           std::vector<scene::Layer>& layers) {
     for (auto& child_ptr : children_) {

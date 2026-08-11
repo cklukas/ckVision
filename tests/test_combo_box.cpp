@@ -6,6 +6,8 @@
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -74,6 +76,27 @@ CK_TEST(editable_combo_accepts_text_and_uses_history_registry) {
     CK_CHECK(combo.text() == "old value");
     CK_CHECK(combo.on_key(key(Key::Up)));
     CK_CHECK(combo.text() == "Ab");
+}
+
+CK_TEST(editable_combo_uses_the_standard_text_editing_keymap) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    ComboBox combo(ComboBoxMode::Editable);
+    combo.set_context(ckv::ui::Context{&app.theme(), &app.roles(), &app});
+    combo.on_attached();
+    combo.set_text("one two three");
+
+    CK_CHECK(combo.on_key(key(Key::Left, Modifier::Ctrl)));
+    CK_CHECK(combo.on_key(key(Key::Left, Modifier::Ctrl | Modifier::Shift)));
+    CK_CHECK(combo.on_key(key(Key::Insert, Modifier::Ctrl)));
+    CK_CHECK(app.clipboard_text() == "two ");
+    CK_CHECK(combo.on_key(key(Key::Delete, Modifier::Shift)));
+    CK_CHECK(combo.text() == "one three");
+    CK_CHECK(combo.on_key(key(Key::Insert, Modifier::Shift)));
+    CK_CHECK(combo.text() == "one two three");
 }
 
 CK_TEST(open_combo_draws_dropdown_rows_inside_its_bounds) {

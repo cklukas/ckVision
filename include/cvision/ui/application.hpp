@@ -38,6 +38,7 @@
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/presenter.hpp"
 #include "cvision/term/terminal.hpp"
+#include "cvision/term/terminal_subsession.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/history.hpp"
 #include "cvision/ui/theme.hpp"
@@ -120,6 +121,17 @@ public:
 
     Clock& clock() noexcept { return clock_; }
     const Clock& clock() const noexcept { return clock_; }
+
+    // The outer terminal's current pixel geometry. Views that host a private
+    // terminal session use this only to size that child endpoint; child bytes
+    // still have no route to the outer Terminal writer.
+    Size terminal_cell_pixels() const noexcept { return terminal_.capabilities().cell_pixels; }
+
+    // Launches a contained child session owned by this application.  A
+    // TerminalView borrows the returned object; the application therefore
+    // guarantees the session outlives all views in its tree.
+    term::TerminalSubsession& launch_terminal_subsession(
+        term::TerminalLaunchSpec spec, term::TerminalSubsessionOptions options = {});
 
     // --- Diagnostics (ARCHITECTURE.md §11) -------------------------------
     //
@@ -251,10 +263,20 @@ public:
     bool step(std::int64_t deadline_nanos);
 
     // D-021 external-loop integration. The view is borrowed from the terminal
-    // backend and contains every native source that can make step() useful;
-    // it is valid only while that terminal session is alive. A host waits on
-    // it alongside its own sources, then calls step(clock.now_nanos()).
-    std::span<const term::WaitHandle> wait_handles() const noexcept { return terminal_.wait_handles(); }
+    // backend and every attached private child session; it contains every
+    // native source that can make step() useful. It is valid until the next
+    // wait_handles() call or until this Application/session set changes. A
+    // host waits on it alongside its own sources, then calls step(clock.now_nanos()).
+    std::span<const term::WaitHandle> wait_handles() const {
+        external_wait_handles_.clear();
+        const std::span<const term::WaitHandle> terminal_handles = terminal_.wait_handles();
+        external_wait_handles_.insert(external_wait_handles_.end(), terminal_handles.begin(), terminal_handles.end());
+        for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
+            const std::span<const term::WaitHandle> session_handles = session->wait_handles();
+            external_wait_handles_.insert(external_wait_handles_.end(), session_handles.begin(), session_handles.end());
+        }
+        return external_wait_handles_;
+    }
 
     // The earliest application-owned timer deadline, if any. Combine this
     // with the host's own deadline when waiting on wait_handles(); application
@@ -432,6 +454,10 @@ private:
     RoleRegistry roles_;
     Theme theme_{roles_};
     CommandRegistry commands_;
+    std::vector<std::unique_ptr<term::TerminalSubsession>> terminal_subsessions_;
+    std::vector<term::WaitHandle> terminal_subsession_wait_handles_;
+    mutable std::vector<term::WaitHandle> external_wait_handles_;
+    int next_terminal_raster_identity_ = 1'000'000;
     View root_;
     // The retained base layer for root-owned chrome/background. Desktop and
     // other retained containers contribute child backing stores separately to

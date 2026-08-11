@@ -752,6 +752,7 @@ CK_TEST(a_keep_filling_window_tracks_desktop_growth_without_being_zoomed) {
     desktop.set_bounds(Rect{0, 0, 120, 50});
 
     CK_CHECK(!w->zoomed());
+    CK_CHECK(w->maximized());
     CK_CHECK(w->bounds() == desktop.content_area());
 }
 

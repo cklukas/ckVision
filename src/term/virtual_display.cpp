@@ -228,6 +228,22 @@ bool VirtualDisplay::flush_text() {
 }
 
 bool VirtualDisplay::handle_csi(char final_byte) {
+    // DECSCUSR: CSI Ps SP q. Keep the deterministic decoder aware of the
+    // cursor declaration emitted by Presenter so headless verification sees
+    // the same visible/blinking cursor contract as a real host terminal.
+    if (final_byte == 'q' && control_buffer_.size() >= 2 && control_buffer_.back() == ' ') {
+        const std::string_view parameter_text{control_buffer_.data(), control_buffer_.size() - 1};
+        bool ok = false;
+        const std::vector<int> params = parse_csi_params(parameter_text, ok);
+        if (!ok || params.size() != 1 || params[0] < 1 || params[0] > 6) {
+            fail("invalid cursor-style sequence");
+            return false;
+        }
+        const int style = params[0];
+        cursor_.blink = (style & 1) != 0;
+        cursor_.shape = style <= 2 ? CursorShape::Block : style <= 4 ? CursorShape::Underline : CursorShape::Bar;
+        return true;
+    }
     if (final_byte == 'H' || final_byte == 'f') {
         bool ok = false;
         const std::vector<int> params = parse_csi_params(control_buffer_, ok);

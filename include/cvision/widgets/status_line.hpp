@@ -47,7 +47,7 @@ struct StatusLineItem {
 };
 
 // Resolves its own theme role from context() once attached (M9
-// WP-7, D-028): "ckv.statusline.normal". Also reads context().app for
+// WP-7, D-028): "ckv.statusline.normal" and "ckv.hotkey". Also reads context().app for
 // the focused view's help-context key (current_hint()) and to
 // execute an item's command (on_mouse()) — see the file comment on
 // why the status line is one of the few widgets that needs it.
@@ -57,6 +57,7 @@ public:
 
     void set_role_override(ui::RoleId role) noexcept { role_ = role; }
     void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
+    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
 
     void set_items(std::vector<StatusLineItem> items);
     const std::vector<StatusLineItem>& items() const noexcept { return items_; }
@@ -78,10 +79,16 @@ public:
     void on_attached() override;
 
 private:
+    struct EffectiveLabel {
+        std::string text;
+        int hotkey_width = 0;  // leading command chord, in terminal cells
+    };
+
     // The rendered text for `item` — either its own hand-set label, or
     // (when it references a command) "{chord} {title}" composed live
-    // from the registry, e.g. "Alt+X Quit".
-    std::string effective_label(const StatusLineItem& item) const;
+    // from the registry, e.g. "Alt+X Quit". The leading chord receives
+    // the shared hotkey accent automatically.
+    EffectiveLabel effective_label(const StatusLineItem& item) const;
     ui::CommandId item_command(const StatusLineItem& item) const noexcept;
     bool item_available(const StatusLineItem& item) const;
     int item_start_column(std::size_t index) const;
@@ -96,6 +103,7 @@ private:
     std::function<std::string(const std::string&)> hint_provider_;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId hotkey_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

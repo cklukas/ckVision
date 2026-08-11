@@ -5,6 +5,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -24,6 +25,7 @@ void Button::on_attached() {
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.button.focused");
     if (default_role_ == ui::kInvalidRole) default_role_ = context().roles->find("ckv.button.default");
     if (shadow_role_ == ui::kInvalidRole) shadow_role_ = context().roles->find("ckv.button.shadow");
+    if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
 }
 
 void Button::set_text(std::string text) {
@@ -80,8 +82,8 @@ void Button::draw(scene::Painter& painter) {
     const int centered = (w - label_width) / 2;
     const int label_x = std::max(label_indent, centered + (pressed_ ? 1 : 0));
     const int available = std::max(0, (pressed_ ? w : s) - label_x);
-    const std::string shown = text::clip_to_width(display_text_, available);
-    painter.draw_text(Point{label_x, face_rows / 2}, shown, face);
+    draw_mnemonic(painter, Point{label_x, face_rows / 2}, parse_mnemonic(raw_text_), available, face,
+                  accent_style(face, theme.resolve(mnemonic_role_)));
 
     // The bottom shadow row: two spacer cells, then the "▀" run under
     // the face. A pressed button has no shadow at all — the whole row

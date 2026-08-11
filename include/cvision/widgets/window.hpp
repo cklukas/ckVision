@@ -99,6 +99,14 @@ public:
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
+    // The framed content's intrinsic size plus the two-cell frame. Desktop
+    // presentation uses these hints to give an otherwise unpositioned modal
+    // a visible, centered initial rectangle; callers that set bounds retain
+    // complete control over modeless-window geometry.
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
+    int height_for_width(int width) const override;
+
     // The interior rect set_content() will resize whatever's passed to
     // it into (inside the 1-cell frame border). Public so a caller can
     // size a content view correctly BEFORE constructing it, when the
@@ -187,6 +195,10 @@ public:
     // Desktop's content area) — passed explicitly so Window never has
     // to know about Desktop.
     void toggle_zoom(Rect available);
+    // Whether this window currently presents as maximized. KeepFilling is a
+    // permanent maximized presentation, unlike zoomed(), which records a
+    // restorable pre-zoom geometry.
+    bool maximized() const noexcept { return zoomed_ || grow_policy_ == DesktopGrowPolicy::KeepFilling; }
     bool zoomed() const noexcept { return zoomed_; }
 
     // Resizes to exactly fill `available`, honoring min/max size
@@ -207,7 +219,11 @@ public:
     // How this window's bounds respond to Desktop growth (default
     // None — see DesktopGrowPolicy). Desktop::on_resized() reads this
     // on every owned window; irrelevant for a standalone Window.
-    void set_grow_policy(DesktopGrowPolicy policy) noexcept { grow_policy_ = policy; }
+    void set_grow_policy(DesktopGrowPolicy policy) noexcept {
+        if (grow_policy_ == policy) return;
+        grow_policy_ = policy;
+        invalidate();  // KeepFilling changes the visible maximize/restore control.
+    }
     DesktopGrowPolicy grow_policy() const noexcept { return grow_policy_; }
 
     // Clamps this window's bounds to fit and remain reachable within
@@ -293,6 +309,7 @@ private:
     ui::RoleId frame_inactive_role_ = ui::kInvalidRole;
     ui::RoleId title_active_role_ = ui::kInvalidRole;
     ui::RoleId title_inactive_role_ = ui::kInvalidRole;
+    ui::RoleId control_role_ = ui::kInvalidRole;
 
     ui::View* content_ = nullptr;
     std::unordered_map<ui::View*, FrameSlot> frame_overlays_;

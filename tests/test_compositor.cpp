@@ -35,6 +35,26 @@ CK_TEST(background_only_frame_matches_background_content) {
     CK_CHECK(row_text(c.frame(), 1) == "....");
 }
 
+CK_TEST(background_rasters_reach_the_presenter_and_are_sliced_by_window_layers) {
+    Compositor c(ckv::Size{8, 8});
+    Surface bg = make_surface(8, 8, ".");
+    const auto image = std::make_shared<ckv::Image>(16, 16);
+    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, true});
+    Surface occluder = make_surface(2, 2, "O");
+    std::vector<Layer> layers{{1, &occluder, ckv::Point{2, 2}, false}};
+
+    c.compose(layers, bg);
+
+    CK_CHECK(c.visible_rasters().size() == 4U);
+    long long visible_area = 0;
+    for (const ckv::RasterSlice& slice : c.visible_rasters()) {
+        CK_CHECK(slice.id == 7);
+        CK_CHECK(slice.full_anchor == (ckv::Rect{1, 1, 4, 4}));
+        visible_area += static_cast<long long>(slice.visible_rect.width) * slice.visible_rect.height;
+    }
+    CK_CHECK(visible_area == 12);  // 4 * 4 anchor minus the 2 * 2 occluder.
+}
+
 CK_TEST(higher_layer_occludes_lower_layer_in_the_overlap) {
     Compositor c(ckv::Size{6, 3});
     Surface bg = make_surface(6, 3, ".");

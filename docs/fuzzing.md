@@ -8,7 +8,10 @@ parsers whose ordinary unit tests cannot cover their input space:
 - `fuzz_text`: UTF-8 decoding, grapheme segmentation, and width clipping;
 - `fuzz_golden`: golden-dump parsing and canonical round trips;
 - `fuzz_osc`: OSC terminator neutralization; and
-- `fuzz_virtual_display`: the bounded incremental VT/Sixel output decoder.
+- `fuzz_virtual_display`: the bounded incremental VT/Sixel output decoder;
+- `fuzz_terminal_emulator`: the private child VT/DCS/Sixel emulator;
+- `fuzz_editor_document`: revisioned document mutations; and
+- `fuzz_syntax_profile`: syntax-profile parsing and compilation.
 
 The checked-in files under `fuzz/corpus/` are permanent regression seeds. They
 use `\e`, `\a`, and `\xNN` spelling for ESC, BEL, and arbitrary bytes; the
@@ -19,7 +22,7 @@ protocol boundaries. Ordinary generated mutations are still fed as raw bytes.
 
 The GitHub Actions `fuzz` lane configures Ubuntu Clang with
 `CKVISION_BUILD_FUZZERS=ON` and `CKVISION_SANITIZE=address,undefined`, builds
-all five targets, and replays every checked-in seed file once through the
+all targets, and replays every checked-in seed file once through the
 libFuzzer entrypoint. The lane uses a 4 KiB input limit, two-second per-input
 timeout, and 512 MiB RSS limit. It is an executable regression gate, not a
 claim of exhaustive fuzzing.
@@ -30,7 +33,7 @@ installed LLVM toolchain rather than Xcode's AppleClang):
 ```sh
 cmake -B build-fuzz -DCMAKE_CXX_COMPILER=clang++ \
   -DCKVISION_BUILD_FUZZERS=ON -DCKVISION_SANITIZE=address,undefined
-cmake --build build-fuzz --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display
+cmake --build build-fuzz --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile
 ctest --test-dir build-fuzz --output-on-failure -L fuzz-corpus
 ```
 

@@ -1,13 +1,15 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/core/filesystem.hpp"
 
-#include <cctype>
+#include <cstdint>
 
 namespace ckv {
 
 namespace {
 bool drive_absolute(std::string_view path) noexcept {
-    return path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) != 0 && path[1] == ':' &&
+    if (path.size() < 3U) return false;
+    const bool drive = (path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z');
+    return path.size() >= 3 && drive && path[1] == ':' &&
            (path[2] == '/' || path[2] == '\\');
 }
 
@@ -59,6 +61,14 @@ std::string FileSystem::parent(std::string_view path) const {
     return p.substr(0, pos);
 }
 
+std::optional<FileReadResult> FileSystem::read_file(std::string_view) const { return std::nullopt; }
+
+FileWriteResult FileSystem::write_file_atomic(std::string_view, std::string_view, FileWriteExpectation) {
+    return FileWriteResult{};
+}
+
+std::optional<FileFingerprint> FileSystem::fingerprint(std::string_view) const { return std::nullopt; }
+
 MemoryFileSystem::Node* MemoryFileSystem::find(std::string_view path) noexcept {
     const std::string norm = normalize(path);
     for (auto& [p, node] : nodes_)
@@ -79,7 +89,7 @@ void MemoryFileSystem::add_directory(std::string_view path) {
     while (pos <= norm.size()) {
         const std::size_t next = norm.find('/', pos);
         const std::string prefix = norm.substr(0, next == std::string::npos ? norm.size() : next);
-        if (find(prefix) == nullptr) nodes_.emplace_back(prefix, Node{true});
+        if (find(prefix) == nullptr) nodes_.emplace_back(prefix, Node{true, {}, 0});
         if (next == std::string::npos) break;
         pos = next + 1;
     }
@@ -87,12 +97,19 @@ void MemoryFileSystem::add_directory(std::string_view path) {
 }
 
 void MemoryFileSystem::add_file(std::string_view path) {
+    add_file(path, {});
+}
+
+void MemoryFileSystem::add_file(std::string_view path, std::string contents) {
     const std::string norm = normalize(path);
     add_directory(parent(norm));
-    if (Node* existing = find(norm))
+    if (Node* existing = find(norm)) {
         existing->is_directory = false;
-    else
-        nodes_.emplace_back(norm, Node{false});
+        existing->contents = std::move(contents);
+        ++existing->revision;
+    } else {
+        nodes_.emplace_back(norm, Node{false, std::move(contents), 1});
+    }
 }
 
 std::vector<FileEntry> MemoryFileSystem::list_directory(std::string_view path) const {
@@ -114,6 +131,38 @@ bool MemoryFileSystem::exists(std::string_view path) const noexcept { return fin
 bool MemoryFileSystem::is_directory(std::string_view path) const noexcept {
     const Node* n = find(path);
     return n != nullptr && n->is_directory;
+}
+
+std::optional<FileReadResult> MemoryFileSystem::read_file(std::string_view path) const {
+    const Node* node = find(path);
+    if (node == nullptr || node->is_directory) return std::nullopt;
+    return FileReadResult{node->contents, FileFingerprint{std::to_string(node->revision)}};
+}
+
+FileWriteResult MemoryFileSystem::write_file_atomic(std::string_view path, std::string_view contents,
+                                                     FileWriteExpectation expectation) {
+    const std::string normalized = normalize(path);
+    Node* node = find(normalized);
+    if (node != nullptr && node->is_directory) return FileWriteResult{FileWriteStatus::NotFound, std::nullopt};
+    if (expectation.kind == FileWriteExpectationKind::MustNotExist && node != nullptr)
+        return FileWriteResult{FileWriteStatus::Conflict, fingerprint(normalized)};
+    if (expectation.kind == FileWriteExpectationKind::MatchFingerprint &&
+        (!expectation.fingerprint || !node || *expectation.fingerprint != FileFingerprint{std::to_string(node->revision)}))
+        return FileWriteResult{FileWriteStatus::Conflict, fingerprint(normalized)};
+    if (node == nullptr) {
+        add_directory(parent(normalized));
+        nodes_.emplace_back(normalized, Node{false, std::string(contents), 1});
+        return FileWriteResult{FileWriteStatus::Ok, FileFingerprint{"1"}};
+    }
+    node->contents.assign(contents);
+    ++node->revision;
+    return FileWriteResult{FileWriteStatus::Ok, FileFingerprint{std::to_string(node->revision)}};
+}
+
+std::optional<FileFingerprint> MemoryFileSystem::fingerprint(std::string_view path) const {
+    const Node* node = find(path);
+    if (node == nullptr || node->is_directory) return std::nullopt;
+    return FileFingerprint{std::to_string(node->revision)};
 }
 
 }  // namespace ckv

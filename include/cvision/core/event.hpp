@@ -24,6 +24,10 @@ enum class MouseAction : std::uint8_t {
     Up,
     Move,
     Wheel,
+    // A host-recognized double press. ckVision never infers this from elapsed
+    // time, preserving deterministic core/UI behavior; backends that can
+    // recognize it may deliver the semantic gesture explicitly.
+    DoubleClick,
 };
 
 // A key press is the portable baseline. Kitty can additionally report

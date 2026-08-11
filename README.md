@@ -103,11 +103,20 @@ is a compact historical index for WP-1…WP-22. The corrective audit
 found that several mechanisms landed without their specified end-to-end
 acceptance and exposed additional lifetime, modality, provenance, Unicode,
 performance, portability, fuzzing, Sixel visual-capture, catalog, and
-documentation gaps. WP-23…WP-38
+documentation gaps. WP-23…WP-50
 now own those repairs explicitly; ROADMAP's Current acceptance status table
 maps every reopened milestone to them.
 
 ## Documents
+
+## Learn the library
+
+New clients should begin with [getting started](docs/getting-started.md), then
+work through the complete [Hello tutorial](docs/tutorial-hello.md) and the
+[object model](docs/object-model.md). The [widget gallery](docs/widget-gallery.md)
+and [example applications](docs/example-apps.md) connect every public widget to
+real source, generated screenshots, and executable evidence. Regenerate the
+documentation visuals and rendered outputs with `tools/docgen/generate_docs.sh`.
 
 | Document | Content |
 |---|---|
@@ -117,9 +126,26 @@ maps every reopened milestone to them.
 | [DECISIONS.md](DECISIONS.md) | Architecture decision records (settled and open) |
 | [plans/widgets.md](plans/widgets.md) | Widget catalog plus the current corrective feature ledger |
 | [plans/api-ergonomics-review-2.md](plans/api-ergonomics-review-2.md) | Historical 2026-08-07 findings and landing record for WP-1…WP-22 |
-| [plans/corrective-assurance.md](plans/corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-38 corrective acceptance |
+| [plans/corrective-assurance.md](plans/corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-50 corrective acceptance |
+| [plans/documentation-revamp.md](plans/documentation-revamp.md) | WP-36C plan for source-backed tutorials, widget gallery, screenshots, and documentation gates |
+| [plans/editor-architecture.md](plans/editor-architecture.md) | Binding architecture for the document editor, profiles, incremental syntax cache, and file workflow |
+| [plans/editor-delivery-target.md](plans/editor-delivery-target.md) | WP-39…WP-44 delivery order, public-client target, and executable acceptance matrix |
+| [plans/embedded-terminal-architecture.md](plans/embedded-terminal-architecture.md) | Binding private-PTY/ConPTY terminal containment and Sixel-composition architecture |
+| [plans/embedded-terminal-delivery-target.md](plans/embedded-terminal-delivery-target.md) | WP-45…WP-50 terminal delivery order, acceptance matrix, and proof of no-spill graphics |
 | [docs/example-apps.md](docs/example-apps.md) | Example applications: what each one demonstrates, how it's tested, generated screenshots |
-| [docs/hello-example.md](docs/hello-example.md) | Hello behavior contract, golden evidence, and 60-line gate |
+| [docs/getting-started.md](docs/getting-started.md) | Build/run path and minimal host application |
+| [docs/tutorial-hello.md](docs/tutorial-hello.md) | Complete Hello source, hierarchy, walkthrough, and generated frames |
+| [docs/object-model.md](docs/object-model.md) | Application/view/Desktop/window ownership, focus, events, and painting |
+| [docs/layout-guide.md](docs/layout-guide.md) | Layout container selection and resize evidence |
+| [docs/widget-gallery.md](docs/widget-gallery.md) | Every public widget/component with usage and visual evidence |
+| [docs/dialogs-and-commands.md](docs/dialogs-and-commands.md) | Commands, dialogs, validation, focus restoration, and wizards |
+| [docs/themes-and-rendering.md](docs/themes-and-rendering.md) | Theme roles and client-level render model |
+| [docs/graphics.md](docs/graphics.md) | ImageView/Canvas and Sixel/no-graphics behavior |
+| [docs/platform-services.md](docs/platform-services.md) | Terminal/clock/filesystem/clipboard host boundary |
+| [docs/editor.md](docs/editor.md) | Revisioned documents, TextEditor, language profiles, search/replace, and safe file workflow |
+| [docs/api-index.md](docs/api-index.md) | Curated public-header index |
+| [docs/coverage.md](docs/coverage.md) | Machine-checked docs-to-header/example/screenshot/test traceability |
+| [docs/hello-example.md](docs/hello-example.md) | Hello verification appendix and golden evidence |
 | [docs/performance.md](docs/performance.md) | Deterministic allocation/cost gates and the pinned-host p99 procedure |
 | [plans/clean-room-derivation.md](plans/clean-room-derivation.md) | D-012 clean-room derivation record for rewritten material |
 | [AGENTS.md](AGENTS.md) | Engineering standard for working in this repository |

@@ -8,6 +8,24 @@
 
 namespace ckv::widgets {
 
+namespace {
+
+void place_unpositioned_window(Window& window, Rect available) {
+    const Rect current = window.bounds();
+    if (current.width > 0 && current.height > 0) return;
+
+    const ui::SizeHint horizontal = window.horizontal_size_hint();
+    const int width = std::clamp(horizontal.preferred, 0, std::max(0, available.width));
+    const int measured_height = window.height_for_width(width);
+    const ui::SizeHint vertical = window.vertical_size_hint();
+    const int height = std::clamp(std::max(vertical.preferred, measured_height), 0, std::max(0, available.height));
+    const int x = available.x + std::max(0, (available.width - width) / 2);
+    const int y = available.y + std::max(0, (available.height - height) / 2);
+    window.set_bounds(Rect{x, y, width, height});
+}
+
+}  // namespace
+
 Desktop::Desktop(Rect bounds) : View(bounds) {
     last_content_area_ = content_area();
 }
@@ -129,6 +147,7 @@ Window* Desktop::present_modeless(WindowHandle handle, ui::Application& app) {
     Window* window = handle.window.get();
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
+    place_unpositioned_window(*window, content_area());
     add_window(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     if (desktop_liveness.expired() || window_liveness.expired()) return nullptr;
@@ -141,6 +160,7 @@ Window* Desktop::present_modal(WindowHandle handle, ui::Application& app) {
     Window* window = handle.window.get();
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
+    place_unpositioned_window(*window, content_area());
     add_window(std::move(handle.window));
     app.push_modal(*window);
     app.set_focus(handle.initial_focus);
@@ -161,6 +181,7 @@ void Desktop::exec_modal(ui::Application& app, WindowHandle handle) {
     Window* window = handle.window.get();
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
+    place_unpositioned_window(*window, content_area());
     add_window(std::move(handle.window));
     const ui::Application::ModalScopeId modal_scope = app.push_modal(*window);
     app.set_focus(handle.initial_focus);

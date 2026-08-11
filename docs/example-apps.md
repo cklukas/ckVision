@@ -17,6 +17,64 @@ also what the headless test suite drives — a documentation screenshot
 or a test failure both describe the real application, never a
 simplified stand-in.
 
+## Start with the pattern you need
+
+This page is a visual tour. For construction and ownership, begin with the
+[Hello tutorial](tutorial-hello.md) and [object model](object-model.md); then
+use the table below to choose a complete, compiled application to adapt. The
+source links are the actual files used by the interactive executable,
+headless tests, and screenshot capture tools.
+
+| Example | Reuse this pattern | Main source | Visual guide |
+|---|---|---|---|
+| Hello | minimal shell, local commands, info dialog | [`hello_app.cpp`](../examples/hello/hello_app.cpp) | [Hello tutorial](tutorial-hello.md) |
+| Gallery | general application shell with form/window/image | [`gallery_app.cpp`](../examples/gallery/gallery_app.cpp) | this page |
+| File Browser | injected filesystem master/detail panes | [`filebrowser_app.cpp`](../examples/filebrowser/filebrowser_app.cpp) | [Platform services](platform-services.md) |
+| Layouts | responsive relationships and user splitter | [`layouts_app.cpp`](../examples/layouts/layouts_app.cpp) | [Layout guide](layout-guide.md) |
+| Forms | validation, help, standard strings, wizard | [`forms_app.cpp`](../examples/forms/forms_app.cpp) | [Dialogs](dialogs-and-commands.md) |
+| Workbench | text/data/utility tabs | [`workbench_app.cpp`](../examples/workbench/workbench_app.cpp) | [Widget gallery](widget-gallery.md) |
+| Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |
+| Terminal | isolated child sessions, multi-window desktop controls, focus escape, scrollback, Sixel containment | [`terminal_app.cpp`](../examples/terminal/terminal_app.cpp) | [Embedded terminal](embedded-terminal.md) |
+| Graphics | ImageView/Canvas capability fallback | [`graphics_app.cpp`](../examples/graphics/graphics_app.cpp) | [Graphics](graphics.md) |
+
+### Layouts
+
+The Layouts app is a compact reference for containers rather than a synthetic
+test: it places the whole tree in a real Desktop window and is captured across
+resize states.
+
+![Layouts example](generated/screenshots/layouts-initial.svg)
+
+### Forms
+
+Forms puts field controls, a localized modal message, descriptor validation,
+context help, and state-dependent wizard flow into one normal application.
+
+![Forms example](generated/screenshots/forms-initial.svg)
+
+### Workbench
+
+Workbench is an application template with text editing, data browsing, and
+utility components on separate tabs.
+
+![Workbench data tab](generated/screenshots/workbench-data.svg)
+
+### Editor
+
+Editor is the source-editing reference: a shared revisioned document, YAML
+profile selection, line-number gutter, and regular application chrome.
+
+![Editor example](generated/screenshots/editor-initial.svg)
+
+![Editor search](generated/screenshots/editor-search.svg)
+
+### Graphics
+
+Graphics is the capability-paired reference: it presents the same public view
+tree under a Sixel profile and no-graphics profile.
+
+![Graphics fallback](generated/screenshots/graphics-no-graphics-canvas.svg)
+
 This page is generated documentation in the sense that its screenshots
 are: they come from `tools/docgen/capture_gallery_screenshots`, which
 builds an example app on a `HeadlessTerminal`, scripts a short

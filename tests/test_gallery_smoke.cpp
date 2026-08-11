@@ -7,6 +7,8 @@
 // mouse (menu-bar click) navigation work against the real render
 // pipeline, not a simplified stand-in.
 #include <algorithm>
+#include <string>
+#include <string_view>
 
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -61,23 +63,31 @@ bool opaque_pixels_form_a_solid_rectangle(const ckv::Image& image) {
             if (image.pixel(x, y).a != 255) return false;
     return true;
 }
+
+bool display_contains(const ckv::term::VirtualDisplay& display, std::string_view needle) {
+    const ckv::FrameView frame = display.frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        std::string row;
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(Point{x, y}).grapheme();
+        if (row.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
 }  // namespace
 
 CK_TEST(the_gallery_renders_both_windows_titles_on_first_frame) {
     Fixture f;
     f.app.step(0);
-    const auto bytes = f.term.written_bytes();
-    CK_CHECK(bytes.find("Controls") != std::string::npos);
-    CK_CHECK(bytes.find("Sixel Demo") != std::string::npos);
+    CK_CHECK(display_contains(f.term.display(), "Controls"));
+    CK_CHECK(display_contains(f.term.display(), "Sixel Demo"));
 }
 
 CK_TEST(the_menu_bar_and_status_line_both_render) {
     Fixture f;
     f.app.step(0);
-    const auto bytes = f.term.written_bytes();
-    CK_CHECK(bytes.find("File") != std::string::npos);
-    CK_CHECK(bytes.find("Window") != std::string::npos);
-    CK_CHECK(bytes.find("Quit") != std::string::npos);
+    CK_CHECK(display_contains(f.term.display(), "File"));
+    CK_CHECK(display_contains(f.term.display(), "Window"));
+    CK_CHECK(display_contains(f.term.display(), "Quit"));
 }
 
 // Regression (M8/WP-6, finding F7): the gallery used to hand-position

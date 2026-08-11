@@ -1,0 +1,1 @@
+\e[?1049hfull-screen\e[?1049l

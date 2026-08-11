@@ -22,6 +22,13 @@ content and compose only the old/new window rectangles and their shadows; a
 resize may repaint only the resized Window's local backing. The same retained
 rule applies to popups: a same-size move is layer composition only, whereas
 their own content invalidation and a resize repaint that popup's backing.
+
+The same CTest budget gate includes the editor's deterministic local-relex
+oracle: on a 4,000-line YAML source, changing a state-independent first line
+may invoke highlighting for at most that line and the one unchanged line that
+proves the cache fixed point. The cap is two lines; it is independent of host
+speed and causes `scene_budget_gate` to fail if a local edit starts scanning an
+unbounded suffix again.
 Window and drop-down-menu layers use the same binary shadow compositor rule;
 their shadows are included in the move damage bound and never compound.
 

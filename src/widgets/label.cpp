@@ -6,6 +6,7 @@
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/mnemonic.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -83,19 +84,8 @@ View* Label::buddy() const noexcept {
 
 void Label::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
-    if (mnemonic_byte_offset_ == std::string::npos) {
-        painter.draw_text(Point{0, 0}, display_text_, theme.resolve(text_role_));
-        return;
-    }
-    const std::string_view before = std::string_view(display_text_).substr(0, mnemonic_byte_offset_);
-    const std::string_view after =
-        std::string_view(display_text_).substr(mnemonic_byte_offset_ + mnemonic_.size());
-    int x = 0;
-    painter.draw_text(Point{x, 0}, before, theme.resolve(text_role_));
-    x += text::text_width(before);
-    painter.draw_text(Point{x, 0}, mnemonic_, theme.resolve(mnemonic_role_));
-    x += text::text_width(mnemonic_);
-    painter.draw_text(Point{x, 0}, after, theme.resolve(text_role_));
+    draw_mnemonic(painter, Point{0, 0}, MnemonicText{display_text_, mnemonic_, mnemonic_byte_offset_},
+                  bounds().width, theme.resolve(text_role_), theme.resolve(mnemonic_role_));
 }
 
 SizeHint Label::horizontal_size_hint() const {

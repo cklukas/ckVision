@@ -257,6 +257,14 @@ CK_TEST(visible_cursor_moves_there_and_shows_it) {
     CK_CHECK(term.written_bytes().find("\x1B[?25h") != std::string_view::npos);
 }
 
+CK_TEST(visible_cursor_declares_a_blinking_shape_to_the_host_terminal) {
+    HeadlessTerminal term(Size{5, 5});
+    Presenter presenter(term);
+    Surface s = make_surface(5, 5);
+    presenter.present(s.view(), CursorState{true, Point{1, 1}, CursorShape::Block, true});
+    CK_CHECK(term.written_bytes().find("\x1B[1 q") != std::string_view::npos);
+}
+
 CK_TEST(hidden_cursor_is_explicitly_hidden) {
     HeadlessTerminal term(Size{5, 5});
     Presenter presenter(term);

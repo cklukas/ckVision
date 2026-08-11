@@ -90,6 +90,7 @@ public:
         highlighted_role_ = highlighted_role;
         disabled_role_ = disabled_role;
     }
+    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
 
     // Fires on Esc, on a click outside the dropdown's own bounds (light
     // dismiss), after a successful item activation, AND unconditionally
@@ -119,6 +120,7 @@ public:
     void on_attached() override;
 
 private:
+    friend class MenuBar;
     // Source text for an item's mnemonic/label parsing (M9/WP-11): the
     // registered command's title when `item.command` is set — so a
     // menu item referencing a command stops carrying its own label
@@ -138,6 +140,10 @@ private:
     void open_submenu(int index);
     void close_submenu(bool restore_capture);
     void dismiss_chain();
+    void begin_pointer_press() noexcept { pointer_pressed_ = true; }
+    void set_pointer_navigation(std::function<bool(const MouseEvent&)> navigation) {
+        pointer_navigation_ = std::move(navigation);
+    }
     bool has_check_column() const noexcept;
     bool has_submenu_column() const noexcept;
     ui::CommandId item_command(const MenuItem& item) const noexcept;
@@ -150,9 +156,12 @@ private:
     DropdownMenu* parent_menu_ = nullptr;
     DropdownMenu* child_menu_ = nullptr;
     bool dismissing_ = false;
+    bool pointer_pressed_ = false;
+    std::function<bool(const MouseEvent&)> pointer_navigation_;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId highlighted_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId hotkey_role_ = ui::kInvalidRole;
 };
 
 struct MenuBarItem {
@@ -185,6 +194,7 @@ public:
         normal_role_ = normal_role;
         active_role_ = active_role;
     }
+    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
 
     // Gives the bar focus (saving whatever was previously focused, for
     // deactivate()/Esc to restore) and highlights the first menu. Also
@@ -212,6 +222,7 @@ public:
 private:
     void open_dropdown(std::size_t menu_index);
     void close_dropdown();
+    bool navigate_pointer(const MouseEvent& event);
 
     std::vector<MenuBarItem> menus_;
     std::size_t highlighted_ = 0;
@@ -221,6 +232,7 @@ private:
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId active_role_ = ui::kInvalidRole;
+    ui::RoleId hotkey_role_ = ui::kInvalidRole;
     ui::Application* app_ = nullptr;
     Desktop* desktop_ = nullptr;
     // Whether THIS instance installed kMenu's default handler (M9/

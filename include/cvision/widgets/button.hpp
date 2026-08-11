@@ -31,7 +31,8 @@ using ui::View;
 // fills the rest of those cells.
 //
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.button.normal/focused/default/shadow". Already
+// WP-7, D-028): "ckv.button.normal/focused/default/shadow" and
+// "ckv.label.mnemonic". Already
 // defaults to FocusPolicy::TabStop — a caller never needs to set that
 // itself. set_role_override lets a caller redirect all four roles at
 // once (e.g. a distinct "danger" button family); takes effect
@@ -53,6 +54,7 @@ public:
         default_role_ = default_role;
         shadow_role_ = shadow_role;
     }
+    void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
     std::function<void()> on_press;
 
@@ -73,6 +75,7 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId default_role_ = ui::kInvalidRole;
     ui::RoleId shadow_role_ = ui::kInvalidRole;
+    ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     bool is_default_ = false;
     bool has_focus_ = false;
     bool pressed_ = false;

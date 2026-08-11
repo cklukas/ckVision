@@ -5,6 +5,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -18,22 +19,23 @@ void StatusLine::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
     if (disabled_role_ == ui::kInvalidRole)
         disabled_role_ = context().roles->find("ckv.statusline.disabled");
+    if (hotkey_role_ == ui::kInvalidRole) hotkey_role_ = context().roles->find("ckv.hotkey");
 }
 
-std::string StatusLine::effective_label(const StatusLineItem& item) const {
+StatusLine::EffectiveLabel StatusLine::effective_label(const StatusLineItem& item) const {
     const ui::CommandId command = item_command(item);
-    if (command == ui::kInvalidCommand) return item.label;
+    if (command == ui::kInvalidCommand) return EffectiveLabel{item.label, 0};
     const ui::CommandInfo* info = context().app->commands().find(command);
-    if (info == nullptr) return item.presentation.label.empty() ? item.label : item.presentation.label;
+    if (info == nullptr) return EffectiveLabel{item.presentation.label.empty() ? item.label : item.presentation.label, 0};
     // Menu titles may carry a '&' mnemonic marker for menus to parse;
     // the status line never navigates by letter, so it always strips
     // one rather than leaking the raw character into the rendered text.
-    std::string text = parse_mnemonic(item.presentation.label.empty() ? info->title
-                                                                      : item.presentation.label)
-                           .display;
-    if (const auto chord = context().app->commands().chord_for_command(command))
-        text = format(*chord) + " " + text;
-    return text;
+    std::string text = parse_mnemonic(item.presentation.label.empty() ? info->title : item.presentation.label).display;
+    if (const auto chord = context().app->commands().chord_for_command(command)) {
+        std::string shortcut = format(*chord);
+        return EffectiveLabel{shortcut + " " + text, text::text_width(shortcut)};
+    }
+    return EffectiveLabel{std::move(text), 0};
 }
 
 ui::CommandId StatusLine::item_command(const StatusLineItem& item) const noexcept {
@@ -78,7 +80,7 @@ std::vector<StatusLine::LaidOutItem> StatusLine::visible_items() const {
         int width = 0;
         for (std::size_t position = 0; position < visible.size(); ++position) {
             if (position > 0) width += kSeparatorWidth;
-            width += text::text_width(effective_label(items_[visible[position]]));
+            width += text::text_width(effective_label(items_[visible[position]]).text);
         }
         return width;
     };
@@ -101,7 +103,7 @@ std::vector<StatusLine::LaidOutItem> StatusLine::visible_items() const {
     for (std::size_t position = 0; position < visible.size(); ++position) {
         if (position > 0) x += kSeparatorWidth;
         const std::size_t index = visible[position];
-        const int width = text::text_width(effective_label(items_[index]));
+        const int width = text::text_width(effective_label(items_[index]).text);
         layout.push_back(LaidOutItem{index, x, width});
         x += width;
     }
@@ -130,9 +132,11 @@ void StatusLine::draw(scene::Painter& painter) {
         const Style item_style =
             item_available(items_[item.index]) ? style : context().theme->resolve(disabled_role_);
         if (position > 0) painter.draw_text(Point{item.x - kSeparatorWidth, 0}, " | ", style);
-        painter.draw_text(Point{item.x, 0},
-                          text::clip_to_width(effective_label(items_[item.index]), bounds().width - item.x),
-                          item_style);
+        const EffectiveLabel label = effective_label(items_[item.index]);
+        painter.draw_text(Point{item.x, 0}, text::clip_to_width(label.text, bounds().width - item.x), item_style);
+        if (label.hotkey_width > 0 && item_available(items_[item.index]))
+            painter.draw_text(Point{item.x, 0}, text::clip_to_width(label.text, label.hotkey_width),
+                              accent_style(item_style, context().theme->resolve(hotkey_role_)));
     }
 }
 
@@ -144,7 +148,7 @@ bool StatusLine::on_mouse(const MouseEvent& event) {
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const int x = item_start_column(i);
         if (x < 0) continue;
-        const int w = text::text_width(effective_label(items_[i]));
+        const int w = text::text_width(effective_label(items_[i]).text);
         if (local_x >= x && local_x < x + w) {
             if (item_command(items_[i]) != ui::kInvalidCommand && item_available(items_[i]))
                 context().app->execute_command(item_command(items_[i]));

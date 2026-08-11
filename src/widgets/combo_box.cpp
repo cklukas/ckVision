@@ -17,6 +17,10 @@ void ComboBox::on_attached() {
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (shadow_role_ == ui::kInvalidRole) shadow_role_ = context().roles->find("ckv.button.shadow");
+    editor_.set_context(context());
+    editor_.set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
+    editor_.on_attached();
+    on_resized();
 }
 
 void ComboBox::set_items(std::vector<std::string> items) {
@@ -36,6 +40,17 @@ void ComboBox::set_mode(ComboBoxMode mode) {
 void ComboBox::set_text(std::string text) {
     if (text_ == text) return;
     text_ = std::move(text);
+    editor_.set_text(text_);
+    selected_index_.reset();
+    history_index_ = -1;
+    invalidate();
+    if (on_text_changed) on_text_changed(text_);
+}
+
+void ComboBox::sync_text_from_editor() {
+    const std::string next = editor_.text();
+    if (next == text_) return;
+    text_ = next;
     selected_index_.reset();
     history_index_ = -1;
     invalidate();
@@ -80,6 +95,7 @@ void ComboBox::select_index(std::size_t index, bool notify) {
     if (index >= items_.size()) return;
     selected_index_ = index;
     text_ = items_[index];
+    editor_.set_text(text_);
     history_index_ = -1;
     invalidate();
     if (notify && on_select) on_select(index);
@@ -100,11 +116,13 @@ void ComboBox::recall_history(int index) {
     history_index_ = index;
     if (index == -1) {
         text_ = history_saved_text_;
+        editor_.set_text(text_);
         selected_index_.reset();
         invalidate();
         if (on_text_changed) on_text_changed(text_);
     } else if (static_cast<std::size_t>(index) < entries.size()) {
         text_ = entries[static_cast<std::size_t>(index)];
+        editor_.set_text(text_);
         selected_index_.reset();
         invalidate();
         if (on_text_changed) on_text_changed(text_);
@@ -159,6 +177,13 @@ bool ComboBox::on_key(const KeyEvent& event) {
             close_dropdown();
             return true;
         case Key::Backspace:
+            if (editable() && !dropdown_open_) {
+                if (editor_.on_key(event)) {
+                    sync_text_from_editor();
+                    return true;
+                }
+                return false;
+            }
             if (!editable() || text_.empty()) return false;
             {
                 std::vector<std::string> graphemes;
@@ -170,15 +195,25 @@ bool ComboBox::on_key(const KeyEvent& event) {
             }
             return true;
         case Key::Char:
-            if (!editable() || has_modifier(event.chord.modifiers, Modifier::Alt) ||
-                has_modifier(event.chord.modifiers, Modifier::Ctrl) ||
-                has_modifier(event.chord.modifiers, Modifier::Super))
-                return false;
-            set_text(text_ + event.chord.text);
-            return true;
+            if (!editable() || dropdown_open_) return false;
+            if (editor_.on_key(event)) {
+                sync_text_from_editor();
+                return true;
+            }
+            return false;
         default:
+            if (editable() && !dropdown_open_ && editor_.on_key(event)) {
+                sync_text_from_editor();
+                return true;
+            }
             return false;
     }
+}
+
+bool ComboBox::on_text(const TextEvent& event) {
+    if (!editable() || dropdown_open_ || !editor_.on_text(event)) return false;
+    sync_text_from_editor();
+    return true;
 }
 
 bool ComboBox::on_mouse(const MouseEvent& event) {
@@ -187,6 +222,9 @@ bool ComboBox::on_mouse(const MouseEvent& event) {
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;
     if (row == 0) {
+        if (editable() && event.cell.x - abs.x < bounds().width - 2) {
+            if (editor_.on_mouse(event)) return true;
+        }
         dropdown_open_ ? close_dropdown() : open_dropdown();
         return true;
     }
@@ -200,7 +238,13 @@ bool ComboBox::on_mouse(const MouseEvent& event) {
 
 void ComboBox::on_focus(const FocusEvent& event) {
     has_focus_ = event.gained;
+    editor_.on_focus(event);
     invalidate();
+}
+
+void ComboBox::on_resized() {
+    const Rect absolute = absolute_bounds();
+    editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, bounds().width - 2), 1});
 }
 
 void ComboBox::draw(scene::Painter& painter) {
@@ -211,7 +255,14 @@ void ComboBox::draw(scene::Painter& painter) {
     if (w <= 0 || bounds().height <= 0) return;
 
     painter.fill(Rect{0, 0, w, 1}, Cell::from_grapheme(" ", normal));
-    painter.draw_text(Point{0, 0}, text::clip_to_width(text_, std::max(0, w - 2)), normal);
+    if (editable()) {
+        const Rect absolute = absolute_bounds();
+        editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, w - 2), 1});
+        scene::Painter editor_painter = painter.translated(Point{0, 0}, Rect{0, 0, std::max(0, w - 2), 1});
+        editor_.draw(editor_painter);
+    } else {
+        painter.draw_text(Point{0, 0}, text::clip_to_width(text_, std::max(0, w - 2)), normal);
+    }
     painter.draw_text(Point{w - 1, 0}, dropdown_open_ ? "▴" : "▾", normal);
 
     if (!dropdown_open_) return;

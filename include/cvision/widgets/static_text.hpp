@@ -35,6 +35,8 @@ public:
     void set_role_override(ui::RoleId role) noexcept { role_ = role; }
 
     void draw(scene::Painter& painter) override;
+    SizeHint horizontal_size_hint() const override;
+    SizeHint vertical_size_hint() const override;
     int height_for_width(int width) const override;
     void on_attached() override;
 

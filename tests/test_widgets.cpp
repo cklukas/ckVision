@@ -244,6 +244,21 @@ CK_TEST(button_draws_a_face_with_half_block_shadow_on_the_right_edge_and_bottom_
     CK_CHECK(s.at(ckv::Point{5, 1}).style() == f.theme.resolve(f.roles.button_shadow));
 }
 
+CK_TEST(button_mnemonics_use_the_dialog_mnemonic_accent) {
+    Fixture f;
+    Surface s = make_surface(14, 3);
+    Button button("&OK");
+    button.set_context(f.ctx());
+    button.set_bounds(Rect{0, 0, 12, 2});
+    Painter painter(s, Rect{0, 0, 14, 3});
+    button.draw(painter);
+
+    // "OK" is centered at columns 5-6; only the '&'-marked O is yellow.
+    CK_CHECK(s.at(ckv::Point{5, 0}).style().fg == f.theme.resolve(f.roles.label_mnemonic).fg);
+    CK_CHECK(s.at(ckv::Point{5, 0}).style().bg == f.theme.resolve(f.roles.button_normal).bg);
+    CK_CHECK(s.at(ckv::Point{6, 0}).style() == f.theme.resolve(f.roles.button_normal));
+}
+
 CK_TEST(button_clipping_keeps_combining_graphemes_intact) {
     Fixture f;
     Surface s = make_surface(7, 3);
@@ -658,6 +673,28 @@ CK_TEST(input_line_copy_cut_and_paste_use_the_application_clipboard) {
 
     CK_CHECK(input.on_key(ctrl_char("v")));
     CK_CHECK(input.text() == "hello");
+}
+
+CK_TEST(input_line_uses_word_navigation_and_legacy_insert_clipboard_bindings) {
+    Fixture f;
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    InputLine input;
+    input.set_context(ui::Context{&app.theme(), &app.roles(), &app});
+    input.set_text("one two three");
+
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Ctrl, ""}}));
+    CK_CHECK(input.cursor() == 8U);
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Ctrl | Modifier::Shift, ""}}));
+    const std::pair<std::size_t, std::size_t> expected_selection{4U, 8U};
+    CK_CHECK(input.selection_range() == expected_selection);
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Insert, Modifier::Ctrl, ""}}));
+    CK_CHECK(app.clipboard_text() == "two ");
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Delete, Modifier::Shift, ""}}));
+    CK_CHECK(input.text() == "one three");
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Insert, Modifier::Shift, ""}}));
+    CK_CHECK(input.text() == "one two three");
 }
 
 CK_TEST(input_line_undo_restores_the_previous_text_and_selection_state) {

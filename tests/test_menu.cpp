@@ -215,6 +215,46 @@ CK_TEST(clicking_a_disabled_item_does_not_activate_it) {
     CK_CHECK(!ran);
 }
 
+CK_TEST(mouse_activation_is_deferred_until_release_and_tracks_dragged_item) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    bool first = false;
+    bool second = false;
+    auto menu = make_dropdown(f, app, {{"First", ui::kInvalidCommand, [&] { first = true; }, false, {}, {}},
+                                        {"Second", ui::kInvalidCommand, [&] { second = true; }, false, {}, {}}});
+    menu->set_bounds(Rect{5, 5, 14, 2});
+    menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 5},
+                                   std::nullopt, Modifier::None});
+    CK_CHECK(!first && !second);
+    menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{6, 6},
+                                   std::nullopt, Modifier::None});
+    CK_CHECK(menu->highlighted() == 1);
+    menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{6, 6},
+                                   std::nullopt, Modifier::None});
+    CK_CHECK(!first && second);
+}
+
+CK_TEST(mouse_release_on_a_divider_cancels_the_pending_activation) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    bool ran = false;
+    auto menu = make_dropdown(f, app, {{"Run", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}},
+                                        {"", ui::kInvalidCommand, {}, true, {}, {}},
+                                        {"Other", ui::kInvalidCommand, {}, false, {}, {}}});
+    menu->set_bounds(Rect{5, 5, 14, 3});
+    menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 5},
+                                   std::nullopt, Modifier::None});
+    menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{6, 6},
+                                   std::nullopt, Modifier::None});
+    menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{6, 6},
+                                   std::nullopt, Modifier::None});
+    CK_CHECK(!ran);
+}
+
 CK_TEST(clicking_outside_the_dropdowns_bounds_dismisses_it_without_activating) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -472,6 +512,44 @@ CK_TEST(enter_opens_a_dropdown_as_a_desktop_popup) {
     CK_CHECK(mf.app.input_capture() == mf.desktop.popups()[0]);
 }
 
+CK_TEST(active_menu_bar_highlight_includes_one_cell_of_visual_padding) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&File", {}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 20, 1});
+    bar->activate();
+    Surface surface(ckv::Size{20, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 1});
+    bar->draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() != surface.at(ckv::Point{1, 0}).style());
+    CK_CHECK(surface.at(ckv::Point{6, 0}).style() != surface.at(ckv::Point{5, 0}).style());
+}
+
+CK_TEST(mouse_drag_from_a_menu_bar_item_switches_dropdown_before_release) {
+    MenuBarFixture mf;
+    bool ran = false;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"Open", ui::kInvalidCommand, {}, false, {}, {}}}},
+        {"&Window", {{"Tile", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}}},
+    });
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 40, 1});
+    bar->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                  std::nullopt, Modifier::None});
+    CK_CHECK(mf.desktop.popups().size() == 1U);
+    auto* first = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
+    first->on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{10, 0},
+                                    std::nullopt, Modifier::None});
+    CK_CHECK(mf.desktop.popups().size() == 1U);
+    auto* second = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
+    second->on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{10, 2},
+                                     std::nullopt, Modifier::None});
+    second->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{10, 2},
+                                     std::nullopt, Modifier::None});
+    CK_CHECK(ran);
+}
+
 CK_TEST(escape_closes_an_open_dropdown_first_without_deactivating_the_bar) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
@@ -551,6 +629,72 @@ CK_TEST(a_narrow_menu_bar_clips_visible_items_to_its_own_width) {
 
     CK_CHECK(row_text(s, 0).size() == 6);
     CK_CHECK(row_text(s, 0).find('.') == std::string::npos);
+}
+
+CK_TEST(menu_mnemonics_use_the_shared_hotkey_accent_on_each_surface) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 12, 1});
+    Surface bar_surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter bar_painter(bar_surface, Rect{0, 0, 12, 1});
+    bar->draw(bar_painter);
+    CK_CHECK(bar_surface.at(ckv::Point{1, 0}).grapheme() == "F");
+    CK_CHECK(bar_surface.at(ckv::Point{1, 0}).style().fg == mf.f.theme.resolve(mf.f.roles.hotkey).fg);
+    CK_CHECK(bar_surface.at(ckv::Point{1, 0}).style().bg == mf.f.theme.resolve(mf.f.roles.menu_bar_normal).bg);
+
+    auto menu = make_dropdown(mf.f, mf.app, {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}});
+    menu->set_bounds(Rect{0, 0, 12, 1});
+    Surface menu_surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter menu_painter(menu_surface, Rect{0, 0, 12, 1});
+    menu->draw(menu_painter);
+    CK_CHECK(menu_surface.at(ckv::Point{1, 0}).grapheme() == "O");
+    CK_CHECK(menu_surface.at(ckv::Point{1, 0}).style().fg == mf.f.theme.resolve(mf.f.roles.hotkey).fg);
+    CK_CHECK(menu_surface.at(ckv::Point{1, 0}).style().bg ==
+             mf.f.theme.resolve(mf.f.roles.menu_dropdown_highlighted).bg);
+}
+
+CK_TEST(a_popup_dropdown_has_an_opaque_classic_frame_and_padded_item_interior) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto menu = make_dropdown(f, app, { {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}},
+                                       {"", ui::kInvalidCommand, nullptr, true, {}, {}},
+                                       {"&Quit", ui::kInvalidCommand, nullptr, false, {}, {}} });
+    const ui::SizeHint width = menu->horizontal_size_hint();
+    const ui::SizeHint height = menu->vertical_size_hint();
+    menu->set_bounds(Rect{0, 0, width.preferred, height.preferred});
+
+    Surface surface(ckv::Size{width.preferred, height.preferred},
+                    ckv::Cell::from_grapheme("P", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, width.preferred, height.preferred});
+    menu->draw(painter);
+
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "┌");
+    CK_CHECK(surface.at(ckv::Point{width.preferred - 1, height.preferred - 1}).grapheme() == "┘");
+    CK_CHECK(surface.at(ckv::Point{1, 1}).grapheme() == " ");
+    CK_CHECK(surface.at(ckv::Point{2, 1}).grapheme() == "O");
+    CK_CHECK(surface.at(ckv::Point{2, 1}).style().bg ==
+             f.theme.resolve(f.roles.menu_dropdown_highlighted).bg);
+    CK_CHECK(surface.at(ckv::Point{0, 2}).grapheme() == "│");
+    CK_CHECK(surface.at(ckv::Point{width.preferred - 1, 2}).grapheme() == "│");
+}
+
+CK_TEST(a_context_menu_keeps_its_frame_inside_the_desktop_at_the_bottom_right_edge) {
+    MenuBarFixture mf;
+    DropdownMenu* menu = show_context_menu(
+        {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}},
+         {"&Quit", ui::kInvalidCommand, nullptr, false, {}, {}}},
+        ckv::Point{79, 23}, mf.app, mf.desktop);
+
+    const Rect bounds = menu->bounds();
+    CK_CHECK(bounds.x >= 0);
+    CK_CHECK(bounds.y >= 0);
+    CK_CHECK(bounds.right() <= mf.desktop.bounds().width);
+    CK_CHECK(bounds.bottom() <= mf.desktop.bounds().height);
+    CK_CHECK(menu->on_key(key(Key::Escape)));
+    CK_CHECK(mf.desktop.popups().empty());
 }
 
 // --- MenuBar: F10 default activation (M9/WP-13, D-029) ---------------------

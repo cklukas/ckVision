@@ -19,6 +19,26 @@ void StaticText::set_text(std::string text) {
     size_hint_changed();
 }
 
+SizeHint StaticText::horizontal_size_hint() const {
+    int widest = 0;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t end = raw_text_.find('\n', start);
+        widest = std::max(widest, text::text_width(
+                                      std::string_view(raw_text_).substr(start, end == std::string::npos
+                                                                                       ? std::string::npos
+                                                                                       : end - start)));
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return SizeHint{1, std::max(1, widest), ui::kUnboundedExtent};
+}
+
+SizeHint StaticText::vertical_size_hint() const {
+    const int lines = 1 + static_cast<int>(std::count(raw_text_.begin(), raw_text_.end(), '\n'));
+    return SizeHint{1, std::max(1, lines), ui::kUnboundedExtent};
+}
+
 std::vector<std::string> StaticText::wrap(int width) const {
     std::vector<std::string> lines;
     const int w = std::max(width, 1);

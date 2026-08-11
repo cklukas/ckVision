@@ -21,6 +21,10 @@ struct StandardRoles {
     RoleId dialog_background;
     RoleId label_text;
     RoleId label_mnemonic;
+    // Shared command accent: command chords in status lines and '&'-marked
+    // mnemonics in menus retain their surface background while applying this
+    // role's foreground and attributes.
+    RoleId hotkey;
     RoleId static_text;
     RoleId button_normal;
     RoleId button_focused;
@@ -39,6 +43,10 @@ struct StandardRoles {
     RoleId window_frame_inactive;
     RoleId window_title_active;
     RoleId window_title_inactive;
+    // The maximize/restore control. Its foreground is composited onto the
+    // owning frame's background, so the accent works for both document
+    // windows and dialog chrome.
+    RoleId window_control;
 
     // Menu system (ARCHITECTURE.md §5 "Menus").
     RoleId menu_bar_normal;
@@ -70,6 +78,25 @@ struct StandardRoles {
     RoleId status_line_disabled;
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
+
+    // WP-41 editor semantics. These roles are intentionally standard rather
+    // than widget-local fallbacks so every built-in scheme can keep source,
+    // selection, search, and syntax categories legible.
+    RoleId editor_text;
+    RoleId editor_gutter;
+    RoleId editor_selection;
+    RoleId editor_search;
+    RoleId editor_syntax_plain;
+    RoleId editor_syntax_keyword;
+    RoleId editor_syntax_type;
+    RoleId editor_syntax_property;
+    RoleId editor_syntax_string;
+    RoleId editor_syntax_number;
+    RoleId editor_syntax_comment;
+    RoleId editor_syntax_command;
+    RoleId editor_syntax_operator;
+    RoleId editor_syntax_escape;
+    RoleId editor_syntax_error;
 };
 
 // Interns every standard role into `registry` with the built-in

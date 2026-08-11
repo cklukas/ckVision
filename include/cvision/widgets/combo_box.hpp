@@ -9,6 +9,7 @@
 #include "cvision/ui/history.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/input_line.hpp"
 
 namespace ckv::widgets {
 
@@ -49,13 +50,16 @@ public:
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
     bool on_key(const KeyEvent& event) override;
+    bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+    void on_resized() override;
 
 private:
     void select_index(std::size_t index, bool notify);
     void move_selection(int delta);
     void recall_history(int index);
+    void sync_text_from_editor();
 
     ComboBoxMode mode_;
     std::vector<std::string> items_;
@@ -63,6 +67,7 @@ private:
     std::optional<std::size_t> selected_index_;
     bool dropdown_open_ = false;
     bool has_focus_ = false;
+    InputLine editor_;
 
     ui::HistoryRegistry* history_registry_ = nullptr;
     std::string history_key_;

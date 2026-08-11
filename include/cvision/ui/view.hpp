@@ -15,10 +15,15 @@
 #include <vector>
 
 #include "cvision/core/event.hpp"
+#include "cvision/core/cursor.hpp"
 #include "cvision/core/geometry.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/ui/context.hpp"
+
+namespace ckv::core {
+class TerminalSubsession;
+}
 
 namespace ckv::ui {
 
@@ -139,6 +144,17 @@ public:
     // already been reported; the default does nothing. It may detach
     // or destroy this View; in that case no later bounds observer runs.
     virtual void on_resized() {}
+
+    // Delivers a contained terminal-session state change through the view
+    // tree.  Retained containers redraw only after a child invalidates, so a
+    // TerminalView uses this notification to invalidate itself when its
+    // privately owned session has new output.
+    void notify_terminal_subsession_changed(const core::TerminalSubsession& session);
+
+    // A focused editable view may provide one absolute-frame cursor state.
+    // The Application publishes only the focused view's cursor after paint;
+    // ordinary views return no cursor and cannot affect terminal state.
+    virtual std::optional<CursorState> cursor_state() const { return std::nullopt; }
 
     // Fired after on_resized(), with this view's NEW bounds (local —
     // same value bounds() now returns), whenever set_bounds() actually
@@ -364,6 +380,7 @@ public:
     void clear_command_context() noexcept { command_context_.reset(); }
 
 protected:
+    virtual void on_terminal_subsession_changed(const core::TerminalSubsession& session) { (void)session; }
     // Retained containers observe invalidation without changing the public
     // dirty-rect callback contract. The initiating view receives the first
     // hook, then each ancestor receives the descendant notification.

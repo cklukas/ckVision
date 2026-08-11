@@ -19,6 +19,9 @@ struct CursorState {
     bool visible = false;
     Point position;
     CursorShape shape = CursorShape::Block;
+    // Requests the host terminal's normal blink cadence when visible.  The
+    // presenter owns the actual timing; the scene only declares intent.
+    bool blink = false;
 
     friend bool operator==(const CursorState&, const CursorState&) = default;
 };

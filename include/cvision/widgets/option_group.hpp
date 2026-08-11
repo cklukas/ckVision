@@ -1,10 +1,11 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // CheckGroup (multi-select) and RadioGroup (exclusive-select): arrow
-// navigation, mnemonics (plans/widgets.md M6a baseline). Each group is
-// ONE Tab stop — arrows move an internal cursor among the group's own
-// items rather than each item being independently focusable, matching
-// the classic clustered check/radio control.
+// navigation, mnemonics (plans/widgets.md M6a baseline). CheckGroup renders
+// [ ] / [X]; RadioGroup renders ( ) / (•). Each group is ONE Tab stop —
+// arrows move an internal cursor among the group's own items rather than each
+// item being independently focusable, matching the classic clustered
+// check/radio control.
 #pragma once
 
 #include <functional>
@@ -25,16 +26,24 @@ enum class CheckState {
 };
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused".
+// WP-7, D-028): "ckv.option.normal"/"ckv.option.focused" and
+// "ckv.label.mnemonic".
 class CheckGroup : public ui::View {
 public:
     // `labels` may each carry a '&' mnemonic.
     explicit CheckGroup(std::vector<std::string> labels);
 
+    // Optional caption owned by this group. When present it occupies the row
+    // above the choices and adopts the focused-group foreground while the
+    // group has keyboard focus.
+    void set_group_label(std::string label);
+    const std::string& group_label() const noexcept { return group_label_; }
+
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
         normal_role_ = normal_role;
         focused_role_ = focused_role;
     }
+    void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
     bool checked(std::size_t index) const;
     void set_checked(std::size_t index, bool value);
@@ -62,12 +71,15 @@ private:
     void move_cursor(int direction);
 
     std::vector<std::string> labels_;
+    std::string group_label_;
     std::vector<CheckState> states_;
     std::size_t cursor_ = 0;
     bool tristate_ = false;
     bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId mnemonic_role_ = ui::kInvalidRole;
+    ui::RoleId group_label_role_ = ui::kInvalidRole;
 };
 
 // Resolves its own theme roles from context() once attached (M9
@@ -76,10 +88,17 @@ class RadioGroup : public ui::View {
 public:
     explicit RadioGroup(std::vector<std::string> labels);
 
+    // Optional caption owned by this group. When present it occupies the row
+    // above the choices and adopts the focused-group foreground while the
+    // group has keyboard focus.
+    void set_group_label(std::string label);
+    const std::string& group_label() const noexcept { return group_label_; }
+
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
         normal_role_ = normal_role;
         focused_role_ = focused_role;
     }
+    void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
     int selected() const noexcept { return selected_; }  // -1 means none selected
     void set_selected(int index);
@@ -99,11 +118,14 @@ private:
     void move_cursor(int direction);
 
     std::vector<std::string> labels_;
+    std::string group_label_;
     int selected_ = -1;
     std::size_t cursor_ = 0;
     bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId mnemonic_role_ = ui::kInvalidRole;
+    ui::RoleId group_label_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

@@ -62,6 +62,17 @@ public:
     // call (a batch), consistent with the ui-layer's batched loop.
     virtual std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) = 0;
 
+    // Waits for this terminal's own sources plus borrowed readiness sources
+    // supplied by a higher-level owner. A POSIX backend combines these with
+    // poll(2), allowing a private child PTY to wake an Application without an
+    // unrelated outer-terminal input event. Backends without such a facility
+    // preserve the ordinary polling behavior.
+    virtual std::vector<TerminalEvent> poll(std::int64_t deadline_nanos,
+                                            std::span<const WaitHandle> additional_wait_handles) {
+        (void)additional_wait_handles;
+        return poll(deadline_nanos);
+    }
+
     // Returns a borrowed, allocation-free view of the backend sources a host
     // may wait on before calling poll() or Application::step(). The returned
     // view is valid only while this Terminal remains alive and its native

@@ -4,7 +4,7 @@ Milestones are sequential; each has binding exit criteria. No dates —
 sequence and criteria only. Original milestone effort figures are coarse
 historical planning aids (focused person-weeks, one senior developer driving
 agent tooling); their former 26–34 pw total no longer describes the reopened
-scope. The corrective queue carries a new 46–77 pw estimate, subject to WP-23's
+scope. The corrective queue carries a new 92–149 pw estimate, subject to WP-23's
 provenance/authority rebaseline.
 
 M8–M10 were inserted by the 2026-08-07 API-ergonomics and integration
@@ -37,18 +37,18 @@ status authority.
 
 | Milestone | Current status | Corrective owner(s) |
 |---|---|---|
-| M0 | **Reopened** — Windows test portability and complete gate reporting do not hold | WP-32, WP-37, WP-38 |
+| M0 | **Reopened** — Windows test portability and complete gate reporting do not hold | WP-32, WP-50, WP-37, WP-38 |
 | M1 | **Reopened** — Unicode tables/corpora are incomplete and widget clipping can split UTF-8 | WP-30, WP-38 |
-| M2 | **Reopened** — paint-scope junction ownership and binary shadow union have initial fixes and overlap goldens, but per-window backing stores, zero-allocation/cells-touched budgets, and the complete cross-platform golden matrix are not accepted | WP-31, WP-38 |
-| M3 | **Reopened** — the initial Sixel/no-graphics virtual display and captures have landed, but its full pixel-golden/state matrix, security, fuzzing, degradation/restoration, p99, and backend evidence remain incomplete | WP-27, WP-29, WP-31, WP-32A, WP-33, WP-37, WP-38 |
-| M4 | **Reopened** — root/input/modality/platform-service/zero-allocation/command-context exits are incomplete | WP-24, WP-25, WP-27, WP-28, WP-31, WP-32, WP-35, WP-38 |
+| M2 | **Reopened** — paint-scope junction ownership and binary shadow union have initial fixes and overlap goldens, but per-window backing stores, zero-allocation/cells-touched budgets, contained child-raster composition, and the complete cross-platform golden matrix are not accepted | WP-31, WP-48, WP-38 |
+| M3 | **Reopened** — the initial Sixel/no-graphics virtual display and captures have landed, but its full pixel-golden/state matrix, security, fuzzing, degradation/restoration, p99, backend evidence, and embedded-terminal containment are incomplete | WP-27, WP-29, WP-31, WP-32A, WP-33, WP-45…WP-50, WP-37, WP-38 |
+| M4 | **Reopened** — root/input/modality/platform-service/zero-allocation/command-context exits and bounded child-session readiness integration are incomplete | WP-24, WP-25, WP-27, WP-28, WP-31, WP-32, WP-35, WP-46, WP-47, WP-38 |
 | M5 | **Reopened** — Desktop lifetime, modality, backing stores, menu/catalog, hello, scripts, and goldens are incomplete | WP-25…WP-27, WP-31, WP-34A, WP-35, WP-38 |
-| M6 | **Reopened** — catalog features, common modern components, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, comprehensive example coverage, and reference docs are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-36A, WP-36B, WP-38 |
-| M7 | **Open / host-blocked** — Windows backend/full matrix has not met its exit | WP-32, WP-37; host availability remains explicit |
+| M6 | **Reopened** — catalog features, common modern components, terminal view, accepted paired Sixel/fallback pixel goldens, complete state/scheme scripts, comprehensive example coverage, usable client-facing tutorials/reference docs, and release evidence are incomplete; generated dual-profile captures alone do not close the golden gate | WP-30, WP-32A, WP-34A…WP-34C, WP-36A, WP-36B, WP-36C, WP-45…WP-49, WP-38 |
+| M7 | **Open / host-blocked** — Windows backend/full matrix, including embedded ConPTY child sessions, has not met its exit | WP-32, WP-50, WP-37; host availability remains explicit |
 | M8 | **Reopened** — corrected WP-24…WP-26 implementations still require example integration and the global matrix | WP-35, WP-38 |
 | M9 | **Reopened** — WP-10 is unfinished and theme, modality, command-context, and remaining example exits are unmet | WP-27, WP-35, WP-38 |
 | M10 | **Reopened** — WP-18…WP-22 landed code but the specified visible/script/golden/reference acceptance is incomplete | WP-36, WP-38 |
-| M11 | **Blocked** — release work cannot start until corrective assurance and M7 gates hold | WP-38 |
+| M11 | **Open** — editor/language-profile and contained-terminal delivery are queued; release remains blocked until they and the M7/global gates hold | WP-39…WP-50, WP-37, WP-38 |
 
 ## M0 — Bootstrap (≈1 pw)
 
@@ -363,31 +363,47 @@ through the injected filesystem with unchanged observable behavior
 plus new lazy/split coverage; every new container and model feature
 reference-documented.
 
-## M11 — graphics polish, themes, docs, release (≈2 pw)
+## M11 — editor, embedded terminal, graphics polish, themes, docs, release (≈48–74 pw)
 
-**Entry status: blocked.** WP-23…WP-38 in the corrective queue, including the
-M7 platform package, must hold before release work begins.
+**Entry status: Mac-first finishing active.** WP-39…WP-49 have implementation
+evidence on the current Mac host. The active finishing sequence is defined in
+[plans/mac-first-delivery-target.md](plans/mac-first-delivery-target.md): close
+the observable release gates, finish interaction and visual polish, harden
+performance and resilience, stabilize packaging, and perform the final Mac
+release audit.
 
-Graphics polish (kitty-graphics secondary encoder, Sixel palette
-optimization); scheme polish; the theme-editor standard dialog; the
-documentation site assembled from per-milestone reference docs plus
-tutorial and extension guides (worked examples for every §14 extension
-point); WP-36A's comprehensive examples polished for release packaging;
-fuzz/bench hardening pass.
+First-class document/source editor and file-editor workflow: revisioned UTF-8
+editing, undo/redo, search/replace, selection/gutter/indicator, deterministic
+profile detection, incremental syntax styling, and shipped JSON/YAML/Bash
+profiles with documented client extension. The binding design and delivery
+target are [plans/editor-architecture.md](plans/editor-architecture.md) and
+[plans/editor-delivery-target.md](plans/editor-delivery-target.md). Also:
+private embedded terminal sessions: explicit process lifecycle, off-screen
+terminal emulation, resize/input/focus, nested ckVision child applications,
+and decoded Sixel content re-composited with no escape beyond the window. The
+binding design and delivery target are
+[plans/embedded-terminal-architecture.md](plans/embedded-terminal-architecture.md)
+and [plans/embedded-terminal-delivery-target.md](plans/embedded-terminal-delivery-target.md).
+Also:
+graphics polish (kitty-graphics secondary encoder, Sixel palette optimization);
+scheme polish; the theme-editor standard dialog; release documentation and
+examples; fuzz/benchmark hardening.
 
 Entry gate — WP-34A…WP-34C have closed or formally re-scoped every catalog
 row, WP-36A has a complete executable example coverage matrix, WP-36B has
-closed or explicitly deferred the common modern components, WP-38 has
-verified the complete widget/state/scheme matrix and public
-reference coverage, and the corrective queue contains no `Ready`, `In progress`, or
-`Blocked` row. Release work does not inherit known corrective debt.
+closed or explicitly deferred the common modern components, WP-36C has produced
+source-backed client tutorials, screenshots, widget/API coverage docs, and
+doc-generation gates, WP-39…WP-49 have met their current-host delivery
+targets, and WP-38-MAC has a traceability report with no unexplained Mac
+acceptance gap. Release work does not inherit known corrective debt.
 
-**Exit — 0.1 release criteria:** every VISION.md non-negotiable
-demonstrably works in the gallery/showcase examples on all three platforms; documentation
-covers every public API; the tutorial walkthrough is executed by script
-in a clean container/VM per platform and reaches a running hello in
-under ten minutes from documented prerequisites; license decision
-(D-OPEN-1) resolved.
+**Exit — 0.1 Mac release criteria:** every VISION.md non-negotiable
+demonstrably works in the gallery/showcase examples on the Mac host, including
+the document editor and its standard language profiles plus the contained
+terminal view and its child-session/Sixel scenarios; documentation covers
+every public API; the tutorial walkthrough is executed from a clean Mac
+checkout and reaches a running hello in under ten minutes from documented
+prerequisites; license decision (D-OPEN-1) resolved.
 
 ## Post-0.1
 

@@ -194,8 +194,27 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
     return result;
 }
 
-void Compositor::compute_visible_rasters(const std::vector<Layer>& layers) {
+void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background) {
     visible_rasters_.clear();
+    // The root/base surface is also a legal Painter target. Its rasters have
+    // no layer offset, but windows and popups above them still occlude them
+    // exactly as they occlude base cells.
+    for (const RasterRegion& region : background.raster_regions()) {
+        const Rect full_anchor = region.anchor;
+        rect_scratch_a_.clear();
+        rect_scratch_a_.push_back(full_anchor);
+        for (const Layer& occluder : layers) {
+            rect_scratch_b_.clear();
+            const Rect occluder_rect = layer_rect(occluder);
+            for (const Rect& candidate : rect_scratch_a_)
+                append_difference(candidate, occluder_rect, rect_scratch_b_);
+            rect_scratch_a_.swap(rect_scratch_b_);
+            if (rect_scratch_a_.empty()) break;
+        }
+        for (const Rect& visible : rect_scratch_a_)
+            visible_rasters_.push_back(
+                RasterSlice{region.id, visible, full_anchor, region.image, region.fallback_active});
+    }
     for (std::size_t i = 0; i < layers.size(); ++i) {
         const Layer& layer = layers[i];
         for (const RasterRegion& region : layer.surface->raster_regions()) {
@@ -241,7 +260,7 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
     for (const Layer& l : layers)
         previous_layers_.push_back(PreviousLayer{l.id, layer_rect(l), l.casts_shadow, l.shadow_clip});
 
-    compute_visible_rasters(layers);
+    compute_visible_rasters(layers, background);
 }
 
 void Compositor::resize(Size new_size) {

@@ -250,7 +250,7 @@ CK_TEST(a_zero_height_scrollbar_does_not_crash_on_draw_or_mouse) {
     CK_CHECK(true);
 }
 
-// --- Glyphs (windowed-desktop fidelity) -----------------------------------
+// --- Glyphs (CP437 desktop convention) ------------------------------------
 
 CK_TEST(a_vertical_scrollbar_draws_solid_triangle_end_arrows) {
     Fixture f;
@@ -278,10 +278,11 @@ CK_TEST(a_horizontal_scrollbar_draws_solid_triangle_end_arrows) {
     CK_CHECK(s.at(Point{9, 0}).grapheme() == "►");
 }
 
-CK_TEST(the_track_and_thumb_use_distinct_glyphs_not_just_distinct_colors) {
-    // A previous version drew both track and thumb as a plain space,
-    // relying entirely on style/color to distinguish them — invisible
-    // on a monochrome terminal and visually flat everywhere else.
+CK_TEST(the_scrollbar_uses_the_classic_light_shade_track_and_full_block_thumb) {
+    // CP437's light-shade page area and full-block scroll box are distinct
+    // in both glyph coverage and theme role.  In particular, do not replace
+    // the track with the heavier medium shade (`▒`): browser renderers turn
+    // it into an intrusive striped field.
     Fixture f;
     Scrollbar sb(Orientation::Vertical);
     sb.set_context(f.ctx());
@@ -294,8 +295,8 @@ CK_TEST(the_track_and_thumb_use_distinct_glyphs_not_just_distinct_colors) {
     bool found_track = false, found_thumb = false;
     for (int y = 1; y < 11; ++y) {
         const std::string_view g = s.at(Point{0, y}).grapheme();
-        if (g == "▒") found_track = true;
-        if (g == "■") found_thumb = true;
+        if (g == "░") found_track = true;
+        if (g == "█") found_thumb = true;
     }
     CK_CHECK(found_track);
     CK_CHECK(found_thumb);
@@ -310,5 +311,32 @@ CK_TEST(a_thumb_that_fills_the_whole_track_leaves_no_bare_track_glyph_visible) {
     ckv::scene::Surface s(ckv::Size{1, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     ckv::scene::Painter painter(s, Rect{0, 0, 1, 10});
     sb.draw(painter);
-    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "■");
+    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "█");
+}
+
+CK_TEST(classic_scrollbar_uses_a_cyan_track_and_continuous_cyan_thumb) {
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_context(f.ctx());
+    sb.set_bounds(Rect{0, 0, 1, 12});
+    sb.set_range(100, 2);
+    ckv::scene::Surface s(ckv::Size{1, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 1, 12});
+    sb.draw(painter);
+
+    bool found_track = false;
+    bool found_thumb = false;
+    for (int y = 1; y < 11; ++y) {
+        const ckv::Cell& cell = s.at(Point{0, y});
+        if (cell.grapheme() == "░") {
+            found_track = true;
+            CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_track));
+        }
+        if (cell.grapheme() == "█") {
+            found_thumb = true;
+            CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_thumb));
+        }
+    }
+    CK_CHECK(found_track);
+    CK_CHECK(found_thumb);
 }

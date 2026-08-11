@@ -1,4 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include <string>
+#include <string_view>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/combo_box.hpp"
@@ -20,15 +23,24 @@ struct Fixture {
     Application app{term, clock};
     ckv::forms::FormsApp forms{app};
 };
+
+bool display_contains(const ckv::term::VirtualDisplay& display, std::string_view needle) {
+    const ckv::FrameView frame = display.frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        std::string row;
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, y}).grapheme();
+        if (row.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
 }  // namespace
 
 CK_TEST(forms_example_renders_form_controls_and_chrome) {
     Fixture f;
     f.app.step(0);
-    const auto bytes = f.term.written_bytes();
-    CK_CHECK(bytes.find("Forms") != std::string::npos);
-    CK_CHECK(bytes.find("Profile") != std::string::npos);
-    CK_CHECK(bytes.find("Quit") != std::string::npos);
+    CK_CHECK(display_contains(f.term.display(), "Forms"));
+    CK_CHECK(display_contains(f.term.display(), "Profile"));
+    CK_CHECK(display_contains(f.term.display(), "Quit"));
     CK_CHECK(f.app.focused() == f.forms.name_input());
     CK_CHECK(f.forms.options()->check_state(1) == ckv::widgets::CheckState::Mixed);
     CK_CHECK(f.forms.mode()->selected() == 0);

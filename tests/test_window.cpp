@@ -629,6 +629,7 @@ CK_TEST(the_close_control_draws_a_filled_square_glyph) {
     CK_CHECK(s.at(Point{1, 0}).grapheme() == "[");
     CK_CHECK(s.at(Point{2, 0}).grapheme() == "■");
     CK_CHECK(s.at(Point{3, 0}).grapheme() == "]");
+    CK_CHECK(s.at(Point{2, 0}).style() == f.theme.resolve(f.roles.window_frame_inactive));
 }
 
 CK_TEST(the_zoom_control_draws_an_up_arrow_when_not_zoomed) {
@@ -639,7 +640,9 @@ CK_TEST(the_zoom_control_draws_an_up_arrow_when_not_zoomed) {
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
     CK_CHECK(!w->zoomed());
+    CK_CHECK(!w->maximized());
     CK_CHECK(s.at(Point{17, 0}).grapheme() == "↑");
+    CK_CHECK(s.at(Point{17, 0}).style() == f.theme.resolve(f.roles.window_control));
 }
 
 CK_TEST(the_zoom_control_draws_an_updown_arrow_once_zoomed) {
@@ -651,6 +654,20 @@ CK_TEST(the_zoom_control_draws_an_updown_arrow_once_zoomed) {
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
     CK_CHECK(w->zoomed());
+    CK_CHECK(w->maximized());
+    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↕");
+}
+
+CK_TEST(a_permanently_filling_window_draws_the_restore_glyph_without_entering_restorable_zoom) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_grow_policy(ckv::widgets::DesktopGrowPolicy::KeepFilling);
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+    CK_CHECK(!w->zoomed());
+    CK_CHECK(w->maximized());
     CK_CHECK(s.at(Point{17, 0}).grapheme() == "↕");
 }
 

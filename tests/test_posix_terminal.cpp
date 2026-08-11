@@ -277,6 +277,46 @@ CK_TEST(construction_enters_alt_screen_and_raw_mode_sequences) {
     ::close(child.master_fd);
 }
 
+CK_TEST(posix_terminal_combined_wait_returns_when_a_borrowed_private_pty_becomes_readable) {
+    int terminal_master = -1;
+    int terminal_slave = -1;
+    int child_master = -1;
+    int child_slave = -1;
+    CK_CHECK(::openpty(&terminal_master, &terminal_slave, nullptr, nullptr, nullptr) == 0);
+    CK_CHECK(::openpty(&child_master, &child_slave, nullptr, nullptr, nullptr) == 0);
+    CK_CHECK(::fcntl(terminal_master, F_SETFL, O_NONBLOCK) == 0);
+
+    const pid_t process = ::fork();
+    CK_CHECK(process >= 0);
+    if (process == 0) {
+        ::close(terminal_master);
+        ::close(child_slave);
+        PosixClock clock;
+        PosixTerminal terminal(clock, terminal_slave, terminal_slave, baseline_capabilities(),
+                               /*enable_capability_probes=*/false);
+        const WaitHandle child_handle{WaitHandleKind::PosixFileDescriptor,
+                                      static_cast<std::uintptr_t>(child_master)};
+        const std::array<WaitHandle, 1> child_handles{child_handle};
+        (void)terminal.poll(clock.now_nanos() + 2'000'000'000LL, child_handles);
+        terminal.write("COMBINED-PTY-WAKE");
+        ::close(child_master);
+        ::_exit(0);
+    }
+
+    ::close(terminal_slave);
+    ::close(child_master);
+    ::usleep(50'000);  // allow the child to enter its combined wait
+    const char byte = 'w';
+    CK_CHECK(::write(child_slave, &byte, 1) == 1);
+    const std::string output = read_until_contains(terminal_master, "COMBINED-PTY-WAKE", 1'000);
+    CK_CHECK(output.find("COMBINED-PTY-WAKE") != std::string::npos);
+    const int status = wait_child(process);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    ::close(child_slave);
+    ::close(terminal_master);
+}
+
 CK_TEST(final_posix_terminal_destruction_restores_the_hosts_signal_dispositions) {
     PtyChild child = spawn_pty_child([](int slave_fd) {
         struct sigaction host_action{};

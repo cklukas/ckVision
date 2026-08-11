@@ -29,6 +29,8 @@ add_library(cvision
     src/term/input_decoder.cpp
     src/term/presenter.cpp
     src/term/sixel_encoder.cpp
+    src/term/terminal_emulator.cpp
+    src/term/terminal_subsession.cpp
     src/term/virtual_display.cpp
     src/ui/anchor_pane.cpp
     src/ui/application.cpp
@@ -49,6 +51,10 @@ add_library(cvision
     src/widgets/desktop.cpp
     src/widgets/dialog.cpp
     src/widgets/directory_picker.cpp
+    src/widgets/editor_document.cpp
+    src/widgets/editor_search.cpp
+    src/widgets/editor_window.cpp
+    src/widgets/file_editor_controller.cpp
     src/widgets/file_dialog.cpp
     src/widgets/help_viewer.cpp
     src/widgets/image_view.cpp
@@ -67,8 +73,12 @@ add_library(cvision
     src/widgets/standard_strings.cpp
     src/widgets/static_text.cpp
     src/widgets/status_line.cpp
+    src/widgets/syntax_cache.cpp
+    src/widgets/syntax_profile.cpp
     src/widgets/table.cpp
     src/widgets/tab_control.cpp
+    src/widgets/terminal_view.cpp
+    src/widgets/text_editor.cpp
     src/widgets/text_view.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp
@@ -84,9 +94,12 @@ endif()
 # The POSIX backend (termios/signal-based) only compiles on UNIX-like
 # systems; the Windows (ConPTY) backend is M7 scope (ROADMAP.md).
 if(UNIX)
-    target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_clock.cpp
+    target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_terminal_subsession.cpp src/term/posix_clock.cpp
         src/term/posix_filesystem.cpp)
     target_compile_definitions(cvision PUBLIC CKVISION_HAS_POSIX_TERMINAL=1)
+    if(NOT APPLE)
+        target_link_libraries(cvision PRIVATE util)
+    endif()
 endif()
 
 option(CKVISION_BUILD_EXAMPLES

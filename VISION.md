@@ -53,6 +53,17 @@ keyboard and mouse:
    every image site so applications stay fully functional on text-only
    terminals; and mouse events on images that carry pixel coordinates
    alongside cell coordinates wherever the terminal reports them.
+10. **First-class text and source editing**: a reusable UTF-8 document and
+    editor widget with deterministic editing, undo/redo, search/replace,
+    line/column indication, file-editor composition, and incremental syntax
+    highlighting. Standard JSON, YAML, and Bash profiles ship with the
+    library; applications extend profiles through explicit instance-owned
+    registration, never a global grammar registry.
+11. **Contained embedded terminals**: a resizable window can host an explicit
+    child terminal session — shells, terminal applications, or another
+    ckVision application — with normal input, resize, lifecycle, and Sixel
+    graphics behavior. Child output is privately emulated and composited, so
+    it cannot escape, glitch, or spill beyond its parent window.
 
 ## Beyond the baseline
 
@@ -147,8 +158,10 @@ I/O and process plumbing.
   ckVision owes the classics inspiration, not bug-for-bug fidelity.
 - Wrapping or depending on curses/ncurses/terminfo.
 - Built-in scripting languages, markup dialects, or configuration DSLs.
-- Being a general-purpose application framework: no file formats, no
-  document models, no network stack. ckVision is the UI layer, done fully.
+- Being a general-purpose application framework: no application-specific file
+  formats, project model, or network stack. The scoped in-memory text document,
+  file-editor controller, and contained local terminal session are UI
+  capabilities, not a general document/process/remote-terminal framework.
 
 ## Independence
 

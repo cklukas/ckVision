@@ -34,7 +34,7 @@ end
   preserved as written).
 - `<shape>`: `block`, `bar`, or `underline`. Cursor coordinates are
   0-based cells and must lie inside the frame.
-- `styles` declares `<count>` styles (0 ≤ count ≤ 62 in version 1),
+- `styles` declares `<count>` styles (0 <= count <= 62 in version 1),
   indexed contiguously from 0 in declaration order. A count of 0 is
   grammatical but unusable in practice: every stylemap cell must
   reference a declared style.
@@ -115,9 +115,9 @@ styles 2
 0 fg #C0C0C0 bg #000080 attrs -
 1 fg #FFFFFF bg #000080 attrs bold
 grid
-|╔══════════╗|
-|║ Hello ck ║|
-|╚══════════╝|
+|+----------+|
+|| Hello ck ||
+|+----------+|
 stylemap
 |000000000000|
 |011111111110|

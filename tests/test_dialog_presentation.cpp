@@ -167,6 +167,31 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(f.desktop->windows().empty());
 }
 
+CK_TEST(standard_modal_presentations_size_and_center_an_unpositioned_window) {
+    Fixture f;
+    auto message = present_message_box(
+        f.app, *f.desktop, f.roles,
+        MessageBoxDescriptor{MessageBoxKind::Info, "Visible", "A visible modal message.", MessageBoxButtons::Ok});
+    Window* window = f.desktop->windows().back();
+    const Rect area = f.desktop->content_area();
+    CK_CHECK(window->bounds().width > 0);
+    CK_CHECK(window->bounds().height > 0);
+    CK_CHECK(window->bounds().x >= area.x);
+    CK_CHECK(window->bounds().y >= area.y);
+    CK_CHECK(window->bounds().x + window->bounds().width <= area.x + area.width);
+    CK_CHECK(window->bounds().y + window->bounds().height <= area.y + area.height);
+
+    f.app.step(0);
+    std::string frame_text;
+    for (int y = 0; y < f.app.current_frame().size().height; ++y)
+        for (int x = 0; x < f.app.current_frame().size().width; ++x)
+            frame_text += f.app.current_frame().at(ckv::Point{x, y}).grapheme();
+    CK_CHECK(frame_text.find("Visible") != std::string::npos);
+    CK_CHECK(frame_text.find("A visible modal message.") != std::string::npos);
+    CK_CHECK(f.app.is_modal());
+    (void)message;
+}
+
 CK_TEST(descriptor_dialog_external_detach_and_host_quit_return_cancellation) {
     Fixture f;
     DialogDescriptor descriptor;

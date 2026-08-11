@@ -21,6 +21,10 @@ public:
     std::vector<FileEntry> list_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;
+    std::optional<FileReadResult> read_file(std::string_view path) const override;
+    FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
+                                      FileWriteExpectation expectation = {}) override;
+    std::optional<FileFingerprint> fingerprint(std::string_view path) const override;
 };
 
 }  // namespace ckv::term

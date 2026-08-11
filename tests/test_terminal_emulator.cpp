@@ -1,0 +1,482 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cktest.hpp"
+
+#include <fstream>
+#include <iterator>
+#include <limits>
+#include <string>
+
+#include "cvision/term/terminal_emulator.hpp"
+
+using namespace ckv;
+
+namespace {
+
+std::string read_fixture(const char* name) {
+    std::ifstream input(std::string(CKV_TEST_SOURCE_DIR) + "/fixtures/" + name, std::ios::binary);
+    if (!input) return {};
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+}
+
+}  // namespace
+
+CK_TEST(terminal_emulator_keeps_child_output_private_and_tracks_cells) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("hello\x1b[2;3Hworld");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    const Size expected_cells{80, 24};
+    CK_CHECK(snapshot.cells == expected_cells);
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "h");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(snapshot.cells.width + 2)].grapheme() == "w");
+}
+
+CK_TEST(terminal_emulator_uses_the_profile_default_terminal_colours_for_blank_and_reset_cells) {
+    term::TerminalEmulator emulator;
+    const auto profile = emulator.profile();
+    CK_CHECK(emulator.snapshot().cell_buffer[0].style().fg == profile.default_style.fg);
+    CK_CHECK(emulator.snapshot().cell_buffer[0].style().bg == profile.default_style.bg);
+    emulator.feed_output("\x1b[31mred\x1b[0mreset");
+    CK_CHECK(emulator.snapshot().cell_buffer[3].style() == profile.default_style);
+}
+
+CK_TEST(terminal_emulator_preserves_split_utf8_codepoints_across_child_reads) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\xc3");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == " ");
+    emulator.feed_output("\xa9");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "é");
+}
+
+CK_TEST(terminal_emulator_has_isolated_alternate_buffer) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("primary\x1b[?1049halt\x1b[?1049l");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.alternate_buffer);
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "p");
+    CK_CHECK(snapshot.cursor.position == (Point{7, 0}));
+}
+
+CK_TEST(terminal_emulator_restores_saved_cursor_for_dec_and_xterm_alternate_screen_modes) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("abc\x1b[?1049hfull\x1b[?1049l\x1b" "7\x1b[2;2H\x1b" "8");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.alternate_buffer);
+    CK_CHECK(snapshot.cursor.position == (Point{3, 0}));
+}
+
+CK_TEST(terminal_emulator_recovers_after_bounded_control_string) {
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("\x1b]0;oversize\x1b\\ok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+}
+
+CK_TEST(terminal_emulator_keeps_discarding_an_oversized_control_after_nonterminating_escape) {
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 3;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("\x1b]1234\x1bXignored\x1b\\ok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+}
+
+CK_TEST(terminal_emulator_limits_and_drains_child_input) {
+    term::TerminalSubsessionOptions options;
+    options.max_input_bytes = 3;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.send_input("hello");
+    CK_CHECK(emulator.take_pending_input() == "hel");
+    CK_CHECK(!emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_does_not_reenter_running_state_after_child_exit) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("before-exit");
+    emulator.mark_exited(0);
+    emulator.feed_output("late-output");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.state == term::TerminalSubsessionState::Exited);
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "b");
+}
+
+CK_TEST(terminal_emulator_defers_output_beyond_one_parser_budget_without_losing_the_tail) {
+    term::TerminalSubsessionOptions options;
+    options.max_parser_work_per_step = 3;
+    options.max_output_bytes = 32;
+    options.max_printable_run_bytes = 32;
+    options.max_control_bytes = 32;
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 1};
+    term::TerminalEmulator emulator(profile, options);
+
+    emulator.feed_output("abcdef");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "a");
+    CK_CHECK(emulator.snapshot().cell_buffer[2].grapheme() == "c");
+    CK_CHECK(emulator.snapshot().cell_buffer[3].grapheme() == " ");
+    emulator.feed_output({});
+    CK_CHECK(emulator.snapshot().cell_buffer[3].grapheme() == "d");
+    CK_CHECK(emulator.snapshot().cell_buffer[5].grapheme() == "f");
+}
+
+CK_TEST(terminal_emulator_reports_bounded_output_queue_overflow_and_recovers_at_a_sequence_boundary) {
+    term::TerminalSubsessionOptions options;
+    options.max_parser_work_per_step = 4;
+    options.max_output_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("abcdefgh");
+    emulator.feed_output("\x1b[2Jok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::LimitExceeded);
+    emulator.feed_output("ok");
+    CK_CHECK(emulator.snapshot().cell_buffer[4].grapheme() == "o");
+}
+
+CK_TEST(terminal_emulator_resize_preserves_visible_cells_and_clamps_cursor) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{4, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("abcd\r\nefgh\x1b[2;4H");
+    emulator.resize(Size{3, 3}, Size{9, 18});
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    const Size expected_cells{3, 3};
+    const Point expected_cursor{2, 1};
+    CK_CHECK(snapshot.cells == expected_cells);
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "a");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(snapshot.cells.width + 2)].grapheme() == "g");
+    CK_CHECK(snapshot.cursor.position == expected_cursor);
+}
+
+CK_TEST(terminal_emulator_resize_preserves_active_child_input_modes) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[?1;1000;1004;1006;2004h");
+    emulator.resize(Size{12, 3}, Size{10, 20});
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.application_cursor_keys);
+    CK_CHECK(snapshot.focus_reporting_enabled);
+    CK_CHECK(snapshot.mouse_reporting_enabled);
+    CK_CHECK(snapshot.mouse_encoding == term::TerminalMouseEncoding::Sgr);
+    CK_CHECK(snapshot.bracketed_paste_enabled);
+}
+
+CK_TEST(terminal_emulator_resize_rebuilds_private_raster_placement_without_stale_pixels) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 4};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(43);
+    emulator.feed_output("\x1b[2;3H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");
+    const term::TerminalSnapshot before = emulator.snapshot();
+    CK_CHECK(before.rasters.size() == 1U);
+    CK_CHECK(before.rasters[0].anchor == (Point{2, 1}));
+    emulator.resize(Size{12, 6}, Size{8, 12});
+    const term::TerminalSnapshot after = emulator.snapshot();
+    CK_CHECK(after.rasters.size() == 1U);
+    CK_CHECK(after.rasters[0].id == 43);
+    CK_CHECK(after.rasters[0].anchor == (Point{2, 1}));
+    CK_CHECK(after.rasters[0].cell_extent == (Size{1, 1}));
+    CK_CHECK(after.rasters[0].image != nullptr);
+}
+
+CK_TEST(terminal_emulator_decodes_bounded_child_sixel_to_private_raster_state) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(41);
+    emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.size() == 1);
+    CK_CHECK(snapshot.rasters[0].id == 41);
+    CK_CHECK(snapshot.rasters[0].image != nullptr);
+    const Image::Rgba pixel = snapshot.rasters[0].image->pixel(0, 0);
+    CK_CHECK(pixel.r == 255);
+    CK_CHECK(pixel.g == 0);
+    CK_CHECK(pixel.b == 0);
+    CK_CHECK(pixel.a == 255);
+}
+
+CK_TEST(terminal_emulator_accepts_parameterized_sixel_dcs_commands) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(77);
+    emulator.feed_output("\x1bP0;1q#0;2;100;0;0~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(emulator.snapshot().rasters[0].id == 77);
+}
+
+CK_TEST(terminal_emulator_decodes_the_published_raw_snake_sixel_fixture) {
+    const std::string sixel = read_fixture("snake.six");
+    CK_CHECK(sixel.size() > 200'000U);
+    CK_CHECK(sixel.starts_with("\x1bP"));
+    CK_CHECK(sixel.find('q') != std::string::npos);
+    CK_CHECK(sixel.ends_with("\x1b\\"));
+
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{80, 30};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalSubsessionOptions options;
+    options.max_output_bytes = sixel.size() + 16;
+    options.max_graphics_payload_bytes = sixel.size() + 16;
+    options.max_parser_work_per_step = sixel.size() + 16;
+    options.max_image_pixels = 80 * 30 * 8 * 16;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.set_raster_identity(501);
+    emulator.feed_output(sixel);
+
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    if (!snapshot.rasters.empty()) {
+        CK_CHECK(snapshot.rasters[0].id == 501);
+        CK_CHECK(snapshot.rasters[0].image != nullptr);
+        CK_CHECK(snapshot.rasters[0].image->width() > 0);
+        CK_CHECK(snapshot.rasters[0].image->height() > 0);
+    }
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_allows_a_bounded_sixel_payload_larger_than_control_strings) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(78);
+    std::string sixel = "\x1bPq#0;2;100;0;0";
+    sixel.append(4000, '~');
+    sixel += "\x1b\\";
+    emulator.feed_output(sixel);
+    const auto snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    CK_CHECK(snapshot.rasters[0].id == 78);
+}
+
+CK_TEST(terminal_emulator_crops_child_sixel_to_its_visible_cell_footprint) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{16, 8};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(42);
+    emulator.feed_output("\x1b[2;3H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    CK_CHECK(snapshot.rasters[0].anchor == (Point{2, 1}));
+    CK_CHECK(snapshot.rasters[0].cell_extent == (Size{2, 2}));
+    CK_CHECK(snapshot.rasters[0].image->width() == 8);
+    CK_CHECK(snapshot.rasters[0].image->height() == 12);
+}
+
+CK_TEST(terminal_emulator_clear_removes_child_raster_before_next_snapshot) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(9);
+    emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1);
+    emulator.feed_output("\x1b[2J");
+    CK_CHECK(emulator.snapshot().rasters.empty());
+}
+
+CK_TEST(terminal_emulator_rejects_a_child_sixel_image_over_its_declared_pixel_limit) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalSubsessionOptions options;
+    options.max_image_pixels = 95;  // The declared terminal plane is 2 * 2 * 4 * 6 = 96 pixels.
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.empty());
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::LimitExceeded);
+}
+
+CK_TEST(terminal_emulator_rejects_overflowing_pixel_geometry_before_decoder_allocation) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.empty());
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::LimitExceeded);
+}
+
+CK_TEST(terminal_emulator_recovers_from_malformed_child_sixel_without_leaking_state_to_another_session) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator first(profile);
+    term::TerminalEmulator second(profile);
+    first.set_raster_identity(1);
+    second.set_raster_identity(2);
+
+    first.feed_output("\x1bPq#0;2;100;0;0\x1b\\ok");
+    second.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+
+    CK_CHECK(first.snapshot().rasters.empty());
+    CK_CHECK(!first.snapshot().diagnostics.empty());
+    CK_CHECK(first.snapshot().cell_buffer[0].grapheme() == "o");
+    CK_CHECK(second.snapshot().rasters.size() == 1U);
+    CK_CHECK(second.snapshot().rasters[0].id == 2);
+}
+
+CK_TEST(terminal_emulator_retains_bounded_primary_scrollback) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 1;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("aa\r\nbb\r\ncc");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.scrollback.size() == 2);
+    CK_CHECK(snapshot.scrollback[0].grapheme() == "a");
+}
+
+CK_TEST(terminal_emulator_keeps_scrolling_regions_private_and_preserves_their_outside_rows) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{4, 4};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("A0\r\nB1\r\nC2\r\nD3\x1b[2;3r\x1b[3;1HZ\n");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "A");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(profile.cells.width)].grapheme() == "Z");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(2 * profile.cells.width)].grapheme() == " ");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(3 * profile.cells.width)].grapheme() == "D");
+    CK_CHECK(snapshot.scrollback.empty());
+}
+
+CK_TEST(terminal_emulator_honours_origin_mode_and_reverse_index_inside_the_scrolling_region) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{3, 4};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("abc\r\ndef\r\nghi\r\njkl\x1b[2;3r\x1b[?6h\x1b[H\x1bM");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "a");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(profile.cells.width)].grapheme() == " ");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(2 * profile.cells.width)].grapheme() == "d");
+    CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(3 * profile.cells.width)].grapheme() == "j");
+}
+
+CK_TEST(terminal_emulator_applies_character_insert_delete_and_erase_privately) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{6, 1};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("abcdef\x1b[1;3H\x1b[2P\x1b[1@\x1b[X");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "a");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "b");
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == " ");
+    CK_CHECK(snapshot.cell_buffer[3].grapheme() == "e");
+    CK_CHECK(snapshot.cell_buffer[4].grapheme() == "f");
+}
+
+CK_TEST(terminal_emulator_applies_ansi_sgr_colours_to_private_cells) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[31;44mX");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    const Cell& cell = snapshot.cell_buffer[0];
+    CK_CHECK(cell.style().fg == Color::rgb(205, 49, 49));
+    CK_CHECK(cell.style().bg == Color::rgb(36, 114, 200));
+}
+
+CK_TEST(terminal_emulator_applies_extended_sgr_colours_without_a_child_diagnostic) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[38;2;1;2;3;48;5;251mX");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    const Cell& cell = snapshot.cell_buffer[0];
+    CK_CHECK(cell.style().fg == Color::rgb(1, 2, 3));
+    CK_CHECK(cell.style().bg == Color::rgb(198, 198, 198));
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_consumes_nested_capability_queries_at_the_private_boundary) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?2026$p\x1b[?2031$p\x1b[c\x1b[?1016$p\x1b[16t");
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2c\x1b[6;18;9t");
+}
+
+CK_TEST(terminal_emulator_tracks_declared_child_input_modes) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?1;1004;2004h\x1b[?1000;1006h");
+    CK_CHECK(emulator.snapshot().application_cursor_keys);
+    CK_CHECK(emulator.snapshot().focus_reporting_enabled);
+    CK_CHECK(emulator.snapshot().bracketed_paste_enabled);
+    CK_CHECK(emulator.snapshot().mouse_reporting_enabled);
+    CK_CHECK(emulator.snapshot().mouse_encoding == term::TerminalMouseEncoding::Sgr);
+    emulator.feed_output("\x1b[?1;1004;2004l\x1b[?1000;1006l");
+    CK_CHECK(!emulator.snapshot().application_cursor_keys);
+    CK_CHECK(!emulator.snapshot().focus_reporting_enabled);
+    CK_CHECK(!emulator.snapshot().bracketed_paste_enabled);
+    CK_CHECK(!emulator.snapshot().mouse_reporting_enabled);
+    CK_CHECK(emulator.snapshot().mouse_encoding == term::TerminalMouseEncoding::None);
+}
+
+CK_TEST(terminal_emulator_answers_declared_cursor_query_in_private_input_queue) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[3;5H\x1b[5n\x1b[6n");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[0n\x1b[3;5R");
+}
+
+CK_TEST(terminal_emulator_applies_explicit_child_osc_title_policy) {
+    term::TerminalCapabilityProfile denied = term::embedded_xterm_sixel_profile();
+    denied.osc_policy = term::TerminalOscPolicy::Deny;
+    term::TerminalEmulator deny_emulator(denied);
+    deny_emulator.feed_output("\x1b]0;untrusted\a");
+    CK_CHECK(deny_emulator.snapshot().title.empty());
+
+    term::TerminalCapabilityProfile stored = term::embedded_xterm_sixel_profile();
+    stored.osc_policy = term::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator store_emulator(stored);
+    store_emulator.feed_output("\x1b]0;private title\x1b\\");
+    CK_CHECK(store_emulator.snapshot().title == "private title");
+}
+
+CK_TEST(terminal_emulator_preserves_shell_tab_layout_and_cursor_style_without_a_diagnostic) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{16, 1};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("left\tright\x1b[6 q");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "l");
+    CK_CHECK(snapshot.cell_buffer[8].grapheme() == "r");
+    CK_CHECK(snapshot.cursor.shape == CursorShape::Bar);
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_recovers_incomplete_output_when_child_exits) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\xc3\x1b[");
+    emulator.mark_exited(0);
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.state == term::TerminalSubsessionState::Exited);
+    CK_CHECK(!snapshot.diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_reports_a_child_exit_mid_sixel_without_publishing_partial_pixels) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 4};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(502);
+    emulator.feed_output("\x1bPq#0;2;100;0;0!32~");
+    emulator.mark_exited(1);
+
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.state == term::TerminalSubsessionState::Exited);
+    CK_CHECK(snapshot.rasters.empty());
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::MalformedSequence);
+}

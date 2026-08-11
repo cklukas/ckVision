@@ -14,6 +14,10 @@
 // owner (e.g. on dialog accept), never automatically on Enter, since
 // Enter's meaning for a given field is the caller's to decide (submit
 // the dialog vs. accept the field vs. both).
+// The standard editing keymap is shared with Memo and TextEditor: Ctrl+Left/
+// Right moves by word, Ctrl+Home/End reaches field boundaries, Shift extends
+// movement, Ctrl+C/X/V and Ctrl+Insert/Shift+Insert access the clipboard, and
+// Ctrl+Backspace/Delete erase by word.
 #pragma once
 
 #include <functional>
@@ -132,6 +136,10 @@ private:
     bool on_text_masked(const TextEvent& event);
 
     void history_show(int index);  // -1 = the live (pre-browsing) text
+
+    std::size_t previous_word(std::size_t from) const noexcept;
+    std::size_t next_word(std::size_t from) const noexcept;
+    void erase_range(std::size_t begin, std::size_t end);
 
     std::vector<std::string> graphemes_;
     std::size_t cursor_ = 0;

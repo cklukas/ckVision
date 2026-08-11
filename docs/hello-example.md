@@ -1,12 +1,18 @@
 ---
-title: Hello Example
+title: Hello Example Verification Appendix
 author: C. Klukas
 date: 2026-08-08
-format: guide
-description: The ckVision-owned behavior contract and verification evidence for the compact Hello example.
+format: report
+description: Verification appendix for the complete Hello tutorial.
 ---
 
-# Hello Example
+# Hello Example: verification appendix
+
+Start with the [complete Hello tutorial](tutorial-hello.md). It contains the
+full compilable source split by file, object hierarchy, explanation of command
+presentation and modal lifetime, and generated initial/menu/dialog screenshots.
+This page keeps the compact behavioral and test contract for maintainers and
+reviewers; it is not the primary learning path.
 
 `examples/hello` is a compact ckVision integration example. It is authored
 and specified inside this repository: an application shell with Desktop, File

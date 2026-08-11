@@ -43,6 +43,12 @@ int main(int argc, char** argv) {
     app.step(0);
     write_svg(out_dir, "hello-initial", term.display());
 
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::F10, Modifier::None, ""}});
+    app.step(0);
+    write_svg(out_dir, "hello-menu-open", term.display());
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}});
+    app.step(0);
+
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "g"}});
     app.step(0);
     write_svg(out_dir, "hello-greeting", term.display());

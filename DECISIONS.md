@@ -609,6 +609,34 @@ forms/widget library rather than an application editor concern; making
 calling scroll-region byte savings a catalog feature instead of a renderer
 optimization.
 
+**D-042 — Embedded terminals are private emulated subsessions, never outer
+terminal pass-through.** An embedded terminal window owns an explicit child
+process and private PTY/ConPTY endpoint through the `term` layer. Child output
+is parsed into an off-screen terminal model and then painted by
+`widgets::TerminalView` through the normal scene compositor. The application's
+outer `Terminal` remains the sole writer to the user's terminal. This confines
+child cursor movement, alternate screens, OSC/DCS, and graphics to the child
+model, and lets the compositor correctly clip, occlude, shadow, clear, and
+re-encode child Sixel content.
+
+The child terminal profile, launch specification, input escape policy, query
+replies, OSC/clipboard/title behavior, parser limits, and termination policy
+are explicit instance values. No child attaches to the parent application's
+outer tty and no profile is inferred from the environment. `term` owns native
+handles, process lifecycle, byte I/O, and emulator state; its public child
+session adapter derives from the dependency-neutral `core::TerminalSubsession`
+contract. `ui::Application` multiplexes readiness; `TerminalView` consumes
+only that core contract and forwards focused view-relative input. The complete
+design and required evidence are in
+`plans/embedded-terminal-architecture.md` and
+`plans/embedded-terminal-delivery-target.md`.
+
+*Rejected:* forwarding raw child bytes (allows cursor/graphics escape and
+corrupts parent presentation); treating a PTY as a generic widget-owned file
+descriptor (breaks session and wait ownership); spawning through an implicit
+shell (ambiguous quoting and policy); global child-session registries; and
+accepting a screenshot without decoded pixel-plane proof of containment.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

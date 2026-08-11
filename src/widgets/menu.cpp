@@ -8,6 +8,7 @@
 #include "cvision/core/text.hpp"
 #include "cvision/scene/box_drawing.hpp"
 #include "cvision/widgets/mnemonic.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
@@ -26,6 +27,14 @@ int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index
     for (std::size_t i = 0; i < index; ++i)
         x += text::text_width(parse_mnemonic(menus[i].label).display) + 2;  // label + 2-space gap
     return x;
+}
+
+Rect clamp_popup_to_desktop(Rect popup, const Rect& desktop) noexcept {
+    const int max_x = std::max(0, desktop.width - popup.width);
+    const int max_y = std::max(0, desktop.height - popup.height);
+    popup.x = std::clamp(popup.x, 0, max_x);
+    popup.y = std::clamp(popup.y, 0, max_y);
+    return popup;
 }
 
 bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
@@ -50,6 +59,7 @@ void DropdownMenu::on_attached() {
         highlighted_role_ = context().roles->find("ckv.menu.dropdown.highlighted");
     if (disabled_role_ == ui::kInvalidRole)
         disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
+    if (hotkey_role_ == ui::kInvalidRole) hotkey_role_ = context().roles->find("ckv.hotkey");
     app_ = context().app;
     for (ui::View* p = parent(); p != nullptr; p = p->parent()) {
         if (auto* d = dynamic_cast<Desktop*>(p)) {
@@ -132,8 +142,10 @@ void DropdownMenu::open_submenu(int index) {
     int local_x = abs.x + bounds().width - desktop_abs.x - 1;
     if (local_x + w.preferred > desktop_->bounds().width)
         local_x = abs.x - desktop_abs.x - w.preferred + 1;
-    const int local_y = abs.y + index - desktop_abs.y;
-    raw->set_bounds(Rect{local_x, local_y, w.preferred, h.preferred});
+    // A submenu aligns its frame with the selected item's padded row, rather
+    // than with the parent frame above it.
+    const int local_y = abs.y + index + 1 - desktop_abs.y;
+    raw->set_bounds(clamp_popup_to_desktop(Rect{local_x, local_y, w.preferred, h.preferred}, desktop_->bounds()));
     raw->on_dismiss = [this, raw]() {
         if (child_menu_ == raw) close_submenu(true);
     };
@@ -201,12 +213,15 @@ SizeHint DropdownMenu::horizontal_size_hint() const {
         if (const auto hint = item_chord_hint(item)) width += 2 + text::text_width(*hint);
         max_width = std::max(max_width, width);
     }
-    const int width = max_width + 2;
+    // The popup owns an opaque interior plus a one-cell frame. The frame is
+    // part of its geometry rather than an overlay, so retained composition
+    // cannot reveal the desktop along a menu edge.
+    const int width = max_width + 4;
     return SizeHint{width, width, width};
 }
 
 SizeHint DropdownMenu::vertical_size_hint() const {
-    const int height = static_cast<int>(items_.size());
+    const int height = static_cast<int>(items_.size()) + 2;
     return SizeHint{height, height, height};
 }
 
@@ -262,54 +277,93 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
 }
 
 bool DropdownMenu::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down) return false;
+    if (event.action == MouseAction::Move && pointer_navigation_ && pointer_navigation_(event)) return true;
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
     const bool inside = local.x >= 0 && local.x < abs.width && local.y >= 0 && local.y < abs.height;
-    if (!inside) {
-        dismiss();  // light dismiss: this event only reaches us via input capture
-        return false;
+    const bool framed = bounds().width >= 4 && bounds().height >= static_cast<int>(items_.size()) + 2;
+    int candidate = -1;
+    if (inside && !(framed && (local.x == 0 || local.x == bounds().width - 1 || local.y == 0 ||
+                                local.y == bounds().height - 1))) {
+        const int row = local.y - (framed ? 1 : 0);
+        if (row >= 0 && row < static_cast<int>(items_.size()) && item_enabled(static_cast<std::size_t>(row)))
+            candidate = row;
     }
-    const auto row = static_cast<std::size_t>(local.y);
-    if (row < items_.size() && item_enabled(row)) {
-        highlighted_ = static_cast<int>(row);
-        activate(static_cast<int>(row));
+    if (event.action == MouseAction::Down) {
+        if (!inside) {
+            dismiss();  // light dismiss: this event only reaches us via input capture
+            return false;
+        }
+        pointer_pressed_ = true;
+        if (highlighted_ != candidate) {
+            highlighted_ = candidate;
+            invalidate();
+        }
+        return true;
     }
-    return true;
+    if (event.action == MouseAction::Move) {
+        if (highlighted_ != candidate) {
+            highlighted_ = candidate;
+            invalidate();
+        }
+        return pointer_pressed_ || inside;
+    }
+    if (event.action == MouseAction::Up) {
+        const bool was_pressed = pointer_pressed_;
+        pointer_pressed_ = false;
+        if (was_pressed && candidate >= 0) activate(candidate);
+        else if (!inside) dismiss();
+        return was_pressed || inside;
+    }
+    return false;
 }
 
 void DropdownMenu::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const bool check_column = has_check_column();
     const bool submenu_column = has_submenu_column();
+    const Style normal = theme.resolve(normal_role_);
+    // Direct unit renderings may deliberately assign a one-row rectangle to
+    // inspect a single item. Real popup geometry always comes from the size
+    // hints above and is therefore framed.
+    const bool framed = bounds().width >= 4 && bounds().height >= static_cast<int>(items_.size()) + 2;
+    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
+    if (framed)
+        painter.draw_box(Rect{0, 0, bounds().width, bounds().height}, scene::LineStyle::Single, normal);
+    const int item_left = framed ? 1 : 0;
+    const int item_top = framed ? 1 : 0;
+    const int item_width = bounds().width - (framed ? 2 : 0);
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
         const MenuItem& item = items_[static_cast<std::size_t>(i)];
         const bool enabled = item_enabled(static_cast<std::size_t>(i));
         const Style style = !enabled ? theme.resolve(disabled_role_)
                              : (i == highlighted_) ? theme.resolve(highlighted_role_)
-                                                    : theme.resolve(normal_role_);
-        painter.fill(Rect{0, i, bounds().width, 1}, Cell::from_grapheme(" ", style));
+                                                    : normal;
+        painter.fill(Rect{item_left, item_top + i, item_width, 1}, Cell::from_grapheme(" ", style));
         if (item.separator) {
-            painter.hline(Point{0, i}, bounds().width, scene::LineStyle::Single, style);
+            painter.hline(Point{item_left, item_top + i}, item_width, scene::LineStyle::Single, style);
         } else {
             const auto parsed = parse_mnemonic(item_source_text(item));
-            const int label_x = check_column ? 3 : 1;
+            const int label_x = item_left + (check_column ? 3 : 1);
             const int submenu_columns = submenu_column ? 2 : 0;
-            int label_columns = std::max(0, bounds().width - label_x - 1 - submenu_columns);
+            int label_columns = std::max(0, item_left + item_width - label_x - 1 - submenu_columns);
             if (check_column && item.check != MenuItemCheck::None)
-                painter.draw_text(Point{1, i}, item.check == MenuItemCheck::Checked ? "x" : " ", style);
+                painter.draw_text(Point{item_left + 1, item_top + i},
+                                  item.check == MenuItemCheck::Checked ? "x" : " ", style);
             if (const auto hint = item_chord_hint(item)) {
-                const int hint_x = bounds().width - 1 - submenu_columns - text::text_width(*hint);
+                const int hint_x = item_left + item_width - 1 - submenu_columns - text::text_width(*hint);
                 label_columns = std::max(0, hint_x - label_x - 1);
                 const int label_end_x =
                     label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
-                painter.draw_text(Point{label_x, i}, text::clip_to_width(parsed.display, label_columns), style);
-                if (hint_x > label_end_x) painter.draw_text(Point{hint_x, i}, *hint, style);
+                draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
+                              accent_style(style, theme.resolve(hotkey_role_)));
+                if (hint_x > label_end_x) painter.draw_text(Point{hint_x, item_top + i}, *hint, style);
             } else {
-                painter.draw_text(Point{label_x, i}, text::clip_to_width(parsed.display, label_columns), style);
+                draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
+                              accent_style(style, theme.resolve(hotkey_role_)));
             }
             if (submenu_column && !item.submenu.empty() && bounds().width >= 2)
-                painter.draw_text(Point{bounds().width - 2, i}, ">", style);
+                painter.draw_text(Point{item_left + item_width - 2, item_top + i}, ">", style);
         }
     }
 }
@@ -343,6 +397,7 @@ void MenuBar::on_attached() {
         normal_role_ = context().roles->find("ckv.menu.bar.normal");
     if (active_role_ == ui::kInvalidRole)
         active_role_ = context().roles->find("ckv.menu.bar.active");
+    if (hotkey_role_ == ui::kInvalidRole) hotkey_role_ = context().roles->find("ckv.hotkey");
     app_ = context().app;
     for (ui::View* p = parent(); p != nullptr; p = p->parent()) {
         if (auto* d = dynamic_cast<Desktop*>(p)) {
@@ -399,8 +454,9 @@ void MenuBar::open_dropdown(std::size_t menu_index) {
     auto* raw = desktop_->add_popup(std::move(dropdown));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
-    raw->set_bounds(Rect{local_x, local_y, w.preferred, h.preferred});
+    raw->set_bounds(clamp_popup_to_desktop(Rect{local_x, local_y, w.preferred, h.preferred}, desktop_->bounds()));
     raw->on_dismiss = [this]() { close_dropdown(); };
+    raw->set_pointer_navigation([this](const MouseEvent& event) { return navigate_pointer(event); });
 
     open_dropdown_ = raw;
     app_->set_input_capture(raw);
@@ -453,16 +509,17 @@ bool MenuBar::on_key(const KeyEvent& event) {
 }
 
 bool MenuBar::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down) return false;
+    if (event.action != MouseAction::Down) return navigate_pointer(event);
     const Rect abs = absolute_bounds();
     if (event.cell.y != abs.y) return false;
     const int local_x = event.cell.x - abs.x;
     for (std::size_t i = 0; i < menus_.size(); ++i) {
         const int x = menu_bar_offset_for(menus_, i);
         const int w = text::text_width(parse_mnemonic(menus_[i].label).display);
-        if (local_x >= x && local_x < x + w) {
+        if (local_x >= x - 1 && local_x < x + w + 1) {
             if (!active_) activate();
             open_dropdown(i);
+            if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
             return true;
         }
     }
@@ -477,9 +534,28 @@ void MenuBar::draw(scene::Painter& painter) {
         const int x = menu_bar_offset_for(menus_, i);
         if (x >= bounds().width) break;
         const Style style = (active_ && i == highlighted_) ? theme.resolve(active_role_) : base;
-        painter.draw_text(Point{x, 0},
-                          text::clip_to_width(parse_mnemonic(menus_[i].label).display, bounds().width - x), style);
+        if (active_ && i == highlighted_ && x > 0)
+            painter.fill(Rect{x - 1, 0, std::min(bounds().width - (x - 1),
+                                                  text::text_width(parse_mnemonic(menus_[i].label).display) + 2),
+                              1},
+                         Cell::from_grapheme(" ", style));
+        draw_mnemonic(painter, Point{x, 0}, parse_mnemonic(menus_[i].label), bounds().width - x, style,
+                      accent_style(style, theme.resolve(hotkey_role_)));
     }
+}
+
+bool MenuBar::navigate_pointer(const MouseEvent& event) {
+    if (!active_ || menus_.empty() || event.cell.y != absolute_bounds().y) return false;
+    const int local_x = event.cell.x - absolute_bounds().x;
+    for (std::size_t i = 0; i < menus_.size(); ++i) {
+        const int x = menu_bar_offset_for(menus_, i);
+        const int width = text::text_width(parse_mnemonic(menus_[i].label).display);
+        if (local_x < x - 1 || local_x >= x + width + 1) continue;
+        if (open_dropdown_ == nullptr || highlighted_ != i) open_dropdown(i);
+        if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
+        return true;
+    }
+    return false;
 }
 
 // --- show_context_menu ---------------------------------------------------
@@ -491,8 +567,9 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
     auto* raw = desktop.add_popup(std::move(menu));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
-    raw->set_bounds(Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred,
-                          h.preferred});
+    raw->set_bounds(clamp_popup_to_desktop(
+        Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred, h.preferred},
+        desktop.bounds()));
 
     raw->on_dismiss = [&app, &desktop, raw]() {
         if (app.input_capture() == raw) app.clear_input_capture();

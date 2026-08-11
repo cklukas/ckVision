@@ -16,6 +16,8 @@
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/window.hpp"
 
+#include <optional>
+
 using ckv::ManualClock;
 using ckv::Rect;
 using ckv::Size;
@@ -200,7 +202,10 @@ CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint)
     CK_CHECK(f.app.last_bytes_emitted() > 0);
     // A full 40x12 repaint is far larger. This captures the Presenter side
     // of the move budget as well as the compositor cells-touched bound.
-    CK_CHECK(f.app.last_bytes_emitted() <= 2048);
+    // The green maximize/restore glyph adds two truecolor transitions to a
+    // title row; 2080 preserves the same "far below a full repaint" guard
+    // while accounting for that deliberate, independently visible control.
+    CK_CHECK(f.app.last_bytes_emitted() <= 2080);
     CK_CHECK(!f.term.written_bytes().empty());
 }
 
@@ -217,12 +222,16 @@ CK_TEST(dragging_a_window_recomposes_without_repainting_its_retained_content) {
 
     f.term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Down,
                                         .button = ckv::MouseButton::Left,
-                                        .cell = ckv::Point{6, 2}});
+                                        .cell = ckv::Point{6, 2},
+                                        .pixel = std::nullopt,
+                                        .modifiers = ckv::Modifier::None});
     f.app.step(0);
 
     f.term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Move,
                                         .button = ckv::MouseButton::Left,
-                                        .cell = ckv::Point{18, 2}});
+                                        .cell = ckv::Point{18, 2},
+                                        .pixel = std::nullopt,
+                                        .modifiers = ckv::Modifier::None});
     f.term.clear_written();
     f.app.step(0);
 

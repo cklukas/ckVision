@@ -2,13 +2,18 @@
 
 Established 2026-08-08 after a critical review of the planning documents,
 current implementation, and verification system. This is the authoritative
-execution queue for correcting acceptance gaps in M0–M10.
+execution queue for correcting acceptance gaps in M0–M11.
 
 The earlier work-package ledger in
 [api-ergonomics-review-2.md](api-ergonomics-review-2.md) records what landed at
 the time. It is historical evidence, not current completion status. Where this
 plan reopens an earlier package, the corrective package below owns the whole
 repair and its literal acceptance criteria.
+
+For current Mac development, the actionable next-package sequence is the
+dedicated [Mac-first delivery target](mac-first-delivery-target.md). The queue
+below remains the global traceability ledger; it is not a reason to pause Mac
+finishing while a deferred external-host row is outstanding.
 
 ## How to choose the next work package
 
@@ -61,17 +66,34 @@ dependent row's package prerequisite; `Blocked` does not.
 | 17 | WP-36 — Layout, dialog, and tree literal acceptance | 2–3 pw | **Implementation complete — gate pending** | WP-35 | WP-16, WP-18…WP-22; M10 exit |
 | 18 | WP-36A — Comprehensive examples and client capability demos | 2–4 pw | **Implementation complete — gate pending** | WP-36 | M6/M11 example coverage; client usability |
 | 19 | WP-36B — Common widget and UI component expansion | 3–6 pw | **Implementation complete — gate pending** | WP-36A | Calendar/date/time, numeric controls, command palette, utility chrome |
-| 20 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-36 and Windows host | M7; Windows portions of global gates |
-| 21 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M10 global gates |
+| 20 | WP-36C — Client documentation and tutorial revamp | 3–5 pw | **Implementation complete — gate pending** | WP-36B | Usable library docs, source-backed tutorials, screenshots, API/widget guide |
+| 21 | WP-39 — Revisioned editor document and Unicode editing core | 3–5 pw | **Implementation complete — gate pending** | WP-36C | First-class editor foundation; [architecture](editor-architecture.md), [delivery target](editor-delivery-target.md) |
+| 22 | WP-40 — TextEditor interaction, viewport, and editor status | 4–6 pw | **Implementation complete — gate pending** | WP-39 | First-class editor interaction; [architecture](editor-architecture.md), [delivery target](editor-delivery-target.md) |
+| 23 | WP-41 — Syntax profile engine and incremental styling | 4–6 pw | **Implementation complete — gate pending** | WP-40 | Deterministic profile/highlighter foundation; [architecture](editor-architecture.md), [delivery target](editor-delivery-target.md) |
+| 24 | WP-42 — Standard JSON, YAML, and Bash profiles | 3–5 pw | **Implementation complete — gate pending** | WP-41 | Shipped profiles and extension guide; [architecture](editor-architecture.md), [delivery target](editor-delivery-target.md) |
+| 25 | WP-43 — Editor search, replace, and command integration | 3–5 pw | **Implementation complete — gate pending** | WP-42 | Editor workflow commands; [architecture](editor-architecture.md), [delivery target](editor-delivery-target.md) |
+| 26 | WP-44 — File-editor workflow, editor example, and documentation | 4–6 pw | **Implementation complete — gate pending** | WP-43 | File lifecycle and client proof point; [architecture](editor-architecture.md), [delivery target](editor-delivery-target.md) |
+| 27 | WP-45 — Embedded-terminal emulator and containment foundation | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-44 | D-042 and private terminal model; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 28 | WP-46 — POSIX PTY child sessions and basic TerminalView | 4–6 pw | **Implementation complete — Mac PTY gate passed** | WP-45 | Mac child lifecycle and readiness; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 29 | WP-47 — TerminalView interaction, resize, and nested ckVision sessions | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-46 | Full terminal usability; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 30 | WP-48 — Contained child Sixel and terminal hardening | 5–7 pw | **Implementation complete — Mac current-host gate passed** | WP-47 | Raster no-spill guarantee; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 31 | WP-49 — Terminal example, documentation, and end-to-end acceptance | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-48 | Client proof point; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 32 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 33 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 34 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
-Corrective work is currently estimated at roughly **46–77 focused
+Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
 re-estimate later rows if its authority/provenance audit invalidates more
 implementation than is currently known; that update changes the estimates,
 never the acceptance criteria silently.
 
 The dependency order deliberately puts correctness, lifetime, security, and
-architecture before convenience work. A package may be split into reviewable
+architecture before convenience work. WP-45…WP-49 now have current-host
+implementation evidence; WP-50 is the next host-blocked package after the
+editor/file-workflow implementation packages. WP-39…WP-44 remain in the
+queue until WP-37/WP-38 complete their cross-platform and release-audit gates.
+A package may be split into reviewable
 commits, but its queue row stays `In progress` until every acceptance item is
 met. New findings discovered while implementing a package are added to that
 package unless they require a new architectural decision; in that case add a
@@ -1799,7 +1821,6 @@ hand-roll them.
 - Tree-table / outline table with hierarchical rows and columns.
 - Data charts beyond `Progress` and `Canvas`; applications can draw charts on
   Canvas for 0.1.
-- Rich document/code editor; still out of scope beyond `Memo` and `TextView`.
 - Dockable/floating tool palettes and MDI-style docking systems.
 
 **Work.**
@@ -1858,6 +1879,427 @@ Focused verification passed on macOS on 2026-08-09:
 `provenance_checker_self_test`. WP-38 still owns the exhaustive
 state/scheme/reference visual matrix for these new components.
 
+### WP-36C — Client documentation and tutorial revamp
+
+**Purpose.** Replace the current verification-heavy documentation with
+credible client-facing library documentation. The docs must teach how to write
+ckVision programs: object hierarchies, complete source, code snippets,
+screenshots, widget selection guidance, layout/dialog/command patterns, and
+platform-service usage. The implementation plan is
+`plans/documentation-revamp.md`.
+
+**Work.**
+
+- Add a real tutorial path: getting started, full Hello walkthrough, object
+  model, layout guide, widget gallery, dialogs/commands, themes/rendering,
+  graphics, platform services, and an API index.
+- Rewrite Hello documentation first. It must include full source, generated
+  screenshots, object hierarchy, command/menu/status wiring, modal-dialog flow,
+  and copy/build/run instructions.
+- Convert example documentation from verification ledger to client guide:
+  every example must show what pattern it teaches, relevant code, screenshots,
+  and the view/window/widget hierarchy.
+- Add a widget gallery covering every public widget and WP-36B common
+  component with code, screenshot or justified exception, keyboard/mouse
+  behavior, callbacks/state, examples, tests, and common mistakes.
+- Add doc tooling: source/snippet extraction, screenshot generation for the new
+  pages, link checking, widget/API coverage checking, and CTest gates.
+- Add `docs/coverage.md`: public class/header → guide section → snippet →
+  screenshot → example → test.
+
+**Implementation closure (2026-08-09; gate pending).** The client-facing
+documentation set now comprises Getting Started, the full source-backed Hello
+tutorial, object model, layout/dialog/command/theme/graphics/platform-service
+guides, widget gallery, API index, and the checked-in coverage matrix. The
+snippet extractor validates 16 generated source blocks; the documentation
+checker validates every public widget header, local link, and screenshot
+reference; and four CTest documentation gates enforce those contracts. Eight
+headless capture tools generate 27 declared screenshots from the real example
+graphs (including the public-API navigation component gallery alongside Hello,
+Gallery, File Browser, Layouts, Forms, Workbench, and Graphics), including
+paired Sixel/no-graphics graphics frames. The documentation generator
+successfully rendered 22 HTML and 22 PDF pages locally. Capture work also
+exposed and corrected the zero-bounds standard-dialog presentation defect, with
+a modal-bounds regression test and updated Hello golden. The full local CTest
+matrix passed 113/113. Cross-platform/release documentation evidence remains
+WP-37/WP-38 work, so this is not an M6 or release-closure claim.
+
+**Acceptance.**
+
+- A new C++ client can write and run the documented Hello app without reading
+  tests or private implementation files.
+- Every public widget/component has a client-facing documentation row with a
+  compile-backed snippet and generated screenshot, or an explicit reason why a
+  screenshot is not meaningful.
+- Documentation generation fails on stale/missing snippets, missing
+  screenshots, broken links, or undocumented public widgets.
+- `README.md` points new users to the tutorial path before planning,
+  verification, and internal-reference documents.
+- WP-38 can consume `docs/coverage.md` directly for the release traceability
+  report.
+
+### WP-39 — Revisioned editor document and Unicode editing core
+
+**Purpose.** Establish the reusable document model required for a professional
+text/source editor without turning `Memo` into an accidental editor. The
+binding design is [editor-architecture.md](editor-architecture.md); the client
+and acceptance target is [editor-delivery-target.md](editor-delivery-target.md).
+
+**Work.**
+
+- Add the documented editor layer placement to `ARCHITECTURE.md` before source
+  code, preserving every existing dependency direction and the zero-dependency
+  rule.
+- Implement `EditorDocument`, revisioned positions/ranges, transactions,
+  bounded undo/redo, deterministic observer lifetime, LF normalization, and
+  grapheme-safe line/column lookup with a large-document piece index or
+  equivalent balanced representation.
+- Define explicit options and error results for invalid UTF-8, BOM/encoding,
+  newline conventions, document limits, and undo limits. Do not let widget
+  paint or direct filesystem access decide any of them.
+- Add unit/property/fuzz coverage for edit sequences, transactions, undo/redo,
+  malformed input, and Unicode boundaries, plus an enforceable edit/lookup
+  benchmark on the pinned host.
+
+**Acceptance.**
+
+- Every edit is revisioned, atomic at transaction scope, reversible when within
+  configured history, and leaves positions and line indices valid.
+- No exposed cursor, selection, deletion, or index result splits a grapheme
+  cluster; tests include combining, wide, and malformed boundary cases.
+- Storage, edit, and lookup work scales without whole-document copying for a
+  local edit; the benchmark has a stated threshold that fails on regression.
+- The public reference defines ownership, position invalidation/rebasing,
+  errors, and all deterministic metadata behavior.
+
+### WP-40 — TextEditor interaction, viewport, and editor status
+
+**Purpose.** Turn the editor document into a first-class, keyboard-and-mouse
+complete widget with an independently composable status/indicator model. This
+package follows [editor-architecture.md](editor-architecture.md) and
+[editor-delivery-target.md](editor-delivery-target.md).
+
+**Work.**
+
+- Implement `TextEditor` separately from `Memo`/`TextView`: focus, caret and
+  selection state, insert/overwrite mode, editing/navigation commands,
+  scrolling, gutter, line/column mapping, read-only/disabled behavior, and
+  injected clipboard operations.
+- Implement `EditorStatusModel` and frame/status presentation hooks without
+  hard-coding a window shell. Ensure resize, narrow terminals, wide Unicode,
+  and visible caret/selection clipping are deterministic.
+- Add public-path keyboard and mouse scripts for typing, selection, drag,
+  scroll, focus traversal, clipboard, command contexts, modality, and
+  destruction/reentrancy; add four-theme styled-cell goldens.
+
+**Acceptance.**
+
+- A client can edit a shared `EditorDocument` through the public widget API;
+  all ordinary input and viewport behavior has script and golden evidence.
+- Gutter, caret, selection, and indicator report correct document positions
+  after edits, undo/redo, scrolling, and resize without splitting graphemes.
+- No viewport frame does unbounded off-screen document work; the budget is
+  measured and enforced.
+
+### WP-41 — Syntax profile engine and incremental styling
+
+**Purpose.** Build a deterministic, extensible highlighter architecture before
+shipping language grammars. The normative contract is
+[editor-architecture.md](editor-architecture.md), with exit evidence in
+[editor-delivery-target.md](editor-delivery-target.md).
+
+**Work.**
+
+- Add an instance-owned `SyntaxProfileRegistry`, stable profile IDs,
+  explicit/deterministic detection inputs and tie behavior, highlighter factory,
+  semantic token kinds, editor theme roles, and plain-text fallback.
+- Implement the compiled rule-set building block and `ISyntaxHighlighter`
+  extension seam. No mandatory grammar engine, dynamic global registration, or
+  unbounded runtime-regex grammar is allowed.
+- Implement the line-state `SyntaxCache`: changed-line invalidation, forward
+  relexing to a state/span fixed point, visible-line priority, and bounded
+  off-screen continuation without a hidden worker thread.
+- Prove detector determinism, token range validation, malformed-input safety,
+  cache convergence, paint precedence (syntax/search/selection/caret), and
+  incremental relex performance with unit/fuzz/golden/benchmark evidence.
+
+**Acceptance.**
+
+- Equal editor inputs and explicit profile metadata produce byte-identical
+  styling regardless of paint order, process state, locale, or elapsed time.
+- A local edit relexes only the necessary suffix and stops at the documented
+  fixed point; multiline state remains correct.
+- All four built-in themes define every editor/syntax role, preserve readable
+  selection/caret precedence, and fall back safely to plain text.
+
+### WP-42 — Standard JSON, YAML, and Bash profiles
+
+**Purpose.** Ship useful default syntax profiles while making extension a
+documented client capability rather than a hidden implementation privilege.
+The profile contract is in [editor-architecture.md](editor-architecture.md)
+and [editor-delivery-target.md](editor-delivery-target.md).
+
+**Work.**
+
+- Implement JSON (`.json`, `.jsonc`), YAML (`.yaml`, `.yml`), and Bash
+  (`.sh`, `.bash`, Bash shebang) detectors and highlighters, along with explicit
+  profile selection and plain-text fallback.
+- Cover the documented minimum categories, multiline lexical state, malformed
+  text, long lines, and adversarial nesting without unbounded behavior.
+- Write a profile-author guide showing declarative rule-set and custom
+  stateful-highlighter registration, stable identifiers, detection tests,
+  theme roles, fixtures, and extension lifetime.
+
+**Acceptance.**
+
+- Checked-in fixtures and public-path goldens demonstrate valid and malformed
+  JSON/YAML/Bash in all built-in themes, including strings/comments and
+  multiline state where each language requires it.
+- Filename, shebang, explicit selection, fallback, and detection tie behavior
+  are executable and documented.
+- An independent sample profile compiles and runs through the public registry
+  API without private headers or global side effects.
+
+### WP-43 — Editor search, replace, and command integration
+
+**Purpose.** Complete the everyday editing workflow with safe search/replace
+and ordinary application command presentation. Design and delivery constraints
+remain [editor-architecture.md](editor-architecture.md) and
+[editor-delivery-target.md](editor-delivery-target.md).
+
+**Work.**
+
+- Implement revision-bound literal search, case/whole-word/direction options,
+  visible match state, replace-one, atomic replace-all, and an optional bounded
+  injected matcher extension.
+- Compose standard Edit/Search commands with command contexts, menus, status
+  hints, enablement, focus, modality, and editor status without global routing.
+- Add unit/script/golden coverage for zero/one/many results, stale ranges,
+  undo after replace-all, command disablement/read-only state, nested modal
+  dialogs, and selection/search/caret style precedence.
+
+**Acceptance.**
+
+- Replace-all never applies a stale plan or leaves a partially changed
+  document; it is one undoable transaction.
+- Search cannot invoke an unbounded standard-library backtracking path; any
+  extension exposes an explicit bounded/cancellable contract.
+- Every command is usable through keyboard, menus, and status presentation as
+  applicable and restores normal routing after dialogs close.
+
+### WP-44 — File-editor workflow, editor example, and documentation
+
+**Purpose.** Deliver the client-ready file editor and the public proof that the
+editor subsystem is usable. This package implements the workflow in
+[editor-architecture.md](editor-architecture.md) and the example/documentation
+target in [editor-delivery-target.md](editor-delivery-target.md).
+
+**Work.**
+
+- Extend the injected platform filesystem boundary with explicit read,
+  metadata/fingerprint, and atomic replacement operations; no editor code may
+  access host files directly.
+- Implement `FileEditorController` and optional `EditorWindow`: open/save/save
+  as, clean revision/dirty marker, encoding/newline preservation policy,
+  changed-on-disk conflict, Save/Discard/Cancel close veto, title and status
+  composition, and failure diagnostics.
+- Add `examples/editor` plus source-backed API/reference/tutorial material,
+  screenshots, hierarchy, command table, profile author guide, and generated
+  documentation checks in the style established by WP-36C.
+- Exercise the complete workflow through `MemoryFileSystem` and public
+  application scripts; add goldens for highlighted/open/modified/search/
+  conflict/close states and all theme/degradation cases.
+
+**Acceptance.**
+
+- A client can use a document/editor without the file controller, or use the
+  controller/window to obtain the documented safe file lifecycle.
+- Save never silently overwrites a detected external change, marks a document
+  clean only after full success, and preserves or explicitly converts declared
+  encoding/newline metadata.
+- `examples/editor` is runnable from its documentation and demonstrates all
+  standard profiles, fallback, editing, search/replace, save, conflict, and
+  close-veto paths through public API only.
+
+### WP-45 — Embedded-terminal emulator and containment foundation
+
+**Purpose.** Build the private off-screen terminal model that makes an embedded
+terminal safe by construction. This is the first package for the binding
+[embedded-terminal architecture](embedded-terminal-architecture.md) and
+[delivery target](embedded-terminal-delivery-target.md); it must establish
+D-042's layer and containment rules before a child process or widget exists.
+
+**Work.**
+
+- Add the D-042 layer placement and core-typed child snapshot contracts to the
+  architecture, then implement the terminal emulator's primary/alternate cell
+  buffers, cursor, SGR, UTF-8, edit/erase, scrolling, DEC modes, scrollback,
+  declared capability replies, diagnostics, and explicit resource limits.
+- Define explicit `TerminalLaunchSpec`, child capability profile, query/OSC
+  policy, and `TerminalSubsessionOptions` values. No profile or launch
+  environment may come from hidden ambient reads.
+- Define the strict output boundary: parser input only updates private model
+  state; it has no reference to the outer `Terminal` writer, scene, or widget.
+- Add unit/property/fuzz evidence for normal and malformed sequences,
+  alternate-screen transitions, UTF-8 boundaries, control-string recovery,
+  resource limits, deterministic query replies, and two isolated emulators.
+
+**Acceptance.**
+
+- The off-screen model can represent the documented xterm-compatible child
+  profile as core-typed cells/cursor/raster placeholders without I/O.
+- No raw child byte has any outer-presenter path, including unsupported OSC/DCS
+  and graphics control strings.
+- Parser work/memory is bounded and recoverable for adversarial inputs; fuzzing
+  has corpus seeds for every parser mode and limit boundary.
+
+### WP-46 — POSIX PTY child sessions and basic TerminalView
+
+**Purpose.** Connect the contained model to a real macOS/Linux child process
+through the correct `term` ownership boundary, then expose a basic view. The
+contract is [embedded-terminal-architecture.md](embedded-terminal-architecture.md)
+and [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md).
+
+**Work.**
+
+- Implement explicit POSIX PTY spawn, nonblocking reads/writes, process exit,
+  signal/close policy, terminal-size propagation, and safe teardown in `term`.
+- Let `Application` multiplex bounded child-session readiness with the outer
+  terminal wait/wake loop, without a global registry or worker thread.
+- Implement basic `TerminalView` snapshot painting, focus, keyboard/text input
+  forwarding, visible exit/error state, and safe detach-before-destroy
+  lifetime rules.
+- Add real PTY scripts on macOS/Linux for Bash/readline, spawn failure, output
+  flood, exit, close, input echo, resize, and two simultaneous sessions.
+
+**Acceptance.**
+
+- Bash runs in a `TerminalView` without the child attaching to or changing the
+  parent application's outer terminal session.
+- Child exit/close/error paths leave no handles, zombies, stale callbacks, or
+  parent terminal-mode changes.
+- A noisy child cannot starve outer input or frame presentation beyond the
+  documented bounded budget.
+
+### WP-47 — TerminalView interaction, resize, and nested ckVision sessions
+
+**Purpose.** Make the terminal window genuinely usable for ordinary full-screen
+terminal applications and a separately launched ckVision application. The
+authoritative contract remains [embedded-terminal-architecture.md](embedded-terminal-architecture.md)
+and [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md).
+
+**Work.**
+
+- Complete input encoding for the child profile: keyboard, text, bracketed
+  paste, eligible mouse reporting, a configurable parent escape chord, and
+  explicit OSC/title/clipboard/hyperlink/notification/query policies.
+- Implement resize ordering, pixel/cell metrics, scrollback, terminal
+  selection/copy, alternate-screen presentation, view/window focus boundaries,
+  and modeless/modal command scoping.
+- Create an integration child that runs a second ckVision application through
+  the private PTY, exercising independent session modes, resize, focus, and
+  presentation within the parent window.
+- Add public-path scripts and cell goldens for Bash, a full-screen alternate
+  buffer sample, nested ckVision, mouse/paste, resize storms, parent window
+  move/overlap/close, and return-to-parent input behavior.
+
+**Acceptance.**
+
+- The child sees only the terminal view's content extent and receives correct
+  resize/input behavior; parent chrome and the escape chord remain local.
+- A nested ckVision child is visually and input-wise confined to its terminal
+  view while both parent and child remain responsive.
+- Scrollback, selection/copy, alternate screen, focus restoration, and modal
+  routing have public script and golden evidence.
+
+### WP-48 — Contained child Sixel and terminal hardening
+
+**Purpose.** Deliver the no-glitch/no-spill graphics guarantee, including
+resource-hardened child Sixel handling. The detailed pixel and policy design is
+[embedded-terminal-architecture.md](embedded-terminal-architecture.md) and the
+acceptance matrix is [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md).
+
+**Work.**
+
+- Implement a bounded Sixel decoder in the child emulator that produces
+  RGBA/core image state plus mandatory fallback cells; it must never relay a
+  child graphics sequence to the outer presenter.
+- Bridge child images through `TerminalView` to ordinary clipped scene raster
+  regions, preserving parent composition/occlusion/shadow/clear/close behavior
+  and outer Sixel/no-graphics degradation.
+- Cover palette/repeat/dimension/payload limits, malformed DCS recovery,
+  raster clearing/alternate screen, resize, moving/resizing/overlapping parent
+  windows, two child sessions, and child termination mid-image.
+- Add parser fuzzing, allocation/work-limit gates, decoded outer-byte pixel
+  goldens, and assertions that parent regions outside the terminal view stay
+  unchanged.
+
+**Acceptance.**
+
+- Child Sixel is correct inside the terminal rectangle and cannot paint a cell
+  or pixel outside it under move, resize, overlap, shadow, clear, close, or
+  capability change.
+- `NoGraphics` produces the deterministic child fallback with zero outer raster
+  pixels; a Sixel parent profile proves decoded pixels from the actual outer
+  presenter byte stream.
+- Malformed or oversized graphics cannot hang, over-allocate, leak partial
+  bytes, or corrupt another child/parent scene.
+
+### WP-49 — Terminal example, documentation, and end-to-end acceptance
+
+**Purpose.** Make the contained terminal usable and believable to clients,
+rather than leaving it as internal PTY/parser evidence. It implements the
+public proof point required by [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md).
+
+**Work.**
+
+- Add `examples/terminal`: a resizable parent window with explicit launch,
+  documented parent escape command, lifecycle diagnostics, Bash/full-screen
+  scenarios, a nested ckVision child, and a child Sixel demonstration.
+- Add a source-backed terminal guide, API reference, object hierarchy,
+  launch-policy guide, security/containment explanation, generated screenshots,
+  and exact build/run/test commands; integrate it into documentation coverage.
+- Automate public-path PTY scripts and generated cell/pixel captures for all
+  teaching states, including no-graphics fallback and explicit no-spill checks.
+
+**Acceptance.**
+
+- A client can follow the documented example without private headers or manual
+  terminal setup and observe Bash, nested ckVision, resize, exit, and Sixel
+  containment behavior.
+- Documentation states clearly which child profile and policy is implemented,
+  how to extend it, and why raw pass-through is prohibited.
+- The example and guide meet the same source/screenshot/hierarchy/evidence
+  gates as WP-36C and WP-44's editor example.
+
+### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
+
+**Purpose.** Provide the Windows-specific child session implementation and
+evidence rather than assuming the outer ConPTY backend covers nested terminal
+processes. This package is blocked on a real Windows/Windows Terminal host and
+uses [embedded-terminal-architecture.md](embedded-terminal-architecture.md) and
+[embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md).
+
+**Work.**
+
+- Implement the ConPTY child-session adapter with explicit process, resize,
+  pipe, exit, cancellation, and teardown ownership equivalent to the POSIX
+  session contract.
+- Run the terminal example and named child fixtures under Windows Terminal,
+  including input, resize, alternate buffer, nested ckVision, Sixel/no-graphics
+  profiles, close/error, resource recovery, and simultaneous sessions.
+- Record deliberate platform differences only at the adapter/capability
+  boundary; platform-independent emulator and scene goldens must match.
+
+**Acceptance.**
+
+- Named Windows host/Terminal versions, capability report, ConPTY evidence,
+  and all degraded rows are recorded; a headless substitute cannot close this
+  package.
+- Every containment and lifecycle assertion from WP-46 through WP-49 passes on
+  Windows, with byte-identical platform-independent cells/pixels where the
+  declared profiles match.
+
 ### WP-37 — Windows backend and three-platform matrix
 
 **Purpose.** Put M7 in the same executable queue as every other remaining
@@ -1870,8 +2312,11 @@ obligation so “next open WP” cannot skip the Windows release gate.
   degraded-host capability rows without a parallel legacy renderer.
 - Run real Windows Terminal scenarios for keyboard, cell/pixel mouse, resize,
   Sixel/fallback graphics, clipboard, suspend/close restoration where supported,
-  and multi-Application isolation. Keep headless equivalents for host features
-  CI cannot expose, but do not label them interactive acceptance.
+  multi-Application isolation, and the editor's Unicode input, highlighting,
+  search, and injected file workflow plus embedded-terminal ConPTY child
+  sessions, nested ckVision, and contained Sixel. Keep headless equivalents
+  for host features CI cannot expose, but do not label them interactive
+  acceptance.
 - Make the full macOS/Linux/Windows matrix build warnings-as-errors and prove
   byte-identical platform-independent goldens. Record and test every deliberate
   backend-specific byte difference at the capability/presenter boundary.
@@ -1900,13 +2345,15 @@ and prevent milestone status from outrunning verification again.
   implementation → unit/script/golden/fuzz/benchmark evidence → public docs.
 - Complete the appearance matrix for every widget/chrome element, including
   WP-36B's common modern components, applicable active/inactive/focused/disabled
-  state, all four built-in schemes, wide text, terminal shrink, and paired
-  Sixel/no-graphics profiles. Raster-bearing rows require both the symbolic
+  state, WP-39…WP-44's editor/document/profile states, WP-45…WP-50's embedded
+  terminal/process/graphics states, all four built-in schemes, wide text,
+  terminal shrink, and paired Sixel/no-graphics profiles.
+  Raster-bearing rows require both the symbolic
   scene golden and WP-32A's decoded pixel-plane golden; neither substitutes for
   the other.
 - Consume WP-36A's example coverage matrix and promote gallery/showcase, hello,
-  filebrowser, layouts, forms, workbench, graphics, menu-only-keyboard,
-  menu-only-mouse, modal, close-veto, restoration, and degradation scenarios
+  filebrowser, editor, layouts, forms, workbench, graphics, menu-only-keyboard,
+  menu-only-mouse, terminal, modal, close-veto, restoration, and degradation scenarios
   to the final byte-exact scripted/golden release evidence.
 - Write reference documentation for every public API and run a link/symbol
   coverage check. Examples and tutorials must be executable from documented
@@ -1922,7 +2369,7 @@ and prevent milestone status from outrunning verification again.
 - Golden coverage is mechanically enumerable and complete against the widget
   catalog/state/scheme matrix.
 - All verification gates pass and failures in any category block completion.
-- Only after this package lands may M0–M10 be reconsidered for `Done`;
+- Only after this package lands may M0–M11 be reconsidered for `Done`;
   each milestone is changed individually only when its own exit row is fully
   supported by the report.
 
@@ -1950,5 +2397,7 @@ and prevent milestone status from outrunning verification again.
 | Height-for-width not consumed; unit assertions substituted for M10 scripts/goldens | WP-36 |
 | Example suite now covers the public surface locally; exhaustive state/theme/reference release traceability remains | WP-36A, WP-38 |
 | Common modern components now exist locally; exhaustive state/theme/reference release traceability remains | WP-36B, WP-38 |
+| First-class editor, syntax-profile, search/replace, and safe file-editor workflow promoted into 0.1 scope | WP-39…WP-44, WP-37, WP-38 |
+| Contained terminal view, private child PTY/ConPTY, nested application, and no-spill Sixel requirement promoted into 0.1 scope | WP-45…WP-50, WP-37, WP-38 |
 | Windows backend/host and full three-platform matrix remain unaccepted | WP-32, WP-37 |
 | Six appearance dumps, smoke-only examples, incomplete public docs and release evidence | WP-38 |

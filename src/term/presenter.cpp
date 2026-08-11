@@ -196,6 +196,14 @@ void Presenter::emit_cursor_move(std::string& out, int x, int y) const {
     out += 'H';
 }
 
+void emit_cursor_shape(std::string& out, CursorShape shape, bool blink) {
+    int parameter = 2;
+    if (shape == CursorShape::Underline) parameter = blink ? 3 : 4;
+    else if (shape == CursorShape::Bar) parameter = blink ? 5 : 6;
+    else parameter = blink ? 1 : 2;
+    out += "\x1B[" + std::to_string(parameter) + " q";
+}
+
 void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& rasters,
                              bool raster_coverage_changed, std::string& out) {
     const Size size = frame.size();
@@ -368,6 +376,7 @@ void Presenter::present(FrameView frame, CursorState cursor,
     if (force_full_ || !previous_cursor_ || cursor != *previous_cursor_) {
         if (cursor.visible) {
             emit_cursor_move(out, cursor.position.x, cursor.position.y);
+            emit_cursor_shape(out, cursor.shape, cursor.blink);
             out += "\x1B[?25h";
         } else {
             out += "\x1B[?25l";

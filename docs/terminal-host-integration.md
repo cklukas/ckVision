@@ -57,12 +57,15 @@ owning UI thread is intentionally backpressured with it.
 An embedding host drives the application by calling `step()` on its owning
 thread. `Application::wait_handles()` exposes a borrowed, read-only set of
 backend-native wait sources; for `PosixTerminal` it contains the terminal input
-descriptor and the private wake descriptor. `Application::next_timer_deadline_nanos()`
+descriptor and the private wake descriptor, followed by the readiness sources
+of every attached child terminal session. `Application::next_timer_deadline_nanos()`
 reports the earliest application timer, if any. The host waits on those handles
 alongside its own sources until the earlier of its deadline and that timer, then
 calls `step(clock.now_nanos())`. It must not close, reconfigure, or retain the
-handles beyond the terminal's lifetime. Deterministic headless and replay
-backends expose no handles and are stepped directly.
+handles beyond the next `wait_handles()` call, an application/session mutation,
+or the terminal/session lifetimes. Deterministic headless and replay
+backends expose no outer-backend handles and are stepped directly; an attached
+POSIX child session still contributes its own borrowed PTY handle.
 
 `Application::wake()` makes the POSIX wake descriptor ready, so a host wait
 returns promptly without synthesizing input. Worker threads use

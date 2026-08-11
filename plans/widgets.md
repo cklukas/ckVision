@@ -48,8 +48,8 @@ widgets and dialogs, never per-widget state.
 | Label | Mnemonic that focuses its buddy control | — |
 | Static text | Styled, wrapped | Alignment options |
 | Button | Default/normal, mnemonic, pressed feedback | Repeat-on-hold option |
-| Input line | Editing keys, selection, clipboard, overwrite/insert, scrolling content, validators, input masks, password echo, history cycling | Grapheme-correct editing (never splits clusters); undo within field |
-| Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo | Word wrap toggle; grapheme-correct navigation |
+| Input line | Editing keys, selection, clipboard, overwrite/insert, scrolling content, validators, input masks, password echo, history cycling | Grapheme-correct editing (never splits clusters); undo within field; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word navigation/deletion, and Shift selection semantics |
+| Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo | Word wrap toggle; grapheme-correct navigation; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word/document navigation/deletion, and Shift selection semantics |
 | Check group | Multi-select, arrow navigation, mnemonics | Tri-state option |
 | Radio group | Exclusive select, arrow navigation, mnemonics | — |
 | List view | Scrolling, single/multi select, keyboard search, injected-Clock double-click activate | Post-0.1 per D-041: virtualized model interface and columned modes |
@@ -62,6 +62,8 @@ widgets and dialogs, never per-widget state.
 | Progress | — | Determinate/indeterminate, label slot |
 | Splitter | — | Keyboard-adjustable split panes |
 | Text view | Read-only styled text, scrolling | Links (activatable; rendered as OSC 8 hyperlinks where supported), simple inline styles; the building block for help browsers and about boxes |
+| Text editor | Revisioned UTF-8 document editing, selections, undo/redo, scrolling, gutter, and line/column indicator | Search/replace, deterministic profile detection, incremental syntax styling, and composable file-editor workflow; WP-39…WP-44 |
+| Terminal view | Private child PTY/ConPTY session, UTF-8 terminal cells, focus/input/resize, scrollback, and process lifecycle | Alternate buffer, mouse/paste/query policy, nested ckVision applications, and decoded Sixel re-composited with no spill; WP-45…WP-50 |
 | Help viewer | Context topics (F1 from any view via help-context keys), activatable cross-links, back navigation | Index/keyword lookup; content via an injected provider — the library defines no help file format |
 | Image view | — | Shows an `Image` scaled to its cell box; mandatory fallback content; dual-space (cell + pixel) mouse events where the terminal reports pixels |
 | Canvas | — | Application draws RGBA at the widget's current pixel size (cell box × cell metrics, redraw on resize); mandatory fallback painter; dual-space mouse events |
@@ -97,8 +99,8 @@ and `examples/workbench`. WP-38 owns the exhaustive state/scheme/reference
 visual matrix before release acceptance.
 
 Post-0.1 candidates unless promoted by a recorded decision: tree-table /
-outline-table with columns, chart widgets beyond `Progress`/`Canvas`, rich
-document/code editor, and dockable/floating tool-palette systems.
+outline-table with columns, chart widgets beyond `Progress`/`Canvas`, and
+dockable/floating tool-palette systems.
 
 ## Standard dialogs (M6)
 
@@ -112,9 +114,9 @@ document/code editor, and dockable/floating tool-palette systems.
 
 ## Explicitly not widgets
 
-- A code/document **editor**: applications own their editors; the library
-  provides Memo (forms) and Text view (display) only.
-- A terminal emulator widget: out of scope for 0.1; revisit on demand.
+- A network/remote terminal client, terminal multiplexer, or raw child-output
+  pass-through: out of scope for 0.1. `TerminalView` is a private, contained
+  local PTY/ConPTY terminal session (D-042).
 
 ## Cross-cutting acceptance (all widgets)
 
@@ -163,6 +165,8 @@ reference acceptance is missing.
 | Progress complete behavior | Progress beyond-baseline | WP-34B |
 | Splitter keyboard adjustment and integrated resize/golden behavior | Splitter beyond-baseline | WP-34C, WP-36 |
 | TextView activatable links, OSC 8 export, and inline styles | Text view beyond-baseline | WP-34C |
+| Editor document, TextEditor interaction, search/replace, standard JSON/YAML/Bash profiles, profile extension, and injected file-editor workflow | Text editor | WP-39…WP-44, WP-38 |
+| Private terminal emulator, process/PTY lifecycle, input/resize, nested ckVision session, child Sixel raster containment, and Windows ConPTY matrix | Terminal view | WP-45…WP-50, WP-37, WP-38 |
 | Help cross-links/back/index/provider behavior | Help viewer baseline/beyond-baseline | WP-34C |
 | ImageView scaling, fallback, occlusion/scroll, dual-space pointer matrix, and paired decoded-Sixel/no-graphics visual captures | Image view beyond-baseline; raster acceptance | WP-32A, WP-34C, WP-38 |
 | Canvas automatically derives pixel size from cell metrics, redraws on metric/size change, and passes paired decoded-Sixel/no-graphics visual captures | Canvas beyond-baseline | WP-32A, WP-34C |

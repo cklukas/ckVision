@@ -97,14 +97,16 @@ void FormsApp::build_window() {
 
     auto options = std::make_unique<widgets::CheckGroup>(
         std::vector<std::string>{"&Validate on accept", "&Tri-state option", "&Remember value"});
-    options->set_bounds(Rect{1, 6, 26, 3});
+    options->set_group_label("Options");
+    options->set_bounds(Rect{1, 6, 26, 4});
     options->set_tristate(true);
     options->set_check_state(1, widgets::CheckState::Mixed);
     options_ = options.get();
     content->add_child(std::move(options));
 
     auto mode = std::make_unique<widgets::RadioGroup>(std::vector<std::string>{"&Modal", "Mode&less"});
-    mode->set_bounds(Rect{30, 6, 14, 2});
+    mode->set_group_label("Presentation mode");
+    mode->set_bounds(Rect{30, 6, 14, 3});
     mode->set_selected(0);
     mode_ = mode.get();
     content->add_child(std::move(mode));

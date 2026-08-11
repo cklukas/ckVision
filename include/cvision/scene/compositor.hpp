@@ -77,9 +77,10 @@ public:
     explicit Compositor(Size frame_size);
 
     // `layers` must already be in z-order, bottom to top. `background`
-    // covers the whole frame; it is never occluded and never
-    // shadow-cast. Consumes (and clears) the row damage of every
-    // surface involved — background and every layer's surface.
+    // covers the whole frame; its cells are the base layer, while any
+    // background rasters are correctly occluded by the supplied layers.
+    // Consumes (and clears) the row damage of every surface involved —
+    // background and every layer's surface.
     void compose(const std::vector<Layer>& layers, Surface& background, ShadowSpec shadow = {});
 
     const Surface& frame() const noexcept { return frame_; }
@@ -111,7 +112,7 @@ private:
                         const ShadowSpec& shadow);
     Cell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
                        std::size_t exclusive_top, const Surface& background) const;
-    void compute_visible_rasters(const std::vector<Layer>& layers);
+    void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background);
 
     Surface frame_;
     CursorState cursor_;

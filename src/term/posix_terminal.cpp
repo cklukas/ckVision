@@ -577,6 +577,11 @@ bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
 }
 
 std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
+    return poll(deadline_nanos, {});
+}
+
+std::vector<TerminalEvent> PosixTerminal::poll(
+    std::int64_t deadline_nanos, std::span<const WaitHandle> additional_wait_handles) {
     std::vector<TerminalEvent> events;
     if (session_slot_ >= 0 &&
         g_sessions[session_slot_].resumed.exchange(false, std::memory_order_acq_rel)) {
@@ -631,7 +636,14 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
     collect_resize();
     if (!events.empty()) return events;
 
-    std::array<struct pollfd, 2> fds{{{input_fd_, POLLIN, 0}, {self_pipe_read_, POLLIN, 0}}};
+    std::vector<struct pollfd> fds;
+    fds.reserve(2 + additional_wait_handles.size());
+    fds.push_back(pollfd{input_fd_, POLLIN, 0});
+    fds.push_back(pollfd{self_pipe_read_, POLLIN, 0});
+    for (const WaitHandle handle : additional_wait_handles) {
+        if (handle.kind != WaitHandleKind::PosixFileDescriptor) continue;
+        fds.push_back(pollfd{static_cast<int>(handle.value), POLLIN, 0});
+    }
     const std::int64_t now = clock_.now_nanos();
     expire_capability_probes(now);
     // The probe window bounds reply acceptance, never the caller's wait.

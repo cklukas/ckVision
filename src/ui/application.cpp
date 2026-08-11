@@ -552,6 +552,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     }
                     return false;
                 } else if constexpr (std::is_same_v<T, MouseEvent>) {
+                    const bool press = e.action == MouseAction::Down || e.action == MouseAction::DoubleClick;
                     // Captured BEFORE target resolution: a popup (menu
                     // dropdown light-dismiss) already owning input capture
                     // means clicks are that popup's own business end to
@@ -577,7 +578,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     const ViewHandle target_handle = make_view_handle(*target);
                     if (resolve_attached_view(target_handle) == nullptr)
                         return false;
-                    if (e.action == MouseAction::Down && input_capture_ == nullptr)
+                    if (press && input_capture_ == nullptr)
                         mouse_capture_ = target;
                     // Click-to-activate/raise (M8 WP-3): notify every
                     // ancestor of target BEFORE delivery, so a container
@@ -589,7 +590,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // is empty), and naturally scoped away from popups:
                     // popups are Desktop's siblings, never descendants of
                     // a window, so this walk never finds one for them.
-                    if (e.action == MouseAction::Down) {
+                    if (press) {
                         // Snapshot no raw parent pointers across callbacks. Each
                         // route entry and the original target is revalidated just
                         // before use; detachment, destruction, or reparenting
@@ -652,7 +653,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // when the widget already focused itself during
                     // delivery, so this never fights a widget's own
                     // choice — it only fills in when nothing did.
-                    if (e.action == MouseAction::Down && !had_input_capture) {
+                    if (press && !had_input_capture) {
                         for (View* v = resolve_attached_view(target_handle); v != nullptr;
                              v = v->parent()) {
                             if (v->focusable()) {
@@ -723,10 +724,26 @@ bool Application::step(std::int64_t deadline_nanos) {
             effective_deadline = std::min(effective_deadline, timer.next_fire_nanos);
 
         bool did_work = false;
-        for (const term::TerminalEvent& event : terminal_.poll(effective_deadline)) {
+        const auto drain_terminal_subsessions = [this, &did_work] {
+            for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
+                if (!session->drain(32 * 1024)) continue;
+                did_work = true;
+                root_.notify_terminal_subsession_changed(*session);
+            }
+        };
+        drain_terminal_subsessions();
+        terminal_subsession_wait_handles_.clear();
+        for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
+            const std::span<const term::WaitHandle> handles = session->wait_handles();
+            terminal_subsession_wait_handles_.insert(terminal_subsession_wait_handles_.end(), handles.begin(), handles.end());
+        }
+        for (const term::TerminalEvent& event : terminal_.poll(effective_deadline, terminal_subsession_wait_handles_)) {
             did_work = true;
             dispatch(event);
         }
+        // A private child can wake the combined wait without supplying an
+        // outer-terminal event. Drain it before the frame is composed.
+        drain_terminal_subsessions();
 
         const std::int64_t now = clock_.now_nanos();
         std::vector<std::function<void()>>& due_callbacks = due_callback_scratch_;
@@ -769,6 +786,15 @@ bool Application::step(std::int64_t deadline_nanos) {
     }
 }
 
+term::TerminalSubsession& Application::launch_terminal_subsession(
+    term::TerminalLaunchSpec spec, term::TerminalSubsessionOptions options) {
+    std::unique_ptr<term::TerminalSubsession> session = term::launch_terminal_subsession(std::move(spec), std::move(options));
+    CKV_ASSERT(session != nullptr);
+    session->set_raster_identity(next_terminal_raster_identity_++);
+    terminal_subsessions_.push_back(std::move(session));
+    return *terminal_subsessions_.back();
+}
+
 void Application::invalidate_all() {
     dirty_ = true;
     presenter_.invalidate();
@@ -800,6 +826,11 @@ void Application::paint_and_present() {
     dirty_ = false;
 
     compositor_.compose(composition_layers_, surface_);
+    CursorState cursor;
+    if (focused_ != nullptr) {
+        if (const std::optional<CursorState> focused_cursor = focused_->cursor_state()) cursor = *focused_cursor;
+    }
+    compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
                        compositor_.visible_rasters());
 }

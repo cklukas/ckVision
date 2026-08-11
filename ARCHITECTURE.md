@@ -14,7 +14,8 @@ pixel-aware input in `term`, image widgets in `widgets`) — see §7.
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │  widgets   buttons, inputs, lists, menus, tabs, dialogs,      │
-│            images, canvases, scrollers, trees, tables, ...    │
+│            images, canvases, scrollers, trees, tables,        │
+│            editor document/models and terminal views, ...     │
 ├───────────────────────────────────────────────────────────────┤
 │  ui        view tree, windows, popups, desktop, focus,        │
 │            events, commands, keymaps, layout, themes, help    │
@@ -24,8 +25,9 @@ pixel-aware input in `term`, image widgets in `widgets`) — see §7.
 │            damage, shadows, cursor state, frame assembly      │
 ├───────────────────────────────────────────────────────────────┤
 │  term      terminal backends, capabilities, input decoder,    │
-│            frame presenter, graphics encoders, platform       │
-│            adapters (filesystem, clock, clipboard export)     │
+│            frame presenter, graphics encoders, private child  │
+│            sessions/emulator, platform adapters               │
+│            (filesystem, clock, clipboard export)              │
 ├───────────────────────────────────────────────────────────────┤
 │  core      geometry, text/width, color, style, cell, image,   │
 │            events, keys, error, clock — no I/O, no platform   │
@@ -34,7 +36,7 @@ pixel-aware input in `term`, image widgets in `widgets`) — see §7.
 
 Allowed dependencies: `widgets → ui → scene → core`; `ui → term` only
 through the `Terminal` and platform-service interfaces; `scene → core`;
-`term → core`. The `Terminal` interface exchanges **core types only**
+`term → core`. The `Terminal` and embedded-session interfaces exchange **core types only**
 (frame data views, events, capabilities), keeping `term` independent of
 `scene`. Nothing depends on `widgets` except applications. No layer
 reaches around a lower layer. No cycles, enforced by include checks in CI.
@@ -158,6 +160,17 @@ event stream, frame presentation, clipboard write, title, notifications
   changes before returning their recorded batch, then captures the same
   operation log so a deterministic rerun can prove byte-for-byte and
   side-effect-for-side-effect fidelity without consulting the original backend.
+
+**Embedded terminal subsessions.** `term` also owns private child PTY/ConPTY
+sessions and their off-screen terminal emulator (D-042). A child gets a
+distinct terminal endpoint; its bytes are parsed into core-typed cells, cursor
+state, and raster images, never forwarded to the outer `Terminal` writer.
+`ui::Application` multiplexes explicitly attached child readiness with its own
+terminal handles, and `widgets::TerminalView` consumes the core session seam
+to paint an emulated snapshot through its clipped painter. The scene compositor therefore remains the sole
+authority for child-cell and child-raster clipping, occlusion, shadowing,
+clearing, and outer Sixel presentation. Details and acceptance live in
+`plans/embedded-terminal-architecture.md`.
 
 **Session-state ledger and restoration.** Every mode the backend sets
 (alternate screen, raw mode, mouse modes, keyboard protocol pushes,

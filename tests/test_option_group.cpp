@@ -2,12 +2,18 @@
 #include "cvision/widgets/option_group.hpp"
 
 #include "cktest.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
+#include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
 using ckv::Modifier;
+using ckv::Point;
 using ckv::Rect;
+using ckv::scene::Painter;
+using ckv::scene::Surface;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
@@ -85,6 +91,67 @@ CK_TEST(mnemonic_key_toggles_the_matching_item_and_moves_the_cursor_to_it) {
     CK_CHECK(group.checked(1));
     group.on_key(key(Key::Char, " "));  // cursor should now be on item 1
     CK_CHECK(!group.checked(1));        // toggled back off
+}
+
+CK_TEST(check_group_mnemonics_use_the_dialog_mnemonic_accent) {
+    Fixture f;
+    CheckGroup group({"&Auto save"});
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_bounds(Rect{0, 0, 16, 1});
+    Surface s(ckv::Size{16, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 16, 1});
+    group.draw(painter);
+
+    CK_CHECK(s.at(Point{4, 0}).grapheme() == "A");
+    CK_CHECK(s.at(Point{4, 0}).style().fg == f.theme.resolve(f.roles.label_mnemonic).fg);
+    CK_CHECK(s.at(Point{4, 0}).style().bg == f.theme.resolve(f.roles.option_normal).bg);
+    CK_CHECK(s.at(Point{5, 0}).style() == f.theme.resolve(f.roles.option_normal));
+}
+
+CK_TEST(check_group_uses_square_brackets_and_an_uppercase_x_for_checked_items) {
+    Fixture f;
+    CheckGroup group({"Unchecked", "Checked"});
+    group.set_checked(1, true);
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_bounds(Rect{0, 0, 16, 2});
+    Surface s(ckv::Size{16, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 16, 2});
+    group.draw(painter);
+
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "[");
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == " ");
+    CK_CHECK(s.at(Point{2, 0}).grapheme() == "]");
+    CK_CHECK(s.at(Point{0, 1}).grapheme() == "[");
+    CK_CHECK(s.at(Point{1, 1}).grapheme() == "X");
+    CK_CHECK(s.at(Point{2, 1}).grapheme() == "]");
+}
+
+CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
+    Fixture f;
+    CheckGroup group({"First", "Second"});
+    group.set_group_label("Choices");
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_bounds(Rect{0, 0, 16, 3});
+    CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{3, 3, 3}));
+
+    Surface normal(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter normal_painter(normal, Rect{0, 0, 16, 3});
+    group.draw(normal_painter);
+    CK_CHECK(normal.at(Point{0, 0}).grapheme() == "C");
+    CK_CHECK(normal.at(Point{0, 0}).style() == f.theme.resolve(f.roles.label_text));
+    CK_CHECK(normal.at(Point{0, 1}).grapheme() == "[");
+    CK_CHECK(!group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 0},
+                                              std::nullopt, Modifier::None}));
+    CK_CHECK(group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 1},
+                                             std::nullopt, Modifier::None}));
+    CK_CHECK(group.checked(0));
+
+    group.on_focus(ckv::FocusEvent{true});
+    Surface focused(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter focused_painter(focused, Rect{0, 0, 16, 3});
+    group.draw(focused_painter);
+    CK_CHECK(focused.at(Point{0, 0}).style().fg == f.theme.resolve(f.roles.option_focused).fg);
+    CK_CHECK(focused.at(Point{0, 0}).style().bg == f.theme.resolve(f.roles.label_text).bg);
 }
 
 CK_TEST(alt_mnemonic_key_toggles_the_matching_check_item_but_ctrl_does_not) {
@@ -198,6 +265,52 @@ CK_TEST(radio_group_starts_with_nothing_selected) {
     Fixture f;
     RadioGroup group({"&A", "&B"});
     CK_CHECK(group.selected() == -1);
+}
+
+CK_TEST(radio_group_uses_round_brackets_and_a_round_dot_for_the_selection) {
+    Fixture f;
+    RadioGroup group({"Unselected", "Selected"});
+    group.set_selected(1);
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_bounds(Rect{0, 0, 16, 2});
+    Surface s(ckv::Size{16, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 16, 2});
+    group.draw(painter);
+
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "(");
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == " ");
+    CK_CHECK(s.at(Point{2, 0}).grapheme() == ")");
+    CK_CHECK(s.at(Point{0, 1}).grapheme() == "(");
+    CK_CHECK(s.at(Point{1, 1}).grapheme() == "•");
+    CK_CHECK(s.at(Point{2, 1}).grapheme() == ")");
+}
+
+CK_TEST(a_radio_group_caption_owns_a_row_and_turns_white_with_group_focus) {
+    Fixture f;
+    RadioGroup group({"First", "Second"});
+    group.set_group_label("Mode");
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_bounds(Rect{0, 0, 16, 3});
+    CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{3, 3, 3}));
+
+    Surface normal(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter normal_painter(normal, Rect{0, 0, 16, 3});
+    group.draw(normal_painter);
+    CK_CHECK(normal.at(Point{0, 0}).grapheme() == "M");
+    CK_CHECK(normal.at(Point{0, 0}).style() == f.theme.resolve(f.roles.label_text));
+    CK_CHECK(normal.at(Point{0, 1}).grapheme() == "(");
+    CK_CHECK(!group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 0},
+                                              std::nullopt, Modifier::None}));
+    CK_CHECK(group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 2},
+                                             std::nullopt, Modifier::None}));
+    CK_CHECK(group.selected() == 1);
+
+    group.on_focus(ckv::FocusEvent{true});
+    Surface focused(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter focused_painter(focused, Rect{0, 0, 16, 3});
+    group.draw(focused_painter);
+    CK_CHECK(focused.at(Point{0, 0}).style().fg == f.theme.resolve(f.roles.option_focused).fg);
+    CK_CHECK(focused.at(Point{0, 0}).style().bg == f.theme.resolve(f.roles.label_text).bg);
 }
 
 CK_TEST(selecting_one_item_deselects_the_previous_one) {

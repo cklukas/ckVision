@@ -69,6 +69,8 @@ public:
     // merely interrupts a blocked poll promptly; it never routes a resize
     // intended for one terminal session into another one.
     std::vector<TerminalEvent> poll(std::int64_t deadline_nanos) override;
+    std::vector<TerminalEvent> poll(std::int64_t deadline_nanos,
+                                    std::span<const WaitHandle> additional_wait_handles) override;
 
     void restore() noexcept override;
     void write_diagnostic_after_restore(std::string_view message) noexcept override;

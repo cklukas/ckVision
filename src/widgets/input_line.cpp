@@ -13,6 +13,13 @@ namespace {
 bool contains(const Rect& r, Point p) noexcept {
     return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
 }
+
+bool word_grapheme(std::string_view grapheme) noexcept {
+    if (grapheme.empty()) return false;
+    const unsigned char value = static_cast<unsigned char>(grapheme.front());
+    return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
+           (value >= '0' && value <= '9') || value == '_';
+}
 }  // namespace
 
 InputLine::InputLine() {
@@ -109,6 +116,34 @@ std::string InputLine::selected_text() const {
     return out;
 }
 
+std::size_t InputLine::previous_word(std::size_t from) const noexcept {
+    std::size_t position = std::min(from, graphemes_.size());
+    while (position > 0U && !word_grapheme(graphemes_[position - 1U])) --position;
+    while (position > 0U && word_grapheme(graphemes_[position - 1U])) --position;
+    return position;
+}
+
+std::size_t InputLine::next_word(std::size_t from) const noexcept {
+    std::size_t position = std::min(from, graphemes_.size());
+    while (position < graphemes_.size() && word_grapheme(graphemes_[position])) ++position;
+    while (position < graphemes_.size() && !word_grapheme(graphemes_[position])) ++position;
+    return position;
+}
+
+void InputLine::erase_range(std::size_t begin, std::size_t end) {
+    begin = std::min(begin, graphemes_.size());
+    end = std::min(std::max(begin, end), graphemes_.size());
+    if (mask_.empty()) {
+        graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(begin),
+                         graphemes_.begin() + static_cast<std::ptrdiff_t>(end));
+    } else {
+        for (std::size_t position = begin; position < end; ++position)
+            if (mask_position_editable(position)) graphemes_[position] = std::string(1, mask_placeholder_);
+    }
+    cursor_ = begin;
+    selection_anchor_.reset();
+}
+
 bool InputLine::copy_selection_to_clipboard() {
     if (context().app == nullptr || !selection_anchor_) return false;
     const std::string selected = selected_text();
@@ -122,7 +157,9 @@ bool InputLine::cut_selection_to_clipboard() {
     if (context().app == nullptr) return false;
     record_undo_state();
     context().app->set_clipboard_text(selected_text());
-    erase_selection();
+    const auto [begin, end] = selection_range();
+    erase_range(begin, end);
+    revalidate();
     invalidate();
     return true;
 }
@@ -202,25 +239,32 @@ std::size_t InputLine::mask_previous_editable(std::size_t from) const noexcept {
 }
 
 bool InputLine::on_key_masked(const KeyEvent& event) {
+    const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const auto move_mask_cursor = [this, shift](std::size_t target) {
+        if (shift) {
+            if (!selection_anchor_) selection_anchor_ = cursor_;
+        } else {
+            selection_anchor_.reset();
+        }
+        cursor_ = target;
+        invalidate();
+    };
     switch (event.chord.key) {
         case Key::Left: {
             const std::size_t prev = mask_previous_editable(cursor_);
             if (prev < graphemes_.size()) {
-                cursor_ = prev;
-                invalidate();
+                move_mask_cursor(prev);
             }
             return true;
         }
         case Key::Right: {
             const std::size_t next = mask_next_editable(cursor_ + 1);
-            cursor_ = next;
-            invalidate();
+            move_mask_cursor(next);
             return true;
         }
         case Key::Home: {
             const std::size_t first = mask_next_editable(0);
-            cursor_ = first < graphemes_.size() ? first : 0;
-            invalidate();
+            move_mask_cursor(first < graphemes_.size() ? first : 0);
             return true;
         }
         case Key::End: {
@@ -231,11 +275,18 @@ bool InputLine::on_key_masked(const KeyEvent& event) {
                     break;
                 }
             }
-            cursor_ = last < graphemes_.size() ? last : 0;
-            invalidate();
+            move_mask_cursor(last < graphemes_.size() ? last : 0);
             return true;
         }
         case Key::Backspace: {
+            if (selection_anchor_) {
+                record_undo_state();
+                const auto [begin, end] = selection_range();
+                erase_range(begin, end);
+                revalidate();
+                invalidate();
+                return true;
+            }
             const std::size_t prev = mask_previous_editable(cursor_);
             if (prev < graphemes_.size()) {
                 record_undo_state();
@@ -247,6 +298,14 @@ bool InputLine::on_key_masked(const KeyEvent& event) {
             return true;
         }
         case Key::Delete: {
+            if (selection_anchor_) {
+                record_undo_state();
+                const auto [begin, end] = selection_range();
+                erase_range(begin, end);
+                revalidate();
+                invalidate();
+                return true;
+            }
             if (cursor_ < graphemes_.size() && mask_position_editable(cursor_)) {
                 record_undo_state();
                 graphemes_[cursor_] = std::string(1, mask_placeholder_);
@@ -261,6 +320,12 @@ bool InputLine::on_key_masked(const KeyEvent& event) {
 }
 
 bool InputLine::on_text_masked(const TextEvent& event) {
+    if (selection_anchor_) {
+        record_undo_state();
+        const auto [begin, end] = selection_range();
+        erase_range(begin, end);
+        cursor_ = mask_next_editable(begin);
+    }
     bool changed = false;
     for (std::string_view g : text::split_graphemes(event.text)) {
         const std::size_t pos = mask_next_editable(cursor_);
@@ -302,10 +367,7 @@ void InputLine::insert_graphemes(const std::vector<std::string>& graphemes) {
 void InputLine::erase_selection() {
     if (!selection_anchor_) return;
     const auto [begin, end] = selection_range();
-    graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(begin),
-                      graphemes_.begin() + static_cast<std::ptrdiff_t>(end));
-    cursor_ = begin;
-    selection_anchor_.reset();
+    erase_range(begin, end);
     revalidate();
 }
 
@@ -321,6 +383,16 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    const bool has_ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
+    const bool has_shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const bool has_alt_or_super = has_modifier(event.chord.modifiers, Modifier::Alt) ||
+                                  has_modifier(event.chord.modifiers, Modifier::Super);
+    if (event.chord.key == Key::Insert && !has_alt_or_super) {
+        if (has_ctrl) return copy_selection_to_clipboard();
+        if (has_shift) return paste_from_clipboard();
+    }
+    if (event.chord.key == Key::Delete && has_shift && !has_ctrl && !has_alt_or_super)
+        return cut_selection_to_clipboard();
     if (event.chord.key == Key::Char && has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
         !has_modifier(event.chord.modifiers, Modifier::Alt) &&
         !has_modifier(event.chord.modifiers, Modifier::Super) && event.chord.text.size() == 1) {
@@ -359,13 +431,14 @@ bool InputLine::on_key(const KeyEvent& event) {
     }
     if (has_mask()) return on_key_masked(event);
 
-    const bool shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    const bool shift = has_shift;
+    const bool control = has_ctrl;
     switch (event.chord.key) {
         case Key::Left:
-            if (cursor_ > 0) move_cursor(cursor_ - 1, shift);
+            if (cursor_ > 0) move_cursor(control ? previous_word(cursor_) : cursor_ - 1, shift);
             return true;
         case Key::Right:
-            move_cursor(cursor_ + 1, shift);
+            move_cursor(control ? next_word(cursor_) : cursor_ + 1, shift);
             return true;
         case Key::Home:
             move_cursor(0, shift);
@@ -380,8 +453,10 @@ bool InputLine::on_key(const KeyEvent& event) {
                 invalidate();
             } else if (cursor_ > 0) {
                 record_undo_state();
-                graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_ - 1));
-                --cursor_;
+                const std::size_t begin = control ? previous_word(cursor_) : cursor_ - 1U;
+                graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(begin),
+                                 graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_));
+                cursor_ = begin;
                 invalidate();
                 revalidate();
             }
@@ -393,7 +468,9 @@ bool InputLine::on_key(const KeyEvent& event) {
                 invalidate();
             } else if (cursor_ < graphemes_.size()) {
                 record_undo_state();
-                graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_));
+                const std::size_t end = control ? next_word(cursor_) : cursor_ + 1U;
+                graphemes_.erase(graphemes_.begin() + static_cast<std::ptrdiff_t>(cursor_),
+                                 graphemes_.begin() + static_cast<std::ptrdiff_t>(end));
                 invalidate();
                 revalidate();
             }

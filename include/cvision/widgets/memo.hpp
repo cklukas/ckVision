@@ -9,6 +9,9 @@
 // route through Application's injected clipboard state, and undo stores bounded
 // grapheme-indexed field snapshots. Word wrap is a widget policy bit that
 // affects soft visual rows without changing the stored document text.
+// Its editing keymap matches InputLine and TextEditor, including word/document
+// navigation, Shift-extended selection, Ctrl+C/X/V, Ctrl+Insert/Shift+Insert,
+// and Ctrl+Backspace/Delete.
 #pragma once
 
 #include <optional>
@@ -91,6 +94,8 @@ private:
     int visual_row_for_position(MemoPosition position, int visible_width) const;
     MemoPosition position_at_visual_row_column(int visual_row, int local_x, int visible_width) const;
     void ensure_cursor_visible();
+    MemoPosition previous_word(MemoPosition from) const noexcept;
+    MemoPosition next_word(MemoPosition from) const noexcept;
 
     std::vector<std::vector<std::string>> lines_;  // each line: graphemes
     MemoPosition cursor_;

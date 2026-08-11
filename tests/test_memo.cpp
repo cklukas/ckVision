@@ -259,6 +259,30 @@ CK_TEST(copy_cut_and_paste_use_the_application_clipboard) {
     CK_CHECK(memo.text() == "llohe");
 }
 
+CK_TEST(memo_uses_word_and_document_navigation_with_legacy_insert_clipboard_bindings) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+
+    Memo memo;
+    memo.set_context(ckv::ui::Context{&app.theme(), &app.roles(), &app});
+    memo.set_text("one two\nthree");
+    memo.on_key(key(Key::End, Modifier::Ctrl));
+    CK_CHECK(memo.on_key(key(Key::Home, Modifier::Ctrl | Modifier::Shift)));
+    CK_CHECK(memo.selection_range() == std::make_pair(MemoPosition{0, 0}, MemoPosition{1, 5}));
+    CK_CHECK(memo.on_key(key(Key::Insert, Modifier::Ctrl)));
+    CK_CHECK(app.clipboard_text() == "one two\nthree");
+    CK_CHECK(memo.on_key(key(Key::Delete, Modifier::Shift)));
+    CK_CHECK(memo.text().empty());
+    CK_CHECK(memo.on_key(key(Key::Insert, Modifier::Shift)));
+    CK_CHECK(memo.text() == "one two\nthree");
+    CK_CHECK(memo.on_key(key(Key::End)));
+    CK_CHECK(memo.on_key(key(Key::Left, Modifier::Ctrl)));
+    CK_CHECK(memo.cursor() == (MemoPosition{1, 0}));
+}
+
 CK_TEST(undo_restores_the_previous_memo_text_cursor_and_selection) {
     Fixture f;
     auto memo = make_memo(f);

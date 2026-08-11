@@ -219,6 +219,25 @@ CK_TEST(draw_renders_the_hint_and_items_without_crashing) {
     CK_CHECK(row_text(s, 0).substr(0, 5) == "Ready");
 }
 
+CK_TEST(command_chords_automatically_use_the_shared_hotkey_accent) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{ui::std_commands::kHelp}}});
+
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    status.draw(painter);
+
+    CK_CHECK(row_text(s, 0).substr(0, 7) == "F1 Help");
+    CK_CHECK(s.at(Point{0, 0}).style().fg == f.theme.resolve(f.roles.hotkey).fg);
+    CK_CHECK(s.at(Point{2, 0}).style().fg == f.theme.resolve(f.roles.status_line_normal).fg);
+}
+
 CK_TEST(draw_stops_placing_items_that_would_start_past_the_available_width_without_crashing) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;

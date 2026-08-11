@@ -14,22 +14,37 @@ BUILD_DIR="${CKVISION_BUILD_DIR:-$REPO_ROOT/build}"
 DOCS_DIR="$REPO_ROOT/docs"
 GEN_DIR="$DOCS_DIR/generated"
 SCREENSHOTS_DIR="$GEN_DIR/screenshots"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 # ckwrite lives in the separate cworks monorepo (CK Office Write), not
 # in this repo — point CKWRITE_BIN at its built binary if it's not at
 # this default location.
 CKWRITE_BIN="${CKWRITE_BIN:-$HOME/git/cworks_dir/cworks/build/bin/ckwrite}"
 
+echo "==> Synchronizing source-backed documentation snippets"
+"$PYTHON_BIN" "$REPO_ROOT/tools/docgen/extract_snippets.py" --root "$REPO_ROOT" --write
+"$PYTHON_BIN" "$REPO_ROOT/tools/docgen/extract_snippets.py" --root "$REPO_ROOT"
+"$PYTHON_BIN" "$REPO_ROOT/tools/docgen/check_docs.py" --root "$REPO_ROOT"
+
 echo "==> Building ckVision (screenshot capture tools)"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
-    --target capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots
+    --target capture_widget_gallery_screenshots capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots \
+        capture_layouts_screenshots capture_forms_screenshots capture_workbench_screenshots \
+        capture_graphics_screenshots capture_editor_screenshots capture_terminal_screenshots
 
 echo "==> Capturing example-app screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_widget_gallery_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_filebrowser_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_hello_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_editor_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_terminal_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_layouts_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_forms_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_workbench_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_graphics_screenshots" "$SCREENSHOTS_DIR"
 
 # ckwrite's LaTeX/PDF path requires a PDF companion for every embedded
 # SVG (no TeX engine reads SVG directly) — the HTML path uses the SVGs
@@ -39,6 +54,7 @@ mkdir -p "$SCREENSHOTS_DIR"
 # warning per file rather than a hard failure.
 if command -v rsvg-convert >/dev/null 2>&1; then
     screenshot_names=(
+        widget-navigation
         gallery-initial
         gallery-typed-name
         gallery-menu-open
@@ -48,6 +64,32 @@ if command -v rsvg-convert >/dev/null 2>&1; then
         filebrowser-include-selected
         hello-initial
         hello-greeting
+        hello-menu-open
+        editor-initial
+        editor-search
+        editor-close-confirm
+        terminal-initial
+        terminal-menu
+        terminal-full-screen
+        terminal-nested
+        terminal-sixel
+        terminal-no-graphics
+        layouts-initial
+        layouts-wide
+        layouts-narrow
+        layouts-too-small
+        layouts-recovered
+        forms-initial
+        forms-invalid-dialog
+        forms-info-message
+        forms-wizard-ready
+        workbench-text
+        workbench-data
+        workbench-help
+        graphics-sixel-image
+        graphics-sixel-canvas
+        graphics-no-graphics-image
+        graphics-no-graphics-canvas
     )
     for name in "${screenshot_names[@]}"; do
         svg="$SCREENSHOTS_DIR/$name.svg"
