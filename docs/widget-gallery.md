@@ -648,7 +648,9 @@ edge/alignment/offset; use it for border metadata such as a current path.
 
 Header: `include/cvision/widgets/window.hpp`. Desktop owns modeless windows.
 Their title bars move, borders resize when enabled, and a close request may be
-vetoed by application policy. Put one content view inside each window. A
+vetoed by application policy. Resizable focused windows expose one-cell
+single-line grips at both lower corners inside their otherwise double-line
+frame; dragging the left grip anchors the right edge. Put one content view inside each window. A
 window using `DesktopGrowPolicy::KeepFilling` is permanently maximized: its
 title control automatically shows the U+2195 restore glyph even though `zoomed()`
 remains false (there is no transient geometry to restore). Its maximize/restore

@@ -295,6 +295,15 @@ CK_TEST(dragging_the_resize_grip_resizes_the_window_without_moving_its_origin) {
     CK_CHECK(w->bounds() == (Rect{5, 5, 25, 13}));
 }
 
+CK_TEST(dragging_the_bottom_left_resize_grip_resizes_while_anchoring_the_right_edge) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{5, 5, 20, 10});
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5, 5 + 9})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{5 - 4, 5 + 9 + 3})));
+    CK_CHECK(w->bounds() == (Rect{1, 5, 24, 13}));
+}
+
 CK_TEST(resizing_below_the_minimum_size_clamps_rather_than_shrinking_further) {
     Fixture f;
     auto w = make_window(f);
@@ -323,6 +332,7 @@ CK_TEST(a_non_resizable_window_ignores_a_grip_drag) {
     w->set_resizable(false);
     w->set_bounds(Rect{5, 5, 20, 10});
     CK_CHECK(!w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 19, 5 + 9})));
+    CK_CHECK(!w->on_mouse(mouse(ckv::MouseAction::Down, Point{5, 5 + 9})));
 }
 
 CK_TEST(a_click_in_the_interior_is_not_handled_by_the_window_itself) {
@@ -555,8 +565,23 @@ CK_TEST(an_active_window_draws_with_double_line_box_glyphs) {
     w->draw(painter);
     CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");
     CK_CHECK(s.at(Point{19, 0}).grapheme() == "╗");
+    CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
+    CK_CHECK(s.at(Point{19, 4}).grapheme() == "┘");
     CK_CHECK(s.at(Point{10, 4}).grapheme() == "═");
     CK_CHECK(s.at(Point{0, 2}).grapheme() == "║");
+}
+
+CK_TEST(an_active_non_resizable_window_keeps_double_line_lower_corners) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(true);
+    w->set_resizable(false);
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+    CK_CHECK(s.at(Point{0, 4}).grapheme() == "╚");
+    CK_CHECK(s.at(Point{19, 4}).grapheme() == "╝");
 }
 
 CK_TEST(reactivating_and_deactivating_a_window_switches_its_frame_style_back_and_forth) {

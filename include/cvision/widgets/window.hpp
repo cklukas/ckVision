@@ -283,7 +283,7 @@ private:
     friend class Desktop;
 
     enum class KeyboardMode { None, Move, Resize };
-    enum class DragKind { None, Move, Resize };
+    enum class DragKind { None, Move, ResizeRight, ResizeLeft };
     // close() callbacks may detach and destroy their Window. The close state
     // therefore has independent lifetime; close() retains it on its stack
     // until its final reset is complete.
@@ -295,7 +295,8 @@ private:
     void relayout_frame_overlays() noexcept;
     bool point_in_close_control(Point local) const noexcept;
     bool point_in_zoom_control(Point local) const noexcept;
-    bool point_in_resize_grip(Point local) const noexcept;
+    bool point_in_resize_right_grip(Point local) const noexcept;
+    bool point_in_resize_left_grip(Point local) const noexcept;
     Rect clamp_size(Rect bounds) const noexcept;
     Rect zoom_target() const noexcept;
     // Desktop owns this relationship.  It is deliberately not public:

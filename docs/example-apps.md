@@ -138,8 +138,11 @@ reaches past those headers.
   cannot get shadow occlusion right). Shadow coverage is binary: one
   or several overlapping casters apply the dim transform exactly once.
 - **Move/resize**: `Window`'s own mouse handling supports dragging the
-  title bar to move and dragging an edge/corner to resize, clamped to
-  `Window`'s declared min/max size.
+  title bar to move and the one-cell lower-left or lower-right corner grip
+  to resize, clamped to `Window`'s declared min/max size. A focused,
+  resizable window keeps those two lower corners single-line inside its
+  otherwise double-line frame; a non-resizable window keeps all four
+  double-line corners.
 
 ### What's verified, and how
 

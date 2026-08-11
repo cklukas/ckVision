@@ -307,8 +307,12 @@ bool Window::point_in_zoom_control(Point local) const noexcept {
     return local.y == 0 && in_range(local.x, w - 3, w - 1);  // "[]" at the last two columns before the corner
 }
 
-bool Window::point_in_resize_grip(Point local) const noexcept {
+bool Window::point_in_resize_right_grip(Point local) const noexcept {
     return resizable_ && local.x == bounds().width - 1 && local.y == bounds().height - 1;
+}
+
+bool Window::point_in_resize_left_grip(Point local) const noexcept {
+    return resizable_ && local.x == 0 && local.y == bounds().height - 1;
 }
 
 void Window::draw(scene::Painter& painter) {
@@ -339,6 +343,13 @@ void Window::draw(scene::Painter& painter) {
     // that has focus," and (unlike relying on color alone) still
     // legible on a monochrome terminal.
     painter.draw_box(b, active_ ? scene::LineStyle::Double : scene::LineStyle::Single, frame_style);
+    if (active_ && resizable_ && b.width > 1 && b.height > 1) {
+        // A focused, resizable window keeps one-cell single-line corner grips.
+        // The surrounding frame remains double-line; the two distinct corner
+        // cells are the resize affordance and consume no content space.
+        painter.draw_text(Point{0, b.height - 1}, "└", frame_style);
+        painter.draw_text(Point{b.width - 1, b.height - 1}, "┘", frame_style);
+    }
     if (b.width > 6) {
         // U+25A0 BLACK SQUARE for close, matching the convention's
         // close-control glyph (not "x" — a plain filled square reads
@@ -434,8 +445,14 @@ bool Window::on_mouse(const MouseEvent& event) {
             toggle_zoom(zoom_target());
             return true;
         }
-        if (point_in_resize_grip(local)) {
-            drag_kind_ = DragKind::Resize;
+        if (point_in_resize_right_grip(local)) {
+            drag_kind_ = DragKind::ResizeRight;
+            drag_start_mouse_ = event.cell;
+            drag_start_bounds_ = bounds();
+            return true;
+        }
+        if (point_in_resize_left_grip(local)) {
+            drag_kind_ = DragKind::ResizeLeft;
             drag_start_mouse_ = event.cell;
             drag_start_bounds_ = bounds();
             return true;
@@ -457,6 +474,14 @@ bool Window::on_mouse(const MouseEvent& event) {
         if (drag_kind_ == DragKind::Move) {
             set_bounds(Rect{drag_start_bounds_.x + dx, drag_start_bounds_.y + dy, drag_start_bounds_.width,
                              drag_start_bounds_.height});
+        } else if (drag_kind_ == DragKind::ResizeLeft) {
+            const Rect resized = clamp_size(Rect{drag_start_bounds_.x + dx, drag_start_bounds_.y,
+                                                  drag_start_bounds_.width - dx,
+                                                  drag_start_bounds_.height + dy});
+            // Keep the opposite edge anchored if min/max size clamping limits
+            // how far the left edge can travel.
+            set_bounds(Rect{drag_start_bounds_.x + drag_start_bounds_.width - resized.width,
+                             resized.y, resized.width, resized.height});
         } else {
             set_bounds(clamp_size(Rect{drag_start_bounds_.x, drag_start_bounds_.y, drag_start_bounds_.width + dx,
                                         drag_start_bounds_.height + dy}));
