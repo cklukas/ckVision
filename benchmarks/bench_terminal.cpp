@@ -1,0 +1,99 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+//
+// Terminal resilience benchmark: the measured paths are deliberately bounded
+// workloads, while the checked invariants make this a deterministic budget
+// gate instead of a machine-speed threshold.
+#include <cstdio>
+#include <string>
+
+#include "ckbench.hpp"
+#include "cvision/term/terminal_emulator.hpp"
+
+namespace {
+
+ckv::term::TerminalSubsessionOptions benchmark_options() {
+    ckv::term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 256;
+    options.max_output_bytes = 1U << 20U;
+    options.max_parser_work_per_step = 128U << 10U;
+    options.max_graphics_payload_bytes = 128U << 10U;
+    options.max_image_pixels = 2U * 1024U * 1024U;
+    return options;
+}
+
+std::string scrollback_workload() {
+    std::string output;
+    output.reserve(64U << 10U);
+    for (int line = 0; line < 900; ++line)
+        output += "terminal-resilience-line-" + std::to_string(line) +
+                  " payload remains private to the child\r\n";
+    return output;
+}
+
+std::string sixel_workload() {
+    std::string output = "\x1bPq#0;2;100;0;0";
+    output.append(64U << 10U, '~');
+    output += "\x1b\\";
+    return output;
+}
+
+}  // namespace
+
+bool run_terminal_benchmarks() {
+    const ckv::term::TerminalCapabilityProfile profile = [] {
+        auto value = ckv::term::embedded_xterm_sixel_profile();
+        value.cells = ckv::Size{120, 40};
+        value.cell_pixels = ckv::Size{8, 16};
+        return value;
+    }();
+    const ckv::term::TerminalSubsessionOptions options = benchmark_options();
+    const std::string flood = scrollback_workload();
+    const std::string sixel = sixel_workload();
+    bool budgets_hold = true;
+    std::size_t sink = 0;
+
+    ckbench::run("terminal_scrollback_flood", 4, [&] {
+        ckv::term::TerminalEmulator emulator(profile, options);
+        emulator.feed_output(flood);
+        const auto snapshot = emulator.snapshot();
+        const std::size_t scrollback_limit = options.max_scrollback_lines *
+                                              static_cast<std::size_t>(profile.cells.width);
+        sink += snapshot.scrollback.size();
+        if (snapshot.scrollback.size() > scrollback_limit ||
+            snapshot.cell_buffer.size() != static_cast<std::size_t>(profile.cells.width * profile.cells.height))
+            budgets_hold = false;
+    });
+
+    ckv::term::TerminalEmulator resized(profile, options);
+    resized.feed_output("ready");
+    ckbench::run("terminal_repeated_resize", 500, [&] {
+        const int width = sink % 2U == 0U ? 120 : 96;
+        const int height = sink % 3U == 0U ? 40 : 32;
+        resized.resize(ckv::Size{width, height}, profile.cell_pixels);
+        const auto snapshot = resized.snapshot();
+        sink += snapshot.cell_buffer.size();
+        if (snapshot.cells != ckv::Size{width, height} ||
+            snapshot.cell_buffer.size() != static_cast<std::size_t>(width * height))
+            budgets_hold = false;
+    });
+
+    ckbench::run("terminal_large_sixel_payload", 8, [&] {
+        ckv::term::TerminalEmulator emulator(profile, options);
+        emulator.set_raster_identity(52);
+        emulator.feed_output(sixel);
+        const auto snapshot = emulator.snapshot();
+        sink += snapshot.rasters.size();
+        if (snapshot.rasters.size() != 1U || snapshot.rasters.front().image == nullptr ||
+            !snapshot.diagnostics.empty())
+            budgets_hold = false;
+    });
+
+    std::printf("  (terminal budgets: scrollback <= %zu cells, parser <= %zu bytes/step, "
+                "graphics <= %zu bytes)\n",
+                options.max_scrollback_lines * static_cast<std::size_t>(profile.cells.width),
+                options.max_parser_work_per_step, options.max_graphics_payload_bytes);
+    std::printf("checksum %zu\n", sink);
+    if (!budgets_hold)
+        std::fputs("terminal budget failure: bounded workload exceeded a checked invariant\n", stderr);
+    return budgets_hold;
+}

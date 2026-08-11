@@ -344,6 +344,32 @@ CK_TEST(terminal_emulator_retains_bounded_primary_scrollback) {
     CK_CHECK(snapshot.scrollback[0].grapheme() == "a");
 }
 
+CK_TEST(terminal_emulator_survives_repeated_resize_and_noisy_scrollback_cycles) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{40, 12};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 64;
+    options.max_output_bytes = 64 * 1024;
+    options.max_parser_work_per_step = 64 * 1024;
+    options.max_printable_run_bytes = 4 * 1024;
+    term::TerminalEmulator emulator(profile, options);
+
+    for (int cycle = 0; cycle < 128; ++cycle) {
+        std::string output;
+        for (int line = 0; line < 20; ++line)
+            output += "noise-" + std::to_string(cycle) + "-" + std::to_string(line) + "\r\n";
+        emulator.feed_output(output);
+        const Size cells = cycle % 2 == 0 ? Size{40, 12} : Size{53, 15};
+        emulator.resize(cells, Size{8 + (cycle % 3), 16});
+        const term::TerminalSnapshot snapshot = emulator.snapshot();
+        CK_CHECK(snapshot.cells == cells);
+        CK_CHECK(snapshot.cell_buffer.size() == static_cast<std::size_t>(cells.width * cells.height));
+        CK_CHECK(snapshot.scrollback.size() <= options.max_scrollback_lines * 53U);
+        CK_CHECK(snapshot.diagnostics.size() <= 64U);
+    }
+}
+
 CK_TEST(terminal_emulator_keeps_scrolling_regions_private_and_preserves_their_outside_rows) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{4, 4};

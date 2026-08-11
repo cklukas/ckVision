@@ -6,8 +6,9 @@
 void run_golden_benchmarks();
 bool run_scene_benchmarks();
 bool run_editor_benchmarks();
+bool run_terminal_benchmarks();
 
 int main() {
     run_golden_benchmarks();
-    return run_scene_benchmarks() && run_editor_benchmarks() ? 0 : 1;
+    return run_scene_benchmarks() && run_editor_benchmarks() && run_terminal_benchmarks() ? 0 : 1;
 }
