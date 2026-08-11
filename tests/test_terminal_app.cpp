@@ -5,8 +5,11 @@
 // platform suite rather than pretending the shell process is portable.
 #if !defined(_WIN32)
 
+#include <array>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/terminal_view.hpp"
 #include "terminal_app.hpp"
@@ -115,6 +118,35 @@ CK_TEST(terminal_example_opens_a_contained_sixel_demo_in_an_independent_window) 
     CK_CHECK(f.example.desktop().windows().size() == 2U);
     CK_CHECK(f.example.desktop().active_window()->title() == "Sixel Demo 2");
     CK_CHECK(dynamic_cast<ckv::widgets::TerminalView*>(f.example.desktop().active_window()->content()) != nullptr);
+}
+
+CK_TEST(terminal_example_public_menu_path_survives_all_builtin_themes) {
+    using ThemeFactory = ckv::ui::Theme (*)(const ckv::ui::RoleRegistry&,
+                                             const ckv::ui::StandardRoles&);
+    constexpr std::array<ThemeFactory, 4> factories{
+        ckv::ui::make_classic_theme,
+        ckv::ui::make_dark_theme,
+        ckv::ui::make_light_theme,
+        ckv::ui::make_mono_theme,
+    };
+
+    for (const ThemeFactory factory : factories) {
+        Fixture f;
+        const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(f.app.roles());
+        f.app.theme() = factory(f.app.roles(), roles);
+        f.app.step(0);
+        CK_CHECK(f.example.desktop().windows().size() == 1U);
+
+        f.app.set_focus(f.example.desktop().top_dock());
+        CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                                ckv::Point{1, 0}, std::nullopt, ckv::Modifier::None}));
+        CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                                ckv::Point{2, 2}, std::nullopt, ckv::Modifier::None}));
+        CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                                ckv::Point{2, 2}, std::nullopt, ckv::Modifier::None}));
+        f.app.step(0);
+        CK_CHECK(f.example.desktop().windows().size() == 2U);
+    }
 }
 
 #endif

@@ -20,6 +20,19 @@
 
 namespace {
 
+enum class ThemeKind { Classic, Dark, Light, Mono };
+
+ckv::ui::Theme make_theme(const ckv::ui::RoleRegistry& registry,
+                          const ckv::ui::StandardRoles& roles, ThemeKind kind) {
+    switch (kind) {
+        case ThemeKind::Dark: return ckv::ui::make_dark_theme(registry, roles);
+        case ThemeKind::Light: return ckv::ui::make_light_theme(registry, roles);
+        case ThemeKind::Mono: return ckv::ui::make_mono_theme(registry, roles);
+        case ThemeKind::Classic: return ckv::ui::make_classic_theme(registry, roles);
+    }
+    return ckv::ui::make_classic_theme(registry, roles);
+}
+
 void write_svg(const std::filesystem::path& directory, const std::string& name,
                const ckv::term::VirtualDisplay& display) {
     std::ofstream out(directory / (name + ".svg"));
@@ -30,13 +43,14 @@ void write_svg(const std::filesystem::path& directory, const std::string& name,
 }
 
 void capture_profile(const std::filesystem::path& directory, std::string_view name,
-                     ckv::term::Capabilities capabilities, bool child_sixel) {
+                     ckv::term::Capabilities capabilities, bool child_sixel,
+                     ThemeKind theme_kind = ThemeKind::Classic) {
     ckv::term::HeadlessTerminal terminal(ckv::Size{100, 30}, capabilities);
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal, clock);
     const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
     ckv::widgets::ApplicationShell shell(
-        app, {.theme = ckv::ui::make_classic_theme(app.roles(), roles)});
+        app, {.theme = make_theme(app.roles(), roles, theme_kind)});
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cell_pixels = capabilities.cell_pixels;
     ckv::term::TerminalEmulator session(profile);
@@ -129,6 +143,12 @@ int main(int argc, char** argv) {
     const std::filesystem::path out_dir = argv[1];
     std::filesystem::create_directories(out_dir);
     capture_profile(out_dir, "terminal-initial", ckv::term::headless_no_graphics_profile(), false);
+    capture_profile(out_dir, "terminal-initial-dark", ckv::term::headless_no_graphics_profile(), false,
+                    ThemeKind::Dark);
+    capture_profile(out_dir, "terminal-initial-light", ckv::term::headless_no_graphics_profile(), false,
+                    ThemeKind::Light);
+    capture_profile(out_dir, "terminal-initial-mono", ckv::term::headless_no_graphics_profile(), false,
+                    ThemeKind::Mono);
     capture_menu(out_dir);
     capture_profile(out_dir, "terminal-sixel", ckv::term::headless_sixel_profile(), true);
     capture_profile(out_dir, "terminal-no-graphics", ckv::term::headless_no_graphics_profile(), true);

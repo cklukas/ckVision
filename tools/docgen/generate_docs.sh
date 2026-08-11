@@ -69,6 +69,9 @@ if command -v rsvg-convert >/dev/null 2>&1; then
         editor-search
         editor-close-confirm
         terminal-initial
+        terminal-initial-dark
+        terminal-initial-light
+        terminal-initial-mono
         terminal-menu
         terminal-full-screen
         terminal-nested

@@ -24,6 +24,14 @@ session uses its deterministic text fallback and emits no outer raster bytes.
 |---|---|---|---|---|
 | ![Interactive shell](generated/screenshots/terminal-initial.svg) | ![Full-screen child](generated/screenshots/terminal-full-screen.svg) | ![Nested child](generated/screenshots/terminal-nested.svg) | ![Contained Sixel](generated/screenshots/terminal-sixel.svg) | ![Sixel fallback](generated/screenshots/terminal-no-graphics.svg) |
 
+The same shell path is exercised through every built-in presentation scheme,
+so menu chrome and terminal content remain visible as the application theme
+changes:
+
+| Classic | Dark | Light | Mono |
+|---|---|---|---|
+| ![Classic terminal](generated/screenshots/terminal-initial.svg) | ![Dark terminal](generated/screenshots/terminal-initial-dark.svg) | ![Light terminal](generated/screenshots/terminal-initial-light.svg) | ![Mono terminal](generated/screenshots/terminal-initial-mono.svg) |
+
 The menu is regular ckVision chrome, including its opaque framed dropdown; it
 does not ask a child terminal to paint any parent UI. Menu pointer activation
 uses the normal press–drag–release contract: moving off an item cancels it,
