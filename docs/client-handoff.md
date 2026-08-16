@@ -36,12 +36,14 @@ terminal documentation capture.
 
 ## Terminal example troubleshooting
 
-`ckvision_terminal` starts an explicit interactive `/bin/sh` child. Its demo
-environment sets `TERM=xterm-256color`, `COLORTERM=truecolor`, and a stable
-PATH containing the standard system directories plus both conventional
-Homebrew locations. Tools such as `btop` therefore resolve by name when they
-are installed in those locations; a library client still supplies its child
-environment explicitly.
+`ckvision_terminal` starts an explicit interactive child: `$SHELL` when the
+environment names one, `/bin/sh` otherwise. Its demo environment sets
+`TERM=xterm-256color` and `COLORTERM=truecolor` and nothing else — `PATH`,
+`PS1` and the rest are inherited, so the shell's own startup files decide the
+prompt and where tools such as `btop` resolve from. A tool that runs in the
+reader's ordinary terminal therefore runs here too, and a prompt that looks
+wrong is a shell configuration to look at rather than something the example
+imposed. A library client still supplies its child environment explicitly.
 
 If text looks misaligned, use a monospaced terminal font and reset the
 terminal's cell metrics. Runtime graphics are enabled only after the terminal

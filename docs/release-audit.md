@@ -57,9 +57,11 @@ git diff --check
 
 - Terminal graphics require a usable reported pixel geometry; otherwise the
   corresponding view uses its documented deterministic cell fallback.
-- The terminal example intentionally starts `/bin/sh` and supplies its demo
-  environment explicitly. Library clients remain responsible for their own
-  child command, working directory, and environment policy.
+- The terminal example intentionally names its child command outright —
+  `$SHELL` with a `/bin/sh` fallback — and supplies its demo environment
+  explicitly, confined to `TERM` and `COLORTERM`. Library clients remain
+  responsible for their own child command, working directory, and environment
+  policy.
 - A monospaced display font and stable cell metrics are required for correct
   box geometry. The terminal guide explains recovery after a font or window
   size change.
