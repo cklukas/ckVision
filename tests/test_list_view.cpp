@@ -74,19 +74,55 @@ CK_TEST(setting_items_places_the_cursor_on_the_first_item) {
     CK_CHECK(list.cursor() == 0);
 }
 
-CK_TEST(the_initial_cursor_row_uses_the_selected_paint_role) {
+CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus) {
+    // Two lists on screen have to be distinguishable: a reader must be able
+    // to see which one their arrow keys will move. An unfocused list still
+    // marks its place, but in the muted form.
     Fixture f;
     auto list = make_list(f);
     list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.on_attached();
     list.set_items({"one", "two"});
     list.set_bounds(Rect{0, 0, 8, 2});
     ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     ckv::scene::Painter painter(surface, Rect{0, 0, 8, 2});
 
+    // Unfocused to begin with — nothing has given it the keyboard.
     list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
 
+    list.on_focus(ckv::FocusEvent{true});
+    list.draw(painter);
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected));
     CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
+
+    list.on_focus(ckv::FocusEvent{false});
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
+}
+
+CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {
+    // The selected row must differ from a normal one by its background, the
+    // way every other "this is the one" surface in the schemes does. An
+    // underline alone reads as a text field or a hyperlink.
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.on_attached();
+    list.on_focus(ckv::FocusEvent{true});
+    list.set_items({"one", "two"});
+    list.set_bounds(Rect{0, 0, 8, 2});
+    ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 2});
+    list.draw(painter);
+
+    const ckv::Style selected = surface.at(ckv::Point{0, 0}).style();
+    const ckv::Style normal = surface.at(ckv::Point{0, 1}).style();
+    CK_CHECK(selected.bg != normal.bg);
+    CK_CHECK(!has_attr(selected.attrs, ckv::Attr::Underline));
+    // The bar runs the row's full width, including past the end of the text.
+    CK_CHECK(surface.at(ckv::Point{6, 0}).style().bg == selected.bg);
 }
 
 CK_TEST(re_setting_items_resets_selection_and_cursor) {
@@ -381,4 +417,28 @@ CK_TEST(provider_backed_list_preserves_cursor_and_selection_identity_across_reor
     CK_CHECK(list.cursor_id() == 20);
     CK_CHECK(list.cursor() == 2);
     CK_CHECK(list.is_selected_id(20));
+}
+
+CK_TEST(setting_the_cursor_moves_both_the_cursor_and_the_selection) {
+    // set_selected alone marks a row chosen but leaves the cursor behind, so
+    // the list paints two highlighted rows and the next arrow key moves from
+    // the wrong place. Restoring a list to a known row has to move both.
+    Fixture f;
+    auto list = make_list(f);
+    list.set_items({"one", "two", "three"});
+    CK_CHECK(list.cursor() == 0);
+
+    list.set_cursor(2);
+    CK_CHECK(list.cursor() == 2);
+    const std::vector<std::size_t> selected = list.selected_indices();
+    CK_CHECK(selected.size() == 1U);
+    CK_CHECK(selected[0] == 2U);
+
+    // Arrow keys now continue from the cursor's new home.
+    list.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Up, ckv::Modifier::None, ""}});
+    CK_CHECK(list.cursor() == 1);
+
+    // Out of range changes nothing.
+    list.set_cursor(99);
+    CK_CHECK(list.cursor() == 1);
 }

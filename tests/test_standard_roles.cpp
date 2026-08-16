@@ -12,7 +12,13 @@ using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 
-CK_TEST(intern_standard_roles_produces_sixty_four_distinct_role_ids) {
+namespace {
+// How many roles StandardRoles names. Bump deliberately when a role is
+// added, so an accidental duplicate or a forgotten intern still fails.
+constexpr std::size_t kStandardRoleCount = 65;
+}  // namespace
+
+CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
     RoleRegistry reg;
     const StandardRoles r = intern_standard_roles(reg);
     const std::set<ckv::ui::RoleId> ids{
@@ -27,7 +33,8 @@ CK_TEST(intern_standard_roles_produces_sixty_four_distinct_role_ids) {
         r.window_title_inactive, r.window_control,         r.menu_bar_normal,
         r.menu_bar_active,
         r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
-        r.list_normal,          r.list_selected,           r.table_header,
+        r.list_normal,          r.list_selected,           r.list_selected_inactive,
+        r.table_header,
         r.memo_normal,          r.memo_focused,            r.option_normal,
         r.option_focused,       r.scrollbar_track,         r.scrollbar_thumb,
         r.image_fallback,       r.canvas_fallback,         r.text_view_text,
@@ -41,9 +48,12 @@ CK_TEST(intern_standard_roles_produces_sixty_four_distinct_role_ids) {
         r.editor_syntax_string, r.editor_syntax_number,    r.editor_syntax_comment,
         r.editor_syntax_command, r.editor_syntax_operator, r.editor_syntax_escape,
         r.editor_syntax_error};
-    CK_CHECK(ids.size() == 64);
+    // Every named role interns to its own id, and nothing is interned that
+    // the struct does not name. The count is stated once, here, rather
+    // than repeated as a literal beside every list of roles.
+    CK_CHECK(ids.size() == kStandardRoleCount);
     for (auto id : ids) CK_CHECK(id != kInvalidRole);
-    CK_CHECK(reg.size() == 64);
+    CK_CHECK(reg.size() == kStandardRoleCount);
 }
 
 CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_registry) {
@@ -52,7 +62,7 @@ CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_re
     const StandardRoles second = intern_standard_roles(reg);
     CK_CHECK(first.dialog_frame == second.dialog_frame);
     CK_CHECK(first.button_default == second.button_default);
-    CK_CHECK(reg.size() == 64);  // no duplicates from the second call
+    CK_CHECK(reg.size() == kStandardRoleCount);  // no duplicates from the second call
 }
 
 CK_TEST(standard_role_names_are_namespaced_under_ckv_prefix) {
@@ -174,7 +184,8 @@ CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
         r.window_title_inactive, r.window_control,           r.menu_bar_normal,
         r.menu_bar_active,
         r.menu_dropdown_normal,  r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
-        r.list_normal,           r.list_selected,            r.table_header,
+        r.list_normal,           r.list_selected,            r.list_selected_inactive,
+        r.table_header,
         r.memo_normal,           r.memo_focused,             r.option_normal,
         r.option_focused,        r.scrollbar_track,          r.scrollbar_thumb,
         r.image_fallback,        r.canvas_fallback,          r.text_view_text,

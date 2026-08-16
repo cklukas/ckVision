@@ -179,3 +179,34 @@ CK_TEST(property_inspector_wizard_notifications_and_tooltip_cover_utility_compon
     tooltip.hide();
     CK_CHECK(!tooltip.shown());
 }
+
+CK_TEST(a_search_box_accepts_ordinary_typed_characters) {
+    // Regression: the box only ever appended text from TextEvent, but a
+    // terminal reports typed characters as Key::Char key events — TextEvent
+    // is for IMEs and paste. The box therefore could not be typed into at
+    // all, which is the one thing it exists to do.
+    ckv::widgets::SearchBox box;
+    std::vector<std::string> observed;
+    box.on_change = [&observed](const std::string& query) { observed.push_back(query); };
+
+    const auto type = [&box](const char* text) {
+        return box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::None, text}});
+    };
+    CK_CHECK(type("v"));
+    CK_CHECK(type("i"));
+    CK_CHECK(type("m"));
+    CK_CHECK(box.query() == "vim");
+    CK_CHECK(observed.size() == 3U);
+    CK_CHECK(observed.back() == "vim");
+
+    // Backspace and Esc keep working, and Esc reports the clear.
+    CK_CHECK(box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Backspace, ckv::Modifier::None, ""}}));
+    CK_CHECK(box.query() == "vi");
+    CK_CHECK(box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}}));
+    CK_CHECK(box.query().empty());
+
+    // A modified character is a chord, not text: command routing must still
+    // be able to claim it.
+    CK_CHECK(!box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Ctrl, "q"}}));
+    CK_CHECK(box.query().empty());
+}

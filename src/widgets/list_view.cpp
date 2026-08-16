@@ -16,6 +16,16 @@ ListView::ListView(bool multi_select) : multi_select_(multi_select) {
 void ListView::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
+    if (selected_inactive_role_ == ui::kInvalidRole)
+        selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
+}
+
+void ListView::on_focus(const FocusEvent& event) {
+    if (focused_ == event.gained) return;
+    focused_ = event.gained;
+    // The selection changes appearance, so the rows have to be repainted even
+    // though nothing about the model moved.
+    invalidate();
 }
 
 void ListView::set_model(ListModel& model) {
@@ -110,6 +120,11 @@ void ListView::select_only(std::size_t index) {
 }
 
 void ListView::toggle_selected(ListItemId id) { set_selected_id(id, !is_selected_id(id)); }
+
+void ListView::set_cursor(std::size_t index) {
+    if (index >= item_count()) return;
+    move_cursor(static_cast<int>(index), /*select_on_move=*/!multi_select_);
+}
 
 void ListView::set_selected(std::size_t index, bool selected) { set_selected_id(id_at(index), selected); }
 
@@ -266,9 +281,16 @@ void ListView::draw(scene::Painter& painter) {
         // painting so a newly presented list has an unambiguous focus row.
         // Multi-select lists retain their independently selected rows while
         // also showing the current navigation cursor.
+        // A selected row wears the full highlight only while this list holds
+        // the keyboard. Two lists on screen otherwise look identically
+        // active, and the reader cannot tell which one their arrow keys will
+        // move; the muted form still says "this list's place is here".
+        const ui::RoleId selection_role =
+            focused_ || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
+                                                                    : selected_inactive_role_;
         Style style = item.id != kInvalidListItemId &&
                                   (item.id == cursor_id_ || is_selected_id(item.id))
-                          ? context().theme->resolve(selected_role_)
+                          ? context().theme->resolve(selection_role)
                           : context().theme->resolve(normal_role_);
         if (item.style) style = *item.style;
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));

@@ -486,6 +486,17 @@ bool SearchBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
     if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(query_.substr(0, query_.size() - 1)); return true; }
     if (event.chord.key == Key::Escape) { clear(); return true; }
+    // Terminals report ordinary typed characters as Key::Char events; only
+    // IMEs and bracketed paste arrive as TextEvent (the same normalization
+    // InputLine performs, for the same reason). Without this a search box
+    // cannot be typed into at all, which is its only purpose. Alt/Ctrl/Super
+    // characters stay chords so command routing still sees them; Shift is
+    // part of ordinary text production.
+    if (event.chord.key == Key::Char && !event.chord.text.empty() &&
+        !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+        !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super))
+        return on_text(TextEvent{event.chord.text, false});
     return false;
 }
 bool SearchBox::on_text(const TextEvent& event) { set_query(query_ + event.text); return true; }

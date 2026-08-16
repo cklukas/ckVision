@@ -86,7 +86,9 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     // while still borrowing input_*/dialog_*/button_* — see the
     // struct's own comment).
     r.list_normal = registry.intern("ckv.list.normal", Style{kBlack, kWhite, Attr{}});
-    r.list_selected = registry.intern("ckv.list.selected", Style{kBlack, kWhite, Attr::Underline});
+    r.list_selected = registry.intern("ckv.list.selected", Style{kBlack, kGreen, Attr{}});
+    r.list_selected_inactive =
+        registry.intern("ckv.list.selected.inactive", Style{kBlack, kLightGray, Attr{}});
     r.table_header = registry.intern("ckv.table.header", Style{kWhite, kLightGray, Attr{}});
     r.memo_normal = registry.intern("ckv.memo.normal", Style{kBlack, kWhite, Attr{}});
     r.memo_focused = registry.intern("ckv.memo.focused", Style{kBlack, kWhite, Attr::Underline});
@@ -165,7 +167,8 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.menu_dropdown_highlighted, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.menu_dropdown_disabled, Style{kGray, kLightGray, Attr::Dim});
     theme.set(roles.list_normal, Style{kBlack, kWhite, Attr{}});
-    theme.set(roles.list_selected, Style{kBlack, kWhite, Attr::Underline});
+    theme.set(roles.list_selected, Style{kBlack, kGreen, Attr{}});
+    theme.set(roles.list_selected_inactive, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.table_header, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.memo_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.memo_focused, Style{kBlack, kWhite, Attr::Underline});
@@ -254,7 +257,8 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.menu_dropdown_highlighted, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_disabled, Style{kDarkFg, kDarkPanel, Attr::Dim});
     theme.set(roles.list_normal, Style{kDarkFg, kDarkBg, Attr{}});
-    theme.set(roles.list_selected, Style{kDarkFg, kDarkBg, Attr::Underline});
+    theme.set(roles.list_selected, Style{kMonoFg, kDarkAccent, Attr{}});
+    theme.set(roles.list_selected_inactive, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.table_header, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.memo_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
@@ -312,7 +316,8 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.menu_dropdown_highlighted, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_disabled, Style{kLightFg, kLightPanel, Attr::Dim});
     theme.set(roles.list_normal, Style{kLightFg, kLightBg, Attr{}});
-    theme.set(roles.list_selected, Style{kLightFg, kLightBg, Attr::Underline});
+    theme.set(roles.list_selected, Style{kLightFg, kLightAccent, Attr{}});
+    theme.set(roles.list_selected_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.table_header, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.memo_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
@@ -370,7 +375,8 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.menu_dropdown_highlighted, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.menu_dropdown_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
     theme.set(roles.list_normal, Style{kMonoFg, kMonoBg, Attr{}});
-    theme.set(roles.list_selected, Style{kMonoFg, kMonoBg, Attr::Underline});
+    theme.set(roles.list_selected, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.list_selected_inactive, Style{kMonoGray, kMonoBg, Attr::Bold});
     theme.set(roles.table_header, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.memo_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
@@ -399,7 +405,9 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     const Style normal{white, black, Attr{}};
     const Style selected{black, white, Attr{}};
     Theme theme(registry);
-    const std::array<RoleId, 64> all_roles{
+    // Size deduced: a hand-written count only ever says how many roles there
+    // were when someone last counted.
+    const std::array all_roles{
         roles.desktop_background,    roles.dialog_frame,             roles.dialog_background,
         roles.label_text,            roles.label_mnemonic,           roles.hotkey,
         roles.static_text,           roles.help_text,                roles.button_normal,
@@ -411,6 +419,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.window_title_inactive, roles.window_control,           roles.menu_bar_normal,
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
+        roles.list_selected_inactive,
         roles.table_header,          roles.memo_normal,              roles.memo_focused,
         roles.option_normal,         roles.option_focused,           roles.scrollbar_track,
         roles.scrollbar_thumb,       roles.image_fallback,           roles.canvas_fallback,
@@ -444,6 +453,10 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.menu_dropdown_highlighted, selected);
     theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Dim});
     theme.set(roles.list_selected, selected);
+    // Bold rather than a second background: high contrast has only two
+    // colours, so the unfocused selection has to be marked by weight or it
+    // would be indistinguishable from the focused one.
+    theme.set(roles.list_selected_inactive, Style{white, black, Attr::Bold});
     theme.set(roles.table_header, Style{black, white, Attr::Bold});
     theme.set(roles.memo_focused, Style{white, black, Attr::Underline});
     theme.set(roles.option_focused, selected);

@@ -7,6 +7,8 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/list_view.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -123,33 +125,6 @@ CK_TEST(back_with_empty_history_is_a_harmless_no_op) {
     CK_CHECK(closed);
 }
 
-CK_TEST(activating_a_cross_link_navigates_to_the_linked_topic_and_back_returns) {
-    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
-    ManualClock clock;
-    Application app(term, clock);
-    Fixture f;
-    auto provider = sample_provider();
-    auto handle = make_help_viewer(provider, "intro", f.roles, app, nullptr);
-    Window* window_ptr = handle.window.get();
-    app.root().add_child(std::move(handle.window));
-
-    // Navigate to the link list (Tab from the text view) and activate
-    // its single entry ("See details" -> topic "details").
-    app.set_focus(handle.initial_focus);
-    app.focus_next();  // text view -> links list
-    app.dispatch(key(Key::Enter));  // activates the highlighted (first) link
-
-    // Now Back must return us to "intro" — verified indirectly by
-    // confirming a second Back is then a no-op (history exhausted),
-    // which would NOT be true if the first Back had never pushed us
-    // anywhere in the first place.
-    bool closed = false;
-    window_ptr->on_closed = [&closed]() { closed = true; };
-    // Tab from the links list to the Back button and press it via Enter.
-    app.focus_next();  // links list -> Back button
-    app.dispatch(key(Key::Enter));
-    CK_CHECK(!closed);  // Back must not close the dialog
-}
 
 CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_viewer) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
@@ -168,21 +143,6 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_viewer) {
     CK_CHECK(app.focused() == invoker);
 }
 
-CK_TEST(a_topic_with_no_links_produces_an_empty_link_list_without_crashing) {
-    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
-    ManualClock clock;
-    Application app(term, clock);
-    Fixture f;
-    MemoryHelpProvider provider;
-    provider.add_topic("solo", HelpTopic{"Solo", "No links here.", {}});
-    auto handle = make_help_viewer(provider, "solo", f.roles, app, nullptr);
-    Window* window_ptr = handle.window.get();
-    app.root().add_child(std::move(handle.window));
-    app.set_focus(handle.initial_focus);
-    app.focus_next();               // text view -> links list (empty)
-    app.dispatch(key(Key::Enter));  // must not crash on an empty list
-    (void)window_ptr;
-}
 
 CK_TEST(present_help_viewer_completes_after_modal_detachment) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
@@ -251,87 +211,194 @@ CK_TEST(a_help_window_on_a_small_terminal_is_clamped_rather_than_overflowing) {
     CK_CHECK(bounds.width > 0 && bounds.height > 0);
 }
 
-namespace {
-// The rendered rows of the presented help window, so a test reads what a
-// reader reads rather than trusting the widget tree's shape.
-std::vector<std::string> help_window_rows(Application& app) {
-    std::vector<std::string> rows;
-    const ckv::FrameView frame = app.current_frame();
-    for (int y = 0; y < frame.size().height; ++y) {
-        std::string row;
-        for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, y}).grapheme();
-        rows.push_back(row);
-    }
-    return rows;
-}
 
-bool any_row_contains(const std::vector<std::string>& rows, std::string_view needle) {
-    for (const std::string& row : rows)
-        if (row.find(needle) != std::string::npos) return true;
-    return false;
-}
+
+
+
+// --- The two-pane browser -------------------------------------------------
+//
+// The viewer shows every topic on the left and the current one's prose on the
+// right. That is the whole point of the arrangement: the navigation surface
+// stays put, so moving between topics never rearranges the thing the reader
+// is navigating with.
+
+namespace {
+
+struct BrowserFixture {
+    ckv::term::HeadlessTerminal term{ckv::Size{110, 32}};
+    ManualClock clock;
+    Application app{term, clock};
+    StandardRoles roles = intern_standard_roles(app.roles());
+    ckv::widgets::Desktop* desktop = nullptr;
+    MemoryHelpProvider provider;
+
+    BrowserFixture() {
+        app.theme() = make_classic_theme(app.roles(), roles);
+        desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 110, 32}));
+        provider.add_topic("alpha", HelpTopic{"Alpha", "About alpha.", {{"beta", "Beta"}}});
+        provider.add_topic("beta", HelpTopic{"Beta", "About beta, which mentions zebra.", {}});
+        provider.add_topic("gamma", HelpTopic{"Gamma", "About gamma.", {}});
+    }
+
+    std::vector<std::string> rows() {
+        std::vector<std::string> out;
+        const ckv::FrameView frame = app.current_frame();
+        for (int y = 0; y < frame.size().height; ++y) {
+            std::string row;
+            for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, y}).grapheme();
+            out.push_back(row);
+        }
+        return out;
+    }
+
+    bool shows(std::string_view needle) {
+        for (const std::string& row : rows())
+            if (row.find(needle) != std::string::npos) return true;
+        return false;
+    }
+
+    // The viewer's own topic list, found by shape rather than by reaching
+    // into the factory's internals.
+    ckv::widgets::ListView* index_list() {
+        ckv::widgets::ListView* found = nullptr;
+        const std::function<void(ckv::ui::View&)> walk = [&](ckv::ui::View& view) {
+            if (auto* const list = dynamic_cast<ckv::widgets::ListView*>(&view); list != nullptr && found == nullptr)
+                found = list;
+            for (const auto& child : view.children()) walk(*child);
+        };
+        walk(app.root());
+        return found;
+    }
+
+    ckv::widgets::SearchBox* search_box() {
+        ckv::widgets::SearchBox* found = nullptr;
+        const std::function<void(ckv::ui::View&)> walk = [&](ckv::ui::View& view) {
+            if (auto* const box = dynamic_cast<ckv::widgets::SearchBox*>(&view); box != nullptr && found == nullptr)
+                found = box;
+            for (const auto& child : view.children()) walk(*child);
+        };
+        walk(app.root());
+        return found;
+    }
+};
+
 }  // namespace
 
-CK_TEST(the_cross_links_are_labelled_so_the_list_reads_as_navigation) {
-    // Regression: the links were an unlabelled box that changed the page when
-    // clicked. Nothing said it was navigation, so it read as a text field.
-    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
-    ManualClock clock;
-    Application app(term, clock);
-    StandardRoles roles = intern_standard_roles(app.roles());
-    app.theme() = make_classic_theme(app.roles(), roles);
-    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
-    auto provider = sample_provider();
+CK_TEST(the_viewer_lists_every_topic_beside_the_one_it_is_showing) {
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
 
-    auto presentation = present_help_viewer(provider, "intro", app, *desktop, roles);
-    app.step(0);
-    const std::vector<std::string> rows = help_window_rows(app);
-    CK_CHECK(any_row_contains(rows, "Links to other help topics:"));
-    CK_CHECK(any_row_contains(rows, "See details"));  // the one link of "intro"
+    // The prose of the current topic...
+    CK_CHECK(f.shows("About alpha."));
+    // ...and every topic there is, including the ones not being shown.
+    CK_CHECK(f.shows("Alpha"));
+    CK_CHECK(f.shows("Beta"));
+    CK_CHECK(f.shows("Gamma"));
 }
 
-CK_TEST(a_topic_with_no_links_shows_neither_the_list_nor_its_heading) {
-    // An empty box under a heading promising links is worse than no box: it
-    // reads as something the reader failed to fill in.
-    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
-    ManualClock clock;
-    Application app(term, clock);
-    StandardRoles roles = intern_standard_roles(app.roles());
-    app.theme() = make_classic_theme(app.roles(), roles);
-    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
-    MemoryHelpProvider provider;
-    provider.add_topic("alone", HelpTopic{"Alone", "This topic links nowhere.", {}});
+CK_TEST(the_current_topic_is_the_highlighted_row_in_the_index) {
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "gamma", f.app, *f.desktop, f.roles);
+    f.app.step(0);
 
-    auto presentation = present_help_viewer(provider, "alone", app, *desktop, roles);
-    app.step(0);
-    const std::vector<std::string> rows = help_window_rows(app);
-    CK_CHECK(any_row_contains(rows, "This topic links nowhere."));
-    CK_CHECK(!any_row_contains(rows, "Links to other help topics:"));
+    ckv::widgets::ListView* const list = f.index_list();
+    CK_CHECK(list != nullptr);
+    // index() sorts by title: Alpha, Beta, Gamma.
+    const std::vector<std::size_t> selected = list->selected_indices();
+    CK_CHECK(selected.size() == 1U);
+    CK_CHECK(selected[0] == 2U);
 }
 
-CK_TEST(the_link_list_is_exactly_as_tall_as_it_has_links) {
-    // A fixed height left blank rows below the last link, which is what made
-    // the list look like an input field with room to type in.
-    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
-    ManualClock clock;
-    Application app(term, clock);
-    StandardRoles roles = intern_standard_roles(app.roles());
-    app.theme() = make_classic_theme(app.roles(), roles);
-    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
-    MemoryHelpProvider provider;
-    provider.add_topic("one", HelpTopic{"One", "Body.", {{"two", "Second topic"}}});
-    provider.add_topic("two", HelpTopic{"Two", "Body.",
-                                        {{"one", "First topic"}, {"three", "Third"}, {"four", "Fourth"}}});
+CK_TEST(choosing_another_topic_changes_the_prose_but_not_the_index) {
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    CK_CHECK(f.shows("About alpha."));
 
-    auto single = present_help_viewer(provider, "one", app, *desktop, roles);
-    app.step(0);
-    const int single_height = desktop->windows()[0]->bounds().height;
-    desktop->windows()[0]->close();
-    app.step(0);
+    ckv::widgets::ListView* const list = f.index_list();
+    CK_CHECK(list != nullptr);
+    f.app.set_focus(list);
+    f.app.dispatch(key(Key::Down));  // Alpha -> Beta
+    f.app.step(0);
 
-    auto several = present_help_viewer(provider, "two", app, *desktop, roles);
-    app.step(0);
-    const int several_height = desktop->windows()[0]->bounds().height;
-    // Three links need two more rows than one link; nothing else differs.
-    CK_CHECK(several_height == single_height + 2);
+    CK_CHECK(f.shows("About beta"));
+    CK_CHECK(!f.shows("About alpha."));
+    // The list itself is untouched: every topic is still offered, which is
+    // what makes the arrangement navigable rather than surprising.
+    CK_CHECK(f.shows("Alpha"));
+    CK_CHECK(f.shows("Beta"));
+    CK_CHECK(f.shows("Gamma"));
+}
+
+CK_TEST(searching_narrows_the_index_to_the_matching_topics) {
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    ckv::widgets::SearchBox* const search = f.search_box();
+    CK_CHECK(search != nullptr);
+
+    // "zebra" appears only in Beta's body, so a body match counts too.
+    search->set_query("zebra");
+    if (search->on_change) search->on_change("zebra");
+    f.app.step(0);
+    CK_CHECK(f.shows("Beta"));
+    CK_CHECK(!f.shows("Gamma"));
+
+    // Clearing restores the whole index.
+    search->set_query("");
+    if (search->on_change) search->on_change("");
+    f.app.step(0);
+    CK_CHECK(f.shows("Alpha"));
+    CK_CHECK(f.shows("Beta"));
+    CK_CHECK(f.shows("Gamma"));
+}
+
+CK_TEST(a_search_does_not_move_the_reader_off_the_topic_they_are_reading) {
+    // Filtering is about finding, not going. The prose pane must stay where
+    // it was until the reader actually chooses something.
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    ckv::widgets::SearchBox* const search = f.search_box();
+    CK_CHECK(search != nullptr);
+
+    search->set_query("gamma");
+    if (search->on_change) search->on_change("gamma");
+    f.app.step(0);
+    CK_CHECK(f.shows("About alpha."));
+}
+
+CK_TEST(a_topics_curated_cross_references_are_named_in_its_prose) {
+    // The links still carry the author's judgement about what relates to
+    // what; they are prose now because every topic they name is already in
+    // the pane on the left.
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    CK_CHECK(f.shows("See also:"));
+
+    // A topic with no cross-references says nothing about them.
+    auto second = present_help_viewer(f.provider, "gamma", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    CK_CHECK(f.shows("About gamma."));
+}
+
+CK_TEST(the_index_cursor_starts_on_the_topic_being_shown) {
+    // Regression: the current topic was marked selected but the cursor stayed
+    // on the first row, so two rows looked highlighted and the first arrow
+    // key jumped to the second topic instead of the one after the current.
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "beta", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+
+    ckv::widgets::ListView* const list = f.index_list();
+    CK_CHECK(list != nullptr);
+    CK_CHECK(list->cursor() == 1);  // Alpha, Beta, Gamma
+    CK_CHECK(f.shows("About beta"));
+
+    f.app.set_focus(list);
+    f.app.dispatch(key(Key::Down));
+    f.app.step(0);
+    CK_CHECK(f.shows("About gamma."));  // the topic after Beta, not before it
 }

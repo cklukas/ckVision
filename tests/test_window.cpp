@@ -674,9 +674,10 @@ CK_TEST(the_close_control_draws_a_filled_square_glyph) {
     Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(true);  // controls wear their own colour on the active window
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
-    CK_CHECK(s.at(Point{1, 0}).grapheme() == "─");
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == "═");  // active frames are double-line
     CK_CHECK(s.at(Point{2, 0}).grapheme() == "[");
     CK_CHECK(s.at(Point{3, 0}).grapheme() == "■");
     CK_CHECK(s.at(Point{4, 0}).grapheme() == "]");
@@ -688,6 +689,7 @@ CK_TEST(the_zoom_control_draws_an_up_arrow_when_not_zoomed) {
     Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     auto w = make_window(f);
     w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(true);  // controls wear their own colour on the active window
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
     CK_CHECK(!w->zoomed());
@@ -1104,4 +1106,47 @@ CK_TEST(a_window_too_narrow_for_two_wide_grips_keeps_them_a_cell_each) {
     CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
     CK_CHECK(s.at(Point{3, 4}).grapheme() == "┘");
     CK_CHECK(s.at(Point{1, 4}).grapheme() != "─");
+}
+
+CK_TEST(a_resize_grip_wears_the_control_colour_not_the_frames) {
+    // A grip is something to take hold of, like the close and zoom
+    // controls, and the convention colours all three alike. Drawn as frame,
+    // the one part of the border you can grab looks like the parts you
+    // cannot.
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+
+    const ckv::Style control = f.theme.resolve(f.roles.window_control);
+    const ckv::Style frame = f.theme.resolve(f.roles.window_frame_active);
+    CK_CHECK(control.fg != frame.fg);  // the test would prove nothing otherwise
+    // Both corners and the widened cells beside them.
+    for (const int x : {0, 1, 18, 19}) CK_CHECK(s.at(Point{x, 4}).style().fg == control.fg);
+    // The close glyph already wore it; the brackets around it stay frame.
+    CK_CHECK(s.at(Point{3, 0}).style().fg == control.fg);
+    CK_CHECK(s.at(Point{2, 0}).style().fg == frame.fg);
+    // Plain border between the grips is still border.
+    CK_CHECK(s.at(Point{9, 4}).style().fg == frame.fg);
+}
+
+CK_TEST(an_inactive_windows_controls_fall_back_to_its_frame) {
+    // The colour is what marks the window you are working in; a desktop of
+    // windows each showing live controls has nothing to point at.
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(false);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+
+    const ckv::Style inactive = f.theme.resolve(f.roles.window_frame_inactive);
+    CK_CHECK(s.at(Point{3, 0}).style().fg == inactive.fg);  // close glyph
+    CK_CHECK(s.at(Point{2, 0}).style().fg == inactive.fg);  // its bracket
 }

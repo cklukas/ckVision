@@ -68,6 +68,10 @@ public:
         normal_role_ = normal_role;
         selected_role_ = selected_role;
     }
+    // The selection's appearance while the keyboard is elsewhere. Separate
+    // from the two above so an existing caller that overrides only the
+    // focused pair keeps working.
+    void set_selected_inactive_role_override(ui::RoleId role) noexcept { selected_inactive_role_ = role; }
 
     // Borrows `model`; it must outlive this ListView or be replaced/cleared
     // before destruction. Changing models clears identities; model_changed()
@@ -104,6 +108,16 @@ public:
 
     int cursor() const noexcept { return cursor_; }  // display index, -1 if empty
 
+    // Puts the cursor on `index` and scrolls it into view, selecting it too
+    // in a single-select list — where "the cursor row" and "the selected row"
+    // are the same idea. set_selected() alone cannot do this: it marks a row
+    // as chosen but leaves the cursor where it was, so the list paints two
+    // highlighted rows and the next arrow key moves from the wrong place.
+    // A caller restoring a list to a known position — which topic a help
+    // viewer is showing, which file a dialog reopened on — needs the cursor
+    // to move, not just the selection. Out-of-range is a harmless no-op.
+    void set_cursor(std::size_t index);
+
     // Index callbacks remain useful for compact materialized clients. Provider
     // clients should use the identity callbacks, which survive reordering.
     std::function<void(std::size_t)> on_activate;
@@ -116,6 +130,7 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
+    void on_focus(const FocusEvent& event) override;
 
 private:
     static constexpr std::int64_t kDoubleClickIntervalNanos = 500'000'000;
@@ -145,6 +160,8 @@ private:
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
+    bool focused_ = false;
 };
 
 }  // namespace ckv::widgets

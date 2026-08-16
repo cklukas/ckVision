@@ -67,7 +67,17 @@ struct StandardRoles {
     // values match exactly what each widget rendered before this
     // split, so no widget's appearance changes — only the indirection.
     RoleId list_normal;      // ListView / TreeView: an unselected row
-    RoleId list_selected;    // ListView / TreeView: the cursor row
+    // ListView / TreeView: the cursor row while the list holds the keyboard.
+    // A highlight bar — a background the row's whole width — because that is
+    // what "this row is the one" means everywhere else in these schemes. An
+    // underline instead reads as a text field or a hyperlink, and says
+    // nothing about which pane the keyboard is in.
+    RoleId list_selected;
+    // The same row while the keyboard is somewhere else. A reader with two
+    // lists on screen has to be able to tell which one their arrow keys will
+    // move, and a selection that looks identical either way cannot say.
+    // Muted rather than absent: the list must still remember its place.
+    RoleId list_selected_inactive;
     RoleId table_header;     // Table: the column-header row
     RoleId memo_normal;
     RoleId memo_focused;

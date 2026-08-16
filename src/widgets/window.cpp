@@ -378,8 +378,16 @@ void Window::draw(scene::Painter& painter) {
     // A control contributes its foreground/attributes only. Its background
     // must remain the active or inactive frame beneath it, including when a
     // dialog overrides the window's chrome roles.
+    //
+    // Only the active window's controls carry their own colour. On an
+    // inactive one they fall back to the frame, so a desktop of windows
+    // shows one set of live controls rather than several competing for the
+    // eye — the colour is what marks the window you are working in.
     const Style control_role_style = theme.resolve(control_role_);
-    const Style control_style{control_role_style.fg, frame_style.bg, frame_style.attrs | control_role_style.attrs};
+    const Style control_style =
+        active_ ? Style{control_role_style.fg, frame_style.bg,
+                        frame_style.attrs | control_role_style.attrs}
+                : frame_style;
 
     // The interior fills with the SAME style as the frame — matching
     // the convention's own "the window's palette is uniform across
@@ -407,13 +415,18 @@ void Window::draw(scene::Painter& painter) {
         // eye looks for the handle, but one cell is a hard thing to hit, and
         // the neighbouring border cells cost nothing to give away — they are
         // frame, not content.
+        // Drawn in the control colour, not the frame's: a grip is something
+        // to take hold of, the same kind of thing as the close and zoom
+        // controls, and the convention colours all three alike. Rendering it
+        // as frame makes the one part of the border you can grab look like
+        // the parts you cannot.
         const int grip = resize_grip_width();
         const int y = b.height - 1;
-        painter.draw_text(Point{0, y}, "└", frame_style);
-        painter.draw_text(Point{b.width - 1, y}, "┘", frame_style);
+        painter.draw_text(Point{0, y}, "└", control_style);
+        painter.draw_text(Point{b.width - 1, y}, "┘", control_style);
         for (int i = 1; i < grip; ++i) {
-            painter.draw_text(Point{i, y}, "─", frame_style);
-            painter.draw_text(Point{b.width - 1 - i, y}, "─", frame_style);
+            painter.draw_text(Point{i, y}, "─", control_style);
+            painter.draw_text(Point{b.width - 1 - i, y}, "─", control_style);
         }
     }
     if (b.width > 6) {

@@ -6,8 +6,8 @@
 
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/desktop.hpp"
-#include "cvision/widgets/label.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/text_view.hpp"
 
@@ -80,38 +80,46 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
 
+    // Two panes: every topic on the left, permanently, and the current one's
+    // prose on the right. The navigation surface therefore never moves under
+    // the reader — the whole difficulty with a viewer that showed only the
+    // current topic's outgoing links was that clicking one replaced both the
+    // page and the list of ways off it, so nothing on screen stayed still
+    // long enough to be understood as navigation.
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
 
+    auto panes = std::make_unique<Row>();
+    panes->set_spacing(1);
+
+    // Left pane: search over the index, then the index itself. Spacing zero —
+    // a filter belongs against the list it filters, and a blank row between
+    // them would read as a separation that isn't there.
+    auto index_pane = std::make_unique<Column>();
+    index_pane->set_spacing(0);
+
+    auto search_box = std::make_unique<SearchBox>();
+    auto* search_ptr =
+        static_cast<SearchBox*>(index_pane->add_item(std::move(search_box), LayoutSpec{SizePolicy::Fixed, 1}));
+
+    auto index_list = std::make_unique<ListView>(/*multi_select=*/false);
+    index_list->set_scrollbar_auto_hide(true);
+    index_list->set_preferred_size(Size{24, 12});
+    auto* index_list_ptr =
+        static_cast<ListView*>(index_pane->add_item(std::move(index_list), LayoutSpec{SizePolicy::Expanding, 1}));
+    panes->add_item(std::move(index_pane), LayoutSpec{SizePolicy::Fixed, 1});
+
     auto text_view = std::make_unique<TextView>();
-    // A help window that is not told how much room its prose wants gets sized
-    // by the only children that do ask for room — the links list and the
-    // button row — and comes out a couple of dozen cells wide, with the topic
-    // clipped away entirely. Nothing else can supply this: a TextView holds
-    // whatever text it is later given, and the placement pass runs before any
-    // topic has been loaded. So the viewer states the shape help wants,
-    // rather than the shape its buttons happen to need: a readable prose
-    // column, deep enough to be worth scrolling. Placement clamps both to the
-    // desktop, and the view scrolls, so a small terminal loses no content.
-    text_view->set_preferred_size(Size{60, 12});
+    // A viewer that is not told how much room its prose wants gets sized by
+    // whatever children do ask for room, and comes out too narrow to read.
+    // Nothing else can supply this: a TextView holds whatever text it is
+    // later given, and placement runs before any topic has been loaded.
+    // Placement clamps to the desktop and the view scrolls, so a small
+    // terminal loses no content.
+    text_view->set_preferred_size(Size{54, 12});
     auto* text_view_ptr =
-        static_cast<TextView*>(column->add_item(std::move(text_view), LayoutSpec{SizePolicy::Expanding, 1}));
-
-    // The cross-links need saying what they are. On their own they are a box
-    // that changes the page when clicked, which reads as anything but
-    // navigation — a text field, most likely, since that is what a bordered
-    // box holding one line of text usually is.
-    auto links_label = std::make_unique<Label>(strings.help_links);
-    auto* links_label_ptr =
-        static_cast<Label*>(column->add_item(std::move(links_label), LayoutSpec{SizePolicy::Fixed, 1}));
-
-    auto links_list = std::make_unique<ListView>(/*multi_select=*/false);
-    // The links almost always fit. A bar that cannot scroll is the only thing
-    // suggesting there is more here than the reader can see.
-    links_list->set_scrollbar_auto_hide(true);
-    auto* links_list_ptr =
-        static_cast<ListView*>(column->add_item(std::move(links_list), LayoutSpec{SizePolicy::Fixed, 1}));
-    links_label_ptr->set_buddy(links_list_ptr);
+        static_cast<TextView*>(panes->add_item(std::move(text_view), LayoutSpec{SizePolicy::Expanding, 1}));
+    column->add_item(std::move(panes), LayoutSpec{SizePolicy::Expanding, 1});
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
@@ -128,44 +136,91 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 
     auto current_key = std::make_shared<std::string>(std::move(initial_topic_key));
     auto history = std::make_shared<std::vector<std::string>>();
-    auto link_keys = std::make_shared<std::vector<std::string>>();
-    auto refresh = std::make_shared<std::function<void()>>();
-    *refresh = [&provider, current_key, link_keys, text_view_ptr, links_list_ptr, links_label_ptr]() {
-        const HelpTopic t = provider.topic(*current_key);
-        text_view_ptr->set_text(t.title + "\n\n" + t.body);
-        std::vector<std::string> labels;
-        link_keys->clear();
-        for (const auto& [key, label] : t.links) {
-            link_keys->push_back(key);
-            labels.push_back(label);
-        }
-        const int count = static_cast<int>(labels.size());
-        links_list_ptr->set_items(std::move(labels));
-        // Exactly as many rows as there are links. A fixed height left blank
-        // rows under the last one, which is what made the list look like an
-        // input field with room to type in. Bounded so a topic that links to
-        // a great many others scrolls instead of crowding out the prose.
-        links_list_ptr->set_preferred_size(Size{0, std::clamp(count, 1, 6)});
-        // A topic with no links shows neither the list nor its heading: an
-        // empty box under a heading promising links is worse than no box.
-        // Hidden rather than removed, so the pair survives navigation to a
-        // topic that does have links.
-        links_label_ptr->set_visible(count > 0);
-        links_list_ptr->set_visible(count > 0);
-    };
-    (*refresh)();
+    // The keys behind the rows currently listed, which is the filtered set
+    // rather than the whole index once a search narrows it.
+    auto listed_keys = std::make_shared<std::vector<std::string>>();
+    // Set while a callback is itself rewriting the list, so the selection
+    // changes that causes cannot be mistaken for the reader choosing a topic.
+    auto updating = std::make_shared<bool>(false);
 
-    links_list_ptr->on_activate = [current_key, history, link_keys, refresh](std::size_t index) {
-        if (index >= link_keys->size()) return;
-        history->push_back(*current_key);
-        *current_key = (*link_keys)[index];
-        (*refresh)();
+    auto show_topic = std::make_shared<std::function<void()>>();
+    *show_topic = [&provider, current_key, text_view_ptr, &strings]() {
+        const HelpTopic t = provider.topic(*current_key);
+        std::string page = t.title + "\n\n" + t.body;
+        // Curated cross-references still carry meaning the index cannot: they
+        // say which topics the author thought related. They are prose here
+        // rather than a second navigable list, because every topic they name
+        // is already one click away in the pane on the left.
+        if (!t.links.empty()) {
+            page += "\n\n" + strings.help_see_also;
+            for (std::size_t i = 0; i < t.links.size(); ++i)
+                page += (i == 0 ? " " : ", ") + t.links[i].second;
+        }
+        text_view_ptr->set_text(std::move(page));
     };
-    back_ptr->on_press = [current_key, history, refresh]() {
+
+    // Rebuilds the left pane from the index, or from a search when the box
+    // holds a query, and keeps the current topic highlighted if it survived
+    // the filter.
+    auto refresh_index = std::make_shared<std::function<void()>>();
+    *refresh_index = [&provider, current_key, listed_keys, index_list_ptr, search_ptr, updating]() {
+        const std::string query = search_ptr->query();
+        const std::vector<HelpIndexEntry> entries =
+            query.empty() ? provider.index() : provider.search(query);
+        std::vector<std::string> labels;
+        listed_keys->clear();
+        for (const HelpIndexEntry& entry : entries) {
+            listed_keys->push_back(entry.key);
+            labels.push_back(entry.title);
+        }
+        *updating = true;
+        index_list_ptr->set_items(std::move(labels));
+        // Put the cursor where the reader actually is, so the highlight marks
+        // the topic on show and the next arrow key moves from there. A filter
+        // that hides the current topic simply leaves the cursor at the top
+        // rather than moving the reader somewhere they did not ask to go.
+        for (std::size_t i = 0; i < listed_keys->size(); ++i) {
+            if ((*listed_keys)[i] != *current_key) continue;
+            index_list_ptr->set_cursor(i);
+            break;
+        }
+        *updating = false;
+    };
+
+    // One entry point for "go to this topic", so the pane, the highlight and
+    // the history can never disagree about which topic is current.
+    auto navigate_to = std::make_shared<std::function<void(std::string, bool)>>();
+    *navigate_to = [current_key, history, show_topic, refresh_index](std::string key, bool record) {
+        if (key.empty() || key == *current_key) return;
+        if (record) history->push_back(*current_key);
+        *current_key = std::move(key);
+        (*show_topic)();
+        (*refresh_index)();
+    };
+
+    (*show_topic)();
+    (*refresh_index)();
+
+    // Selecting in the index navigates: with the list permanently on screen,
+    // moving the highlight IS the request, and demanding a separate Enter
+    // would leave the highlight pointing at a topic the pane is not showing.
+    index_list_ptr->on_selection_changed = [listed_keys, navigate_to, updating](std::size_t index) {
+        if (*updating || index >= listed_keys->size()) return;
+        (*navigate_to)((*listed_keys)[index], /*record=*/true);
+    };
+    index_list_ptr->on_activate = [listed_keys, navigate_to, updating](std::size_t index) {
+        if (*updating || index >= listed_keys->size()) return;
+        (*navigate_to)((*listed_keys)[index], /*record=*/true);
+    };
+    search_ptr->on_change = [refresh_index](const std::string&) { (*refresh_index)(); };
+    search_ptr->on_clear = [refresh_index]() { (*refresh_index)(); };
+
+    back_ptr->on_press = [current_key, history, show_topic, refresh_index]() {
         if (history->empty()) return;
         *current_key = history->back();
         history->pop_back();
-        (*refresh)();
+        (*show_topic)();
+        (*refresh_index)();
     };
     close_ptr->on_press = [window_ptr]() { window_ptr->close(); };
 
@@ -183,7 +238,11 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
         if (!held_window_liveness.expired()) schedule_self_detach(*held_window, app);
     };
 
-    return WindowHandle{std::move(window), text_view_ptr};
+    // The index takes the keyboard first. It is what the reader came to use —
+    // arrow keys move between topics straight away — and it is the surface
+    // whose highlight tells them where they are. Tab reaches the prose to
+    // scroll it, and the search box above.
+    return WindowHandle{std::move(window), index_list_ptr};
 }
 
 HelpViewerPresentation present_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
