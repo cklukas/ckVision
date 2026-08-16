@@ -339,7 +339,12 @@ add_test(NAME install_package_smoke
         -DCKVISION_EXPECT_TERMINAL=$<BOOL:$<TARGET_EXISTS:ckvision_terminal>>
         -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/install_package_smoke.cmake)
-set_tests_properties(install_package_smoke PROPERTIES LABELS "package;install;client" TIMEOUT 120)
+# Both package tests drive `cmake --install` / `cmake --build` against the
+# one shared build tree. Run concurrently under `ctest -j`, they race each
+# other over the same object files and one of them fails on a half-written
+# artifact -- a flake in the gate that says nothing about the library.
+set_tests_properties(install_package_smoke PROPERTIES LABELS "package;install;client" TIMEOUT 120
+    RESOURCE_LOCK ckvision_build_tree)
 
 if(TARGET ckvision_terminal AND TARGET capture_terminal_screenshots)
     add_test(NAME client_bundle_smoke
@@ -348,7 +353,8 @@ if(TARGET ckvision_terminal AND TARGET capture_terminal_screenshots)
             -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
             -DCKVISION_BUNDLE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/client-bundle
             -P ${CMAKE_CURRENT_SOURCE_DIR}/client_bundle_smoke.cmake)
-    set_tests_properties(client_bundle_smoke PROPERTIES LABELS "package;handoff;artifact;client" TIMEOUT 180)
+    set_tests_properties(client_bundle_smoke PROPERTIES LABELS "package;handoff;artifact;client" TIMEOUT 180
+        RESOURCE_LOCK ckvision_build_tree)
 endif()
 
 # Python is build/CI tooling, not a library dependency (D-004 untouched).
