@@ -382,3 +382,97 @@ CK_TEST(wire_dialog_window_honors_an_explicit_resizable_opt_in) {
 
     CK_CHECK(window.resizable());
 }
+
+// --- Check fields (plans/07 U1-d, Check slice) -------------------------
+
+CK_TEST(a_check_field_materializes_a_checkbox_carrying_its_own_label) {
+    // A yes/no question is one sentence — "[X] Start terminals as login
+    // shells" — so the box owns the text. There is no separate Label to put
+    // in a caption column, and the text field slot stays empty.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(
+        FieldDescriptor{.label = "&Ask every time", .kind = ckv::widgets::FieldKind::Check});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.checks.size() == 1U);
+    CK_CHECK(dialog.checks[0] != nullptr);
+    CK_CHECK(dialog.inputs.size() == 1U);
+    CK_CHECK(dialog.inputs[0] == nullptr);
+    CK_CHECK(dialog.labels[0] == nullptr);
+}
+
+CK_TEST(a_check_field_starts_in_the_state_the_descriptor_asked_for) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(
+        FieldDescriptor{.label = "On", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
+    descriptor.fields.push_back(
+        FieldDescriptor{.label = "Off", .kind = ckv::widgets::FieldKind::Check, .initial_checked = false});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.checks[0]->checked(0));
+    CK_CHECK(!dialog.checks[1]->checked(0));
+}
+
+CK_TEST(a_text_field_beside_a_check_field_keeps_its_own_index_in_both_arrays) {
+    // The parallel arrays are the contract: field i's answer is at index i
+    // whatever kind field i is, so a caller never has to count kinds to find
+    // its own value.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&Name:", "typed", nullptr});
+    descriptor.fields.push_back(
+        FieldDescriptor{.label = "&Flag", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.inputs[0] != nullptr && dialog.checks[0] == nullptr);
+    CK_CHECK(dialog.inputs[1] == nullptr && dialog.checks[1] != nullptr);
+    CK_CHECK(dialog.labels[0] != nullptr);  // the text field's caption
+    CK_CHECK(dialog.labels[1] == nullptr);  // the box carries its own
+}
+
+CK_TEST(a_validator_on_a_check_field_is_not_asked_about_text_that_does_not_exist) {
+    // validate_dialog walks the fields by index; a checkbox has no text and
+    // no invalid marker, and must not be dereferenced as though it had.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    bool validator_ran = false;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Flag",
+                                                .validate =
+                                                    [&](const std::string&) {
+                                                        validator_ran = true;
+                                                        return false;
+                                                    },
+                                                .kind = ckv::widgets::FieldKind::Check});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(validate_dialog(dialog, descriptor, app));
+    CK_CHECK(!validator_ran);
+}
+
+CK_TEST(a_note_field_is_text_the_form_says_rather_than_a_field_it_asks) {
+    // A settings dialog has to be able to explain itself. The note is a
+    // Label: no input, no box, nothing to Tab to, and an empty answer.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "Applies to terminals opened from now on.", .kind = ckv::widgets::FieldKind::Note});
+    descriptor.fields.push_back(
+        FieldDescriptor{.label = "&Enabled", .kind = ckv::widgets::FieldKind::Check});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.labels[0] != nullptr);
+    CK_CHECK(dialog.inputs[0] == nullptr);
+    CK_CHECK(dialog.checks[0] == nullptr);
+    // The checkbox below it is what the keyboard lands on, not the prose.
+    CK_CHECK(dialog.initial_focus == dialog.checks[1]);
+}

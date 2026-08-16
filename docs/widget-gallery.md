@@ -416,7 +416,10 @@ desktop-wide tile/cascade commands; do not use a global desktop singleton.
 ## FieldDescriptor
 
 Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator
-record used to materialize a descriptor dialog.
+record used to materialize a descriptor dialog. `kind` selects the control:
+`Text` (an `InputLine`, the default), `Check` (a checkbox carrying the label
+as its own text) or `Note` (text the form states rather than asks). See
+[Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
 
 ## ButtonDescriptor
 

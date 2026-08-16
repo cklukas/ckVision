@@ -79,6 +79,41 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 
 ![Invalid profile dialog](generated/screenshots/forms-invalid-dialog.svg)
 
+## Fields that are not text
+
+`FieldDescriptor::kind` selects what a field materializes as. `Text` is the
+default and is what every descriptor written before the enum existed still
+gets; `Check` is a single checkbox carrying `label` as its own text; `Note` is
+text the form states rather than asks.
+
+```cpp
+descriptor.fields.push_back(widgets::FieldDescriptor{
+    .label = "&Ask for a filename every time",
+    .kind = widgets::FieldKind::Check,
+    .initial_checked = true});
+descriptor.fields.push_back(widgets::FieldDescriptor{
+    .label = "  Otherwise each file is named from its job and the time.",
+    .kind = widgets::FieldKind::Note});
+```
+
+`MaterializedDialog::labels`, `inputs` and `checks`, and `DialogResult::values`
+and `checked`, are all parallel to `descriptor.fields`: field *i*'s widget and
+answer sit at index *i* whatever kind it is, so a caller never counts kinds to
+find its own value. The slots a field did not fill are null (or empty), and a
+`Check` field is skipped by validation — it has no text to validate and no
+invalid state to show.
+
+A checkbox is ticked with `Space`. `Enter` is left to the form, so it reaches
+the default button from anywhere in the dialog, a focused checkbox or radio
+group included.
+
+Notes take no focus, so `Tab` still moves between the fields a reader answers.
+Consecutive notes lay out as one paragraph with no blank row between them: the
+form's own spacing separates questions, not the lines of a sentence.
+
+`Radio`, `Combo` and `Number` field kinds are not implemented; a form needing
+those is still built by hand.
+
 ## Standard message boxes and strings
 
 `present_message_box` owns the modal window and returns a typed presentation.

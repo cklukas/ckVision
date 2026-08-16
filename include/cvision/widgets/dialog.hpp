@@ -35,15 +35,37 @@
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
 
 class Desktop;
 
+// Which control a field materializes as. A settings form is mostly not text:
+// it is answers to yes/no questions, and a descriptor that can only make
+// input lines forces every such form to be hand-built, which is how two
+// dialogs in one application come to disagree about their own layout.
+enum class FieldKind {
+    // An InputLine. The default, and what every descriptor written before
+    // this enum existed still gets.
+    Text,
+    // A single checkbox carrying `label` as its own text. There is no
+    // separate caption: "[X] Ask for a filename every time" reads as one
+    // sentence, and splitting it across a label column would break it.
+    Check,
+    // Text the form says rather than asks: what a setting will do, what it
+    // will not do, where its effect shows up. A settings dialog needs this
+    // more than a data-entry form does — a checkbox can be labelled
+    // truthfully and still leave its reader guessing what ticking it costs
+    // them. Takes no focus, contributes an empty value, and is skipped by
+    // validation.
+    Note,
+};
+
 struct FieldDescriptor {
     std::string label;         // may carry a '&' mnemonic; empty = unlabeled field
-    std::string initial_text;
+    std::string initial_text;  // Text fields only
 
     // Optional; empty means "always valid". Runs at accept time only
     // (ARCHITECTURE.md §5 dialog-accept veto) — never on every
@@ -57,6 +79,15 @@ struct FieldDescriptor {
     // so declarative input boxes can safely request password entry too.
     bool password_echo = false;
     char password_echo_char = '*';
+
+    // Last, not first, although a field's kind is the first thing about it:
+    // this is an aggregate that callers brace-initialize positionally
+    // (`{"&Name:", "", nullptr}`), and putting a new member ahead of `label`
+    // would break every one of those for a field kind they do not use. New
+    // members go on the end, and a Check field names its members.
+    FieldKind kind = FieldKind::Text;
+    // Check fields only. Ignored, and left false, for a Text field.
+    bool initial_checked = false;
 };
 
 struct ButtonDescriptor {
@@ -96,8 +127,14 @@ struct DialogDescriptor {
 
 struct MaterializedDialog {
     std::unique_ptr<ui::View> root;
-    std::vector<Label*> labels;     // parallel to descriptor.fields; nullptr where a field had no label
-    std::vector<InputLine*> inputs;  // parallel to descriptor.fields
+    // All three are parallel to descriptor.fields and are indexed by field,
+    // so a caller reads the one its own field kind filled in: `labels` is
+    // nullptr where a field had no label (and always for a Check field,
+    // which carries its label itself), `inputs` is nullptr for a Check
+    // field, and `checks` is nullptr for a Text field.
+    std::vector<Label*> labels;
+    std::vector<InputLine*> inputs;
+    std::vector<CheckGroup*> checks;
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     ui::View* initial_focus = nullptr;
     Button* default_button = nullptr;
@@ -106,10 +143,17 @@ struct MaterializedDialog {
 // The typed outcome of a descriptor dialog. An accepted result contains one
 // value for each descriptor field, in descriptor order. Close, Esc, external
 // detach, and a host quit produce the default cancellation result
-// `{false, {}}`; no partial field values escape a cancelled dialog.
+// `{false, {}, {}}`; no partial field values escape a cancelled dialog.
 struct DialogResult {
     bool accepted = false;
+    // Both are parallel to descriptor.fields, so a field's answer is always
+    // at its own index whatever kind it is: `values` holds a Text field's
+    // contents (empty string for a Check field) and `checked` a Check
+    // field's state (false for a Text field). Two aligned vectors rather
+    // than one variant, so the long-standing `result.values[i]` reading of
+    // a text form keeps working unchanged.
     std::vector<std::string> values;
+    std::vector<bool> checked;
 
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
 };

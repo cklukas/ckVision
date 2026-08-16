@@ -30,6 +30,9 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescript
     InputLine* first_invalid = nullptr;
     bool all_valid = true;
     for (std::size_t i = 0; i < inputs.size(); ++i) {
+        // A checkbox has no text to validate and no invalid state to show;
+        // its slot in the parallel array is empty by construction.
+        if (inputs[i] == nullptr) continue;
         const auto& validate = descriptor.fields[i].validate;
         const bool valid = !validate || validate(inputs[i]->text());
         inputs[i]->set_valid(valid);
@@ -56,11 +59,19 @@ struct BuiltDescriptorDialog {
     std::shared_ptr<DescriptorDialogCompletion> completion;
 };
 
-DialogResult accepted_result(const std::vector<InputLine*>& inputs) {
+// Both vectors are filled for every field, whatever its kind, so a caller
+// indexes either by field position without first asking what kind it was.
+DialogResult accepted_result(const std::vector<InputLine*>& inputs,
+                              const std::vector<CheckGroup*>& checks) {
+    CKV_ASSERT(inputs.size() == checks.size());
     DialogResult result;
     result.accepted = true;
     result.values.reserve(inputs.size());
-    for (const InputLine* input : inputs) result.values.push_back(input->text());
+    result.checked.reserve(checks.size());
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        result.values.push_back(inputs[i] != nullptr ? inputs[i]->text() : std::string{});
+        result.checked.push_back(checks[i] != nullptr && checks[i]->checked(0));
+    }
     return result;
 }
 
@@ -69,6 +80,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     auto retained_descriptor = std::make_shared<DialogDescriptor>(std::move(descriptor));
     MaterializedDialog materialized = materialize_dialog(*retained_descriptor);
     std::vector<InputLine*> inputs = materialized.inputs;
+    std::vector<CheckGroup*> checks = materialized.checks;
     Button* const default_button = materialized.default_button;
     ui::View* const initial_focus = materialized.initial_focus;
 
@@ -90,7 +102,8 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
 
     window->set_content(std::move(materialized.root));
     window->set_resizable(retained_descriptor->resizable);
-    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, default_button, &app]() {
+    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, checks, default_button,
+                              &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
         // callback is allowed to detach and destroy its own Window, which
@@ -101,7 +114,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         // Record before application code runs: a descriptor button handler
         // may detach or destroy this Window synchronously, but its successful
         // acceptance still has one stable typed result after detachment.
-        held_completion->selected_result = accepted_result(inputs);
+        held_completion->selected_result = accepted_result(inputs, checks);
         if (default_button != nullptr && default_button->on_press) default_button->on_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
@@ -130,9 +143,55 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
     auto column = std::make_unique<Column>();
     column->set_spacing(1);
 
-    for (const FieldDescriptor& field : descriptor.fields) {
+    for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
+        const FieldDescriptor& field = descriptor.fields[index];
+
+        if (field.kind == FieldKind::Note) {
+            // Consecutive notes are one paragraph, so they go into a column
+            // of their own with no spacing. The form's own spacing of one
+            // blank row is right between things a reader answers, and wrong
+            // between the lines of a sentence — set loose there it turns an
+            // explanation into a list of unrelated remarks.
+            auto paragraph = std::make_unique<Column>();
+            paragraph->set_spacing(0);
+            int lines = 0;
+            for (; index < descriptor.fields.size() &&
+                   descriptor.fields[index].kind == FieldKind::Note;
+                 ++index) {
+                auto note = std::make_unique<Label>(descriptor.fields[index].label);
+                auto* note_ptr = static_cast<Label*>(
+                    paragraph->add_item(std::move(note), LayoutSpec{SizePolicy::Fixed, 1}));
+                // Parallel arrays still get one entry per field: a note holds
+                // the labels slot, since that is the only widget it made.
+                result.labels.push_back(note_ptr);
+                result.inputs.push_back(nullptr);
+                result.checks.push_back(nullptr);
+                ++lines;
+            }
+            --index;  // the loop's own ++ takes us past the last note
+            column->add_item(std::move(paragraph), LayoutSpec{SizePolicy::Fixed, lines});
+            continue;
+        }
+
         auto row = std::make_unique<Row>();
         row->set_spacing(1);
+
+        if (field.kind == FieldKind::Check) {
+            // One box, carrying its own text. A CheckGroup of one is still a
+            // CheckGroup: the reader gets the same "[X] label", the same
+            // mnemonic handling and the same single Tab stop as in a cluster
+            // of them, so a form does not read differently for having asked
+            // only one yes/no question.
+            auto check = std::make_unique<CheckGroup>(std::vector<std::string>{field.label});
+            check->set_checked(0, field.initial_checked);
+            auto* check_ptr =
+                static_cast<CheckGroup*>(row->add_item(std::move(check), LayoutSpec{SizePolicy::Expanding, 1}));
+            result.labels.push_back(nullptr);
+            result.inputs.push_back(nullptr);
+            result.checks.push_back(check_ptr);
+            column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+            continue;
+        }
 
         Label* label_ptr = nullptr;
         if (!field.label.empty()) {
@@ -149,6 +208,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         if (label_ptr != nullptr) label_ptr->set_buddy(input_ptr);
         result.labels.push_back(label_ptr);
         result.inputs.push_back(input_ptr);
+        result.checks.push_back(nullptr);
 
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }

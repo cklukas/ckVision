@@ -162,7 +162,7 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(default_pressed);
     // The self-detach is deferred until the button callback unwinds, then
     // drained by this same step's ordinary posted-work phase.
-    CK_CHECK((presentation.result() == DialogResult{true, {"localhost"}}));
+    CK_CHECK((presentation.result() == DialogResult{true, {"localhost"}, {false}}));
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(f.desktop->windows().empty());
 }
@@ -244,7 +244,7 @@ CK_TEST(descriptor_dialog_acceptance_survives_a_default_callback_that_destroys_i
     dialog = f.desktop->windows().back();
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
-    CK_CHECK((presentation.result() == DialogResult{true, {"value"}}));
+    CK_CHECK((presentation.result() == DialogResult{true, {"value"}, {false}}));
     CK_CHECK(!f.app.is_modal());
 }
 
@@ -393,4 +393,41 @@ CK_TEST(quit_sweep_completes_every_standard_presentation_after_all_windows_detac
     CK_CHECK(directory.result()->path.empty());
     CK_CHECK(window_list.result() == WindowListDialogResult::Closed);
     CK_CHECK(viewer.result() == HelpViewerResult::Closed);
+}
+
+CK_TEST(an_accepted_dialog_reports_each_check_field_beside_its_text_fields) {
+    // The end a caller actually touches: a settings form asks one yes/no
+    // question and reads the answer back at that field's own index.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Settings";
+    descriptor.fields.push_back(FieldDescriptor{"&Name:", "kept", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Enabled", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+
+    CK_CHECK(presentation.completed());
+    CK_CHECK((presentation.result() == DialogResult{true, {"kept", ""}, {false, true}}));
+}
+
+CK_TEST(a_cancelled_dialog_reports_no_check_state_either) {
+    // Cancellation is one result, not a partly-filled one: no text escapes a
+    // cancelled form, and neither does the box the reader ticked.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Settings";
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Enabled", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
+
+    // The default result carries an empty `checked`, so equality with it is
+    // exactly the claim that no box state escaped.
+    CK_CHECK(presentation.result() == DialogResult{});
 }
