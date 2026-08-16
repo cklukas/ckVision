@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "cvision/core/palette.hpp"
 #include "cvision/scene/rect_ops.hpp"
 
 namespace ckv::scene {
@@ -67,13 +68,20 @@ Style default_dim(Style style) noexcept {
     const auto dim_channel = [](std::uint8_t c) -> std::uint8_t {
         return static_cast<std::uint8_t>(c / 2);
     };
+    // A shadow halves whatever colour is under it, so it needs the channels
+    // rather than the name: a palette index is resolved here, at the point
+    // where pixels are actually being computed, and the dimmed result is the
+    // specific colour it became.
     const auto dim_color = [&](Color c) -> Color {
-        if (c.is_default()) return Color::rgb(0, 0, 0);
-        return Color::rgb(dim_channel(c.r()), dim_channel(c.g()), dim_channel(c.b()));
+        const Color rgb = resolved_color(c, Color::rgb(0, 0, 0));
+        return Color::rgb(dim_channel(rgb.r()), dim_channel(rgb.g()), dim_channel(rgb.b()));
     };
     Style out = style;
     out.fg = dim_color(style.fg);
     out.bg = dim_color(style.bg);
+    // An underline that follows the text keeps following it; one with a
+    // colour of its own is in shadow like everything else.
+    if (!style.underline_color.is_default()) out.underline_color = dim_color(style.underline_color);
     return out;
 }
 
@@ -217,7 +225,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     for (const RasterRegion& region : background.raster_regions()) {
         const Rect full_anchor = region.anchor;
         rect_scratch_a_.clear();
-        rect_scratch_a_.push_back(full_anchor);
+        rect_scratch_a_.push_back(region.visible.empty() ? full_anchor : region.visible);
         for (const Layer& occluder : layers) {
             rect_scratch_b_.clear();
             const Rect occluder_rect = layer_rect(occluder);
@@ -235,7 +243,11 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                                     region.anchor.y + layer.position.y, region.anchor.width,
                                     region.anchor.height};
             rect_scratch_a_.clear();
-            rect_scratch_a_.push_back(full_anchor);
+            rect_scratch_a_.push_back(
+                region.visible.empty()
+                    ? full_anchor
+                    : Rect{region.visible.x + layer.position.x, region.visible.y + layer.position.y,
+                           region.visible.width, region.visible.height});
             for (std::size_t j = i + 1; j < layers.size(); ++j) {
                 rect_scratch_b_.clear();
                 const Rect occluder = layer_rect(layers[j]);

@@ -167,8 +167,13 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     CKV_ASSERT(image->width() > 0 && image->height() > 0);
     Painter fallback_painter = clipped(anchor);  // clipped() already translates via to_absolute
     fallback(fallback_painter);
-    surface_.add_raster_region(
-        RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, to_absolute(anchor), std::move(image), true});
+    // Recorded at full extent, but only as far as this painter may draw.
+    // Without the second rect an image simply overhangs the view that drew
+    // it: a Sixel keeps painting past a window's frame and out onto the
+    // desktop, because nothing downstream knows where that view ended.
+    const Rect absolute = to_absolute(anchor);
+    surface_.add_raster_region(RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, absolute,
+                                            std::move(image), true, absolute.intersected(clip_)});
 }
 
 }  // namespace ckv::scene
