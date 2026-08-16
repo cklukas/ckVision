@@ -244,14 +244,23 @@ showing, so it reads as a menu title rather than as a second kind of control.
 
 ## CalendarDropdown
 
-Header: `include/cvision/widgets/common_components.hpp`. A CalendarView shown
-as a transient popup: it closes on Escape and on a press anywhere but itself.
-That behaviour is what separates a dropdown from a small window, and it is
-deliberately not in CalendarView — the same calendar sits permanently in a
-dialog elsewhere and must not vanish when the reader clicks beside it. Open
+Header: `include/cvision/widgets/common_components.hpp`. A month, framed and
+coloured as a dropdown menu, with the controls for choosing which month: a
+ComboBox of month names above a year field flanked by `<<` and `>>`. Typing in
+the year field admits digits and nothing else; Enter — or moving on with Tab —
+commits it, and a year that is not one leaves the word `invalid` in the field
+for three seconds before the shown year comes back. `show_month()` sets all
+three at once, so the picker and the field never disagree with the grid.
+
+It is a transient popup: it closes on Escape and on a press anywhere but
+itself. That behaviour is what separates a dropdown from a small window, and
+it is deliberately not in CalendarView — the same calendar sits permanently in
+a dialog elsewhere and must not vanish when the reader clicks beside it. Open
 one with `show_calendar_dropdown()`, which hangs it under an anchor with their
 right edges aligned, the way a submenu hangs from the right end of a bar, and
-pulls it back inside the desktop rather than letting it run off the edge.
+pulls it back inside the desktop rather than letting it run off the edge. It
+scopes input while it is up, so Tab walks its own three controls — days, month,
+year — and reaches nothing behind it.
 
 ## DateValue
 
@@ -597,6 +606,17 @@ Header: `include/cvision/widgets/menu.hpp`. Dock it at the Desktop top. F10
 activates the standard menu command, mnemonics enter menus, Escape restores
 the preceding focus. Its mnemonic letters use the shared `ckv.hotkey` accent.
 The [Hello tutorial](tutorial-hello.md) shows it open.
+
+## MenuBarAccessory
+
+Header: `include/cvision/widgets/menu.hpp`. What a view implements to become a
+participant in the menu bar rather than something merely parked on it. A bar
+with a trailing view — a clock at the right end, say — walks onto it with the
+arrow keys and activates it with Enter or Space, and the accessory is told when
+it is the highlighted slot so it can wear the bar's active colours like any
+menu title. `MenuBar::set_trailing_view<T>()` installs one and hands back the
+typed pointer; a trailing view that does not implement the interface is still
+laid out and drawn, it simply cannot be reached from the keyboard.
 
 ## MemoPosition
 

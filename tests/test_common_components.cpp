@@ -551,6 +551,138 @@ CK_TEST(a_right_aligned_dropdown_is_pulled_back_when_its_anchor_sits_near_the_le
     CK_CHECK(dropdown->bounds().right() <= desktop->bounds().width);
 }
 
+namespace {
+// A dropped calendar with its own application around it -- the popup scopes
+// input, so the fixture has to be a whole application, not a bare view.
+struct DroppedCalendar {
+    ckv::term::HeadlessTerminal term{ckv::Size{60, 20}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{term, clock};
+    ckv::widgets::Desktop* desktop = nullptr;
+    ClockView* anchor = nullptr;
+    CalendarDropdown* dropdown = nullptr;
+
+    DroppedCalendar() {
+        const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+        app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+        desktop = static_cast<ckv::widgets::Desktop*>(
+            app.root().add_child(std::make_unique<ckv::widgets::Desktop>(app.root().bounds())));
+        anchor = static_cast<ClockView*>(desktop->add_child(std::make_unique<ClockView>()));
+        anchor->set_time_provider([] { return TimeValue{9, 41, 0}; });
+        anchor->set_bounds(ckv::Rect{52, 0, 5, 1});
+        app.step(0);
+        dropdown = show_calendar_dropdown(*anchor, app, *desktop);
+        dropdown->show_month(DateValue{2026, 8, 1});
+        app.step(0);
+    }
+
+    void press(ckv::Key k, ckv::Modifier m = ckv::Modifier::None, std::string text = {}) {
+        app.dispatch(ckv::KeyEvent{ckv::KeyChord{k, m, std::move(text)}});
+        app.step(0);
+    }
+
+    void click(ckv::Point cell) {
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, cell, std::nullopt,
+                                     ckv::Modifier::None});
+        app.step(0);
+    }
+};
+}  // namespace
+
+CK_TEST(a_dropped_calendar_opens_on_the_month_it_shows) {
+    DroppedCalendar c;
+    // Opening on August with nothing chosen would make the reader pick the
+    // month they are already looking at.
+    CK_CHECK(c.dropdown->month_picker().selected_index() == std::optional<std::size_t>{7});
+    CK_CHECK(c.dropdown->year_field().text() == "2026");
+}
+
+CK_TEST(tab_walks_the_dropped_calendars_own_controls_and_no_further) {
+    DroppedCalendar c;
+    // The days are what the reader came for, so that is where focus lands.
+    CK_CHECK(c.app.focused() == &c.dropdown->calendar());
+    c.press(ckv::Key::Tab);
+    CK_CHECK(c.app.focused() == &c.dropdown->month_picker());
+    c.press(ckv::Key::Tab);
+    CK_CHECK(c.app.focused() == &c.dropdown->year_field());
+    c.press(ckv::Key::Tab);
+    CK_CHECK(c.app.focused() == &c.dropdown->calendar());  // round, never out
+}
+
+CK_TEST(picking_a_month_moves_the_calendar_to_it) {
+    DroppedCalendar c;
+    c.press(ckv::Key::Tab);   // onto the month picker
+    c.press(ckv::Key::Down);  // open the list
+    CK_CHECK(c.dropdown->month_picker().dropdown_open());
+    // The list is drawn over the rows below it, so those rows step aside.
+    CK_CHECK(!c.dropdown->calendar().visible());
+    CK_CHECK(!c.dropdown->year_field().visible());
+    for (int i = 0; i < 3; ++i) c.press(ckv::Key::Down);  // August -> November
+    c.press(ckv::Key::Enter);
+    CK_CHECK(c.dropdown->calendar().month().month == 11);
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);
+    CK_CHECK(c.dropdown->calendar().visible());
+    CK_CHECK(c.dropdown->year_field().visible());
+}
+
+CK_TEST(the_year_steppers_move_a_year_at_a_time) {
+    DroppedCalendar c;
+    const ckv::Rect abs = c.dropdown->absolute_bounds();
+    c.click(ckv::Point{abs.x + 2, abs.y + 2});  // "<<"
+    CK_CHECK(c.dropdown->calendar().month().year == 2025);
+    CK_CHECK(c.dropdown->year_field().text() == "2025");
+    c.click(ckv::Point{abs.right() - 3, abs.y + 2});  // ">>"
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);
+}
+
+CK_TEST(a_typed_year_takes_digits_only_and_moves_the_calendar_on_enter) {
+    DroppedCalendar c;
+    c.press(ckv::Key::Tab);
+    c.press(ckv::Key::Tab);  // onto the year field
+    c.press(ckv::Key::Backspace);
+    c.press(ckv::Key::Char, ckv::Modifier::None, "x");  // not part of a year
+    c.press(ckv::Key::Char, ckv::Modifier::None, "5");
+    CK_CHECK(c.dropdown->year_field().text() == "2025");
+    c.press(ckv::Key::Enter);
+    CK_CHECK(c.dropdown->calendar().month().year == 2025);
+}
+
+CK_TEST(leaving_the_year_field_commits_what_was_typed) {
+    DroppedCalendar c;
+    c.press(ckv::Key::Tab);
+    c.press(ckv::Key::Tab);
+    c.press(ckv::Key::Backspace);
+    c.press(ckv::Key::Char, ckv::Modifier::None, "4");
+    c.press(ckv::Key::Tab);  // moving on says the same thing as Enter
+    CK_CHECK(c.dropdown->calendar().month().year == 2024);
+}
+
+CK_TEST(a_year_that_is_not_one_is_refused_and_the_shown_year_comes_back) {
+    DroppedCalendar c;
+    c.press(ckv::Key::Tab);
+    c.press(ckv::Key::Tab);
+    for (int i = 0; i < 4; ++i) c.press(ckv::Key::Backspace);
+    c.press(ckv::Key::Enter);  // nothing typed is not a year
+    CK_CHECK(c.dropdown->year_field().text() == "invalid");
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);  // unmoved
+    // While it says so it is not a field: typing into the complaint would
+    // leave a word with digits in it.
+    c.press(ckv::Key::Char, ckv::Modifier::None, "9");
+    CK_CHECK(c.dropdown->year_field().text() == "invalid");
+    c.clock.advance(3'100'000'000);
+    c.app.step(0);
+    CK_CHECK(c.dropdown->year_field().text() == "2026");
+    c.press(ckv::Key::Char, ckv::Modifier::None, "9");  // a field again
+    CK_CHECK(c.dropdown->year_field().text() == "20269");
+}
+
+CK_TEST(escape_closes_a_dropped_calendar) {
+    DroppedCalendar c;
+    c.press(ckv::Key::Escape);
+    CK_CHECK(c.app.input_capture() == nullptr);
+    CK_CHECK(!c.app.is_modal());  // the scope goes with it
+}
+
 CK_TEST(an_open_clock_wears_the_menu_bars_own_active_role) {
     // To a reader it is a menu title with its dropdown down, so it uses the
     // same two roles rather than a highlight of its own -- a theme dresses

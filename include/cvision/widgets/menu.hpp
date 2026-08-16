@@ -235,6 +235,20 @@ struct MenuBarItem {
 // is never silently overridden. The destructor clears the handler
 // again if this instance was the one that installed it, so a
 // destroyed MenuBar can never be reached through a stale handler.
+// A trailing view that behaves as a title on the bar rather than as
+// decoration beside it: the keyboard walks onto it, it highlights while it
+// holds the walk, and Enter or Space acts on it.
+//
+// An interface rather than a concrete type because what drops out of such a
+// title is the caller's business -- a calendar, a palette, anything. The bar
+// keeps what a bar owns: the highlight, the walk, and the acting.
+class MenuBarAccessory {
+public:
+    virtual ~MenuBarAccessory() = default;
+    virtual void set_menu_highlighted(bool highlighted) = 0;
+    virtual void activate_from_menu_bar() = 0;
+};
+
 class MenuBar : public ui::View {
 public:
     // A view pinned to the right end of the bar -- a clock, an indicator,
@@ -297,6 +311,13 @@ private:
 
     ui::View* trailing_view_ = nullptr;
     ui::View* set_trailing_view_impl(std::unique_ptr<ui::View> view);
+    // The trailing view as a bar title, or nullptr when it is only
+    // decoration. Decides whether the keyboard walk has one more stop.
+    MenuBarAccessory* trailing_accessory() const noexcept;
+    // Slots the walk can occupy: one per menu, plus the trailing title.
+    std::size_t navigable_slots() const noexcept;
+    bool trailing_slot_highlighted() const noexcept;
+    void set_bar_highlight(std::size_t slot);
     void layout_trailing_view();
     std::vector<MenuBarItem> menus_;
     std::size_t highlighted_ = 0;

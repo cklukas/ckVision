@@ -114,3 +114,44 @@ CK_TEST(open_combo_draws_dropdown_rows_inside_its_bounds) {
     CK_CHECK(row_text(surface, 1).substr(0, 3) == "One");
     CK_CHECK(row_text(surface, 2).substr(0, 3) == "Two");
 }
+
+
+CK_TEST(an_open_list_asks_for_the_height_it_needs) {
+    ComboBox combo;
+    combo.set_items({"one", "two", "three"});
+    CK_CHECK(combo.vertical_size_hint().preferred == 1);
+    combo.open_dropdown();
+    // The list is drawn inside the control, so opening it changes the height
+    // the control needs -- a container hears that and lays it out taller.
+    CK_CHECK(combo.vertical_size_hint().preferred == 4);
+    combo.close_dropdown();
+    CK_CHECK(combo.vertical_size_hint().preferred == 1);
+}
+
+CK_TEST(a_list_given_less_room_than_it_needs_scrolls_to_the_selection) {
+    Fixture fixture;
+    ComboBox combo;
+    combo.set_items({"one", "two", "three", "four", "five"});
+    combo.set_context(fixture.ctx());
+    combo.on_attached();
+    combo.set_bounds(Rect{0, 0, 12, 3});  // room for the row and two items
+    combo.open_dropdown();
+
+    auto paint = [&](ckv::scene::Surface& surface) {
+        ckv::scene::Painter painter(surface, Rect{0, 0, 12, 3});
+        combo.draw(painter);
+    };
+    ckv::scene::Surface surface(ckv::Size{12, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    paint(surface);
+    CK_CHECK(row_text(surface, 1).find("one") == 0);
+
+    for (int i = 0; i < 4; ++i) combo.on_key(key(Key::Down));  // walk to the last item
+    ckv::scene::Surface scrolled(ckv::Size{12, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    paint(scrolled);
+    // The tail of the list is reachable: what the eye sees is the selection.
+    CK_CHECK(row_text(scrolled, 2).find("five") == 0);
+    // ...and the mouse agrees with the eye, rather than with index 0.
+    combo.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 2},
+                                   std::nullopt, Modifier::None});
+    CK_CHECK(combo.text() == "five");
+}

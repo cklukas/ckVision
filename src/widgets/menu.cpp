@@ -519,6 +519,7 @@ void MenuBar::activate() {
 
 void MenuBar::deactivate() {
     if (!active_) return;
+    if (MenuBarAccessory* const accessory = trailing_accessory()) accessory->set_menu_highlighted(false);
     close_dropdown();
     ui::View* restore = previously_focused_;
     previously_focused_ = nullptr;
@@ -619,23 +620,40 @@ bool MenuBar::on_key(const KeyEvent& event) {
     }
     switch (event.chord.key) {
         case Key::Left:
-            highlighted_ = (highlighted_ + menus_.size() - 1) % menus_.size();
-            if (open_dropdown_ != nullptr) open_dropdown(highlighted_);
+            // The walk runs over one slot per menu plus the trailing title,
+            // so a clock at the right end is reached by walking to it rather
+            // than by knowing it is there.
+            set_bar_highlight((highlighted_ + navigable_slots() - 1) % navigable_slots());
+            if (open_dropdown_ != nullptr && !trailing_slot_highlighted()) open_dropdown(highlighted_);
             invalidate();
             return true;
         case Key::Right:
-            highlighted_ = (highlighted_ + 1) % menus_.size();
-            if (open_dropdown_ != nullptr) open_dropdown(highlighted_);
+            set_bar_highlight((highlighted_ + 1) % navigable_slots());
+            if (open_dropdown_ != nullptr && !trailing_slot_highlighted()) open_dropdown(highlighted_);
             invalidate();
             return true;
         case Key::Down:
         case Key::Enter:
+            if (trailing_slot_highlighted()) {
+                // What drops out of a trailing title is the caller's; the bar
+                // only says when.
+                trailing_accessory()->activate_from_menu_bar();
+                return true;
+            }
             open_dropdown(highlighted_);
             return true;
+
         case Key::Escape:
             deactivate();
             return true;
         case Key::Char:
+            // Space acts on the trailing title, as Enter does. It arrives as
+            // an ordinary character, so it is handled with the mnemonics
+            // rather than as a key of its own.
+            if (event.chord.text == " " && trailing_slot_highlighted()) {
+                trailing_accessory()->activate_from_menu_bar();
+                return true;
+            }
             for (std::size_t i = 0; i < menus_.size(); ++i) {
                 const auto parsed = parse_mnemonic(menus_[i].label);
                 if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text)) {
@@ -668,6 +686,27 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
 }
 
 void MenuBar::on_resized() { layout_trailing_view(); }
+
+void MenuBar::set_bar_highlight(std::size_t slot) {
+    highlighted_ = slot;
+    // The trailing title is a view, not a label the bar paints, so it has to
+    // be told when the walk is standing on it.
+    if (MenuBarAccessory* const accessory = trailing_accessory())
+        accessory->set_menu_highlighted(trailing_slot_highlighted());
+    invalidate();
+}
+
+MenuBarAccessory* MenuBar::trailing_accessory() const noexcept {
+    return dynamic_cast<MenuBarAccessory*>(trailing_view_);
+}
+
+std::size_t MenuBar::navigable_slots() const noexcept {
+    return menus_.size() + (trailing_accessory() != nullptr ? 1 : 0);
+}
+
+bool MenuBar::trailing_slot_highlighted() const noexcept {
+    return active_ && trailing_accessory() != nullptr && highlighted_ == menus_.size();
+}
 
 ui::View* MenuBar::set_trailing_view_impl(std::unique_ptr<ui::View> view) {
     if (trailing_view_ != nullptr) {

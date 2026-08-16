@@ -231,14 +231,9 @@ widgets::Window* TerminalApp::new_sixel_demo() {
 
 void TerminalApp::open_calendar() {
     if (desktop_ == nullptr || clock_ == nullptr) return;
-    // Clicking an open clock closes it, the way clicking an open menu title
-    // does. Without this the only way out is to click elsewhere, which is
-    // not how anything else on the bar behaves.
-    if (clock_->open()) {
-        app_.clear_input_capture();
-        clock_->set_open(false);
-        return;
-    }
+    // An open calendar holds the mouse, so a click on the clock dismisses it
+    // before the clock ever hears about it -- the way clicking an open menu
+    // title closes its menu. Reopening takes the next click.
     widgets::CalendarDropdown* const dropdown =
         widgets::show_calendar_dropdown(*clock_, app_, *desktop_);
     clock_->set_open(true);
@@ -252,7 +247,7 @@ void TerminalApp::open_calendar() {
     ::localtime_r(&now, &local);
 #endif
     const widgets::DateValue today{local.tm_year + 1900, local.tm_mon + 1, local.tm_mday};
-    dropdown->calendar().set_month(widgets::DateValue{today.year, today.month, 1});
+    dropdown->show_month(today);  // the month picker and the year field follow
     dropdown->calendar().set_selected(today);
     dropdown->calendar().set_today(today);
 }

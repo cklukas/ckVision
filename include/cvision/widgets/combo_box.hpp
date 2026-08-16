@@ -16,8 +16,11 @@ namespace ckv::widgets {
 enum class ComboBoxMode { PickOnly, Editable };
 
 // Editable or pick-only combo box with deterministic in-application history.
-// The dropdown is drawn inside this widget's own bounds; callers that want an
-// overlaid popup give the control enough height while it is open.
+// The dropdown is drawn inside this widget's own bounds, so opening it changes
+// the height the control needs: it reports that through size_hint_changed(),
+// and a container lays it out taller for as long as the list is open. Given
+// less room than the list is long, the list scrolls to keep the selected item
+// in view rather than hiding the tail of itself.
 class ComboBox : public ui::View {
 public:
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
@@ -57,6 +60,8 @@ public:
 
 private:
     void select_index(std::size_t index, bool notify);
+    void ensure_selection_visible();
+    int visible_rows() const noexcept;
     void move_selection(int delta);
     void recall_history(int index);
     void sync_text_from_editor();
@@ -66,6 +71,7 @@ private:
     std::string text_;
     std::optional<std::size_t> selected_index_;
     bool dropdown_open_ = false;
+    int first_visible_ = 0;
     bool has_focus_ = false;
     InputLine editor_;
 

@@ -9,7 +9,10 @@
 
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/menu.hpp"
 
 namespace ckv::widgets {
 
@@ -50,7 +53,7 @@ enum class Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sun
 // ckVision's Clock is monotonic with an implementation-defined epoch,
 // deliberately not a wall clock. The provider is what makes a clock
 // testable -- a test hands it a value and steps it.
-class ClockView : public ui::View {
+class ClockView : public ui::View, public MenuBarAccessory {
 public:
     ClockView();
 
@@ -84,6 +87,11 @@ public:
     void set_open(bool open);
     bool open() const noexcept { return open_; }
 
+    // MenuBarAccessory: the bar walks onto this title and acts on it, so it
+    // needs no separate keyboard handling of its own.
+    void set_menu_highlighted(bool highlighted) override;
+    void activate_from_menu_bar() override;
+
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
@@ -104,6 +112,7 @@ private:
     std::string rendered_;
     bool separator_lit_ = true;
     bool open_ = false;
+    bool menu_highlighted_ = false;
     bool ticking_ = false;
     bool pressed_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
@@ -148,6 +157,18 @@ public:
     void set_labels(std::vector<std::string> month_labels, std::vector<std::string> weekday_labels);
     // The day the week starts on, which decides both the weekday header and
     // where the first of the month falls in the grid.
+    // Draw with a caller's roles rather than the list's. A calendar inside a
+    // dropdown has to look like a dropdown, not like a list that happens to
+    // be floating.
+    void set_role_override(ui::RoleId normal, ui::RoleId selected, ui::RoleId disabled) noexcept {
+        normal_role_ = normal;
+        selected_role_ = selected;
+        disabled_role_ = disabled;
+    }
+    // The "August 2026" line. Off when something above the grid already
+    // says which month is shown -- a month picker and a year field, say.
+    void set_show_title(bool show);
+    bool show_title() const noexcept { return show_title_; }
     void set_first_weekday(Weekday first);
     Weekday first_weekday() const noexcept { return first_weekday_; }
     void set_show_iso_week_numbers(bool show);
@@ -182,6 +203,9 @@ private:
     std::vector<std::string> month_labels_;
     std::vector<std::string> weekday_labels_;
     Weekday first_weekday_ = Weekday::Monday;
+    bool show_title_ = true;
+    int header_row() const noexcept { return show_title_ ? 1 : 0; }
+    int grid_top() const noexcept { return header_row() + 1; }
     bool show_iso_week_numbers_ = false;
     bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
@@ -204,34 +228,51 @@ public:
     CalendarDropdown();
 
     CalendarView& calendar() noexcept { return *calendar_; }
+    ComboBox& month_picker() noexcept { return *month_; }
+    InputLine& year_field() noexcept { return *year_; }
 
-    // Fires once, when the popup has decided it is finished. The owner
-    // removes it; this view never removes itself, having no say in who owns
-    // it.
+    // The month names offered by the picker, in order. The same list the
+    // calendar itself is given, so the two never disagree.
+    void set_month_labels(std::vector<std::string> labels);
+
+    // Puts the calendar on `month`, and the two controls with it.
+    void show_month(DateValue month);
+
     std::function<void()> on_dismiss;
-
-    // Also called when the popup closes, and separately from on_dismiss:
-    // show_calendar_dropdown() claims on_dismiss to remove the popup, so a
-    // caller that also wants to know has nowhere else to put it.
     std::function<void()> on_closed;
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
     bool on_key(const KeyEvent& event) override;
     void on_resized() override;
+    void on_attached() override;
+    void on_child_size_hint_changed(ui::View& child) override;
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
 
 private:
     void dismiss();
+    void step_year(int delta);
+    void commit_year();
+    void report_invalid_year();
+    void focus_slot(int slot);
+    void sync_month_bounds();
+    Rect step_back_rect() const noexcept;
+    Rect step_forward_rect() const noexcept;
 
     CalendarView* calendar_ = nullptr;
+    ComboBox* month_ = nullptr;
+    InputLine* year_ = nullptr;
+    std::vector<std::string> month_labels_;
+    int focus_slot_ = 0;  // 0 month, 1 year, 2 grid
     bool dismissed_ = false;
+    bool showing_invalid_ = false;
+    ui::RoleId frame_role_ = ui::kInvalidRole;
 };
 
-// Opens a calendar under `anchor` -- typically a ClockView -- and takes
-// input capture so the next click outside closes it. The caller configures
-// the returned dropdown's calendar() before the next frame.
+// Drops a calendar below `anchor`, right-aligned with it the way a menu is
+// aligned with the title that opened it. Owned by the desktop; it takes
+// input capture and hands itself back so the caller can close it.
 CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application& app, Desktop& desktop);
 
 class DatePicker : public ui::View {

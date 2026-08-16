@@ -2,6 +2,7 @@
 #include "cvision/widgets/common_components.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cctype>
 #include <cstdio>
 #include <sstream>
@@ -162,6 +163,12 @@ void CalendarView::set_labels(std::vector<std::string> month_labels, std::vector
     invalidate();
 }
 
+void CalendarView::set_show_title(bool show) {
+    if (show_title_ == show) return;
+    show_title_ = show;
+    invalidate();
+}
+
 void CalendarView::set_first_weekday(Weekday first) {
     if (first_weekday_ == first) return;
     first_weekday_ = first;
@@ -197,7 +204,7 @@ std::optional<DateValue> CalendarView::date_at_cell(Point local) const {
     const int x_offset = show_iso_week_numbers_ ? 3 : 0;
     if (local.y < 2 || local.y >= 8 || local.x < x_offset) return std::nullopt;
     const int column = (local.x - x_offset) / 3;
-    const int row = local.y - 2;
+    const int row = local.y - grid_top();
     if (column < 0 || column >= 7) return std::nullopt;
     const int first_weekday = weekday_index(month_, first_weekday_);
     const int day = row * 7 + column - first_weekday + 1;
@@ -216,11 +223,17 @@ void CalendarView::draw(scene::Painter& painter) {
     // cell in one frame has to agree about what day it is.
     const std::optional<DateValue> today = effective_today();
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
-    const std::string title = month_labels_[std::clamp(month_.month, 1, 12) - 1] + " " + std::to_string(month_.year);
-    painter.draw_text(Point{0, 0}, text::clip_to_width(title, bounds().width), normal);
+    if (show_title_) {
+        const std::string title =
+            month_labels_[std::clamp(month_.month, 1, 12) - 1] + " " + std::to_string(month_.year);
+        painter.draw_text(Point{0, 0}, text::clip_to_width(title, bounds().width), normal);
+    }
     const int x_offset = show_iso_week_numbers_ ? 3 : 0;
-    if (show_iso_week_numbers_) painter.draw_text(Point{0, 1}, "Wk", normal);
-    for (int i = 0; i < 7; ++i) painter.draw_text(Point{x_offset + i * 3, 1}, weekday_labels_[i], normal);
+    if (show_iso_week_numbers_) painter.draw_text(Point{0, header_row()}, "Wk", normal);
+    // The weekday names start at whichever day the week starts on.
+    const int first_offset = static_cast<int>(first_weekday_);
+    for (int i = 0; i < 7; ++i)
+        painter.draw_text(Point{x_offset + i * 3, header_row()}, weekday_labels_[(first_offset + i) % 7], normal);
     for (int day = 1; day <= days_in_month(month_.year, month_.month); ++day) {
         const DateValue date{month_.year, month_.month, day};
         const int index = weekday_index(month_, first_weekday_) + day - 1;
@@ -234,7 +247,7 @@ void CalendarView::draw(scene::Painter& painter) {
                             : (today && date == *today) ? today_style
                             : within_marked_span(date)  ? marked_style
                                                         : normal;
-        painter.draw_text(Point{x_offset + column * 3, 2 + row}, (day < 10 ? " " : "") + std::to_string(day), style);
+        painter.draw_text(Point{x_offset + column * 3, grid_top() + row}, (day < 10 ? " " : "") + std::to_string(day), style);
     }
 }
 
@@ -370,6 +383,16 @@ void ClockView::set_open(bool open) {
     invalidate();
 }
 
+void ClockView::set_menu_highlighted(bool highlighted) {
+    if (menu_highlighted_ == highlighted) return;
+    menu_highlighted_ = highlighted;
+    invalidate();
+}
+
+void ClockView::activate_from_menu_bar() {
+    if (on_click) on_click();
+}
+
 void ClockView::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.menu.bar.normal");
     if (open_role_ == ui::kInvalidRole) open_role_ = context().roles->find("ckv.menu.bar.active");
@@ -378,7 +401,9 @@ void ClockView::on_attached() {
 }
 
 void ClockView::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(open_ ? open_role_ : role_);
+    // Held by the keyboard walk or showing something: either way it is the
+    // title the reader is on, and a bar title looks the same in both.
+    const Style style = context().theme->resolve((open_ || menu_highlighted_) ? open_role_ : role_);
     // The padding is part of the highlight, as a menu title's is: without it
     // the open state reads as coloured text rather than as a pressed item.
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", style));
@@ -413,37 +438,182 @@ ui::SizeHint ClockView::horizontal_size_hint() const {
 
 ui::SizeHint ClockView::vertical_size_hint() const { return ui::SizeHint{1, 1, 1}; }
 
+namespace {
+// The calendar grid is seven columns of three cells, less the trailing gap.
+constexpr int kGridWidth = 7 * 3 - 1;
+// One column of padding to the left of the content, inside the frame.
+constexpr int kContentPad = 1;
+constexpr int kContentLeft = 1 + kContentPad;  // frame, then the padding
+constexpr int kMonthRow = 1;
+constexpr int kYearRow = 2;
+constexpr int kGridRow = 3;
+constexpr int kStepWidth = 2;  // "<<" and ">>"
+// Wide enough for the word the field shows when what was typed is not a year,
+// plus the cell the cursor sits in past the last character -- a field as wide
+// as its text scrolls the first character out of sight to make room.
+constexpr int kYearWidth = 8;
+constexpr std::int64_t kInvalidHoldNanos = 3'000'000'000;
+}  // namespace
+
 CalendarDropdown::CalendarDropdown() {
     set_focus_policy(ui::FocusPolicy::None);
+    // Added in the order a reader works through them, which is the order Tab
+    // walks: the month, the year, then the days themselves.
+    auto month = std::make_unique<ComboBox>(ComboBoxMode::PickOnly);
+    month->on_select = [this](std::size_t index) {
+        calendar_->set_month(DateValue{calendar_->month().year, static_cast<int>(index) + 1, 1});
+    };
+    month_ = static_cast<ComboBox*>(add_child(std::move(month)));
+    auto year = std::make_unique<InputLine>();
+    // Digits only: anything else is not part of a year, and refusing it as
+    // it is typed beats accepting it and complaining afterwards.
+    year->set_grapheme_filter([](std::string_view g) { return g.size() == 1 && g[0] >= '0' && g[0] <= '9'; });
+    year_ = static_cast<InputLine*>(add_child(std::move(year)));
     auto calendar = std::make_unique<CalendarView>();
+    calendar->set_show_title(false);  // the controls above say which month
     calendar_ = static_cast<CalendarView*>(add_child(std::move(calendar)));
 }
 
+void CalendarDropdown::on_attached() {
+    if (frame_role_ == ui::kInvalidRole) frame_role_ = context().roles->find("ckv.menu.dropdown.normal");
+    // A calendar inside a dropdown has to look like a dropdown, not like a
+    // list that happens to be floating.
+    calendar_->set_role_override(frame_role_, context().roles->find("ckv.menu.dropdown.highlighted"),
+                                 context().roles->find("ckv.menu.dropdown.disabled"));
+    if (month_labels_.empty())
+        set_month_labels({"January", "February", "March", "April", "May", "June", "July", "August",
+                          "September", "October", "November", "December"});
+}
+
+void CalendarDropdown::set_month_labels(std::vector<std::string> labels) {
+    month_labels_ = std::move(labels);
+    month_->set_items(month_labels_);
+    calendar_->set_labels(month_labels_, {});
+}
+
+void CalendarDropdown::show_month(DateValue month) {
+    calendar_->set_month(DateValue{month.year, month.month, 1});
+    // Selected, not merely listed: opening on August with nothing chosen
+    // would make the reader pick the month they are already looking at.
+    month_->set_selected_index(static_cast<std::size_t>(std::clamp(month.month, 1, 12) - 1));
+    year_->set_text(std::to_string(month.year));
+    showing_invalid_ = false;
+    invalidate();
+}
+
+Rect CalendarDropdown::step_back_rect() const noexcept { return Rect{kContentLeft, kYearRow, kStepWidth, 1}; }
+
+Rect CalendarDropdown::step_forward_rect() const noexcept {
+    return Rect{kContentLeft + kGridWidth - kStepWidth, kYearRow, kStepWidth, 1};
+}
+
+void CalendarDropdown::sync_month_bounds() {
+    // The list is drawn inside the combo box, so the combo box has to be as
+    // tall as the list is long -- capped at the room inside the frame, where
+    // it scrolls rather than spilling past the popup.
+    const int wanted = month_->vertical_size_hint().preferred;
+    const int rows = std::max(1, std::min(wanted, bounds().height - 1 - kMonthRow));
+    month_->set_bounds(Rect{kContentLeft, kMonthRow, kGridWidth, rows});
+    // The list covers the rows below the picker, so what those rows hold
+    // steps aside: left up, the year would print across the month names and
+    // the grid would show through wherever the list falls short.
+    const bool list_open = month_->dropdown_open();
+    year_->set_visible(!list_open);
+    calendar_->set_visible(!list_open);
+}
+
+void CalendarDropdown::on_child_size_hint_changed(ui::View& child) {
+    if (&child == month_) sync_month_bounds();
+}
+
 void CalendarDropdown::on_resized() {
-    if (calendar_ != nullptr) calendar_->set_bounds(Rect{0, 0, bounds().width, bounds().height});
+    year_->set_bounds(Rect{kContentLeft + (kGridWidth - kYearWidth) / 2, kYearRow, kYearWidth, 1});
+    calendar_->set_bounds(Rect{kContentLeft, kGridRow, kGridWidth, std::max(0, bounds().height - kGridRow - 1)});
+    sync_month_bounds();
 }
 
 ui::SizeHint CalendarDropdown::horizontal_size_hint() const {
-    return calendar_ != nullptr ? calendar_->horizontal_size_hint() : ui::SizeHint{1, 1, 1};
+    const int width = kContentLeft + kGridWidth + 1;  // frame, pad, grid, frame
+    return ui::SizeHint{width, width, width};
 }
 
 ui::SizeHint CalendarDropdown::vertical_size_hint() const {
-    return calendar_ != nullptr ? calendar_->vertical_size_hint() : ui::SizeHint{1, 1, 1};
+    const int height = kGridRow + 1 + 6 + 1;  // chrome, weekday row, six weeks, frame
+    return ui::SizeHint{height, height, height};
 }
 
-void CalendarDropdown::draw(scene::Painter&) {}  // the calendar child draws it all
+void CalendarDropdown::draw(scene::Painter& painter) {
+    const Style style = context().theme->resolve(frame_role_);
+    const Rect all{0, 0, bounds().width, bounds().height};
+    painter.fill(all, Cell::from_grapheme(" ", style));
+    // Framed like a dropdown menu, in a dropdown menu's colours, because
+    // that is what it is.
+    painter.draw_box(all, scene::LineStyle::Single, style);
+    if (year_->visible()) {
+        painter.draw_text(Point{step_back_rect().x, kYearRow}, "<<", style);
+        painter.draw_text(Point{step_forward_rect().x, kYearRow}, ">>", style);
+    }
+}
 
 void CalendarDropdown::dismiss() {
     if (dismissed_) return;
     dismissed_ = true;
-    // Copied before calling: the handler is expected to destroy this view,
-    // so the member must not be touched once it starts running.
-    // Both copied before either runs: on_dismiss is expected to destroy
-    // this view, so neither member may be touched afterwards.
     const std::function<void()> notify = on_closed;
     const std::function<void()> callback = on_dismiss;
     if (notify) notify();
     if (callback) callback();
+}
+
+void CalendarDropdown::step_year(int delta) {
+    const DateValue shown = calendar_->month();
+    show_month(DateValue{std::clamp(shown.year + delta, 1, 9999), shown.month, 1});
+}
+
+void CalendarDropdown::report_invalid_year() {
+    showing_invalid_ = true;
+    year_->set_text("invalid");
+    // The field says what happened, and while it does it is not a field: it
+    // takes no edits, so nothing is typed into the middle of the word.
+    year_->set_enabled(false);
+    invalidate();
+    if (context().app == nullptr) return;
+    const std::weak_ptr<void> liveness = lifetime_token();
+    // Held long enough to read, then the year that is actually shown comes
+    // back -- leaving the complaint there would be a second thing to clear.
+    context().app->start_timer(kInvalidHoldNanos, /*repeating=*/false, [this, liveness] {
+        if (liveness.expired()) return;
+        if (!showing_invalid_) return;
+        showing_invalid_ = false;
+        year_->set_enabled(true);
+        year_->set_text(std::to_string(calendar_->month().year));
+        invalidate();
+    });
+}
+
+void CalendarDropdown::commit_year() {
+    if (showing_invalid_) return;
+    const std::string text = year_->text();
+    int year = 0;
+    // The field only admits digits, so what is left to reject is a year that
+    // is empty, overlong, or zero.
+    const bool parsed = !text.empty() && text.size() <= 4 &&
+                        std::from_chars(text.data(), text.data() + text.size(), year).ec == std::errc{};
+    if (!parsed || year < 1) {
+        report_invalid_year();
+        return;
+    }
+    show_month(DateValue{year, calendar_->month().month, 1});
+}
+
+void CalendarDropdown::focus_slot(int slot) {
+    focus_slot_ = ((slot % 3) + 3) % 3;
+    if (focus_slot_ != 0 && month_->dropdown_open()) month_->close_dropdown();
+    if (context().app == nullptr) return;
+    ui::View* const target = focus_slot_ == 0   ? static_cast<ui::View*>(month_)
+                             : focus_slot_ == 1 ? static_cast<ui::View*>(year_)
+                                                : static_cast<ui::View*>(calendar_);
+    context().app->set_focus(target);
+    invalidate();
 }
 
 bool CalendarDropdown::on_mouse(const MouseEvent& event) {
@@ -451,22 +621,51 @@ bool CalendarDropdown::on_mouse(const MouseEvent& event) {
     const bool inside = event.cell.x >= abs.x && event.cell.x < abs.right() && event.cell.y >= abs.y &&
                         event.cell.y < abs.bottom();
     if (!inside) {
-        // Only a press closes it. Closing on a release would swallow the
-        // press that opened the next thing.
         if (event.action == MouseAction::Down) dismiss();
         return false;
     }
-    // Input capture routes to this view, so the calendar underneath is
-    // handed the event rather than reached by hit-testing.
-    return calendar_ != nullptr && calendar_->on_mouse(event);
+    const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
+    if (event.action == MouseAction::Down && year_->visible()) {
+        if (step_back_rect().contains(local)) {
+            step_year(-1);
+            return true;
+        }
+        if (step_forward_rect().contains(local)) {
+            step_year(1);
+            return true;
+        }
+        if (month_->bounds().contains(local)) focus_slot(0);
+        else if (year_->visible() && year_->bounds().contains(local)) focus_slot(1);
+        else if (calendar_->visible() && calendar_->bounds().contains(local)) focus_slot(2);
+    }
+    // The popup holds the mouse so a click outside can dismiss it, which
+    // means every click inside arrives here and is handed on by hand.
+    if (month_->bounds().contains(local)) return month_->on_mouse(event);
+    if (year_->visible() && year_->bounds().contains(local)) return year_->on_mouse(event);
+    if (calendar_->visible() && calendar_->bounds().contains(local)) return calendar_->on_mouse(event);
+    return true;
 }
 
 bool CalendarDropdown::on_key(const KeyEvent& event) {
-    if (event.action == KeyAction::Press && event.chord.key == Key::Escape) {
+    // Keys reach the focused control first and only then this popup, so what
+    // is left here is what belongs to the popup as a whole.
+    if (event.action != KeyAction::Press) return false;
+    const ui::View* const focused = context().app != nullptr ? context().app->focused() : nullptr;
+    if (event.chord.key == Key::Tab) {
+        // Leaving the year field is a commit: the reader typed a year and
+        // moved on, which is the same statement as pressing Enter on it.
+        if (focused == year_) commit_year();
+        return false;  // traversal itself is the application's to run
+    }
+    if (event.chord.key == Key::Escape) {
         dismiss();
         return true;
     }
-    return calendar_ != nullptr && calendar_->on_key(event);
+    if (event.chord.key == Key::Enter && focused == year_) {
+        commit_year();
+        return true;
+    }
+    return false;
 }
 
 CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application& app, Desktop& desktop) {
@@ -485,11 +684,19 @@ CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application
     const int y = std::clamp(anchor_abs.bottom() - desktop_abs.y, 0,
                              std::max(0, desktop.bounds().height - h.preferred));
     raw->set_bounds(Rect{x, y, w.preferred, h.preferred});
-    raw->on_dismiss = [&app, &desktop, raw] {
+    // Scoped like any other popup: keys and Tab traversal stay inside it, so
+    // the month picker and the year field are reachable from the keyboard and
+    // the menu bar behind it is not.
+    const ui::Application::ModalScopeId scope = app.push_modal(*raw);
+    raw->on_dismiss = [&app, &desktop, raw, scope] {
         if (app.input_capture() == raw) app.clear_input_capture();
+        app.pop_modal(scope);
         desktop.remove_popup(raw);  // discards ownership -> destroys this view
     };
     app.set_input_capture(raw);
+    // The days are what the reader came for; Tab from there reaches the month
+    // picker and the year, and comes back.
+    app.set_focus(&raw->calendar());
     return raw;
 }
 

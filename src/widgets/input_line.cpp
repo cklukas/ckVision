@@ -388,6 +388,9 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    // A disabled field is not merely greyed: it accepts nothing, the same
+    // contract TextEditor keeps.
+    if (!enabled()) return false;
     const bool has_ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
     const bool has_shift = has_modifier(event.chord.modifiers, Modifier::Shift);
     const bool has_alt_or_super = has_modifier(event.chord.modifiers, Modifier::Alt) ||
@@ -490,6 +493,7 @@ bool InputLine::on_key(const KeyEvent& event) {
 }
 
 bool InputLine::on_text(const TextEvent& event) {
+    if (!enabled()) return false;
     if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;
     for (std::string_view g : text::split_graphemes(event.text)) {

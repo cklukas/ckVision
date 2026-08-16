@@ -78,22 +78,43 @@ void ComboBox::commit_to_history() {
     history_index_ = -1;
 }
 
+int ComboBox::visible_rows() const noexcept { return std::max(0, bounds().height - 1); }
+
+void ComboBox::ensure_selection_visible() {
+    // A list taller than the space it was given still has to show the item
+    // that is selected -- and hand the mouse the same item the eye sees.
+    const int rows = visible_rows();
+    const int count = static_cast<int>(items_.size());
+    if (rows <= 0 || count <= rows) {
+        first_visible_ = 0;
+        return;
+    }
+    const int selected = selected_index_ ? static_cast<int>(*selected_index_) : 0;
+    if (selected < first_visible_) first_visible_ = selected;
+    if (selected >= first_visible_ + rows) first_visible_ = selected - rows + 1;
+    first_visible_ = std::clamp(first_visible_, 0, count - rows);
+}
+
 void ComboBox::open_dropdown() {
     if (dropdown_open_) return;
     dropdown_open_ = true;
     if (!selected_index_ && !items_.empty()) selected_index_ = 0;
+    ensure_selection_visible();
+    size_hint_changed();
     invalidate();
 }
 
 void ComboBox::close_dropdown() {
     if (!dropdown_open_) return;
     dropdown_open_ = false;
+    size_hint_changed();
     invalidate();
 }
 
 void ComboBox::select_index(std::size_t index, bool notify) {
     if (index >= items_.size()) return;
     selected_index_ = index;
+    ensure_selection_visible();
     text_ = items_[index];
     editor_.set_text(text_);
     history_index_ = -1;
@@ -136,7 +157,12 @@ ui::SizeHint ComboBox::horizontal_size_hint() const {
     return ui::SizeHint{4, width, ui::kUnboundedExtent};
 }
 
-ui::SizeHint ComboBox::vertical_size_hint() const { return ui::SizeHint{1, 1, ui::kUnboundedExtent}; }
+ui::SizeHint ComboBox::vertical_size_hint() const {
+    // Closed, one row. Open, the row plus the list drawn under it -- what the
+    // control needs, not what it currently has.
+    const int preferred = dropdown_open_ ? 1 + static_cast<int>(items_.size()) : 1;
+    return ui::SizeHint{1, preferred, ui::kUnboundedExtent};
+}
 
 bool ComboBox::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
@@ -229,7 +255,7 @@ bool ComboBox::on_mouse(const MouseEvent& event) {
         return true;
     }
     if (!dropdown_open_) return false;
-    const std::size_t index = static_cast<std::size_t>(row - 1);
+    const std::size_t index = static_cast<std::size_t>(first_visible_ + row - 1);
     if (index >= items_.size()) return false;
     select_index(index, true);
     close_dropdown();
@@ -243,6 +269,7 @@ void ComboBox::on_focus(const FocusEvent& event) {
 }
 
 void ComboBox::on_resized() {
+    ensure_selection_visible();
     const Rect absolute = absolute_bounds();
     editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, bounds().width - 2), 1});
 }
@@ -267,13 +294,13 @@ void ComboBox::draw(scene::Painter& painter) {
 
     if (!dropdown_open_) return;
     const int item_width = std::max(0, w - 1);
-    const int max_rows = std::min(static_cast<int>(items_.size()), std::max(0, bounds().height - 1));
+    const int max_rows = std::min(static_cast<int>(items_.size()) - first_visible_, visible_rows());
     for (int row = 0; row < max_rows; ++row) {
-        const bool active = selected_index_ && *selected_index_ == static_cast<std::size_t>(row);
+        const std::size_t item = static_cast<std::size_t>(first_visible_ + row);
+        const bool active = selected_index_ && *selected_index_ == item;
         const Style style = active ? selected : normal;
         painter.fill(Rect{0, row + 1, item_width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{0, row + 1}, text::clip_to_width(items_[static_cast<std::size_t>(row)], item_width),
-                          style);
+        painter.draw_text(Point{0, row + 1}, text::clip_to_width(items_[item], item_width), style);
         if (w > 1) painter.draw_text(Point{w - 1, row + 1}, "█", shadow);
     }
 }
