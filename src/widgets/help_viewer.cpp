@@ -7,6 +7,7 @@
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/label.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/text_view.hpp"
 
@@ -96,10 +97,21 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto* text_view_ptr =
         static_cast<TextView*>(column->add_item(std::move(text_view), LayoutSpec{SizePolicy::Expanding, 1}));
 
+    // The cross-links need saying what they are. On their own they are a box
+    // that changes the page when clicked, which reads as anything but
+    // navigation — a text field, most likely, since that is what a bordered
+    // box holding one line of text usually is.
+    auto links_label = std::make_unique<Label>(strings.help_links);
+    auto* links_label_ptr =
+        static_cast<Label*>(column->add_item(std::move(links_label), LayoutSpec{SizePolicy::Fixed, 1}));
+
     auto links_list = std::make_unique<ListView>(/*multi_select=*/false);
-    links_list->set_preferred_size(Size{0, 4});
+    // The links almost always fit. A bar that cannot scroll is the only thing
+    // suggesting there is more here than the reader can see.
+    links_list->set_scrollbar_auto_hide(true);
     auto* links_list_ptr =
         static_cast<ListView*>(column->add_item(std::move(links_list), LayoutSpec{SizePolicy::Fixed, 1}));
+    links_label_ptr->set_buddy(links_list_ptr);
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
@@ -118,7 +130,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto history = std::make_shared<std::vector<std::string>>();
     auto link_keys = std::make_shared<std::vector<std::string>>();
     auto refresh = std::make_shared<std::function<void()>>();
-    *refresh = [&provider, current_key, link_keys, text_view_ptr, links_list_ptr]() {
+    *refresh = [&provider, current_key, link_keys, text_view_ptr, links_list_ptr, links_label_ptr]() {
         const HelpTopic t = provider.topic(*current_key);
         text_view_ptr->set_text(t.title + "\n\n" + t.body);
         std::vector<std::string> labels;
@@ -127,7 +139,19 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
             link_keys->push_back(key);
             labels.push_back(label);
         }
+        const int count = static_cast<int>(labels.size());
         links_list_ptr->set_items(std::move(labels));
+        // Exactly as many rows as there are links. A fixed height left blank
+        // rows under the last one, which is what made the list look like an
+        // input field with room to type in. Bounded so a topic that links to
+        // a great many others scrolls instead of crowding out the prose.
+        links_list_ptr->set_preferred_size(Size{0, std::clamp(count, 1, 6)});
+        // A topic with no links shows neither the list nor its heading: an
+        // empty box under a heading promising links is worse than no box.
+        // Hidden rather than removed, so the pair survives navigation to a
+        // topic that does have links.
+        links_label_ptr->set_visible(count > 0);
+        links_list_ptr->set_visible(count > 0);
     };
     (*refresh)();
 

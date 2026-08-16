@@ -423,3 +423,80 @@ CK_TEST(a_row_can_mix_fill_and_non_fill_aligned_children_independently) {
     CK_CHECK(filled->bounds() == (Rect{0, 0, 10, 10}));   // default Fill: full row height
     CK_CHECK(started->bounds() == (Rect{10, 0, 10, 3}));  // Start: its own preferred height
 }
+
+// --- Visibility and layout space -------------------------------------------
+
+namespace {
+class Sized : public View {
+public:
+    explicit Sized(int extent) : extent_(extent) {}
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return ckv::ui::SizeHint{extent_, extent_, ckv::ui::kUnboundedExtent};
+    }
+    ckv::ui::SizeHint vertical_size_hint() const override {
+        return ckv::ui::SizeHint{extent_, extent_, ckv::ui::kUnboundedExtent};
+    }
+
+private:
+    int extent_;
+};
+}  // namespace
+
+CK_TEST(a_hidden_child_takes_no_room_in_a_column_and_leaves_no_gap) {
+    // Hiding a child is how a container whose contents depend on state drops
+    // it from the layout without dropping it from the tree. Reserving its
+    // space would leave a hole the reader cannot account for.
+    Column column;
+    column.set_spacing(1);
+    column.set_bounds(Rect{0, 0, 20, 20});
+    auto* first = static_cast<Sized*>(column.add_item(std::make_unique<Sized>(3),
+                                                       LayoutSpec{SizePolicy::Fixed, 1}));
+    auto* middle = static_cast<Sized*>(column.add_item(std::make_unique<Sized>(4),
+                                                        LayoutSpec{SizePolicy::Fixed, 1}));
+    auto* last = static_cast<Sized*>(column.add_item(std::make_unique<Sized>(5),
+                                                      LayoutSpec{SizePolicy::Fixed, 1}));
+    CK_CHECK(first->bounds().y == 0);
+    CK_CHECK(middle->bounds().y == 4);   // 3 + 1 spacing
+    CK_CHECK(last->bounds().y == 9);     // + 4 + 1 spacing
+
+    middle->set_visible(false);
+    column.set_bounds(Rect{0, 0, 20, 21});  // force a relayout
+    CK_CHECK(first->bounds().y == 0);
+    CK_CHECK(first->bounds().height == 3);
+    // The last child moves up into the hidden one's place, and only ONE
+    // spacing gap separates it from the first — not two.
+    CK_CHECK(last->bounds().y == 4);
+    CK_CHECK(last->bounds().height == 5);
+
+    middle->set_visible(true);
+    column.set_bounds(Rect{0, 0, 20, 20});
+    CK_CHECK(last->bounds().y == 9);
+}
+
+CK_TEST(a_hidden_child_contributes_nothing_to_a_columns_size_hints) {
+    Column column;
+    column.set_spacing(1);
+    column.add_item(std::make_unique<Sized>(3), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* hidden = column.add_item(std::make_unique<Sized>(4), LayoutSpec{SizePolicy::Fixed, 1});
+    const int with_both = column.vertical_size_hint().preferred;
+    hidden->set_visible(false);
+    const int with_one = column.vertical_size_hint().preferred;
+    // Losing the child loses its extent AND the gap that separated it.
+    CK_CHECK(with_both == 8);  // 3 + 1 + 4
+    CK_CHECK(with_one == 3);
+}
+
+CK_TEST(a_hidden_child_takes_no_room_in_a_row_either) {
+    Row row;
+    row.set_spacing(2);
+    row.set_bounds(Rect{0, 0, 30, 5});
+    auto* first = row.add_item(std::make_unique<Sized>(4), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* hidden = row.add_item(std::make_unique<Sized>(6), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* last = row.add_item(std::make_unique<Sized>(5), LayoutSpec{SizePolicy::Fixed, 1});
+    CK_CHECK(last->bounds().x == 14);  // 4 + 2 + 6 + 2
+
+    hidden->set_visible(false);
+    row.set_bounds(Rect{0, 0, 31, 5});
+    CK_CHECK(first->bounds().x == 0);
+    CK_CHECK(last->bounds().x == 6);  // 4 + 2
+}

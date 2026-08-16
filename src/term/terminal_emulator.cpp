@@ -62,12 +62,20 @@ Color ansi_color(int index) noexcept {
 // true-colour foreground is a specific colour the program chose, and
 // brightening that would be overriding the choice rather than honouring a
 // convention.
-Style bold_brightened(Style style) noexcept {
+Style bold_brightened(Style style, const Style& default_style) noexcept {
     if (!has_attr(style.attrs, Attr::Bold)) return style;
+    // The default foreground brightens too, and to white. A terminal's
+    // default behaves as the eighth colour does for this purpose, and it is
+    // the case that matters most: a program reaching for emphasis without
+    // naming a colour is the common one, and ncurses does exactly that.
+    if (style.fg == default_style.fg) {
+        style.fg = ansi_color(15);
+        return style;
+    }
     for (int index = 0; index < 8; ++index) {
         if (style.fg == ansi_color(index)) {
             style.fg = ansi_color(index + 8);
-            break;
+            return style;
         }
     }
     return style;
@@ -701,7 +709,7 @@ void TerminalEmulator::put_text(bool flush_incomplete) {
 void TerminalEmulator::put_grapheme(std::string_view grapheme) {
     if (cursor_.position.x >= cells_.width) { cursor_.position.x = 0; index(); }
     last_graphic_.assign(grapheme);
-    const Style style = bold_brightened(style_);
+    const Style style = bold_brightened(style_, profile_.default_style);
     Cell cell = Cell::from_grapheme(grapheme, style);
     active_cells()[static_cast<std::size_t>(cursor_.position.y * cells_.width + cursor_.position.x)] = cell;
     const int width = std::max(1, cell.width());

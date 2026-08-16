@@ -30,7 +30,11 @@ enum class TerminalMouseEncoding : std::uint8_t { None, X10, Sgr };
 struct TerminalCapabilityProfile {
     ::ckv::Size cells{80, 24};
     ::ckv::Size cell_pixels{9, 18};
-    ::ckv::Style default_style{::ckv::Color::rgb(229, 229, 229), ::ckv::Color::rgb(0, 0, 0)};
+    // Ordinary text sits below the brightest white the palette can reach, so
+    // that the bold a program asks for has somewhere to go. Setting this to
+    // the palette's own light grey leaves emphasis and body text a shade
+    // apart, which is too little to read as emphasis at all.
+    ::ckv::Style default_style{::ckv::Color::rgb(187, 187, 187), ::ckv::Color::rgb(0, 0, 0)};
     bool sixel = false;
     bool bracketed_paste = true;
     bool mouse_reporting = true;

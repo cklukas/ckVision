@@ -155,6 +155,14 @@ void ListView::ensure_cursor_visible() {
     }
 }
 
+void ListView::set_scrollbar_auto_hide(bool enabled) {
+    if (scrollbar_ != nullptr) scrollbar_->set_auto_hide(enabled);
+}
+
+bool ListView::scrollbar_auto_hide() const noexcept {
+    return scrollbar_ != nullptr && scrollbar_->auto_hide();
+}
+
 void ListView::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});

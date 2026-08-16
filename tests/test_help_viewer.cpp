@@ -250,3 +250,88 @@ CK_TEST(a_help_window_on_a_small_terminal_is_clamped_rather_than_overflowing) {
     CK_CHECK(bounds.height <= 12);
     CK_CHECK(bounds.width > 0 && bounds.height > 0);
 }
+
+namespace {
+// The rendered rows of the presented help window, so a test reads what a
+// reader reads rather than trusting the widget tree's shape.
+std::vector<std::string> help_window_rows(Application& app) {
+    std::vector<std::string> rows;
+    const ckv::FrameView frame = app.current_frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        std::string row;
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, y}).grapheme();
+        rows.push_back(row);
+    }
+    return rows;
+}
+
+bool any_row_contains(const std::vector<std::string>& rows, std::string_view needle) {
+    for (const std::string& row : rows)
+        if (row.find(needle) != std::string::npos) return true;
+    return false;
+}
+}  // namespace
+
+CK_TEST(the_cross_links_are_labelled_so_the_list_reads_as_navigation) {
+    // Regression: the links were an unlabelled box that changed the page when
+    // clicked. Nothing said it was navigation, so it read as a text field.
+    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
+    auto provider = sample_provider();
+
+    auto presentation = present_help_viewer(provider, "intro", app, *desktop, roles);
+    app.step(0);
+    const std::vector<std::string> rows = help_window_rows(app);
+    CK_CHECK(any_row_contains(rows, "Links to other help topics:"));
+    CK_CHECK(any_row_contains(rows, "See details"));  // the one link of "intro"
+}
+
+CK_TEST(a_topic_with_no_links_shows_neither_the_list_nor_its_heading) {
+    // An empty box under a heading promising links is worse than no box: it
+    // reads as something the reader failed to fill in.
+    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
+    MemoryHelpProvider provider;
+    provider.add_topic("alone", HelpTopic{"Alone", "This topic links nowhere.", {}});
+
+    auto presentation = present_help_viewer(provider, "alone", app, *desktop, roles);
+    app.step(0);
+    const std::vector<std::string> rows = help_window_rows(app);
+    CK_CHECK(any_row_contains(rows, "This topic links nowhere."));
+    CK_CHECK(!any_row_contains(rows, "Links to other help topics:"));
+}
+
+CK_TEST(the_link_list_is_exactly_as_tall_as_it_has_links) {
+    // A fixed height left blank rows below the last link, which is what made
+    // the list look like an input field with room to type in.
+    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
+    MemoryHelpProvider provider;
+    provider.add_topic("one", HelpTopic{"One", "Body.", {{"two", "Second topic"}}});
+    provider.add_topic("two", HelpTopic{"Two", "Body.",
+                                        {{"one", "First topic"}, {"three", "Third"}, {"four", "Fourth"}}});
+
+    auto single = present_help_viewer(provider, "one", app, *desktop, roles);
+    app.step(0);
+    const int single_height = desktop->windows()[0]->bounds().height;
+    desktop->windows()[0]->close();
+    app.step(0);
+
+    auto several = present_help_viewer(provider, "two", app, *desktop, roles);
+    app.step(0);
+    const int several_height = desktop->windows()[0]->bounds().height;
+    // Three links need two more rows than one link; nothing else differs.
+    CK_CHECK(several_height == single_height + 2);
+}

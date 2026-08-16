@@ -603,6 +603,33 @@ CK_TEST(an_absurd_repeat_count_is_bounded_by_the_screen) {
 
 // --- Bold and the low eight colours ---------------------------------------
 
+CK_TEST(a_real_curses_frame_renders_its_emphasis_white_and_its_body_below_it) {
+    // Bytes recorded from ncdu against a real pty. Emphasis has to be
+    // visibly brighter than body text, not a shade above it: the whole
+    // point of the convention is that a reader can see the difference.
+    term::TerminalEmulator emulator;
+    emulator.feed_output(read_fixture("ncdu_frame.raw"));
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    int bold_white = 0;
+    int body = 0;
+    for (const Cell& cell : snapshot.cell_buffer) {
+        if (cell.grapheme() == " ") continue;
+        if (has_attr(cell.style().attrs, ckv::Attr::Bold)) {
+            if (cell.style().fg == ckv::Color::rgb(255, 255, 255)) ++bold_white;
+        } else if (cell.style().fg == ckv::Color::rgb(187, 187, 187)) {
+            ++body;
+        }
+    }
+    CK_CHECK(bold_white > 0);
+    CK_CHECK(body > 0);
+    // Every printed cell is one or the other: nothing fell through as an
+    // unbrightened bold or an unexpected colour.
+    int printed = 0;
+    for (const Cell& cell : snapshot.cell_buffer)
+        if (cell.grapheme() != " ") ++printed;
+    CK_CHECK(bold_white + body == printed);
+}
+
 CK_TEST(bold_on_the_default_foreground_arrives_white_not_merely_heavier) {
     // ncurses asks for bold against the default foreground and every other
     // terminal answers with white. Emitting the same grey with a weight

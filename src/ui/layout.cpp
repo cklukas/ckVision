@@ -173,13 +173,14 @@ void Row::set_spacing(int spacing) {
 }
 
 void Row::relayout() {
+    const std::vector<View*> laid_out = detail::visible_children(children());
     std::vector<LayoutChild> layout_children;
-    layout_children.reserve(children().size());
-    for (const auto& child : children()) layout_children.push_back(child_layout(*child, specs_, true));
+    layout_children.reserve(laid_out.size());
+    for (View* child : laid_out) layout_children.push_back(child_layout(*child, specs_, true));
 
     const auto sizes = distribute_main_axis(layout_children, bounds().width, spacing_);
-    for (std::size_t i = 0; i < children().size(); ++i) {
-        View& child = *children()[i];
+    for (std::size_t i = 0; i < laid_out.size(); ++i) {
+        View& child = *laid_out[i];
         const LayoutSpec spec = spec_for(child, specs_);
         const int preferred = detail::preferred_height_for_width(child, sizes[i].second);
         const auto [cross_offset, cross_extent] = align_cross_axis(
@@ -213,9 +214,10 @@ void Column::set_spacing(int spacing) {
 }
 
 void Column::relayout() {
+    const std::vector<View*> laid_out = detail::visible_children(children());
     std::vector<LayoutChild> layout_children;
-    layout_children.reserve(children().size());
-    for (const auto& child : children()) {
+    layout_children.reserve(laid_out.size());
+    for (View* child : laid_out) {
         const LayoutSpec spec = spec_for(*child, specs_);
         const int preferred_width = child->horizontal_size_hint().preferred;
         const auto [cross_offset, cross_extent] = align_cross_axis(
@@ -228,8 +230,8 @@ void Column::relayout() {
     }
 
     const auto sizes = distribute_main_axis(layout_children, bounds().height, spacing_);
-    for (std::size_t i = 0; i < children().size(); ++i) {
-        View& child = *children()[i];
+    for (std::size_t i = 0; i < laid_out.size(); ++i) {
+        View& child = *laid_out[i];
         const LayoutSpec spec = spec_for(child, specs_);
         const int preferred = child.horizontal_size_hint().preferred;
         const auto [cross_offset, cross_extent] = align_cross_axis(
@@ -245,12 +247,13 @@ namespace {
 // any child makes the aggregate max unbounded too.
 SizeHint sum_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal, int spacing) {
     SizeHint total{0, 0, 0};
-    for (const auto& child : children) {
+    const std::vector<View*> counted = detail::visible_children(children);
+    for (View* child : counted) {
         const SizeHint h = horizontal ? child->horizontal_size_hint() : child->vertical_size_hint();
         total.min += h.min;
         total.preferred += h.preferred;
     }
-    const int gaps = children.empty() ? 0 : spacing * (static_cast<int>(children.size()) - 1);
+    const int gaps = counted.empty() ? 0 : spacing * (static_cast<int>(counted.size()) - 1);
     total.min += gaps;
     total.preferred += gaps;
     total.max = kUnboundedExtent;
@@ -259,7 +262,7 @@ SizeHint sum_hints(const std::vector<std::unique_ptr<View>>& children, bool hori
 
 SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, bool horizontal) {
     SizeHint total{0, 0, kUnboundedExtent};
-    for (const auto& child : children) {
+    for (View* child : detail::visible_children(children)) {
         const SizeHint h = horizontal ? child->horizontal_size_hint() : child->vertical_size_hint();
         total.min = std::max(total.min, h.min);
         total.preferred = std::max(total.preferred, h.preferred);

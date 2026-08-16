@@ -28,6 +28,10 @@ struct StandardStrings {
     std::string select_directory_title = "Select Directory";
     std::string window_list_title = "Window List";
     std::string help_title = "Help";
+    // Heading over the help viewer's cross-link list. Without it the list is
+    // an unlabeled box that changes the page when clicked, and a reader has
+    // no way to tell it is navigation rather than, say, a text field.
+    std::string help_links = "Links to other help topics:";
 };
 
 const StandardStrings& english_standard_strings() noexcept;
