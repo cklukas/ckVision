@@ -172,8 +172,13 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     // it: a Sixel keeps painting past a window's frame and out onto the
     // desktop, because nothing downstream knows where that view ended.
     const Rect absolute = to_absolute(anchor);
+    const Rect visible = absolute.intersected(clip_);
+    // Nothing of it falls inside this painter, so there is nothing to
+    // record. The fallback above has already run, clipped to the same
+    // nothing.
+    if (visible.empty()) return;
     surface_.add_raster_region(RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, absolute,
-                                            std::move(image), true, absolute.intersected(clip_)});
+                                            std::move(image), true, visible});
 }
 
 }  // namespace ckv::scene

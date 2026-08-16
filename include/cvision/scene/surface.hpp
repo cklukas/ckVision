@@ -47,13 +47,18 @@ struct RasterRegion {
     Rect anchor;  // cell-space position + span, at full extent
     std::shared_ptr<const Image> image;
     bool fallback_active = true;
-    // The part of `anchor` its painter was allowed to draw in; empty means
-    // the whole of it. An image larger than the view holding it -- a picture
-    // in a terminal window the reader has narrowed, say -- must be cut off
-    // at that view's edge, and only the painter knows where the edge is.
-    // Kept apart from `anchor` because the crop is worked out from the two:
-    // the full extent says which pixels these cells stand for, and this says
-    // which of them show.
+    // The part of `anchor` that may actually be drawn. An image larger than
+    // the view holding it -- a picture in a terminal window the reader has
+    // narrowed, say -- must be cut off at that view's edge, and only the
+    // painter knows where the edge is. Kept apart from `anchor` because the
+    // crop is worked out from the two: the full extent says which pixels
+    // these cells stand for, and this says which of them show.
+    //
+    // Always states the truth; it has no "unset" value. Letting an empty
+    // rect mean "all of it" reads correctly for a region nobody clipped and
+    // backwards for one clipped away entirely -- which is a window narrowed
+    // until the picture is off its edge, at which point the picture would
+    // spring back to full size.
     Rect visible;
 };
 

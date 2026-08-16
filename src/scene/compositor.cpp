@@ -225,7 +225,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     for (const RasterRegion& region : background.raster_regions()) {
         const Rect full_anchor = region.anchor;
         rect_scratch_a_.clear();
-        rect_scratch_a_.push_back(region.visible.empty() ? full_anchor : region.visible);
+        rect_scratch_a_.push_back(region.visible);
         for (const Layer& occluder : layers) {
             rect_scratch_b_.clear();
             const Rect occluder_rect = layer_rect(occluder);
@@ -243,11 +243,9 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                                     region.anchor.y + layer.position.y, region.anchor.width,
                                     region.anchor.height};
             rect_scratch_a_.clear();
-            rect_scratch_a_.push_back(
-                region.visible.empty()
-                    ? full_anchor
-                    : Rect{region.visible.x + layer.position.x, region.visible.y + layer.position.y,
-                           region.visible.width, region.visible.height});
+            rect_scratch_a_.push_back(Rect{region.visible.x + layer.position.x,
+                                           region.visible.y + layer.position.y,
+                                           region.visible.width, region.visible.height});
             for (std::size_t j = i + 1; j < layers.size(); ++j) {
                 rect_scratch_b_.clear();
                 const Rect occluder = layer_rect(layers[j]);

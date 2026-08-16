@@ -68,7 +68,7 @@ CK_TEST(clear_damage_resets_every_row) {
 CK_TEST(resize_reallocates_clears_raster_regions_and_fully_damages) {
     Surface s(ckv::Size{2, 2});
     s.clear_damage();
-    s.add_raster_region(RasterRegion{1, ckv::Rect{0, 0, 1, 1}, make_image(4, 4), true, {}});
+    s.add_raster_region(RasterRegion{1, ckv::Rect{0, 0, 1, 1}, make_image(4, 4), true, ckv::Rect{0, 0, 1, 1}});
     CK_CHECK(s.raster_regions().size() == 1);
 
     s.resize(ckv::Size{6, 4}, ckv::Cell::from_grapheme("z", ckv::Style{}));
@@ -84,7 +84,7 @@ CK_TEST(raster_region_lifecycle_marks_damage_and_supports_removal) {
     Surface s(ckv::Size{10, 10});
     s.clear_damage();
 
-    s.add_raster_region(RasterRegion{1, ckv::Rect{2, 2, 3, 3}, make_image(8, 8), true, {}});
+    s.add_raster_region(RasterRegion{1, ckv::Rect{2, 2, 3, 3}, make_image(8, 8), true, ckv::Rect{2, 2, 3, 3}});
     CK_CHECK(s.row_damage(2).lo == 2 && s.row_damage(2).hi == 5);
     CK_CHECK(s.row_damage(4).lo == 2 && s.row_damage(4).hi == 5);
     CK_CHECK(s.row_damage(0).empty());
@@ -106,8 +106,8 @@ CK_TEST(raster_region_lifecycle_marks_damage_and_supports_removal) {
 
 CK_TEST(raster_regions_can_stack_independently) {
     Surface s(ckv::Size{10, 10});
-    s.add_raster_region(RasterRegion{1, ckv::Rect{0, 0, 2, 2}, make_image(4, 4), true, {}});
-    s.add_raster_region(RasterRegion{2, ckv::Rect{5, 5, 2, 2}, make_image(4, 4), false, {}});
+    s.add_raster_region(RasterRegion{1, ckv::Rect{0, 0, 2, 2}, make_image(4, 4), true, ckv::Rect{0, 0, 2, 2}});
+    s.add_raster_region(RasterRegion{2, ckv::Rect{5, 5, 2, 2}, make_image(4, 4), false, ckv::Rect{5, 5, 2, 2}});
     CK_CHECK(s.raster_regions().size() == 2);
     CK_CHECK(s.raster_regions()[0].id == 1);
     CK_CHECK(s.raster_regions()[1].fallback_active == false);

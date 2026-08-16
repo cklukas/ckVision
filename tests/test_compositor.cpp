@@ -39,7 +39,7 @@ CK_TEST(background_rasters_reach_the_presenter_and_are_sliced_by_window_layers) 
     Compositor c(ckv::Size{8, 8});
     Surface bg = make_surface(8, 8, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
-    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, true, {}});
+    bg.add_raster_region(ckv::scene::RasterRegion{7, ckv::Rect{1, 1, 4, 4}, image, true, ckv::Rect{1, 1, 4, 4}});
     Surface occluder = make_surface(2, 2, "O");
     std::vector<Layer> layers{{1, &occluder, ckv::Point{2, 2}, false}};
 
@@ -242,7 +242,7 @@ CK_TEST(visible_rasters_unoccluded_region_reports_the_full_anchor) {
     Surface layer_surface = make_surface(6, 6, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{1, 1, 3, 2}, image, true, {}});
+        ckv::scene::RasterRegion{1, ckv::Rect{1, 1, 3, 2}, image, true, ckv::Rect{1, 1, 3, 2}});
     std::vector<Layer> layers{{1, &layer_surface, ckv::Point{0, 0}, false}};
     c.compose(layers, bg);
 
@@ -258,7 +258,7 @@ CK_TEST(visible_rasters_are_sliced_by_a_higher_occluding_layer) {
     Surface layer_surface = make_surface(6, 6, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 4, 4}, image, true, {}});
+        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 4, 4}, image, true, ckv::Rect{0, 0, 4, 4}});
     Surface occluder = make_surface(2, 2, "O");
     std::vector<Layer> layers{
         {1, &layer_surface, ckv::Point{0, 0}, false},
@@ -279,7 +279,7 @@ CK_TEST(visible_rasters_fully_occluded_region_yields_no_slices) {
     Surface layer_surface = make_surface(6, 6, ".");
     const auto image = std::make_shared<ckv::Image>(16, 16);
     layer_surface.add_raster_region(
-        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 2, 2}, image, true, {}});
+        ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 2, 2}, image, true, ckv::Rect{0, 0, 2, 2}});
     Surface occluder = make_surface(4, 4, "O");
     std::vector<Layer> layers{
         {1, &layer_surface, ckv::Point{0, 0}, false},
@@ -322,7 +322,7 @@ CK_TEST(a_raster_reaching_past_the_frame_is_clipped_not_fitted) {
     // A window near the right edge whose image extends beyond it.
     ckv::scene::Surface window(ckv::Size{12, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     auto image = std::make_shared<ckv::Image>(60, 30);
-    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, false, {}});
+    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, false, ckv::Rect{0, 0, 12, 6}});
     std::vector<Layer> layers(1);
     layers[0].id = 1;
     layers[0].surface = &window;
@@ -374,4 +374,35 @@ CK_TEST(an_image_inside_its_view_keeps_its_whole_extent_visible) {
     painter.draw_image(ckv::Rect{2, 1, 6, 3}, 8, image, [](ckv::scene::Painter&) {});
     const ckv::scene::RasterRegion& region = surface.raster_regions().front();
     CK_CHECK(region.visible == region.anchor);
+}
+
+CK_TEST(an_image_shrunk_out_of_its_view_disappears_rather_than_springing_back) {
+    // Narrowing a window past the picture must not bring the picture back.
+    // It did: an empty visible rect meant "unset" and the compositor read it
+    // as "all of it", so the last step of shrinking redrew the image whole.
+    ckv::scene::Surface surface(ckv::Size{40, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto image = std::make_shared<ckv::Image>(80, 40);
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 80; ++x) image->set_pixel(x, y, ckv::Image::Rgba{10, 20, 30, 255});
+
+    // The view has shrunk to the top-left corner; the picture starts beyond it.
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 10, 6});
+    painter.draw_image(ckv::Rect{20, 8, 30, 8}, 7, image, [](ckv::scene::Painter&) {});
+    CK_CHECK(surface.raster_regions().empty());
+}
+
+CK_TEST(the_visible_extent_only_ever_shrinks_as_a_view_narrows) {
+    auto image = std::make_shared<ckv::Image>(80, 40);
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 80; ++x) image->set_pixel(x, y, ckv::Image::Rgba{10, 20, 30, 255});
+    int previous = 1 << 20;
+    for (const int width : {30, 20, 10, 4, 1}) {
+        ckv::scene::Surface surface(ckv::Size{40, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+        ckv::scene::Painter painter(surface, ckv::Rect{0, 0, width, 6});
+        painter.draw_image(ckv::Rect{0, 0, 30, 8}, 7, image, [](ckv::scene::Painter&) {});
+        CK_CHECK(!surface.raster_regions().empty());
+        const int visible = surface.raster_regions().front().visible.width;
+        CK_CHECK(visible <= previous);
+        previous = visible;
+    }
 }
