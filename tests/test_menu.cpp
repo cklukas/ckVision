@@ -1176,3 +1176,32 @@ CK_TEST(dragging_from_the_title_onto_an_item_highlights_it_before_release) {
                                        Modifier::None});
     CK_CHECK(mf.desktop.popups().empty());
 }
+
+CK_TEST(a_menu_item_can_state_the_chord_its_application_actually_uses) {
+    // The registry's chord is one KeyChord; an application may reach the same
+    // command by a sequence the keymap cannot hold. The menu then has to
+    // advertise the application's spelling, or it teaches a key that does
+    // nothing where the reader is standing.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
+    app.commands().register_command(kSave, "&Save", "File", KeyChord{Key::Char, Modifier::Ctrl, "s"});
+    auto menu = make_dropdown(
+        f, app,
+        {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{kSave, "&Save", "^B s"}}});
+    menu->set_bounds(Rect{0, 0, 20, 1});
+
+    Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 1});
+    menu->draw(painter);
+
+    const std::string row = row_text(s, 0);
+    const auto hint_pos = row.find("^B s");
+    CK_CHECK(hint_pos != std::string::npos);
+    CK_CHECK(hint_pos + 4 == 19);  // still right-aligned
+    CK_CHECK(row.find("Ctrl+S") == std::string::npos);
+    // Presentation only: the registry binding is untouched and still fires.
+    CK_CHECK(app.commands().command_for_key(KeyChord{Key::Char, Modifier::Ctrl, "s"}) == kSave);
+}

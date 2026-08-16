@@ -1051,3 +1051,57 @@ CK_TEST(a_growing_overlay_label_stays_right_aligned_live) {
     const int right_edge = narrow.x + narrow.width;
     CK_CHECK(wide.x + wide.width == right_edge);  // still flush against the same margin
 }
+
+CK_TEST(a_resize_grip_reaches_along_the_border_and_the_whole_reach_resizes) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+
+    // The corner is still the corner; the cell beside it now belongs to the
+    // grip too, drawn as border so it costs no content space.
+    CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
+    CK_CHECK(s.at(Point{1, 4}).grapheme() == "─");
+    CK_CHECK(s.at(Point{19, 4}).grapheme() == "┘");
+    CK_CHECK(s.at(Point{18, 4}).grapheme() == "─");
+
+    // ...and the widened cells resize, exactly as the corners do. An
+    // affordance the pointer can see but not use is worse than none.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{18, 4})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{24, 7})));
+    CK_CHECK(w->bounds().width > 20);
+    CK_CHECK(w->bounds().height > 5);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{24, 7})));
+}
+
+CK_TEST(the_left_grips_widened_cell_resizes_from_the_left_edge) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{5, 5, 20, 10});
+    w->set_resizable(true);
+    // One cell in from the bottom-left corner.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 1, 5 + 9})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{5 - 3, 5 + 12})));
+    // Dragging the left grip outward moves the left edge and widens.
+    CK_CHECK(w->bounds().width > 20);
+    CK_CHECK(w->bounds().x < 5);
+}
+
+CK_TEST(a_window_too_narrow_for_two_wide_grips_keeps_them_a_cell_each) {
+    Fixture f;
+    Surface s(ckv::Size{8, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 4, 5});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 8, 5});
+    w->draw(painter);
+    // Two two-cell grips would meet and read as one continuous edge.
+    CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
+    CK_CHECK(s.at(Point{3, 4}).grapheme() == "┘");
+    CK_CHECK(s.at(Point{1, 4}).grapheme() != "─");
+}

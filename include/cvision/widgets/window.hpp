@@ -307,6 +307,11 @@ private:
     bool point_in_zoom_control(Point local) const noexcept;
     bool point_in_resize_right_grip(Point local) const noexcept;
     bool point_in_resize_left_grip(Point local) const noexcept;
+    // How many cells of the bottom border each corner grip occupies, and so
+    // how large a target the pointer has to hit. One cell is a small thing
+    // to aim at; drawing and hit-testing both read this, which is what keeps
+    // the affordance and the region that answers it the same size.
+    int resize_grip_width() const noexcept;
     Rect clamp_size(Rect bounds) const noexcept;
     Rect zoom_target() const noexcept;
     // Desktop owns this relationship.  It is deliberately not public:

@@ -437,3 +437,61 @@ CK_TEST(a_status_item_acts_on_release_and_can_be_taken_back) {
     status.on_mouse(at(38, ckv::MouseAction::Up));
     CK_CHECK(runs == 1);
 }
+
+CK_TEST(a_surface_stated_chord_replaces_the_registrys_and_keeps_its_accent) {
+    // An application whose command is reached by something the keymap cannot
+    // hold — a multi-key sequence — states the spelling it means. Without
+    // this the bar renders the registry chord AND the application's own
+    // wording, telling the reader two different things at once.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kOpen = ui::kFirstApplicationCommandId;
+    app.commands().register_command(kOpen, "Window List");
+    app.commands().bind_key(*ckv::KeyChord::parse("F6"), kOpen);
+    app.set_command_handler(kOpen, [] {});
+
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    status.on_attached();
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{kOpen, "windows", "^B w"}}});
+
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    status.draw(painter);
+    const std::string row = row_text(s, 0);
+    CK_CHECK(row.find("^B w windows") != std::string::npos);
+    // The registry's own chord is not advertised here...
+    CK_CHECK(row.find("F6") == std::string::npos);
+    // ...and it still works everywhere else: this is presentation only.
+    CK_CHECK(app.commands().command_for_key(*ckv::KeyChord::parse("F6")) == kOpen);
+
+    // The stated chord is what receives the hotkey accent, not the label.
+    const ckv::Style hotkey = f.theme.resolve(f.roles.hotkey);
+    CK_CHECK(s.at(Point{1, 0}).style().fg == hotkey.fg);   // '^' of "^B w"
+    CK_CHECK(s.at(Point{6, 0}).style().fg != hotkey.fg);   // 'w' of "windows"
+}
+
+CK_TEST(an_item_without_a_stated_chord_still_asks_the_registry) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kOpen = ui::kFirstApplicationCommandId;
+    app.commands().register_command(kOpen, "Window List");
+    app.commands().bind_key(*ckv::KeyChord::parse("F6"), kOpen);
+    app.set_command_handler(kOpen, [] {});
+
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    status.on_attached();
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{kOpen, "windows"}}});
+
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    status.draw(painter);
+    CK_CHECK(row_text(s, 0).find("F6 windows") != std::string::npos);
+}

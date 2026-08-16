@@ -49,6 +49,11 @@ StatusLine::EffectiveLabel StatusLine::effective_label(const StatusLineItem& ite
     // the status line never navigates by letter, so it always strips
     // one rather than leaking the raw character into the rendered text.
     std::string text = parse_mnemonic(item.presentation.label.empty() ? info->title : item.presentation.label).display;
+    // A surface-stated chord wins over the registry's: it is the application
+    // saying how the command is reached from where the reader is now.
+    if (!item.presentation.chord.empty())
+        return EffectiveLabel{item.presentation.chord + " " + text,
+                              text::text_width(item.presentation.chord)};
     if (const auto chord = context().app->commands().chord_for_command(command)) {
         std::string shortcut = context().app->commands().format_chord(*chord);
         return EffectiveLabel{shortcut + " " + text, text::text_width(shortcut)};

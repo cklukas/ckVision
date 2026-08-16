@@ -348,12 +348,24 @@ bool Window::point_in_zoom_control(Point local) const noexcept {
     return local.y == 0 && in_range(local.x, w - 5, w - 2);  // "[]" leaves one frame cell before the corner
 }
 
+int Window::resize_grip_width() const noexcept {
+    if (!resizable_) return 0;
+    // Two cells where there is room for two of them plus a cell of plain
+    // border between, so the two grips stay visibly separate things rather
+    // than merging into one continuous bottom edge.
+    constexpr int kWide = 2;
+    return bounds().width >= 2 * kWide + 1 ? kWide : 1;
+}
+
 bool Window::point_in_resize_right_grip(Point local) const noexcept {
-    return resizable_ && local.x == bounds().width - 1 && local.y == bounds().height - 1;
+    const int grip = resize_grip_width();
+    return grip > 0 && local.y == bounds().height - 1 && local.x >= bounds().width - grip &&
+           local.x < bounds().width;
 }
 
 bool Window::point_in_resize_left_grip(Point local) const noexcept {
-    return resizable_ && local.x == 0 && local.y == bounds().height - 1;
+    const int grip = resize_grip_width();
+    return grip > 0 && local.y == bounds().height - 1 && local.x >= 0 && local.x < grip;
 }
 
 void Window::draw(scene::Painter& painter) {
@@ -389,11 +401,20 @@ void Window::draw(scene::Painter& painter) {
     // legible on a monochrome terminal.
     painter.draw_box(b, active_ ? scene::LineStyle::Double : scene::LineStyle::Single, frame_style);
     if (active_ && resizable_ && b.width > 1 && b.height > 1) {
-        // A focused, resizable window keeps one-cell single-line corner grips.
-        // The surrounding frame remains double-line; the two distinct corner
-        // cells are the resize affordance and consume no content space.
-        painter.draw_text(Point{0, b.height - 1}, "└", frame_style);
-        painter.draw_text(Point{b.width - 1, b.height - 1}, "┘", frame_style);
+        // A focused, resizable window keeps single-line corner grips against
+        // the double-line frame. They run a short way along the bottom border
+        // rather than marking the corner cell alone: the corner is where the
+        // eye looks for the handle, but one cell is a hard thing to hit, and
+        // the neighbouring border cells cost nothing to give away — they are
+        // frame, not content.
+        const int grip = resize_grip_width();
+        const int y = b.height - 1;
+        painter.draw_text(Point{0, y}, "└", frame_style);
+        painter.draw_text(Point{b.width - 1, y}, "┘", frame_style);
+        for (int i = 1; i < grip; ++i) {
+            painter.draw_text(Point{i, y}, "─", frame_style);
+            painter.draw_text(Point{b.width - 1 - i, y}, "─", frame_style);
+        }
     }
     if (b.width > 6) {
         // U+25A0 BLACK SQUARE for close, matching the convention's

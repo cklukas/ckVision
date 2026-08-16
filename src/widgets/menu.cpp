@@ -215,6 +215,10 @@ std::string DropdownMenu::item_source_text(const MenuItem& item) const {
 std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) const {
     const ui::CommandId command = item_command(item);
     if (command == ui::kInvalidCommand) return std::nullopt;
+    // A surface-stated chord wins over the registry's (see
+    // CommandPresentation::chord): the menu advertises the way this
+    // application actually reaches the command.
+    if (!item.presentation.chord.empty()) return item.presentation.chord;
     const auto chord = context().app->commands().chord_for_command(command);
     if (!chord) return std::nullopt;
     return context().app->commands().format_chord(*chord);
