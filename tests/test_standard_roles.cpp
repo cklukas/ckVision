@@ -257,3 +257,35 @@ CK_TEST(a_hued_scheme_draws_the_window_caption_on_the_frames_own_background) {
         CK_CHECK(has_attr(theme.resolve(r.window_title_active).attrs, ckv::Attr::Bold));
     }
 }
+
+CK_TEST(a_button_never_wears_the_background_behind_its_dialog) {
+    // A control the reader is meant to press has to read as a raised surface.
+    // The dark scheme's default button used the desktop background as its
+    // face, which made the one button a dialog most wants pressed look like a
+    // hole punched in it.
+    //
+    // Mono and High Contrast are excluded on purpose: with two colours and no
+    // hue to spend, a button face IS the background plus an attribute, and
+    // there is nothing else for it to be.
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    const std::vector<ckv::ui::Theme> hued{
+        make_classic_theme(reg, r),
+        ckv::ui::make_dark_theme(reg, r),
+        ckv::ui::make_light_theme(reg, r),
+    };
+
+    for (const ckv::ui::Theme& theme : hued) {
+        const ckv::Color desktop = theme.resolve(r.desktop_background).bg;
+        const ckv::Color dialog = theme.resolve(r.dialog_background).bg;
+        for (const ckv::ui::RoleId face :
+             {r.button_normal, r.button_focused, r.button_default}) {
+            CK_CHECK(theme.resolve(face).bg != desktop);
+            CK_CHECK(theme.resolve(face).bg != dialog);
+        }
+        // The default button is set apart from an ordinary one by weight and
+        // colour of text, not by changing what surface it is.
+        CK_CHECK(has_attr(theme.resolve(r.button_default).attrs, ckv::Attr::Bold) ||
+                 theme.resolve(r.button_default).fg != theme.resolve(r.button_normal).fg);
+    }
+}

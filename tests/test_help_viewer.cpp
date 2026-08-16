@@ -430,17 +430,3 @@ CK_TEST(the_help_window_is_resizable_and_its_panes_grow_with_it) {
     CK_CHECK(f.shows("About alpha."));
 }
 
-CK_TEST(the_buttons_sit_against_the_bottom_border_with_no_leftover_row) {
-    // The button shadow already separates the row from the frame; a margin
-    // under it is a blank row nobody asked for.
-    BrowserFixture f;
-    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
-    f.app.step(0);
-    ckv::widgets::Window* const window = f.desktop->windows()[0];
-
-    const ckv::Rect content = window->content_rect();
-    // Content reaches the last row inside the frame: bottom margin is zero.
-    CK_CHECK(content.y + content.height == window->bounds().height - 1);
-    // ...while the top still keeps its breathing room.
-    CK_CHECK(content.y == 2);
-}

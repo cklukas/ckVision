@@ -78,6 +78,11 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     if (retained_descriptor->minimum_window_size.width > 0 ||
         retained_descriptor->minimum_window_size.height > 0)
         window->set_min_size(retained_descriptor->minimum_window_size);
+    // A descriptor dialog is held off its frame like any other. Previously
+    // it had no margin at all, which left fields and buttons against the
+    // border and made each application add padding of its own -- the same
+    // decision taken repeatedly, differently.
+    window->set_content_margin(1, 1);
     Window* const window_ptr = window.get();
     auto completion = std::make_shared<DescriptorDialogCompletion>(
         DescriptorDialogCompletion{window_ptr->lifetime_token(), std::nullopt, false});

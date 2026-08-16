@@ -89,6 +89,12 @@ private:
     int scroll_top_ = 0;
     int scroll_bottom_ = 0;
     bool origin_mode_ = false;
+    // DECAWM. On by default, as a terminal is; a program turns it off to
+    // write into the last column without the cursor falling to the next line.
+    bool autowrap_ = true;
+    // IRM (the ANSI mode, CSI 4 h). While set, a written character pushes the
+    // rest of the line right instead of replacing what is under it.
+    bool insert_mode_ = false;
     ParseState parse_state_ = ParseState::Ground;
     // G0..G3 and which of them the printable range currently resolves
     // through. SI and SO move the pointer; ESC ( ) * + change the contents.

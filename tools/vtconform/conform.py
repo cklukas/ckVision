@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 
 # Each case is a byte script plus the screen it is played on. They are chosen
 # to isolate one decision each, because a case that exercises three rules at
@@ -92,10 +93,51 @@ CASES = {
     "dl": (16, 3, "\033[1;1Ha\033[2;1Hb\033[1;1H\033[42m\033[M"),
     "scroll_up_newline": (8, 3, "\033[3;1H\033[44m\n"),
     "scroll_region_su": (8, 4, "\033[1;3r\033[44m\033[2S"),
+    # --- Cursor motion and clamping.
+    "cup_clamped": (10, 3, "\033[99;99Hx"),
+    "cha_vpa": (10, 3, "\033[1;1Habc\033[5Gx\033[2dy"),
+    "cursor_save_restore": (10, 3, "\033[2;3H\0337\033[1;1Hab\0338z"),
+    # --- Autowrap, including the pending-wrap quirk at the last column.
+    "autowrap": (5, 3, "abcdefgh"),
+    "pending_wrap_then_cr": (5, 3, "abcde\rZ"),
+    "pending_wrap_then_bs": (5, 3, "abcde\bZ"),
+    "no_autowrap": (5, 3, "\033[?7labcdefgh"),
+    # --- Tabs.
+    "default_tabs": (24, 2, "a\tb\tc"),
+    "tab_clear_and_set": (24, 2, "\033[1;5H\033H\033[1;1H\033[3gA\tB"),
+    # --- Scrolling regions.
+    "stbm_index_at_bottom": (8, 5, "\033[2;4r\033[4;1Ha\n\033[Hz"),
+    "stbm_reverse_index_at_top": (8, 5, "\033[2;4r\033[2;1Ha\033Mz"),
+    # --- Insert mode and repeat.
+    "irm_insert": (12, 2, "\033[1;1Habcdef\033[1;3H\033[4hXY"),
+    "rep": (12, 2, "\033[1;1Hx\033[5b"),
+    # --- Line-drawing charset.
+    "dec_graphics": (12, 2, "\033(0qqq\033(BX"),
+    # --- Wide characters and how they are overwritten.
+    "wide_char": (10, 2, "\033[1;1H\344\275\240\345\245\275"),
+    "overwrite_wide_left": (10, 2, "\033[1;1H\344\275\240\033[1;1HX"),
+    # --- 256-colour and true-colour selection.
+    "sgr_256": (10, 2, "\033[38;5;196;48;5;21mAB"),
+    "sgr_truecolor": (10, 2, "\033[38;2;10;20;30;48;2;40;50;60mAB"),
+    # --- Alternate screen.
+    "alt_screen": (10, 3, "\033[1;1Hmain\033[?1049h\033[1;1Halt"),
+    "alt_screen_restore": (10, 3, "\033[1;1Hmain\033[?1049h\033[1;1Halt\033[?1049l"),
     # --- Colour resets, so "default" means the same thing on both sides.
     "sgr_default_bg": (12, 2, "\033[44mxx\033[49m\033[K"),
     "sgr_default_fg": (12, 2, "\033[31mxx\033[39myy"),
     "sgr_reset_then_erase": (12, 2, "\033[4;44mxx\033[0m\033[K"),
+}
+
+# DEC Special Graphics, per the published VT100 character set: the reference's
+# capture reports a shift-out plus the ASCII byte, where the emulator stores
+# the glyph that byte stands for. Same screen, two spellings.
+DEC_GRAPHICS = {
+    "`": "\u25c6", "a": "\u2592", "f": "\u00b0", "g": "\u00b1", "i": "\u240b",
+    "j": "\u2518", "k": "\u2510", "l": "\u250c", "m": "\u2514", "n": "\u253c",
+    "o": "\u23ba", "p": "\u23bb", "q": "\u2500", "r": "\u23bc", "s": "\u23bd",
+    "t": "\u251c", "u": "\u2524", "v": "\u2534", "w": "\u252c", "x": "\u2502",
+    "y": "\u2264", "z": "\u2265", "{": "\u03c0", "|": "\u2260", "}": "\u00a3",
+    "~": "\u00b7", "_": " ", "0": "\u2588",
 }
 
 SGR_RE = re.compile(r"\033\[([0-9;]*)m")
@@ -192,6 +234,7 @@ def runs_from_capture(lines, columns, rows):
         raw = lines[row] if row < len(lines) else ""
         pen = Pen()
         cells = []
+        shifted = False
         i = 0
         while i < len(raw) and len(cells) < columns:
             m = SGR_RE.match(raw, i)
@@ -203,10 +246,32 @@ def runs_from_capture(lines, columns, rows):
                 nxt = raw.find("m", i)
                 i = nxt + 1 if nxt != -1 else len(raw)
                 continue
-            cells.append((raw[i], pen.signature()))
+            ch = raw[i]
             i += 1
+            # The capture speaks its own shorthand for three things, and a
+            # reading that took them literally would report differences that
+            # are not on the screen at all.
+            if ch == "\x0e":  # shift out: the line-drawing set is now current
+                shifted = True
+                continue
+            if ch == "\x0f":  # shift in
+                shifted = False
+                continue
+            if ch == "\t":  # a tab is captured as itself, not as the cells it skipped
+                stop = min(((len(cells) // 8) + 1) * 8, columns)
+                while len(cells) < stop:
+                    cells.append((" ", pen.signature()))
+                continue
+            if shifted:
+                ch = DEC_GRAPHICS.get(ch, ch)
+            cells.append((ch, pen.signature()))
+            # A double-width character owns two cells; the second holds no
+            # grapheme of its own, which is how the emulator represents it.
+            if unicodedata.east_asian_width(ch) in ("W", "F"):
+                cells.append(("", pen.signature()))
         while len(cells) < columns:
             cells.append((" ", Pen().signature()))
+        del cells[columns:]
 
         start = 0
         for x in range(1, columns + 1):

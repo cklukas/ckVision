@@ -78,10 +78,9 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     // out to grow with it.
     window->set_resizable(true);
     window->set_min_size(Size{40, 12});
-    // Prose is held off the frame, but the button row is not: its cast shadow
-    // already separates it from the bottom border, so a margin under it is a
-    // blank row nobody asked for.
-    window->set_content_margins(1, 1, 1, 0);
+    // Prose is held off the frame; the window works out for itself that the
+    // button row below it needs no margin, its shadow being the gap already.
+    window->set_content_margin(1, 1);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();

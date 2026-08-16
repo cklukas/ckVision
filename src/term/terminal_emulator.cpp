@@ -464,6 +464,8 @@ void TerminalEmulator::handle_csi(char final_byte) {
                 }
             } else if (mode == 2004) {
                 bracketed_paste_enabled_ = enabled && profile_.bracketed_paste;
+            } else if (mode == 7) {
+                autowrap_ = enabled;
             } else if (mode == 6) {
                 origin_mode_ = enabled;
                 cursor_.position = Point{0, origin_mode_ ? scroll_top_ : 0};
@@ -479,6 +481,22 @@ void TerminalEmulator::handle_csi(char final_byte) {
             } else if (mode == 25) {
                 cursor_.visible = enabled;
             }
+            if (end == std::string_view::npos) break;
+            begin = end + 1;
+        }
+        return;
+    }
+    // The ANSI modes, which carry no '?' and are a separate space from the
+    // DEC private ones above: the same number means different things in each.
+    if (final_byte == 'h' || final_byte == 'l') {
+        const bool enabled = final_byte == 'h';
+        std::string_view modes(control_);
+        std::size_t begin = 0;
+        while (begin <= modes.size()) {
+            const std::size_t end = modes.find(';', begin);
+            const std::string_view value =
+                modes.substr(begin, end == std::string_view::npos ? modes.size() - begin : end - begin);
+            if (parameter(value, 0, -1) == 4) insert_mode_ = enabled;
             if (end == std::string_view::npos) break;
             begin = end + 1;
         }
@@ -728,14 +746,35 @@ void TerminalEmulator::put_text(bool flush_incomplete) {
 }
 
 void TerminalEmulator::put_grapheme(std::string_view grapheme) {
-    if (cursor_.position.x >= cells_.width) { cursor_.position.x = 0; index(); }
+    if (cursor_.position.x >= cells_.width) {
+        // Autowrap off means the last column is written over and over rather
+        // than the cursor falling to the next line — which is how a program
+        // fills the bottom-right cell without scrolling the screen.
+        if (!autowrap_) cursor_.position.x = cells_.width - 1;
+        else { cursor_.position.x = 0; index(); }
+    }
     last_graphic_.assign(grapheme);
     const Style style = bold_brightened(style_, profile_.default_style);
     Cell cell = Cell::from_grapheme(grapheme, style);
-    active_cells()[static_cast<std::size_t>(cursor_.position.y * cells_.width + cursor_.position.x)] = cell;
     const int width = std::max(1, cell.width());
-    if (width == 2 && cursor_.position.x + 1 < cells_.width)
-        active_cells()[static_cast<std::size_t>(cursor_.position.y * cells_.width + cursor_.position.x + 1)] = Cell::continuation(style_);
+    if (insert_mode_) insert_cells(width);
+
+    auto& cells = active_cells();
+    const auto at = [this, &cells](int x) -> Cell& {
+        return cells[static_cast<std::size_t>(cursor_.position.y * cells_.width + x)];
+    };
+    // A double-width character occupies two cells that only mean anything
+    // together. Writing over either one leaves the other a half of nothing,
+    // so it is blanked rather than left to render as a stray fragment of a
+    // character that is no longer there.
+    const int x = cursor_.position.x;
+    if (at(x).is_continuation() && x > 0) at(x - 1) = erase_cell();
+    if (at(x).width() == 2 && x + 1 < cells_.width) at(x + 1) = erase_cell();
+    if (width == 2 && x + 1 < cells_.width && at(x + 1).width() == 2 && x + 2 < cells_.width)
+        at(x + 2) = erase_cell();
+
+    at(x) = cell;
+    if (width == 2 && x + 1 < cells_.width) at(x + 1) = Cell::continuation(style_);
     cursor_.position.x += width;
 }
 

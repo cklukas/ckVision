@@ -92,6 +92,11 @@ public:
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
 
+    // Every child shares this row, so the row's last line is a shadow only
+    // when all of them end in one -- which is what a row of nothing but
+    // buttons is, and what a row mixing a button with a label is not.
+    bool trailing_row_is_shadow() const noexcept override;
+
     // A container's own hints aggregate its children's (main axis:
     // sum plus spacing; cross axis: max) — this is what lets a Fixed-
     // policy Row of buttons nested inside a Column get its natural
@@ -123,6 +128,10 @@ public:
 
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
+
+    // The column's last row belongs to its last item, so the question goes
+    // there.
+    bool trailing_row_is_shadow() const noexcept override;
 
     // See Row: main axis (vertical here) sums, cross axis maxes.
     SizeHint horizontal_size_hint() const override;

@@ -118,6 +118,9 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     // separates the message from the box drawn around it. The size hints
     // budget this margin, so the alert grows to keep it rather than
     // squeezing its own text.
+    // One cell off the frame. The window drops the bottom of that itself
+    // when the content ends in a button row, whose shadow is already the
+    // gap.
     window->set_content_margin(1, 1);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};

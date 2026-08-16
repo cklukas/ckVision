@@ -814,3 +814,67 @@ CK_TEST(scrolling_fills_the_exposed_line_with_the_selected_background) {
     for (int x = 0; x < 6; ++x)
         CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(2 * 6 + x)].style().bg == blue);
 }
+
+CK_TEST(insert_mode_pushes_the_rest_of_the_line_right) {
+    // IRM, the ANSI mode CSI 4 h. Found by differential conformance against
+    // an established terminal: ckVision had no handling for ANSI modes at all
+    // (only the DEC private '?' ones), so writing in insert mode overwrote
+    // what a program expected to be pushed aside.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{12, 2};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[1;1Habcdef\x1b[1;3H\x1b[4hXY");
+    ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    std::string row;
+    for (int x = 0; x < 8; ++x) row += snapshot.cell_buffer[static_cast<std::size_t>(x)].grapheme();
+    CK_CHECK(row == "abXYcdef");
+
+    // Replace mode is the default and must still overwrite.
+    emulator.feed_output("\x1b[4l\x1b[1;1H\x1b[2K\x1b[1;1Habcdef\x1b[1;3HZZ");
+    snapshot = emulator.snapshot();
+    row.clear();
+    for (int x = 0; x < 6; ++x) row += snapshot.cell_buffer[static_cast<std::size_t>(x)].grapheme();
+    CK_CHECK(row == "abZZef");
+}
+
+CK_TEST(autowrap_can_be_turned_off_so_the_last_column_is_written_over) {
+    // DECAWM (?7) reset. A program fills the bottom-right cell this way
+    // without the screen scrolling out from under it.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{5, 3};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[?7labcdefgh");
+    ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    std::string first;
+    for (int x = 0; x < 5; ++x) first += snapshot.cell_buffer[static_cast<std::size_t>(x)].grapheme();
+    CK_CHECK(first == "abcdh");  // the tail piles up in the last column
+    CK_CHECK(snapshot.cell_buffer[5].grapheme() == " ");  // nothing wrapped
+
+    // Turning it back on restores wrapping.
+    emulator.feed_output("\x1b[?7h\x1b[2J\x1b[1;1Habcdefgh");
+    snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[5].grapheme() == "f");
+}
+
+CK_TEST(overwriting_half_of_a_wide_character_blanks_the_other_half) {
+    // The two cells of a double-width character only mean anything together.
+    // Left behind, the orphaned half renders as a fragment of a character
+    // that is no longer on the screen.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{10, 2};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[1;1H\xe4\xbd\xa0\x1b[1;1HX");  // write over the left half
+    ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "X");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == " ");
+    CK_CHECK(!snapshot.cell_buffer[1].is_continuation());
+
+    // ...and over the right half, which orphans the left one instead.
+    emulator.feed_output("\x1b[2J\x1b[1;1H\xe4\xbd\xa0\x1b[1;2HY");
+    snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == " ");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "Y");
+}

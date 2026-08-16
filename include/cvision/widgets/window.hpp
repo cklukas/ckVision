@@ -133,6 +133,11 @@ public:
     // blank row nobody asked for, while the top of the window still wants
     // its breathing space. Symmetric padding cannot express that.
     void set_content_margins(int left, int top, int right, int bottom);
+    // The margins actually applied. The bottom one is dropped when the
+    // content's last row is a cast shadow: measuring, sizing and painting
+    // all ask here, so a window cannot be sized for a gap it does not draw.
+    int effective_top_margin() const noexcept;
+    int effective_bottom_margin() const noexcept;
     int top_content_margin() const noexcept { return top_content_margin_; }
     int bottom_content_margin() const noexcept { return bottom_content_margin_; }
 

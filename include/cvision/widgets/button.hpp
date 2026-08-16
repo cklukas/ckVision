@@ -75,6 +75,8 @@ public:
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
+    // The face sits on row 0 and the cast shadow on row 1.
+    bool trailing_row_is_shadow() const noexcept override { return true; }
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;

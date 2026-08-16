@@ -204,6 +204,16 @@ public:
     virtual SizeHint vertical_size_hint() const {
         return SizeHint{0, preferred_size_.height, kUnboundedExtent};
     }
+
+    // True when this view's final row is a cast shadow rather than content.
+    //
+    // Such a row already stands the view off whatever sits below it, so a
+    // container that then adds a margin under it produces two gaps where one
+    // was meant -- the blank line under a dialog's buttons. Containers
+    // forward the question to whichever child occupies their own last row,
+    // so a caller states the padding it wants and the arrangement works out
+    // where that padding is already present.
+    virtual bool trailing_row_is_shadow() const noexcept { return false; }
     void set_preferred_size(Size size) { preferred_size_ = size; }
 
     // Fired on the immediate parent (M9/WP-16, E10) whenever one of its

@@ -232,8 +232,12 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.help_text, Style{kDarkYellow, kDarkBg, Attr{}});
     theme.set(roles.button_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.button_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
-    theme.set(roles.button_default, Style{kDarkYellow, kDarkBg, Attr::Bold});
-    theme.set(roles.button_shadow, Style{kDarkBg, kDarkPanel, Attr{}});
+    // Every button keeps the same raised face; the default one is marked by
+    // an accent foreground and weight, not by becoming a different -- and in
+    // a dark scheme, near-black -- surface. A control the reader is meant to
+    // press should never be the colour of the background behind the dialog.
+    theme.set(roles.button_default, Style{kDarkYellow, kDarkFocus, Attr::Bold});
+    theme.set(roles.button_shadow, Style{kDarkFocus, kDarkPanel, Attr{}});
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
@@ -294,7 +298,9 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.help_text, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.button_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.button_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
-    theme.set(roles.button_default, Style{kMonoBg, kLightYellow, Attr::Bold});
+    // Same rule as the dark scheme, and no borrowing of a monochrome constant
+    // for a hued one: the face stays the button face.
+    theme.set(roles.button_default, Style{kLightFg, kLightFocus, Attr::Bold});
     theme.set(roles.button_shadow, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr{}});

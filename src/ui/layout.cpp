@@ -272,8 +272,19 @@ SizeHint max_hints(const std::vector<std::unique_ptr<View>>& children, bool hori
 
 }  // namespace
 
+bool Row::trailing_row_is_shadow() const noexcept {
+    if (children().empty()) return false;
+    for (const std::unique_ptr<View>& child : children())
+        if (!child->trailing_row_is_shadow()) return false;
+    return true;
+}
+
 SizeHint Row::horizontal_size_hint() const { return sum_hints(children(), true, spacing_); }
 SizeHint Row::vertical_size_hint() const { return max_hints(children(), false); }
+bool Column::trailing_row_is_shadow() const noexcept {
+    return !children().empty() && children().back()->trailing_row_is_shadow();
+}
+
 SizeHint Column::horizontal_size_hint() const { return max_hints(children(), true); }
 SizeHint Column::vertical_size_hint() const { return sum_hints(children(), false, spacing_); }
 

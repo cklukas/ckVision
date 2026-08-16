@@ -73,10 +73,21 @@ ui::SizeHint Window::horizontal_size_hint() const {
     return ui::SizeHint{minimum, preferred, std::max(preferred, maximum)};
 }
 
+int Window::effective_top_margin() const noexcept { return top_content_margin_; }
+
+// The bottom margin works itself out. Content whose last row is a cast shadow
+// already stands clear of the border, so a margin under it is a second gap
+// where one was asked for -- the blank line beneath a dialog's buttons.
+// Asking the content beats making every caller remember which of its dialogs
+// happens to end in a button row.
+int Window::effective_bottom_margin() const noexcept {
+    return content_ != nullptr && content_->trailing_row_is_shadow() ? 0 : bottom_content_margin_;
+}
+
 ui::SizeHint Window::vertical_size_hint() const {
     if (content_ == nullptr) return ui::SizeHint{min_size_.height, min_size_.height, ui::kUnboundedExtent};
     const ui::SizeHint content = content_->vertical_size_hint();
-    const int chrome = 2 + 2 * vertical_content_margin_;
+    const int chrome = 2 + effective_top_margin() + effective_bottom_margin();
     const int minimum = std::max(min_size_.height, content.min + chrome);
     const int preferred = std::max(minimum, content.preferred + chrome);
     const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + chrome;
@@ -87,7 +98,8 @@ ui::SizeHint Window::vertical_size_hint() const {
 int Window::height_for_width(int width) const {
     const int content_width = std::max(0, width - 2 - 2 * horizontal_content_margin_);
     const int content_height = content_ != nullptr ? content_->height_for_width(content_width) : 0;
-    return std::max(vertical_size_hint().min, content_height + 2 + 2 * vertical_content_margin_);
+    return std::max(vertical_size_hint().min, content_height + 2 + effective_top_margin() +
+                                                   effective_bottom_margin());
 }
 
 ui::AnchorPane& Window::content_pane() {
@@ -234,8 +246,8 @@ Rect Window::content_rect() const noexcept {
     const int vertical_room = std::max(0, (b.height - 3) / 2);
     const int left = std::min(left_content_margin_, horizontal_room);
     const int right = std::min(right_content_margin_, horizontal_room);
-    const int top = std::min(top_content_margin_, vertical_room);
-    const int bottom = std::min(bottom_content_margin_, vertical_room);
+    const int top = std::min(effective_top_margin(), vertical_room);
+    const int bottom = std::min(effective_bottom_margin(), vertical_room);
     return Rect{1 + left, 1 + top, b.width - 2 - left - right, b.height - 2 - top - bottom};
 }
 

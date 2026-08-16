@@ -7,6 +7,9 @@
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/static_text.hpp"
+#include "cvision/widgets/button.hpp"
+#include "cvision/ui/layout.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -1151,26 +1154,48 @@ CK_TEST(an_inactive_windows_controls_fall_back_to_its_frame) {
     CK_CHECK(s.at(Point{2, 0}).style().fg == inactive.fg);  // its bracket
 }
 
-CK_TEST(per_edge_content_margins_pad_only_the_edges_they_name) {
-    // A layout whose edges want different padding — a button row whose cast
-    // shadow already separates it from the bottom border — cannot be
-    // expressed by a single symmetric margin.
-    Window window("Margins");
-    window.set_bounds(ckv::Rect{0, 0, 20, 10});
+CK_TEST(a_window_gives_up_its_bottom_margin_to_a_row_of_buttons) {
+    // The margin works itself out rather than each caller remembering which
+    // of its dialogs happens to end in buttons. A button's cast shadow is
+    // already the gap; a margin under it is a second one.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_content_margin(1, 1);
 
-    window.set_content_margins(2, 1, 3, 0);
-    const ckv::Rect content = window.content_rect();
-    CK_CHECK(content.x == 1 + 2);          // border + left margin
-    CK_CHECK(content.y == 1 + 1);          // border + top margin
-    CK_CHECK(content.width == 20 - 2 - 2 - 3);
-    CK_CHECK(content.height == 10 - 2 - 1 - 0);  // nothing reserved at the bottom
-    CK_CHECK(window.top_content_margin() == 1);
-    CK_CHECK(window.bottom_content_margin() == 0);
+    auto column = std::make_unique<ckv::ui::Column>();
+    column->add_item(std::make_unique<ckv::widgets::StaticText>("body"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
+    auto row = std::make_unique<ckv::ui::Row>();
+    row->add_item(std::make_unique<ckv::widgets::Button>("OK"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
+    column->add_item(std::move(row), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 2});
+    w->set_content(std::move(column));
 
-    // The symmetric setter still works, and still reports what it was given.
-    window.set_content_margin(1, 1);
-    CK_CHECK(window.content_rect() == (ckv::Rect{2, 2, 16, 6}));
-    CK_CHECK(window.horizontal_content_margin() == 1);
-    CK_CHECK(window.vertical_content_margin() == 1);
-    CK_CHECK(window.bottom_content_margin() == 1);
+    CK_CHECK(w->effective_top_margin() == 1);
+    CK_CHECK(w->effective_bottom_margin() == 0);
+    // Sizing must agree with painting, or the window reserves a gap it does
+    // not draw and the freed row simply reappears elsewhere in the dialog --
+    // which is what happened when only the paint path knew the rule.
+    CK_CHECK(w->vertical_size_hint().preferred ==
+             w->content()->vertical_size_hint().preferred + 2 + 1);  // frame + top margin, no bottom
+
+    // Content that does not end in buttons keeps its margin, and is sized
+    // for it.
+    auto plain = std::make_unique<ckv::ui::Column>();
+    plain->add_item(std::make_unique<ckv::widgets::StaticText>("body"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
+    plain->add_item(std::make_unique<ckv::widgets::StaticText>("more"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
+    w->set_content(std::move(plain));
+    CK_CHECK(w->effective_bottom_margin() == 1);
+    CK_CHECK(w->vertical_size_hint().preferred ==
+             w->content()->vertical_size_hint().preferred + 2 + 1 + 1);
+}
+
+CK_TEST(a_row_mixing_a_button_with_other_content_keeps_the_margin) {
+    // Only a row of nothing but buttons is all shadow along its bottom.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_content_margin(1, 1);
+    auto row = std::make_unique<ckv::ui::Row>();
+    row->add_item(std::make_unique<ckv::widgets::Button>("OK"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
+    row->add_item(std::make_unique<ckv::widgets::StaticText>("note"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
+    w->set_content(std::move(row));
+    CK_CHECK(w->effective_bottom_margin() == 1);
 }
