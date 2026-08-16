@@ -83,6 +83,7 @@ add_library(cvision
     src/widgets/tab_control.cpp
     src/widgets/terminal_view.cpp
     src/widgets/text_editor.cpp
+    src/widgets/text_layout.cpp
     src/widgets/text_view.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp

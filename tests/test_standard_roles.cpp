@@ -30,9 +30,8 @@ CK_TEST(intern_standard_roles_produces_one_distinct_role_id_per_named_role) {
         r.input_invalid,         r.message_info_text,      r.message_warning_text,
         r.message_error_text,    r.message_confirm_text,
         r.window_frame_active,  r.window_frame_inactive,   r.window_title_active,
-        r.window_title_inactive, r.window_control,         r.window_control_pressed,
-        r.calendar_today, r.calendar_marked,
-        r.menu_bar_normal,
+        r.window_title_inactive, r.window_control,           r.window_control_pressed,
+        r.calendar_today, r.calendar_marked,         r.menu_bar_normal,
         r.menu_bar_active,
         r.menu_dropdown_normal, r.menu_dropdown_highlighted, r.menu_dropdown_disabled,
         r.list_normal,          r.list_selected,           r.list_selected_inactive,
@@ -289,5 +288,14 @@ CK_TEST(a_button_never_wears_the_background_behind_its_dialog) {
         // colour of text, not by changing what surface it is.
         CK_CHECK(has_attr(theme.resolve(r.button_default).attrs, ckv::Attr::Bold) ||
                  theme.resolve(r.button_default).fg != theme.resolve(r.button_normal).fg);
+
+        // A cast shadow has to be distinguishable from the control casting
+        // it, or it stops describing depth and just widens the button.
+        const ckv::Color shadow = theme.resolve(r.button_shadow).fg;
+        for (const ckv::ui::RoleId face :
+             {r.button_normal, r.button_focused, r.button_default})
+            CK_CHECK(shadow != theme.resolve(face).bg);
+        // ...and from the surface it falls on.
+        CK_CHECK(shadow != theme.resolve(r.button_shadow).bg);
     }
 }

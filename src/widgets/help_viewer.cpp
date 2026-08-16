@@ -118,7 +118,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     // Help is prose. Prose that runs off the right edge is prose the reader
     // cannot finish, and a help window is resizable precisely so they can
     // choose how wide a line should be.
-    text_view->set_word_wrap(true);
+    text_view->set_wrap_mode(WrapMode::Word);  // prose
     // A viewer that is not told how much room its prose wants gets sized by
     // whatever children do ask for room, and comes out too narrow to read.
     // Nothing else can supply this: a TextView holds whatever text it is
@@ -135,8 +135,14 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto back_button = std::make_unique<Button>(strings.back);
     auto* back_ptr =
         static_cast<Button*>(button_row->add_item(std::move(back_button), LayoutSpec{SizePolicy::Fixed, 1}));
+    // Not a default button. A default button is the affirmative answer to a
+    // question a dialog is asking, and a help viewer asks nothing: there is
+    // no input to commit and no choice to confirm. Marking Close as the
+    // default made Enter — pressed anywhere, including part-way through
+    // typing a search — dismiss the window the reader was reading, which is
+    // the one thing they did not ask for. Escape still closes it, which is
+    // what "no affirmative action" leaves.
     auto close_button = std::make_unique<Button>(strings.close);
-    close_button->set_default(true);
     auto* close_ptr =
         static_cast<Button*>(button_row->add_item(std::move(close_button), LayoutSpec{SizePolicy::Fixed, 1}));
     column->add_item(std::move(button_row), LayoutSpec{SizePolicy::Fixed, 1});
@@ -233,9 +239,13 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     };
     close_ptr->on_press = [window_ptr]() { window_ptr->close(); };
 
-    window_ptr->accept_request = [close_ptr]() {
-        if (close_ptr->on_press) close_ptr->on_press();
-    };
+    // accept_request is deliberately left unset, so Window::on_key does not
+    // claim Enter for the window. Enter therefore belongs to whatever holds
+    // the keyboard: the index list opens the highlighted topic with it, a
+    // focused button presses itself, and the search box — which does not use
+    // Enter, its filtering being live — does nothing at all with it. That
+    // last case is the point. Typing a query and reaching for Enter is a
+    // habit, and the habit must not throw the answer away.
     window_ptr->cancel_request = [close_ptr]() {
         if (close_ptr->on_press) close_ptr->on_press();
     };

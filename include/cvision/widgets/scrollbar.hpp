@@ -54,6 +54,12 @@ public:
     int position() const noexcept { return position_; }
     int max_position() const noexcept;
 
+    // How many cells the thumb occupies, which is the share of the content
+    // currently visible. Exposed because it is the bar's answer to "how much
+    // of this am I looking at", and a caller pinning that behaviour should
+    // not have to read it off painted cells.
+    int thumb_length() const noexcept { return thumb_length_cells(); }
+
     void set_policy(ScrollbarPolicy policy);
     ScrollbarPolicy policy() const noexcept { return policy_; }
     // Whether this bar would be on screen for the range it currently holds.
@@ -72,6 +78,15 @@ public:
     void on_attached() override;
 
 private:
+    // Where the thumb sits and how long it is, in HALF cells — the block
+    // glyphs can fill half a cell, so position and length both carry twice
+    // the resolution the cell grid alone would allow.
+    struct ThumbSpan {
+        int start = 0;
+        int length = 0;
+    };
+    ThumbSpan thumb_span_halves() const noexcept;
+
     int track_length() const noexcept;  // cells available for the thumb, excluding the two arrow cells
     int thumb_length_cells() const noexcept;
     int thumb_start_cell() const noexcept;

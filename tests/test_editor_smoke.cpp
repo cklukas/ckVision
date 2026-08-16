@@ -195,7 +195,7 @@ CK_TEST(the_editor_example_reflows_long_lines_with_a_visible_marker_and_can_disa
     f.app.step(0);
     CK_CHECK(display_contains(f.term.display(), "\xE2\x86\xAA"));  // U+21AA ↪
 
-    f.editor.editor()->set_word_wrap(false);
+    f.editor.editor()->set_wrap_mode(ckv::widgets::WrapMode::None);
     f.app.step(0);
     CK_CHECK(!display_contains(f.term.display(), "\xE2\x86\xAA"));
 }

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/memo.hpp"
 
+#include "cvision/widgets/text_layout.hpp"
+
 #include <algorithm>
 #include <cctype>
 
@@ -24,6 +26,9 @@ bool word_grapheme(std::string_view grapheme) noexcept {
 
 Memo::Memo() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    scrollbar_->set_policy(ScrollbarPolicy::Auto);
+    h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
+    h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     set_focus_policy(ui::FocusPolicy::TabStop);
     lines_.emplace_back();
 }
@@ -64,9 +69,9 @@ std::string Memo::text() const {
     return out;
 }
 
-void Memo::set_word_wrap(bool enabled) {
-    if (word_wrap_ == enabled) return;
-    word_wrap_ = enabled;
+void Memo::set_wrap_mode(WrapMode mode) {
+    if (wrap_mode_ == mode) return;
+    wrap_mode_ = mode;
     on_resized();
     ensure_cursor_visible();
     invalidate();
@@ -291,29 +296,22 @@ std::vector<Memo::VisualRow> Memo::visual_rows(int visible_width) const {
 
     for (int line_index = 0; line_index < static_cast<int>(lines_.size()); ++line_index) {
         const auto& line = lines_[static_cast<std::size_t>(line_index)];
-        if (!word_wrap_ || visible_width <= 0) {
-            rows.push_back(VisualRow{line_index, 0, static_cast<int>(line.size())});
-            continue;
-        }
-        if (line.empty()) {
-            rows.push_back(VisualRow{line_index, 0, 0});
-            continue;
-        }
-
-        int begin = 0;
-        int columns = 0;
-        for (int column = 0; column < static_cast<int>(line.size()); ++column) {
-            const int grapheme_columns = text::grapheme_width(line[static_cast<std::size_t>(column)]);
-            if (column > begin && columns + grapheme_columns > visible_width) {
-                rows.push_back(VisualRow{line_index, begin, column});
-                begin = column;
-                columns = 0;
-            }
-            columns += grapheme_columns;
-        }
-        rows.push_back(VisualRow{line_index, begin, static_cast<int>(line.size())});
+        // One wrap rule for the whole library, so a memo breaks lines exactly
+        // where a help page and an editor do.
+        for (const WrapSegment& segment :
+             wrap_graphemes(line, WrapOptions{visible_width, wrap_mode_, 0}))
+            rows.push_back(VisualRow{line_index, static_cast<int>(segment.begin),
+                                     static_cast<int>(segment.end)});
     }
     return rows;
+}
+
+int Memo::column_x(const VisualRow& row, int column) const {
+    const auto& line = lines_[static_cast<std::size_t>(row.line)];
+    int x = 0;
+    for (int i = row.begin; i < column && static_cast<std::size_t>(i) < line.size(); ++i)
+        x += text::grapheme_width(line[static_cast<std::size_t>(i)]);
+    return x;
 }
 
 int Memo::visual_row_for_position(MemoPosition position, int visible_width) const {
@@ -344,21 +342,79 @@ MemoPosition Memo::position_at_visual_row_column(int visual_row, int local_x, in
 }
 
 void Memo::ensure_cursor_visible() {
-    if (scrollbar_ == nullptr) return;
-    const int cursor_row = visual_row_for_position(cursor_, std::max(0, bounds().width - 1));
+    if (scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
+    const std::vector<VisualRow> rows = visual_rows(viewport_width_);
+    const int cursor_row = visual_row_for_position(cursor_, viewport_width_);
     if (cursor_row < scrollbar_->position()) {
         scrollbar_->set_position(cursor_row);
     } else if (cursor_row >= scrollbar_->position() + scrollbar_->viewport_size()) {
         scrollbar_->set_position(cursor_row - scrollbar_->viewport_size() + 1);
     }
+
+    // Horizontally too: with wrapping off, a cursor moving along a long line
+    // would otherwise walk straight off the edge and out of sight.
+    if (cursor_row < 0 || static_cast<std::size_t>(cursor_row) >= rows.size()) return;
+    const int cursor_x = column_x(rows[static_cast<std::size_t>(cursor_row)], cursor_.column);
+    if (cursor_x < h_scrollbar_->position()) {
+        h_scrollbar_->set_position(cursor_x);
+    } else if (cursor_x >= h_scrollbar_->position() + std::max(1, viewport_width_)) {
+        h_scrollbar_->set_position(cursor_x - std::max(1, viewport_width_) + 1);
+    }
 }
 
-void Memo::on_resized() {
-    if (scrollbar_ == nullptr) return;
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
-    scrollbar_->set_range(static_cast<int>(visual_rows(std::max(0, bounds().width - 1)).size()),
-                          std::max(1, bounds().height));
+int Memo::left_column() const noexcept { return h_scrollbar_ != nullptr ? h_scrollbar_->position() : 0; }
+
+void Memo::set_vertical_scrollbar_policy(ScrollbarPolicy policy) {
+    if (scrollbar_ != nullptr) scrollbar_->set_policy(policy);
+    relayout_scrollbars();
+    invalidate();
 }
+
+void Memo::set_horizontal_scrollbar_policy(ScrollbarPolicy policy) {
+    if (h_scrollbar_ != nullptr) h_scrollbar_->set_policy(policy);
+    relayout_scrollbars();
+    invalidate();
+}
+
+ScrollbarPolicy Memo::vertical_scrollbar_policy() const noexcept {
+    return scrollbar_ != nullptr ? scrollbar_->policy() : ScrollbarPolicy::Hidden;
+}
+
+ScrollbarPolicy Memo::horizontal_scrollbar_policy() const noexcept {
+    return h_scrollbar_ != nullptr ? h_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+}
+
+void Memo::relayout_scrollbars() {
+    if (scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
+
+    const ScrollGeometry geometry = resolve_scroll_geometry(
+        Size{bounds().width, bounds().height}, scrollbar_->policy(), h_scrollbar_->policy(),
+        [this](int viewport_width) {
+            const std::vector<VisualRow> rows = visual_rows(viewport_width);
+            int widest = 0;
+            for (const VisualRow& row : rows) widest = std::max(widest, column_x(row, row.end));
+            return Size{widest, static_cast<int>(rows.size())};
+        });
+
+    viewport_width_ = geometry.viewport_width;
+    viewport_height_ = geometry.viewport_height;
+    const std::vector<VisualRow> rows = visual_rows(viewport_width_);
+    content_width_ = 0;
+    for (const VisualRow& row : rows) content_width_ = std::max(content_width_, column_x(row, row.end));
+
+    const int v_width = geometry.show_vertical ? std::min(1, bounds().width) : 0;
+    const int h_height = geometry.show_horizontal ? std::min(1, bounds().height) : 0;
+    scrollbar_->set_range(static_cast<int>(rows.size()), std::max(1, geometry.viewport_height));
+    h_scrollbar_->set_range(content_width_, std::max(1, geometry.viewport_width));
+    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
+                                std::max(0, bounds().height - h_height)});
+    h_scrollbar_->set_bounds(Rect{0, std::max(0, bounds().height - h_height),
+                                  std::max(0, bounds().width - v_width), h_height});
+    scrollbar_->set_visible(geometry.show_vertical);
+    h_scrollbar_->set_visible(geometry.show_horizontal);
+}
+
+void Memo::on_resized() { relayout_scrollbars(); }
 
 bool Memo::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
@@ -531,11 +587,12 @@ bool Memo::on_mouse(const MouseEvent& event) {
     }
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
-    if (row < 0 || row >= bounds().height) return false;
-    const int visible_width = std::max(0, bounds().width - 1);
+    if (row < 0 || row >= viewport_height_) return false;
+    // The click lands in the viewport, so the column it names is offset by
+    // however far the view is scrolled sideways.
+    const int local_x = std::clamp(event.cell.x - abs.x, 0, std::max(0, viewport_width_ - 1)) + left_column();
     const MemoPosition target =
-        position_at_visual_row_column(scrollbar_->position() + row, std::clamp(event.cell.x - abs.x, 0, visible_width),
-                                      visible_width);
+        position_at_visual_row_column(scrollbar_->position() + row, local_x, viewport_width_);
 
     if (event.action == MouseAction::Move && dragging_selection_) {
         move_cursor(target, true);
@@ -554,38 +611,40 @@ void Memo::on_focus(const FocusEvent& event) {
 
 void Memo::draw(scene::Painter& painter) {
     const Style base = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
-    const int visible_width = std::max(0, bounds().width - 1);
+    const int visible_width = viewport_width_;
     const std::vector<VisualRow> rows = visual_rows(visible_width);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
+    const int left = left_column();
     const auto [sel_begin, sel_end] = selection_range();
 
-    for (int row = 0; row < bounds().height; ++row) {
+    for (int row = 0; row < viewport_height_; ++row) {
         const int visual_index = top + row;
         painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", base));
         if (visual_index < 0 || static_cast<std::size_t>(visual_index) >= rows.size()) continue;
         const VisualRow& visual_row = rows[static_cast<std::size_t>(visual_index)];
         const int line_index = visual_row.line;
         const auto& line = lines_[static_cast<std::size_t>(visual_row.line)];
-        int x = 0;
-        for (int i = visual_row.begin; i < visual_row.end && x < visible_width; ++i) {
+        // Walk the row in its own coordinates and subtract the scroll offset,
+        // so a horizontally scrolled row starts part-way through rather than
+        // being dropped.
+        int cell_x = 0;
+        for (int i = visual_row.begin; i < visual_row.end; ++i) {
             const int grapheme_columns = text::grapheme_width(line[static_cast<std::size_t>(i)]);
-            if (grapheme_columns > visible_width - x) break;
+            const int x = cell_x - left;
+            cell_x += grapheme_columns;
+            if (x + grapheme_columns <= 0) continue;   // scrolled off to the left
+            if (x >= visible_width) break;             // past the right edge
+            if (x < 0 || grapheme_columns > visible_width - x) continue;
             Style style = base;
             const MemoPosition p{line_index, i};
             if (selection_anchor_ && !position_less(p, sel_begin) && position_less(p, sel_end))
                 style.attrs |= Attr::Reverse;
             painter.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
-            x += grapheme_columns;
         }
         if (has_focus_ && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
             cursor_.column <= visual_row.end) {
-            const int cursor_x = [&line, &visual_row, this] {
-                int cx = 0;
-                for (int i = visual_row.begin; i < cursor_.column && static_cast<std::size_t>(i) < line.size(); ++i)
-                    cx += text::grapheme_width(line[static_cast<std::size_t>(i)]);
-                return cx;
-            }();
-            if (cursor_x < visible_width) {
+            const int cursor_x = column_x(visual_row, cursor_.column) - left;
+            if (cursor_x >= 0 && cursor_x < visible_width) {
                 Style cursor_style = base;
                 cursor_style.attrs |= Attr::Reverse;
                 const std::string glyph = static_cast<std::size_t>(cursor_.column) < line.size()

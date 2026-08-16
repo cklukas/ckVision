@@ -52,6 +52,7 @@ and executable test family. Screenshots are generated, not committed artwork.
 | `include/cvision/widgets/tab_control.hpp` | [Gallery](widget-gallery.md#tabcontrol) | workbench/graphics | workbench-data/graphics-sixel-image | test_tab_control |
 | `include/cvision/widgets/table.hpp` | [Data views](data-views.md) | workbench | workbench-data | test_table |
 | `include/cvision/widgets/terminal_view.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | interactive session | test_terminal_view, test_terminal_app, terminal_redraw_contract |
+| `include/cvision/widgets/text_layout.hpp` | [Gallery](widget-gallery.md#wrapmode) | editor | editor-initial | test_text_layout |
 | `include/cvision/widgets/text_view.hpp` | [Gallery](widget-gallery.md#textview) | workbench | workbench-text | test_text_view |
 | `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md) | editor | editor-initial/editor-search | test_text_editor |
 | `include/cvision/widgets/syntax_profile.hpp` | [Editor](editor.md) | editor | editor-initial/editor-json/editor-search | test_syntax_profile |

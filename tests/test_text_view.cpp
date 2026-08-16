@@ -285,10 +285,10 @@ CK_TEST(word_wrap_breaks_between_words_and_keeps_them_whole) {
     view.set_text("the quick brown fox");
 
     // Unwrapped, one logical line is one display line however long it is.
-    CK_CHECK(!view.word_wrap());
+    CK_CHECK(view.wrap_mode() == ckv::widgets::WrapMode::None);
     CK_CHECK(view.display_line_count() == 1);
 
-    view.set_word_wrap(true);
+    view.set_wrap_mode(ckv::widgets::WrapMode::Word);
     CK_CHECK(view.display_line_count() > 1);
     // Wrapping is by width, so no display line is wider than the text area...
     CK_CHECK(view.content_width() <= 12);
@@ -305,7 +305,7 @@ CK_TEST(a_word_wider_than_the_view_is_not_broken_and_brings_a_horizontal_bar) {
     TextView view;
     view.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
     view.on_attached();
-    view.set_word_wrap(true);
+    view.set_wrap_mode(ckv::widgets::WrapMode::Word);
     view.set_bounds(ckv::Rect{0, 0, 10, 4});
     view.set_text("short /a/very/long/unbreakable/path");
 
@@ -348,7 +348,7 @@ CK_TEST(a_hidden_scrollbar_policy_leaves_the_whole_width_to_the_text) {
     view.on_attached();
     view.set_vertical_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Hidden);
     view.set_horizontal_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Hidden);
-    view.set_word_wrap(true);
+    view.set_wrap_mode(ckv::widgets::WrapMode::Word);
     view.set_bounds(ckv::Rect{0, 0, 10, 2});
     view.set_text("aaa bbb ccc ddd eee fff ggg");
 

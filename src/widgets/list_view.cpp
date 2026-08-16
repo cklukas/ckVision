@@ -270,7 +270,13 @@ bool ListView::on_mouse(const MouseEvent& event) {
 }
 
 void ListView::draw(scene::Painter& painter) {
-    const int visible_width = std::max(0, bounds().width - 1);
+    // A row is painted across the whole list, last column included. The bar
+    // is a child and paints after this, over the column it occupies, so
+    // stopping a column short here does not make room for it — it only
+    // leaves a hole, and when the policy is Auto and there is nothing to
+    // scroll, nothing ever covers that hole. Whatever is behind the list
+    // shows through it, which in a dialog is a one-column notch down the
+    // right edge that does not line up with the widget above or below.
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
     const std::size_t count = item_count();
     for (int row = 0; row < bounds().height; ++row) {
@@ -293,7 +299,7 @@ void ListView::draw(scene::Painter& painter) {
                           ? context().theme->resolve(selection_role)
                           : context().theme->resolve(normal_role_);
         if (item.style) style = *item.style;
-        painter.fill(Rect{0, row, visible_width, 1}, Cell::from_grapheme(" ", style));
+        painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
         if (item.id != kInvalidListItemId) painter.draw_text(Point{0, row}, item.text, style);
     }
 }

@@ -442,3 +442,48 @@ CK_TEST(setting_the_cursor_moves_both_the_cursor_and_the_selection) {
     list.set_cursor(99);
     CK_CHECK(list.cursor() == 1);
 }
+
+CK_TEST(a_row_is_painted_across_the_whole_list_width) {
+    // Regression: draw() filled bounds().width - 1, keeping the last column
+    // clear "for the scrollbar". The scrollbar is a child and paints itself
+    // over that column, so the reservation bought nothing — and under an Auto
+    // policy with nothing to scroll it is not drawn at all, leaving whatever
+    // is behind the list showing through a one-column notch down its right
+    // edge. Stacked under a search box in a dialog, that notch is exactly
+    // where the two widgets stop lining up.
+    Fixture f;
+    HeadlessTerminal term(ckv::Size{40, 10});
+    ManualClock clock;
+    Application app(term, clock);
+    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    auto* const list = app.root().add(std::make_unique<ListView>(/*multi_select=*/false));
+    list->set_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Auto);
+    list->set_items({"one", "two"});
+    list->set_bounds(Rect{0, 0, 12, 4});
+    app.step(0);
+
+    // Two items in four rows: nothing to scroll, so no bar, so every one of
+    // the twelve columns is the list's own.
+    const ckv::FrameView frame = app.current_frame();
+    const ckv::Style row_style = frame.at(ckv::Point{0, 0}).style();
+    for (int x = 0; x < 12; ++x) CK_CHECK(frame.at(ckv::Point{x, 0}).style().bg == row_style.bg);
+}
+
+CK_TEST(a_scrolling_list_still_shows_its_bar_in_the_last_column) {
+    // The other half of the above: painting the full width must not bury the
+    // scrollbar when there IS something to scroll. The bar paints after the
+    // row fill, so it still wins its column.
+    Fixture f;
+    HeadlessTerminal term(ckv::Size{40, 10});
+    ManualClock clock;
+    Application app(term, clock);
+    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    auto* const list = app.root().add(std::make_unique<ListView>(/*multi_select=*/false));
+    list->set_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Auto);
+    list->set_items({"one", "two", "three", "four", "five", "six"});
+    list->set_bounds(Rect{0, 0, 12, 3});
+    app.step(0);
+
+    const ckv::FrameView frame = app.current_frame();
+    CK_CHECK(frame.at(ckv::Point{11, 0}).style().bg != frame.at(ckv::Point{0, 0}).style().bg);
+}

@@ -14,6 +14,8 @@
 
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/scrollbar.hpp"
+#include "cvision/widgets/text_layout.hpp"
 #include "cvision/widgets/editor_document.hpp"
 #include "cvision/widgets/editor_search.hpp"
 #include "cvision/widgets/syntax_cache.hpp"
@@ -47,11 +49,22 @@ public:
 
     void set_show_line_numbers(bool enabled);
     bool show_line_numbers() const noexcept { return show_line_numbers_; }
-    // Wraps a logical line into viewport-width display rows. The document's
-    // line/column model remains logical and therefore stable when this is
-    // toggled; a visible reflow marker identifies each continued row.
-    void set_word_wrap(bool enabled);
-    bool word_wrap() const noexcept { return word_wrap_; }
+    // How a logical line is broken into viewport-width display rows. The
+    // document's line/column model stays logical and is therefore unchanged
+    // by this; a visible reflow marker identifies each continued row.
+    // WrapMode::None is the default — source and logs mean what they mean at
+    // their own line breaks — and the horizontal bar reaches the rest.
+    void set_wrap_mode(WrapMode mode);
+    WrapMode wrap_mode() const noexcept { return wrap_mode_; }
+    void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
+    void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
+    ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
+    ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+    // The widest display row in cells, and the leftmost text column showing.
+    // The gutter never scrolls: line numbers that slid away with the text
+    // would stop being an index into it.
+    int content_width() const noexcept { return content_width_; }
+    int left_column() const noexcept;
     void set_read_only(bool value) noexcept { read_only_ = value; }
     bool read_only() const noexcept { return read_only_; }
     void set_overwrite(bool value);
@@ -120,6 +133,9 @@ private:
     const std::vector<DisplayRow>& display_rows(int content_width) const;
     std::size_t cursor_display_row(const std::vector<DisplayRow>& rows) const;
     void ensure_cursor_visible();
+    void relayout_scrollbars();
+    // Cells from the start of a display row to `byte` within it.
+    int column_x(const DisplayRow& row, std::size_t byte) const;
     void notify_status_changed();
     void refresh_search();
     bool activate_search_match(std::size_t index);
@@ -152,8 +168,15 @@ private:
     std::optional<std::size_t> active_search_match_;
     EditorDocument::ObserverId observer_ = 0;
     int top_display_row_ = 0;
+    Scrollbar* v_scrollbar_ = nullptr;
+    Scrollbar* h_scrollbar_ = nullptr;
+    // The text area, once the gutter and whichever bars are showing have
+    // taken their columns and row.
+    int viewport_width_ = 0;
+    int viewport_height_ = 0;
+    int content_width_ = 0;
     bool show_line_numbers_ = false;
-    bool word_wrap_ = false;
+    WrapMode wrap_mode_ = WrapMode::None;
     bool read_only_ = false;
     bool overwrite_ = false;
     bool has_focus_ = false;

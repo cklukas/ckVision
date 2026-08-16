@@ -21,25 +21,48 @@ int Scrollbar::track_length() const noexcept {
     return std::max(0, total - 2);  // minus the two arrow cells
 }
 
-int Scrollbar::thumb_length_cells() const noexcept {
+Scrollbar::ThumbSpan Scrollbar::thumb_span_halves() const noexcept {
     const int track = track_length();
-    if (track <= 0) return 0;
-    if (content_size_ <= viewport_size_) return track;  // nothing to scroll: thumb fills the track
-    // A scrollable bar marks the position with a single cell rather than a
-    // proportional block. The indicator answers "where am I", which is the
-    // question a one-cell marker answers most precisely — and it keeps the
-    // whole travel available at every content size, instead of shrinking
-    // the range a long document can point into.
-    return 1;
+    if (track <= 0) return ThumbSpan{0, 0};
+    const int track_halves = track * 2;
+    if (content_size_ <= viewport_size_) return ThumbSpan{0, track_halves};  // all of it is visible
+
+    // Measured in HALF cells, because the block-drawing glyphs can fill half
+    // a cell: that doubles the resolution of both the thumb's length and its
+    // position, so a long document's bar moves smoothly instead of jumping a
+    // whole cell at a time.
+    //
+    // The length is the share of the content currently on screen, so the
+    // thumb's size answers "how much of this am I looking at" — the question
+    // a fixed-size marker cannot answer at all. Rounded to nearest, so a
+    // half-full view does not read as slightly less than half.
+    const int proportional =
+        (track_halves * viewport_size_ + content_size_ / 2) / std::max(1, content_size_);
+    // At least one half cell, or there would be nothing to see or to drag...
+    int length = std::max(1, proportional);
+    // ...and at least one half cell of track left over, because a thumb
+    // filling its track says "everything is visible", which is exactly what
+    // is not true here. The gap is also what keeps every scroll position
+    // reachable by dragging.
+    length = std::min(length, track_halves - 1);
+
+    const int max_pos = max_position();
+    const int travel = track_halves - length;
+    const int start = max_pos <= 0 ? 0 : travel * position_ / max_pos;
+    return ThumbSpan{start, length};
 }
 
-int Scrollbar::thumb_start_cell() const noexcept {
-    const int max_pos = max_position();
-    if (max_pos <= 0) return 0;
-    const int available = track_length() - thumb_length_cells();
-    if (available <= 0) return 0;
-    return available * position_ / max_pos;
+int Scrollbar::thumb_length_cells() const noexcept {
+    const ThumbSpan span = thumb_span_halves();
+    if (span.length <= 0) return 0;
+    // How many cells the thumb touches, which is what a caller reasoning
+    // about layout wants; the halves are a rendering detail.
+    const int first = span.start / 2;
+    const int last = (span.start + span.length - 1) / 2;
+    return last - first + 1;
 }
+
+int Scrollbar::thumb_start_cell() const noexcept { return thumb_span_halves().start / 2; }
 
 int Scrollbar::max_position() const noexcept { return std::max(0, content_size_ - viewport_size_); }
 
@@ -172,24 +195,45 @@ void Scrollbar::draw(scene::Painter& painter) {
         painter.draw_text(p, glyph, style);
     };
 
-    // The CP437 scrollbar vocabulary of the classic desktop: triangle
-    // arrows at the ends, a medium-shade page area, and a solid block as
-    // the position indicator. A bar with nothing to scroll drops both the
+    // Triangle arrows at the ends and a trough marked by its own background
+    // colour, with the thumb drawn in block glyphs at half-cell resolution.
+    // A bar with nothing to scroll draws a thumb the full length of its
+    // track, which is the honest statement that the whole content is on
+    // screen — the same thing thumb_length() reports. A bar with nothing to scroll drops both the
     // page area and the indicator for one dark-shade run — the bar is
     // still drawn, but it states plainly that there is nowhere to go.
     put(0, orientation_ == Orientation::Horizontal ? "◄" : "▲", track_style);
     if (total > 1) put(total - 1, orientation_ == Orientation::Horizontal ? "►" : "▼", track_style);
 
     const int track = track_length();
-    if (max_position() == 0) {
-        for (int i = 0; i < track; ++i) put(1 + i, "▓", track_style);
-        return;
-    }
-    const int thumb_start = thumb_start_cell();
-    const int thumb_len = thumb_length_cells();
+    // The thumb is drawn from block glyphs so it reads as one continuous
+    // handle rather than a column of beads, and so a half-covered cell can
+    // show it: a full block where the whole cell is thumb, and the matching
+    // half block where only one half is. A half-block cell keeps the track's
+    // own background, so the uncovered half still looks like track.
+    const ThumbSpan span = thumb_span_halves();
+    const Style half_style{thumb_style.fg, track_style.bg, thumb_style.attrs};
+    const bool horizontal = orientation_ == Orientation::Horizontal;
     for (int i = 0; i < track; ++i) {
-        const bool is_thumb = i >= thumb_start && i < thumb_start + thumb_len;
-        put(1 + i, is_thumb ? "■" : "▒", is_thumb ? thumb_style : track_style);
+        const auto covered = [&span](int half) {
+            return half >= span.start && half < span.start + span.length;
+        };
+        const bool first = covered(2 * i);      // top, or left
+        const bool second = covered(2 * i + 1); // bottom, or right
+        if (first && second) {
+            put(1 + i, "█", thumb_style);
+        } else if (first) {
+            put(1 + i, horizontal ? "▌" : "▀", half_style);
+        } else if (second) {
+            put(1 + i, horizontal ? "▐" : "▄", half_style);
+        } else {
+            // A blank cell in the trough's own colour, not a shaded glyph.
+            // The empty half of a half-block cell shows plain background, so
+            // a textured track would meet it at a visible seam: the reader
+            // sees the pattern stop mid-cell for no reason they can name.
+            // Colour alone marks the trough, and the two meet flush.
+            put(1 + i, " ", track_style);
+        }
     }
 }
 

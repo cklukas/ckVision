@@ -37,7 +37,7 @@ CK_TEST(workbench_example_renders_text_page_and_chrome) {
 
 CK_TEST(workbench_text_page_exposes_memo_history_and_links) {
     Fixture f;
-    CK_CHECK(f.workbench.memo()->word_wrap());
+    CK_CHECK(f.workbench.memo()->wrap_mode() == ckv::widgets::WrapMode::Word);
     CK_CHECK(f.workbench.command_input()->text() == "test");
     CK_CHECK(f.workbench.text_view()->link_count() == 1);
 

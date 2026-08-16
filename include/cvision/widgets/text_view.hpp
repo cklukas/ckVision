@@ -21,6 +21,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/scrollbar.hpp"
+#include "cvision/widgets/text_layout.hpp"
 
 namespace ckv::widgets {
 
@@ -52,17 +53,12 @@ public:
     ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
     ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
 
-    // Whether a logical line too wide for the view continues on the next
-    // display line instead of running off the edge. Off by default, because
-    // preformatted text — a table, a diagram, code — means what it means only
-    // at its own line breaks.
-    //
-    // A word longer than the whole width is NOT broken: it stays on one
-    // display line and overflows, which is what makes the horizontal bar
-    // appear under Auto even with wrapping on. Breaking mid-word would hide
-    // that a path or an identifier is wider than the window.
-    void set_word_wrap(bool enabled);
-    bool word_wrap() const noexcept { return word_wrap_; }
+    // How a logical line too wide for the view is broken into display lines.
+    // WrapMode::None by default — preformatted text means what it means only
+    // at its own line breaks — with the horizontal bar reaching the rest.
+    // See WrapMode for what each choice is for.
+    void set_wrap_mode(WrapMode mode);
+    WrapMode wrap_mode() const noexcept { return wrap_mode_; }
 
     // Display lines — what the reader scrolls through. Equal to the logical
     // line count unless wrapping is on.
@@ -121,7 +117,7 @@ private:
     // never against bounds(), so they cannot disagree with what is drawn.
     int viewport_width_ = 0;
     int viewport_height_ = 0;
-    bool word_wrap_ = false;
+    WrapMode wrap_mode_ = WrapMode::None;
     Scrollbar* scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;
     bool vertical_scrollbar_visible_ = true;

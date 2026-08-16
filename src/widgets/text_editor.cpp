@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/text_editor.hpp"
 
+#include "cvision/widgets/text_layout.hpp"
+
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -71,6 +73,10 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         register_standard_syntax_profiles(fallback_profiles_);
         profiles_ = &fallback_profiles_;
     }
+    v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
+    v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
+    h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
+    h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     profile_ = &profiles_->plain_text();
     profile_id_ = profile_->id;
     cursor_ = document_->begin();
@@ -116,10 +122,13 @@ void TextEditor::set_show_line_numbers(bool enabled) {
     invalidate();
 }
 
-void TextEditor::set_word_wrap(bool enabled) {
-    if (word_wrap_ == enabled) return;
-    word_wrap_ = enabled;
+void TextEditor::set_wrap_mode(WrapMode mode) {
+    if (wrap_mode_ == mode) return;
+    wrap_mode_ = mode;
     display_rows_dirty_ = true;
+    // Rewrapping changes both how many rows there are and how wide the widest
+    // is, so the bars have to be settled again before the cursor is chased.
+    relayout_scrollbars();
     ensure_cursor_visible();
     invalidate();
 }
@@ -261,33 +270,14 @@ const std::vector<TextEditor::DisplayRow>& TextEditor::display_rows(int content_
     const int marker_width = text::text_width(reflow_marker);
     for (std::size_t line_index = 0; line_index < lines_.size(); ++line_index) {
         const Line& line = lines_[line_index];
-        if (!word_wrap_ || line.text.empty()) {
-            display_rows_cache_.push_back(DisplayRow{line_index, 0, line.text.size(), false});
-            continue;
-        }
-        std::size_t begin = 0;
-        while (begin < line.text.size()) {
-            // A continued visual row reserves a cell for the reflow marker
-            // whenever the viewport is wide enough to show both content and
-            // the marker. At one cell wide progress wins over decoration.
-            const int usable = width > marker_width ? width - marker_width : width;
-            int occupied = 0;
-            std::size_t end = begin;
-            while (end < line.text.size()) {
-                const std::size_t next = text::grapheme_end(line.text, end);
-                const int grapheme_width = text::grapheme_width(
-                    std::string_view(line.text).substr(end, next - end));
-                if (end != begin && occupied + grapheme_width > usable) break;
-                if (end == begin && grapheme_width > usable) {
-                    end = next;
-                    break;
-                }
-                occupied += grapheme_width;
-                end = next;
-            }
-            const bool continues = end < line.text.size();
-            display_rows_cache_.push_back(DisplayRow{line_index, begin, end, continues});
-            begin = end;
+        // One wrap rule for the whole library. A continued row reserves a
+        // cell for the reflow marker, which is what the shared reserve is for.
+        const std::vector<WrapSegment> segments =
+            wrap_text(line.text, WrapOptions{width, wrap_mode_, marker_width});
+        for (std::size_t i = 0; i < segments.size(); ++i) {
+            const bool continues = i + 1 < segments.size();
+            display_rows_cache_.push_back(
+                DisplayRow{line_index, segments[i].begin, segments[i].end, continues});
         }
     }
     if (display_rows_cache_.empty()) display_rows_cache_.push_back(DisplayRow{});
@@ -304,14 +294,103 @@ std::size_t TextEditor::cursor_display_row(const std::vector<DisplayRow>& rows) 
     return rows.empty() ? 0U : rows.size() - 1U;
 }
 
+int TextEditor::left_column() const noexcept {
+    return h_scrollbar_ != nullptr ? h_scrollbar_->position() : 0;
+}
+
+int TextEditor::column_x(const DisplayRow& row, std::size_t byte) const {
+    if (row.line >= lines_.size()) return 0;
+    const Line& line = lines_[row.line];
+    int columns = 0;
+    for (std::size_t at = row.begin_byte; at < byte && at < line.text.size();) {
+        const std::size_t end = text::grapheme_end(line.text, at);
+        columns += text::grapheme_width(std::string_view(line.text).substr(at, end - at));
+        at = end;
+    }
+    return columns;
+}
+
+void TextEditor::set_vertical_scrollbar_policy(ScrollbarPolicy policy) {
+    if (v_scrollbar_ != nullptr) v_scrollbar_->set_policy(policy);
+    relayout_scrollbars();
+    invalidate();
+}
+
+void TextEditor::set_horizontal_scrollbar_policy(ScrollbarPolicy policy) {
+    if (h_scrollbar_ != nullptr) h_scrollbar_->set_policy(policy);
+    relayout_scrollbars();
+    invalidate();
+}
+
+ScrollbarPolicy TextEditor::vertical_scrollbar_policy() const noexcept {
+    return v_scrollbar_ != nullptr ? v_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+}
+
+ScrollbarPolicy TextEditor::horizontal_scrollbar_policy() const noexcept {
+    return h_scrollbar_ != nullptr ? h_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+}
+
+void TextEditor::relayout_scrollbars() {
+    if (v_scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
+    const int gutter = static_cast<int>(gutter_width());
+
+    // The gutter is chrome, not content: it is subtracted before the text
+    // area is measured, and it never scrolls sideways with the text.
+    const ScrollGeometry geometry = resolve_scroll_geometry(
+        Size{std::max(0, bounds().width - gutter), bounds().height}, v_scrollbar_->policy(),
+        h_scrollbar_->policy(), [this](int viewport_width) {
+            const auto& rows = display_rows(std::max(1, viewport_width));
+            int widest = 0;
+            for (const DisplayRow& row : rows) widest = std::max(widest, column_x(row, row.end_byte));
+            return Size{widest, static_cast<int>(rows.size())};
+        });
+
+    viewport_width_ = geometry.viewport_width;
+    viewport_height_ = geometry.viewport_height;
+    const auto& rows = display_rows(std::max(1, viewport_width_));
+    content_width_ = 0;
+    for (const DisplayRow& row : rows) content_width_ = std::max(content_width_, column_x(row, row.end_byte));
+
+    const int v_width = geometry.show_vertical ? std::min(1, bounds().width) : 0;
+    const int h_height = geometry.show_horizontal ? std::min(1, bounds().height) : 0;
+    v_scrollbar_->set_range(static_cast<int>(rows.size()), std::max(1, geometry.viewport_height));
+    h_scrollbar_->set_range(content_width_, std::max(1, geometry.viewport_width));
+    v_scrollbar_->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
+                                  std::max(0, bounds().height - h_height)});
+    h_scrollbar_->set_bounds(Rect{gutter, std::max(0, bounds().height - h_height),
+                                  std::max(0, bounds().width - gutter - v_width), h_height});
+    v_scrollbar_->set_visible(geometry.show_vertical);
+    h_scrollbar_->set_visible(geometry.show_horizontal);
+    v_scrollbar_->set_position(top_display_row_);
+}
+
 void TextEditor::ensure_cursor_visible() {
-    const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
+    const int content_width = std::max(1, viewport_width_ > 0
+                                              ? viewport_width_
+                                              : bounds().width - static_cast<int>(gutter_width()));
     const auto& rows = display_rows(content_width);
     const int cursor_row = static_cast<int>(cursor_display_row(rows));
-    const int height = std::max(1, bounds().height);
+    const int height = std::max(1, viewport_height_ > 0 ? viewport_height_ : bounds().height);
     if (cursor_row < top_display_row_) top_display_row_ = cursor_row;
     if (cursor_row >= top_display_row_ + height) top_display_row_ = cursor_row - height + 1;
     top_display_row_ = std::clamp(top_display_row_, 0, std::max(0, static_cast<int>(rows.size()) - height));
+    if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
+
+    // And sideways: without wrapping, a cursor walking along a long line
+    // would otherwise leave the viewport and keep going unseen.
+    if (h_scrollbar_ == nullptr || cursor_row < 0 ||
+        static_cast<std::size_t>(cursor_row) >= rows.size())
+        return;
+    const DisplayRow& row = rows[static_cast<std::size_t>(cursor_row)];
+    if (row.line >= lines_.size()) return;
+    // The same line-relative byte cursor_display_row() works in.
+    const std::size_t within = cursor_.byte - std::min(cursor_.byte, lines_[row.line].start_byte);
+    const int cursor_x = column_x(row, within);
+    if (cursor_x < h_scrollbar_->position()) {
+        h_scrollbar_->set_position(cursor_x);
+    } else if (cursor_x >= h_scrollbar_->position() + content_width) {
+        h_scrollbar_->set_position(cursor_x - content_width + 1);
+    }
 }
 
 void TextEditor::notify_status_changed() {
@@ -524,14 +603,16 @@ void TextEditor::draw(scene::Painter& painter) {
     const Style base = context().theme->resolve(text_role_);
     const std::size_t gutter = gutter_width();
     const int content_x = static_cast<int>(std::min<std::size_t>(gutter, static_cast<std::size_t>(std::max(0, bounds().width))));
-    const int content_width = std::max(0, bounds().width - content_x);
+    const int content_width = viewport_width_ > 0 ? viewport_width_ : std::max(0, bounds().width - content_x);
+    const int rows_shown = viewport_height_ > 0 ? viewport_height_ : bounds().height;
+    const int left = left_column();
     const auto selected = selection();
-    const auto& rows = display_rows(content_width);
-    const int max_top = std::max(0, static_cast<int>(rows.size()) - std::max(1, bounds().height));
+    const auto& rows = display_rows(std::max(1, content_width));
+    const int max_top = std::max(0, static_cast<int>(rows.size()) - std::max(1, rows_shown));
     top_display_row_ = std::clamp(top_display_row_, 0, max_top);
     constexpr std::string_view reflow_marker = "\xE2\x86\xAA";  // U+21AA ↪
     const Style marker_style = context().theme->resolve(gutter_role_);
-    for (int row = 0; row < bounds().height; ++row) {
+    for (int row = 0; row < rows_shown; ++row) {
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", base));
         const int display_index = top_display_row_ + row;
         if (display_index < 0 || static_cast<std::size_t>(display_index) >= rows.size()) continue;
@@ -546,17 +627,25 @@ void TextEditor::draw(scene::Painter& painter) {
                 : std::string(gutter, ' ');
             painter.draw_text(Point{0, row}, padded, context().theme->resolve(gutter_role_));
         }
-        int x = content_x;
-        for (std::size_t byte = display.begin_byte; byte < display.end_byte && x < bounds().width;) {
-            const std::size_t end = text::grapheme_end(line.text, byte);
-            const std::size_t absolute = line.start_byte + byte;
+        // Walk the row in its own columns and subtract the scroll offset, so
+        // a horizontally scrolled row starts part-way through rather than
+        // being dropped. The gutter is drawn above at column 0 regardless:
+        // line numbers that slid away with the text would stop indexing it.
+        int cell_x = 0;
+        for (std::size_t byte = display.begin_byte; byte < display.end_byte;) {
+            const std::size_t start_byte = byte;
+            const std::size_t end = text::grapheme_end(line.text, start_byte);
+            const std::size_t absolute = line.start_byte + start_byte;
             const bool highlighted = selected && absolute >= selected->begin.byte && absolute < selected->end.byte;
-            const std::string_view grapheme(line.text.data() + byte, end - byte);
+            const std::string_view grapheme(line.text.data() + start_byte, end - start_byte);
             const int width = text::grapheme_width(grapheme);
-            if (x + width > content_x + content_width) break;
-            painter.draw_text(Point{x, row}, grapheme, style_for(display.line, byte, highlighted));
-            x += width;
+            const int x = content_x + cell_x - left;
+            cell_x += width;
             byte = end;
+            if (x + width <= content_x) continue;               // off to the left
+            if (x >= content_x + content_width) break;          // past the right edge
+            if (x < content_x || x + width > content_x + content_width) continue;
+            painter.draw_text(Point{x, row}, grapheme, style_for(display.line, start_byte, highlighted));
         }
         if (display.continues && content_width > text::text_width(reflow_marker))
             painter.draw_text(Point{content_x + content_width - text::text_width(reflow_marker), row}, reflow_marker, marker_style);
@@ -653,7 +742,7 @@ std::optional<DocumentPosition> TextEditor::position_for_screen_cell(Point cell)
     const auto& rows = display_rows(content_width);
     const int row = cell.y - absolute.y + top_display_row_;
     if (row < 0 || static_cast<std::size_t>(row) >= rows.size()) return std::nullopt;
-    const int x = cell.x - absolute.x - static_cast<int>(gutter_width());
+    const int x = cell.x - absolute.x - static_cast<int>(gutter_width()) + left_column();
     if (x < 0) return std::nullopt;
     const DisplayRow& display = rows[static_cast<std::size_t>(row)];
     const Line& line = lines_[display.line];
@@ -723,7 +812,10 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
 }
 
 void TextEditor::on_focus(const FocusEvent& event) { has_focus_ = event.gained; notify_status_changed(); invalidate(); }
-void TextEditor::on_resized() { rebuild_lines(); }
+void TextEditor::on_resized() {
+    rebuild_lines();
+    relayout_scrollbars();
+}
 
 std::optional<CursorState> TextEditor::cursor_state() const {
     if (!has_focus_ || bounds().width <= 0 || bounds().height <= 0) return std::nullopt;

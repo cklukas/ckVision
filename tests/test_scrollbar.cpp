@@ -291,11 +291,11 @@ CK_TEST(a_horizontal_scrollbar_draws_solid_triangle_end_arrows) {
     CK_CHECK(s.at(Point{9, 0}).grapheme() == "►");
 }
 
-CK_TEST(the_scrollbar_uses_the_classic_medium_shade_page_area_and_block_indicator) {
-    // CP437's light-shade page area and full-block scroll box are distinct
-    // in both glyph coverage and theme role.  In particular, do not replace
-    // the track with the heavier medium shade (`▒`): browser renderers turn
-    // it into an intrusive striped field.
+CK_TEST(the_trough_is_marked_by_colour_rather_than_by_a_shaded_glyph) {
+    // The empty half of a half-block cell shows plain background. A textured
+    // track would therefore meet the thumb at a visible seam — the pattern
+    // stopping mid-cell for no reason a reader can name — so the trough is a
+    // blank cell wearing the track role's own colour instead.
     Fixture f;
     Scrollbar sb(Orientation::Vertical);
     sb.set_context(f.ctx());
@@ -307,15 +307,43 @@ CK_TEST(the_scrollbar_uses_the_classic_medium_shade_page_area_and_block_indicato
 
     bool found_track = false, found_thumb = false;
     for (int y = 1; y < 11; ++y) {
-        const std::string_view g = s.at(Point{0, y}).grapheme();
-        if (g == "▒") found_track = true;
-        if (g == "■") found_thumb = true;
+        const ckv::Cell& cell = s.at(Point{0, y});
+        const std::string_view g = cell.grapheme();
+        CK_CHECK(g != "▒" && g != "▓");  // no shaded fills anywhere in the track
+        if (g == " ") {
+            found_track = true;
+            CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_track));
+        }
+        if (g == "█" || g == "▀" || g == "▄") found_thumb = true;
     }
     CK_CHECK(found_track);
     CK_CHECK(found_thumb);
 }
 
-CK_TEST(a_bar_with_nothing_to_scroll_fills_its_track_with_the_dark_shade) {
+CK_TEST(a_half_covered_cell_shares_the_troughs_background_exactly) {
+    // This is the whole point of dropping the shaded glyph: the uncovered
+    // half of a half block and the cell next to it must be the same colour,
+    // or the join shows.
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_context(f.ctx());
+    sb.set_bounds(Rect{0, 0, 1, 12});
+    sb.set_range(41, 20);  // deliberately not a whole number of cells
+    ckv::scene::Surface s(ckv::Size{1, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 1, 12});
+    sb.draw(painter);
+
+    const ckv::Color trough = f.theme.resolve(f.roles.scrollbar_track).bg;
+    for (int y = 1; y < 11; ++y) {
+        const ckv::Cell& cell = s.at(Point{0, y});
+        const std::string_view g = cell.grapheme();
+        if (g == "▀" || g == "▄" || g == " ") CK_CHECK(cell.style().bg == trough);
+    }
+}
+
+CK_TEST(a_bar_with_nothing_to_scroll_shows_a_thumb_the_length_of_its_track) {
+    // A full-length thumb is the honest statement that the whole content is
+    // on screen, and it is the same thing thumb_length() reports.
     Fixture f;
     Scrollbar sb(Orientation::Vertical);
     sb.set_context(f.ctx());
@@ -324,7 +352,7 @@ CK_TEST(a_bar_with_nothing_to_scroll_fills_its_track_with_the_dark_shade) {
     ckv::scene::Surface s(ckv::Size{1, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     ckv::scene::Painter painter(s, Rect{0, 0, 1, 10});
     sb.draw(painter);
-    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "▓");
+    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "█");
 }
 
 CK_TEST(classic_scrollbar_styles_its_page_area_and_indicator_from_their_roles) {
@@ -341,15 +369,124 @@ CK_TEST(classic_scrollbar_styles_its_page_area_and_indicator_from_their_roles) {
     bool found_thumb = false;
     for (int y = 1; y < 11; ++y) {
         const ckv::Cell& cell = s.at(Point{0, y});
-        if (cell.grapheme() == "▒") {
+        if (cell.grapheme() == " ") {
             found_track = true;
             CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_track));
         }
-        if (cell.grapheme() == "■") {
+        // A fully covered cell is a solid block in the thumb's own style; a
+        // half-covered one is a half block that keeps the track's background,
+        // so the uncovered half still reads as track.
+        if (cell.grapheme() == "█") {
             found_thumb = true;
             CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_thumb));
+        }
+        if (cell.grapheme() == "▀" || cell.grapheme() == "▄") {
+            found_thumb = true;
+            CK_CHECK(cell.style().fg == f.theme.resolve(f.roles.scrollbar_thumb).fg);
+            CK_CHECK(cell.style().bg == f.theme.resolve(f.roles.scrollbar_track).bg);
         }
     }
     CK_CHECK(found_track);
     CK_CHECK(found_thumb);
+}
+
+CK_TEST(the_thumb_length_reports_how_much_of_the_content_is_visible) {
+    // The thumb's size is the share of the content on screen — the question a
+    // one-cell marker could not answer at all.
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_bounds(Rect{0, 0, 1, 22});  // 20 cells of track, minus two arrows
+
+    // Half the content visible: about half the track.
+    sb.set_range(40, 20);
+    const int half = sb.thumb_length();
+    CK_CHECK(half >= 8 && half <= 12);
+
+    // A tenth visible: a much shorter thumb, but never nothing.
+    sb.set_range(200, 20);
+    const int tenth = sb.thumb_length();
+    CK_CHECK(tenth >= 1);
+    CK_CHECK(tenth < half);
+
+    // An enormous document still leaves something to see and to grab.
+    sb.set_range(100000, 20);
+    CK_CHECK(sb.thumb_length() >= 1);
+}
+
+CK_TEST(a_scrollable_thumb_always_leaves_a_cell_of_track_to_move_through) {
+    // A thumb filling its track says "everything is visible", which is
+    // exactly what is not true while there is anything to scroll to. The gap
+    // is also what keeps every position reachable by dragging.
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_bounds(Rect{0, 0, 1, 22});
+
+    // Only just scrollable: the proportional length would fill the track.
+    sb.set_range(21, 20);
+    CK_CHECK(sb.max_position() > 0);
+    CK_CHECK(sb.thumb_length() <= 20 - 1);
+
+    // Nothing to scroll: now the thumb may fill it, which is the honest
+    // signal that the whole content is on screen.
+    sb.set_range(20, 20);
+    CK_CHECK(sb.max_position() == 0);
+    CK_CHECK(sb.thumb_length() == 20);
+}
+
+CK_TEST(the_thumb_is_drawn_as_a_continuous_handle_with_half_cell_ends) {
+    // Block glyphs give the thumb twice the resolution of the cell grid: a
+    // fully covered cell is solid, and a cell the thumb only half covers
+    // shows the matching half block instead of being rounded away.
+    Fixture f;
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_context(f.ctx());
+    sb.set_bounds(Rect{0, 0, 1, 12});   // 10 cells of track = 20 half cells
+    sb.set_range(40, 20);               // half the content visible
+    ckv::scene::Surface s(ckv::Size{1, 12}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 1, 12});
+    sb.draw(painter);
+
+    // The thumb's cells are contiguous — a handle, not a row of beads.
+    int first = -1, last = -1;
+    for (int y = 1; y < 11; ++y) {
+        const std::string g{s.at(Point{0, y}).grapheme()};
+        if (g == "█" || g == "▀" || g == "▄") {
+            if (first < 0) first = y;
+            last = y;
+        }
+    }
+    CK_CHECK(first > 0);
+    for (int y = first; y <= last; ++y) {
+        const std::string g{s.at(Point{0, y}).grapheme()};
+        CK_CHECK(g == "█" || g == "▀" || g == "▄");
+    }
+    // Half the content visible: about half the track, and the arrows are
+    // never part of the thumb.
+    CK_CHECK(last - first + 1 >= 4);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "▲");
+    CK_CHECK(s.at(Point{0, 11}).grapheme() == "▼");
+}
+
+CK_TEST(a_horizontal_thumb_uses_the_left_and_right_half_blocks) {
+    // The same rule read along the other axis: a half-covered cell shows
+    // which half is covered, rather than rounding to a whole one.
+    Fixture f;
+    Scrollbar sb(Orientation::Horizontal);
+    sb.set_context(f.ctx());
+    sb.set_bounds(Rect{0, 0, 12, 1});
+    sb.set_range(41, 20);  // deliberately not a whole number of cells
+    ckv::scene::Surface s(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 12, 1});
+    sb.draw(painter);
+
+    bool any_thumb = false;
+    for (int x = 1; x < 11; ++x) {
+        const std::string g{s.at(Point{x, 0}).grapheme()};
+        // Never the vertical halves on a horizontal bar.
+        CK_CHECK(g != "▀" && g != "▄");
+        if (g == "█" || g == "▌" || g == "▐") any_thumb = true;
+    }
+    CK_CHECK(any_thumb);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "◄");
+    CK_CHECK(s.at(Point{11, 0}).grapheme() == "►");
 }

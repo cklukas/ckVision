@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/text_view.hpp"
 
+#include "cvision/widgets/text_layout.hpp"
+
 #include <algorithm>
 
 #include "cvision/core/text.hpp"
@@ -47,9 +49,9 @@ ScrollbarPolicy TextView::horizontal_scrollbar_policy() const noexcept {
 
 int TextView::left_column() const noexcept { return h_scrollbar_ != nullptr ? h_scrollbar_->position() : 0; }
 
-void TextView::set_word_wrap(bool enabled) {
-    if (word_wrap_ == enabled) return;
-    word_wrap_ = enabled;
+void TextView::set_wrap_mode(WrapMode mode) {
+    if (wrap_mode_ == mode) return;
+    wrap_mode_ = mode;
     on_resized();
     invalidate();
 }
@@ -170,120 +172,72 @@ std::string TextView::osc8_text() const {
 }
 
 void TextView::rebuild_display() {
-    // One cell of laid-out text, kept flat while wrapping so a break can fall
-    // anywhere without first having to split a styled run by hand — and so a
-    // fragment never loses which link it belonged to.
-    struct FlatCellLocal {
-        std::string grapheme;
-        int width = 1;
-        Attr attrs = static_cast<Attr>(0);
-        std::optional<std::size_t> link_index;
-    };
-
     display_runs_.clear();
     content_width_ = 0;
-    const int wrap_width = word_wrap_ ? std::max(1, viewport_width_) : 0;
 
     for (const std::vector<LineRun>& runs : line_runs_) {
-        // Flatten to cells so a wrap point can be chosen by width and the
-        // styling re-formed afterwards, rather than trying to cut runs in
-        // place and losing which link a fragment belonged to.
-        std::vector<FlatCellLocal> cells;
+        // Flattened to clusters so a break can fall anywhere without first
+        // having to split a styled run by hand — and so a fragment never
+        // loses which link it belonged to.
+        std::vector<std::string> graphemes;
+        std::vector<const LineRun*> owners;
         for (const LineRun& run : runs) {
-            for (const std::string_view grapheme : text::split_graphemes(run.text))
-                cells.push_back(FlatCellLocal{std::string(grapheme),
-                                              std::max(1, text::grapheme_width(grapheme)), run.attrs,
-                                              run.link_index});
-        }
-
-        std::vector<std::pair<std::size_t, std::size_t>> segments;  // [begin, end)
-        if (!word_wrap_) {
-            segments.emplace_back(0, cells.size());
-        } else {
-            std::size_t begin = 0;
-            while (begin < cells.size()) {
-                std::size_t end = begin;
-                int width = 0;
-                std::size_t last_break = 0;  // one past the last space that fits
-                while (end < cells.size() && width + cells[end].width <= wrap_width) {
-                    width += cells[end].width;
-                    ++end;
-                    if (end < cells.size() && cells[end - 1].grapheme == " ") last_break = end;
-                }
-                if (end >= cells.size()) {
-                    segments.emplace_back(begin, cells.size());
-                    break;
-                }
-                if (last_break > begin) {
-                    end = last_break;  // break at the space, keeping the word whole
-                } else if (end == begin) {
-                    // A single grapheme wider than the whole view: take it
-                    // anyway, or nothing would ever be emitted.
-                    end = begin + 1;
-                } else {
-                    // No space to break at: the word is wider than the view.
-                    // It stays whole and overflows, which is what makes the
-                    // horizontal bar appear rather than hiding the fact.
-                    while (end < cells.size() && cells[end].grapheme != " ") ++end;
-                }
-                segments.emplace_back(begin, end);
-                begin = end;
+            for (const std::string_view grapheme : text::split_graphemes(run.text)) {
+                graphemes.emplace_back(grapheme);
+                owners.push_back(&run);
             }
-            if (cells.empty()) segments.emplace_back(0, 0);
         }
 
-        for (const auto& [begin, end] : segments) {
+        const std::vector<WrapSegment> segments =
+            wrap_graphemes(graphemes, WrapOptions{viewport_width_, wrap_mode_, 0});
+        for (const WrapSegment& segment : segments) {
             std::vector<LineRun> row;
             int row_width = 0;
-            for (std::size_t i = begin; i < end; ++i) {
-                row_width += cells[i].width;
-                if (!row.empty() && row.back().attrs == cells[i].attrs &&
-                    row.back().link_index == cells[i].link_index) {
-                    row.back().text += cells[i].grapheme;
+            for (std::size_t i = segment.begin; i < segment.end && i < graphemes.size(); ++i) {
+                row_width += std::max(1, text::grapheme_width(graphemes[i]));
+                if (!row.empty() && row.back().attrs == owners[i]->attrs &&
+                    row.back().link_index == owners[i]->link_index) {
+                    row.back().text += graphemes[i];
                 } else {
-                    row.push_back(LineRun{cells[i].grapheme, cells[i].attrs, cells[i].link_index});
+                    row.push_back(LineRun{graphemes[i], owners[i]->attrs, owners[i]->link_index});
                 }
             }
             content_width_ = std::max(content_width_, row_width);
             display_runs_.push_back(std::move(row));
         }
-        if (segments.empty()) display_runs_.emplace_back();
     }
     if (display_runs_.empty()) display_runs_.emplace_back();
 }
 
 void TextView::relayout_scrollbars() {
     if (scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
-    const int width = bounds().width;
-    const int height = bounds().height;
 
-    // Each bar's presence changes the room left for the other, and with word
-    // wrap the room also changes how many display lines there are. Settle it
-    // by repetition rather than by guessing an order: three passes is past
-    // the point where anything still moves.
-    bool show_v = false;
-    bool show_h = false;
-    for (int pass = 0; pass < 3; ++pass) {
-        viewport_width_ = std::max(0, width - (show_v ? 1 : 0));
-        rebuild_display();
-        const int viewport_height = std::max(1, height - (show_h ? 1 : 0));
-        scrollbar_->set_range(display_line_count(), viewport_height);
-        h_scrollbar_->set_range(content_width_, std::max(1, viewport_width_));
-        const bool next_v = vertical_scrollbar_visible_ && scrollbar_->should_show();
-        const bool next_h = h_scrollbar_->should_show();
-        if (next_v == show_v && next_h == show_h) break;
-        show_v = next_v;
-        show_h = next_h;
-    }
+    // Both bars settled together by the shared resolver: each one's presence
+    // changes the room left for the other, and with wrap the width also
+    // decides how many display rows there are.
+    const ScrollGeometry geometry = resolve_scroll_geometry(
+        Size{bounds().width, bounds().height},
+        vertical_scrollbar_visible_ ? scrollbar_->policy() : ScrollbarPolicy::Hidden,
+        h_scrollbar_->policy(), [this](int viewport_width) {
+            viewport_width_ = viewport_width;
+            rebuild_display();
+            return Size{content_width_, display_line_count()};
+        });
 
-    const int v_width = show_v ? std::min(1, width) : 0;
-    const int h_height = show_h ? std::min(1, height) : 0;
-    scrollbar_->set_bounds(Rect{std::max(0, width - v_width), 0, v_width, std::max(0, height - h_height)});
-    h_scrollbar_->set_bounds(Rect{0, std::max(0, height - h_height), std::max(0, width - v_width), h_height});
-    scrollbar_->set_visible(show_v);
-    h_scrollbar_->set_visible(show_h);
-    viewport_width_ = std::max(0, width - v_width);
-    viewport_height_ = std::max(0, height - h_height);
+    viewport_width_ = geometry.viewport_width;
+    viewport_height_ = geometry.viewport_height;
+    rebuild_display();  // final width, so what is drawn is what was measured
+
+    const int v_width = geometry.show_vertical ? std::min(1, bounds().width) : 0;
+    const int h_height = geometry.show_horizontal ? std::min(1, bounds().height) : 0;
+    scrollbar_->set_range(display_line_count(), std::max(1, geometry.viewport_height));
+    h_scrollbar_->set_range(content_width_, std::max(1, geometry.viewport_width));
+    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
+                                std::max(0, bounds().height - h_height)});
+    h_scrollbar_->set_bounds(Rect{0, std::max(0, bounds().height - h_height),
+                                  std::max(0, bounds().width - v_width), h_height});
+    scrollbar_->set_visible(geometry.show_vertical);
+    h_scrollbar_->set_visible(geometry.show_horizontal);
 }
 
 void TextView::on_resized() { relayout_scrollbars(); }

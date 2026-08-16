@@ -72,6 +72,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_terminal_emulator.cpp
     test_terminal_cell_golden.cpp
     test_terminal_view.cpp
+    test_text_layout.cpp
     test_text_view.cpp
     test_text_editor.cpp
     test_text_width.cpp

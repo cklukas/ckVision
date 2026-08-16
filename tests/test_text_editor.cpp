@@ -193,3 +193,71 @@ CK_TEST(editor_status_model_tracks_an_editor_without_assuming_window_chrome) {
     CK_CHECK(notifications != 0U);
     status.unsubscribe(observer);
 }
+
+// --- Wrap modes and scrollbar policies ------------------------------------
+
+CK_TEST(the_editor_offers_all_three_wrap_modes_and_defaults_to_none) {
+    // Source and logs mean what they mean at their own line breaks, so an
+    // editor does not rewrap them unless asked. The horizontal bar is how
+    // the rest of a long line is reached instead.
+    auto document = std::make_shared<EditorDocument>("the quickbrown fox jumps");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 12, 5});
+    CK_CHECK(editor.wrap_mode() == ckv::widgets::WrapMode::None);
+    CK_CHECK(editor.content_width() > 12);  // one long row, reached sideways
+
+    // Word: broken between words, and the row now fits.
+    editor.set_wrap_mode(ckv::widgets::WrapMode::Word);
+    CK_CHECK(editor.content_width() <= 12);
+
+    // Character: broken at the edge, so it also fits — by a different rule.
+    editor.set_wrap_mode(ckv::widgets::WrapMode::Character);
+    CK_CHECK(editor.content_width() <= 12);
+}
+
+CK_TEST(the_editor_scrollbar_policies_are_settable_and_default_to_auto) {
+    auto document = std::make_shared<EditorDocument>("short");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 20, 5});
+    CK_CHECK(editor.vertical_scrollbar_policy() == ckv::widgets::ScrollbarPolicy::Auto);
+    CK_CHECK(editor.horizontal_scrollbar_policy() == ckv::widgets::ScrollbarPolicy::Auto);
+
+    editor.set_horizontal_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Hidden);
+    CK_CHECK(editor.horizontal_scrollbar_policy() == ckv::widgets::ScrollbarPolicy::Hidden);
+    editor.set_vertical_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Always);
+    CK_CHECK(editor.vertical_scrollbar_policy() == ckv::widgets::ScrollbarPolicy::Always);
+}
+
+CK_TEST(the_editor_cursor_stays_on_screen_horizontally_on_a_long_line) {
+    auto document = std::make_shared<EditorDocument>("0123456789abcdefghijklmnopqrstuvwxyz");
+    TextEditor editor(document);
+    editor.set_wrap_mode(ckv::widgets::WrapMode::None);
+    editor.set_bounds(Rect{0, 0, 12, 4});
+    CK_CHECK(editor.left_column() == 0);
+
+    for (int i = 0; i < 30; ++i) editor.on_key(KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    CK_CHECK(editor.status().column == 31U);
+    // The view followed the cursor instead of letting it walk off the edge.
+    CK_CHECK(editor.left_column() > 0);
+
+    editor.on_key(KeyEvent{KeyChord{Key::Home, Modifier::None, ""}});
+    CK_CHECK(editor.left_column() == 0);
+}
+
+CK_TEST(an_editor_rewrap_leaves_the_document_position_where_it_was) {
+    // The document's line/column model is logical; wrapping is display only.
+    auto document = std::make_shared<EditorDocument>("alpha beta gamma delta epsilon zeta");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 14, 6});
+    for (int i = 0; i < 12; ++i) editor.on_key(KeyEvent{KeyChord{Key::Right, Modifier::None, ""}});
+    const auto before = editor.status();
+
+    editor.set_wrap_mode(ckv::widgets::WrapMode::Word);
+    CK_CHECK(editor.status().line == before.line);
+    CK_CHECK(editor.status().column == before.column);
+    editor.set_wrap_mode(ckv::widgets::WrapMode::Character);
+    CK_CHECK(editor.status().column == before.column);
+    editor.set_bounds(Rect{0, 0, 8, 6});  // a resize rewraps too
+    CK_CHECK(editor.status().column == before.column);
+    CK_CHECK(document->text() == "alpha beta gamma delta epsilon zeta");
+}

@@ -91,7 +91,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto memo = std::make_unique<widgets::Memo>();
     memo->set_bounds(Rect{1, 1, 36, 10});
-    memo->set_word_wrap(true);
+    memo->set_wrap_mode(widgets::WrapMode::Word);
     memo->set_text("ckVision memo\nclipboard, undo, and wrapping live here.");
     memo_ = memo.get();
     page->add_child(std::move(memo));

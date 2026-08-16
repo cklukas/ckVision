@@ -206,6 +206,7 @@ constexpr Color kDarkPanel = Color::rgb(45, 45, 48);
 constexpr Color kDarkFg = Color::rgb(220, 220, 220);
 constexpr Color kDarkAccent = Color::rgb(0, 90, 158);
 constexpr Color kDarkFocus = Color::rgb(70, 70, 76);
+constexpr Color kDarkShadow = Color::rgb(18, 18, 20);
 constexpr Color kDarkYellow = Color::rgb(220, 200, 80);
 constexpr Color kDarkRed = Color::rgb(200, 70, 70);
 
@@ -215,6 +216,7 @@ constexpr Color kLightPanel = Color::rgb(225, 225, 225);
 constexpr Color kLightFg = Color::rgb(20, 20, 20);
 constexpr Color kLightAccent = Color::rgb(190, 215, 245);
 constexpr Color kLightFocus = Color::rgb(205, 205, 205);
+constexpr Color kLightShadow = Color::rgb(150, 150, 152);
 constexpr Color kLightYellow = Color::rgb(255, 235, 140);
 constexpr Color kLightRed = Color::rgb(220, 90, 90);
 
@@ -244,7 +246,10 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     // a dark scheme, near-black -- surface. A control the reader is meant to
     // press should never be the colour of the background behind the dialog.
     theme.set(roles.button_default, Style{kDarkYellow, kDarkFocus, Attr::Bold});
-    theme.set(roles.button_shadow, Style{kDarkFocus, kDarkPanel, Attr{}});
+    // Darker than both the dialog it falls on and the button casting it: a
+    // shadow the colour of the control reads as part of the control, and the
+    // depth it exists to describe disappears.
+    theme.set(roles.button_shadow, Style{kDarkShadow, kDarkPanel, Attr{}});
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
@@ -278,8 +283,10 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
     theme.set(roles.option_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.option_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
-    theme.set(roles.scrollbar_track, Style{kDarkFocus, kDarkPanel, Attr{}});
-    theme.set(roles.scrollbar_thumb, Style{kDarkAccent, kDarkPanel, Attr{}});
+    // The trough is a colour, not a texture: a blank cell in a shade set
+    // back from the panel, so the thumb's half-covered cells meet it flush.
+    theme.set(roles.scrollbar_track, Style{kDarkAccent, kDarkBg, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kDarkAccent, kDarkBg, Attr{}});
     theme.set(roles.image_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.canvas_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.text_view_text, Style{kDarkFg, kDarkPanel, Attr{}});
@@ -311,7 +318,9 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     // Same rule as the dark scheme, and no borrowing of a monochrome constant
     // for a hued one: the face stays the button face.
     theme.set(roles.button_default, Style{kLightFg, kLightFocus, Attr::Bold});
-    theme.set(roles.button_shadow, Style{kLightFg, kLightPanel, Attr{}});
+    // A light scheme's shadow is a soft grey, not near-black: the same rule,
+    // read against a pale surface.
+    theme.set(roles.button_shadow, Style{kLightShadow, kLightPanel, Attr{}});
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
@@ -342,8 +351,8 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
     theme.set(roles.option_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.option_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
-    theme.set(roles.scrollbar_track, Style{kLightFocus, kLightPanel, Attr{}});
-    theme.set(roles.scrollbar_thumb, Style{kLightAccent, kLightPanel, Attr{}});
+    theme.set(roles.scrollbar_track, Style{kLightFg, kLightFocus, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.image_fallback, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.canvas_fallback, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.text_view_text, Style{kLightFg, kLightPanel, Attr{}});
@@ -404,8 +413,8 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.option_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.option_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
-    theme.set(roles.scrollbar_track, Style{kMonoGray, kMonoBg, Attr{}});
-    theme.set(roles.scrollbar_thumb, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.scrollbar_track, Style{kMonoFg, kMonoGray, Attr{}});
+    theme.set(roles.scrollbar_thumb, Style{kMonoFg, kMonoGray, Attr::Bold});
     theme.set(roles.image_fallback, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.canvas_fallback, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.text_view_text, Style{kMonoFg, kMonoBg, Attr{}});
@@ -487,6 +496,9 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.table_header, Style{black, white, Attr::Bold});
     theme.set(roles.memo_focused, Style{white, black, Attr::Underline});
     theme.set(roles.option_focused, selected);
+    // Two colours only: the trough takes the inverted surface so it is
+    // visible at all, and the thumb draws onto it in the same pair.
+    theme.set(roles.scrollbar_track, selected);
     theme.set(roles.scrollbar_thumb, selected);
     theme.set(roles.status_line_disabled, Style{white, black, Attr::Dim});
     theme.set(roles.status_line_selected, selected);

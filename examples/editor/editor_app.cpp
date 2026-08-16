@@ -55,8 +55,21 @@ EditorApp::EditorApp(ui::Application& application)
     application_.commands().add(ui::CommandDescriptor{kCut, "Cu&t", "Edit", {}, "Ctrl+X", [this] { (void)editor_->cut_selection_to_clipboard(); }});
     application_.commands().add(ui::CommandDescriptor{kCopy, "&Copy", "Edit", {}, "Ctrl+C", [this] { (void)editor_->copy_selection_to_clipboard(); }});
     application_.commands().add(ui::CommandDescriptor{kPaste, "&Paste", "Edit", {}, "Ctrl+V", [this] { (void)editor_->paste_from_clipboard(); }});
+    // All three modes, in the order a reader wants them: off for source and
+    // logs, word for prose, character for content with no word structure to
+    // respect. One key cycles them so the difference is easy to see.
     application_.commands().add(ui::CommandDescriptor{kToggleWrap, "&Word Wrap", "Edit", {}, "Alt+W", [this] {
-        editor_->set_word_wrap(!editor_->word_wrap());
+        switch (editor_->wrap_mode()) {
+            case widgets::WrapMode::None:
+                editor_->set_wrap_mode(widgets::WrapMode::Word);
+                break;
+            case widgets::WrapMode::Word:
+                editor_->set_wrap_mode(widgets::WrapMode::Character);
+                break;
+            case widgets::WrapMode::Character:
+                editor_->set_wrap_mode(widgets::WrapMode::None);
+                break;
+        }
     }});
     application_.commands().add(ui::CommandDescriptor{kFindSelection, "&Find Selection", "Search", {}, "Ctrl+F", [this] {
         (void)editor_->use_selection_as_search_query();
@@ -119,7 +132,7 @@ EditorApp::EditorApp(ui::Application& application)
     auto editor = std::make_unique<widgets::TextEditor>(document_, &profiles_);
     editor->set_file_name("config.yaml");
     editor->set_show_line_numbers(true);
-    editor->set_word_wrap(true);
+    editor->set_wrap_mode(widgets::WrapMode::Word);
     editor_ = editor.get();
     editor_->set_status_changed_handler([this](const widgets::EditorStatus&) { refresh_status(); });
     window->set_content(std::move(editor));

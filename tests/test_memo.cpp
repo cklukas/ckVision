@@ -349,21 +349,32 @@ CK_TEST(draw_does_not_crash_for_an_empty_focused_memo) {
     CK_CHECK(true);
 }
 
-CK_TEST(word_wrap_draws_soft_rows_without_changing_the_document_text) {
+CK_TEST(wrapping_draws_soft_rows_without_changing_the_document_text) {
     Fixture f;
     auto memo = make_memo(f);
     memo.set_context(f.ctx());
-    memo.set_bounds(Rect{0, 0, 6, 3});  // five text columns plus scrollbar
+    memo.on_attached();
+    memo.set_bounds(Rect{0, 0, 6, 3});
     memo.set_text("abcdefgh");
-    memo.set_word_wrap(true);
 
     ckv::scene::Surface surface(ckv::Size{6, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     ckv::scene::Painter painter(surface, Rect{0, 0, 6, 3});
-    memo.draw(painter);
 
+    // Character mode breaks where the edge falls, mid-word.
+    memo.set_wrap_mode(ckv::widgets::WrapMode::Character);
+    memo.draw(painter);
+    CK_CHECK(memo.text() == "abcdefgh");  // the document is untouched either way
+    CK_CHECK(row_text(surface, 0).substr(0, 6) == "abcdef");
+    CK_CHECK(row_text(surface, 1).substr(0, 2) == "gh");
+
+    // Word mode will not split one long word: it stays whole and overflows,
+    // which is what brings the horizontal bar out rather than telling the
+    // reader the word is shorter than it is.
+    memo.set_wrap_mode(ckv::widgets::WrapMode::Word);
+    memo.draw(painter);
     CK_CHECK(memo.text() == "abcdefgh");
-    CK_CHECK(row_text(surface, 0).substr(0, 5) == "abcde");
-    CK_CHECK(row_text(surface, 1).substr(0, 3) == "fgh");
+    CK_CHECK(memo.content_width() == 8);
+    CK_CHECK(row_text(surface, 1).substr(0, 2) == "  ");  // nothing wrapped down
 }
 
 CK_TEST(a_grapheme_correct_backspace_removes_a_whole_multi_byte_cluster) {
@@ -374,4 +385,95 @@ CK_TEST(a_grapheme_correct_backspace_removes_a_whole_multi_byte_cluster) {
     memo.on_key(key(Key::Right));  // past 'é' -> cursor between é and z
     memo.on_key(key(Key::Backspace));
     CK_CHECK(memo.text() == "az");
+}
+
+// --- Wrap modes and scrollbar policies ------------------------------------
+
+CK_TEST(a_memo_offers_all_three_wrap_modes_and_word_wraps_by_default) {
+    // Prose is what a memo holds, so Word is the default here — unlike an
+    // editor, where source and logs mean what they mean at their own breaks.
+    Fixture f;
+    Memo memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.on_attached();
+    memo.set_bounds(Rect{0, 0, 12, 6});
+    CK_CHECK(memo.wrap_mode() == ckv::widgets::WrapMode::Word);
+
+    memo.set_text("the quickbrown fox");
+    ckv::scene::Surface surface(ckv::Size{12, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 12, 6});
+    memo.draw(painter);
+    // Word wrap keeps "quickbrown" whole, so it cannot share row 0.
+    CK_CHECK(row_text(surface, 0).find("quickb") == std::string::npos);
+
+    memo.set_wrap_mode(ckv::widgets::WrapMode::Character);
+    memo.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("quickb") != std::string::npos);
+
+    // No wrap: one display row per logical line, reached sideways instead.
+    memo.set_wrap_mode(ckv::widgets::WrapMode::None);
+    memo.draw(painter);
+    CK_CHECK(memo.content_width() >= 18);
+}
+
+CK_TEST(a_memo_shows_a_horizontal_bar_only_when_something_runs_off_the_edge) {
+    Fixture f;
+    Memo memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.on_attached();
+    memo.set_bounds(Rect{0, 0, 12, 6});
+    CK_CHECK(memo.horizontal_scrollbar_policy() == ckv::widgets::ScrollbarPolicy::Auto);
+
+    // Wrapped, nothing overflows sideways however long the text is.
+    memo.set_wrap_mode(ckv::widgets::WrapMode::Word);
+    memo.set_text("aaa bbb ccc ddd eee fff ggg hhh");
+    CK_CHECK(memo.content_width() <= 12);
+
+    // Unwrapped, the same text is one long row and the bar has work to do.
+    memo.set_wrap_mode(ckv::widgets::WrapMode::None);
+    CK_CHECK(memo.content_width() > 12);
+}
+
+CK_TEST(the_memo_cursor_stays_on_screen_horizontally_as_it_walks_a_long_line) {
+    // Document coordinates are what the cursor is stored in; the view scrolls
+    // to keep the display position of that cursor inside the viewport.
+    Fixture f;
+    Memo memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.on_attached();
+    memo.set_wrap_mode(ckv::widgets::WrapMode::None);
+    memo.set_bounds(Rect{0, 0, 12, 4});
+    memo.set_text("0123456789abcdefghijklmnopqrstuvwxyz");
+    memo.on_focus(ckv::FocusEvent{true});
+    CK_CHECK(memo.left_column() == 0);
+
+    for (int i = 0; i < 30; ++i) memo.on_key(key(Key::Right));
+    CK_CHECK(memo.cursor().column == 30);
+    // The view followed it rather than letting it walk off the edge.
+    CK_CHECK(memo.left_column() > 0);
+    CK_CHECK(memo.cursor().column >= memo.left_column());
+
+    memo.on_key(key(Key::Home));
+    CK_CHECK(memo.left_column() == 0);
+}
+
+CK_TEST(a_memo_rewrap_moves_no_cursor_and_no_selection) {
+    // The whole reason cursor and selection live in document coordinates:
+    // changing how lines are displayed must not edit where the reader is.
+    Fixture f;
+    Memo memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.on_attached();
+    memo.set_bounds(Rect{0, 0, 14, 6});
+    memo.set_text("alpha beta gamma delta epsilon");
+    memo.on_focus(ckv::FocusEvent{true});
+    for (int i = 0; i < 12; ++i) memo.on_key(key(Key::Right));
+    const MemoPosition before = memo.cursor();
+
+    memo.set_wrap_mode(ckv::widgets::WrapMode::Character);
+    CK_CHECK(memo.cursor() == before);
+    memo.set_wrap_mode(ckv::widgets::WrapMode::None);
+    CK_CHECK(memo.cursor() == before);
+    memo.set_bounds(Rect{0, 0, 8, 6});  // a resize rewraps too
+    CK_CHECK(memo.cursor() == before);
 }

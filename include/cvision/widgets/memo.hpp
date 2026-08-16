@@ -7,8 +7,10 @@
 //
 // Clipboard and undo are application-local and deterministic: cut/copy/paste
 // route through Application's injected clipboard state, and undo stores bounded
-// grapheme-indexed field snapshots. Word wrap is a widget policy bit that
-// affects soft visual rows without changing the stored document text.
+// grapheme-indexed field snapshots. Wrapping affects display rows only and
+// never the stored document text; the cursor and selection are held in
+// document coordinates and mapped through the display rows for drawing and
+// hit-testing, so a rewrap moves neither.
 // Its editing keymap matches InputLine and TextEditor, including word/document
 // navigation, Shift-extended selection, Ctrl+C/X/V, Ctrl+Insert/Shift+Insert,
 // and Ctrl+Backspace/Delete.
@@ -22,6 +24,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/scrollbar.hpp"
+#include "cvision/widgets/text_layout.hpp"
 
 namespace ckv::widgets {
 
@@ -47,8 +50,19 @@ public:
     void set_text(std::string text);
     std::string text() const;
 
-    void set_word_wrap(bool enabled);
-    bool word_wrap() const noexcept { return word_wrap_; }
+    // How a line too wide for the view is broken into display rows, and
+    // when each scrollbar is on screen. WrapMode::Word is the default here:
+    // a memo holds prose a reader is writing, and prose wants word wrap.
+    void set_wrap_mode(WrapMode mode);
+    WrapMode wrap_mode() const noexcept { return wrap_mode_; }
+    void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
+    void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
+    ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
+    ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+
+    // The widest display row, in cells, and the leftmost column on screen.
+    int content_width() const noexcept { return content_width_; }
+    int left_column() const noexcept;
 
     MemoPosition cursor() const noexcept { return cursor_; }
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
@@ -94,6 +108,10 @@ private:
     int visual_row_for_position(MemoPosition position, int visible_width) const;
     MemoPosition position_at_visual_row_column(int visual_row, int local_x, int visible_width) const;
     void ensure_cursor_visible();
+    void relayout_scrollbars();
+    // Cells from the start of `row` to `column` — the x a cursor or a
+    // selection edge lands on within its display row.
+    int column_x(const VisualRow& row, int column) const;
     MemoPosition previous_word(MemoPosition from) const noexcept;
     MemoPosition next_word(MemoPosition from) const noexcept;
 
@@ -102,10 +120,17 @@ private:
     std::optional<MemoPosition> selection_anchor_;
     std::vector<EditState> undo_stack_;
     bool has_focus_ = false;
-    bool word_wrap_ = false;
+    WrapMode wrap_mode_ = WrapMode::Word;
     bool dragging_selection_ = false;
 
     Scrollbar* scrollbar_ = nullptr;
+    Scrollbar* h_scrollbar_ = nullptr;
+    // The area left for text once whichever bars are showing have taken
+    // their column and row. Wrapping, drawing and hit-testing all measure
+    // against these, never against bounds(), so they cannot disagree.
+    int viewport_width_ = 0;
+    int viewport_height_ = 0;
+    int content_width_ = 0;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
 };

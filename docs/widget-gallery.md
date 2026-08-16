@@ -755,6 +755,53 @@ focus under the application's control; see [Embedded terminal](embedded-terminal
 Header: `include/cvision/widgets/text_view.hpp`. Styled/link-capable fragment
 used by TextView.
 
+## WrapMode
+
+Where a line is allowed to break, shared by every scrolling text surface —
+`TextView`, `Memo` and `TextEditor` all take the same three choices, so a
+reader meets one behaviour rather than three.
+
+- `WrapMode::None` — one display row per logical line, however long, with a
+  horizontal scrollbar reaching the rest. Preformatted text (a table, a
+  diagram, source, a log) means what it means only at its own line breaks.
+  This is the default for `TextView` and `TextEditor`.
+- `WrapMode::Word` — break between words, keeping each whole. What prose
+  wants, and the default for `Memo` and for the help viewer. A word wider
+  than the row is *not* split: it takes a row of its own and overflows, which
+  is what brings the horizontal bar out rather than telling the reader a path
+  is shorter than it is.
+- `WrapMode::Character` — break exactly at the edge, mid-word where the edge
+  falls there. For content with no word structure to respect: a hex dump, one
+  unbroken identifier, a script that does not space its words.
+
+```cpp
+editor->set_wrap_mode(widgets::WrapMode::Word);
+memo->set_wrap_mode(widgets::WrapMode::Character);
+```
+
+## WrapOptions
+
+The width a row may use, the `WrapMode`, and `continuation_reserve` — cells
+held back on wrapped rows for a continuation marker the caller draws.
+`wrap_graphemes` indexes by grapheme cluster, `wrap_text` by byte offset; both
+respect cluster boundaries and always return at least one segment, so an empty
+line still occupies a row.
+
+## WrapSegment
+
+One display row's worth of a logical line, as a half-open `[begin, end)`
+range in whichever units the entry point indexes by.
+
+## ScrollGeometry
+
+Which scrollbars a surface shows and what is left for its content, from
+`resolve_scroll_geometry`. The two bars cannot be decided independently: a
+vertical bar costs a column, which can be what makes a line no longer fit; a
+horizontal bar costs a row, which can be what makes the text no longer fit;
+and under wrapping the width also decides how many rows there are. The
+resolver settles them together and reports the viewport that results — always
+measure and draw against that, never against the raw bounds.
+
 ## TextView
 
 Header: `include/cvision/widgets/text_view.hpp`. Use passive rich,
@@ -832,7 +879,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto memo = std::make_unique<widgets::Memo>();
     memo->set_bounds(Rect{1, 1, 36, 10});
-    memo->set_word_wrap(true);
+    memo->set_wrap_mode(widgets::WrapMode::Word);
     memo->set_text("ckVision memo\nclipboard, undo, and wrapping live here.");
     memo_ = memo.get();
     page->add_child(std::move(memo));
