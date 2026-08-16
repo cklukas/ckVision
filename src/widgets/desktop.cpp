@@ -605,8 +605,11 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
     // window's shadow is a windows-on-windows effect, and docked chrome
     // is not a window.
     const Rect shadow_clip = content_area();
+    // Docked chrome paints last, for the same reason the retained path bounds
+    // its window layers: a window belongs under the furniture.
     for (auto& child_ptr : children()) {
         View& child = *child_ptr;
+        if (&child == top_dock_ || &child == bottom_dock_) continue;
         if (!paint_one_child(child, own_painter)) continue;  // invisible: nothing to shadow either
 
         if (!child_casts_shadow(child)) continue;
@@ -621,6 +624,8 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
             if (!clipped.empty()) mutable_painter.apply_shadow(clipped, &scene::default_dim);
         }
     }
+    for (ui::View* dock : {top_dock_, bottom_dock_})
+        if (dock != nullptr) (void)paint_one_child(*dock, own_painter);
 }
 
 void Desktop::paint_retained(const scene::Painter& own_painter,
@@ -636,10 +641,14 @@ void Desktop::paint_retained(const scene::Painter& own_painter,
 
         if (auto* window = dynamic_cast<Window*>(&child)) {
             if (window->repaint_backing_if_needed()) ++last_content_repaints_;
+            // Windows are bounded to the content area, so one dragged upward
+            // slides under the menu bar rather than over it. Docked chrome is
+            // the desktop's furniture: it is always there, and a window that
+            // can cover it can hide the way out of whatever it is covering.
             layers.push_back(scene::Layer{window->compositor_layer_id_, &window->backing_surface(),
                                           Point{window->absolute_bounds().x,
                                                 window->absolute_bounds().y},
-                                          child_casts_shadow(*window), shadow_clip});
+                                          child_casts_shadow(*window), shadow_clip, shadow_clip});
             continue;
         }
 

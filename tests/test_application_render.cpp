@@ -502,3 +502,34 @@ CK_TEST(growing_back_above_the_floor_recovers_normal_rendering_automatically) {
     CK_CHECK(!f.app.terminal_too_small());
     CK_CHECK(f.term.written_bytes().find("Back") != std::string::npos);
 }
+
+// --- Docked chrome stays above windows ---------------------------------------
+
+CK_TEST(a_window_dragged_onto_the_menu_bar_passes_under_it) {
+    // Docked chrome is the desktop's furniture: always there, and a window
+    // that can cover it can hide the way out of whatever it is covering.
+    Fixture f;
+    auto* desktop = static_cast<ckv::widgets::Desktop*>(
+        f.app.root().add_child(std::make_unique<ckv::widgets::Desktop>(f.app.root().bounds())));
+    desktop->dock_top(std::make_unique<ckv::widgets::MenuBar>(
+        std::vector<ckv::widgets::MenuBarItem>{{"&File", {}}}));
+    auto* w = desktop->add_window(std::make_unique<ckv::widgets::Window>("Win"));
+    w->set_bounds(ckv::Rect{2, 3, 20, 5});
+    f.app.step(0);
+
+    const auto row = [&f](int y) {
+        std::string text;
+        for (int x = 0; x < f.app.composed_surface().size().width; ++x)
+            text += f.app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return text;
+    };
+    const std::string menu_row = row(0);
+    CK_CHECK(menu_row.find("File") != std::string::npos);
+
+    // Drag it up over the menu bar. Its title row would land on row 0.
+    w->set_bounds(ckv::Rect{2, 0, 20, 5});
+    f.app.step(0);
+    CK_CHECK(row(0) == menu_row);                      // menu bar untouched
+    CK_CHECK(row(0).find("Win") == std::string::npos);  // and not the title
+    CK_CHECK(row(1).find("║") != std::string::npos);    // the window is there, below
+}

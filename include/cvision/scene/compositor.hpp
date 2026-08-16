@@ -30,16 +30,25 @@ struct Layer {
     Surface* surface = nullptr;
     Point position;
     bool casts_shadow = false;
-    // Optional frame-absolute boundary for this layer's shadow only. The
-    // layer content itself remains clipped by its Surface; Desktop uses this
-    // to keep window shadows out of docked chrome.
+    // Optional frame-absolute boundary for this layer's shadow only. Desktop
+    // uses this to keep window shadows out of docked chrome.
     std::optional<Rect> shadow_clip;
+    // Optional frame-absolute boundary for the layer's own content. A layer
+    // composites above the background, so a window dragged over a docked
+    // menu bar covers it; bounding the layer instead sends the window under
+    // the chrome, which is where a desktop's furniture belongs. Everything
+    // that asks where a layer is -- damage, occlusion, cell resolution,
+    // raster visibility -- reads it through one function, so bounding it
+    // here bounds all of them.
+    std::optional<Rect> content_clip;
 
     Layer() = default;
     Layer(int layer_id, Surface* layer_surface, Point layer_position, bool layer_casts_shadow,
-          std::optional<Rect> layer_shadow_clip = std::nullopt)
+          std::optional<Rect> layer_shadow_clip = std::nullopt,
+          std::optional<Rect> layer_content_clip = std::nullopt)
         : id(layer_id), surface(layer_surface), position(layer_position),
-          casts_shadow(layer_casts_shadow), shadow_clip(std::move(layer_shadow_clip)) {}
+          casts_shadow(layer_casts_shadow), shadow_clip(std::move(layer_shadow_clip)),
+          content_clip(std::move(layer_content_clip)) {}
 };
 
 // Default shadow dimming: halves each RGB channel; a "default" (no-RGB)

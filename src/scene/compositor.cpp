@@ -19,7 +19,8 @@ void accumulate_surface_damage(std::vector<Rect>& damage, const Surface& surface
 }
 
 Rect layer_rect(const Layer& l) {
-    return Rect{l.position.x, l.position.y, l.surface->size().width, l.surface->size().height};
+    const Rect full{l.position.x, l.position.y, l.surface->size().width, l.surface->size().height};
+    return l.content_clip ? full.intersected(*l.content_clip) : full;
 }
 
 void append_shadow_footprint(Rect layer, ShadowSpec shadow, const std::optional<Rect>& shadow_clip,
@@ -245,7 +246,8 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
             rect_scratch_a_.clear();
             rect_scratch_a_.push_back(Rect{region.visible.x + layer.position.x,
                                            region.visible.y + layer.position.y,
-                                           region.visible.width, region.visible.height});
+                                           region.visible.width, region.visible.height}
+                                          .intersected(layer_rect(layer)));
             for (std::size_t j = i + 1; j < layers.size(); ++j) {
                 rect_scratch_b_.clear();
                 const Rect occluder = layer_rect(layers[j]);
