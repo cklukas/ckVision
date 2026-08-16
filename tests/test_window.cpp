@@ -205,7 +205,10 @@ CK_TEST(clicking_the_close_control_invokes_close) {
     w->set_bounds(Rect{5, 5, 20, 10});
     bool closed = false;
     w->on_closed = [&] { closed = true; };
+    // A frame control acts on release, so the click has to be completed.
     CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 3, 5})));  // inside "[x]" at local x=2..4
+    CK_CHECK(!closed);                                                       // the press alone decides nothing
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{5 + 3, 5})));
     CK_CHECK(closed);
 }
 
@@ -229,6 +232,7 @@ CK_TEST(clicking_the_zoom_control_toggles_zoom) {
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
     CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 17, 5})));  // inside "[]" near the top-right
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{5 + 17, 5})));
     CK_CHECK(w->zoomed());
 }
 
@@ -237,6 +241,7 @@ CK_TEST(a_standalone_windows_zoom_control_uses_its_own_current_bounds_as_a_harml
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
     CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 17, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{5 + 17, 5})));
     CK_CHECK(w->zoomed());
     CK_CHECK(w->bounds() == (Rect{5, 5, 20, 10}));  // unchanged: no provider, nothing else to target
 }
@@ -767,6 +772,7 @@ CK_TEST(the_zoom_control_hit_test_region_is_unaffected_by_the_glyph_change) {
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
     CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 17, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{5 + 17, 5})));
     CK_CHECK(w->zoomed());
 }
 
@@ -1368,4 +1374,90 @@ CK_TEST(deactivating_a_window_ends_a_drag_it_still_believed_in) {
     Painter painter(s, Rect{0, 0, 20, 6});
     w->draw(painter);
     CK_CHECK(s.at(Point{0, 5}).grapheme() == "╚");  // not still held
+}
+
+// --- Frame controls act on release ------------------------------------------
+
+CK_TEST(the_close_control_acts_on_release_not_on_press) {
+    // A press is a question; the release is the answer. Closing on the press
+    // gives the reader no chance to change their mind, and closing is not
+    // something they can take back.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    bool asked = false;
+    w->close_request = [&] { asked = true; return false; };
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{3, 0})));
+    CK_CHECK(!asked);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{3, 0})));
+    CK_CHECK(asked);
+}
+
+CK_TEST(releasing_away_from_the_close_control_takes_the_press_back) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    bool asked = false;
+    w->close_request = [&] { asked = true; return false; };
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{3, 0})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{9, 3})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{9, 3})));
+    CK_CHECK(!asked);
+}
+
+CK_TEST(the_zoom_control_acts_on_release_and_can_be_taken_back_too) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_resizable(true);
+    const Rect before = w->bounds();
+
+    // Press, leave, release: nothing happens.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{16, 0})));
+    CK_CHECK(w->bounds() == before);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{9, 3})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{9, 3})));
+    CK_CHECK(w->bounds() == before);
+
+    // Press and release on it: it zooms.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{16, 0})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{16, 0})));
+    CK_CHECK(w->zoomed());
+}
+
+// --- A window stays reachable -------------------------------------------------
+
+CK_TEST(a_moved_window_keeps_its_title_bar_where_the_mouse_can_reach_it) {
+    // The title bar is the only way to move a window, so it is the part that
+    // must stay reachable. Dragged under the menu bar or past the footer,
+    // there would be nothing left to grab it by.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{5, 5, 20, 6});
+    w->set_move_bounds(Rect{0, 1, 40, 10});  // desktop content: rows 1..10
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{15, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{15, -20})));
+    CK_CHECK(w->bounds().y == 1);  // not one row further under the chrome
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{15, 60})));
+    CK_CHECK(w->bounds().y == 10);  // the last row of the content area
+
+    // Sideways, enough of the title bar stays inside to aim at.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{-90, 5})));
+    CK_CHECK(w->bounds().x + w->bounds().width >= 8);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{200, 5})));
+    CK_CHECK(w->bounds().x <= 40 - 8);
+}
+
+CK_TEST(a_window_with_no_move_bounds_is_unconstrained) {
+    // Constraining is the owner's decision; a Window on its own does not
+    // invent a boundary it was never told about.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{5, 5, 20, 6});
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{15, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{15, -20})));
+    CK_CHECK(w->bounds().y < 0);
 }

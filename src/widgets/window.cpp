@@ -36,7 +36,22 @@ void Window::set_title(std::string title) {
     invalidate();
 }
 
+Rect Window::clamp_move(Rect moved) const noexcept {
+    if (move_bounds_.empty()) return moved;
+    // The title bar is the only way to move a window, so it is the part that
+    // has to stay reachable. Its row must remain inside vertically -- one row
+    // under the menu bar or below the footer and there is nothing to grab --
+    // and enough of it must remain inside horizontally to aim at.
+    constexpr int kReachable = 8;
+    const int min_x = move_bounds_.x - std::max(0, moved.width - kReachable);
+    const int max_x = move_bounds_.right() - std::min(kReachable, moved.width);
+    moved.x = std::clamp(moved.x, min_x, max_x);
+    moved.y = std::clamp(moved.y, move_bounds_.y, move_bounds_.bottom() - 1);
+    return moved;
+}
+
 void Window::end_drag() {
+    held_control_ = Control::None;
     if (drag_kind_ == DragKind::None) return;
     const bool was_resizing = drag_kind_ == DragKind::Resize;
     drag_kind_ = DragKind::None;
@@ -598,11 +613,11 @@ bool Window::on_mouse(const MouseEvent& event) {
         // gesture ended.
         end_drag();
         if (point_in_close_control(local)) {
-            close();
+            held_control_ = Control::Close;
             return true;
         }
         if (point_in_zoom_control(local)) {
-            toggle_zoom(zoom_target());
+            held_control_ = Control::Zoom;
             return true;
         }
         // Before the title-bar move: the top corners sit on that row, and a
@@ -624,6 +639,17 @@ bool Window::on_mouse(const MouseEvent& event) {
         return false;  // not frame chrome — let a child (content) handle it
     }
 
+    if (held_control_ != Control::None) {
+        if (event.action != MouseAction::Up) return true;  // held; nothing decided yet
+        const Control held = held_control_;
+        held_control_ = Control::None;
+        // Released off the control it started on: the reader moved away, and
+        // moving away is how a press is taken back.
+        if (held == Control::Close && point_in_close_control(local)) close();
+        else if (held == Control::Zoom && point_in_zoom_control(local)) toggle_zoom(zoom_target());
+        return true;
+    }
+
     if (drag_kind_ == DragKind::None) return false;
 
     // Motion with no button held: the release happened where this window
@@ -638,8 +664,8 @@ bool Window::on_mouse(const MouseEvent& event) {
         const int dx = event.cell.x - drag_start_mouse_.x;
         const int dy = event.cell.y - drag_start_mouse_.y;
         if (drag_kind_ == DragKind::Move) {
-            set_bounds(Rect{drag_start_bounds_.x + dx, drag_start_bounds_.y + dy, drag_start_bounds_.width,
-                             drag_start_bounds_.height});
+            set_bounds(clamp_move(Rect{drag_start_bounds_.x + dx, drag_start_bounds_.y + dy,
+                                        drag_start_bounds_.width, drag_start_bounds_.height}));
             return true;
         }
         // One rule for all four corners: the grabbed corner follows the

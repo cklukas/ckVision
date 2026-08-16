@@ -133,6 +133,7 @@ public:
     // blank row nobody asked for, while the top of the window still wants
     // its breathing space. Symmetric padding cannot express that.
     void set_content_margins(int left, int top, int right, int bottom);
+    void set_move_bounds(Rect bounds) noexcept { move_bounds_ = bounds; }
     // The margins actually applied. The bottom one is dropped when the
     // content's last row is a cast shadow: measuring, sizing and painting
     // all ask here, so a window cannot be sized for a gap it does not draw.
@@ -382,11 +383,28 @@ private:
 
     DragKind drag_kind_ = DragKind::None;
     Corner resize_corner_ = Corner::BottomRight;
+    // A frame control the pointer is holding down. Command-like controls act
+    // on release inside themselves, never on press: a press is a question
+    // ("this one?") and the release is the answer. Closing a window the
+    // moment the button goes down gives the reader no way to change their
+    // mind, and closing is not an action they can take back.
+    enum class Control { None, Close, Zoom };
+    Control held_control_ = Control::None;
+
+    // The area a drag must leave this window's title bar reachable within,
+    // in parent coordinates. Set by whatever owns the window; empty means
+    // unconstrained. Window stays Desktop-agnostic, so it is told rather
+    // than asking.
+    Rect move_bounds_;
     // Ends whatever drag is in progress and repaints if that changed what is
     // drawn. A drag has no guaranteed ending: release the button outside the
     // terminal and the release is delivered to somebody else, leaving this
     // window believing a gesture is still under way.
     void end_drag();
+    // Clamps `moved` so enough of the title bar stays inside move_bounds_ to
+    // grab again. A window dragged entirely under the menu bar or past the
+    // footer cannot be brought back with the mouse at all.
+    Rect clamp_move(Rect moved) const noexcept;
     Point drag_start_mouse_;
     Rect drag_start_bounds_;
 

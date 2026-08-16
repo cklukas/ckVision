@@ -131,6 +131,9 @@ Window* Desktop::add_window(std::unique_ptr<Window> window) {
     // lifetime-bound capability is cleared before either participant can
     // detach, so a retained Window cannot call into a former Desktop.
     raw->bind_desktop_zoom_target([this] { return content_area(); }, window_relationship_);
+    // A drag may not carry the title bar out of the content area: under the
+    // menu bar or past the footer there is nothing left to grab it by.
+    raw->set_move_bounds(content_area());
     activate(raw);
     return raw;
 }
@@ -408,6 +411,10 @@ void Desktop::on_resized() {
         if (desktop_liveness.expired()) return;
     }
     const Rect area = content_area();
+    // The docks may have changed height, so the area a window must stay
+    // reachable within has moved with them.
+    for (Window* window : windows_)
+        if (window != nullptr) window->set_move_bounds(area);
 
     // Desktop growth tracking (M8 WP-4): a zoomed window keeps filling
     // the (possibly now larger or smaller) content area rather than
