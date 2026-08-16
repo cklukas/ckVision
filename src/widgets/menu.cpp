@@ -542,6 +542,8 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     CKV_ASSERT(menu_index < menus_.size());
     close_dropdown();
     highlighted_ = menu_index;
+    menus_follow_walk_ = true;
+    sync_trailing_highlight();
 
     auto dropdown = std::make_unique<DropdownMenu>(menus_[menu_index].items);
     // Before add_popup(): on_attached() decides the initial selection from it.
@@ -586,6 +588,9 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
 }
 
 void MenuBar::close_dropdown() {
+    // Closing is the reader saying they are done with menus, unless the one
+    // caller that means "hold this thought" says otherwise straight after.
+    menus_follow_walk_ = false;
     if (open_dropdown_ == nullptr) return;
     if (app_->input_capture() == open_dropdown_) app_->clear_input_capture();
     desktop_->remove_popup(open_dropdown_);
@@ -624,12 +629,10 @@ bool MenuBar::on_key(const KeyEvent& event) {
             // so a clock at the right end is reached by walking to it rather
             // than by knowing it is there.
             set_bar_highlight((highlighted_ + navigable_slots() - 1) % navigable_slots());
-            if (open_dropdown_ != nullptr && !trailing_slot_highlighted()) open_dropdown(highlighted_);
             invalidate();
             return true;
         case Key::Right:
             set_bar_highlight((highlighted_ + 1) % navigable_slots());
-            if (open_dropdown_ != nullptr && !trailing_slot_highlighted()) open_dropdown(highlighted_);
             invalidate();
             return true;
         case Key::Down:
@@ -689,11 +692,36 @@ void MenuBar::on_resized() { layout_trailing_view(); }
 
 void MenuBar::set_bar_highlight(std::size_t slot) {
     highlighted_ = slot;
-    // The trailing title is a view, not a label the bar paints, so it has to
-    // be told when the walk is standing on it.
-    if (MenuBarAccessory* const accessory = trailing_accessory())
-        accessory->set_menu_highlighted(trailing_slot_highlighted());
+    // One slot is highlighted, and what is open belongs to it. The bar owns
+    // both facts, so it reconciles them here rather than leaving every caller
+    // that moves the highlight to remember: walking from one menu to the next
+    // carries the open menu along, and walking onto a title that has no menu
+    // of its own -- the trailing view -- closes what was open. Left to the
+    // callers, a dropdown stayed open beside a highlighted clock and kept the
+    // keys, so Enter chose that menu's item instead of the one the reader
+    // could see was selected.
+    if (trailing_slot_highlighted()) {
+        // Suspended, not cancelled: the trailing title has no menu of its
+        // own, but the walk is still the one the reader started with a menu
+        // open, so stepping back onto a menu shows it again.
+        if (open_dropdown_ != nullptr) {
+            close_dropdown();
+            menus_follow_walk_ = true;
+        }
+    } else if (menus_follow_walk_) {
+        open_dropdown(slot);
+    }
+    sync_trailing_highlight();
     invalidate();
+}
+
+void MenuBar::sync_trailing_highlight() {
+    // The trailing title is a view, not a label the bar paints, so it has to
+    // be told when the walk is standing on it -- and told just as promptly
+    // when it is not, or it goes on wearing the active colours beside a menu
+    // that is now the highlighted one.
+    if (MenuBarAccessory* const accessory = trailing_accessory())
+        accessory->set_menu_highlighted(active_ && trailing_slot_highlighted());
 }
 
 MenuBarAccessory* MenuBar::trailing_accessory() const noexcept {

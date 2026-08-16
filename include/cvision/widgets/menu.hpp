@@ -318,9 +318,13 @@ private:
     std::size_t navigable_slots() const noexcept;
     bool trailing_slot_highlighted() const noexcept;
     void set_bar_highlight(std::size_t slot);
+    void sync_trailing_highlight();
     void layout_trailing_view();
     std::vector<MenuBarItem> menus_;
     std::size_t highlighted_ = 0;
+    // Whether walking the bar carries an open menu with it, as it does from
+    // the moment one is opened until the reader closes it or leaves the bar.
+    bool menus_follow_walk_ = false;
     bool active_ = false;
     ui::View* previously_focused_ = nullptr;
     DropdownMenu* open_dropdown_ = nullptr;  // observer into desktop_'s popup list

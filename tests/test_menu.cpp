@@ -647,6 +647,87 @@ CK_TEST(captured_menu_bar_pointer_gesture_keeps_dropdown_open_until_release_over
     CK_CHECK(desktop->popups().empty());
 }
 
+namespace {
+// A trailing view that counts what the bar does to it -- what a clock at the
+// right end of the bar is, reduced to what these tests need to see.
+class TrailingProbe : public ckv::ui::View, public ckv::widgets::MenuBarAccessory {
+public:
+    void set_menu_highlighted(bool highlighted) override { highlighted_ = highlighted; }
+    void activate_from_menu_bar() override { ++activations; }
+    bool highlighted() const noexcept { return highlighted_; }
+    ckv::ui::SizeHint horizontal_size_hint() const override { return ckv::ui::SizeHint{5, 5, 5}; }
+    ckv::ui::SizeHint vertical_size_hint() const override { return ckv::ui::SizeHint{1, 1, 1}; }
+    int activations = 0;
+
+private:
+    bool highlighted_ = false;
+};
+
+MenuBar* bar_with_trailing_probe(MenuBarFixture& mf, TrailingProbe** probe) {
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}},
+        {"&Help", {{"&About", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 80, 1});
+    *probe = bar->set_trailing_view(std::make_unique<TrailingProbe>());
+    return bar;
+}
+}  // namespace
+
+CK_TEST(walking_onto_the_trailing_title_closes_the_menu_that_was_open) {
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));  // opens File
+    CK_CHECK(mf.desktop.popups().size() == 1);
+
+    mf.app.dispatch(key(Key::Right));  // File -> Help, carrying the open menu
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(!probe->highlighted());
+
+    mf.app.dispatch(key(Key::Right));  // Help -> the trailing title
+    // One slot is highlighted and what is open belongs to it: a menu left
+    // open here would keep the keys, and Enter would choose its item rather
+    // than the title the reader can see is selected.
+    CK_CHECK(mf.desktop.popups().empty());
+    CK_CHECK(probe->highlighted());
+
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(probe->activations == 1);
+}
+
+CK_TEST(stepping_back_off_the_trailing_title_shows_the_menu_again) {
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));  // opens File
+    mf.app.dispatch(key(Key::Right));
+    mf.app.dispatch(key(Key::Right));  // onto the trailing title: suspended
+    CK_CHECK(mf.desktop.popups().empty());
+
+    mf.app.dispatch(key(Key::Left));  // back onto Help
+    // Suspended, not cancelled: this is still the walk the reader started
+    // with a menu open.
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(!probe->highlighted());
+}
+
+CK_TEST(a_menu_opened_by_mnemonic_takes_the_highlight_off_the_trailing_title) {
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    bar->activate();
+    mf.app.dispatch(key(Key::Right));
+    mf.app.dispatch(key(Key::Right));  // onto the trailing title
+    CK_CHECK(probe->highlighted());
+
+    mf.app.dispatch(key(Key::Char, "f"));  // File, by its mnemonic
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(!probe->highlighted());  // never two of them lit at once
+}
+
 CK_TEST(escape_closes_an_open_dropdown_first_without_deactivating_the_bar) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
