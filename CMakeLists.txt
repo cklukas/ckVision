@@ -130,6 +130,14 @@ if(UNIX)
     ckvision_strict(ckvision_terminal_probe)
 endif()
 
+# Half of the VT conformance harness (tools/vtconform/README.md): it prints
+# what a byte script made of the embedded emulator's screen, so the same
+# script's effect on an established terminal can be compared against it.
+# Built with the library because a fidelity question can arise on any host.
+add_executable(ckvision_vt_dump tools/vtconform/dump_emulator.cpp)
+target_link_libraries(ckvision_vt_dump PRIVATE cvision)
+ckvision_strict(ckvision_vt_dump)
+
 option(CKVISION_BUILD_TESTING
     "Build ckVision tests and benchmarks" ${PROJECT_IS_TOP_LEVEL})
 if(CKVISION_BUILD_TESTING)

@@ -169,6 +169,14 @@ CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
             if (raster.cell_extent.width >= 40 && raster.cell_extent.height >= 8) sized = true;
     }
     CK_CHECK(sized);
+
+    // ...and the child got it through intact. A picture too large for the
+    // subsession's output budget is discarded whole, which presents as an
+    // empty window with the reason recorded only in a diagnostic. Checking
+    // the raster alone does not catch that: the sizes still look right on
+    // whichever fragment did arrive.
+    for (const auto& diagnostic : view->session().snapshot().diagnostics)
+        CK_CHECK(diagnostic.kind != ckv::core::TerminalDiagnostic::Kind::LimitExceeded);
 }
 
 CK_TEST(the_help_command_answers_with_an_about_box) {

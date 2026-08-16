@@ -113,32 +113,40 @@ widgets::Window* TerminalApp::new_terminal() {
 
 namespace {
 
-// A picture worth putting on screen: colour bands across, brightness down,
-// and a pale frame so the image's own extent is visible against the terminal
+// A picture worth putting on screen: blocks of flat colour, in a grid, with
+// a pale border so the image's own extent is visible against the terminal
 // behind it. The demonstration is that a child process's graphics arrive as
-// scene rasters -- and a solid rectangle a few cells wide does not show
-// that. It shows a coloured smudge that could as easily be a fault.
+// scene rasters -- a solid rectangle a few cells wide does not show that.
+//
+// Flat colour is not only a look. Sixel encodes one pass per colour and
+// run-length encodes each pass, so a picture of a few flat blocks costs a
+// couple of kilobytes, while the same picture carrying a smooth gradient
+// costs well over a hundred and is dropped by the subsession's output
+// budget before it can be decoded -- which presents as an empty window,
+// with the reason recorded in a diagnostic nobody was looking at.
 Image demo_picture(Size cell_pixels, Size cells) {
     const int width = std::max(1, cell_pixels.width * cells.width);
     const int height = std::max(1, cell_pixels.height * cells.height);
     Image image(width, height);
-    constexpr Image::Rgba bands[] = {
+    constexpr Image::Rgba hues[] = {
         {220, 60, 60, 255},  {220, 150, 60, 255}, {220, 220, 60, 255},
         {60, 200, 90, 255},  {60, 160, 220, 255}, {150, 90, 210, 255},
     };
-    constexpr int band_count = static_cast<int>(std::size(bands));
+    constexpr int columns = static_cast<int>(std::size(hues));
+    constexpr int rows = 4;
     for (int y = 0; y < height; ++y) {
-        // Full colour at the top fading towards black at the bottom, which
-        // reads as a gradient only if pixels are being placed correctly.
-        const int shade = 255 - (y * 200 / std::max(1, height - 1));
+        const int row = std::min(rows - 1, y * rows / height);
+        // Four discrete steps, not a gradient: still visibly a ramp, and
+        // still only twenty-four colours in the whole image.
+        const int shade = 255 - row * 55;
         for (int x = 0; x < width; ++x) {
-            const Image::Rgba band = bands[std::min(band_count - 1, x * band_count / width)];
+            const Image::Rgba hue = hues[std::min(columns - 1, x * columns / width)];
             const bool edge = x < 2 || x >= width - 2 || y < 2 || y >= height - 2;
             image.set_pixel(x, y,
                             edge ? Image::Rgba{235, 235, 235, 255}
-                                 : Image::Rgba{static_cast<std::uint8_t>(band.r * shade / 255),
-                                               static_cast<std::uint8_t>(band.g * shade / 255),
-                                               static_cast<std::uint8_t>(band.b * shade / 255), 255});
+                                 : Image::Rgba{static_cast<std::uint8_t>(hue.r * shade / 255),
+                                               static_cast<std::uint8_t>(hue.g * shade / 255),
+                                               static_cast<std::uint8_t>(hue.b * shade / 255), 255});
         }
     }
     return image;

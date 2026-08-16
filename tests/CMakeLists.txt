@@ -402,6 +402,18 @@ add_test(NAME provenance_checker_self_test
             --self-test)
 set_tests_properties(provenance_checker_self_test PROPERTIES LABELS "script;provenance" TIMEOUT 30)
 
+# Differential VT conformance (tools/vtconform/README.md): the same byte
+# scripts through ckVision's emulator and through an established terminal,
+# compared cell by cell. It reports and skips when no reference terminal is
+# installed, so it never fails a host for not having one -- but where one
+# exists, an unexplained difference in terminal semantics fails the build.
+if(TARGET ckvision_vt_dump)
+    add_test(NAME vt_conformance
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/vtconform/conform.py
+                --dump-tool $<TARGET_FILE:ckvision_vt_dump>)
+    set_tests_properties(vt_conformance PROPERTIES LABELS "script;conformance;terminal" TIMEOUT 180)
+endif()
+
 add_test(NAME test_inventory
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py
             --test-dir ${CMAKE_BINARY_DIR})
