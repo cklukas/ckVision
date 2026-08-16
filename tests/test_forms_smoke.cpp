@@ -2,7 +2,7 @@
 #include <string>
 #include <string_view>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/common_components.hpp"

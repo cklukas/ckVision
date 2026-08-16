@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"

@@ -8,7 +8,7 @@
 // handled, and that an invisible/unchanged tree costs nothing.
 #include "cvision/ui/application.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
@@ -221,16 +221,21 @@ CK_TEST(dragging_a_window_recomposes_without_repainting_its_retained_content) {
     f.app.step(0);
     const std::size_t original_repaints = window->content_repaint_count();
 
+    // Grab the title bar on a column that carries no frame control: the
+    // close control occupies local columns 2-4 and the maximize/restore
+    // control local columns width-5..width-3, so local column 6 (absolute
+    // 8, for a window whose left edge is at 2) is title, not chrome. A
+    // press on a control activates it instead of starting a drag.
     f.term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Down,
                                         .button = ckv::MouseButton::Left,
-                                        .cell = ckv::Point{6, 2},
+                                        .cell = ckv::Point{8, 2},
                                         .pixel = std::nullopt,
                                         .modifiers = ckv::Modifier::None});
     f.app.step(0);
 
     f.term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Move,
                                         .button = ckv::MouseButton::Left,
-                                        .cell = ckv::Point{18, 2},
+                                        .cell = ckv::Point{20, 2},
                                         .pixel = std::nullopt,
                                         .modifiers = ckv::Modifier::None});
     f.term.clear_written();

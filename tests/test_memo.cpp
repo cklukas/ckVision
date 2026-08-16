@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/memo.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/core/clock.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"

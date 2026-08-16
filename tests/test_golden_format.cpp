@@ -5,7 +5,7 @@
 #include <sstream>
 #include <string>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 namespace {
 

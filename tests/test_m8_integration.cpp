@@ -8,7 +8,7 @@
 // by injecting a ResizeEvent into Application or poking a widget's own
 // methods directly, since that is exactly the gap that let each finding
 // stay green under unit tests while broken interactively.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"

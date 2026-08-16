@@ -7,7 +7,7 @@
 // the "complete headless+interactive form demo" and "focus spec as a
 // headless event script" ROADMAP.md calls for M4's exit, exercised as
 // one coherent scenario rather than only unit-level pieces.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/widgets/dialog.hpp"

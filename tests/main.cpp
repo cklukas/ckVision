@@ -3,6 +3,6 @@
 // The single cktest entry point for the cvision_tests executable — every
 // other test_*.cpp registers CK_TEST cases via inline static
 // initialization and must NOT define its own CKTEST_MAIN.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CKTEST_MAIN

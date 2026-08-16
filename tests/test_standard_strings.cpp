@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/standard_strings.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/core/filesystem.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"

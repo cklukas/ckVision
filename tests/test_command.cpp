@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/command.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;

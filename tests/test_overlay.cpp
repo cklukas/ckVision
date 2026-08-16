@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/overlay.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::Rect;
 using ckv::ui::Overlay;

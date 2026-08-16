@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <optional>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"

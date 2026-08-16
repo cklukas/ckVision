@@ -1,5 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 #include "cvision/widgets/syntax_profile.hpp"
 

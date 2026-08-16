@@ -1,5 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 #include <fstream>
 #include <iterator>
@@ -505,4 +505,50 @@ CK_TEST(terminal_emulator_reports_a_child_exit_mid_sixel_without_publishing_part
     CK_CHECK(snapshot.rasters.empty());
     CK_CHECK(!snapshot.diagnostics.empty());
     CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::MalformedSequence);
+}
+
+// --- Designated character sets --------------------------------------------
+
+CK_TEST(a_designated_line_drawing_set_turns_letters_into_frame_pieces) {
+    // What ncurses actually sends to draw a box: designate the DEC special
+    // graphics set, send the letters, designate ASCII again. Read literally
+    // these spell "lqqk", which is what an emulator ignoring the
+    // designation puts on screen.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b(0lqqk\x1b(B");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "\u250c");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "\u2500");
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == "\u2500");
+    CK_CHECK(snapshot.cell_buffer[3].grapheme() == "\u2510");
+}
+
+CK_TEST(the_designation_itself_never_reaches_the_screen) {
+    // The failure this replaced printed the final byte of the designation
+    // as text, so a frame corner arrived as "0lqqB".
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b(0x\x1b(BWarning");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "\u2502");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "W");
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == "a");
+}
+
+CK_TEST(ascii_is_restored_by_designation_so_later_text_reads_normally) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b(0q\x1b(Bq");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "\u2500");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "q");  // the same byte, now itself
+}
+
+CK_TEST(shift_out_and_shift_in_move_between_the_designated_sets) {
+    // G1 carries the line-drawing set and SO/SI switch to it and back
+    // without redesignating — the other way a curses program draws frames.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b)0" "A" "\x0e" "q" "\x0f" "B");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "A");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "\u2500");
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == "B");
 }

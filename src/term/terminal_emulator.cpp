@@ -193,9 +193,19 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else if (byte == '\n') { put_text(true); cursor_.position.x = 0; index(); }
                 else if (byte == '\t') { put_text(true); cursor_.position.x = std::min(cells_.width, ((cursor_.position.x / 8) + 1) * 8); }
                 else if (byte == '\b') { put_text(true); cursor_.position.x = std::max(0, cursor_.position.x - 1); }
+                else if (byte == '\x0f') { put_text(true); active_charset_ = 0; }  // SI
+                else if (byte == '\x0e') { put_text(true); active_charset_ = 1; }  // SO
                 else if (static_cast<unsigned char>(byte) >= 0x20) {
                     if (printable_.size() == options_.max_printable_run_bytes) { diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child printable run exceeded configured limit"); put_text(); }
-                    printable_.push_back(byte);
+                    // A designated line-drawing set turns letters into frame
+                    // pieces. Substituting here keeps the rest of the parser,
+                    // the grapheme splitter and the cell store working in one
+                    // encoding rather than carrying the repertoire downstream.
+                    const std::string_view graphic =
+                        charsets_[active_charset_] == Charset::DecGraphics ? dec_graphic_for(byte)
+                                                                           : std::string_view{};
+                    if (graphic.empty()) printable_.push_back(byte);
+                    else printable_.append(graphic);
                 }
                 break;
             case ParseState::Escape:
@@ -205,9 +215,23 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else if (byte == 'D') { index(); parse_state_ = ParseState::Ground; }
                 else if (byte == 'E') { cursor_.position.x = 0; index(); parse_state_ = ParseState::Ground; }
                 else if (byte == 'M') { reverse_index(); parse_state_ = ParseState::Ground; }
+                else if (byte == '(' || byte == ')' || byte == '*' || byte == '+') {
+                    pending_charset_slot_ = static_cast<unsigned char>(byte == '(' ? 0 : byte == ')' ? 1 : byte == '*' ? 2 : 3);
+                    parse_state_ = ParseState::Scs;
+                }
                 else if (byte == '7') { saved_cursor_ = cursor_; saved_cursor_valid_ = true; parse_state_ = ParseState::Ground; }
                 else if (byte == '8') { if (saved_cursor_valid_) cursor_ = saved_cursor_; parse_state_ = ParseState::Ground; }
                 else { diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child escape sequence"); parse_state_ = ParseState::Ground; }
+                break;
+            case ParseState::Scs:
+                // The final byte names the repertoire. Everything that is not
+                // the line-drawing set is treated as the ASCII one: the sets
+                // that differ from it do so in accented letters, and showing
+                // an unaccented letter beats showing the designation itself
+                // as text across the middle of the screen.
+                put_text(true);
+                charsets_[pending_charset_slot_] = byte == '0' ? Charset::DecGraphics : Charset::Ascii;
+                parse_state_ = ParseState::Ground;
                 break;
             case ParseState::Csi:
                 if (byte >= '@' && byte <= '~') { handle_csi(byte); control_.clear(); parse_state_ = ParseState::Ground; }
@@ -582,6 +606,49 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child CSI sequence");
+}
+
+// The DEC Special Graphics repertoire, which occupies the ASCII letter
+// range while designated. Only the box-drawing half is what programs
+// actually reach for, but the whole published range is here: a partial
+// table would render most of a frame and corrupt the rest, which is
+// harder to recognise than rendering none of it.
+std::string_view TerminalEmulator::dec_graphic_for(char byte) noexcept {
+    switch (byte) {
+        case '_': return " ";
+        case '`': return "\u25c6";  // diamond
+        case 'a': return "\u2592";  // checker board
+        case 'b': return "\u2409";  // HT
+        case 'c': return "\u240c";  // FF
+        case 'd': return "\u240d";  // CR
+        case 'e': return "\u240a";  // LF
+        case 'f': return "\u00b0";  // degree
+        case 'g': return "\u00b1";  // plus/minus
+        case 'h': return "\u2424";  // NL
+        case 'i': return "\u240b";  // VT
+        case 'j': return "\u2518";
+        case 'k': return "\u2510";
+        case 'l': return "\u250c";
+        case 'm': return "\u2514";
+        case 'n': return "\u253c";
+        case 'o': return "\u23ba";  // scan line 1
+        case 'p': return "\u23bb";  // scan line 3
+        case 'q': return "\u2500";
+        case 'r': return "\u23bc";  // scan line 7
+        case 's': return "\u23bd";  // scan line 9
+        case 't': return "\u251c";
+        case 'u': return "\u2524";
+        case 'v': return "\u2534";
+        case 'w': return "\u252c";
+        case 'x': return "\u2502";
+        case 'y': return "\u2264";
+        case 'z': return "\u2265";
+        case '{': return "\u03c0";
+        case '|': return "\u2260";
+        case '}': return "\u00a3";
+        case '~': return "\u00b7";
+        default: return {};
+    }
 }
 
 void TerminalEmulator::put_text(bool flush_incomplete) {

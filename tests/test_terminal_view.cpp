@@ -10,7 +10,7 @@
 #include "cvision/widgets/window.hpp"
 #include "cvision/widgets/terminal_view.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 #include <algorithm>
 

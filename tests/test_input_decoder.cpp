@@ -9,7 +9,7 @@
 #include <iterator>
 #include <optional>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using namespace ckv;
 using namespace ckv::term;

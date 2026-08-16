@@ -2,7 +2,7 @@
 #include "cvision/core/frame_view.hpp"
 
 #include "cvision/scene/surface.hpp"
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(frame_view_over_a_surface_reflects_its_cells) {
     ckv::scene::Surface s(ckv::Size{3, 2});

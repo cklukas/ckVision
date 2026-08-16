@@ -15,7 +15,7 @@
 // then review the diff like any other source change before
 // committing — regeneration is a manual, reviewed act, never
 // automatic.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"

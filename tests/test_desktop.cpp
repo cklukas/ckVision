@@ -4,7 +4,7 @@
 #include <functional>
 #include <set>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -943,8 +943,10 @@ CK_TEST(a_window_retained_after_detaching_and_destroying_its_desktop_cannot_reac
     std::unique_ptr<Window> retained = desktop->remove_window(raw);
     desktop.reset();
 
+    // width-4 is the maximize/restore control's glyph column: absolute 21
+    // for this 20-wide window at x=5.
     CK_CHECK(retained->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                                ckv::Point{23, 5}, std::nullopt, ckv::Modifier::None}));
+                                                ckv::Point{21, 5}, std::nullopt, ckv::Modifier::None}));
     CK_CHECK(retained->zoomed());
     CK_CHECK(retained->bounds() == (Rect{5, 5, 20, 10}));
 }
@@ -1062,7 +1064,11 @@ CK_TEST(terminal_mouse_zoom_and_restore_track_the_desktop_after_a_resize) {
     const Rect restored = window->bounds();
 
     af.app.step(0);  // establish the initial composed frame
-    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{28, 5},
+    // The maximize/restore control spans local columns width-5..width-3;
+    // width-4 is its glyph. For a 20-wide window at x=10 that is absolute
+    // column 26 — pressing outside that span would start a title drag
+    // instead of toggling zoom.
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{26, 5},
                                          std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
     CK_CHECK(window->zoomed());
@@ -1075,7 +1081,7 @@ CK_TEST(terminal_mouse_zoom_and_restore_track_the_desktop_after_a_resize) {
 
     const Rect zoomed = window->absolute_bounds();
     af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                         ckv::Point{zoomed.x + window->bounds().width - 2, zoomed.y},
+                                         ckv::Point{zoomed.x + window->bounds().width - 4, zoomed.y},
                                          std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
     CK_CHECK(!window->zoomed());

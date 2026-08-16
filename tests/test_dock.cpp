@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/dock.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::Rect;
 using ckv::ui::compute_dock_layout;

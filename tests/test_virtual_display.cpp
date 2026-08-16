@@ -3,7 +3,7 @@
 
 #include <string>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 

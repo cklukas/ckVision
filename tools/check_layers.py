@@ -25,6 +25,13 @@ ALLOWED = {
     "term": {"term", "core"},
     "ui": {"ui", "core", "scene", "term"},
     "widgets": {"widgets", "ui", "scene", "core"},
+    # The installed test harness (include/cvision/testing) is standalone by
+    # construction: it depends on the standard library only, never on the
+    # framework it is used to test. It therefore sits beside every other
+    # layer and may include nothing from them — and, equally, nothing may
+    # include it, so no framework code can ever acquire a test-only
+    # dependency.
+    "testing": {"testing"},
 }
 
 CVISION_RE = re.compile(r'#\s*include\s+[<"](cvision/([a-z]+)/[^">]+)[">]')

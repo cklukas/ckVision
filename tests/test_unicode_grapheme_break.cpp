@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/core/utf8.hpp"
 
 namespace {

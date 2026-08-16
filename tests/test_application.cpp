@@ -8,7 +8,7 @@
 #include <mutex>
 #include <thread>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/record_replay_terminal.hpp"
 

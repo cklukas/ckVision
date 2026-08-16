@@ -77,7 +77,16 @@ bool run_scene_benchmarks() {
     const std::size_t initial_repaints = retained_window->content_repaint_count();
     bool on_right = false;
     constexpr std::size_t kMoveCellsBudget = 696;
-    constexpr std::size_t kMoveBytesBudget = 6144;
+    // The cell budget is a geometric bound and is unaffected by chrome
+    // detail; the byte budget is not. Each separately colored frame control
+    // (close, and the maximize/restore control on a resizable window) adds a
+    // truecolor SGR transition to the title row at BOTH the vacated and the
+    // newly occupied position, so the emitted diff grew by a small constant
+    // when the maximize control landed. This keeps the same "far below a full
+    // repaint" guard — a full frame is an order of magnitude larger — with
+    // enough headroom for those transitions rather than pinning the budget to
+    // the exact byte count of one particular chrome layout.
+    constexpr std::size_t kMoveBytesBudget = 6272;
     ckbench::run("retained_window_move", 500, [&] {
         retained_window->set_bounds(Rect{on_right ? 10 : 130, 5, 30, 10});
         on_right = !on_right;

@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::FileEntry;
 using ckv::MemoryFileSystem;

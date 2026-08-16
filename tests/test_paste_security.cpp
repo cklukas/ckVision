@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 namespace {
 

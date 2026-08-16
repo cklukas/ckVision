@@ -9,7 +9,7 @@
 #include <sstream>
 #include <string>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/terminal_emulator.hpp"

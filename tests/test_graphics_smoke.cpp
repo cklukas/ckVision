@@ -1,5 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/image_view.hpp"

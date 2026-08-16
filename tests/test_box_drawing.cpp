@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/scene/box_drawing.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::scene::Junction;
 using ckv::scene::JunctionGlyphInfo;

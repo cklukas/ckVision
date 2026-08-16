@@ -3,7 +3,7 @@
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -220,6 +220,30 @@ CK_TEST(application_shell_constructs_chrome_without_owning_loop_or_process_state
     CK_CHECK(f.app.root().children().size() == 1);
     CK_CHECK(f.app.root().children().front().get() == &shell.desktop());
     CK_CHECK(!f.app.quit_requested());
+}
+
+CK_TEST(application_shell_docks_an_empty_status_line_only_when_the_caller_asks_for_one) {
+    // An application whose status items come from live state has nothing to
+    // pass at construction, but still needs the bar. Without the explicit
+    // request the old rule stands: no items, no bar.
+    AppFixture f;
+    widgets::ApplicationShell implicit(f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles)});
+    CK_CHECK(implicit.status_line() == nullptr);
+
+    AppFixture requested;
+    widgets::ApplicationShell shell(
+        requested.app, {.theme = ui::make_classic_theme(requested.app.roles(), requested.roles),
+                        .always_dock_status_line = true});
+    CK_CHECK(shell.status_line() != nullptr);
+    CK_CHECK(shell.status_line()->items().empty());
+    CK_CHECK(shell.desktop().bottom_dock() == shell.status_line());
+    // The bar is real chrome from the start: it takes its row out of the
+    // area windows may occupy, so an application that fills it later never
+    // sees the desktop reflow underneath its windows.
+    CK_CHECK(shell.desktop().content_area().height < shell.desktop().bounds().height);
+
+    shell.status_line()->set_items({widgets::StatusLineItem{"F1 Help"}});
+    CK_CHECK(shell.status_line()->items().size() == 1U);
 }
 
 CK_TEST(theme_override_rethemes_an_existing_subtree_and_clear_restores_the_parent_theme) {

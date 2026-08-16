@@ -16,9 +16,9 @@ ApplicationShell::ApplicationShell(ui::Application& app, ApplicationShellOptions
     if (!options.menus.empty())
         menu_bar_ = desktop_->dock_top(std::make_unique<MenuBar>(std::move(options.menus)));
 
-    if (!options.status_items.empty()) {
+    if (!options.status_items.empty() || options.always_dock_status_line) {
         auto status = std::make_unique<StatusLine>();
-        status->set_items(std::move(options.status_items));
+        if (!options.status_items.empty()) status->set_items(std::move(options.status_items));
         status_line_ = desktop_->dock_bottom(std::move(status));
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/core/version.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(version_is_consistent) {
     const ckv::Version v = ckv::version();

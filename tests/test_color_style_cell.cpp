@@ -3,7 +3,7 @@
 #include "cvision/core/color.hpp"
 #include "cvision/core/style.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(color_default_and_rgb) {
     CK_CHECK(ckv::Color{}.is_default());

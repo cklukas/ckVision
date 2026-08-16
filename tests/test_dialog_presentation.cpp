@@ -10,7 +10,7 @@
 #include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/standard_roles.hpp"

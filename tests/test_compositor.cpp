@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/scene/compositor.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::scene::Compositor;
 using ckv::scene::Layer;

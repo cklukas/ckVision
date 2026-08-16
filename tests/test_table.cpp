@@ -3,7 +3,7 @@
 
 #include <algorithm>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/context.hpp"

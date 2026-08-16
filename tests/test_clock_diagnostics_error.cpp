@@ -3,7 +3,7 @@
 #include "cvision/core/diagnostics.hpp"
 #include "cvision/core/error.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(manual_clock_starts_at_given_time_and_advances) {
     ckv::ManualClock clock(1000);

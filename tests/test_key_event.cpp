@@ -2,7 +2,7 @@
 #include "cvision/core/event.hpp"
 #include "cvision/core/key.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(modifier_combination) {
     ckv::Modifier m = ckv::Modifier::Ctrl | ckv::Modifier::Shift;

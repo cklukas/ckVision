@@ -4,7 +4,7 @@
 #include <set>
 #include <vector>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::ui::intern_standard_roles;
 using ckv::ui::kInvalidRole;

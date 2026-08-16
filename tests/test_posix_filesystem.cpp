@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using ckv::FileEntry;
 using ckv::term::PosixFileSystem;

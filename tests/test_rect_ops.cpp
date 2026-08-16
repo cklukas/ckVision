@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <numeric>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 namespace {
 

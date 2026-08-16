@@ -5,7 +5,7 @@
 #include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(memory_clipboard_writer_is_a_deterministic_in_memory_platform_service) {
     ckv::MemoryClipboardWriter clipboard;

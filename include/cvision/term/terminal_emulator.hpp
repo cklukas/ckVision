@@ -31,7 +31,18 @@ public:
     std::optional<int> exit_code() const noexcept { return exit_code_; }
 
 private:
-    enum class ParseState : unsigned char { Ground, Escape, Csi, Osc, OscEscape, Dcs, DcsEscape, Discard, DiscardEscape };
+    enum class ParseState : unsigned char { Ground, Escape, Csi, Osc, OscEscape, Dcs, DcsEscape, Discard, DiscardEscape, Scs };
+
+    // Which repertoire the printable bytes currently stand for. A program
+    // drawing a frame with ncurses does not send box-drawing characters: it
+    // designates the DEC line-drawing set and then sends the letters l, q,
+    // k, x, m and j. Read as ASCII those spell nonsense across the frame,
+    // which is what an emulator that ignores the designation shows.
+    enum class Charset : unsigned char { Ascii, DecGraphics };
+
+    // The byte a DEC line-drawing designation gives, or nullopt when the
+    // byte stands for itself.
+    static std::string_view dec_graphic_for(char byte) noexcept;
 
     std::vector<Cell>& active_cells() noexcept;
     const std::vector<Cell>& active_cells() const noexcept;
@@ -69,6 +80,11 @@ private:
     int scroll_bottom_ = 0;
     bool origin_mode_ = false;
     ParseState parse_state_ = ParseState::Ground;
+    // G0..G3 and which of them the printable range currently resolves
+    // through. SI and SO move the pointer; ESC ( ) * + change the contents.
+    Charset charsets_[4] = {Charset::Ascii, Charset::Ascii, Charset::Ascii, Charset::Ascii};
+    unsigned char active_charset_ = 0;
+    unsigned char pending_charset_slot_ = 0;
     std::string printable_;
     std::string control_;
     bool dcs_sixel_payload_ = false;

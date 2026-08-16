@@ -34,7 +34,7 @@
 #include <thread>
 #include <vector>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 using namespace ckv;
 using namespace ckv::term;

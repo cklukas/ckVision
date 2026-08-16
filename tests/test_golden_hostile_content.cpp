@@ -8,7 +8,7 @@
 #include "cvision/core/cell.hpp"
 #include "cvision/core/golden.hpp"
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 
 CK_TEST(hostile_grapheme_through_cell_produces_a_well_formed_dump) {
     // A raw '\n' reaching a grid row unneutralized would split it into

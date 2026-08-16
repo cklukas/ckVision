@@ -9,7 +9,7 @@
 // a simplified stand-in.
 #include <cstdlib>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/core/filesystem.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/splitter.hpp"

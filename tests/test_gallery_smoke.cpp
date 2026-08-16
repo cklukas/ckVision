@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-#include "cktest.hpp"
+#include "cvision/testing/cktest.hpp"
 #include "cvision/widgets/image_view.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/input_line.hpp"
