@@ -293,3 +293,19 @@ CK_TEST(runtime_sixel_geometry_limits_replace_an_ineligible_raster_with_its_cell
     CK_CHECK(term.display().has_raster_pixels());
     (void)gallery;
 }
+
+CK_TEST(f1_answers_with_an_about_box) {
+    // Every example installs one. Silence on F1 is the single response a
+    // reader cannot interpret: it is indistinguishable from a key that never
+    // arrived, a window that did not have focus, and a feature never built.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::gallery::GalleryApp gallery(app);
+    app.step(0);
+    CK_CHECK(!app.is_modal());
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}});
+    app.step(0);
+    CK_CHECK(app.is_modal());
+    (void)gallery;
+}

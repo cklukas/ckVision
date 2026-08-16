@@ -210,3 +210,68 @@ CK_TEST(a_search_box_accepts_ordinary_typed_characters) {
     CK_CHECK(!box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Ctrl, "q"}}));
     CK_CHECK(box.query().empty());
 }
+
+CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_drawn) {
+    // Regression: the box drew "Search: <query> [x]" as one run of
+    // label-coloured cells, so it read as a caption rather than something to
+    // type into — and the "[x]" landed wherever the query happened to end,
+    // while only the last three columns answered a click.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::ui::RoleRegistry registry;
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
+    ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
+
+    ckv::widgets::SearchBox box;
+    box.set_context(ckv::ui::Context{&theme, &registry, &app});
+    box.on_attached();
+    box.set_bounds(ckv::Rect{0, 0, 20, 1});
+
+    ckv::scene::Surface surface(ckv::Size{20, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 20, 1});
+    box.draw(painter);
+
+    // The field carries the input surface's own background, which is what
+    // says "text goes here"; the prompt does not.
+    const ckv::Style field = surface.at(ckv::Point{10, 0}).style();
+    const ckv::Style prompt = surface.at(ckv::Point{0, 0}).style();
+    CK_CHECK(field.bg == theme.resolve(roles.input_normal).bg);
+    CK_CHECK(field.bg != prompt.bg);
+
+    // With no query there is nothing to clear, so no control is offered...
+    std::string row;
+    for (int x = 0; x < 20; ++x) row += surface.at(ckv::Point{x, 0}).grapheme();
+    CK_CHECK(row.find("[x]") == std::string::npos);
+    CK_CHECK(!box.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                            ckv::Point{19, 0}, std::nullopt, ckv::Modifier::None}) == false);
+
+    // ...and once there is, it is drawn at the right edge, exactly where a
+    // click on it is answered.
+    box.set_query("vim");
+    box.draw(painter);
+    row.clear();
+    for (int x = 0; x < 20; ++x) row += surface.at(ckv::Point{x, 0}).grapheme();
+    CK_CHECK(row.find("vim") != std::string::npos);
+    CK_CHECK(row.rfind("[x]") == 17U);  // the last three columns of a 20-wide box
+
+    CK_CHECK(box.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                           ckv::Point{18, 0}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(box.query().empty());
+}
+
+CK_TEST(a_focused_search_box_shows_a_caret_where_typing_will_land) {
+    ckv::widgets::SearchBox box;
+    box.set_bounds(ckv::Rect{0, 0, 20, 1});
+    CK_CHECK(!box.cursor_state().has_value());  // unfocused: no caret
+
+    box.on_focus(ckv::FocusEvent{true});
+    const auto empty_caret = box.cursor_state();
+    CK_CHECK(empty_caret.has_value());
+    CK_CHECK(empty_caret->visible);
+
+    box.set_query("vi");
+    const auto typed_caret = box.cursor_state();
+    CK_CHECK(typed_caret.has_value());
+    CK_CHECK(typed_caret->position.x == empty_caret->position.x + 2);  // follows the text
+}

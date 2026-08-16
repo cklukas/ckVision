@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/message_box.hpp"
 #include "forms_app.hpp"
 
 #include <memory>
@@ -48,6 +49,12 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
     app_.set_focus(name_input_);
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision Forms example",
+                                "Field controls, validation, context help and a wizard flow.");
 }
 
 void FormsApp::build_chrome() {

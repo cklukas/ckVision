@@ -114,6 +114,20 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
                                                           const MessageBoxDescriptor& descriptor,
                                                           const StandardStrings& strings = english_standard_strings());
 
+// Answers the help command (F1) with a box naming the application and
+// saying what it is.
+//
+// Every application should answer F1 with something. Silence is the one
+// response a reader cannot interpret: it is indistinguishable from a key
+// that did not arrive, a window that did not have focus, and a feature that
+// was never built. An application with a real help system installs that
+// instead; this is for the rest, and for the moment before the real one
+// exists.
+//
+// Installs a handler for std_commands::kHelp, replacing any already there.
+void install_about_help(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                        std::string title, std::string body);
+
 // The blocking convenience (M9/WP-15, D-021's "blocking wrapper for
 // applications that own the loop"): builds and shows the box exactly
 // like make_message_box + Desktop::present_modal, scopes input to it for

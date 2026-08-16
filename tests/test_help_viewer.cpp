@@ -144,7 +144,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_viewer) {
 }
 
 
-CK_TEST(present_help_viewer_completes_after_modal_detachment) {
+CK_TEST(present_help_viewer_is_modeless_and_completes_on_detachment) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -158,7 +158,10 @@ CK_TEST(present_help_viewer_completes_after_modal_detachment) {
     std::optional<ckv::widgets::HelpViewerResult> completion;
     presentation.set_completion_handler([&](ckv::widgets::HelpViewerResult result) { completion = result; });
 
-    CK_CHECK(app.is_modal());
+    // Help is a reference, consulted while doing the thing it is about, so it
+    // never scopes input to itself: the reader can go back to their work with
+    // the answer still on screen.
+    CK_CHECK(!app.is_modal());
     app.dispatch(key(Key::Escape));
     CK_CHECK(!presentation.completed());
     app.step(0);
@@ -401,4 +404,43 @@ CK_TEST(the_index_cursor_starts_on_the_topic_being_shown) {
     f.app.dispatch(key(Key::Down));
     f.app.step(0);
     CK_CHECK(f.shows("About gamma."));  // the topic after Beta, not before it
+}
+
+CK_TEST(the_help_window_is_resizable_and_its_panes_grow_with_it) {
+    // A help window shows a document beside an index of documents; how much
+    // of either to have on screen is the reader's decision.
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    ckv::widgets::Window* const window = f.desktop->windows()[0];
+    CK_CHECK(window->resizable());
+
+    ckv::widgets::ListView* const list = f.index_list();
+    CK_CHECK(list != nullptr);
+    const ckv::Rect before_list = list->bounds();
+    const ckv::Rect before_window = window->bounds();
+
+    window->set_bounds(ckv::Rect{before_window.x, before_window.y, before_window.width + 10,
+                                 before_window.height + 6});
+    f.app.step(0);
+
+    // The topic list takes the extra height; it is what fills the left pane.
+    CK_CHECK(list->bounds().height > before_list.height);
+    // ...and the prose still fits inside the window rather than overflowing.
+    CK_CHECK(f.shows("About alpha."));
+}
+
+CK_TEST(the_buttons_sit_against_the_bottom_border_with_no_leftover_row) {
+    // The button shadow already separates the row from the frame; a margin
+    // under it is a blank row nobody asked for.
+    BrowserFixture f;
+    auto presentation = present_help_viewer(f.provider, "alpha", f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    ckv::widgets::Window* const window = f.desktop->windows()[0];
+
+    const ckv::Rect content = window->content_rect();
+    // Content reaches the last row inside the frame: bottom margin is zero.
+    CK_CHECK(content.y + content.height == window->bounds().height - 1);
+    // ...while the top still keeps its breathing room.
+    CK_CHECK(content.y == 2);
 }

@@ -33,6 +33,13 @@ composition.
 
 <!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="100-139" -->
 ```cpp
+    window->set_min_size(Size{40, 10});
+    // Keeps filling the content area as the terminal grows, rather
+    // than staying pinned at whatever size it happened to be created
+    // at (M8 WP-4) — the natural policy for a single-window,
+    // fills-the-desktop application like this one.
+    window->set_grow_policy(widgets::DesktopGrowPolicy::KeepFilling);
+
     auto tree = std::make_unique<widgets::TreeView>();
     tree_ = tree.get();
 
@@ -66,13 +73,6 @@ composition.
     // The selected directory's full path, shown live on the window's
     // own bottom border via Window::add_frame_overlay — exactly the
     // "current line in a text input window" pattern the overlay slot
-    // exists for, applied here to "current directory" instead.
-    auto path_label = std::make_unique<widgets::Label>(root_path_);
-    path_label->set_role_override(roles_.static_text, roles_.label_mnemonic);  // static-text styling, not a form label
-    path_label_ = window->add_frame_overlay(std::move(path_label), widgets::FrameSlot{});
-
-    window_ = desktop_->add_window(std::move(window));
-    refresh_file_list_for_selected_node();
 ```
 <!-- /ckvision-snippet -->
 

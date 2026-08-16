@@ -744,3 +744,73 @@ CK_TEST(bold_inside_reverse_video_does_not_pale_the_bar_behind_it) {
     CK_CHECK(has_attr(snapshot.cell_buffer[3].style().attrs, ckv::Attr::Bold));
     CK_CHECK(has_attr(snapshot.cell_buffer[3].style().attrs, ckv::Attr::Reverse));
 }
+
+CK_TEST(erasing_fills_with_the_selected_background_not_the_terminal_default) {
+    // Background colour erase, which xterm-family terminfo advertises as
+    // `bce`. A curses program paints a full-width header bar by selecting the
+    // colour and erasing the line, not by writing spaces across it — so a
+    // terminal that erases to its own default shows that bar only underneath
+    // the characters that happened to be written. This is htop's table
+    // header, and it was coloured from "PID" to "Command" and nowhere else.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{20, 3};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    // Green background, home the cursor, erase the line, then write text
+    // starting a couple of columns in — exactly ncurses' order.
+    emulator.feed_output("\x1b[42m\x1b[1;1H\x1b[K\x1b[1;3HPID");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    const ckv::Color green = ckv::Color::rgb(13, 188, 121);
+
+    // The bar starts at the first column, before any text...
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == green);
+    CK_CHECK(snapshot.cell_buffer[1].style().bg == green);
+    // ...covers the text...
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == "P");
+    CK_CHECK(snapshot.cell_buffer[2].style().bg == green);
+    // ...and runs to the end of the line rather than stopping after it.
+    CK_CHECK(snapshot.cell_buffer[19].style().bg == green);
+    // The row below is untouched: erasing one line colours one line.
+    CK_CHECK(snapshot.cell_buffer[20].style().bg == profile.default_style.bg);
+}
+
+CK_TEST(an_erased_cell_keeps_the_background_but_not_the_glyph_attributes) {
+    // Weight and italics describe a glyph that is no longer there, and
+    // underline would draw a rule across every cleared line.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{8, 2};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[1;4;44m\x1b[2J");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::rgb(36, 114, 200));
+    CK_CHECK(!has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Underline));
+    CK_CHECK(!has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Bold));
+}
+
+CK_TEST(reverse_video_erases_with_what_the_reader_sees_as_the_background) {
+    // While reverse is set the visible background is the selected
+    // foreground, so that is what an erase has to leave behind.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{8, 2};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[31;7m\x1b[2J");  // red foreground, reversed
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::rgb(205, 49, 49));
+}
+
+CK_TEST(scrolling_fills_the_exposed_line_with_the_selected_background) {
+    // A scroll exposes a new line; under a coloured pen that line is part of
+    // the coloured region, which is how a full-screen program keeps its
+    // background continuous while content moves.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{6, 3};
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[44m\x1b[3;1H\n");  // blue pen, scroll from the last row
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    const ckv::Color blue = ckv::Color::rgb(36, 114, 200);
+    for (int x = 0; x < 6; ++x)
+        CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(2 * 6 + x)].style().bg == blue);
+}

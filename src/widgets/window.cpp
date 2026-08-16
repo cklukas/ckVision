@@ -230,14 +230,27 @@ Rect Window::content_rect() const noexcept {
     // honouring it would leave nothing for the content keeps the content
     // and gives up the margin, since blank cells are worth less than the
     // text they would displace.
-    const int h = std::min(horizontal_content_margin_, std::max(0, (b.width - 3) / 2));
-    const int v = std::min(vertical_content_margin_, std::max(0, (b.height - 3) / 2));
-    return Rect{1 + h, 1 + v, b.width - 2 - 2 * h, b.height - 2 - 2 * v};
+    const int horizontal_room = std::max(0, (b.width - 3) / 2);
+    const int vertical_room = std::max(0, (b.height - 3) / 2);
+    const int left = std::min(left_content_margin_, horizontal_room);
+    const int right = std::min(right_content_margin_, horizontal_room);
+    const int top = std::min(top_content_margin_, vertical_room);
+    const int bottom = std::min(bottom_content_margin_, vertical_room);
+    return Rect{1 + left, 1 + top, b.width - 2 - left - right, b.height - 2 - top - bottom};
 }
 
 void Window::set_content_margin(int horizontal, int vertical) {
     horizontal_content_margin_ = std::max(0, horizontal);
     vertical_content_margin_ = std::max(0, vertical);
+    set_content_margins(horizontal_content_margin_, vertical_content_margin_,
+                        horizontal_content_margin_, vertical_content_margin_);
+}
+
+void Window::set_content_margins(int left, int top, int right, int bottom) {
+    left_content_margin_ = std::max(0, left);
+    top_content_margin_ = std::max(0, top);
+    right_content_margin_ = std::max(0, right);
+    bottom_content_margin_ = std::max(0, bottom);
     if (content_ != nullptr) content_->set_bounds(content_rect());
     invalidate();
 }

@@ -1150,3 +1150,27 @@ CK_TEST(an_inactive_windows_controls_fall_back_to_its_frame) {
     CK_CHECK(s.at(Point{3, 0}).style().fg == inactive.fg);  // close glyph
     CK_CHECK(s.at(Point{2, 0}).style().fg == inactive.fg);  // its bracket
 }
+
+CK_TEST(per_edge_content_margins_pad_only_the_edges_they_name) {
+    // A layout whose edges want different padding — a button row whose cast
+    // shadow already separates it from the bottom border — cannot be
+    // expressed by a single symmetric margin.
+    Window window("Margins");
+    window.set_bounds(ckv::Rect{0, 0, 20, 10});
+
+    window.set_content_margins(2, 1, 3, 0);
+    const ckv::Rect content = window.content_rect();
+    CK_CHECK(content.x == 1 + 2);          // border + left margin
+    CK_CHECK(content.y == 1 + 1);          // border + top margin
+    CK_CHECK(content.width == 20 - 2 - 2 - 3);
+    CK_CHECK(content.height == 10 - 2 - 1 - 0);  // nothing reserved at the bottom
+    CK_CHECK(window.top_content_margin() == 1);
+    CK_CHECK(window.bottom_content_margin() == 0);
+
+    // The symmetric setter still works, and still reports what it was given.
+    window.set_content_margin(1, 1);
+    CK_CHECK(window.content_rect() == (ckv::Rect{2, 2, 16, 6}));
+    CK_CHECK(window.horizontal_content_margin() == 1);
+    CK_CHECK(window.vertical_content_margin() == 1);
+    CK_CHECK(window.bottom_content_margin() == 1);
+}

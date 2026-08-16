@@ -127,6 +127,15 @@ public:
     int horizontal_content_margin() const noexcept { return horizontal_content_margin_; }
     int vertical_content_margin() const noexcept { return vertical_content_margin_; }
 
+    // Per-edge margins, for a layout whose edges do not want the same
+    // padding. A button row is the usual reason: its cast shadow already
+    // separates it from the frame, so a bottom margin under it reads as a
+    // blank row nobody asked for, while the top of the window still wants
+    // its breathing space. Symmetric padding cannot express that.
+    void set_content_margins(int left, int top, int right, int bottom);
+    int top_content_margin() const noexcept { return top_content_margin_; }
+    int bottom_content_margin() const noexcept { return bottom_content_margin_; }
+
     // The free-placement, resize-aware alternative to hand-building a
     // set_content() call yourself (M10/WP-18): lazily installs a fresh
     // ui::AnchorPane as this window's content the first time it's
@@ -334,8 +343,15 @@ private:
     bool active_ = false;
     bool movable_ = true;
     bool resizable_ = true;
+    // horizontal_/vertical_ remain the symmetric setter's own record so its
+    // getters keep reporting what it was given; the four below are what
+    // content_rect() actually measures with.
     int horizontal_content_margin_ = 0;
     int vertical_content_margin_ = 0;
+    int left_content_margin_ = 0;
+    int top_content_margin_ = 0;
+    int right_content_margin_ = 0;
+    int bottom_content_margin_ = 0;
     std::shared_ptr<CloseState> close_state_ = std::make_shared<CloseState>();
     Size min_size_{10, 4};
     Size max_size_{0, 0};

@@ -114,7 +114,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                                widgets::StatusLineItem{widgets::CommandPresentation{kCmdQuit, "&Quit"}},
                                                widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}}}});
     desktop_ = &shell.desktop();
-}
+
 ```
 <!-- /ckvision-snippet -->
 
@@ -124,16 +124,16 @@ window pointer, so close/removal remains owned by the presentation API.
 
 <!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="27-36" -->
 ```cpp
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision Hello example",
+                                "The smallest complete ckVision application: a shell, a local command, and a dialog.");
+}
+
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.
 void HelloApp::greeting_box() {
     auto greeting = widgets::present_message_box(app_, *desktop_, roles_,
-                                                  {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
-                                                   widgets::MessageBoxButtons::Ok});
-    greeting.set_completion_handler([](widgets::MessageBoxResult) {});
-}
-
-}  // namespace ckv::hello
 ```
 <!-- /ckvision-snippet -->
 

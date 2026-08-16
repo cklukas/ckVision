@@ -739,13 +739,26 @@ void TerminalEmulator::put_grapheme(std::string_view grapheme) {
     cursor_.position.x += width;
 }
 
+Cell TerminalEmulator::erase_cell() const noexcept {
+    // Only the background survives into a blank cell. Weight, italics and the
+    // rest describe a glyph that is no longer there, and carrying underline
+    // into erased cells would draw a rule across the width of every cleared
+    // line. Reverse video is the exception that has to be resolved rather
+    // than dropped: while it is set, what the reader sees as the background
+    // is the selected foreground.
+    const bool reversed = has_attr(style_.attrs, Attr::Reverse);
+    const Color background = reversed ? style_.fg : style_.bg;
+    return Cell::from_grapheme(" ", Style{profile_.default_style.fg, background, Attr{}});
+}
+
 void TerminalEmulator::erase_cells(int left, int top, int right, int bottom) noexcept {
     left = std::clamp(left, 0, cells_.width); right = std::clamp(right, 0, cells_.width);
     top = std::clamp(top, 0, cells_.height); bottom = std::clamp(bottom, 0, cells_.height);
     auto& cells = active_cells();
+    const Cell blank = erase_cell();
     for (int y = top; y < bottom; ++y)
         for (int x = left; x < right; ++x)
-            cells[static_cast<std::size_t>(y * cells_.width + x)] = Cell::from_grapheme(" ", profile_.default_style);
+            cells[static_cast<std::size_t>(y * cells_.width + x)] = blank;
 }
 
 void TerminalEmulator::insert_cells(int count) noexcept {
@@ -755,7 +768,7 @@ void TerminalEmulator::insert_cells(int count) noexcept {
     auto first = cells.begin() + static_cast<std::ptrdiff_t>(cursor_.position.y * cells_.width + cursor_.position.x);
     auto last = cells.begin() + static_cast<std::ptrdiff_t>((cursor_.position.y + 1) * cells_.width);
     std::move_backward(first, last - count, last);
-    std::fill(first, first + count, Cell::from_grapheme(" ", profile_.default_style));
+    std::fill(first, first + count, erase_cell());
 }
 
 void TerminalEmulator::delete_cells(int count) noexcept {
@@ -765,7 +778,7 @@ void TerminalEmulator::delete_cells(int count) noexcept {
     auto first = cells.begin() + static_cast<std::ptrdiff_t>(cursor_.position.y * cells_.width + cursor_.position.x);
     auto last = cells.begin() + static_cast<std::ptrdiff_t>((cursor_.position.y + 1) * cells_.width);
     std::move(first + count, last, first);
-    std::fill(last - count, last, Cell::from_grapheme(" ", profile_.default_style));
+    std::fill(last - count, last, erase_cell());
 }
 
 void TerminalEmulator::scroll_up(int rows) noexcept {
@@ -789,8 +802,7 @@ void TerminalEmulator::scroll_up_region(int top, int bottom, int rows) noexcept 
     const auto first = cells.begin() + static_cast<std::ptrdiff_t>(top * cells_.width);
     const auto last = cells.begin() + static_cast<std::ptrdiff_t>(bottom * cells_.width);
     std::move(first + static_cast<std::ptrdiff_t>(rows * cells_.width), last, first);
-    std::fill(last - static_cast<std::ptrdiff_t>(rows * cells_.width), last,
-              Cell::from_grapheme(" ", profile_.default_style));
+    std::fill(last - static_cast<std::ptrdiff_t>(rows * cells_.width), last, erase_cell());
 }
 
 void TerminalEmulator::scroll_down_region(int top, int bottom, int rows) noexcept {
@@ -802,8 +814,7 @@ void TerminalEmulator::scroll_down_region(int top, int bottom, int rows) noexcep
     const auto first = cells.begin() + static_cast<std::ptrdiff_t>(top * cells_.width);
     const auto last = cells.begin() + static_cast<std::ptrdiff_t>(bottom * cells_.width);
     std::move_backward(first, last - static_cast<std::ptrdiff_t>(rows * cells_.width), last);
-    std::fill(first, first + static_cast<std::ptrdiff_t>(rows * cells_.width),
-              Cell::from_grapheme(" ", profile_.default_style));
+    std::fill(first, first + static_cast<std::ptrdiff_t>(rows * cells_.width), erase_cell());
 }
 
 void TerminalEmulator::index() noexcept {

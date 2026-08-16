@@ -49,6 +49,14 @@ private:
     void put_text(bool flush_incomplete = false);
     void put_grapheme(std::string_view grapheme);
     void handle_csi(char final_byte);
+    // The cell an erase leaves behind. Not the profile default: erasing
+    // fills with the colour the program has currently selected, which is
+    // what "background colour erase" means and what xterm-family terminfo
+    // advertises as `bce`. A curses program paints a coloured bar by setting
+    // the colour and erasing the line rather than by writing spaces across
+    // it, so a terminal that erases to its own default shows that bar only
+    // under the characters that happened to be written.
+    Cell erase_cell() const noexcept;
     void erase_cells(int left, int top, int right, int bottom) noexcept;
     void insert_cells(int count) noexcept;
     void delete_cells(int count) noexcept;

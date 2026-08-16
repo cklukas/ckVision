@@ -23,6 +23,13 @@ normal `TabControl`:
 
 <!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="43-98" -->
 ```cpp
+
+    auto status = std::make_unique<widgets::StatusLine>();
+    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kQuit}}});
+    desktop_->dock_bottom(std::move(status));
+}
+
 void GraphicsApp::build_window() {
     demo_image_ = make_demo_image();
 
@@ -72,13 +79,6 @@ void GraphicsApp::build_window() {
 
     auto note = std::make_unique<widgets::StaticText>(
         "Run with Sixel or NoGraphics terminal profiles to see raster output and fallback.");
-    note->set_bounds(Rect{1, 13, 56, 1});
-    canvas_page->add_child(std::move(note));
-
-    tabs->add_tab("&Image", std::move(image_page));
-    tabs->add_tab("&Canvas", std::move(canvas_page));
-    window->set_content(std::move(tabs));
-    window_ = desktop_->add_window(std::move(window));
 ```
 <!-- /ckvision-snippet -->
 

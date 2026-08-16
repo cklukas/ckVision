@@ -194,6 +194,26 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     return WindowHandle{std::move(window), default_button};
 }
 
+void install_about_help(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                        std::string title, std::string body) {
+    // The handler outlives this call, so everything it needs that a caller
+    // might not keep alive is copied: the identity strings, and the roles --
+    // which are a handful of ids, and which a caller may well have interned
+    // inline at the call site. Application and Desktop are the two things
+    // that outlive any handler by construction.
+    app.commands().set_handler(
+        ui::std_commands::kHelp,
+        [&app, &desktop, roles, title = std::move(title), body = std::move(body)] {
+            MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", title + "\n\n" + body,
+                                            MessageBoxButtons::Ok};
+            descriptor.emphasized_leading_lines = 1;
+            descriptor.message_alignment = ui::Alignment::Center;
+            descriptor.button_alignment = ui::Alignment::Center;
+            auto presentation = present_message_box(app, desktop, roles, descriptor);
+            presentation.set_completion_handler([](MessageBoxResult) {});
+        });
+}
+
 MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
                                             const MessageBoxDescriptor& descriptor,

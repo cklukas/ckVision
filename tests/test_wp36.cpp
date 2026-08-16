@@ -139,7 +139,7 @@ CK_TEST(wrapped_static_text_reallocates_height_through_a_hosted_dialog_content_t
     CK_CHECK(f.app.current_frame().at(ckv::Point{3, 3}).grapheme() == "o");
 }
 
-CK_TEST(every_standard_dialog_factory_builds_a_non_resizable_window_by_default) {
+CK_TEST(alert_shaped_dialog_factories_build_non_resizable_windows_by_default) {
     AppFixture f;
     MemoryFileSystem fs = dialog_filesystem();
     MemoryHelpProvider help = help_provider();
@@ -155,11 +155,16 @@ CK_TEST(every_standard_dialog_factory_builds_a_non_resizable_window_by_default) 
     auto help_viewer = ckv::widgets::make_help_viewer(help, "intro", f.roles, f.app, nullptr);
     auto window_list = ckv::widgets::make_window_list_dialog(desktop, f.roles, f.app, nullptr);
 
+    // A dialog that asks one question is sized by that question: there is
+    // nothing a reader could usefully do with a bigger one.
     CK_CHECK(!message_box.window->resizable());
     CK_CHECK(!file_dialog.window->resizable());
     CK_CHECK(!directory_picker.window->resizable());
-    CK_CHECK(!help_viewer.window->resizable());
     CK_CHECK(!window_list.window->resizable());
+    // The help viewer is the exception, and deliberately: it shows a document
+    // beside an index of documents, and how much of either to have on screen
+    // is the reader's call, not the factory's.
+    CK_CHECK(help_viewer.window->resizable());
 }
 
 CK_TEST(descriptor_dialog_validation_veto_and_escape_cancel_run_on_window_hooks) {

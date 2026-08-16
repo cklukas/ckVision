@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/message_box.hpp"
 #include "graphics_app.hpp"
 
 #include <cstdint>
@@ -27,6 +28,12 @@ GraphicsApp::GraphicsApp(ui::Application& app) : app_(app), roles_(ui::intern_st
     build_window();
 
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision Graphics example",
+                                "ImageView and Canvas, with the fallback a terminal without graphics gets.");
 }
 
 void GraphicsApp::build_chrome() {

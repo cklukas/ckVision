@@ -73,9 +73,15 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     auto window = std::make_unique<Window>(strings.help_title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
-    window->set_resizable(false);
-    // A help topic is prose; hold it off the frame like every other dialog.
-    window->set_content_margin(1, 1);
+    // Resizable: a help window is a document, and how much of a document a
+    // reader wants on screen is theirs to decide. The panes below are laid
+    // out to grow with it.
+    window->set_resizable(true);
+    window->set_min_size(Size{40, 12});
+    // Prose is held off the frame, but the button row is not: its cast shadow
+    // already separates it from the bottom border, so a margin under it is a
+    // blank row nobody asked for.
+    window->set_content_margins(1, 1, 1, 0);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
@@ -257,7 +263,10 @@ HelpViewerPresentation present_help_viewer(const HelpProvider& provider, std::st
         if (previous) previous();
         Access::finish(state, HelpViewerResult::Closed);
     };
-    desktop.present_modal(std::move(handle), app);
+    // Modeless: help is a reference, and a reader consults it while doing the
+    // thing it is about. Scoping input to it would mean answering a question
+    // requires dismissing the answer first.
+    desktop.present_modeless(std::move(handle), app);
     return std::move(parts.presentation);
 }
 

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/message_box.hpp"
 #include "layouts_app.hpp"
 
 #include <memory>
@@ -29,6 +30,12 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
     app_.set_focus(splitter_);
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision Layouts example",
+                                "Layout containers and a splitter, shown responding to resize.");
 }
 
 void LayoutsApp::build_chrome() {

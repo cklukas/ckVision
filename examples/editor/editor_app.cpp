@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/message_box.hpp"
 #include "editor_app.hpp"
 
 #include <memory>
@@ -134,6 +135,12 @@ EditorApp::EditorApp(ui::Application& application)
 
     application_.commands().set_handler(ui::std_commands::kQuit, [this] { application_.request_quit(); });
     application_.set_focus(editor_);
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(application_, *desktop_, roles_,
+                                "ckVision Editor example",
+                                "A shared document with a gutter and an editable source view.");
 }
 
 void EditorApp::refresh_status() {

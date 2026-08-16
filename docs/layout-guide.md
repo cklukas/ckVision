@@ -31,6 +31,13 @@ of `LayoutsApp::build_window`, so it compiles as the real example.
 
 <!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="62-86" -->
 ```cpp
+    window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
+
+    window->add_frame_overlay(std::make_unique<widgets::Label>("frame:start"),
+                              widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::Start, 1});
+    window->add_frame_overlay(std::make_unique<widgets::Label>("frame:end"),
+                              widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::End, -1});
+
     ui::AnchorPane& pane = window->content_pane();
 
     auto row = std::make_unique<ui::Row>(Rect{1, 1, 30, 3});
@@ -49,13 +56,6 @@ of `LayoutsApp::build_window`, so it compiles as the real example.
                      ui::LayoutSpec{ui::SizePolicy::Expanding});
     pane.add_item(std::move(column), ui::Anchors{false, true, true, false});
 
-    auto grid = std::make_unique<ui::Grid>(Rect{1, 5, 30, 5}, 2, 3);
-    grid->set_spacing(1);
-    grid_ = grid.get();
-    grid->add_item(std::make_unique<widgets::Label>("Grid"), ui::GridSpec{0, 0, 1, 2});
-    grid->add_item(std::make_unique<widgets::Label>("A"), ui::GridSpec{0, 2, 1, 1, ui::Alignment::Center});
-    grid->add_item(std::make_unique<widgets::Label>("span"), ui::GridSpec{1, 0, 1, 3, ui::Alignment::Center});
-    pane.add_item(std::move(grid), ui::Anchors{true, true, true, false});
 ```
 <!-- /ckvision-snippet -->
 
@@ -64,6 +64,13 @@ are owned by `Window`, not painted by the content manually.
 
 <!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="88-114" -->
 ```cpp
+    grid->set_spacing(1);
+    grid_ = grid.get();
+    grid->add_item(std::make_unique<widgets::Label>("Grid"), ui::GridSpec{0, 0, 1, 2});
+    grid->add_item(std::make_unique<widgets::Label>("A"), ui::GridSpec{0, 2, 1, 1, ui::Alignment::Center});
+    grid->add_item(std::make_unique<widgets::Label>("span"), ui::GridSpec{1, 0, 1, 3, ui::Alignment::Center});
+    pane.add_item(std::move(grid), ui::Anchors{true, true, true, false});
+
     auto dock = std::make_unique<ui::Dock>(Rect{1, 11, 30, 5});
     dock_ = dock.get();
     dock->add_item(std::make_unique<widgets::Label>("Dock top"), ui::DockEdge::Top);
@@ -84,13 +91,6 @@ are owned by `Window`, not painted by the content manually.
     auto splitter = std::make_unique<widgets::Splitter>(Rect{52, 1, 17, 13}, std::move(first), std::move(second));
     splitter_ = splitter.get();
     pane.add_item(std::move(splitter), ui::Anchors{false, true, true, true});
-
-    auto anchored = std::make_unique<widgets::Label>("Anchored");
-    anchored->set_bounds(Rect{58, 15, 8, 1});
-    anchored_label_ = anchored.get();
-    pane.add_item(std::move(anchored), ui::Anchors{false, false, true, true});
-
-    window_ = desktop_->add_window(std::move(window));
 ```
 <!-- /ckvision-snippet -->
 

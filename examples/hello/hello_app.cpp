@@ -22,6 +22,12 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                                widgets::StatusLineItem{widgets::CommandPresentation{kCmdQuit, "&Quit"}},
                                                widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}}}});
     desktop_ = &shell.desktop();
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision Hello example",
+                                "The smallest complete ckVision application: a shell, a local command, and a dialog.");
 }
 
 // A command handler presents the typed, non-blocking standard dialog and

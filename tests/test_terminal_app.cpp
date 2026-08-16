@@ -41,13 +41,14 @@ CK_TEST(terminal_example_exposes_new_terminal_and_window_arrangement_commands) {
 
     auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.example.desktop().top_dock());
     CK_CHECK(menu_bar != nullptr);
-    CK_CHECK(menu_bar->menus().size() == 2U);
+    CK_CHECK(menu_bar->menus().size() == 3U);
     CK_CHECK(menu_has_command(menu_bar->menus()[0], ckv::terminal_example::TerminalApp::kNewTerminalCommand));
     CK_CHECK(menu_has_command(menu_bar->menus()[0], ckv::terminal_example::TerminalApp::kNewSixelDemoCommand));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kNextWindow));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kPreviousWindow));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kTile));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kCascade));
+    CK_CHECK(menu_has_command(menu_bar->menus()[2], ckv::ui::std_commands::kHelp));
 }
 
 CK_TEST(terminal_example_opens_switches_arranges_and_closes_independent_terminal_windows) {
@@ -150,3 +151,34 @@ CK_TEST(terminal_example_public_menu_path_survives_all_builtin_themes) {
 }
 
 #endif
+
+CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
+    // The point of the demo is that a child's graphics arrive as a scene
+    // raster. It used to emit a solid rectangle four cells wide, which a
+    // reader could not tell from a rendering fault -- and then buried it
+    // under a shell prompt.
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(f.app.commands().execute(ckv::terminal_example::TerminalApp::kNewSixelDemoCommand));
+    auto* view = dynamic_cast<ckv::widgets::TerminalView*>(f.example.desktop().active_window()->content());
+    CK_CHECK(view != nullptr);
+    bool sized = false;
+    for (int attempt = 0; attempt < 400 && !sized; ++attempt) {
+        f.app.step(0);
+        for (const auto& raster : view->session().snapshot().rasters)
+            if (raster.cell_extent.width >= 40 && raster.cell_extent.height >= 8) sized = true;
+    }
+    CK_CHECK(sized);
+}
+
+CK_TEST(the_help_command_answers_with_an_about_box) {
+    // A focused terminal forwards F1 to its child, as a terminal should, so
+    // this application reaches About through its Help menu instead. The
+    // command is the same one F1 runs everywhere else.
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kHelp));
+    f.app.step(0);
+    CK_CHECK(f.app.is_modal());
+}

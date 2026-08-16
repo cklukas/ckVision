@@ -478,9 +478,46 @@ void SearchBox::clear() {
     if (on_clear) on_clear();
 }
 void SearchBox::draw(scene::Painter& painter) {
+    // A search box has to look like something you can type into. Drawing the
+    // prompt, the text and a "[x]" as one run of label-coloured cells made it
+    // read as a caption, and put the clear control wherever the query
+    // happened to end — nowhere near the columns that actually respond to a
+    // click on it.
     const Style style = context().theme->resolve(has_focus_ ? focused_role_ : role_);
-    painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
-    painter.draw_text(Point{0, 0}, text::clip_to_width("Search: " + query_ + " [x]", bounds().width), style);
+    const Style label = context().theme->resolve(label_role_);
+    const int width = bounds().width;
+    if (width <= 0) return;
+    painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", label));
+
+    const std::string prompt = "Search ";
+    const int prompt_width = std::min(text::text_width(prompt), width);
+    painter.draw_text(Point{0, 0}, text::clip_to_width(prompt, prompt_width), label);
+
+    // The field runs from the prompt to the right edge, less the clear
+    // control's own columns when there is a query to clear. Its own
+    // background is what says "text goes here".
+    const int clear_width = query_.empty() ? 0 : kClearControlWidth;
+    const int field_x = prompt_width;
+    const int field_width = std::max(0, width - field_x - clear_width);
+    if (field_width > 0) {
+        painter.fill(Rect{field_x, 0, field_width, 1}, Cell::from_grapheme(" ", style));
+        painter.draw_text(Point{field_x, 0}, text::clip_to_width(query_, field_width), style);
+    }
+    if (clear_width > 0 && width - clear_width >= 0)
+        painter.draw_text(Point{width - clear_width, 0}, "[x]", label);
+}
+
+std::optional<CursorState> SearchBox::cursor_state() const {
+    // The caret is the other half of "you can type here", and it also tells
+    // the reader which pane the keyboard is in.
+    if (!has_focus_) return std::nullopt;
+    const int width = bounds().width;
+    const int prompt_width = std::min(static_cast<int>(std::string_view("Search ").size()), width);
+    const int clear_width = query_.empty() ? 0 : kClearControlWidth;
+    const int field_width = std::max(0, width - prompt_width - clear_width);
+    const int caret = std::min(text::text_width(query_), std::max(0, field_width - 1));
+    const Rect absolute = absolute_bounds();
+    return CursorState{true, Point{absolute.x + prompt_width + caret, absolute.y}, CursorShape::Bar, false};
 }
 bool SearchBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -501,13 +538,22 @@ bool SearchBox::on_key(const KeyEvent& event) {
 }
 bool SearchBox::on_text(const TextEvent& event) { set_query(query_ + event.text); return true; }
 bool SearchBox::on_mouse(const MouseEvent& event) {
-    if (event.action == MouseAction::Down && event.cell.x >= absolute_bounds().x + bounds().width - 3) { clear(); return true; }
-    return false;
+    if (event.action != MouseAction::Down) return false;
+    // The clear control only exists while there is something to clear, and
+    // only where it is drawn — the right edge. It used to answer clicks on
+    // the last three columns whether or not it was drawn there.
+    if (!query_.empty() && event.cell.x >= absolute_bounds().x + bounds().width - kClearControlWidth) {
+        clear();
+        return true;
+    }
+    // A click anywhere else in the field is a request to type in it.
+    return true;
 }
 void SearchBox::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
 void SearchBox::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
+    if (label_role_ == ui::kInvalidRole) label_role_ = context().roles->find("ckv.label.text");
 }
 
 void ToolBar::set_commands(std::vector<ui::CommandId> commands) { commands_ = std::move(commands); invalidate(); }

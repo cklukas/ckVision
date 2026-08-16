@@ -40,6 +40,7 @@ Desktop, transfer it to the root, then build chrome and windows.
 
 <!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="20-32" -->
 ```cpp
+
 LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
@@ -52,7 +53,6 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
     app_.set_focus(splitter_);
-}
 ```
 <!-- /ckvision-snippet -->
 

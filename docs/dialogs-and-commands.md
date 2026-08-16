@@ -48,6 +48,13 @@ the failing field. Escape cancels.
 
 <!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="174-199" -->
 ```cpp
+    help->set_bounds(Rect{33, 14, 12, 2});
+    help->on_press = [this] { present_help(); };
+    help_button_ = help.get();
+    content->add_child(std::move(help));
+
+    window->set_content(std::move(content));
+    window_ = desktop_->add_window(std::move(window));
 }
 
 widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
@@ -66,13 +73,6 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     descriptor.buttons.push_back(widgets::ButtonDescriptor{"&OK", true, [] {}});
     descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", false, [] {}});
     return descriptor;
-}
-
-void FormsApp::present_profile_dialog() {
-    profile_dialog_ = widgets::present_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);
-    profile_dialog_->set_completion_handler([this](widgets::DialogResult result) {
-        last_dialog_result_ = std::move(result);
-    });
 }
 ```
 <!-- /ckvision-snippet -->
@@ -105,12 +105,12 @@ the actual control state, so a caller does not manually synchronize a button.
 
 <!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="144-149" -->
 ```cpp
-    content->add_child(std::move(slider));
+    spin_box_ = spin.get();
+    content->add_child(std::move(spin));
 
-    auto wizard = std::make_unique<widgets::Wizard>();
-    wizard->set_bounds(Rect{47, 4, 16, 5});
-    wizard->set_pages({widgets::WizardPage{"Step 1", [this] { return !name_input_->text().empty(); }},
-                       widgets::WizardPage{"Step 2", [] { return true; }}});
+    auto slider = std::make_unique<widgets::Slider>();
+    slider->set_bounds(Rect{42, 13, 18, 1});
+    slider->set_value(40);
 ```
 <!-- /ckvision-snippet -->
 

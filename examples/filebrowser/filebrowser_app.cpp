@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/message_box.hpp"
 #include "filebrowser_app.hpp"
 
 #include <algorithm>
@@ -64,6 +65,12 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
 
     app_.set_focus(tree_);
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision File Browser example",
+                                "Master and detail panes over an injected filesystem.");
 }
 
 void FileBrowserApp::build_menu_bar() {

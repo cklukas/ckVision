@@ -1,7 +1,12 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/message_box.hpp"
 #include "terminal_app.hpp"
 
 #include <cstdlib>
+#include "cvision/term/sixel_encoder.hpp"
+#include <iterator>
+#include <cstdint>
+#include <algorithm>
 
 #include <memory>
 #include <string>
@@ -72,9 +77,16 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
             widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kCascade}},
         },
     };
+    // A focused terminal forwards its keys to the child, F1 included --
+    // which is what a terminal is for. So this application also carries the
+    // About where it can always be reached.
+    widgets::MenuBarItem help_menu{
+        "&Help",
+        {widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kHelp}}},
+    };
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles),
-               .menus = {std::move(file_menu), std::move(window_menu)},
+               .menus = {std::move(file_menu), std::move(window_menu), std::move(help_menu)},
                .status_items = {
                    widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kNextWindow}},
@@ -83,6 +95,12 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
                }});
     desktop_ = &shell.desktop();
     (void)new_terminal();
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, ui::intern_standard_roles(app_.roles()),
+                                "ckVision Terminal example",
+                                "Child processes in contained windows, with scrollback and Sixel graphics.");
 }
 
 widgets::Window* TerminalApp::new_terminal() {
@@ -93,13 +111,59 @@ widgets::Window* TerminalApp::new_terminal() {
     return open_terminal(std::move(launch), "Terminal " + std::to_string(next_terminal_number_++));
 }
 
+namespace {
+
+// A picture worth putting on screen: colour bands across, brightness down,
+// and a pale frame so the image's own extent is visible against the terminal
+// behind it. The demonstration is that a child process's graphics arrive as
+// scene rasters -- and a solid rectangle a few cells wide does not show
+// that. It shows a coloured smudge that could as easily be a fault.
+Image demo_picture(Size cell_pixels, Size cells) {
+    const int width = std::max(1, cell_pixels.width * cells.width);
+    const int height = std::max(1, cell_pixels.height * cells.height);
+    Image image(width, height);
+    constexpr Image::Rgba bands[] = {
+        {220, 60, 60, 255},  {220, 150, 60, 255}, {220, 220, 60, 255},
+        {60, 200, 90, 255},  {60, 160, 220, 255}, {150, 90, 210, 255},
+    };
+    constexpr int band_count = static_cast<int>(std::size(bands));
+    for (int y = 0; y < height; ++y) {
+        // Full colour at the top fading towards black at the bottom, which
+        // reads as a gradient only if pixels are being placed correctly.
+        const int shade = 255 - (y * 200 / std::max(1, height - 1));
+        for (int x = 0; x < width; ++x) {
+            const Image::Rgba band = bands[std::min(band_count - 1, x * band_count / width)];
+            const bool edge = x < 2 || x >= width - 2 || y < 2 || y >= height - 2;
+            image.set_pixel(x, y,
+                            edge ? Image::Rgba{235, 235, 235, 255}
+                                 : Image::Rgba{static_cast<std::uint8_t>(band.r * shade / 255),
+                                               static_cast<std::uint8_t>(band.g * shade / 255),
+                                               static_cast<std::uint8_t>(band.b * shade / 255), 255});
+        }
+    }
+    return image;
+}
+
+}  // namespace
+
 widgets::Window* TerminalApp::new_sixel_demo() {
-    // The private child owns these bytes. The Sixel decoder converts them to
-    // a scene raster before the outer presenter can see them; then an
-    // interactive shell keeps the demonstration window useful.
-    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(
-        "/bin/sh", {"-c", "printf '\\033Pq#0;2;100;0;0!32~-!32~-!32~-!32~-!32~-!32~\\033\\\\'; exec /bin/sh -i"});
+    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {});
     launch.profile = term::embedded_xterm_sixel_profile();
+    // Sized from the child's own cell metric, so the picture lands on whole
+    // cells whatever the profile is configured with.
+    const std::string picture =
+        term::encode_sixel(demo_picture(launch.profile.cell_pixels, Size{44, 10}), 256);
+    // The bytes travel as an argument rather than inside the command text.
+    // They contain an ESC and a good deal of punctuation, and quoting that
+    // into a shell string is how a demo comes to break silently. The child
+    // owns them; the Sixel decoder turns them into a scene raster before the
+    // outer presenter sees anything, and the interactive shell afterwards
+    // leaves the window usable.
+    launch.arguments = {
+        "-c",
+        "printf '%s\n\n' 'ckVision embedded terminal: Sixel from a child process'; "
+        "printf '%s' \"$1\"; printf '\n\n'; exec /bin/sh -i",
+        "sixel-demo", picture};
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Sixel Demo " + std::to_string(next_terminal_number_++));

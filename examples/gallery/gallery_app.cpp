@@ -53,6 +53,12 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
 
     app_.set_focus(name_input_);
+
+    // F1 answers with something. Silence is the one response a reader
+    // cannot tell apart from a key that never arrived.
+    widgets::install_about_help(app_, *desktop_, roles_,
+                                "ckVision Gallery example",
+                                "An ordinary application shell carrying a form, a window and an image.");
 }
 
 void GalleryApp::build_menu_bar() {

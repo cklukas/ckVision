@@ -330,6 +330,13 @@ Slider, and Wizard with real values and ownership.
 
 <!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="112-149" -->
 ```cpp
+    content->add_child(std::move(options));
+
+    auto mode = std::make_unique<widgets::RadioGroup>(std::vector<std::string>{"&Modal", "Mode&less"});
+    mode->set_group_label("Presentation mode");
+    mode->set_bounds(Rect{30, 6, 14, 3});
+    mode->set_selected(0);
+    mode_ = mode.get();
     content->add_child(std::move(mode));
 
     auto country = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::Editable);
@@ -361,13 +368,6 @@ Slider, and Wizard with real values and ownership.
     auto slider = std::make_unique<widgets::Slider>();
     slider->set_bounds(Rect{42, 13, 18, 1});
     slider->set_value(40);
-    slider_ = slider.get();
-    content->add_child(std::move(slider));
-
-    auto wizard = std::make_unique<widgets::Wizard>();
-    wizard->set_bounds(Rect{47, 4, 16, 5});
-    wizard->set_pages({widgets::WizardPage{"Step 1", [this] { return !name_input_->text().empty(); }},
-                       widgets::WizardPage{"Step 2", [] { return true; }}});
 ```
 <!-- /ckvision-snippet -->
 
@@ -759,6 +759,13 @@ The Workbench source shows the text/data family in the exact compiled app:
 
 <!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="71-170" -->
 ```cpp
+    desktop_->dock_bottom(std::move(status));
+}
+
+void WorkbenchApp::build_window() {
+    auto window = std::make_unique<widgets::Window>("Workbench");
+    window->set_bounds(Rect{2, 2, 74, 20});
+    window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
 
     auto tabs = std::make_unique<widgets::TabControl>();
     tabs->set_bounds(Rect{0, 0, 72, 18});
@@ -852,12 +859,5 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(list));
 
     auto table = std::make_unique<widgets::Table>();
-    table->set_bounds(Rect{45, 1, 24, 8});
-    table->set_columns({widgets::TableColumn{"Name", 10, 4}, widgets::TableColumn{"State", 10, 4}});
-    table->set_rows({{"alpha", "ready"}, {"beta", "blocked"}, {"gamma", "done"}});
-    table_ = table.get();
-    page->add_child(std::move(table));
-
-    auto combo = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
 ```
 <!-- /ckvision-snippet -->

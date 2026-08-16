@@ -193,12 +193,19 @@ public:
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
+    std::optional<CursorState> cursor_state() const override;
 
 private:
+    // Columns the "[x]" clear control occupies at the right edge. Drawing and
+    // hit-testing both derive from this, which is what keeps the control the
+    // reader can see and the region that answers a click the same thing.
+    static constexpr int kClearControlWidth = 3;
+
     std::string query_;
     bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId label_role_ = ui::kInvalidRole;
 };
 
 class ToolBar : public ui::View {
