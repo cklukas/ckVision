@@ -390,6 +390,12 @@ private:
     // mind, and closing is not an action they can take back.
     enum class Control { None, Close, Zoom };
     Control held_control_ = Control::None;
+    // Whether the pointer is still on the control it went down on. A press
+    // dragged away un-highlights but stays claimed, so returning to the
+    // control re-arms it -- the highlight is the window saying what would
+    // happen if the button came up now.
+    bool held_inside_ = true;
+    ui::RoleId control_pressed_role_ = ui::kInvalidRole;
 
     // The area a drag must leave this window's title bar reachable within,
     // in parent coordinates. Set by whatever owns the window; empty means

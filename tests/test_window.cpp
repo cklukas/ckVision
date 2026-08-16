@@ -1461,3 +1461,52 @@ CK_TEST(a_window_with_no_move_bounds_is_unconstrained) {
     CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{15, -20})));
     CK_CHECK(w->bounds().y < 0);
 }
+
+CK_TEST(a_held_frame_control_highlights_and_lets_go_when_the_pointer_leaves) {
+    // The highlight is the window saying what would happen if the button
+    // came up now. Leaving withdraws that promise; returning renews it.
+    Fixture f;
+    Surface s(ckv::Size{20, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_active(true);
+    Painter painter(s, Rect{0, 0, 20, 6});
+    const ckv::Style pressed = f.theme.resolve(f.roles.window_control_pressed);
+    const ckv::Style control = f.theme.resolve(f.roles.window_control);
+    CK_CHECK(pressed.bg != control.bg);  // the check would prove nothing otherwise
+
+    w->draw(painter);
+    CK_CHECK(s.at(Point{3, 0}).style().bg != pressed.bg);  // idle
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{3, 0})));
+    w->draw(painter);
+    // Brackets included: one pressed thing, not a recoloured glyph.
+    for (const int x : {2, 3, 4}) CK_CHECK(s.at(Point{x, 0}).style().bg == pressed.bg);
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{10, 3})));
+    w->draw(painter);
+    for (const int x : {2, 3, 4}) CK_CHECK(s.at(Point{x, 0}).style().bg != pressed.bg);
+
+    // Back on it: armed again, and it fires on release.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{3, 0})));
+    w->draw(painter);
+    CK_CHECK(s.at(Point{3, 0}).style().bg == pressed.bg);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{3, 0})));
+    w->draw(painter);
+    CK_CHECK(s.at(Point{3, 0}).style().bg != pressed.bg);  // released, highlight gone
+}
+
+CK_TEST(the_zoom_control_highlights_while_held_too) {
+    Fixture f;
+    Surface s(ckv::Size{20, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 6});
+    const ckv::Style pressed = f.theme.resolve(f.roles.window_control_pressed);
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{16, 0})));
+    w->draw(painter);
+    for (const int x : {15, 16, 17}) CK_CHECK(s.at(Point{x, 0}).style().bg == pressed.bg);
+}

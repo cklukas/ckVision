@@ -76,6 +76,8 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.window_title_active = registry.intern("ckv.window.title.active", Style{kWhite, kBlue, Attr::Bold});
     r.window_title_inactive = registry.intern("ckv.window.title.inactive", Style{kLightGray, kBlue, Attr{}});
     r.window_control = registry.intern("ckv.window.control", Style{kGreen, kBlue, Attr::Bold});
+    r.window_control_pressed =
+        registry.intern("ckv.window.control.pressed", Style{kBlue, kGreen, Attr::Bold});
     r.menu_bar_normal = registry.intern("ckv.menu.bar.normal", Style{kBlack, kLightGray, Attr{}});
     r.menu_bar_active = registry.intern("ckv.menu.bar.active", Style{kBlack, kGreen, Attr{}});
     r.menu_dropdown_normal = registry.intern("ckv.menu.dropdown.normal", Style{kBlack, kLightGray, Attr{}});
@@ -161,6 +163,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.window_title_active, Style{kWhite, kBlue, Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kLightGray, kBlue, Attr{}});
     theme.set(roles.window_control, Style{kGreen, kBlue, Attr::Bold});
+    theme.set(roles.window_control_pressed, Style{kBlue, kGreen, Attr::Bold});
     theme.set(roles.menu_bar_normal, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.menu_bar_active, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.menu_dropdown_normal, Style{kBlack, kLightGray, Attr{}});
@@ -255,6 +258,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.window_title_active, Style{kMonoFg, kDarkFocus, Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_control, Style{kDarkYellow, kDarkPanel, Attr::Bold});
+    theme.set(roles.window_control_pressed, Style{kDarkPanel, kDarkYellow, Attr::Bold});
     theme.set(roles.menu_bar_normal, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.menu_bar_active, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_normal, Style{kDarkFg, kDarkPanel, Attr{}});
@@ -316,6 +320,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.window_title_active, Style{kLightFg, kLightFocus, Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_control, Style{kLightRed, kLightPanel, Attr::Bold});
+    theme.set(roles.window_control_pressed, Style{kLightPanel, kLightRed, Attr::Bold});
     theme.set(roles.menu_bar_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.menu_bar_active, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_normal, Style{kLightFg, kLightPanel, Attr{}});
@@ -375,6 +380,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.window_title_active, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.window_control, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.window_control_pressed, Style{kMonoBg, kMonoFg, Attr::Bold});
     theme.set(roles.menu_bar_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.menu_bar_active, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.menu_dropdown_normal, Style{kMonoFg, kMonoBg, Attr{}});
@@ -422,7 +428,8 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.input_focused,         roles.input_invalid,            roles.message_info_text,
         roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
         roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
-        roles.window_title_inactive, roles.window_control,           roles.menu_bar_normal,
+        roles.window_title_inactive, roles.window_control,           roles.window_control_pressed,
+        roles.menu_bar_normal,
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
         roles.list_selected_inactive,
@@ -455,6 +462,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.window_title_active, selected);
     theme.set(roles.window_title_inactive, Style{white, black, Attr::Dim});
     theme.set(roles.window_control, Style{white, black, Attr::Bold});
+    theme.set(roles.window_control_pressed, selected);
     theme.set(roles.menu_bar_active, selected);
     theme.set(roles.menu_dropdown_highlighted, selected);
     theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Dim});

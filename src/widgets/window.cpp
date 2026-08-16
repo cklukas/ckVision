@@ -25,6 +25,8 @@ void Window::on_attached() {
     if (title_inactive_role_ == ui::kInvalidRole)
         title_inactive_role_ = context().roles->find("ckv.window.title.inactive");
     if (control_role_ == ui::kInvalidRole) control_role_ = context().roles->find("ckv.window.control");
+    if (control_pressed_role_ == ui::kInvalidRole)
+        control_pressed_role_ = context().roles->find("ckv.window.control.pressed");
 }
 
 void Window::on_detaching() {
@@ -443,6 +445,9 @@ void Window::draw(scene::Painter& painter) {
     // shows one set of live controls rather than several competing for the
     // eye — the colour is what marks the window you are working in.
     const Style control_role_style = theme.resolve(control_role_);
+    const Style pressed_role_style = theme.resolve(control_pressed_role_);
+    const Style pressed_style{pressed_role_style.fg, pressed_role_style.bg,
+                              frame_style.attrs | pressed_role_style.attrs};
     const Style control_style =
         active_ ? Style{control_role_style.fg, frame_style.bg,
                         frame_style.attrs | control_role_style.attrs}
@@ -511,17 +516,26 @@ void Window::draw(scene::Painter& painter) {
         // Keep one frame-rule cell between the corner and the control.  This
         // makes the chrome read as ╔═[■] rather than a control fused into the
         // corner, and matches the corresponding gap before the zoom control.
-        painter.draw_text(Point{2, 0}, "[", frame_style);
-        painter.draw_text(Point{3, 0}, "■", control_style);
-        painter.draw_text(Point{4, 0}, "]", frame_style);
+        // Held down, the whole control highlights -- brackets included, so
+        // it reads as one pressed thing rather than a recoloured glyph. It
+        // un-highlights the moment the pointer leaves, which is the window
+        // saying what would happen if the button came up now.
+        const bool armed = held_control_ == Control::Close && held_inside_;
+        const Style face = armed ? pressed_style : frame_style;
+        painter.draw_text(Point{2, 0}, "[", face);
+        painter.draw_text(Point{3, 0}, "■", armed ? pressed_style : control_style);
+        painter.draw_text(Point{4, 0}, "]", face);
     }
     if (resizable_ && b.width > 8) {
         // Up-arrow "maximize"; changes to an up/down arrow once zoomed.
         // A fixed-size dialog does not draw or expose this control.
         const int control_x = b.width - 5;
-        painter.draw_text(Point{control_x, 0}, "[", frame_style);
-        painter.draw_text(Point{control_x + 1, 0}, maximized() ? "↕" : "↑", control_style);
-        painter.draw_text(Point{control_x + 2, 0}, "]", frame_style);
+        const bool armed = held_control_ == Control::Zoom && held_inside_;
+        const Style face = armed ? pressed_style : frame_style;
+        painter.draw_text(Point{control_x, 0}, "[", face);
+        painter.draw_text(Point{control_x + 1, 0}, maximized() ? "↕" : "↑",
+                          armed ? pressed_style : control_style);
+        painter.draw_text(Point{control_x + 2, 0}, "]", face);
     }
     if (b.width > 8) {
         // Centered, with a one-cell padding space on each side. The
@@ -614,10 +628,14 @@ bool Window::on_mouse(const MouseEvent& event) {
         end_drag();
         if (point_in_close_control(local)) {
             held_control_ = Control::Close;
+            held_inside_ = true;
+            invalidate();
             return true;
         }
         if (point_in_zoom_control(local)) {
             held_control_ = Control::Zoom;
+            held_inside_ = true;
+            invalidate();
             return true;
         }
         // Before the title-bar move: the top corners sit on that row, and a
@@ -640,9 +658,20 @@ bool Window::on_mouse(const MouseEvent& event) {
     }
 
     if (held_control_ != Control::None) {
-        if (event.action != MouseAction::Up) return true;  // held; nothing decided yet
+        const bool over = held_control_ == Control::Close ? point_in_close_control(local)
+                                                          : point_in_zoom_control(local);
+        if (event.action != MouseAction::Up) {
+            // Held: nothing is decided, but say whether it still would be.
+            if (over != held_inside_) {
+                held_inside_ = over;
+                invalidate();
+            }
+            return true;
+        }
         const Control held = held_control_;
         held_control_ = Control::None;
+        held_inside_ = true;
+        invalidate();
         // Released off the control it started on: the reader moved away, and
         // moving away is how a press is taken back.
         if (held == Control::Close && point_in_close_control(local)) close();

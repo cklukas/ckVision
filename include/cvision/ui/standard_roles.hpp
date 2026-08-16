@@ -51,6 +51,11 @@ struct StandardRoles {
     // owning frame's background, so the accent works for both document
     // windows and dialog chrome.
     RoleId window_control;
+    // A frame control with the pointer held down on it. Its own role rather
+    // than an inversion the widget works out: whether a pressed control
+    // darkens, brightens or swaps is the theme's business, and a monochrome
+    // theme has to answer it differently from a colour one.
+    RoleId window_control_pressed;
 
     // Menu system (ARCHITECTURE.md §5 "Menus").
     RoleId menu_bar_normal;
