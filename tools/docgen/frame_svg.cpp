@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "cvision/core/palette.hpp"
 #include "cvision/scene/box_drawing.hpp"
 
 namespace ckv::docgen {
@@ -16,7 +17,22 @@ namespace {
 constexpr Color kDefaultFg = Color::rgb(192, 192, 192);
 constexpr Color kDefaultBg = Color::rgb(0, 0, 0);
 
-Color resolve(Color c, Color fallback) { return c.is_default() ? fallback : c; }
+// An SVG needs channels, so this is one of the places a palette index stops
+// being an index (core/palette.hpp).
+Color resolve(Color c, Color fallback) { return resolved_color(c, fallback); }
+
+// SVG spells the underline shapes as decoration styles, and the names line up
+// one for one except that a curl is "wavy" there.
+const char* svg_underline_style(UnderlineShape shape) noexcept {
+    switch (shape) {
+        case UnderlineShape::Straight: return "solid";
+        case UnderlineShape::Double: return "double";
+        case UnderlineShape::Curly: return "wavy";
+        case UnderlineShape::Dotted: return "dotted";
+        case UnderlineShape::Dashed: return "dashed";
+    }
+    return "solid";
+}
 
 std::string hex(Color c) {
     char buf[8];
@@ -360,7 +376,19 @@ std::string render_svg(const FrameView& frame, const Image* raster_plane, Size c
 
             std::string style_attrs = "fill=\"" + hex(fg) + "\"";
             if (has_attr(style.attrs, Attr::Bold)) style_attrs += " font-weight=\"bold\"";
-            if (has_attr(style.attrs, Attr::Underline)) style_attrs += " text-decoration=\"underline\"";
+            if (has_attr(style.attrs, Attr::Underline)) {
+                // The plain rule is what SVG draws for a bare underline, so
+                // saying so again would only add a token to every screenshot
+                // that has ever had underlined text in it.
+                style_attrs += " text-decoration=\"underline\"";
+                if (style.underline != UnderlineShape::Straight) {
+                    style_attrs += " text-decoration-style=\"";
+                    style_attrs += svg_underline_style(style.underline);
+                    style_attrs += "\"";
+                }
+                if (!style.underline_color.is_default())
+                    style_attrs += " text-decoration-color=\"" + hex(resolve(style.underline_color, fg)) + "\"";
+            }
 
             const int baseline_y = py + cell_pixels.height - cell_pixels.height / 4;
             out += "<text x=\"" + std::to_string(px) + "\" y=\"" + std::to_string(baseline_y) +

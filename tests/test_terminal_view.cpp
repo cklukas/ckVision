@@ -398,3 +398,242 @@ CK_TEST(terminal_view_renders_private_diagnostic_without_raw_control_data) {
     CK_CHECK(surface.at(ckv::Point{0, 1}).grapheme() == "[");
     CK_CHECK(surface.at(ckv::Point{10, 1}).grapheme() != "\x1b");
 }
+
+CK_TEST(a_wheel_over_a_full_screen_child_scrolls_it_with_cursor_keys) {
+    // `less` and `man` never ask for mouse reporting, so without this a wheel
+    // over them does nothing at all — which reads as a broken wheel rather
+    // than as a mode nobody enabled.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{10, 3};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[?1049h");  // the child goes full-screen
+    session.take_pending_input();
+
+    const ckv::MouseEvent wheel_down{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                     ckv::Point{2, 1}, {}, ckv::Modifier::None};
+    CK_CHECK(view.on_mouse(wheel_down));
+    CK_CHECK(session.take_pending_input() == "\x1b[B\x1b[B\x1b[B");
+
+    const ckv::MouseEvent wheel_up{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp,
+                                   ckv::Point{2, 1}, {}, ckv::Modifier::None};
+    CK_CHECK(view.on_mouse(wheel_up));
+    CK_CHECK(session.take_pending_input() == "\x1b[A\x1b[A\x1b[A");
+}
+
+CK_TEST(alternate_scroll_speaks_the_cursor_key_dialect_the_child_selected) {
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[?1049h\x1b[?1h");  // full-screen, application cursor keys
+    session.take_pending_input();
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                           ckv::Point{2, 1}, {}, ckv::Modifier::None}));
+    CK_CHECK(session.take_pending_input() == "\x1bOB\x1bOB\x1bOB");
+}
+
+CK_TEST(a_wheel_stays_out_of_the_prompt_on_the_primary_buffer) {
+    // On the primary buffer the wheel belongs to the terminal's own history;
+    // arrow keys sent there would walk the shell's command history instead.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    CK_CHECK(!view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                            ckv::Point{2, 1}, {}, ckv::Modifier::None}));
+    CK_CHECK(session.take_pending_input().empty());
+}
+
+CK_TEST(a_child_that_turned_alternate_scroll_off_gets_no_cursor_keys) {
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[?1049h\x1b[?1007l");
+    CK_CHECK(!view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                            ckv::Point{2, 1}, {}, ckv::Modifier::None}));
+    CK_CHECK(session.take_pending_input().empty());
+}
+
+CK_TEST(a_child_tracking_the_mouse_itself_keeps_its_wheel_events) {
+    // With mouse reporting on, the wheel is the child's own input and must
+    // arrive as a mouse report rather than as keys it never asked for.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[?1049h\x1b[?1000h\x1b[?1006h");
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                           ckv::Point{2, 1}, {}, ckv::Modifier::None}));
+    CK_CHECK(session.take_pending_input() == "\x1b[<65;3;2M");
+}
+
+CK_TEST(a_child_clipboard_request_reaches_the_host_once_per_request) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.clipboard_policy = ckv::term::TerminalClipboardPolicy::AllowWrite;
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+
+    std::vector<std::string> exported;
+    view.on_clipboard_write = [&exported](std::string text) { exported.push_back(std::move(text)); };
+
+    session.feed_output("\x1b]52;c;aGVsbG8=\x07");
+    view.notify_terminal_subsession_changed(session);
+    // Another look at the same snapshot is not another request: the snapshot
+    // is a value, and reading it must not be what causes the export.
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(exported.size() == 1);
+    CK_CHECK(exported[0] == "hello");
+
+    session.feed_output("\x1b]52;c;d29ybGQ=\x07");
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(exported.size() == 2);
+    CK_CHECK(exported[1] == "world");
+}
+
+CK_TEST(a_denied_child_clipboard_request_never_reaches_the_host) {
+    ckv::term::TerminalEmulator session;  // the default profile denies it
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    bool exported = false;
+    view.on_clipboard_write = [&exported](std::string) { exported = true; };
+    session.feed_output("\x1b]52;c;aGVsbG8=\x07");
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(!exported);
+}
+
+namespace {
+
+ckv::KeyEvent key_press(ckv::Key key, ckv::Modifier modifiers = ckv::Modifier::None,
+                        std::string text = {}) {
+    return ckv::KeyEvent{ckv::KeyChord{key, modifiers, std::move(text)}, ckv::KeyAction::Press, false};
+}
+
+}  // namespace
+
+CK_TEST(a_child_that_asked_for_disambiguation_can_tell_ctrl_i_from_tab) {
+    // The legacy encoding spells both as one byte, which is the whole reason
+    // the protocol exists.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[>1u");
+
+    CK_CHECK(view.on_key(key_press(ckv::Key::Char, ckv::Modifier::Ctrl, "i")));
+    CK_CHECK(session.take_pending_input() == "\x1b[105;5u");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Tab)));
+    CK_CHECK(session.take_pending_input() == "\t");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Escape)));
+    CK_CHECK(session.take_pending_input() == "\x1b[27u");
+}
+
+CK_TEST(plain_typing_stays_plain_text_until_a_child_asks_for_every_key) {
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+
+    session.feed_output("\x1b[>1u");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Char, ckv::Modifier::None, "a")));
+    CK_CHECK(session.take_pending_input() == "a");
+
+    session.feed_output("\x1b[>8u");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Char, ckv::Modifier::None, "a")));
+    CK_CHECK(session.take_pending_input() == "\x1b[97u");
+    // Shift is a modifier on the key, not a different key: the code stays the
+    // one the key carries and the shift travels beside it.
+    CK_CHECK(view.on_key(key_press(ckv::Key::Char, ckv::Modifier::Shift, "A")));
+    CK_CHECK(session.take_pending_input() == "\x1b[97;2u");
+}
+
+CK_TEST(a_child_that_asked_for_event_types_learns_when_a_key_is_released) {
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[>10u");  // report all keys, report event types
+
+    ckv::KeyEvent release = key_press(ckv::Key::Char, ckv::Modifier::None, "a");
+    release.action = ckv::KeyAction::Release;
+    CK_CHECK(view.on_key(release));
+    CK_CHECK(session.take_pending_input() == "\x1b[97;1:3u");
+
+    ckv::KeyEvent repeat = key_press(ckv::Key::Up);
+    repeat.action = ckv::KeyAction::Repeat;
+    CK_CHECK(view.on_key(repeat));
+    CK_CHECK(session.take_pending_input() == "\x1b[1;1:2A");
+}
+
+CK_TEST(a_release_is_swallowed_rather_than_delivered_as_a_press) {
+    // Without event reporting there is nothing a release can be encoded as,
+    // and a release arriving as a press would type the key twice.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[>9u");  // disambiguate + report all keys, no event types
+    ckv::KeyEvent release = key_press(ckv::Key::Char, ckv::Modifier::None, "a");
+    release.action = ckv::KeyAction::Release;
+    CK_CHECK(!view.on_key(release));
+    CK_CHECK(session.take_pending_input().empty());
+}
+
+CK_TEST(a_child_that_asked_for_the_text_gets_the_key_and_the_character) {
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[>24u");  // report all keys + associated text
+    CK_CHECK(view.on_key(key_press(ckv::Key::Char, ckv::Modifier::Shift, "A")));
+    CK_CHECK(session.take_pending_input() == "\x1b[97;2;65u");
+}
+
+CK_TEST(the_legacy_encoding_is_what_a_child_that_asked_for_nothing_gets) {
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    CK_CHECK(view.on_key(key_press(ckv::Key::Escape)));
+    CK_CHECK(session.take_pending_input() == "\x1b");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Char, ckv::Modifier::Ctrl, "i")));
+    CK_CHECK(session.take_pending_input() == "\t");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Up)));
+    CK_CHECK(session.take_pending_input() == "\x1b[A");
+}
+
+CK_TEST(functional_keys_keep_the_encoding_they_already_had) {
+    // The protocol deliberately does not renumber the keys that already had
+    // an encoding; it only gives them the fields they never had room for.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[>1u");
+    CK_CHECK(view.on_key(key_press(ckv::Key::Up, ckv::Modifier::Ctrl)));
+    CK_CHECK(session.take_pending_input() == "\x1b[1;5A");
+    CK_CHECK(view.on_key(key_press(ckv::Key::F5)));
+    CK_CHECK(session.take_pending_input() == "\x1b[15~");
+    CK_CHECK(view.on_key(key_press(ckv::Key::PageDown, ckv::Modifier::Shift)));
+    CK_CHECK(session.take_pending_input() == "\x1b[6;2~");
+}

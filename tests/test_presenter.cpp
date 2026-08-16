@@ -15,6 +15,14 @@ Surface make_surface(int w, int h, std::string_view fill = " ") {
     return Surface(Size{w, h}, Cell::from_grapheme(fill, Style{}));
 }
 
+// The one thing the style cases vary is what the host can be told, so each
+// names its host by the depth it has.
+Capabilities host_with_depth(ColorDepth depth) {
+    Capabilities caps = baseline_capabilities();
+    caps.color_depth = depth;
+    return caps;
+}
+
 }  // namespace
 
 // --- Cell diffing -------------------------------------------------------------
@@ -103,7 +111,7 @@ CK_TEST(continuation_cells_contribute_no_text_of_their_own) {
 
 CK_TEST(style_to_sgr_truecolor) {
     const Style st{Color::rgb(10, 20, 30), Color::rgb(1, 2, 3), Attr::Bold};
-    const std::string sgr = style_to_sgr(st, ColorDepth::TrueColor);
+    const std::string sgr = style_to_sgr(st, host_with_depth(ColorDepth::TrueColor));
     CK_CHECK(sgr.find(";1") != std::string::npos);        // bold
     CK_CHECK(sgr.find("38;2;10;20;30") != std::string::npos);
     CK_CHECK(sgr.find("48;2;1;2;3") != std::string::npos);
@@ -111,7 +119,7 @@ CK_TEST(style_to_sgr_truecolor) {
 
 CK_TEST(style_to_sgr_default_colors_emit_no_color_escape) {
     const Style st{Color{}, Color{}, Attr{}};
-    const std::string sgr = style_to_sgr(st, ColorDepth::TrueColor);
+    const std::string sgr = style_to_sgr(st, host_with_depth(ColorDepth::TrueColor));
     CK_CHECK(sgr.find("38;") == std::string::npos);
     CK_CHECK(sgr.find("48;") == std::string::npos);
     CK_CHECK(sgr == "\x1B[0m");  // just a reset
@@ -119,7 +127,7 @@ CK_TEST(style_to_sgr_default_colors_emit_no_color_escape) {
 
 CK_TEST(style_to_sgr_256_color_uses_indexed_form) {
     const Style st{Color::rgb(255, 0, 0), Color{}, Attr{}};
-    const std::string sgr = style_to_sgr(st, ColorDepth::Color256);
+    const std::string sgr = style_to_sgr(st, host_with_depth(ColorDepth::Color256));
     CK_CHECK(sgr.find("38;5;") != std::string::npos);
     CK_CHECK(sgr.find("38;2;") == std::string::npos);  // never truecolor form at this depth
 }
@@ -129,7 +137,7 @@ CK_TEST(style_to_sgr_256_color_picks_a_plausible_red) {
     // (high red channel index), not an arbitrary color — verified by
     // checking it is NOT the palette's darkest/grayscale region.
     const Style st{Color::rgb(255, 0, 0), Color{}, Attr{}};
-    const std::string sgr = style_to_sgr(st, ColorDepth::Color256);
+    const std::string sgr = style_to_sgr(st, host_with_depth(ColorDepth::Color256));
     const std::size_t pos = sgr.find("38;5;");
     CK_CHECK(pos != std::string::npos);
     const int index = std::stoi(sgr.substr(pos + 5));
@@ -138,7 +146,7 @@ CK_TEST(style_to_sgr_256_color_picks_a_plausible_red) {
 
 CK_TEST(style_to_sgr_mono16_uses_basic_sgr_codes) {
     const Style bright_red{Color::rgb(255, 0, 0), Color{}, Attr{}};
-    const std::string sgr = style_to_sgr(bright_red, ColorDepth::Mono16);
+    const std::string sgr = style_to_sgr(bright_red, host_with_depth(ColorDepth::Mono16));
     CK_CHECK(sgr.find("38;") == std::string::npos);  // no indexed/truecolor form at all
     // Must contain a plain SGR foreground code (30-37 or 90-97).
     bool found_basic_code = false;
@@ -147,6 +155,64 @@ CK_TEST(style_to_sgr_mono16_uses_basic_sgr_codes) {
     for (int code = 90; code <= 97; ++code)
         if (sgr.find(";" + std::to_string(code)) != std::string::npos) found_basic_code = true;
     CK_CHECK(found_basic_code);
+}
+
+CK_TEST(a_palette_index_reaches_the_host_as_a_palette_index) {
+    // The host's palette is themed by the person using it, so index 1 means
+    // their red there just as it did to whoever asked for it. Resolving it
+    // here would substitute ckVision's opinion of red for theirs.
+    const Style st{Color::indexed(1), Color::indexed(238), Attr{}};
+    const std::string truecolor = style_to_sgr(st, host_with_depth(ColorDepth::TrueColor));
+    CK_CHECK(truecolor.find("38;5;1") != std::string::npos);
+    CK_CHECK(truecolor.find("48;5;238") != std::string::npos);
+    CK_CHECK(truecolor.find("38;2;") == std::string::npos);
+    // Same at 256 colours, where there is nothing to quantise either.
+    CK_CHECK(style_to_sgr(st, host_with_depth(ColorDepth::Color256)) == truecolor);
+}
+
+CK_TEST(a_palette_index_degrades_to_the_sixteen_a_mono_host_has) {
+    // The low sixteen are exactly the codes such a host understands, so they
+    // go out unchanged; anything above is resolved and matched.
+    const Style low{Color::indexed(1), Color::indexed(12), Attr{}};
+    const std::string sgr = style_to_sgr(low, host_with_depth(ColorDepth::Mono16));
+    CK_CHECK(sgr.find(";31") != std::string::npos);
+    CK_CHECK(sgr.find(";104") != std::string::npos);
+    CK_CHECK(sgr.find("38;5;") == std::string::npos);
+
+    const Style high{Color::indexed(21), Color{}, Attr{}};  // a cube blue
+    const std::string matched = style_to_sgr(high, host_with_depth(ColorDepth::Mono16));
+    CK_CHECK(matched.find(";34") != std::string::npos || matched.find(";94") != std::string::npos);
+}
+
+CK_TEST(an_underline_shape_is_only_sent_to_a_host_that_can_draw_one) {
+    // A terminal that has never heard of the colon form reads `4:3` as two
+    // parameters and applies italics, so a shape degrades to the plain rule
+    // rather than being offered on the chance that it lands.
+    Style curly{Color{}, Color{}, Attr::Underline};
+    curly.underline = UnderlineShape::Curly;
+    curly.underline_color = Color::indexed(1);
+
+    const Capabilities plain = host_with_depth(ColorDepth::TrueColor);
+    const std::string degraded = style_to_sgr(curly, plain);
+    CK_CHECK(degraded.find(";4") != std::string::npos);
+    CK_CHECK(degraded.find("4:3") == std::string::npos);
+    CK_CHECK(degraded.find("58") == std::string::npos);
+
+    Capabilities modern = plain;
+    modern.underline_styles = true;
+    const std::string full = style_to_sgr(curly, modern);
+    CK_CHECK(full.find(";4:3") != std::string::npos);
+    CK_CHECK(full.find(";58:5:1") != std::string::npos);
+}
+
+CK_TEST(an_underline_that_follows_the_text_names_no_colour_of_its_own) {
+    Style straight{Color{}, Color{}, Attr::Underline};
+    Capabilities modern = host_with_depth(ColorDepth::TrueColor);
+    modern.underline_styles = true;
+    CK_CHECK(style_to_sgr(straight, modern) == "\x1B[0;4m");
+
+    straight.underline_color = Color::rgb(10, 20, 30);
+    CK_CHECK(style_to_sgr(straight, modern) == "\x1B[0;4;58:2::10:20:30m");
 }
 
 CK_TEST(repeated_same_style_in_a_run_emits_the_style_escape_only_once) {

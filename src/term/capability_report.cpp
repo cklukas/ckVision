@@ -114,6 +114,7 @@ std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, S
         {"Focus events", yes_no(caps.focus_events), "DEC 1004"},
         {"Clipboard write", yes_no(caps.clipboard_write), "OSC 52"},
         {"Hyperlinks", yes_no(caps.hyperlinks), "OSC 8"},
+        {"Underline styles", yes_no(caps.underline_styles), "SGR 4:x / 58 (host profile)"},
         {"Ambiguous width is wide", yes_no(caps.ambiguous_width_is_wide), "host policy (D-019)"},
     };
 }

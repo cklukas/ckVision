@@ -23,6 +23,70 @@ namespace ckv::core {
 
 enum class TerminalQueryPolicy : std::uint8_t { NoResponse, DeclaredProfile };
 enum class TerminalOscPolicy : std::uint8_t { Deny, StoreMetadata };
+
+// Whether a child may put text on the clipboard with OSC 52.
+//
+// Opt-in, because it is the one child-initiated action that reaches outside
+// the terminal window: a program that writes the clipboard replaces whatever
+// the person using the computer had put there, without their having asked.
+// That is a feature when it is `yank` in an editor they are driving, and an
+// attack when it is a file they happened to `cat`. Reading is not a policy
+// choice — see `TerminalSnapshot::clipboard_text`.
+enum class TerminalClipboardPolicy : std::uint8_t { Deny, AllowWrite };
+
+// The kitty keyboard protocol's progressive-enhancement flags, as a child
+// program turns them on for itself.
+//
+// The legacy encoding a terminal has always used cannot say some things: it
+// spells Ctrl+I and Tab identically, has no way to distinguish a lone Escape
+// from the start of a sequence except by waiting, and reports no key release
+// at all. A program that needs those asks for them, one capability at a time,
+// and reads back what it actually got — which is why the flags a session does
+// not implement are dropped at the moment they are set rather than reported
+// back as though they were in force.
+enum class TerminalKeyboardFlags : std::uint8_t {
+    None = 0,
+    // Keys whose legacy encoding is ambiguous — Escape, and anything with
+    // Ctrl or Alt — are sent as unambiguous escape codes instead.
+    DisambiguateEscapeCodes = 1u << 0,
+    // Press, repeat and release are distinguished, for the keys that are sent
+    // as escape codes.
+    ReportEventTypes = 1u << 1,
+    // The shifted and base-layout forms of the key travel with it. ckVision's
+    // input model carries one key and the text it produced, not the keyboard
+    // layout behind them, so this one is not offered.
+    ReportAlternateKeys = 1u << 2,
+    // Every key becomes an escape code, including those that would otherwise
+    // simply be text. This is what a program wants when it is reading keys
+    // rather than reading a document.
+    ReportAllKeysAsEscapeCodes = 1u << 3,
+    // The text a key produced travels with the escape code, so a program can
+    // have both the key and the character without decoding a layout itself.
+    ReportAssociatedText = 1u << 4,
+};
+
+constexpr TerminalKeyboardFlags operator|(TerminalKeyboardFlags a, TerminalKeyboardFlags b) noexcept {
+    return static_cast<TerminalKeyboardFlags>(static_cast<std::uint8_t>(a) |
+                                              static_cast<std::uint8_t>(b));
+}
+constexpr TerminalKeyboardFlags operator&(TerminalKeyboardFlags a, TerminalKeyboardFlags b) noexcept {
+    return static_cast<TerminalKeyboardFlags>(static_cast<std::uint8_t>(a) &
+                                              static_cast<std::uint8_t>(b));
+}
+constexpr bool has_flag(TerminalKeyboardFlags set, TerminalKeyboardFlags flag) noexcept {
+    return (static_cast<std::uint8_t>(set) & static_cast<std::uint8_t>(flag)) != 0;
+}
+
+// The enhancements this terminal can actually deliver. A child's request is
+// masked with this before it takes effect, so the flags it reads back are the
+// ones that will really change what it receives — the protocol is designed to
+// be asked, and answering with a promise we cannot keep is worse than
+// answering with less.
+constexpr TerminalKeyboardFlags supported_terminal_keyboard_flags() noexcept {
+    return TerminalKeyboardFlags::DisambiguateEscapeCodes | TerminalKeyboardFlags::ReportEventTypes |
+           TerminalKeyboardFlags::ReportAllKeysAsEscapeCodes |
+           TerminalKeyboardFlags::ReportAssociatedText;
+}
 enum class TerminalExitPolicy : std::uint8_t { WaitForExit, TerminateAfterGrace };
 enum class TerminalSubsessionState : std::uint8_t { Ready, Running, Exited, Failed, Closed };
 enum class TerminalMouseEncoding : std::uint8_t { None, X10, Sgr };
@@ -38,8 +102,15 @@ struct TerminalCapabilityProfile {
     bool sixel = false;
     bool bracketed_paste = true;
     bool mouse_reporting = true;
+    // The initial state of alternate scroll (DEC mode 1007), which the child
+    // may turn off or back on. On, because a wheel over a full-screen program
+    // that has not asked for mouse reporting is a request to scroll, and
+    // `less` and `man` never ask: with it off they simply do not move, which
+    // reads as a broken wheel rather than as a mode nobody enabled.
+    bool alternate_scroll = true;
     TerminalQueryPolicy query_policy = TerminalQueryPolicy::DeclaredProfile;
     TerminalOscPolicy osc_policy = TerminalOscPolicy::Deny;
+    TerminalClipboardPolicy clipboard_policy = TerminalClipboardPolicy::Deny;
 
     friend bool operator==(const TerminalCapabilityProfile&, const TerminalCapabilityProfile&) = default;
 };
@@ -73,6 +144,16 @@ enum class TerminalEnvironmentPolicy {
 struct TerminalLaunchSpec {
     std::string executable;
     std::vector<std::string> arguments;
+    // What the child sees as argv[0]. Empty means the executable path, which
+    // is what a program expects and what almost every caller wants.
+    //
+    // It exists because of one convention a terminal cannot do without: a
+    // shell is told it is a LOGIN shell by a leading '-' on its own argv[0]
+    // ("-zsh"), and by nothing else. There is no flag every shell agrees on,
+    // and the dash is how login(1), the terminal emulators, and tmux all say
+    // it. A host that cannot set argv[0] cannot open the kind of shell its
+    // user gets everywhere else, and their profile files never run.
+    std::string argv0;
     std::string working_directory = "/";
     // Applied on top of whatever `environment_policy` starts from.
     std::vector<std::pair<std::string, std::string>> environment;
@@ -97,8 +178,23 @@ struct TerminalSubsessionOptions {
     // much smaller control-sequence limit.
     std::size_t max_graphics_payload_bytes = 4 * 1024 * 1024;
     std::size_t max_printable_run_bytes = 16 * 1024;
+    // How much text a child may put on the clipboard in one OSC 52. Large
+    // enough for the paragraph or the file listing somebody actually meant to
+    // copy, small enough that a hostile child cannot use the clipboard as
+    // storage for a megabyte the reader will never see.
+    std::size_t max_clipboard_bytes = 64 * 1024;
     std::size_t max_scrollback_lines = 2'000;
-    std::size_t max_image_pixels = 4 * 1024 * 1024;
+    // The raster plane a child's Sixel is decoded into, in pixels. That plane
+    // is the child's own window — its grid times the cell metric — so its
+    // size is the host's choice and not something a child can inflate; the
+    // quantity a child really controls is bounded by
+    // `max_graphics_payload_bytes` above. This limit is therefore a guard
+    // against absurd or overflowing geometry reaching the decoder's
+    // allocator, and belongs far above any window a person could be looking
+    // at: a 4K screen at 2x scaling is already ~33 Mpx. Set anywhere near a
+    // real window it protects nothing and instead turns graphics silently off
+    // for everyone with a large one — which is what 4 Mpx did.
+    std::size_t max_image_pixels = 64 * 1024 * 1024;
     std::size_t max_parser_work_per_step = 32 * 1024;
     ::ckv::Size max_cells{500, 300};
 };
@@ -134,6 +230,24 @@ struct TerminalSnapshot {
     TerminalMouseEncoding mouse_encoding = TerminalMouseEncoding::None;
     bool application_cursor_keys = false;
     bool focus_reporting_enabled = false;
+    // DEC mode 1007: with the alternate screen up and the child not tracking
+    // the mouse itself, a wheel notch is to be delivered as cursor keys.
+    bool alternate_scroll_enabled = false;
+    // The last text the child asked to put on the clipboard, and a count of
+    // how many such requests have been granted. A consumer forwards the text
+    // when the count differs from the one it last acted on; that keeps the
+    // snapshot a value that can be read as often as anyone likes, rather than
+    // a queue that reading empties.
+    //
+    // There is deliberately no way for a child to read the clipboard back
+    // (D-022): an OSC 52 read is answered nowhere in ckVision, whatever the
+    // policy says about writing, because a program that can read the
+    // clipboard can read whatever the person using the computer last copied.
+    std::string clipboard_text;
+    std::uint64_t clipboard_serial = 0;
+    // The kitty keyboard enhancements the child currently has on. Empty is
+    // the legacy encoding, which remains correct — only coarser.
+    TerminalKeyboardFlags keyboard_flags = TerminalKeyboardFlags::None;
 };
 
 // UI-facing seam. Platform adapters may add readiness and child-process

@@ -83,6 +83,12 @@ struct Capabilities {
     bool focus_events = false;         // DEC mode 1004
     bool bracketed_paste = false;      // DEC mode 2004
     bool hyperlinks = false;           // OSC 8
+    // The sub-parameter form of SGR 4 (`4:3` and friends) and the underline
+    // colour SGR 58. Off by default and never assumed: a terminal that does
+    // not know the colon form reads `4:3` as two parameters and applies
+    // italics, so a shape is only ever sent to a host that has said it can
+    // draw one. Without it every shape degrades to the plain rule.
+    bool underline_styles = false;
     ColorScheme color_scheme = ColorScheme::Unknown;
     // DEC mode 2031 is active for this session and the terminal has
     // positively established that it can send CSI ? 997 ; {1,2} n color
@@ -155,6 +161,7 @@ constexpr Capabilities baseline_capabilities() noexcept {
     caps.focus_events = true;
     caps.bracketed_paste = true;
     caps.hyperlinks = false;
+    caps.underline_styles = false;
     caps.color_scheme = ColorScheme::Unknown;
     caps.color_scheme_notifications = false;
     caps.ambiguous_width_is_wide = false;
@@ -177,6 +184,7 @@ constexpr Capabilities capabilities_for_profile(TerminalProfile profile) noexcep
             caps.sixel_graphics = false;
             caps.kitty_graphics = false;
             caps.pixel_mouse = false;
+            caps.underline_styles = false;
             caps.cell_pixels = {};
             caps.color_scheme = ColorScheme::Unknown;
             return caps;

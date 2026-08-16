@@ -3,6 +3,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_anchor_pane.cpp
     test_application.cpp
     test_application_render.cpp
+    test_base64.cpp
     test_box_drawing.cpp
     test_canvas.cpp
     test_clock_diagnostics_error.cpp

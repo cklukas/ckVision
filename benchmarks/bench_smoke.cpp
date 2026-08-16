@@ -17,8 +17,8 @@ ckv::golden::Document make_document(int cols, int rows) {
     doc.cursor = {true, 1, 1, "block"};
     for (int i = 0; i < 4; ++i) {
         ckv::golden::StyleSpec style;
-        style.fg = {false, static_cast<std::uint8_t>(64 * i), 255, 128};
-        style.bg = {false, 0, 0, static_cast<std::uint8_t>(32 * i)};
+        style.fg = {ckv::golden::Color::Kind::Rgb, 0, static_cast<std::uint8_t>(64 * i), 255, 128};
+        style.bg = {ckv::golden::Color::Kind::Rgb, 0, 0, 0, static_cast<std::uint8_t>(32 * i)};
         if (i % 2 == 1) style.attrs = {"bold"};
         doc.styles.push_back(style);
     }

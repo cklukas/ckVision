@@ -14,6 +14,7 @@ endif()
 
 add_library(cvision
     src/core/assert.cpp
+    src/core/base64.cpp
     src/core/cell.cpp
     src/core/filesystem.cpp
     src/core/golden.cpp

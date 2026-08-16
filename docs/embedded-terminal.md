@@ -7,18 +7,22 @@ normal ckVision window. It is not a pass-through to the parent terminal: the
 child is connected to a private PTY (or ConPTY on the corresponding platform),
 and ckVision alone presents the composed parent frame.
 
-The runnable POSIX example is `ckvision_terminal`. It launches an interactive
-`/bin/sh` child and reserves `Ctrl+Alt+Space` to return command focus to the
-parent application. Choose **File → New Terminal** to create another isolated
-shell window. `Ctrl+Alt+Space` moves focus to the parent menu bar without
-sending that chord to the child. From there, **Window → Next/Previous**
-(F6/Shift+F6) changes the active window, while **Window → Tile** and
-**Window → Cascade** arrange every open terminal window. Shift-dragging in a
-terminal selects visible cells and copies them to the application clipboard.
-Choose **File → New Sixel Demo** to open a second private child that emits a
-small Sixel sample before starting its interactive shell. With an outer Sixel
-profile the sample is a clipped raster; with `NoGraphics` the same private
-session uses its deterministic text fallback and emits no outer raster bytes.
+The runnable POSIX example is `ckvision_terminal`. It launches the reader's own
+interactive shell — `$SHELL`, falling back to `/bin/sh` — and reserves
+`Ctrl+Alt+Space` to return command focus to the parent application. Its child
+environment names only `TERM` and `COLORTERM`; the prompt, `PATH` and
+everything else arrive from that shell's own startup files, so a window here
+looks like a window in any other terminal on the machine. Choose **File → New
+Terminal** to create another isolated shell window. `Ctrl+Alt+Space` moves
+focus to the parent menu bar without sending that chord to the child. From
+there, **Window → Next/Previous** (F6/Shift+F6) changes the active window,
+while **Window → Tile** and **Window → Cascade** arrange every open terminal
+window. Shift-dragging in a terminal selects visible cells and copies them to
+the application clipboard. Choose **File → New Sixel Demo** to open a second
+private child that emits a small Sixel sample before starting its interactive
+shell. With an outer Sixel profile the sample is a clipped raster; with
+`NoGraphics` the same private session uses its deterministic text fallback and
+emits no outer raster bytes.
 
 | Initial shell | Full-screen alternate buffer | Nested child | Child Sixel on a graphics-capable outer terminal | Same child with no outer graphics |
 |---|---|---|---|---|
@@ -56,6 +60,12 @@ window->set_content(std::move(terminal));
 environment and the policy governing it, child capability profile, and exit
 policy. No shell is inserted implicitly.
 
+`argv0` is separate from `executable`, and empty means "the executable path".
+It exists for one convention: a shell is told it is a *login* shell by a
+leading `-` on its own `argv[0]` (`-zsh`) and by nothing else — no flag every
+shell agrees on does it. A host that opens login shells sets it; anything
+else leaves it alone.
+
 By default the child inherits the environment the host process is running in,
 and the entries in `environment` are applied on top: they replace their
 namesakes and add the rest. A terminal is a place to run the programs one
@@ -92,9 +102,9 @@ The embedded profile uses an explicit dark terminal default (black background,
 a foreground below the palette's brightest white so that the bold a program
 asks for has somewhere to go), while SGR and truecolor updates remain
 child-local. The POSIX demo overrides only what a terminal itself has an
-opinion about — the 256-color and truecolor markers and its own prompt — and
-opens in the user's home directory, leaving `PATH` and the rest to the
-environment the user already has.
+opinion about — the 256-color and truecolor markers — and opens in the user's
+home directory, leaving the prompt, `PATH` and the rest to the environment the
+user already has.
 
 PageUp and PageDown navigate the bounded local scrollback. Shift-drag selects
 the rows currently visible (including scrollback) and invokes the view's copy
@@ -106,9 +116,62 @@ another.
 The shipped profile supports the terminal modes needed by ordinary full-screen
 applications: alternate buffer, DEC scrolling margins and origin mode,
 index/reverse-index, application cursor keys, bracketed paste, focus reports,
-and the declared cursor-status replies. These remain private PTY traffic; the
-outer application's menus, window chrome, and `Ctrl+Alt+Space` escape chord
-are always local.
+alternate scroll, and the declared cursor-status replies. These remain private
+PTY traffic; the outer application's menus, window chrome, and
+`Ctrl+Alt+Space` escape chord are always local.
+
+## Scrolling a full-screen child with the wheel
+
+`less` and `man` never ask for mouse reporting, so a wheel over them used to
+do nothing at all — which reads as a broken wheel rather than as a mode nobody
+enabled. With DEC mode 1007 (`alternate_scroll`, on by default and
+child-controllable) a wheel notch over the alternate screen is delivered as
+three cursor keys, in the dialect the child selected. On the primary buffer
+the wheel is left alone: there it belongs to the terminal's own history, and
+arrow keys sent to a shell prompt would walk its command history instead.
+
+## Colours a child asks about, and colours it sets
+
+vim and nvim probe `OSC 11` for the background before choosing a colour
+scheme; silence makes them guess, and on a dark background they guess light.
+The emulator answers `OSC 10`, `OSC 11` and `OSC 4 ; n ; ?` with
+`rgb:RRRR/GGGG/BBBB`, using the terminator the child asked with, under the
+same `TerminalQueryPolicy` that governs every other reply. *Setting* those is
+a different question and is refused: a child that could redefine the palette
+could recolour the window it sits in.
+
+A child's colours are stored as what it asked for — a palette index stays an
+index all the way to the outer terminal, so the reader's own theme applies to
+a child's `SGR 31` exactly as it would outside ckVision. `SGR 4:0`–`4:5` and
+`SGR 58`/`59` carry the underline's shape and its own colour, which is how an
+editor marks a spelling mistake differently from a type error; where the outer
+terminal cannot draw them they degrade to the plain rule.
+
+## The clipboard, and the keyboard protocol
+
+`OSC 52` lets a child put text on the clipboard. It is the one thing a child
+can do that reaches outside its own window, so it is **opt-in**:
+
+```cpp
+shell.profile.clipboard_policy = term::TerminalClipboardPolicy::AllowWrite;
+```
+
+The payload is size-capped (`max_clipboard_bytes`), decoded with a strict
+base64 reader, and sanitized for a clipboard rather than for a cell — tabs and
+line breaks are content in a document and survive, every other control byte
+does not. `TerminalView::on_clipboard_write` delivers the result; what to do
+with it is the host's decision. Clipboard *reads* are refused under every
+policy, including this one (D-022).
+
+A child may also ask for the kitty keyboard protocol's enhancements
+(`CSI > flags u` and friends), which is how a program distinguishes `Ctrl+I`
+from `Tab`, sees a lone `Esc` without waiting for a timer, or learns that a
+key was released. The flag stack is per screen, so a full-screen program's
+settings never follow it out onto the shell's screen. A requested flag is
+masked to what this terminal can really deliver before it takes effect, so
+what a program reads back with `CSI ? u` is what it will really receive. With
+no flags set — the default — keys arrive in the legacy encoding, which remains
+correct.
 
 For a full-screen smoke test, launch a child that uses the alternate buffer,
 for example `printf '\033[?1049h\033[2J\033[Hfull-screen\033[?1049l'`, and
@@ -133,8 +196,34 @@ rendered frame is observed only by the parent session.
 Child bytes are terminal-emulator input only. Cursor movement, OSC, DCS, and
 unsupported controls modify private state or generate a child diagnostic; they
 are never written to the outer terminal. The documented profile answers only
-declared queries. OSC metadata is denied by default, and bracketed paste is
-encoded only for the child session.
+declared queries. OSC metadata is denied by default, clipboard writes are
+denied by default, clipboard reads are refused outright, and bracketed paste
+is encoded only for the child session.
+
+A child only sends a picture when it has been told the terminal can show one,
+so the profile's `sixel` flag is answered as well as honoured. DA1 (`CSI c`)
+carries parameter 4 whenever the profile declares Sixel — that list is what
+`img2sixel`, `chafa`, gnuplot and ckVision's own capability probe read — and
+XTSMGRAPHICS (`CSI ? Pi ; Pa ; Pv S`) reports the limits behind it: the
+decoder's 256 colour registers, and a maximum geometry of the child's own
+window in pixels, since anything past the last cell is cropped away. A request
+to *change* a limit is refused, and so is every graphics request under a
+profile without Sixel — with a status rather than with silence, which would
+leave the asking program waiting out a timeout. XTSMGRAPHICS shares its final
+byte with SU (scroll up); it is the private marker that keeps a probe from
+scrolling away the screen it was asking about.
+
+Both answers also fall back to "no graphics" for a child window whose raster
+plane would exceed `max_image_pixels`, because at that size every image the
+child sends is dropped by the decoder. Telling such a window the truth costs
+it a picture it was never going to get and buys it the program's own text
+fallback, instead of the blank that an unheeded advertisement leaves behind.
+That limit guards against absurd or overflowing geometry reaching the
+decoder's allocator, so it sits far above any real window (64 Mpx; a 4K
+screen at 2x scaling is ~33 Mpx). The plane is the child's own window, which
+the host sizes and the child cannot inflate — the child-controlled quantity
+is `max_graphics_payload_bytes` — so a limit set near a plausible window size
+protects nothing and silently removes graphics from large screens.
 
 Child Sixel data is decoded into an RGBA raster snapshot. Parameterized Sixel
 DCS commands are accepted, and graphics payloads have their own bounded limit

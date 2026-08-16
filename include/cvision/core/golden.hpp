@@ -16,9 +16,15 @@ namespace ckv::golden {
 inline constexpr std::string_view style_alphabet =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
+// The three things a colour can be, spelled `default`, `@<index>` and
+// `#RRGGBB`. The index form is kept rather than resolved so that a dump says
+// what a program asked for — "the palette's red" is a different fact from
+// "this particular red", and only the first can be re-themed.
 struct Color {
-    bool is_default = true;
-    std::uint8_t r = 0;
+    enum class Kind : std::uint8_t { Default, Indexed, Rgb };
+    Kind kind = Kind::Default;
+    std::uint8_t index = 0;  // Indexed only
+    std::uint8_t r = 0;      // Rgb only
     std::uint8_t g = 0;
     std::uint8_t b = 0;
 };
@@ -27,6 +33,13 @@ struct StyleSpec {
     Color fg;
     Color bg;
     std::vector<std::string> attrs;  // subset of the known attribute names
+    // The shape of the underline, written only when the style is underlined
+    // and the shape is not the plain rule; empty otherwise. One of
+    // "double", "curly", "dotted", "dashed".
+    std::string underline;
+    // The underline's own colour, written only when the style is underlined
+    // and the rule does not simply follow the text.
+    Color underline_color;
 };
 
 struct Cursor {

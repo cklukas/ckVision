@@ -13,6 +13,12 @@ constexpr std::array<std::string_view, 6> known_attrs = {
 
 constexpr std::array<std::string_view, 3> known_shapes = {"block", "bar", "underline"};
 
+// The underline shapes that are written down. The plain rule is what an
+// underline is unless something says otherwise, so it is spelled by its
+// absence and never appears here.
+constexpr std::array<std::string_view, 4> known_underlines = {"double", "curly", "dotted",
+                                                              "dashed"};
+
 bool is_hex_digit_lower(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
 }
@@ -54,13 +60,22 @@ bool parse_color(std::string_view token, Color& out) {
         out = Color{};
         return true;
     }
+    if (!token.empty() && token[0] == '@') {
+        int index = -1;
+        if (!parse_int(token.substr(1), index) || index > 255) return false;
+        out = Color{};
+        out.kind = Color::Kind::Indexed;
+        out.index = static_cast<std::uint8_t>(index);
+        return true;
+    }
     if (token.size() != 7 || token[0] != '#') return false;
     int v[6];
     for (std::size_t i = 0; i < 6; ++i) {
         v[i] = hex_value(token[i + 1]);
         if (v[i] < 0) return false;
     }
-    out.is_default = false;
+    out = Color{};
+    out.kind = Color::Kind::Rgb;
     out.r = static_cast<std::uint8_t>(v[0] * 16 + v[1]);
     out.g = static_cast<std::uint8_t>(v[2] * 16 + v[3]);
     out.b = static_cast<std::uint8_t>(v[4] * 16 + v[5]);
@@ -68,9 +83,16 @@ bool parse_color(std::string_view token, Color& out) {
 }
 
 void append_color(std::string& out, const Color& c) {
-    if (c.is_default) {
-        out += "default";
-        return;
+    switch (c.kind) {
+        case Color::Kind::Default:
+            out += "default";
+            return;
+        case Color::Kind::Indexed:
+            out += '@';
+            out += std::to_string(static_cast<int>(c.index));
+            return;
+        case Color::Kind::Rgb:
+            break;
     }
     constexpr char digits[] = "0123456789ABCDEF";
     out += '#';
@@ -88,6 +110,12 @@ bool known_attr(std::string_view name) {
 
 bool known_shape(std::string_view name) {
     for (const std::string_view s : known_shapes)
+        if (s == name) return true;
+    return false;
+}
+
+bool known_underline(std::string_view name) {
+    for (const std::string_view s : known_underlines)
         if (s == name) return true;
     return false;
 }
@@ -223,11 +251,34 @@ ParseResult parse(std::string_view text) {
             const auto t = tokenize(line);
             StyleSpec style;
             int declared = -1;
-            if (t.size() != 7 || !parse_int(t[0], declared) || declared != i || t[1] != "fg" ||
+            if (t.size() < 7 || !parse_int(t[0], declared) || declared != i || t[1] != "fg" ||
                 !parse_color(t[2], style.fg) || t[3] != "bg" || !parse_color(t[4], style.bg) ||
                 t[5] != "attrs" || !parse_attrs(t[6], style.attrs))
                 return p.fail("expected '<index> fg <color> bg <color> attrs <attrs>' with "
                               "contiguous indices");
+            // Both refinements describe an underline, so neither is
+            // meaningful without one, and each is written only where it says
+            // something the default does not — that is what keeps one
+            // appearance from having two spellings.
+            const bool underlined =
+                std::find(style.attrs.begin(), style.attrs.end(), "underline") != style.attrs.end();
+            std::size_t token = 7;
+            if (token + 1 < t.size() && t[token] == "underline") {
+                if (!underlined || !known_underline(t[token + 1]))
+                    return p.fail("'underline <shape>' needs an underlined style and one of "
+                                  "double, curly, dotted, dashed");
+                style.underline = std::string(t[token + 1]);
+                token += 2;
+            }
+            if (token + 1 < t.size() && t[token] == "ulcolor") {
+                if (!underlined || !parse_color(t[token + 1], style.underline_color) ||
+                    style.underline_color.kind == Color::Kind::Default)
+                    return p.fail("'ulcolor <color>' needs an underlined style and a colour that "
+                                  "is not the default");
+                token += 2;
+            }
+            if (token != t.size())
+                return p.fail("unexpected trailing tokens on a style line");
             doc.styles.push_back(std::move(style));
         }
 
@@ -340,6 +391,11 @@ std::string serialize(const Document& doc) {
                 if (a > 0) out += ',';
                 out += style.attrs[a];
             }
+        }
+        if (!style.underline.empty()) out += " underline " + style.underline;
+        if (style.underline_color.kind != Color::Kind::Default) {
+            out += " ulcolor ";
+            append_color(out, style.underline_color);
         }
         out += '\n';
     }

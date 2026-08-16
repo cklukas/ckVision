@@ -29,8 +29,10 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 
 ## Embedded terminal
 
-| `include/cvision/core/terminal_subsession.hpp` | deterministic child-session snapshot contract | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/core/terminal_subsession.hpp` | deterministic child-session snapshot contract, capability profile and policies | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/term/terminal_subsession.hpp` | launch specification and platform adapter seam | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/core/palette.hpp` | what a palette index names, and colour resolution | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/base64.hpp` | the encoding `OSC 52` carries clipboard text in | [Embedded terminal](embedded-terminal.md) |
 
 ## Chrome and interaction
 

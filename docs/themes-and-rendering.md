@@ -70,3 +70,26 @@ then search, then syntax/base text; a selected match therefore remains legible
 under every built-in scheme. Applications may override any of these semantic
 roles in an ordinary `Theme` without changing editor behavior or using a
 global palette.
+
+## What a colour is, and what an underline looks like
+
+A `Color` is one of three things, and the difference is kept rather than
+collapsed: the terminal's own foreground or background, an entry in the
+palette named by its index, or a specific 24-bit colour. Themes name concrete
+colours; an embedded terminal's child usually names palette entries. Keeping
+the index is what lets a palette be re-themed later — "the palette's red" is a
+different fact from "this particular red" — and it is what lets the index
+reach the outer terminal unchanged, so a reader's own theme applies to it.
+
+`core/palette.hpp` is the one place that turns an index into channels, for the
+things that genuinely need pixels: dimming a shadow, writing an SVG, or
+quantising for a host with fewer colours. `resolved_color(colour, fallback)`
+is the call; everything in between carries the index.
+
+`Style::underline` refines an underline that is being drawn — straight,
+double, curly, dotted or dashed — and `Style::underline_color` gives the rule a
+colour of its own, defaulting to "follow the text". Both are meaningful only
+while `Attr::Underline` is set, and clearing the underline restores them, so
+two cells that look alike compare alike. A shape reaches the screen only where
+the host declares `underline_styles`; without it every shape degrades to the
+plain rule, which still reads as emphasis.

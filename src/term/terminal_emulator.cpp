@@ -7,6 +7,8 @@
 #include <initializer_list>
 #include <limits>
 
+#include "cvision/core/base64.hpp"
+#include "cvision/core/palette.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/term/virtual_display.hpp"
 
@@ -33,35 +35,12 @@ std::int64_t saturated_product(std::initializer_list<std::int64_t> factors) noex
     return result;
 }
 
-Color ansi_color(int index) noexcept {
-    constexpr std::array<Color, 16> colors{
-        Color::rgb(0, 0, 0),       Color::rgb(205, 49, 49),   Color::rgb(13, 188, 121), Color::rgb(229, 229, 16),
-        Color::rgb(36, 114, 200),  Color::rgb(188, 63, 188),  Color::rgb(17, 168, 205), Color::rgb(229, 229, 229),
-        Color::rgb(102, 102, 102), Color::rgb(241, 76, 76),   Color::rgb(35, 209, 139), Color::rgb(245, 245, 67),
-        Color::rgb(59, 142, 234),  Color::rgb(214, 112, 214), Color::rgb(41, 184, 219), Color::rgb(255, 255, 255),
-    };
-    if (index < 16) return colors[static_cast<std::size_t>(std::max(0, index))];
-    if (index < 232) {
-        constexpr std::array<std::uint8_t, 6> levels{{0, 95, 135, 175, 215, 255}};
-        const int cube = index - 16;
-        return Color::rgb(levels[static_cast<std::size_t>((cube / 36) % 6)],
-                          levels[static_cast<std::size_t>((cube / 6) % 6)],
-                          levels[static_cast<std::size_t>(cube % 6)]);
-    }
-    if (index < 256) {
-        const auto value = static_cast<std::uint8_t>(8 + (index - 232) * 10);
-        return Color::rgb(value, value, value);
-    }
-    return colors[0];
-}
-
 // Bold has meant "brighter" for the low eight colours since the hardware
 // that had only eight, and programs still write for that: text asking for
 // bold on the default foreground expects white, not a heavier grey. The
-// eight base colours are the whole of it -- an explicit 256-colour or
-// true-colour foreground is a specific colour the program chose, and
-// brightening that would be overriding the choice rather than honouring a
-// convention.
+// eight base colours are the whole of it -- a true-colour foreground is a
+// specific colour the program chose, and brightening that would be
+// overriding the choice rather than honouring a convention.
 Style bold_brightened(Style style, const Style& default_style) noexcept {
     if (!has_attr(style.attrs, Attr::Bold)) return style;
     // Reverse video swaps the two colours, so brightening the foreground
@@ -75,15 +54,16 @@ Style bold_brightened(Style style, const Style& default_style) noexcept {
     // the case that matters most: a program reaching for emphasis without
     // naming a colour is the common one, and ncurses does exactly that.
     if (style.fg == default_style.fg) {
-        style.fg = ansi_color(15);
+        style.fg = Color::indexed(15);
         return style;
     }
-    for (int index = 0; index < 8; ++index) {
-        if (style.fg == ansi_color(index)) {
-            style.fg = ansi_color(index + 8);
-            return style;
-        }
-    }
+    // Now that a colour keeps its index, this is the whole rule: the low
+    // eight are the eight that brighten, and everything else -- an explicit
+    // 256-colour index, a chosen RGB -- is left as it was asked for. Before
+    // indices survived, a program's own `38;2;205;49;49` was indistinguishable
+    // from palette red and got brightened along with it.
+    if (style.fg.is_indexed() && style.fg.index() < 8)
+        style.fg = Color::indexed(static_cast<std::uint8_t>(style.fg.index() + 8));
     return style;
 }
 
@@ -165,7 +145,9 @@ TerminalSnapshot TerminalEmulator::snapshot() const {
         : mouse_sgr_enabled_ ? TerminalMouseEncoding::Sgr : TerminalMouseEncoding::X10;
     return TerminalSnapshot{cells_, active_cells(), cursor_, alternate_buffer_, rasters_, diagnostics_, title_, state_, scrollback_,
                             bracketed_paste_enabled_, mouse_reporting_enabled_, mouse_encoding,
-                            application_cursor_keys_, focus_reporting_enabled_};
+                            application_cursor_keys_, focus_reporting_enabled_, alternate_scroll_enabled_,
+                            clipboard_text_, clipboard_serial_,
+                            (alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_).flags};
 }
 
 void TerminalEmulator::diagnostic(TerminalDiagnostic::Kind kind, std::string message) {
@@ -173,19 +155,180 @@ void TerminalEmulator::diagnostic(TerminalDiagnostic::Kind kind, std::string mes
     if (diagnostics_.size() > 64) diagnostics_.erase(diagnostics_.begin());
 }
 
-void TerminalEmulator::handle_osc() {
-    if (profile_.osc_policy != TerminalOscPolicy::StoreMetadata) return;
-    // OSC 0 sets the icon name and the window title together; OSC 2 sets the
-    // title alone. Both are how a program says what it is now working on, and
-    // a host that shows a caption wants either. OSC 1 is the icon name only
-    // and deliberately does not touch the title.
-    const bool sets_title = control_.rfind("0;", 0) == 0 || control_.rfind("2;", 0) == 0;
-    if (!sets_title) return;
-    // The title is child-supplied text on its way to a window frame. Control
-    // bytes in it would be drawn as frame content, so they are replaced here
-    // rather than trusted to whatever eventually renders it. Length is
-    // already bounded by max_control_bytes when the string was accumulated.
-    title_ = text::sanitize_display_text(std::string_view(control_).substr(2));
+// A colour as a terminal reports one: `rgb:` and four hex digits per channel,
+// each byte doubled into the sixteen-bit form the convention uses. A program
+// that asked is prepared for this shape and no other.
+std::string TerminalEmulator::report_color(Color color, Color fallback) {
+    const Color resolved = resolved_color(color, fallback);
+    constexpr char digits[] = "0123456789abcdef";
+    std::string out = "rgb:";
+    bool first = true;
+    for (const std::uint8_t channel : {resolved.r(), resolved.g(), resolved.b()}) {
+        if (!first) out += '/';
+        first = false;
+        // Sixteen bits per channel, each eight-bit value doubled — 0xBB
+        // becomes 0xBBBB, which is how a terminal widens what it has.
+        for (int repeat = 0; repeat < 2; ++repeat) {
+            out += digits[channel >> 4];
+            out += digits[channel & 0x0F];
+        }
+    }
+    return out;
+}
+
+void TerminalEmulator::reply_osc(std::string_view body, bool bel_terminated) {
+    send_input("\x1b]" + std::string(body) + (bel_terminated ? "\a" : "\x1b\\"));
+}
+
+void TerminalEmulator::handle_osc(bool bel_terminated) {
+    const std::string_view control(control_);
+    const std::size_t separator = control.find(';');
+    const std::string_view command = control.substr(0, separator);
+    const std::string_view body =
+        separator == std::string_view::npos ? std::string_view{} : control.substr(separator + 1);
+    int number = -1;
+    if (!command.empty() && command.size() <= 3) {
+        int parsed = 0;
+        const auto result = std::from_chars(command.data(), command.data() + command.size(), parsed);
+        if (result.ec == std::errc{} && result.ptr == command.data() + command.size()) number = parsed;
+    }
+
+    switch (number) {
+        // OSC 0 sets the icon name and the window title together; OSC 2 sets
+        // the title alone. Both are how a program says what it is now working
+        // on, and a host that shows a caption wants either. OSC 1 is the icon
+        // name only and deliberately does not touch the title.
+        case 0:
+        case 2:
+            if (profile_.osc_policy != TerminalOscPolicy::StoreMetadata) return;
+            // The title is child-supplied text on its way to a window frame.
+            // Control bytes in it would be drawn as frame content, so they
+            // are replaced here rather than trusted to whatever eventually
+            // renders it. Length is already bounded by max_control_bytes when
+            // the string was accumulated.
+            title_ = text::sanitize_display_text(body);
+            return;
+        case 1:
+            return;  // icon name: understood, and deliberately without effect
+        case 4:
+            handle_palette_query(body, bel_terminated);
+            return;
+        // The colours a terminal has of its own. vim and nvim ask for the
+        // background before they choose a colour scheme, and a terminal that
+        // says nothing leaves them guessing — on a dark background they
+        // usually guess light, and every syntax colour comes out wrong.
+        case 10:
+        case 11:
+            if (profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) return;
+            if (body != "?") {
+                // Setting them is a separate question from answering them:
+                // the default colours are the profile's, and a child that
+                // could rewrite them could recolour the window it sits in.
+                diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                           "child attempted to set a terminal default colour");
+                return;
+            }
+            reply_osc(std::string(command) + ";" +
+                          report_color(number == 10 ? profile_.default_style.fg
+                                                    : profile_.default_style.bg,
+                                       Color::rgb(0, 0, 0)),
+                      bel_terminated);
+            return;
+        case 52:
+            handle_clipboard(body);
+            return;
+        default:
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child OSC sequence");
+            return;
+    }
+}
+
+// OSC 4 asks what a palette entry is, one `index ; ?` pair at a time and
+// sometimes several in one sequence. Each pair is answered separately, which
+// is what the asking program expects to read back.
+void TerminalEmulator::handle_palette_query(std::string_view body, bool bel_terminated) {
+    if (profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) return;
+    std::size_t position = 0;
+    while (position < body.size()) {
+        const std::size_t index_end = body.find(';', position);
+        if (index_end == std::string_view::npos) break;
+        const std::string_view index_text = body.substr(position, index_end - position);
+        const std::size_t value_end = body.find(';', index_end + 1);
+        const std::string_view value = body.substr(
+            index_end + 1, value_end == std::string_view::npos ? body.size() - index_end - 1
+                                                               : value_end - index_end - 1);
+        int index = -1;
+        const auto result =
+            std::from_chars(index_text.data(), index_text.data() + index_text.size(), index);
+        const bool valid_index = result.ec == std::errc{} &&
+                                 result.ptr == index_text.data() + index_text.size() && index >= 0 &&
+                                 index <= 255;
+        if (valid_index && value == "?") {
+            reply_osc("4;" + std::to_string(index) + ";" +
+                          report_color(Color::indexed(static_cast<std::uint8_t>(index)),
+                                       Color::rgb(0, 0, 0)),
+                      bel_terminated);
+        } else if (valid_index) {
+            // Redefining a palette entry is the same question as setting a
+            // default colour, and gets the same answer.
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                       "child attempted to redefine a palette colour");
+        }
+        if (value_end == std::string_view::npos) break;
+        position = value_end + 1;
+    }
+}
+
+// OSC 52, the one thing a child can do that reaches outside its own window.
+//
+// Writing is opt-in per profile and bounded; reading is refused outright and
+// under every policy (D-022), because a program that can read the clipboard
+// can read whatever its reader last copied — a password, most likely, since
+// that is what people copy. The refusal is silent as far as the child is
+// concerned: it gets no reply at all, which is what a terminal without the
+// feature looks like.
+void TerminalEmulator::handle_clipboard(std::string_view body) {
+    const std::size_t separator = body.find(';');
+    const std::string_view payload =
+        separator == std::string_view::npos ? body : body.substr(separator + 1);
+    if (payload == "?") {
+        diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                   "child clipboard read refused");
+        return;
+    }
+    if (profile_.clipboard_policy != TerminalClipboardPolicy::AllowWrite) {
+        diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                   "child clipboard write denied by policy");
+        return;
+    }
+    // Bound the encoded form before decoding it: four base64 characters are
+    // three bytes, less one for each padding character, so the decoded size
+    // is known exactly and an oversized payload is refused without building
+    // it. A malformed length is left for the decoder to reject.
+    std::size_t padding = 0;
+    while (padding < 2 && payload.size() > padding && payload[payload.size() - 1 - padding] == '=')
+        ++padding;
+    if (payload.size() / 4 * 3 - std::min(payload.size() / 4 * 3, padding) >
+        options_.max_clipboard_bytes) {
+        diagnostic(TerminalDiagnostic::Kind::LimitExceeded,
+                   "child clipboard payload exceeded configured limit");
+        return;
+    }
+    std::string decoded;
+    if (!base64::decode(payload, decoded)) {
+        diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "malformed child clipboard payload");
+        return;
+    }
+    if (decoded.size() > options_.max_clipboard_bytes) {
+        diagnostic(TerminalDiagnostic::Kind::LimitExceeded,
+                   "child clipboard payload exceeded configured limit");
+        return;
+    }
+    // ckVision has one clipboard, so which selection the child named makes no
+    // difference to where the text goes; it is recorded and the host decides
+    // what to do with it.
+    clipboard_text_ = text::sanitize_clipboard_text(decoded);
+    ++clipboard_serial_;
 }
 
 bool TerminalEmulator::append_control(char byte) {
@@ -285,12 +428,12 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else append_control(byte);
                 break;
             case ParseState::Osc:
-                if (byte == '\a') { handle_osc(); control_.clear(); parse_state_ = ParseState::Ground; }
+                if (byte == '\a') { handle_osc(true); control_.clear(); parse_state_ = ParseState::Ground; }
                 else if (byte == '\x1b') parse_state_ = ParseState::OscEscape;
                 else append_control(byte);
                 break;
             case ParseState::OscEscape:
-                if (byte == '\\') { handle_osc(); control_.clear(); parse_state_ = ParseState::Ground; }
+                if (byte == '\\') { handle_osc(false); control_.clear(); parse_state_ = ParseState::Ground; }
                 else {
                     const bool retained_escape = append_control('\x1b');
                     const bool retained_byte = retained_escape && append_control(byte);
@@ -304,13 +447,20 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
             case ParseState::DcsEscape:
                 if (byte == '\\') {
                     if (profile_.sixel && is_sixel_control(control_)) {
-                        const std::int64_t pixels = saturated_product({
-                            cells_.width, cells_.height, std::max(1, profile_.cell_pixels.width),
-                            std::max(1, profile_.cell_pixels.height)});
-                        const std::int64_t image_limit = static_cast<std::int64_t>(std::min<std::size_t>(
-                            options_.max_image_pixels, static_cast<std::size_t>(std::numeric_limits<int>::max())));
-                        if (pixels > image_limit) {
-                            diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child Sixel image exceeds configured pixel limit");
+                        if (!graphics_available()) {
+                            // Name the numbers. "Exceeds the configured limit"
+                            // sends the reader looking for a limit on the
+                            // picture, when what is too large is the window it
+                            // would have been drawn into.
+                            diagnostic(TerminalDiagnostic::Kind::LimitExceeded,
+                                       "child Sixel dropped: the " +
+                                           std::to_string(static_cast<std::int64_t>(cells_.width) *
+                                                          std::max(1, profile_.cell_pixels.width)) +
+                                           "x" +
+                                           std::to_string(static_cast<std::int64_t>(cells_.height) *
+                                                          std::max(1, profile_.cell_pixels.height)) +
+                                           " terminal plane is past max_image_pixels (" +
+                                           std::to_string(options_.max_image_pixels) + ")");
                         } else {
                             VirtualDisplay display(cells_, profile_.cell_pixels);
                             if (display.write("\x1bP" + control_ + "\x1b\\") && display.has_raster_pixels()) {
@@ -397,8 +547,22 @@ void TerminalEmulator::handle_csi(char final_byte) {
         (control_ == "?2026$" || control_ == "?2031$" || control_ == "?1016$"))
         return;
     if (final_byte == 'c' && control_.empty()) {
+        // DA1 is where a program asks what this terminal is, and parameter 4
+        // is the one answer that decides whether it draws a picture at all:
+        // img2sixel, chafa, gnuplot and ckVision's own capability probe all
+        // read the Sixel advertisement out of this list. Answering a fixed
+        // `?1;2c` while the profile declares graphics tells every one of them
+        // to fall back to text on a terminal that would have drawn the image.
         if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
-            send_input("\x1b[?1;2c");
+            send_input(graphics_available() ? "\x1b[?1;2;4c" : "\x1b[?1;2c");
+        return;
+    }
+    // XTSMGRAPHICS asks for the graphics limits behind that advertisement.
+    // It shares its final byte with SU (scroll up) and only the private
+    // marker separates them: read as SU, a probe scrolls the child's own
+    // screen away instead of answering it.
+    if (final_byte == 'S' && !control_.empty() && control_.front() == '?') {
+        handle_graphics_attributes();
         return;
     }
     if (final_byte == 't' && control_ == "16") {
@@ -421,7 +585,14 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     if (final_byte == 'u') {
-        if (saved_cursor_valid_) cursor_ = saved_cursor_;
+        // Bare `CSI u` is the cursor restore it has always been. The kitty
+        // keyboard protocol's forms all carry a private prefix, which is what
+        // keeps the two apart.
+        if (control_.empty()) {
+            if (saved_cursor_valid_) cursor_ = saved_cursor_;
+            return;
+        }
+        handle_keyboard_protocol();
         return;
     }
     if ((final_byte == 'h' || final_byte == 'l') && !control_.empty() && control_.front() == '?') {
@@ -478,6 +649,12 @@ void TerminalEmulator::handle_csi(char final_byte) {
                 mouse_sgr_enabled_ = enabled && profile_.mouse_reporting;
             } else if (mode == 1004) {
                 focus_reporting_enabled_ = enabled;
+            } else if (mode == 1007) {
+                // Alternate scroll: with the alternate screen up and no mouse
+                // tracking of its own, the child wants a wheel notch as cursor
+                // keys. The emulator only records the request — turning a
+                // wheel into keys needs a wheel, and that is the view's end.
+                alternate_scroll_enabled_ = enabled;
             } else if (mode == 25) {
                 cursor_.visible = enabled;
             }
@@ -602,80 +779,7 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 'S') { scroll_up_region(scroll_top_, scroll_bottom_, parameter(control_, 0, 1)); return; }
     if (final_byte == 'T') { scroll_down_region(scroll_top_, scroll_bottom_, parameter(control_, 0, 1)); return; }
     if (final_byte == 'm') {
-        std::vector<int> values;
-        std::size_t begin = 0;
-        bool valid = true;
-        while (begin <= control_.size()) {
-            const std::size_t end = control_.find(';', begin);
-            const std::string_view text = std::string_view(control_).substr(
-                begin, end == std::string::npos ? control_.size() - begin : end - begin);
-            int value = 0;
-            if (!text.empty()) {
-                const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value);
-                if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()) {
-                    valid = false;
-                    break;
-                }
-            }
-            values.push_back(value);
-            if (end == std::string::npos) break;
-            begin = end + 1;
-        }
-        if (!valid || values.empty()) {
-            diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "malformed child SGR sequence");
-            return;
-        }
-        const auto clear_attrs = [this](Attr attrs) {
-            style_.attrs = static_cast<Attr>(static_cast<std::uint8_t>(style_.attrs) &
-                                             static_cast<std::uint8_t>(~static_cast<std::uint8_t>(attrs)));
-        };
-        for (std::size_t index = 0; index < values.size(); ++index) {
-            const int value = values[index];
-            if (value == 0) style_ = profile_.default_style;
-            else if (value == 1) style_.attrs |= Attr::Bold;
-            else if (value == 2) style_.attrs |= Attr::Dim;
-            else if (value == 3) style_.attrs |= Attr::Italic;
-            else if (value == 4) style_.attrs |= Attr::Underline;
-            else if (value == 7) style_.attrs |= Attr::Reverse;
-            else if (value == 9) style_.attrs |= Attr::Strike;
-            else if (value == 22) clear_attrs(Attr::Bold | Attr::Dim);
-            else if (value == 23) clear_attrs(Attr::Italic);
-            else if (value == 24) clear_attrs(Attr::Underline);
-            else if (value == 27) clear_attrs(Attr::Reverse);
-            else if (value == 29) clear_attrs(Attr::Strike);
-            else if (value == 39) style_.fg = profile_.default_style.fg;
-            else if (value == 49) style_.bg = profile_.default_style.bg;
-            else if ((value >= 30 && value <= 37) || (value >= 90 && value <= 97))
-                style_.fg = ansi_color(value >= 90 ? value - 90 + 8 : value - 30);
-            else if ((value >= 40 && value <= 47) || (value >= 100 && value <= 107))
-                style_.bg = ansi_color(value >= 100 ? value - 100 + 8 : value - 40);
-            else if (value == 38 || value == 48) {
-                const bool background = value == 48;
-                if (index + 1 >= values.size()) {
-                    diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "truncated child extended color");
-                    return;
-                }
-                const int mode = values[++index];
-                Color color;
-                if (mode == 5 && index + 1 < values.size() && values[index + 1] >= 0 && values[index + 1] <= 255) {
-                    color = ansi_color(values[++index]);
-                } else if (mode == 2 && index + 3 < values.size() && values[index + 1] >= 0 &&
-                           values[index + 1] <= 255 && values[index + 2] >= 0 && values[index + 2] <= 255 &&
-                           values[index + 3] >= 0 && values[index + 3] <= 255) {
-                    color = Color::rgb(static_cast<std::uint8_t>(values[index + 1]),
-                                       static_cast<std::uint8_t>(values[index + 2]),
-                                       static_cast<std::uint8_t>(values[index + 3]));
-                    index += 3;
-                } else {
-                    diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "invalid child extended color");
-                    return;
-                }
-                if (background) style_.bg = color;
-                else style_.fg = color;
-            } else if (value != 5 && value != 6) {
-                diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child SGR parameter");
-            }
-        }
+        handle_sgr();
         return;
     }
     if (final_byte == 'n' && profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
@@ -687,6 +791,330 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child CSI sequence");
+}
+
+// Whether a child's picture can actually be shown, which is what every
+// graphics answer below is derived from. The profile has to declare Sixel,
+// and the raster plane a decode allocates — the child's whole window — has to
+// fit the configured pixel budget. Past that budget every image the child
+// sends is dropped, so the honest answer to "can you show one?" is no: a
+// program told no draws its text fallback, where one told yes sends a picture
+// that dies in the decoder and leaves a blank where it should have been.
+bool TerminalEmulator::graphics_available() const noexcept {
+    if (!profile_.sixel) return false;
+    const std::int64_t pixels =
+        saturated_product({cells_.width, cells_.height, std::max(1, profile_.cell_pixels.width),
+                           std::max(1, profile_.cell_pixels.height)});
+    return pixels <= static_cast<std::int64_t>(std::min<std::size_t>(
+                         options_.max_image_pixels, static_cast<std::size_t>(std::numeric_limits<int>::max())));
+}
+
+// XTSMGRAPHICS (CSI ? Pi ; Pa ; Pv S), the graphics counterpart of the
+// XTWINOPS metrics above. Pi names the item — 1 the Sixel colour registers,
+// 2 the Sixel geometry, 3 ReGIS geometry — and Pa the action: 1 read the
+// current value, 2 reset it to the default, 3 set it, 4 read the maximum.
+// The reply repeats Pi, then a status: 0 success, 1 an item this terminal
+// does not know, 2 an action it does not know, 3 a request it will not
+// grant. Something is always sent back, because the program on the other end
+// is waiting for an answer and silence costs it a timeout before it gives up.
+void TerminalEmulator::handle_graphics_attributes() {
+    if (profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) return;
+    const int item = parameter(control_, 0, 0);
+    const int action = parameter(control_, 1, 0);
+    const std::string reply = "\x1b[?" + std::to_string(item) + ";";
+    if (item < 1 || item > 3) {
+        send_input(reply + "1;0S");
+        return;
+    }
+    if (action < 1 || action > 4) {
+        send_input(reply + "2;0S");
+        return;
+    }
+    // Reading, resetting and reading the maximum all land on the same number
+    // here: these limits are the decoder's palette and the child's own
+    // window, neither of which a child may move. A set request is therefore
+    // refused rather than acknowledged — an acknowledgement would be a
+    // promise the next image breaks.
+    if (action == 3 || item == 3 || !graphics_available()) {
+        send_input(reply + "3;0S");
+        return;
+    }
+    if (item == 1) {
+        send_input(reply + "0;" + std::to_string(kSixelColorRegisters) + "S");
+        return;
+    }
+    // The geometry a Sixel may occupy is the window it is drawn into: what
+    // reaches past the last cell is cropped away and never seen.
+    send_input(reply + "0;" + std::to_string(std::max(1, profile_.cell_pixels.width) * cells_.width) +
+               ";" + std::to_string(std::max(1, profile_.cell_pixels.height) * cells_.height) + "S");
+}
+
+// The kitty keyboard protocol, from the terminal's side. A program pushes the
+// enhancements it wants, uses them, and pops them back off on its way out —
+// the stack is what makes that safe when the program is killed, nested, or
+// interrupted by another that wants something different.
+//
+// The stack is per screen, so a full-screen editor's settings do not follow
+// it out onto the shell's screen. A program that dies without popping leaves
+// its flags on the alternate screen it died in, and the shell underneath is
+// unaffected.
+void TerminalEmulator::handle_keyboard_protocol() {
+    KeyboardState& state = alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_;
+    const char introducer = control_.front();
+    const std::string_view parameters(std::string_view(control_).substr(1));
+    const auto requested = [&parameters](std::size_t index) {
+        return static_cast<TerminalKeyboardFlags>(static_cast<std::uint8_t>(
+            std::clamp(parameter(parameters, index, 0), 0, 0xFF)));
+    };
+    // Only what this terminal can really deliver takes effect, so what a
+    // program reads back is what it will really receive.
+    const auto honoured = [](TerminalKeyboardFlags flags) {
+        return flags & supported_terminal_keyboard_flags();
+    };
+
+    switch (introducer) {
+        case '?':
+            if (profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) return;
+            send_input("\x1b[?" + std::to_string(static_cast<int>(state.flags)) + "u");
+            return;
+        case '>': {
+            // A stack has to have a bottom. Dropping the oldest entry keeps a
+            // program that pushes without popping from growing this without
+            // limit; it can only ever lose a setting it had already stopped
+            // tracking.
+            constexpr std::size_t kMaxDepth = 16;
+            if (state.stack.size() >= kMaxDepth) state.stack.erase(state.stack.begin());
+            state.stack.push_back(state.flags);
+            state.flags = honoured(requested(0));
+            return;
+        }
+        case '<': {
+            const int count = std::max(0, parameter(parameters, 0, 1));
+            for (int popped = 0; popped < count; ++popped) {
+                if (state.stack.empty()) {
+                    // Popping more than was ever pushed returns to no
+                    // enhancements at all: that is the state a terminal
+                    // starts in, and the only safe answer to "put it back the
+                    // way it was" when nothing was saved.
+                    state.flags = TerminalKeyboardFlags::None;
+                    break;
+                }
+                state.flags = state.stack.back();
+                state.stack.pop_back();
+            }
+            return;
+        }
+        case '=': {
+            const TerminalKeyboardFlags flags = honoured(requested(0));
+            const int mode = parameter(parameters, 1, 1);
+            if (mode == 2) state.flags = state.flags | flags;
+            else if (mode == 3)
+                state.flags = static_cast<TerminalKeyboardFlags>(
+                    static_cast<std::uint8_t>(state.flags) & ~static_cast<std::uint8_t>(flags));
+            else state.flags = flags;
+            return;
+        }
+        default:
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child CSI sequence");
+            return;
+    }
+}
+
+// SGR is the one control a child writes with sub-parameters. `4:3` is a curly
+// underline rather than parameters 4 and 3, and `58:2::R:G:B` is one colour
+// rather than five numbers, so the parameter list is read as values each with
+// their own colon-separated tail. Everything else in this parser takes plain
+// semicolon-separated numbers, which is why this reading is here and not in
+// `parameter()`.
+//
+// The reading is deliberately not shared with the virtual display's, which
+// decodes what the Presenter writes: that decoder is an independent oracle
+// (D-035), and an oracle that agreed with the thing it checks by construction
+// would not be one.
+std::vector<TerminalEmulator::SgrParameter> TerminalEmulator::parse_sgr_parameters(
+    std::string_view text, bool& valid) {
+    std::vector<SgrParameter> parameters;
+    valid = true;
+    std::size_t position = 0;
+    for (;;) {
+        SgrParameter parameter;
+        for (bool first = true;; first = false) {
+            const std::size_t start = position;
+            while (position < text.size() && text[position] >= '0' && text[position] <= '9') ++position;
+            int value = 0;
+            if (position > start) {
+                const auto parsed =
+                    std::from_chars(text.data() + start, text.data() + position, value);
+                // A run of digits longer than an int is not a colour anybody
+                // meant; treat it as the malformed sequence it is.
+                if (parsed.ec != std::errc{}) {
+                    valid = false;
+                    return {};
+                }
+            }
+            if (first) parameter.value = value;
+            else parameter.subs.push_back(value);
+            if (position == text.size() || text[position] != ':') break;
+            ++position;
+        }
+        parameters.push_back(std::move(parameter));
+        if (position == text.size()) break;
+        if (text[position] != ';') {
+            valid = false;
+            return {};
+        }
+        ++position;
+        if (position == text.size()) {
+            parameters.push_back(SgrParameter{});
+            break;
+        }
+    }
+    return parameters;
+}
+
+void TerminalEmulator::handle_sgr() {
+    bool valid = false;
+    const std::vector<SgrParameter> parameters = parse_sgr_parameters(control_, valid);
+    if (!valid || parameters.empty()) {
+        diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "malformed child SGR sequence");
+        return;
+    }
+    const auto clear_attrs = [this](Attr attrs) {
+        style_.attrs = static_cast<Attr>(static_cast<std::uint8_t>(style_.attrs) &
+                                         static_cast<std::uint8_t>(~static_cast<std::uint8_t>(attrs)));
+    };
+    // An underline that is not being drawn has no shape and no colour of its
+    // own. Keeping that canonical is what lets two cells that look the same
+    // compare the same — and the presenter redraw only what changed.
+    const auto clear_underline = [this, &clear_attrs] {
+        clear_attrs(Attr::Underline);
+        style_.underline = UnderlineShape::Straight;
+        style_.underline_color = Color::default_color();
+    };
+
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+        const SgrParameter& parameter = parameters[index];
+        const int value = parameter.value;
+        if (value == 0) style_ = profile_.default_style;
+        else if (value == 1) style_.attrs |= Attr::Bold;
+        else if (value == 2) style_.attrs |= Attr::Dim;
+        else if (value == 3) style_.attrs |= Attr::Italic;
+        else if (value == 4) {
+            // Bare `4` is the rule underlines have always been; `4:0` turns
+            // it off, and the remaining shapes are what a compiler's
+            // diagnostics use to tell a spelling mistake from a type error.
+            const int shape = parameter.subs.empty() ? 1 : parameter.subs.front();
+            if (parameter.subs.size() > 1) {
+                diagnostic(TerminalDiagnostic::Kind::MalformedSequence,
+                           "malformed child underline style");
+                return;
+            }
+            if (shape == 0) {
+                clear_underline();
+            } else if (shape >= 1 && shape <= 5) {
+                style_.attrs |= Attr::Underline;
+                style_.underline = shape == 2   ? UnderlineShape::Double
+                                   : shape == 3 ? UnderlineShape::Curly
+                                   : shape == 4 ? UnderlineShape::Dotted
+                                   : shape == 5 ? UnderlineShape::Dashed
+                                                : UnderlineShape::Straight;
+            } else {
+                // A shape nobody has defined is not a reason to lose the
+                // underline the program plainly wants.
+                style_.attrs |= Attr::Underline;
+                style_.underline = UnderlineShape::Straight;
+                diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                           "unsupported child underline style");
+            }
+        }
+        else if (value == 7) style_.attrs |= Attr::Reverse;
+        else if (value == 9) style_.attrs |= Attr::Strike;
+        // SGR 21 is a double underline. It was once "bold off" on hardware
+        // that could not do either, and terminals that answer it at all now
+        // answer it this way; 22 is the reset every program actually uses to
+        // end bold.
+        else if (value == 21) {
+            style_.attrs |= Attr::Underline;
+            style_.underline = UnderlineShape::Double;
+        }
+        else if (value == 22) clear_attrs(Attr::Bold | Attr::Dim);
+        else if (value == 23) clear_attrs(Attr::Italic);
+        else if (value == 24) clear_underline();
+        else if (value == 27) clear_attrs(Attr::Reverse);
+        else if (value == 29) clear_attrs(Attr::Strike);
+        else if (value == 39) style_.fg = profile_.default_style.fg;
+        else if (value == 49) style_.bg = profile_.default_style.bg;
+        else if (value == 59) style_.underline_color = Color::default_color();
+        else if ((value >= 30 && value <= 37) || (value >= 90 && value <= 97))
+            style_.fg = Color::indexed(static_cast<std::uint8_t>(value >= 90 ? value - 90 + 8 : value - 30));
+        else if ((value >= 40 && value <= 47) || (value >= 100 && value <= 107))
+            style_.bg = Color::indexed(static_cast<std::uint8_t>(value >= 100 ? value - 100 + 8 : value - 40));
+        else if (value == 38 || value == 48 || value == 58) {
+            Color color;
+            if (!extended_color(parameters, index, parameter, color)) return;
+            if (value == 48) style_.bg = color;
+            else if (value == 58) style_.underline_color = color;
+            else style_.fg = color;
+        } else if (value != 5 && value != 6) {
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child SGR parameter");
+        }
+    }
+}
+
+// The colour that follows `38`, `48` or `58`, in either of the two spellings
+// programs use: the older one where the parts are ordinary parameters
+// (`38;5;196`), and the ISO 8613-6 one where they are sub-parameters of a
+// single parameter (`38:2::12:34:56`, with the colour space left unnamed).
+// The second is the form that made colon sub-parameters necessary at all, and
+// nvim writes underline colours in it.
+//
+// `index` advances past whatever this colour consumed. A malformed colour
+// abandons the rest of the sequence: the parameters after it can no longer be
+// located, and applying them by guesswork is how a stray colour ends up on
+// the screen.
+bool TerminalEmulator::extended_color(const std::vector<SgrParameter>& parameters,
+                                      std::size_t& index, const SgrParameter& parameter,
+                                      Color& color) {
+    const auto in_byte_range = [](int value) { return value >= 0 && value <= 255; };
+    if (!parameter.subs.empty()) {
+        const std::vector<int>& subs = parameter.subs;
+        const int mode = subs.front();
+        if (mode == 5 && subs.size() >= 2 && in_byte_range(subs[1])) {
+            color = Color::indexed(static_cast<std::uint8_t>(subs[1]));
+            return true;
+        }
+        // Five sub-parameters carry the colour space that the three-component
+        // form omits; both spellings are in circulation.
+        const std::size_t first = subs.size() >= 5 ? 2 : 1;
+        if (mode == 2 && subs.size() >= first + 3 && in_byte_range(subs[first]) &&
+            in_byte_range(subs[first + 1]) && in_byte_range(subs[first + 2])) {
+            color = Color::rgb(static_cast<std::uint8_t>(subs[first]),
+                               static_cast<std::uint8_t>(subs[first + 1]),
+                               static_cast<std::uint8_t>(subs[first + 2]));
+            return true;
+        }
+        diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "invalid child extended color");
+        return false;
+    }
+    if (index + 1 >= parameters.size()) {
+        diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "truncated child extended color");
+        return false;
+    }
+    const int mode = parameters[++index].value;
+    if (mode == 5 && index + 1 < parameters.size() && in_byte_range(parameters[index + 1].value)) {
+        color = Color::indexed(static_cast<std::uint8_t>(parameters[++index].value));
+        return true;
+    }
+    if (mode == 2 && index + 3 < parameters.size() && in_byte_range(parameters[index + 1].value) &&
+        in_byte_range(parameters[index + 2].value) && in_byte_range(parameters[index + 3].value)) {
+        color = Color::rgb(static_cast<std::uint8_t>(parameters[index + 1].value),
+                           static_cast<std::uint8_t>(parameters[index + 2].value),
+                           static_cast<std::uint8_t>(parameters[index + 3].value));
+        index += 3;
+        return true;
+    }
+    diagnostic(TerminalDiagnostic::Kind::MalformedSequence, "invalid child extended color");
+    return false;
 }
 
 // The DEC Special Graphics repertoire, which occupies the ASCII letter
@@ -786,8 +1214,13 @@ Cell TerminalEmulator::erase_cell() const noexcept {
     // than dropped: while it is set, what the reader sees as the background
     // is the selected foreground.
     const bool reversed = has_attr(style_.attrs, Attr::Reverse);
-    const Color background = reversed ? style_.fg : style_.bg;
-    return Cell::from_grapheme(" ", Style{profile_.default_style.fg, background, Attr{}});
+    // Built from a default Style rather than braced field-by-field: an erased
+    // cell keeps the background and nothing else, so every other part of the
+    // style — present or added later — should be whatever "unset" means.
+    Style blank;
+    blank.fg = profile_.default_style.fg;
+    blank.bg = reversed ? style_.fg : style_.bg;
+    return Cell::from_grapheme(" ", blank);
 }
 
 void TerminalEmulator::erase_cells(int left, int top, int right, int bottom) noexcept {

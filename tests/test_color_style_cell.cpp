@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/core/cell.hpp"
 #include "cvision/core/color.hpp"
+#include "cvision/core/palette.hpp"
 #include "cvision/core/style.hpp"
 
 #include "cvision/testing/cktest.hpp"
@@ -10,12 +11,64 @@ CK_TEST(color_default_and_rgb) {
     CK_CHECK(ckv::Color::default_color().is_default());
     const ckv::Color c = ckv::Color::rgb(10, 20, 30);
     CK_CHECK(!c.is_default());
+    CK_CHECK(c.is_rgb());
     CK_CHECK(c.r() == 10);
     CK_CHECK(c.g() == 20);
     CK_CHECK(c.b() == 30);
     CK_CHECK(ckv::Color::rgb(1, 2, 3) == ckv::Color::rgb(1, 2, 3));
     CK_CHECK(ckv::Color::rgb(1, 2, 3) != ckv::Color::rgb(1, 2, 4));
     CK_CHECK(ckv::Color::default_color() != ckv::Color::rgb(0, 0, 0));
+}
+
+CK_TEST(a_palette_colour_stays_the_index_it_was_asked_for) {
+    // The whole point of the third kind: "the palette's red" is a different
+    // fact from "this particular red", and only the first can be re-themed.
+    const ckv::Color indexed = ckv::Color::indexed(1);
+    CK_CHECK(indexed.is_indexed());
+    CK_CHECK(!indexed.is_default());
+    CK_CHECK(!indexed.is_rgb());
+    CK_CHECK(indexed.index() == 1);
+    CK_CHECK(indexed == ckv::Color::indexed(1));
+    CK_CHECK(indexed != ckv::Color::indexed(2));
+    // ...and it is not the same value as the colour it currently resolves to.
+    CK_CHECK(indexed != ckv::palette_color(1));
+}
+
+CK_TEST(the_palette_resolves_indices_the_way_the_convention_fixed_them) {
+    // A program computes a cube entry arithmetically and expects the levels
+    // every terminal shares; the grey ramp is the same kind of promise.
+    CK_CHECK(ckv::palette_color(16) == ckv::Color::rgb(0, 0, 0));
+    CK_CHECK(ckv::palette_color(16 + 36 * 5 + 6 * 5 + 5) == ckv::Color::rgb(255, 255, 255));
+    CK_CHECK(ckv::palette_color(16 + 36 * 2) == ckv::Color::rgb(135, 0, 0));
+    CK_CHECK(ckv::palette_color(232) == ckv::Color::rgb(8, 8, 8));
+    CK_CHECK(ckv::palette_color(255) == ckv::Color::rgb(238, 238, 238));
+}
+
+CK_TEST(resolving_a_colour_yields_channels_whatever_kind_it_was) {
+    const ckv::Color fallback = ckv::Color::rgb(1, 2, 3);
+    CK_CHECK(ckv::resolved_color(ckv::Color::default_color(), fallback) == fallback);
+    CK_CHECK(ckv::resolved_color(ckv::Color::rgb(9, 9, 9), fallback) == ckv::Color::rgb(9, 9, 9));
+    CK_CHECK(ckv::resolved_color(ckv::Color::indexed(4), fallback) == ckv::palette_color(4));
+    // A fallback may itself be a palette entry; the answer is still channels.
+    CK_CHECK(ckv::resolved_color(ckv::Color::default_color(), ckv::Color::indexed(2)) ==
+             ckv::palette_color(2));
+    // And a fallback with nothing to give leaves black rather than an index.
+    CK_CHECK(ckv::resolved_color(ckv::Color::default_color(), ckv::Color::default_color()) ==
+             ckv::Color::rgb(0, 0, 0));
+}
+
+CK_TEST(an_underline_carries_a_shape_and_a_colour_of_its_own) {
+    ckv::Style style;
+    CK_CHECK(style.underline == ckv::UnderlineShape::Straight);
+    CK_CHECK(style.underline_color.is_default());  // the rule follows the text
+
+    style.attrs |= ckv::Attr::Underline;
+    style.underline = ckv::UnderlineShape::Curly;
+    style.underline_color = ckv::Color::indexed(1);
+    ckv::Style other = style;
+    CK_CHECK(other == style);
+    other.underline = ckv::UnderlineShape::Dotted;
+    CK_CHECK(other != style);  // a different rule is a different appearance
 }
 
 CK_TEST(style_attrs_combine) {

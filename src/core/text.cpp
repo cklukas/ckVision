@@ -304,4 +304,27 @@ std::string sanitize_display_text(std::string_view text) {
     return out;
 }
 
+std::string sanitize_clipboard_text(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const std::size_t start = pos;
+        const char32_t cp = utf8::decode(text, pos);
+        if (cp == U'\n' || cp == U'\t') {
+            out += static_cast<char>(cp);
+        } else if (cp == U'\r') {
+            // One line break, however it was spelled: a lone CR and the CR of
+            // a CRLF pair both end a line and do nothing else.
+            out += '\n';
+            if (pos < text.size() && text[pos] == '\n') ++pos;
+        } else if (is_control_for_sanitization(cp) || cp == utf8::replacement_char) {
+            out += "\xEF\xBF\xBD"; // U+FFFD
+        } else {
+            out.append(text.substr(start, pos - start));
+        }
+    }
+    return out;
+}
+
 } // namespace ckv::text

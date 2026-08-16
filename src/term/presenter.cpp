@@ -5,6 +5,7 @@
 #include <climits>
 #include <string>
 
+#include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 
@@ -70,6 +71,29 @@ int nearest_16(uint8_t r, uint8_t g, uint8_t b) noexcept {
 void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth depth) {
     if (color.is_default()) return;
     const int base_fg = is_bg ? 48 : 38;
+    // A palette index goes out as a palette index. The host has a palette of
+    // its own, themed by the person using it, and index 1 means "their red"
+    // there just as it did to whoever asked for it. Resolving it here would
+    // substitute ckVision's opinion of red for theirs, and — where the host
+    // has fewer colours — would quantise a number that needed no quantising.
+    if (color.is_indexed()) {
+        const int index = color.index();
+        if (depth != ColorDepth::Mono16) {
+            out += ';';
+            out += std::to_string(base_fg);
+            out += ";5;";
+            out += std::to_string(index);
+            return;
+        }
+        // Sixteen colours: the low sixteen are exactly the codes this host
+        // has, and the rest are resolved and matched to the nearest of them.
+        const int basic = index < 16 ? index
+                                     : nearest_16(palette_color(index).r(), palette_color(index).g(),
+                                                  palette_color(index).b());
+        out += ';';
+        out += std::to_string((basic < 8) ? (basic + (is_bg ? 40 : 30)) : (basic - 8 + (is_bg ? 100 : 90)));
+        return;
+    }
     switch (depth) {
         case ColorDepth::TrueColor:
             out += ';';
@@ -97,6 +121,44 @@ void append_color_sgr(std::string& out, Color color, bool is_bg, ColorDepth dept
     }
 }
 
+// SGR 4 is the underline every terminal has had since underlines existed.
+// Its sub-parameter form — `4:3` for a curl, `4:4` for dots — names a shape
+// instead, and a host that has never heard of it must not be sent one: a
+// terminal that reads `4:3` as two ordinary parameters applies italics to
+// text that asked for a wavy rule. Where the capability is absent every shape
+// therefore degrades to the plain rule, which is exactly what an underline
+// meant before the shapes existed and is still legible as emphasis.
+//
+// The underline's own colour (`58`) travels with it, in the colon form the
+// terminals that implement it document; `59` is unnecessary because every
+// style begins with a full reset.
+void append_underline_sgr(std::string& out, const Style& style, bool extended) {
+    if (!extended) {
+        out += ";4";
+        return;
+    }
+    switch (style.underline) {
+        case UnderlineShape::Straight: out += ";4"; break;
+        case UnderlineShape::Double: out += ";4:2"; break;
+        case UnderlineShape::Curly: out += ";4:3"; break;
+        case UnderlineShape::Dotted: out += ";4:4"; break;
+        case UnderlineShape::Dashed: out += ";4:5"; break;
+    }
+    const Color color = style.underline_color;
+    if (color.is_default()) return;  // the rule follows the text, as it does by default
+    if (color.is_indexed()) {
+        out += ";58:5:";
+        out += std::to_string(color.index());
+        return;
+    }
+    out += ";58:2::";
+    out += std::to_string(color.r());
+    out += ':';
+    out += std::to_string(color.g());
+    out += ':';
+    out += std::to_string(color.b());
+}
+
 // D-019: without an interoperable terminal width-reporting protocol, only
 // ASCII has a sufficiently narrow, stable rendering contract to trust its
 // natural cursor advance. Every non-ASCII grapheme is therefore a cursor
@@ -121,16 +183,16 @@ bool is_width_unsafe(std::string_view grapheme) noexcept {
 
 }  // namespace
 
-std::string style_to_sgr(const Style& style, ColorDepth depth) {
+std::string style_to_sgr(const Style& style, const Capabilities& caps) {
     std::string out = "\x1B[0";
     if (has_attr(style.attrs, Attr::Bold)) out += ";1";
     if (has_attr(style.attrs, Attr::Dim)) out += ";2";
     if (has_attr(style.attrs, Attr::Italic)) out += ";3";
-    if (has_attr(style.attrs, Attr::Underline)) out += ";4";
+    if (has_attr(style.attrs, Attr::Underline)) append_underline_sgr(out, style, caps.underline_styles);
     if (has_attr(style.attrs, Attr::Reverse)) out += ";7";
     if (has_attr(style.attrs, Attr::Strike)) out += ";9";
-    append_color_sgr(out, style.fg, false, depth);
-    append_color_sgr(out, style.bg, true, depth);
+    append_color_sgr(out, style.fg, false, caps.color_depth);
+    append_color_sgr(out, style.bg, true, caps.color_depth);
     out += 'm';
     return out;
 }
@@ -207,7 +269,7 @@ void emit_cursor_shape(std::string& out, CursorShape shape, bool blink) {
 void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& rasters,
                              bool raster_coverage_changed, std::string& out) {
     const Size size = frame.size();
-    const ColorDepth depth = terminal_.capabilities().color_depth;
+    const Capabilities& caps = terminal_.capabilities();
 
     Point believed_cursor{-1, -1};
     bool style_known = false;
@@ -272,7 +334,7 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
                 const Cell c = presentation_cell(frame, Point{rx, y}, rasters);
                 if (c.is_continuation()) continue;
                 if (!style_known || !(c.style() == current_style)) {
-                    out += style_to_sgr(c.style(), depth);
+                    out += style_to_sgr(c.style(), caps);
                     current_style = c.style();
                     style_known = true;
                 }
@@ -342,7 +404,7 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         // immediately before the DCS rather than inheriting whichever
         // style happened to end the cell-diff traversal.
         out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
-                            terminal_.capabilities().color_depth);
+                            terminal_.capabilities());
         out += encode_sixel(cropped, terminal_.capabilities().sixel_color_registers);
     }
 }

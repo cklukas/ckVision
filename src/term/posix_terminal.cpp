@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/core/base64.hpp"
 #include "cvision/term/presenter.hpp"  // sanitize_osc_text
 
 namespace ckv::term {
@@ -390,37 +391,6 @@ void write_all(int fd, std::string_view bytes) {
     }
 }
 
-std::string base64_encode(std::string_view data) {
-    static constexpr char kAlphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve((data.size() + 2) / 3 * 4);
-    std::size_t i = 0;
-    for (; i + 3 <= data.size(); i += 3) {
-        const std::uint32_t n = (static_cast<unsigned char>(data[i]) << 16) |
-                                 (static_cast<unsigned char>(data[i + 1]) << 8) |
-                                 static_cast<unsigned char>(data[i + 2]);
-        out += kAlphabet[(n >> 18) & 0x3F];
-        out += kAlphabet[(n >> 12) & 0x3F];
-        out += kAlphabet[(n >> 6) & 0x3F];
-        out += kAlphabet[n & 0x3F];
-    }
-    const std::size_t remaining = data.size() - i;
-    if (remaining == 1) {
-        const std::uint32_t n = static_cast<unsigned char>(data[i]) << 16;
-        out += kAlphabet[(n >> 18) & 0x3F];
-        out += kAlphabet[(n >> 12) & 0x3F];
-        out += "==";
-    } else if (remaining == 2) {
-        const std::uint32_t n =
-            (static_cast<unsigned char>(data[i]) << 16) | (static_cast<unsigned char>(data[i + 1]) << 8);
-        out += kAlphabet[(n >> 18) & 0x3F];
-        out += kAlphabet[(n >> 12) & 0x3F];
-        out += kAlphabet[(n >> 6) & 0x3F];
-        out += '=';
-    }
-    return out;
-}
 
 }  // namespace
 
@@ -858,7 +828,7 @@ void PosixTerminal::bell() { write_all(output_fd_, "\x07"); }
 
 void PosixTerminal::write_clipboard(std::string_view text) {
     if (!caps_.clipboard_write) return;
-    write_all(output_fd_, "\x1B]52;c;" + base64_encode(text) + "\x07");
+    write_all(output_fd_, "\x1B]52;c;" + base64::encode(text) + "\x07");
 }
 
 void PosixTerminal::wake() noexcept {

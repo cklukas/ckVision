@@ -55,4 +55,13 @@ std::string elide_to_width(std::string_view text, int max_columns,
 // itself replaced per codepoint (see utf8::decode).
 std::string sanitize_display_text(std::string_view text);
 
+// The same guarantee for text on its way to a clipboard rather than into a
+// cell, where the difference is that a clipboard holds documents: tab and
+// line break are content there, not control data, and a copy that lost them
+// would paste back as one run-on line. CR and CRLF both become a single LF —
+// a line break is a line break, and a bare CR left in clipboard text behaves
+// as Enter when it is pasted into a shell. Every other C0/C1 control, and
+// malformed UTF-8, is replaced with U+FFFD exactly as above.
+std::string sanitize_clipboard_text(std::string_view text);
+
 }  // namespace ckv::text

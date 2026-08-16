@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "cvision/core/utf8.hpp"
 #include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
@@ -36,6 +37,127 @@ std::string encode_cursor_key(char final_byte, Modifier modifiers, bool applicat
     return "\x1b[1;" + std::to_string(parameter) + final_byte;
 }
 
+// --- The kitty keyboard protocol, on the side that sends keys -------------
+//
+// The legacy encoding above is correct and stays the default. What it cannot
+// do is say some things at all: Ctrl+I and Tab are the same byte, a lone
+// Escape is indistinguishable from the start of a sequence until a timer
+// expires, and no key ever reports being released. A program that needs those
+// asks for them, and then this encoding is what it gets.
+
+int kitty_modifier_parameter(Modifier modifiers) noexcept {
+    // The xterm parameter, extended with Super — same one-based counting, so
+    // "no modifiers" is 1 in both.
+    int parameter = xterm_modifier_parameter(modifiers);
+    if (has_modifier(modifiers, Modifier::Super)) parameter += 8;
+    return parameter;
+}
+
+// Press is 1 and is left out, as the protocol specifies; repeat and release
+// are the two that have to be said.
+int kitty_event_type(KeyAction action) noexcept {
+    switch (action) {
+        case KeyAction::Press: return 1;
+        case KeyAction::Repeat: return 2;
+        case KeyAction::Release: return 3;
+    }
+    return 1;
+}
+
+// The text a key produced, as the codepoints the protocol carries it in.
+std::string kitty_text_codepoints(std::string_view text) {
+    std::string out;
+    std::size_t position = 0;
+    while (position < text.size()) {
+        const char32_t codepoint = utf8::decode(text, position);
+        if (!out.empty()) out += ':';
+        out += std::to_string(static_cast<std::uint32_t>(codepoint));
+    }
+    return out;
+}
+
+// `CSI <number> ; <modifiers>[:<event>] [; <text>] <final>`, with every field
+// the protocol allows to be left out left out — a bare press of an unmodified
+// key is `CSI 97 u`, not `CSI 97;1:1 u`.
+std::string kitty_sequence(int number, char final_byte, int modifiers, int event,
+                           std::string_view text) {
+    std::string out = "\x1b[";
+    out += std::to_string(number);
+    if (modifiers != 1 || event != 1 || !text.empty()) {
+        out += ';';
+        out += std::to_string(modifiers);
+        if (event != 1) {
+            out += ':';
+            out += std::to_string(event);
+        }
+    }
+    if (!text.empty()) {
+        out += ';';
+        out += text;
+    }
+    out += final_byte;
+    return out;
+}
+
+// The codepoint that names a key: the character it produces with no modifiers
+// applied, which for the Latin letters means the lower-case one. ckVision's
+// input model carries the text a key produced rather than the layout behind
+// it, so this is as close to "the key itself" as the model can get — and it
+// is exact for every key a program actually binds.
+char32_t kitty_key_code(std::string_view text) noexcept {
+    if (text.empty()) return 0;
+    std::size_t position = 0;
+    const char32_t codepoint = utf8::decode(text, position);
+    if (codepoint >= U'A' && codepoint <= U'Z') return codepoint - U'A' + U'a';
+    return codepoint;
+}
+
+// Which of the named keys keep a legacy escape form under the protocol, and
+// what it is. The protocol deliberately does not renumber the keys that
+// already had an encoding: Up stays `CSI A`, gaining only the fields it never
+// had room for. `number` is the parameter the final byte expects — 1 for the
+// letter finals, the key's own number for `~`.
+struct LegacyForm {
+    int number = 1;
+    char final_byte = 'u';
+    bool exists = false;
+};
+
+LegacyForm legacy_form(Key key) noexcept {
+    switch (key) {
+        case Key::Up: return {1, 'A', true};
+        case Key::Down: return {1, 'B', true};
+        case Key::Right: return {1, 'C', true};
+        case Key::Left: return {1, 'D', true};
+        case Key::Home: return {1, 'H', true};
+        case Key::End: return {1, 'F', true};
+        case Key::F1: return {1, 'P', true};
+        case Key::F2: return {1, 'Q', true};
+        case Key::F3: return {1, 'R', true};
+        case Key::F4: return {1, 'S', true};
+        case Key::Insert: return {2, '~', true};
+        case Key::Delete: return {3, '~', true};
+        case Key::PageUp: return {5, '~', true};
+        case Key::PageDown: return {6, '~', true};
+        case Key::F5: return {15, '~', true};
+        case Key::F6: return {17, '~', true};
+        case Key::F7: return {18, '~', true};
+        case Key::F8: return {19, '~', true};
+        case Key::F9: return {20, '~', true};
+        case Key::F10: return {21, '~', true};
+        case Key::F11: return {23, '~', true};
+        case Key::F12: return {24, '~', true};
+        // The four that are control characters rather than sequences. They
+        // have no parameters to grow, so under the protocol they become
+        // ordinary `CSI ... u` keys, numbered by the code they used to send.
+        case Key::Escape: return {27, 'u', false};
+        case Key::Enter: return {13, 'u', false};
+        case Key::Tab: return {9, 'u', false};
+        case Key::Backspace: return {127, 'u', false};
+        default: return {};
+    }
+}
+
 }  // namespace
 
 TerminalView::TerminalView(core::TerminalSubsession& session) : session_(&session) {
@@ -57,7 +179,13 @@ void TerminalView::on_focus(const FocusEvent& event) {
 }
 
 void TerminalView::on_terminal_subsession_changed(const core::TerminalSubsession& session) {
-    if (&session == session_) invalidate();
+    if (&session != session_) return;
+    const core::TerminalSnapshot snapshot = session_->snapshot();
+    if (snapshot.clipboard_serial != forwarded_clipboard_serial_) {
+        forwarded_clipboard_serial_ = snapshot.clipboard_serial;
+        if (on_clipboard_write) on_clipboard_write(snapshot.clipboard_text);
+    }
+    invalidate();
 }
 
 std::optional<CursorState> TerminalView::cursor_state() const {
@@ -154,6 +282,62 @@ void TerminalView::draw(scene::Painter& painter) {
     }
 }
 
+// The protocol's own encoding, for a child that asked for it. Returns an
+// empty string when this key is one the enhancements in force do not cover,
+// which leaves the legacy encoding to say it instead.
+std::string TerminalView::encode_kitty_key(const KeyEvent& event,
+                                           core::TerminalKeyboardFlags flags) {
+    using core::TerminalKeyboardFlags;
+    const bool report_all = has_flag(flags, TerminalKeyboardFlags::ReportAllKeysAsEscapeCodes);
+    const bool disambiguate =
+        report_all || has_flag(flags, TerminalKeyboardFlags::DisambiguateEscapeCodes);
+    if (!disambiguate) return {};
+
+    const Modifier modifiers = event.chord.modifiers;
+    const int modifier_parameter = kitty_modifier_parameter(modifiers);
+    const int event_type =
+        has_flag(flags, TerminalKeyboardFlags::ReportEventTypes) ? kitty_event_type(event.action) : 1;
+    // Without event reporting there is nothing a release can be encoded as,
+    // and a release delivered as a press would be worse than silence.
+    if (event_type == 1 && event.action != KeyAction::Press) return {};
+
+    const bool wants_text = has_flag(flags, TerminalKeyboardFlags::ReportAssociatedText);
+    // A release produced no text; neither did a key held with Ctrl.
+    const std::string text =
+        wants_text && event.action != KeyAction::Release && !event.chord.text.empty() &&
+                !has_modifier(modifiers, Modifier::Ctrl)
+            ? kitty_text_codepoints(event.chord.text)
+            : std::string{};
+
+    if (event.chord.key == Key::Char) {
+        if (event.chord.text.empty()) return {};
+        // A plain letter is still a letter. Only a program that asked for
+        // every key as an escape code wants `a` to stop being `a`; the
+        // disambiguation flag alone is about the keys that were ambiguous,
+        // which the unmodified ones never were.
+        const bool ambiguous = has_modifier(modifiers, Modifier::Ctrl) ||
+                               has_modifier(modifiers, Modifier::Alt) ||
+                               has_modifier(modifiers, Modifier::Super);
+        if (!report_all && !ambiguous) return {};
+        const char32_t code = kitty_key_code(event.chord.text);
+        if (code == 0) return {};
+        return kitty_sequence(static_cast<int>(code), 'u', modifier_parameter, event_type, text);
+    }
+
+    const LegacyForm form = legacy_form(event.chord.key);
+    if (form.number == 1 && form.final_byte == 'u' && !form.exists) return {};  // a key we do not name
+    if (form.exists)
+        return kitty_sequence(form.number, form.final_byte, modifier_parameter, event_type, text);
+    // Escape, Enter, Tab and Backspace. Their legacy spelling is a control
+    // byte with nowhere to put a modifier, so an unmodified press of one is
+    // left as that byte unless the child asked for every key as an escape
+    // code — but Ctrl+Enter, Shift+Tab and a bare Escape under the protocol
+    // are exactly what the program turned this on to be able to tell apart.
+    const bool bare = modifier_parameter == 1 && event_type == 1;
+    if (!report_all && bare && event.chord.key != Key::Escape) return {};
+    return kitty_sequence(form.number, 'u', modifier_parameter, event_type, text);
+}
+
 std::string TerminalView::encode_key(const KeyEvent& event, bool application_cursor_keys) {
     if (event.action == KeyAction::Release) return {};
     const Modifier modifiers = event.chord.modifiers;
@@ -204,11 +388,22 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
 }
 
 bool TerminalView::on_key(const KeyEvent& event) {
-    if (event.action == KeyAction::Release) return false;
     if (event.chord == parent_escape_) {
-        if (on_parent_escape) on_parent_escape();
+        // The one chord the child never sees, and it is claimed on the press:
+        // letting the matching release through would deliver half a chord to
+        // a program that was told nothing about the other half.
+        if (event.action == KeyAction::Press && on_parent_escape) on_parent_escape();
         return true;
     }
+    const core::TerminalKeyboardFlags keyboard_flags = session_->snapshot().keyboard_flags;
+    if (keyboard_flags != core::TerminalKeyboardFlags::None) {
+        const std::string kitty = encode_kitty_key(event, keyboard_flags);
+        if (!kitty.empty()) {
+            session_->send_input(kitty);
+            return true;
+        }
+    }
+    if (event.action == KeyAction::Release) return false;
     if ((event.chord.key == Key::PageUp || event.chord.key == Key::PageDown) && !session_->snapshot().alternate_buffer) {
         const core::TerminalSnapshot snapshot = session_->snapshot();
         const int history_rows = static_cast<int>(snapshot.scrollback.size() / static_cast<std::size_t>(snapshot.cells.width));
@@ -313,10 +508,33 @@ bool TerminalView::on_mouse(const MouseEvent& event) {
         return true;
     }
     const core::TerminalSnapshot snapshot = session_->snapshot();
-    if (!snapshot.mouse_reporting_enabled) return false;
+    if (!snapshot.mouse_reporting_enabled) return forward_alternate_scroll(event, snapshot);
     const std::string encoded = encode_mouse(event, snapshot.mouse_encoding);
     if (encoded.empty()) return false;
     session_->send_input(encoded);
+    return true;
+}
+
+bool TerminalView::forward_alternate_scroll(const MouseEvent& event,
+                                            const core::TerminalSnapshot& snapshot) {
+    // Only on the alternate screen. A full-screen program owns the whole
+    // window and has somewhere to scroll to; on the primary buffer the wheel
+    // belongs to the terminal's own history, and sending arrow keys there
+    // would type into whatever is at the prompt.
+    if (!snapshot.alternate_buffer || !snapshot.alternate_scroll_enabled) return false;
+    if (event.button != MouseButton::WheelUp && event.button != MouseButton::WheelDown) return false;
+    if (!local_cell(event.cell)) return false;
+    // Three lines to a notch, the convention every terminal that offers this
+    // uses; a wheel that moved one line would need three times the turning
+    // for the same page.
+    constexpr int kLinesPerNotch = 3;
+    const std::string key =
+        encode_cursor_key(event.button == MouseButton::WheelUp ? 'A' : 'B', Modifier::None,
+                          snapshot.application_cursor_keys);
+    std::string bytes;
+    bytes.reserve(key.size() * kLinesPerNotch);
+    for (int line = 0; line < kLinesPerNotch; ++line) bytes += key;
+    session_->send_input(bytes);
     return true;
 }
 

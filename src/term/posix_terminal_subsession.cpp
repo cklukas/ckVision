@@ -57,7 +57,10 @@ bool PosixTerminalSubsession::spawn() {
 
     std::vector<char*> argv;
     argv.reserve(spec_.arguments.size() + 2);
-    argv.push_back(spec_.executable.data());
+    // execve takes the program to run and the name it is run under as two
+    // separate things, and a spec that left them fused could not ask for a
+    // login shell.
+    argv.push_back(spec_.argv0.empty() ? spec_.executable.data() : spec_.argv0.data());
     for (std::string& argument : spec_.arguments) argv.push_back(argument.data());
     argv.push_back(nullptr);
 

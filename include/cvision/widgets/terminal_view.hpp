@@ -27,6 +27,11 @@ public:
     const KeyChord& parent_escape() const noexcept { return parent_escape_; }
     std::function<void()> on_parent_escape;
     std::function<void(std::string)> on_selection_copy;
+    // The child asked to put text on the clipboard with OSC 52, and its
+    // profile allows that. The text has already been decoded, bounded and
+    // sanitized; what to do with it — export it to the system clipboard, hold
+    // it internally, ask first — is the host's decision, not the widget's.
+    std::function<void(std::string)> on_clipboard_write;
 
     void set_cell_metrics(Size cell_pixels);
     void draw(scene::Painter& painter) override;
@@ -43,7 +48,14 @@ protected:
 
 private:
     static std::string encode_key(const KeyEvent& event, bool application_cursor_keys);
+    // The kitty keyboard protocol's encoding, for a child that asked for it.
+    // Empty when the enhancements in force do not cover this key, which
+    // leaves the legacy encoding to say it instead.
+    static std::string encode_kitty_key(const KeyEvent& event, core::TerminalKeyboardFlags flags);
     std::string encode_mouse(const MouseEvent& event, core::TerminalMouseEncoding encoding) const;
+    // Alternate scroll (DEC mode 1007): a wheel notch over a full-screen
+    // program that is not tracking the mouse becomes cursor keys.
+    bool forward_alternate_scroll(const MouseEvent& event, const core::TerminalSnapshot& snapshot);
     std::optional<Point> local_cell(Point absolute) const;
     std::string selected_text() const;
 
@@ -54,6 +66,10 @@ private:
     std::optional<Point> selection_start_;
     std::optional<Point> selection_end_;
     ui::RoleId text_role_ = ui::kInvalidRole;
+    // The clipboard request this view has already forwarded. The snapshot
+    // carries a count rather than a queue, so comparing is how a value that
+    // may be read any number of times drives an action that happens once.
+    std::uint64_t forwarded_clipboard_serial_ = 0;
     bool has_explicit_cell_metrics_ = false;
     bool focused_ = false;
 };

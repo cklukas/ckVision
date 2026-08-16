@@ -40,6 +40,22 @@ private:
     // which is what an emulator that ignores the designation shows.
     enum class Charset : unsigned char { Ascii, DecGraphics };
 
+    // One SGR parameter with its colon-separated sub-parameters — the shape
+    // of an underline, or a whole colour written as one parameter.
+    struct SgrParameter {
+        int value = 0;
+        std::vector<int> subs;
+    };
+
+    // The kitty keyboard enhancements in force, and the stack a program
+    // pushes them onto so it can put them back. There is one of these per
+    // screen: a full-screen program's settings must not follow it out onto
+    // the shell's screen, and must not survive its own death either.
+    struct KeyboardState {
+        TerminalKeyboardFlags flags = TerminalKeyboardFlags::None;
+        std::vector<TerminalKeyboardFlags> stack;
+    };
+
     // The byte a DEC line-drawing designation gives, or nullopt when the
     // byte stands for itself.
     static std::string_view dec_graphic_for(char byte) noexcept;
@@ -49,6 +65,13 @@ private:
     void put_text(bool flush_incomplete = false);
     void put_grapheme(std::string_view grapheme);
     void handle_csi(char final_byte);
+    static std::vector<SgrParameter> parse_sgr_parameters(std::string_view text, bool& valid);
+    void handle_sgr();
+    bool graphics_available() const noexcept;
+    void handle_graphics_attributes();
+    void handle_keyboard_protocol();
+    bool extended_color(const std::vector<SgrParameter>& parameters, std::size_t& index,
+                        const SgrParameter& parameter, Color& color);
     // The cell an erase leaves behind. Not the profile default: erasing
     // fills with the colour the program has currently selected, which is
     // what "background colour erase" means and what xterm-family terminfo
@@ -68,8 +91,14 @@ private:
     void reset_active_buffer();
     void diagnostic(TerminalDiagnostic::Kind kind, std::string message);
     bool append_control(char byte);
-    // Applies a completed OSC string, whichever terminator ended it.
-    void handle_osc();
+    // Applies a completed OSC string. A reply goes back with the same
+    // terminator the child used to ask, which is what a program that accepts
+    // only one of the two will be reading for.
+    void handle_osc(bool bel_terminated);
+    void handle_palette_query(std::string_view body, bool bel_terminated);
+    void handle_clipboard(std::string_view body);
+    void reply_osc(std::string_view body, bool bel_terminated);
+    static std::string report_color(Color color, Color fallback);
     bool append_dcs_byte(char byte);
     static int parameter(std::string_view text, std::size_t index, int default_value);
 
@@ -117,6 +146,11 @@ private:
     bool mouse_sgr_enabled_ = false;
     bool application_cursor_keys_ = false;
     bool focus_reporting_enabled_ = false;
+    bool alternate_scroll_enabled_ = profile_.alternate_scroll;
+    std::string clipboard_text_;
+    std::uint64_t clipboard_serial_ = 0;
+    KeyboardState primary_keyboard_;
+    KeyboardState alternate_keyboard_;
 };
 
 }  // namespace ckv::term

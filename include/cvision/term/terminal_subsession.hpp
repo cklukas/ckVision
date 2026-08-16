@@ -15,8 +15,10 @@
 namespace ckv::term {
 
 using core::TerminalCapabilityProfile;
+using core::TerminalClipboardPolicy;
 using core::TerminalDiagnostic;
 using core::TerminalExitPolicy;
+using core::TerminalKeyboardFlags;
 using core::TerminalEnvironmentPolicy;
 using core::TerminalLaunchSpec;
 using core::TerminalMouseEncoding;
@@ -28,6 +30,8 @@ using core::TerminalSubsessionOptions;
 using core::TerminalSubsessionState;
 
 using core::embedded_xterm_sixel_profile;
+using core::has_flag;
+using core::supported_terminal_keyboard_flags;
 
 class TerminalSubsession : public core::TerminalSubsession {
 public:

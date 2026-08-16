@@ -301,6 +301,35 @@ CK_TEST(terminal_emulator_rejects_a_child_sixel_image_over_its_declared_pixel_li
     CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::LimitExceeded);
 }
 
+CK_TEST(terminal_emulator_decodes_a_child_sixel_in_a_full_screen_window) {
+    // A near-full-screen terminal on a HiDPI display: 137 x 45 cells at
+    // 16 x 48 px is a 4.7 Mpx plane. The pixel limit is a guard against
+    // absurd geometry, not a cap on ordinary windows — set near one, as it
+    // once was, it silently removes graphics from every large screen.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{137, 45};
+    profile.cell_pixels = Size{16, 48};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[c\x1bPq#0;2;100;0;0#0~~~~~~\x1b\\");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c");
+    CK_CHECK(!emulator.snapshot().rasters.empty());
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_stops_advertising_graphics_it_could_not_decode) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalSubsessionOptions options;
+    options.max_image_pixels = 95;  // one pixel short of this window's 2 * 2 * 4 * 6
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("\x1b[c\x1b[?2;4;0S");
+    // Advertising Sixel from a window this large asks for an image the
+    // decoder then drops, leaving a blank where the program's own text
+    // fallback would have been.
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2c\x1b[?2;3;0S");
+}
+
 CK_TEST(terminal_emulator_rejects_overflowing_pixel_geometry_before_decoder_allocation) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
@@ -413,8 +442,10 @@ CK_TEST(terminal_emulator_applies_ansi_sgr_colours_to_private_cells) {
     emulator.feed_output("\x1b[31;44mX");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     const Cell& cell = snapshot.cell_buffer[0];
-    CK_CHECK(cell.style().fg == Color::rgb(205, 49, 49));
-    CK_CHECK(cell.style().bg == Color::rgb(36, 114, 200));
+    // The palette entries the program named, still named: `31` is the
+    // palette's red rather than one particular red.
+    CK_CHECK(cell.style().fg == Color::indexed(1));
+    CK_CHECK(cell.style().bg == Color::indexed(4));
 }
 
 CK_TEST(terminal_emulator_applies_extended_sgr_colours_without_a_child_diagnostic) {
@@ -423,7 +454,7 @@ CK_TEST(terminal_emulator_applies_extended_sgr_colours_without_a_child_diagnosti
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     const Cell& cell = snapshot.cell_buffer[0];
     CK_CHECK(cell.style().fg == Color::rgb(1, 2, 3));
-    CK_CHECK(cell.style().bg == Color::rgb(198, 198, 198));
+    CK_CHECK(cell.style().bg == Color::indexed(251));
     CK_CHECK(snapshot.diagnostics.empty());
 }
 
@@ -431,7 +462,50 @@ CK_TEST(terminal_emulator_consumes_nested_capability_queries_at_the_private_boun
     term::TerminalEmulator emulator;
     emulator.feed_output("\x1b[?2026$p\x1b[?2031$p\x1b[c\x1b[?1016$p\x1b[16t");
     CK_CHECK(emulator.snapshot().diagnostics.empty());
-    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2c\x1b[6;18;9t");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c\x1b[6;18;9t");
+}
+
+CK_TEST(terminal_emulator_advertises_declared_graphics_in_device_attributes) {
+    // Parameter 4 is what a Sixel-emitting program looks for; without it the
+    // picture is never sent, however well the emulator would decode it.
+    term::TerminalEmulator with_graphics;
+    with_graphics.feed_output("\x1b[c");
+    CK_CHECK(with_graphics.take_pending_input() == "\x1b[?1;2;4c");
+
+    term::TerminalCapabilityProfile text_only = term::embedded_xterm_sixel_profile();
+    text_only.sixel = false;
+    term::TerminalEmulator without_graphics(text_only);
+    without_graphics.feed_output("\x1b[c");
+    CK_CHECK(without_graphics.take_pending_input() == "\x1b[?1;2c");
+}
+
+CK_TEST(terminal_emulator_reports_graphics_limits_instead_of_scrolling_the_child) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{4, 3};
+    profile.cell_pixels = Size{10, 20};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("ab\x1b[?1;4;0S\x1b[?2;4;0S");
+    // The registers the decoder holds, then the child's own window in pixels:
+    // a Sixel reaching past the last cell is cropped and never seen.
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;0;256S\x1b[?2;0;40;60S");
+    // XTSMGRAPHICS and SU share their final byte. Read as SU, both probes
+    // would have scrolled this line off the top of the child's screen.
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "a");
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_answers_graphics_requests_it_will_not_grant) {
+    term::TerminalEmulator emulator;
+    // Setting a limit, ReGIS geometry, an unknown item, an unknown action:
+    // each refused, none left unanswered, because the child is waiting.
+    emulator.feed_output("\x1b[?1;3;16S\x1b[?3;1;0S\x1b[?7;1;0S\x1b[?1;9;0S");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;3;0S\x1b[?3;3;0S\x1b[?7;1;0S\x1b[?1;2;0S");
+
+    term::TerminalCapabilityProfile text_only = term::embedded_xterm_sixel_profile();
+    text_only.sixel = false;
+    term::TerminalEmulator without_graphics(text_only);
+    without_graphics.feed_output("\x1b[?2;4;0S");
+    CK_CHECK(without_graphics.take_pending_input() == "\x1b[?2;3;0S");
 }
 
 CK_TEST(terminal_emulator_tracks_declared_child_input_modes) {
@@ -648,7 +722,7 @@ CK_TEST(bold_on_the_default_foreground_arrives_white_not_merely_heavier) {
     term::TerminalEmulator emulator;
     emulator.feed_output("\x1b[1mB");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
-    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(255, 255, 255));
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::indexed(15));
     CK_CHECK(has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Bold));
 }
 
@@ -656,25 +730,36 @@ CK_TEST(bold_brightens_each_of_the_low_eight_to_its_own_bright_form) {
     term::TerminalEmulator emulator;
     emulator.feed_output("\x1b[1;31mR\x1b[1;34mB");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
-    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(241, 76, 76));   // bright red
-    CK_CHECK(snapshot.cell_buffer[1].style().fg == ckv::Color::rgb(59, 142, 234));  // bright blue
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::indexed(9));   // bright red
+    CK_CHECK(snapshot.cell_buffer[1].style().fg == ckv::Color::indexed(12));  // bright blue
 }
 
 CK_TEST(bold_leaves_a_colour_the_program_chose_explicitly_alone) {
-    // A 256-colour or true-colour foreground is a specific choice;
+    // A true-colour foreground is a specific colour the program picked;
     // brightening it would override the program rather than honour a
-    // convention it was written for.
+    // convention it was written for. That the picked value happens to be the
+    // palette's own red makes no difference — before a colour kept its index
+    // the two were indistinguishable, and this one was brightened too.
     term::TerminalEmulator emulator;
-    emulator.feed_output("\x1b[1;38;2;10;20;30mX");
+    emulator.feed_output("\x1b[1;38;2;10;20;30mX\x1b[1;38;2;205;49;49mY");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(10, 20, 30));
+    CK_CHECK(snapshot.cell_buffer[1].style().fg == ckv::Color::rgb(205, 49, 49));
+}
+
+CK_TEST(bold_brightens_a_low_palette_index_however_it_was_spelled) {
+    // `SGR 31` and `SGR 38;5;1` are the same request — the palette's first
+    // colour — so the convention that brightens one brightens the other.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[1;38;5;1mR");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].style().fg == ckv::Color::indexed(9));
 }
 
 CK_TEST(text_that_is_not_bold_keeps_the_colour_it_asked_for) {
     term::TerminalEmulator emulator;
     emulator.feed_output("\x1b[31mR");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
-    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(205, 49, 49));  // plain red
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::indexed(1));  // plain red
 }
 
 CK_TEST(osc_two_sets_the_title_the_same_way_osc_zero_does) {
@@ -760,7 +845,7 @@ CK_TEST(erasing_fills_with_the_selected_background_not_the_terminal_default) {
     // starting a couple of columns in — exactly ncurses' order.
     emulator.feed_output("\x1b[42m\x1b[1;1H\x1b[K\x1b[1;3HPID");
     const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
-    const ckv::Color green = ckv::Color::rgb(13, 188, 121);
+    const ckv::Color green = ckv::Color::indexed(2);
 
     // The bar starts at the first column, before any text...
     CK_CHECK(snapshot.cell_buffer[0].style().bg == green);
@@ -783,7 +868,7 @@ CK_TEST(an_erased_cell_keeps_the_background_but_not_the_glyph_attributes) {
 
     emulator.feed_output("\x1b[1;4;44m\x1b[2J");
     const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
-    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::rgb(36, 114, 200));
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::indexed(4));
     CK_CHECK(!has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Underline));
     CK_CHECK(!has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Bold));
 }
@@ -797,7 +882,7 @@ CK_TEST(reverse_video_erases_with_what_the_reader_sees_as_the_background) {
 
     emulator.feed_output("\x1b[31;7m\x1b[2J");  // red foreground, reversed
     const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
-    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::rgb(205, 49, 49));
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::indexed(1));
 }
 
 CK_TEST(scrolling_fills_the_exposed_line_with_the_selected_background) {
@@ -810,7 +895,7 @@ CK_TEST(scrolling_fills_the_exposed_line_with_the_selected_background) {
 
     emulator.feed_output("\x1b[44m\x1b[3;1H\n");  // blue pen, scroll from the last row
     const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
-    const ckv::Color blue = ckv::Color::rgb(36, 114, 200);
+    const ckv::Color blue = ckv::Color::indexed(4);
     for (int x = 0; x < 6; ++x)
         CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(2 * 6 + x)].style().bg == blue);
 }
@@ -877,4 +962,289 @@ CK_TEST(overwriting_half_of_a_wide_character_blanks_the_other_half) {
     snapshot = emulator.snapshot();
     CK_CHECK(snapshot.cell_buffer[0].grapheme() == " ");
     CK_CHECK(snapshot.cell_buffer[1].grapheme() == "Y");
+}
+
+CK_TEST(an_underline_style_survives_as_the_shape_the_program_asked_for) {
+    // nvim draws a spelling mistake with a curl and a type error with a
+    // dotted rule; an emulator that knows only one rule shows the same mark
+    // for both, and the distinction the editor was making is lost.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[4:3mA\x1b[4:4mB\x1b[4:2mC\x1b[4mD");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().underline == ckv::UnderlineShape::Curly);
+    CK_CHECK(snapshot.cell_buffer[1].style().underline == ckv::UnderlineShape::Dotted);
+    CK_CHECK(snapshot.cell_buffer[2].style().underline == ckv::UnderlineShape::Double);
+    CK_CHECK(snapshot.cell_buffer[3].style().underline == ckv::UnderlineShape::Straight);
+    for (std::size_t i = 0; i < 4; ++i)
+        CK_CHECK(has_attr(snapshot.cell_buffer[i].style().attrs, ckv::Attr::Underline));
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(turning_an_underline_off_leaves_no_shape_or_colour_behind) {
+    // Two cells that look alike have to compare alike, or the presenter
+    // redraws cells nothing happened to.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[4:3;58;5;9mA\x1b[24mB\x1b[4:3;58;5;9m\x1b[4:0mC");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    const ckv::Style plain = snapshot.cell_buffer[1].style();
+    CK_CHECK(!has_attr(plain.attrs, ckv::Attr::Underline));
+    CK_CHECK(plain.underline == ckv::UnderlineShape::Straight);
+    CK_CHECK(plain.underline_color.is_default());
+    // `4:0` is the same statement written the other way round.
+    CK_CHECK(snapshot.cell_buffer[2].style() == plain);
+}
+
+CK_TEST(an_underline_can_be_coloured_without_recolouring_the_word) {
+    // The point of SGR 58: a red curl under a black word. Both spellings are
+    // in circulation and nvim writes the sub-parameter one.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[58;5;9mA\x1b[58:2::10:20:30mB\x1b[58:2:0:1:2:3mC\x1b[59mD");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().underline_color == ckv::Color::indexed(9));
+    CK_CHECK(snapshot.cell_buffer[1].style().underline_color == ckv::Color::rgb(10, 20, 30));
+    CK_CHECK(snapshot.cell_buffer[2].style().underline_color == ckv::Color::rgb(1, 2, 3));
+    CK_CHECK(snapshot.cell_buffer[3].style().underline_color.is_default());
+    // The text keeps the colour it had throughout.
+    for (std::size_t i = 0; i < 4; ++i)
+        CK_CHECK(snapshot.cell_buffer[i].style().fg == emulator.profile().default_style.fg);
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(sgr_21_is_the_double_underline_terminals_answer_it_with) {
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[21mA");
+    const ckv::Style style = emulator.snapshot().cell_buffer[0].style();
+    CK_CHECK(has_attr(style.attrs, ckv::Attr::Underline));
+    CK_CHECK(style.underline == ckv::UnderlineShape::Double);
+}
+
+CK_TEST(a_colour_written_as_sub_parameters_is_one_parameter_not_five) {
+    // The ISO 8613-6 spelling. Read as ordinary parameters the trailing
+    // numbers would be applied as attributes of their own.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[38:2::1:2:3;48:5:238mX");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(1, 2, 3));
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == ckv::Color::indexed(238));
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(an_unknown_underline_shape_still_leaves_an_underline) {
+    // The program plainly wants a rule; losing it because the shape is one
+    // nobody has defined would be a worse reading than drawing the rule.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[4:9mA");
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Underline));
+    CK_CHECK(snapshot.cell_buffer[0].style().underline == ckv::UnderlineShape::Straight);
+    CK_CHECK(snapshot.diagnostics.size() == 1);
+    CK_CHECK(snapshot.diagnostics[0].kind ==
+             ckv::term::TerminalDiagnostic::Kind::UnsupportedSequence);
+}
+
+CK_TEST(a_child_asking_for_the_background_colour_is_told_what_it_is) {
+    // vim and nvim ask before choosing a colour scheme. A terminal that says
+    // nothing leaves them guessing, and on a dark background they guess light
+    // — every syntax colour then comes out wrong at once.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b]11;?\x07");
+    CK_CHECK(emulator.take_pending_input() == "\x1b]11;rgb:0000/0000/0000\a");
+
+    // The foreground is the other half of the same question.
+    emulator.feed_output("\x1b]10;?\x1b\\");
+    CK_CHECK(emulator.take_pending_input() == "\x1b]10;rgb:bbbb/bbbb/bbbb\x1b\\");
+}
+
+CK_TEST(a_colour_report_comes_back_with_the_terminator_it_was_asked_with) {
+    // Programs read for one or the other, not for both; answering with the
+    // wrong one is answering into a read that never completes.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b]11;?\x1b\\");
+    const std::string reply = emulator.take_pending_input();
+    CK_CHECK(reply.size() > 2 && reply.substr(reply.size() - 2) == "\x1b\\");
+}
+
+CK_TEST(a_child_can_ask_what_a_palette_entry_is) {
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b]4;1;?\x07");
+    CK_CHECK(emulator.take_pending_input() == "\x1b]4;1;rgb:cdcd/3131/3131\a");
+    // Several entries in one sequence are answered one reply each, which is
+    // what the asking program reads back.
+    emulator.feed_output("\x1b]4;0;?;15;?\x07");
+    CK_CHECK(emulator.take_pending_input() ==
+             "\x1b]4;0;rgb:0000/0000/0000\a\x1b]4;15;rgb:ffff/ffff/ffff\a");
+}
+
+CK_TEST(a_child_cannot_redefine_the_colours_the_terminal_is_made_of) {
+    // Answering what a colour is and letting a child change it are different
+    // questions: a child that could set them could recolour its own window.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b]11;#ff0000\x07\x1b]4;1;#00ff00\x07");
+    CK_CHECK(emulator.take_pending_input().empty());
+    CK_CHECK(emulator.profile().default_style.bg == ckv::Color::rgb(0, 0, 0));
+    const ckv::term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.diagnostics.size() == 2);
+}
+
+CK_TEST(a_silent_query_policy_answers_no_colour_question_either) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.query_policy = ckv::term::TerminalQueryPolicy::NoResponse;
+    ckv::term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]11;?\x07\x1b]10;?\x07\x1b]4;1;?\x07");
+    CK_CHECK(emulator.take_pending_input().empty());
+}
+
+CK_TEST(alternate_scroll_is_on_until_the_child_turns_it_off) {
+    ckv::term::TerminalEmulator emulator;
+    CK_CHECK(emulator.snapshot().alternate_scroll_enabled);
+    emulator.feed_output("\x1b[?1007l");
+    CK_CHECK(!emulator.snapshot().alternate_scroll_enabled);
+    emulator.feed_output("\x1b[?1007h");
+    CK_CHECK(emulator.snapshot().alternate_scroll_enabled);
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(a_profile_may_open_with_alternate_scroll_off) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.alternate_scroll = false;
+    ckv::term::TerminalEmulator emulator(profile);
+    CK_CHECK(!emulator.snapshot().alternate_scroll_enabled);
+}
+
+CK_TEST(a_child_clipboard_write_is_denied_unless_the_profile_allows_it) {
+    // It is the one thing a child can do that reaches outside its window:
+    // yank in an editor somebody is driving, or a file they happened to cat.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b]52;c;aGVsbG8=\x07");
+    const ckv::term::TerminalSnapshot denied = emulator.snapshot();
+    CK_CHECK(denied.clipboard_serial == 0);
+    CK_CHECK(denied.clipboard_text.empty());
+    CK_CHECK(denied.diagnostics.size() == 1);
+}
+
+CK_TEST(an_allowed_child_clipboard_write_arrives_decoded_and_counted) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.clipboard_policy = ckv::term::TerminalClipboardPolicy::AllowWrite;
+    ckv::term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]52;c;aGVsbG8=\x07");
+    CK_CHECK(emulator.snapshot().clipboard_text == "hello");
+    CK_CHECK(emulator.snapshot().clipboard_serial == 1);
+
+    // A second request with the same text still counts as a request: the
+    // reader asked for it twice and the clipboard was set twice.
+    emulator.feed_output("\x1b]52;c;aGVsbG8=\x1b\\");
+    CK_CHECK(emulator.snapshot().clipboard_serial == 2);
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(a_child_clipboard_read_is_refused_under_every_policy) {
+    // A program that can read the clipboard can read whatever its reader last
+    // copied, which is usually a password.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.clipboard_policy = ckv::term::TerminalClipboardPolicy::AllowWrite;
+    ckv::term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]52;c;?\x07");
+    CK_CHECK(emulator.take_pending_input().empty());
+    CK_CHECK(emulator.snapshot().clipboard_serial == 0);
+}
+
+CK_TEST(a_child_clipboard_write_is_bounded_and_must_be_well_formed) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.clipboard_policy = ckv::term::TerminalClipboardPolicy::AllowWrite;
+    ckv::term::TerminalSubsessionOptions options;
+    options.max_clipboard_bytes = 8;
+    ckv::term::TerminalEmulator emulator(profile, options);
+
+    emulator.feed_output("\x1b]52;c;bm90IGJhc2U2NCEh!!\x07");  // not base64 at all
+    CK_CHECK(emulator.snapshot().clipboard_serial == 0);
+    emulator.feed_output("\x1b]52;c;YWJjZGVmZ2hpamtsbW5vcA==\x07");  // sixteen bytes
+    CK_CHECK(emulator.snapshot().clipboard_serial == 0);
+    emulator.feed_output("\x1b]52;c;YWJjZGVmZ2g=\x07");  // eight bytes, exactly the cap
+    CK_CHECK(emulator.snapshot().clipboard_text == "abcdefgh");
+    CK_CHECK(emulator.snapshot().clipboard_serial == 1);
+}
+
+CK_TEST(clipboard_text_keeps_its_lines_and_loses_its_control_bytes) {
+    // A clipboard holds documents: tabs and line breaks are content there.
+    // An escape byte is not, and would be a control sequence the next time
+    // that text was pasted anywhere.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.clipboard_policy = ckv::term::TerminalClipboardPolicy::AllowWrite;
+    ckv::term::TerminalEmulator emulator(profile);
+    // "a\tb\r\nc\x1b[31md"
+    emulator.feed_output("\x1b]52;c;YQliDQpj G1szMW1k\x07");
+    CK_CHECK(emulator.snapshot().clipboard_serial == 0);  // whitespace is not base64
+    emulator.feed_output("\x1b]52;c;YQliDQpjG1szMW1k\x07");
+    CK_CHECK(emulator.snapshot().clipboard_text == "a\tb\nc\xEF\xBF\xBD[31md");
+}
+
+CK_TEST(a_child_pushes_and_pops_the_keyboard_enhancements_it_wants) {
+    // The stack is what makes progressive enhancement safe: a program turns
+    // on what it needs, and puts the terminal back exactly as it found it.
+    ckv::term::TerminalEmulator emulator;
+    CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
+    emulator.feed_output("\x1b[>1u");
+    CK_CHECK(emulator.snapshot().keyboard_flags ==
+             ckv::term::TerminalKeyboardFlags::DisambiguateEscapeCodes);
+    emulator.feed_output("\x1b[>3u");
+    CK_CHECK(emulator.snapshot().keyboard_flags ==
+             (ckv::term::TerminalKeyboardFlags::DisambiguateEscapeCodes |
+              ckv::term::TerminalKeyboardFlags::ReportEventTypes));
+    emulator.feed_output("\x1b[<u");
+    CK_CHECK(emulator.snapshot().keyboard_flags ==
+             ckv::term::TerminalKeyboardFlags::DisambiguateEscapeCodes);
+    emulator.feed_output("\x1b[<u");
+    CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(popping_more_than_was_pushed_leaves_the_terminal_as_it_started) {
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[>9u\x1b[<5u");
+    CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
+}
+
+CK_TEST(a_child_is_told_only_the_enhancements_it_will_really_receive) {
+    // The protocol exists to be asked. Reporting a flag we cannot honour
+    // would have a program stop looking for the fallback it still needs.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[>31u\x1b[?u");
+    const int supported =
+        static_cast<int>(ckv::term::supported_terminal_keyboard_flags());
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?" + std::to_string(supported) + "u");
+    CK_CHECK(!has_flag(emulator.snapshot().keyboard_flags,
+                       ckv::term::TerminalKeyboardFlags::ReportAlternateKeys));
+}
+
+CK_TEST(the_keyboard_flags_can_be_set_added_to_and_taken_from) {
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[=1;1u");  // set
+    CK_CHECK(emulator.snapshot().keyboard_flags ==
+             ckv::term::TerminalKeyboardFlags::DisambiguateEscapeCodes);
+    emulator.feed_output("\x1b[=2;2u");  // add
+    CK_CHECK(emulator.snapshot().keyboard_flags ==
+             (ckv::term::TerminalKeyboardFlags::DisambiguateEscapeCodes |
+              ckv::term::TerminalKeyboardFlags::ReportEventTypes));
+    emulator.feed_output("\x1b[=1;3u");  // remove
+    CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::ReportEventTypes);
+}
+
+CK_TEST(a_full_screen_programs_keyboard_settings_do_not_follow_it_out) {
+    // A program that dies on the alternate screen without putting the
+    // keyboard back would otherwise leave the shell underneath it receiving
+    // keys in an encoding the shell never asked for.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?1049h\x1b[>15u");
+    CK_CHECK(emulator.snapshot().keyboard_flags != ckv::term::TerminalKeyboardFlags::None);
+    emulator.feed_output("\x1b[?1049l");
+    CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
+}
+
+CK_TEST(a_bare_cursor_restore_is_still_a_cursor_restore) {
+    // `CSI u` without a private prefix has meant "restore the cursor" since
+    // long before the keyboard protocol existed.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[3;4H\x1b[s\x1b[1;1H\x1b[u");
+    CK_CHECK(emulator.snapshot().cursor.position == (ckv::Point{3, 2}));
+    CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
 }

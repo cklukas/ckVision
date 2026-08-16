@@ -10,13 +10,27 @@ namespace {
 
 golden::Color to_golden_color(Color c) {
     golden::Color out;
-    out.is_default = c.is_default();
-    if (!out.is_default) {
+    if (c.is_indexed()) {
+        out.kind = golden::Color::Kind::Indexed;
+        out.index = c.index();
+    } else if (c.is_rgb()) {
+        out.kind = golden::Color::Kind::Rgb;
         out.r = c.r();
         out.g = c.g();
         out.b = c.b();
     }
     return out;
+}
+
+const char* underline_shape_name(UnderlineShape shape) noexcept {
+    switch (shape) {
+        case UnderlineShape::Straight: return "";
+        case UnderlineShape::Double: return "double";
+        case UnderlineShape::Curly: return "curly";
+        case UnderlineShape::Dotted: return "dotted";
+        case UnderlineShape::Dashed: return "dashed";
+    }
+    return "";
 }
 
 std::vector<std::string> attrs_to_names(Attr attrs) {
@@ -85,6 +99,12 @@ void capture_grid_and_styles(const Surface& surface, golden::Document& doc) {
         spec.fg = to_golden_color(s.fg);
         spec.bg = to_golden_color(s.bg);
         spec.attrs = attrs_to_names(s.attrs);
+        // An underline's shape and colour describe a rule that is being
+        // drawn; with no underline there is nothing for them to describe.
+        if (has_attr(s.attrs, Attr::Underline)) {
+            spec.underline = underline_shape_name(s.underline);
+            spec.underline_color = to_golden_color(s.underline_color);
+        }
         doc.styles.push_back(std::move(spec));
     }
 }

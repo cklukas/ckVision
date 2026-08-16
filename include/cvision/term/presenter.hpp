@@ -83,11 +83,12 @@ private:
     std::size_t last_bytes_emitted_ = 0;
 };
 
-// Encodes a foreground/background pair's SGR sequence for `depth`,
-// including attribute bits — exposed for direct unit testing of the
-// color-depth degradation (TrueColor/256/Mono16), independent of the
-// full diff pipeline.
-std::string style_to_sgr(const Style& style, ColorDepth depth);
+// Encodes a style as the SGR sequence a host with these capabilities can
+// read: attributes, underline shape and colour where it understands them,
+// and colours at the depth it has. Exposed for direct unit testing of the
+// degradations (TrueColor/256/Mono16, extended underline or not),
+// independent of the full diff pipeline.
+std::string style_to_sgr(const Style& style, const Capabilities& caps);
 
 // Neutralizes embedded OSC terminator bytes (ESC, BEL) in `text` before
 // it is embedded in an OSC sequence (title, future hyperlinks) —

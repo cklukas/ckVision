@@ -66,6 +66,42 @@ CK_TEST(non_canonical_color_normalizes_to_uppercase) {
     }
 }
 
+CK_TEST(a_palette_colour_is_written_as_the_index_it_is) {
+    std::string text = minimal_doc;
+    const std::string from = "0 fg default bg default attrs -";
+    text.replace(text.find(from), from.size(), "0 fg @9 bg @0 attrs -");
+    const ckv::golden::ParseResult result = ckv::golden::parse(text);
+    CK_CHECK(static_cast<bool>(result));
+    if (result) {
+        CK_CHECK(result.document->styles[0].fg.kind == ckv::golden::Color::Kind::Indexed);
+        CK_CHECK(result.document->styles[0].fg.index == 9);
+        CK_CHECK(ckv::golden::serialize(*result.document) == text);
+    }
+}
+
+CK_TEST(an_underline_shape_and_colour_are_written_only_where_they_say_something) {
+    std::string text = minimal_doc;
+    const std::string from = "0 fg default bg default attrs -";
+    text.replace(text.find(from), from.size(),
+                 "0 fg default bg default attrs underline underline curly ulcolor @1");
+    const ckv::golden::ParseResult result = ckv::golden::parse(text);
+    CK_CHECK(static_cast<bool>(result));
+    if (result) {
+        CK_CHECK(result.document->styles[0].underline == "curly");
+        CK_CHECK(result.document->styles[0].underline_color.index == 1);
+        CK_CHECK(ckv::golden::serialize(*result.document) == text);
+    }
+
+    // The plain rule and a rule that follows the text are what an underline
+    // is unless something says otherwise, so neither is ever written: one
+    // appearance has exactly one spelling.
+    std::string plain = minimal_doc;
+    plain.replace(plain.find(from), from.size(), "0 fg default bg default attrs underline");
+    const ckv::golden::ParseResult unadorned = ckv::golden::parse(plain);
+    CK_CHECK(static_cast<bool>(unadorned));
+    if (unadorned) CK_CHECK(ckv::golden::serialize(*unadorned.document) == plain);
+}
+
 CK_TEST(rejects_bad_input) {
     using ckv::golden::parse;
 
@@ -118,6 +154,18 @@ CK_TEST(rejects_bad_input) {
     // Raster hash must be lowercase hex.
     CK_CHECK(!parse(mutate(
         "end", "raster 1 anchor 0 0 span 1 1 pixels 8 8 hash AB fallback active\nend")));
+    // A palette index has to be a palette index.
+    CK_CHECK(!parse(mutate("fg default", "fg @256")));
+    CK_CHECK(!parse(mutate("fg default", "fg @")));
+    CK_CHECK(!parse(mutate("fg default", "fg @01")));
+    // An underline shape or colour with no underline to describe.
+    CK_CHECK(!parse(mutate("attrs -", "attrs bold underline curly")));
+    CK_CHECK(!parse(mutate("attrs -", "attrs bold ulcolor @1")));
+    // The plain rule and a default colour are spelled by their absence.
+    CK_CHECK(!parse(mutate("attrs -", "attrs underline underline straight")));
+    CK_CHECK(!parse(mutate("attrs -", "attrs underline ulcolor default")));
+    // Trailing tokens nobody defined.
+    CK_CHECK(!parse(mutate("attrs -", "attrs underline blink yes")));
     // Content after 'end'.
     CK_CHECK(!parse(mutate("end", "end\nextra")));
 }

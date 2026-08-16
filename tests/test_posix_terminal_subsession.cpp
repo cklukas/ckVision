@@ -277,6 +277,42 @@ CK_TEST(posix_terminal_subsession_uses_explicit_launch_environment_and_directory
     CK_CHECK(screen_text(session->snapshot()).find("declareddirectory") != std::string::npos);
 }
 
+CK_TEST(a_launch_spec_can_name_the_child_something_other_than_its_executable) {
+    // The leading dash is the whole point: it is the only way a shell is told
+    // it is a login shell, so a terminal that cannot set argv[0] cannot open
+    // the shell its user gets from login(1) or from any other terminal.
+    ckv::term::TerminalLaunchSpec launch =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf '[%s]' \"$0\""});
+    launch.argv0 = "-sh";
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    pollfd ready{session->file_descriptor(), POLLIN, 0};
+    CK_CHECK(::poll(&ready, 1, 1'000) == 1);
+    for (int attempt = 0; attempt < 100 && screen_text(session->snapshot()).find("[-sh]") == std::string::npos;
+         ++attempt) {
+        (void)session->drain(16 * 1024);
+        pollfd more{session->file_descriptor(), POLLIN | POLLHUP, 0};
+        (void)::poll(&more, 1, 10);
+    }
+    CK_CHECK(screen_text(session->snapshot()).find("[-sh]") != std::string::npos);
+}
+
+CK_TEST(a_launch_spec_without_an_argv0_still_names_the_child_by_its_path) {
+    // The field is an addition, not a new obligation: every existing caller
+    // leaves it empty and must keep seeing exactly what it saw before.
+    ckv::term::TerminalLaunchSpec launch =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf '[%s]' \"$0\""});
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    pollfd ready{session->file_descriptor(), POLLIN, 0};
+    CK_CHECK(::poll(&ready, 1, 1'000) == 1);
+    for (int attempt = 0; attempt < 100 && screen_text(session->snapshot()).find("[/bin/sh]") == std::string::npos;
+         ++attempt) {
+        (void)session->drain(16 * 1024);
+        pollfd more{session->file_descriptor(), POLLIN | POLLHUP, 0};
+        (void)::poll(&more, 1, 10);
+    }
+    CK_CHECK(screen_text(session->snapshot()).find("[/bin/sh]") != std::string::npos);
+}
+
 CK_TEST(an_explicit_only_subsession_inherits_neither_environment_nor_directory) {
     // Isolation is still available in full; it is now asked for rather than
     // imposed. The default is the opposite, because a terminal whose shell

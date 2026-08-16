@@ -19,7 +19,7 @@ ckvision-golden 1
 frame 8 3
 cursor 3 0 block
 styles 2
-0 fg #0DBC79 bg #000000 attrs -
+0 fg @2 bg #000000 attrs -
 1 fg #BBBBBB bg #000000 attrs -
 grid
 |ALT     |

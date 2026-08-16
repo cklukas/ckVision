@@ -17,42 +17,13 @@
 
 namespace {
 
-// The fixed xterm palette, so a resolved colour can be named as the index a
-// script asked for. The emulator stores colours resolved to RGB; a dump that
-// printed raw RGB could not be compared against an emulator that reports
-// indices, and every difference would look like a difference of opinion
-// rather than of fact.
-int palette_index_of(ckv::Color color) {
-    static const std::vector<ckv::Color> palette = [] {
-        std::vector<ckv::Color> table{
-            ckv::Color::rgb(0, 0, 0),        ckv::Color::rgb(205, 49, 49),   ckv::Color::rgb(13, 188, 121),
-            ckv::Color::rgb(229, 229, 16),   ckv::Color::rgb(36, 114, 200),  ckv::Color::rgb(188, 63, 188),
-            ckv::Color::rgb(17, 168, 205),   ckv::Color::rgb(229, 229, 229), ckv::Color::rgb(102, 102, 102),
-            ckv::Color::rgb(241, 76, 76),    ckv::Color::rgb(35, 209, 139),  ckv::Color::rgb(245, 245, 67),
-            ckv::Color::rgb(59, 142, 234),   ckv::Color::rgb(214, 112, 214), ckv::Color::rgb(41, 184, 219),
-            ckv::Color::rgb(255, 255, 255)};
-        const int levels[6] = {0, 95, 135, 175, 215, 255};
-        for (int r = 0; r < 6; ++r)
-            for (int g = 0; g < 6; ++g)
-                for (int b = 0; b < 6; ++b)
-                    table.push_back(ckv::Color::rgb(static_cast<std::uint8_t>(levels[r]),
-                                                    static_cast<std::uint8_t>(levels[g]),
-                                                    static_cast<std::uint8_t>(levels[b])));
-        for (int i = 0; i < 24; ++i) {
-            const auto v = static_cast<std::uint8_t>(8 + i * 10);
-            table.push_back(ckv::Color::rgb(v, v, v));
-        }
-        return table;
-    }();
-    for (std::size_t i = 0; i < palette.size(); ++i)
-        if (palette[i] == color) return static_cast<int>(i);
-    return -1;
-}
-
+// A colour is named as what it is. The emulator keeps a palette colour as its
+// index, so the dump prints that index directly: the reference terminal
+// reports indices too, and a comparison of indices is a comparison of what
+// each side was told rather than of how each side chose to render it.
 std::string colour_name(ckv::Color color, ckv::Color default_color) {
-    if (color == default_color) return "default";
-    const int index = palette_index_of(color);
-    if (index >= 0) return std::to_string(index);
+    if (color == default_color || color.is_default()) return "default";
+    if (color.is_indexed()) return std::to_string(color.index());
     char buffer[32];
     std::snprintf(buffer, sizeof(buffer), "#%02x%02x%02x", color.r(), color.g(), color.b());
     return buffer;
@@ -60,14 +31,26 @@ std::string colour_name(ckv::Color color, ckv::Color default_color) {
 
 std::string attribute_names(ckv::Style style) {
     std::string out;
-    const auto add = [&out](const char* name) {
+    const auto add = [&out](const std::string& name) {
         if (!out.empty()) out += "+";
         out += name;
     };
     if (has_attr(style.attrs, ckv::Attr::Bold)) add("bold");
     if (has_attr(style.attrs, ckv::Attr::Dim)) add("dim");
     if (has_attr(style.attrs, ckv::Attr::Italic)) add("italic");
-    if (has_attr(style.attrs, ckv::Attr::Underline)) add("underline");
+    if (has_attr(style.attrs, ckv::Attr::Underline)) {
+        std::string name = "underline";
+        switch (style.underline) {
+            case ckv::UnderlineShape::Straight: break;
+            case ckv::UnderlineShape::Double: name += ":double"; break;
+            case ckv::UnderlineShape::Curly: name += ":curly"; break;
+            case ckv::UnderlineShape::Dotted: name += ":dotted"; break;
+            case ckv::UnderlineShape::Dashed: name += ":dashed"; break;
+        }
+        if (!style.underline_color.is_default())
+            name += "@" + colour_name(style.underline_color, ckv::Color::default_color());
+        add(name);
+    }
     if (has_attr(style.attrs, ckv::Attr::Reverse)) add("reverse");
     if (has_attr(style.attrs, ckv::Attr::Strike)) add("strike");
     return out.empty() ? "-" : out;

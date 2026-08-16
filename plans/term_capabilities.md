@@ -78,7 +78,7 @@ against a reference terminal rather than decided — see
 | `CSI ? 1006 h/l` | SGR mouse encoding | E+H | as above |
 | `CSI ? 1004 h/l` | focus reporting | E+H | host must report focus |
 | `CSI ? 2004 h/l` | bracketed paste | E | |
-| `CSI ? 1007` | alternate scroll | **N** | wheel-to-arrows on the alternate screen is not tracked |
+| `CSI ? 1007 h/l` | alternate scroll | E+H | on unless the child says otherwise; the wheel is the *host's* to report |
 | `CSI ? 2026` | synchronized output | **N** (inner) / H (outer) | we *use* it against the host; a child asking for it is ignored |
 | `CSI ? 1016` | pixel mouse | H | outer-terminal capability, negotiated by the host layer |
 
@@ -90,13 +90,32 @@ against a reference terminal rather than decided — see
 | `SGR 30-37/39/40-47/49`, `90-97/100-107` | E | 16 colours, defaults, bright |
 | `SGR 38;5;n` / `48;5;n` | E | 256 colours |
 | `SGR 38;2;r;g;b` / `48;2;r;g;b` | E | true colour |
+| `SGR 38:2::r:g:b`, `38:5:n` | E | the ISO 8613-6 sub-parameter spelling of the same two |
 | Bold brightening of the low 8 colours | E | a program asking for bold on a base colour gets the bright one, as terminals do |
-| `SGR 4:3` (undercurl) and `58` (underline colour) | **N** | nvim uses these; they degrade to a plain underline |
-| `SGR 21` (double underline), `53` (overline) | **N** | |
+| `SGR 4:0` … `4:5` | E | no underline, straight, double, curly, dotted, dashed |
+| `SGR 21` | E | double underline — measured against the reference, which reports it back as `4:2` |
+| `SGR 58` / `59` | E+H | the underline's own colour, in both spellings; drawn where the host can draw it |
+| `SGR 53` (overline) | **N** | |
 
-Colour is stored **resolved to RGB**, so a child's indexed colour cannot be
-re-themed downstream. That is a deliberate simplification, not an oversight,
-and it is the one thing blocking per-terminal palette re-theming.
+Colour is stored **as what the program asked for**: a palette index stays an
+index, a chosen RGB stays that RGB, and the terminal's own default stays the
+default. This is what makes per-terminal palette re-theming possible at all —
+"the palette's red" is a different fact from "this particular red", and only
+the first can be re-themed later. `core/palette.hpp` is the one place that
+turns an index into channels, for the things that genuinely need pixels: a
+shadow, an SVG, or a host with fewer colours.
+
+Two consequences worth knowing. A palette index reaches the outer terminal
+**as an index**, so a reader's own theme applies to a child's `SGR 31` exactly
+as it would outside ckmux. And bold brightening now applies to the low eight
+palette entries only — a program's own `38;2;205;49;49` is a colour it chose,
+and is left alone, where before it was indistinguishable from palette red.
+
+The underline **shapes** are emulated always, and reach the screen where the
+host declares `underline_styles`. Without it every shape degrades to the plain
+rule: a terminal that has never heard of the colon form reads `4:3` as two
+parameters and applies italics, so a shape is only ever sent to a host that
+has said it can draw one.
 
 ### Character sets
 
@@ -109,10 +128,12 @@ and it is the one thing blocking per-terminal palette re-theming.
 
 | Sequence | Name | Answer |
 |---|---|---|
-| `CSI c` | DA1 | reflects the capability profile, so a child that probes gets the truth |
+| `CSI c` | DA1 | reflects the capability profile, so a child that probes gets the truth — including **parameter 4 when the profile declares Sixel and the window is one the decoder can hold** (`max_image_pixels`), which is the advertisement `img2sixel`, `chafa` and gnuplot decide from |
 | `CSI n` (5/6) | DSR | status and cursor position, origin-mode aware |
 | `CSI 14 t` / `CSI 16 t` | XTWINOPS | pixel geometry, which Sixel-emitting programs ask for |
+| `CSI ? Pi ; Pa ; Pv S` | XTSMGRAPHICS | the graphics limits behind that advertisement: the decoder's 256 colour registers, and a maximum geometry of the child's own window in pixels. Requests to *set* a limit, ReGIS geometry, and every request under a profile without Sixel are refused with a status — never with silence, which costs the asking program a timeout |
 | `CSI SP q` | DECSCUSR | cursor shape |
+| `CSI ? u` | kitty keyboard query | the enhancements actually in force — see below |
 
 ### Graphics and metadata
 
@@ -121,19 +142,98 @@ and it is the one thing blocking per-terminal palette re-theming.
 | `DCS q … ST` | **E+H** | Sixel is **decoded always**, into a scene raster. It reaches the screen as pixels where the host supports Sixel, and as a text placeholder where it does not — never as leaked escape bytes |
 | `OSC 0` / `OSC 2` | E | window title, sanitised and length-bounded; policy-gated (`TerminalOscPolicy`) |
 | `OSC 1` | E | icon name — deliberately does not change the title |
-| `OSC 52` (clipboard) | **N** | a child cannot set the clipboard; opt-in policy is planned |
-| `OSC 4/10/11` (palette query) | **N** | vim probes `OSC 11` for the background; it currently gets no answer |
+| `OSC 52` (clipboard write) | E | opt-in per profile (`TerminalClipboardPolicy`), size-capped, sanitised — see below |
+| `OSC 52 ; … ; ?` (clipboard read) | **never** | refused under every policy (D-022): a program that can read the clipboard can read whatever its reader last copied |
+| `OSC 4 ; n ; ?`, `OSC 10 ; ?`, `OSC 11 ; ?` | E | answered as `rgb:RRRR/GGGG/BBBB`, with the terminator the child asked with |
+| `OSC 4/10/11` *set* | **N** | answering what a colour is and letting a child change it are different questions; a child that could set them could recolour its own window |
 | `OSC 8` (hyperlinks) | **N** | |
 | Kitty graphics | **N** | Sixel is the one image path |
-| Kitty keyboard (child side) | **N** | the legacy encoding is a correct fallback |
+| Kitty keyboard (child side) | E | the flag stack, per screen; the legacy encoding remains the default and the fallback |
+| `CSI Ps i` / `CSI ? Ps i` (`MC`, Media Copy) | **N** | dropped with a diagnostic; **capture** under an opt-in policy is planned — see below |
+
+### The clipboard a child can reach
+
+`OSC 52` is the one thing a child can do that reaches outside its own window:
+it replaces whatever the person at the keyboard had copied, without their
+having asked. That is a feature when it is `yank` in an editor they are
+driving and an attack when it is a file they happened to `cat`, and the
+difference is not visible from inside the terminal. So it is opt-in per
+profile (`TerminalClipboardPolicy::AllowWrite`, default `Deny`), bounded by
+`max_clipboard_bytes`, decoded with a **strict** base64 reader, and sanitised
+for the clipboard rather than for a cell — tab and line break are content in a
+document, so they survive; every other control byte does not.
+
+The emulator records the text and a count of granted requests;
+`widgets::TerminalView` forwards it through `on_clipboard_write` when the
+count moves. A snapshot is a value that may be read any number of times, so
+the count — not the act of reading — is what makes an export happen once.
+
+Reading is refused under **every** policy, including `AllowWrite`. There is no
+setting that turns it on.
+
+### The keyboard protocol a child can ask for
+
+The legacy encoding is correct and stays the default. What it cannot do is say
+some things at all: `Ctrl+I` and `Tab` are one byte, a lone `Esc` is
+indistinguishable from the start of a sequence until a timer expires, and no
+key ever reports being released. The kitty protocol's flags are how a program
+asks for those, one at a time, and reads back what it actually got.
+
+| Sequence | Effect |
+|---|---|
+| `CSI > flags u` | push the current flags, set these |
+| `CSI < n u` | pop `n` (default 1); popping past the bottom returns to none |
+| `CSI = flags ; mode u` | set (1), add (2) or remove (3) |
+| `CSI ? u` | report the flags actually in force |
+
+Two decisions worth stating. The stack is **per screen**, so a full-screen
+program's settings do not follow it out onto the shell's screen — and a
+program that dies without popping leaves nothing behind for the shell
+underneath. And a requested flag is masked to what this terminal can really
+deliver *before* it takes effect, so what a program reads back is what it will
+really receive: `ReportAlternateKeys` is dropped, because ckVision's input
+model carries the key and the text it produced, not the keyboard layout behind
+them, and reporting it would have a program stop looking for a fallback it
+still needs.
+
+### Printer control: captured, never a printer
+
+`MC` was on the never-list with the reason *"a child must not be able to
+write to a printer"*. That reason holds — but it indicts the **sink**, not
+the sequence. xterm implements `MC` by piping the captured stream to a shell
+command and ships that command empty by default, precisely because `cat`-ing
+a hostile file must never reach a device. Replace the sink and the hazard is
+gone, while `xterm-256color` — which every embedded terminal here advertises
+— keeps promising `mc0`/`mc4`/`mc5` to programs that then print into
+silence.
+
+Planned (driven by ckmux's WP-PRINT, implemented here): a
+`TerminalPrinterPolicy{Deny, Capture}` on `TerminalCapabilityProfile`,
+**defaulting to `Deny` so nothing changes for an application that does not
+opt in**; a printer-controller parse state whose `CSI 4 i` terminator match
+survives `feed_output()` chunk boundaries; print-screen, print-line and
+autoprint; `DECPFF`/`DECPEX`; honest `CSI ? 15 n` replies; a bounded spool
+(`max_printer_spool_bytes`) drained out of band by `take_printer_jobs()`,
+never through `snapshot()`. On overflow the emulator frees its buffer and
+becomes a **sink** — still in controller mode, still scanning for the
+terminator, still not touching the grid — because resuming the screen
+mid-stream would put the child's raw print bytes on the display. The
+emulator captures; it still cannot open a device or run a command.
 
 ### Deliberately never supported
 
-Printer control (`MC`) — a child must not be able to write to a printer.
 Tektronix and ReGIS graphics. DRCS soft fonts. Answerback (`ENQ` returns
-empty, never a fingerprint). Unknown `APC`/`PM`/`DCS` strings are parsed to
+empty, never a fingerprint). Unknown string sequences are parsed to
 completion and dropped, so an unrecognised sequence can never desynchronise
 the parser.
+
+**Gap against that last claim:** it is true for `DCS` today, but the parser
+has no `APC` (`ESC _`), `PM` (`ESC ^`) or `SOS` (`ESC X`) introducer at all
+— `TerminalEmulator::feed_output`'s escape state handles `[ ] P D E M ( ) *
++ 7 8` and sends everything else to a diagnostic and back to Ground, so an
+`APC` **payload lands on the screen as text**. Routing those three
+introducers into the existing `Discard` state is a three-line fix that makes
+the documented contract true.
 
 ---
 
@@ -152,6 +252,7 @@ degrades rather than failing.
 | `pixel_mouse` (SGR-Pixels 1016) | pixel-precise positions inside images | cell precision |
 | `synchronized_output` (2026) | tear-free frames | frames may tear on a slow host |
 | `clipboard_write` (OSC 52) | copy reaches the system clipboard | internal clipboard still works |
+| `underline_styles` (SGR `4:x` / `58`) | curls, dots and a rule with its own colour | every shape degrades to the plain rule, which still reads as emphasis |
 | `bracketed_paste` (2004) | paste is distinguishable from typing | paste arrives as keys |
 | `focus_events` (1004) | focus in/out known | assumed focused |
 | `hyperlinks` (OSC 8) | clickable links | plain text |
@@ -165,7 +266,7 @@ degrades rather than failing.
 
 By measurement, not by assertion. `tools/vtconform/` plays the same byte
 scripts through this emulator and through an established terminal and
-compares the resulting cells. It currently runs 42 cases; every difference is
+compares the resulting cells. It currently runs 49 cases; every difference is
 either fixed or listed with the documentation that justifies it, and an
 unexplained difference fails the build (`ctest -R vt_conformance`).
 
@@ -174,14 +275,24 @@ rather than argued about: IRM insert mode was missing entirely (ANSI modes
 were not handled at all), DECAWM could not be turned off, and overwriting
 half of a double-width character left the other half orphaned.
 
+It is also how the underline work above was settled rather than assumed. The
+reference reports `SGR 21` back as `4:2`, keeps `4:5` as dashed, and treats
+`4:0` as no underline at all — so that is what this emulator does, and the
+seven cases that establish it fail the build if it ever stops.
+
 ## Gaps worth closing next, in order of what a real program will notice
 
-1. **`OSC 11` background query** — vim and nvim probe it to choose a colour
-   scheme, and silence makes them guess wrong.
-2. **`CSI ? 1007` alternate scroll** — wheel scrolling in `less` and `vim`.
-3. **`SGR 4:3` / `58`** — nvim's undercurl and its colour.
-4. **Child `OSC 52`**, behind an opt-in policy and a size cap.
-5. **Indexed colour preserved through the emulator**, which is what a
-   palette-re-theming feature would need.
-6. **Kitty keyboard protocol, child side** — progressive enhancement; the
-   legacy encoding remains correct until then.
+The six that stood here — `OSC 11`, alternate scroll, `SGR 4:3`/`58`, child
+`OSC 52`, indexed colour, and the kitty keyboard protocol — are all closed and
+documented above. What is left, in the same order of what a program notices:
+
+1. **`OSC 8` hyperlinks**, inner side. A child's links are currently plain
+   text; the outer half of this is already a capability.
+2. **`SGR 53` overline.** Rare, and the only remaining SGR gap.
+3. **`ReportAlternateKeys`**, which needs the input model to carry the
+   keyboard layout behind a key rather than only the text it produced. Until
+   then the flag is dropped at the moment it is set, so a program is told the
+   truth about what it will receive.
+4. **Printer capture** (`MC`), designed above and waiting on its policy.
+5. **The `APC`/`PM`/`SOS` routing bug** noted above, which is a three-line fix
+   to a contract this document already claims.

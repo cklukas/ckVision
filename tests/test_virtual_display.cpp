@@ -84,6 +84,45 @@ CK_TEST(encoder_to_virtual_display_is_opaque_regardless_of_source_alpha) {
     CK_CHECK(display.raster_plane().pixel(1, 0).a == 255);
 }
 
+CK_TEST(virtual_display_decodes_palette_indices_as_the_indices_they_are) {
+    // This decoder is the oracle for what the Presenter wrote, and "the host
+    // was told index 4" is the fact worth recording. Resolving it here would
+    // invent a palette the receiving terminal never consulted.
+    VirtualDisplay display(Size{4, 1}, Size{2, 3});
+    CK_CHECK(display.write("\x1B[1;1H\x1B[0;31;104mA\x1B[0;38;5;208;48;5;17mB"));
+    CK_CHECK(display.frame().at(Point{0, 0}).style().fg == Color::indexed(1));
+    CK_CHECK(display.frame().at(Point{0, 0}).style().bg == Color::indexed(12));
+    CK_CHECK(display.frame().at(Point{1, 0}).style().fg == Color::indexed(208));
+    CK_CHECK(display.frame().at(Point{1, 0}).style().bg == Color::indexed(17));
+}
+
+CK_TEST(virtual_display_decodes_underline_shapes_and_their_colour) {
+    // The Presenter emits these to a host that says it can draw them, so the
+    // decoder that checks the Presenter has to read them back.
+    VirtualDisplay display(Size{4, 1}, Size{2, 3});
+    CK_CHECK(display.write("\x1B[1;1H\x1B[0;4:3;58:5:9mA\x1B[0;4:2;58:2::10:20:30mB\x1B[0;4mC"));
+    const Style curly = display.frame().at(Point{0, 0}).style();
+    CK_CHECK(has_attr(curly.attrs, Attr::Underline));
+    CK_CHECK(curly.underline == UnderlineShape::Curly);
+    CK_CHECK(curly.underline_color == Color::indexed(9));
+    const Style doubled = display.frame().at(Point{1, 0}).style();
+    CK_CHECK(doubled.underline == UnderlineShape::Double);
+    CK_CHECK(doubled.underline_color == Color::rgb(10, 20, 30));
+    const Style plain = display.frame().at(Point{2, 0}).style();
+    CK_CHECK(has_attr(plain.attrs, Attr::Underline));
+    CK_CHECK(plain.underline == UnderlineShape::Straight);
+    CK_CHECK(plain.underline_color.is_default());
+}
+
+CK_TEST(virtual_display_rejects_sub_parameters_on_controls_that_have_none) {
+    // Accepting a colon wherever one appears would let a malformed Presenter
+    // sequence decode as though it had meant something.
+    VirtualDisplay display(Size{2, 2});
+    CK_CHECK(!display.write("\x1B[1:2H"));
+    VirtualDisplay other(Size{2, 2});
+    CK_CHECK(!other.write("\x1B[1:2m"));
+}
+
 CK_TEST(virtual_display_rejects_unsupported_output_instead_of_silently_ignoring_it) {
     VirtualDisplay display(Size{2, 2});
     CK_CHECK(!display.write("\x1B]0;title\x07"));

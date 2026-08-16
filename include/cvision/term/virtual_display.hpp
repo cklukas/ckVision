@@ -19,6 +19,11 @@
 
 namespace ckv::term {
 
+// The Sixel colour registers this decoder holds. Sixel numbers its registers
+// `#0` … `#255`, and a child that asks XTSMGRAPHICS how many the terminal it
+// is talking to has is told this number.
+inline constexpr int kSixelColorRegisters = 256;
+
 class VirtualDisplay {
 public:
     explicit VirtualDisplay(Size cells, Size cell_pixels = Size{9, 18});
@@ -72,11 +77,21 @@ private:
         std::uint8_t a = 255;
     };
 
+    // One SGR parameter with its colon-separated sub-parameters. SGR is the
+    // only control the Presenter writes them in — the shape of an underline
+    // and an underline's colour — so every other control here still reads a
+    // plain list of numbers, and a colon in one of those is malformed.
+    struct SgrParam {
+        int value = 0;
+        std::vector<int> subs;
+    };
+
     void fail(std::string message);
     bool flush_text();
     bool handle_csi(char final_byte);
     bool decode_sixel(std::string_view body);
-    bool apply_sgr(const std::vector<int>& params);
+    static std::vector<SgrParam> parse_sgr_params(std::string_view text, bool& ok);
+    bool apply_sgr(const std::vector<SgrParam>& params);
     void put_grapheme(std::string_view grapheme);
     void erase_cells(int left, int top, int right, int bottom) noexcept;
     void scroll_rows(int rows) noexcept;
@@ -103,8 +118,8 @@ private:
     std::string text_buffer_;
     std::string control_buffer_;
     std::string error_;
-    std::array<Rgba, 256> sixel_palette_{};
-    std::array<bool, 256> sixel_palette_defined_{};
+    std::array<Rgba, kSixelColorRegisters> sixel_palette_{};
+    std::array<bool, kSixelColorRegisters> sixel_palette_defined_{};
 };
 
 }  // namespace ckv::term

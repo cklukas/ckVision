@@ -27,6 +27,15 @@ import tempfile
 import time
 import unicodedata
 
+
+class HarnessError(RuntimeError):
+    """The reference terminal misbehaved, so this case measured nothing.
+
+    Kept distinct from a conformance difference on purpose: an instrument
+    that failed to take a reading must never be reported as agreement, nor
+    as a fault in the emulator it was pointed at.
+    """
+
 # Each case is a byte script plus the screen it is played on. They are chosen
 # to isolate one decision each, because a case that exercises three rules at
 # once cannot say which of them a difference came from.
@@ -122,6 +131,14 @@ CASES = {
     # --- Alternate screen.
     "alt_screen": (10, 3, "\033[1;1Hmain\033[?1049h\033[1;1Halt"),
     "alt_screen_restore": (10, 3, "\033[1;1Hmain\033[?1049h\033[1;1Halt\033[?1049l"),
+    # --- Underline shapes and the underline's own colour.
+    "sgr_underline_curly": (12, 2, "\033[4:3mAB"),
+    "sgr_underline_dashed": (12, 2, "\033[4:5mAB"),
+    "sgr_underline_off": (12, 2, "\033[4:3mAB\033[4:0mCD"),
+    "sgr_underline_21_is_double": (12, 2, "\033[21mAB"),
+    "sgr_underline_colour": (12, 2, "\033[4:3;58;5;9mAB"),
+    "sgr_underline_colour_subparams": (12, 2, "\033[4:3;58:2::10:20:30mAB"),
+    "sgr_underline_colour_reset": (12, 2, "\033[4;58;5;9mAB\033[59mCD"),
     # --- Colour resets, so "default" means the same thing on both sides.
     "sgr_default_bg": (12, 2, "\033[44mxx\033[49m\033[K"),
     "sgr_default_fg": (12, 2, "\033[31mxx\033[39myy"),
@@ -140,7 +157,9 @@ DEC_GRAPHICS = {
     "~": "\u00b7", "_": " ", "0": "\u2588",
 }
 
-SGR_RE = re.compile(r"\033\[([0-9;]*)m")
+# SGR is the one control that carries colon-separated sub-parameters: the
+# shape of an underline, and an underline colour written as one parameter.
+SGR_RE = re.compile(r"\033\[([0-9;:]*)m")
 
 
 class Pen:
@@ -153,17 +172,28 @@ class Pen:
         self.fg = "default"
         self.bg = "default"
         self.attrs = set()
+        # An underline that is not being drawn has no shape and no colour of
+        # its own, so both are spelled by their absence.
+        self.underline = None
+        self.ul_color = "default"
 
     def copy(self):
         other = Pen()
         other.fg, other.bg, other.attrs = self.fg, self.bg, set(self.attrs)
+        other.underline, other.ul_color = self.underline, self.ul_color
         return other
 
+    UNDERLINE_SHAPES = {1: "", 2: "double", 3: "curly", 4: "dotted", 5: "dashed"}
+
     def apply(self, params):
-        values = [int(p) for p in params.split(";") if p != ""] or [0]
+        # Each parameter is a head value and its colon-separated tail. An
+        # empty field is zero, which is how `58:2::R:G:B` spells "no colour
+        # space named".
+        groups = [[int(x) if x != "" else 0 for x in g.split(":")]
+                  for g in params.split(";")] or [[0]]
         i = 0
-        while i < len(values):
-            v = values[i]
+        while i < len(groups):
+            v, subs = groups[i][0], groups[i][1:]
             if v == 0:
                 self.reset()
             elif v == 1:
@@ -173,18 +203,24 @@ class Pen:
             elif v == 3:
                 self.attrs.add("italic")
             elif v == 4:
-                self.attrs.add("underline")
+                shape = subs[0] if subs else 1
+                if shape == 0:
+                    self.clear_underline()
+                else:
+                    self.underline = self.UNDERLINE_SHAPES.get(shape, "")
             elif v == 7:
                 self.attrs.add("reverse")
             elif v == 9:
                 self.attrs.add("strike")
+            elif v == 21:
+                self.underline = "double"
             elif v in (22,):
                 self.attrs.discard("bold")
                 self.attrs.discard("dim")
             elif v == 23:
                 self.attrs.discard("italic")
             elif v == 24:
-                self.attrs.discard("underline")
+                self.clear_underline()
             elif v == 27:
                 self.attrs.discard("reverse")
             elif v == 29:
@@ -197,22 +233,51 @@ class Pen:
                 self.bg = str(v - 40)
             elif v == 49:
                 self.bg = "default"
+            elif v == 59:
+                self.ul_color = "default"
             elif 90 <= v <= 97:
                 self.fg = str(v - 90 + 8)
             elif 100 <= v <= 107:
                 self.bg = str(v - 100 + 8)
-            elif v in (38, 48) and i + 1 < len(values):
-                target = "fg" if v == 38 else "bg"
-                if values[i + 1] == 5 and i + 2 < len(values):
-                    setattr(self, target, str(values[i + 2]))
-                    i += 2
-                elif values[i + 1] == 2 and i + 4 < len(values):
-                    setattr(self, target, "#%02x%02x%02x" % tuple(values[i + 2 : i + 5]))
-                    i += 4
+            elif v in (38, 48, 58):
+                target = {38: "fg", 48: "bg", 58: "ul_color"}[v]
+                if subs:
+                    # The whole colour as one parameter's sub-parameters.
+                    color, consumed = self.color_from(subs), 0
+                else:
+                    color, consumed = self.color_from([g[0] for g in groups[i + 1:]]), 0
+                    if color is not None:
+                        consumed = 2 if groups[i + 1][0] == 5 else 4
+                if color is not None:
+                    setattr(self, target, color)
+                    i += consumed
             i += 1
 
+    @staticmethod
+    def color_from(values):
+        """A colour from `5, index` or `2, [space,] r, g, b`, in either spelling."""
+        if not values:
+            return None
+        if values[0] == 5 and len(values) >= 2:
+            return str(values[1])
+        if values[0] == 2:
+            channels = values[2:5] if len(values) >= 5 else values[1:4]
+            if len(channels) == 3:
+                return "#%02x%02x%02x" % tuple(channels)
+        return None
+
+    def clear_underline(self):
+        self.underline = None
+        self.ul_color = "default"
+
     def signature(self):
-        return (self.fg, self.bg, "+".join(sorted(self.attrs)) or "-")
+        names = set(self.attrs)
+        if self.underline is not None:
+            name = "underline" + (":" + self.underline if self.underline else "")
+            if self.ul_color != "default":
+                name += "@" + self.ul_color
+            names.add(name)
+        return (self.fg, self.bg, "+".join(sorted(names)) or "-")
 
 
 def runs_from_dump(text):
@@ -297,10 +362,41 @@ def reference_capture(script, columns, rows, socket):
             ["tmux", "-L", socket, "-f", "/dev/null", "new-session", "-d",
              "-x", str(columns), "-y", str(rows), f"cat {path}; sleep 30"],
             env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        time.sleep(0.35)
-        out = subprocess.run(["tmux", "-L", socket, "capture-pane", "-p", "-e", "-N"],
-                             env=env, check=True, capture_output=True)
-        return out.stdout.decode("utf-8", "replace").split("\n")
+        # The pane runs `cat <script>; sleep 30`, so the foreground command
+        # flips from `cat` to `sleep` exactly when the last script byte has
+        # been written. Waiting for that beats sleeping a guessed interval,
+        # which reads a half-drawn screen whenever the machine is loaded.
+        deadline = time.monotonic() + 10.0
+        while True:
+            probe = subprocess.run(
+                ["tmux", "-L", socket, "display-message", "-p", "#{pane_current_command}"],
+                env=env, capture_output=True)
+            if probe.returncode == 0 and probe.stdout.decode().strip() == "sleep":
+                break
+            if time.monotonic() > deadline:
+                raise HarnessError(
+                    "reference terminal never finished playing the script "
+                    f"(last probe: rc={probe.returncode} "
+                    f"{probe.stderr.decode('utf-8', 'replace').strip()!r})")
+            time.sleep(0.02)
+        # `cat` exiting proves the bytes were written, not that tmux has
+        # parsed them — it drains the pty on its own schedule. Capture until
+        # two consecutive reads agree, which observes the screen settling
+        # instead of assuming an interval long enough to have covered it.
+        previous = None
+        while True:
+            out = subprocess.run(["tmux", "-L", socket, "capture-pane", "-p", "-e", "-N"],
+                                 env=env, capture_output=True)
+            if out.returncode != 0:
+                raise HarnessError("reference terminal could not be captured: "
+                                   f"{out.stderr.decode('utf-8', 'replace').strip()}")
+            current = out.stdout.decode("utf-8", "replace")
+            if current == previous:
+                return current.split("\n")
+            if time.monotonic() > deadline:
+                raise HarnessError("reference terminal screen never stopped changing")
+            previous = current
+            time.sleep(0.02)
     finally:
         subprocess.run(["tmux", "-L", socket, "kill-server"], env=env,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -321,15 +417,35 @@ def main():
         print(f"vtconform: {args.dump_tool} not built", file=sys.stderr)
         return 2
 
+    # Private to this process. A fixed socket name lets two concurrent runs
+    # -- a developer's suite overlapping CI's, say -- kill each other's
+    # reference server mid-capture, which reads as an emulator fault.
+    socket = f"ckvconf{os.getpid()}"
     names = args.case or sorted(CASES)
     failures = []
     documented = []
+    unmeasured = []
     for name in names:
         columns, rows, script = CASES[name]
         ours = subprocess.run([args.dump_tool, "--columns", str(columns), "--rows", str(rows)],
                               input=script.encode("latin-1"), capture_output=True, check=True)
         mine = runs_from_dump(ours.stdout.decode())
-        theirs = runs_from_capture(reference_capture(script, columns, rows, "ckvconf"), columns, rows)
+        # One retry, because the reference terminal is a separate process
+        # competing for a loaded machine. Two failures in a row is the
+        # instrument being broken rather than busy, and is reported as such.
+        for attempt in range(2):
+            try:
+                theirs = runs_from_capture(reference_capture(script, columns, rows, socket),
+                                           columns, rows)
+                break
+            except HarnessError as error:
+                if attempt == 0:
+                    continue
+                unmeasured.append(name)
+                print(f"  ERROR {name}: {error}")
+                theirs = None
+        if theirs is None:
+            continue
 
         if mine == theirs:
             print(f"  ok    {name}")
@@ -352,14 +468,19 @@ def main():
             print(f"      ckvision : {a}")
             print(f"      reference: {b}")
 
-    agreed = len(names) - len(failures) - len(documented)
+    agreed = len(names) - len(failures) - len(documented) - len(unmeasured)
     print(f"\nvtconform: {agreed}/{len(names)} cases agree with the reference, "
-          f"{len(documented)} documented deviation(s), {len(failures)} unexplained")
+          f"{len(documented)} documented deviation(s), {len(failures)} unexplained"
+          + (f", {len(unmeasured)} unmeasured" if unmeasured else ""))
     for reason in sorted({DEVIATIONS[n] for n in documented}):
         print(f"\n  deviation: {reason}\n    " + DEVIATION_REASONS[reason].replace(". ", ".\n    "))
     if failures:
         print("\nunexplained differences: " + ", ".join(failures))
-    return 1 if failures else 0
+    if unmeasured:
+        print("\nthe reference terminal failed to produce a reading for: "
+              + ", ".join(unmeasured) + "\nthis says nothing about ckVision; "
+              "it means the harness could not measure.")
+    return 1 if failures or unmeasured else 0
 
 
 if __name__ == "__main__":

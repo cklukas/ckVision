@@ -18,36 +18,6 @@ namespace {
 constexpr std::size_t kMaxControlBytes = 16U * 1024U * 1024U;
 constexpr int kMaxSixelRepeat = 1'000'000;
 
-struct Rgb {
-    std::uint8_t r;
-    std::uint8_t g;
-    std::uint8_t b;
-};
-
-constexpr std::array<Rgb, 16> kBasic16{{
-    {0, 0, 0},       {128, 0, 0},     {0, 128, 0},     {128, 128, 0},
-    {0, 0, 128},     {128, 0, 128},   {0, 128, 128},   {192, 192, 192},
-    {128, 128, 128}, {255, 0, 0},     {0, 255, 0},     {255, 255, 0},
-    {0, 0, 255},     {255, 0, 255},   {0, 255, 255},   {255, 255, 255},
-}};
-
-Rgb indexed_color(int index) noexcept {
-    if (index < 0) index = 0;
-    if (index < 16) return kBasic16[static_cast<std::size_t>(index)];
-    if (index < 232) {
-        constexpr std::array<std::uint8_t, 6> levels{{0, 95, 135, 175, 215, 255}};
-        const int cube = index - 16;
-        return Rgb{levels[static_cast<std::size_t>((cube / 36) % 6)],
-                   levels[static_cast<std::size_t>((cube / 6) % 6)],
-                   levels[static_cast<std::size_t>(cube % 6)]};
-    }
-    if (index < 256) {
-        const auto value = static_cast<std::uint8_t>(8 + (index - 232) * 10);
-        return Rgb{value, value, value};
-    }
-    return kBasic16[0];
-}
-
 bool parse_unsigned(std::string_view text, std::size_t& pos, int& value) noexcept {
     if (pos >= text.size() || !std::isdigit(static_cast<unsigned char>(text[pos]))) return false;
     int parsed = 0;
@@ -91,6 +61,48 @@ std::vector<int> parse_csi_params(std::string_view text, bool& ok) {
     }
     return result;
 }
+
+}  // namespace
+
+std::vector<VirtualDisplay::SgrParam> VirtualDisplay::parse_sgr_params(std::string_view text,
+                                                                        bool& ok) {
+    std::vector<SgrParam> result;
+    ok = true;
+    if (text.empty()) return result;
+    std::size_t pos = 0;
+    for (;;) {
+        SgrParam parameter;
+        for (bool first = true;; first = false) {
+            int value = 0;
+            // An omitted number means zero, which is how `58:2::R:G:B`
+            // spells "no colour space named".
+            if (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos])) != 0) {
+                if (!parse_unsigned(text, pos, value)) {
+                    ok = false;
+                    return {};
+                }
+            }
+            if (first) parameter.value = value;
+            else parameter.subs.push_back(value);
+            if (pos == text.size() || text[pos] != ':') break;
+            ++pos;
+        }
+        result.push_back(std::move(parameter));
+        if (pos == text.size()) break;
+        if (text[pos] != ';') {
+            ok = false;
+            return {};
+        }
+        ++pos;
+        if (pos == text.size()) {
+            result.push_back(SgrParam{});
+            break;
+        }
+    }
+    return result;
+}
+
+namespace {
 
 Attr without_attr(Attr attrs, Attr removed) noexcept {
     const auto bits = static_cast<std::uint8_t>(attrs);
@@ -259,12 +271,12 @@ bool VirtualDisplay::handle_csi(char final_byte) {
 
     if (final_byte == 'm') {
         bool ok = false;
-        std::vector<int> params = parse_csi_params(control_buffer_, ok);
+        std::vector<SgrParam> params = parse_sgr_params(control_buffer_, ok);
         if (!ok) {
             fail("invalid SGR CSI sequence");
             return false;
         }
-        if (params.empty()) params.push_back(0);
+        if (params.empty()) params.push_back(SgrParam{});
         return apply_sgr(params);
     }
 
@@ -338,10 +350,36 @@ bool VirtualDisplay::handle_csi(char final_byte) {
     return false;
 }
 
-bool VirtualDisplay::apply_sgr(const std::vector<int>& params) {
+bool VirtualDisplay::apply_sgr(const std::vector<SgrParam>& params) {
+    // A palette index decodes back to a palette index. This decoder is an
+    // oracle for what the Presenter wrote, and "the host was told index 4" is
+    // the fact worth recording; resolving it to a particular blue here would
+    // invent a palette the receiving terminal never consulted.
+    const auto color_from = [](int mode, const int* values, std::size_t count,
+                               Color& out) -> bool {
+        if (mode == 5) {
+            if (count < 1 || values[0] < 0 || values[0] > 255) return false;
+            out = Color::indexed(static_cast<std::uint8_t>(values[0]));
+            return true;
+        }
+        if (mode != 2 || count < 3) return false;
+        for (std::size_t i = 0; i < 3; ++i)
+            if (values[i] < 0 || values[i] > 255) return false;
+        out = Color::rgb(static_cast<std::uint8_t>(values[0]), static_cast<std::uint8_t>(values[1]),
+                         static_cast<std::uint8_t>(values[2]));
+        return true;
+    };
+
     std::size_t i = 0;
     while (i < params.size()) {
-        const int p = params[i++];
+        const SgrParam& parameter = params[i++];
+        const int p = parameter.value;
+        // Only the parameters documented below carry sub-parameters; one
+        // anywhere else is a form the Presenter cannot have produced.
+        if (!parameter.subs.empty() && p != 4 && p != 58 && p != 38 && p != 48) {
+            fail("unexpected SGR sub-parameter in virtual display");
+            return false;
+        }
         switch (p) {
             case 0:
                 style_ = Style{};
@@ -355,9 +393,28 @@ bool VirtualDisplay::apply_sgr(const std::vector<int>& params) {
             case 3:
                 style_.attrs |= Attr::Italic;
                 break;
-            case 4:
+            case 4: {
+                // Bare `4` is the plain rule; `4:0` is no underline at all,
+                // and the rest name a shape.
+                const int shape = parameter.subs.empty() ? 1 : parameter.subs.front();
+                if (parameter.subs.size() > 1 || shape < 0 || shape > 5) {
+                    fail("unsupported underline style in virtual display");
+                    return false;
+                }
+                if (shape == 0) {
+                    style_.attrs = without_attr(style_.attrs, Attr::Underline);
+                    style_.underline = UnderlineShape::Straight;
+                    style_.underline_color = Color{};
+                    break;
+                }
                 style_.attrs |= Attr::Underline;
+                style_.underline = shape == 2   ? UnderlineShape::Double
+                                   : shape == 3 ? UnderlineShape::Curly
+                                   : shape == 4 ? UnderlineShape::Dotted
+                                   : shape == 5 ? UnderlineShape::Dashed
+                                                : UnderlineShape::Straight;
                 break;
+            }
             case 7:
                 style_.attrs |= Attr::Reverse;
                 break;
@@ -372,6 +429,8 @@ bool VirtualDisplay::apply_sgr(const std::vector<int>& params) {
                 break;
             case 24:
                 style_.attrs = without_attr(style_.attrs, Attr::Underline);
+                style_.underline = UnderlineShape::Straight;
+                style_.underline_color = Color{};
                 break;
             case 27:
                 style_.attrs = without_attr(style_.attrs, Attr::Reverse);
@@ -385,55 +444,63 @@ bool VirtualDisplay::apply_sgr(const std::vector<int>& params) {
             case 49:
                 style_.bg = Color{};
                 break;
+            case 59:
+                style_.underline_color = Color{};
+                break;
             case 38:
-            case 48: {
-                const bool background = p == 48;
-                if (i >= params.size()) {
-                    fail("truncated extended-color SGR sequence");
-                    return false;
-                }
+            case 48:
+            case 58: {
                 Color color;
-                const int mode = params[i++];
-                if (mode == 2) {
-                    if (i + 2 >= params.size()) {
-                        fail("truncated truecolor SGR sequence");
+                if (!parameter.subs.empty()) {
+                    // The ISO 8613-6 spelling, in which the whole colour is
+                    // one parameter: `58:5:n`, or `58:2::R:G:B` with the
+                    // colour space left unnamed.
+                    const std::vector<int>& subs = parameter.subs;
+                    const int mode = subs[0];
+                    const std::size_t skip = (mode == 2 && subs.size() >= 5) ? 2 : 1;
+                    if (!color_from(mode, subs.data() + skip, subs.size() - skip, color)) {
+                        fail("invalid extended-color SGR sub-parameters");
                         return false;
                     }
-                    const int r = params[i++];
-                    const int g = params[i++];
-                    const int b = params[i++];
-                    if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
-                        fail("out-of-range truecolor SGR component");
-                        return false;
-                    }
-                    color = Color::rgb(static_cast<std::uint8_t>(r), static_cast<std::uint8_t>(g),
-                                       static_cast<std::uint8_t>(b));
-                } else if (mode == 5) {
-                    if (i >= params.size() || params[i] < 0 || params[i] > 255) {
-                        fail("invalid indexed-color SGR sequence");
-                        return false;
-                    }
-                    const Rgb rgb = indexed_color(params[i++]);
-                    color = Color::rgb(rgb.r, rgb.g, rgb.b);
                 } else {
-                    fail("unsupported extended-color SGR mode");
-                    return false;
+                    if (i >= params.size()) {
+                        fail("truncated extended-color SGR sequence");
+                        return false;
+                    }
+                    const int mode = params[i++].value;
+                    const std::size_t count = mode == 2 ? 3 : 1;
+                    if (params.size() - i < count) {
+                        fail("truncated extended-color SGR sequence");
+                        return false;
+                    }
+                    int values[3] = {0, 0, 0};
+                    for (std::size_t v = 0; v < count; ++v) {
+                        if (!params[i + v].subs.empty()) {
+                            fail("unexpected SGR sub-parameter in virtual display");
+                            return false;
+                        }
+                        values[v] = params[i + v].value;
+                    }
+                    i += count;
+                    if (!color_from(mode, values, count, color)) {
+                        fail("unsupported extended-color SGR mode");
+                        return false;
+                    }
                 }
-                if (background)
-                    style_.bg = color;
-                else
-                    style_.fg = color;
+                if (p == 48) style_.bg = color;
+                else if (p == 58) style_.underline_color = color;
+                else style_.fg = color;
                 break;
             }
+            case 21:
+                style_.attrs |= Attr::Underline;
+                style_.underline = UnderlineShape::Double;
+                break;
             default:
                 if ((p >= 30 && p <= 37) || (p >= 90 && p <= 97)) {
-                    const int index = p >= 90 ? p - 90 + 8 : p - 30;
-                    const Rgb rgb = indexed_color(index);
-                    style_.fg = Color::rgb(rgb.r, rgb.g, rgb.b);
+                    style_.fg = Color::indexed(static_cast<std::uint8_t>(p >= 90 ? p - 90 + 8 : p - 30));
                 } else if ((p >= 40 && p <= 47) || (p >= 100 && p <= 107)) {
-                    const int index = p >= 100 ? p - 100 + 8 : p - 40;
-                    const Rgb rgb = indexed_color(index);
-                    style_.bg = Color::rgb(rgb.r, rgb.g, rgb.b);
+                    style_.bg = Color::indexed(static_cast<std::uint8_t>(p >= 100 ? p - 100 + 8 : p - 40));
                 } else {
                     fail("unsupported SGR parameter in virtual display");
                     return false;
@@ -636,7 +703,7 @@ bool VirtualDisplay::decode_sixel(std::string_view body) {
         if (c == '#') {
             ++pos;
             int index = 0;
-            if (!parse_unsigned(body, pos, index) || index < 0 || index >= 256) {
+            if (!parse_unsigned(body, pos, index) || index < 0 || index >= kSixelColorRegisters) {
                 fail("invalid Sixel color register");
                 return false;
             }

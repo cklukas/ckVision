@@ -679,6 +679,75 @@ descriptor (breaks session and wait ownership); spawning through an implicit
 shell (ambiguous quoting and policy); global child-session registries; and
 accepting a screenshot without decoded pixel-plane proof of containment.
 
+**D-044 — A colour keeps the kind it was asked for.** `Color` is one of three
+things — the terminal's own default, a palette index, or a specific 24-bit
+value — and the distinction survives every layer. Resolving an index to RGB on
+the way in answered the palette question once, permanently, at the moment the
+byte arrived: the cell remembered red-as-it-was-then rather than "red", and no
+later re-theming could reach it. `core/palette.hpp` is the single place that
+turns an index into channels, for the things that genuinely need pixels
+(shadow dimming, SVG capture, quantisation for a host with fewer colours);
+everything in between carries the index, and the `Presenter` passes it out to
+the host unchanged so the reader's own theme applies to it. The golden format
+spells the three kinds `default`, `@<index>` and `#RRGGBB` for the same
+reason: a dump is a specification, and it must not record an answer the source
+never gave. *Consequence, deliberate:* bold brightening applies to the low
+eight palette entries only — a program's own `38;2;205;49;49` is a colour it
+chose, where before it was indistinguishable from palette red and was
+brightened with it. *Rejected:* resolving at parse time (loses the fact);
+carrying a parallel "original index" beside the RGB (two representations of
+one thing, and every consumer must remember which is authoritative).
+
+**D-045 — An underline has a shape and a colour, and only while it exists.**
+`Attr::Underline` says a rule is drawn; `Style::underline` says which rule and
+`Style::underline_color` says what colour, and both are meaningful only while
+the attribute is set. Clearing the underline restores them, so two cells that
+render alike compare alike and the presenter's diff does not redraw cells
+nothing happened to. The shapes are emulated always and emitted only to a host
+that declares `Capabilities::underline_styles`: a terminal that has never
+heard of the colon form reads `4:3` as two parameters and applies italics, so
+a shape is never offered on the chance that it lands. Where the capability is
+absent every shape degrades to the plain rule, which still reads as emphasis.
+The behaviour itself — `SGR 21` as a double rule, `4:0` as none, `4:5` as
+dashed — was **measured** against a reference terminal through
+`tools/vtconform/`, not decided. *Rejected:* removing `Attr::Underline` in
+favour of a shape enum alone (`Attr` is the project's vocabulary for text
+attributes and several public surfaces carry it); separate `Attr` bits per
+shape (mutually exclusive states modelled as flags).
+
+**D-046 — A child may write the clipboard by opt-in, and may never read it.**
+`OSC 52` is the one child-initiated action that reaches outside the terminal
+window: it replaces what the person at the keyboard had copied, without their
+having asked. That is a feature when it is `yank` in an editor they are
+driving and an attack when it is a file they happened to `cat`, and the
+difference is not visible from inside the terminal — so writing is opt-in per
+profile (`TerminalClipboardPolicy`, default `Deny`), bounded by
+`max_clipboard_bytes`, strictly base64-decoded, and sanitized for a clipboard
+rather than for a cell. The emulator records the text and a count of granted
+requests; `TerminalView` exports it when the count moves, because a snapshot
+is a value that may be read any number of times and reading must not be what
+causes an export. Reading is refused under **every** policy, extending D-022's
+no-OSC-52-read boundary inward to child sessions: a program that can read the
+clipboard can read whatever its reader last copied. *Rejected:* a policy value
+that enables reads (there is no safe form of it); delivering the text through
+a queue that `snapshot()` drains (makes an observation destructive).
+
+**D-047 — Keyboard enhancements are masked to what will really be delivered.**
+The kitty keyboard protocol is progressive enhancement: a program asks for
+flags, reads back what it got, and keeps its fallback for the rest. ckVision
+therefore masks a requested flag to what the session can actually honour *at
+the moment it is set*, so `CSI ? u` reports what will really arrive rather
+than what was asked for. `ReportAlternateKeys` is consequently dropped —
+ckVision's input model carries a key and the text it produced, not the layout
+behind them — and a program is told so rather than being led to stop looking
+for the fallback it still needs. The flag stack is per screen: a full-screen
+program's settings must not follow it out onto the shell's screen, and a
+program that dies without popping must leave nothing behind. The legacy
+encoding remains the default and the fallback for every key the flags in force
+do not cover. *Rejected:* storing every requested flag and honouring a subset
+(reports a promise the terminal does not keep); one stack shared by both
+screens (leaks a dead program's settings to the shell).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**
