@@ -374,3 +374,208 @@ CK_TEST(the_day_a_reader_selected_outranks_today_and_the_marked_span) {
     calendar.set_selected(DateValue{2026, 8, 20});
     CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.calendar_today).bg);
 }
+
+// --- Clock -------------------------------------------------------------------
+
+CK_TEST(a_clock_shows_the_time_its_host_supplies_in_the_format_asked_for) {
+    Standalone s;
+    ClockView clock;
+    attach_standalone(clock, s);
+    TimeValue now{13, 5, 9};
+    clock.set_time_provider([&] { return now; });
+
+    CK_CHECK(clock.text() == std::string("13:05"));
+    clock.set_show_seconds(true);
+    CK_CHECK(clock.text() == std::string("13:05:09"));
+
+    // Twelve-hour, with the words the host chose -- ckVision carries no
+    // locale data of its own.
+    clock.set_hour_format(HourFormat::TwelveHour);
+    CK_CHECK(clock.text() == std::string("1:05:09 PM"));
+    clock.set_meridiem_labels("vorm.", "nachm.");
+    CK_CHECK(clock.text() == std::string("1:05:09 nachm."));
+    clock.set_meridiem_labels("", "");  // suppress the suffix entirely
+    CK_CHECK(clock.text() == std::string("1:05:09"));
+}
+
+CK_TEST(midnight_and_noon_read_as_twelve_not_zero) {
+    Standalone s;
+    ClockView clock;
+    attach_standalone(clock, s);
+    TimeValue now{0, 30, 0};
+    clock.set_time_provider([&] { return now; });
+    clock.set_hour_format(HourFormat::TwelveHour);
+    CK_CHECK(clock.text() == std::string("12:30 AM"));
+    now = TimeValue{12, 30, 0};
+    clock.set_show_seconds(false);
+    clock.set_hour_format(HourFormat::TwentyFour);
+    clock.set_hour_format(HourFormat::TwelveHour);  // force a re-render
+    CK_CHECK(clock.text() == std::string("12:30 PM"));
+}
+
+CK_TEST(a_blinking_separator_hides_the_colon_and_never_the_digits) {
+    // A clock whose numbers flicker is unreadable, and the separator carries
+    // no information -- so it is the only thing that blinks.
+    Standalone s;
+    ClockView clock;
+    attach_standalone(clock, s);
+    clock.set_time_provider([] { return TimeValue{9, 41, 0}; });
+    clock.set_blinking_separator(true);
+    CK_CHECK(clock.text() == std::string("09:41"));
+    CK_CHECK(clock.text().find("41") != std::string::npos);
+}
+
+CK_TEST(a_clock_that_shows_no_seconds_is_sized_for_what_it_shows) {
+    Standalone s;
+    ClockView clock;
+    attach_standalone(clock, s);
+    clock.set_time_provider([] { return TimeValue{9, 41, 7}; });
+    const int without = clock.horizontal_size_hint().preferred;
+    clock.set_show_seconds(true);
+    const int with = clock.horizontal_size_hint().preferred;
+    CK_CHECK(with == without + 3);  // ":07"
+}
+
+// --- Calendar: where the week starts ------------------------------------------
+
+CK_TEST(the_week_starts_where_the_reader_expects_it_to) {
+    // 1 August 2026 is a Saturday. Counting from Monday it is the sixth
+    // column; counting from Sunday, the seventh.
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_selected(DateValue{2026, 8, 1});
+    calendar.set_today(std::nullopt);
+    calendar.set_bounds(ckv::Rect{0, 0, 30, 10});
+    ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+
+    const auto column_of_first = [&] {
+        ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 30, 10});
+        painter.fill(ckv::Rect{0, 0, 30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+        calendar.draw(painter);
+        for (int column = 0; column < 7; ++column)
+            if (surface.at(ckv::Point{column * 3 + 1, 2}).grapheme() == "1") return column;
+        return -1;
+    };
+
+    calendar.set_first_weekday(Weekday::Monday);
+    CK_CHECK(column_of_first() == 5);
+    calendar.set_first_weekday(Weekday::Sunday);
+    CK_CHECK(column_of_first() == 6);
+}
+
+CK_TEST(a_clock_repaints_when_the_time_changes_and_not_on_every_tick) {
+    // The whole claim: a clock without seconds costs one string comparison a
+    // second and one repaint a minute. Measured at the terminal, because
+    // that is where the cost lands.
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 6});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+
+    TimeValue now{9, 41, 0};
+    auto* view = static_cast<ClockView*>(app.root().add_child(std::make_unique<ClockView>()));
+    view->set_time_provider([&] { return now; });
+    view->set_bounds(ckv::Rect{0, 0, 10, 1});
+    app.step(0);
+    CK_CHECK(!term.written_bytes().empty());  // first frame draws it
+
+    // Ten seconds pass with the minute unchanged: the clock ticks ten times
+    // and asks for nothing.
+    term.clear_written();
+    std::int64_t at = clock.now_nanos();
+    for (int i = 0; i < 10; ++i) {
+        now.second = i + 1;
+        at += 1'000'000'000;
+        clock.advance(1'000'000'000);
+        app.step(at);
+    }
+    CK_CHECK(term.written_bytes().empty());
+
+    // The minute turns over: now it repaints.
+    now = TimeValue{9, 42, 0};
+    at += 1'000'000'000;
+    clock.advance(1'000'000'000);
+    app.step(at);
+    CK_CHECK(!term.written_bytes().empty());
+    CK_CHECK(view->text() == std::string("09:42"));
+}
+
+CK_TEST(a_calendar_dropdown_hangs_right_aligned_under_its_anchor_and_closes_outside) {
+    ckv::term::HeadlessTerminal term(ckv::Size{60, 20});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<ckv::widgets::Desktop*>(
+        app.root().add_child(std::make_unique<ckv::widgets::Desktop>(app.root().bounds())));
+    auto* anchor = static_cast<ClockView*>(desktop->add_child(std::make_unique<ClockView>()));
+    anchor->set_time_provider([] { return TimeValue{9, 41, 0}; });
+    anchor->set_bounds(ckv::Rect{52, 0, 5, 1});  // at the right end, as in a menu bar
+    app.step(0);
+
+    CalendarDropdown* dropdown = show_calendar_dropdown(*anchor, app, *desktop);
+    app.step(0);
+    // Right edges aligned, the way a submenu hangs from the right end.
+    CK_CHECK(dropdown->bounds().right() == anchor->bounds().right());
+    CK_CHECK(dropdown->bounds().y == anchor->bounds().bottom());
+    CK_CHECK(app.input_capture() == dropdown);
+
+    // A press outside closes it, and gives up the capture with it.
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 10},
+                                  std::nullopt, ckv::Modifier::None});
+    app.step(0);
+    CK_CHECK(app.input_capture() == nullptr);
+}
+
+CK_TEST(a_right_aligned_dropdown_is_pulled_back_when_its_anchor_sits_near_the_left) {
+    // Right-alignment can only push a wide calendar off the LEFT edge: under
+    // an anchor at the right end it always fits. An anchor near the left is
+    // therefore the case worth pinning.
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 20});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<ckv::widgets::Desktop*>(
+        app.root().add_child(std::make_unique<ckv::widgets::Desktop>(app.root().bounds())));
+    auto* anchor = static_cast<ClockView*>(desktop->add_child(std::make_unique<ClockView>()));
+    anchor->set_time_provider([] { return TimeValue{9, 41, 0}; });
+    anchor->set_bounds(ckv::Rect{2, 0, 4, 1});
+    app.step(0);
+
+    CalendarDropdown* dropdown = show_calendar_dropdown(*anchor, app, *desktop);
+    CK_CHECK(dropdown->bounds().x == 0);  // pulled back rather than off-screen
+    CK_CHECK(dropdown->bounds().right() <= desktop->bounds().width);
+}
+
+CK_TEST(an_open_clock_wears_the_menu_bars_own_active_role) {
+    // To a reader it is a menu title with its dropdown down, so it uses the
+    // same two roles rather than a highlight of its own -- a theme dresses
+    // both alike without being asked twice.
+    Standalone s;
+    ClockView clock;
+    attach_standalone(clock, s);
+    clock.set_time_provider([] { return TimeValue{9, 41, 0}; });
+    clock.set_bounds(ckv::Rect{0, 0, 8, 1});
+    ckv::scene::Surface surface(ckv::Size{8, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+
+    const auto background_at = [&](int x) {
+        ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 8, 1});
+        clock.draw(painter);
+        return surface.at(ckv::Point{x, 0}).style().bg;
+    };
+    const ckv::Style normal = s.theme.resolve(s.roles.menu_bar_normal);
+    const ckv::Style active = s.theme.resolve(s.roles.menu_bar_active);
+    CK_CHECK(normal.bg != active.bg);  // the check would prove nothing otherwise
+
+    CK_CHECK(background_at(1) == normal.bg);
+    clock.set_open(true);
+    // The padding highlights with the text, so it reads as one item.
+    CK_CHECK(background_at(0) == active.bg);
+    CK_CHECK(background_at(1) == active.bg);
+    clock.set_open(false);
+    CK_CHECK(background_at(1) == normal.bg);
+}

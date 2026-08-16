@@ -237,6 +237,20 @@ struct MenuBarItem {
 // destroyed MenuBar can never be reached through a stale handler.
 class MenuBar : public ui::View {
 public:
+    // A view pinned to the right end of the bar -- a clock, an indicator,
+    // anything an application wants permanently in view. It is a child, so
+    // it draws and receives input normally; the bar only decides where it
+    // sits, and re-decides on every resize so it stays at the right end
+    // rather than where the right end used to be.
+    // Typed insertion, as add_window/add_popup do: the bar hands back what
+    // was put in, so a caller keeps its own type without a cast.
+    template <class T>
+    T* set_trailing_view(std::unique_ptr<T> view) {
+        return static_cast<T*>(set_trailing_view_impl(std::move(view)));
+    }
+    ui::View* trailing_view() const noexcept { return trailing_view_; }
+    void on_resized() override;
+
     explicit MenuBar(std::vector<MenuBarItem> menus);
     ~MenuBar() override;
 
@@ -281,6 +295,9 @@ private:
     void close_dropdown();
     bool navigate_pointer(const MouseEvent& event);
 
+    ui::View* trailing_view_ = nullptr;
+    ui::View* set_trailing_view_impl(std::unique_ptr<ui::View> view);
+    void layout_trailing_view();
     std::vector<MenuBarItem> menus_;
     std::size_t highlighted_ = 0;
     bool active_ = false;

@@ -56,11 +56,20 @@ DateValue clamp_day(DateValue date) noexcept {
     return date;
 }
 
+int weekday_index(DateValue date, Weekday first) noexcept;
+
 int weekday_monday_zero(DateValue date) noexcept {
     // 0000-03-01 style weekday math is unnecessary here; the absolute offset
     // only needs to be stable. 1970-01-01 was Thursday, hence +3 for Monday=0.
     const int days = serial(date) - serial(DateValue{1970, 1, 1});
     return ((days + 3) % 7 + 7) % 7;
+}
+
+// The column a date falls in, counting from whichever day the week starts.
+int weekday_index(DateValue date, Weekday first) noexcept {
+    const int monday_zero = weekday_monday_zero(date);
+    const int offset = static_cast<int>(first);
+    return ((monday_zero - offset) % 7 + 7) % 7;
 }
 
 std::string two_digit(int value) {
@@ -153,6 +162,12 @@ void CalendarView::set_labels(std::vector<std::string> month_labels, std::vector
     invalidate();
 }
 
+void CalendarView::set_first_weekday(Weekday first) {
+    if (first_weekday_ == first) return;
+    first_weekday_ = first;
+    invalidate();
+}
+
 void CalendarView::set_show_iso_week_numbers(bool show) {
     if (show_iso_week_numbers_ == show) return;
     show_iso_week_numbers_ = show;
@@ -184,7 +199,7 @@ std::optional<DateValue> CalendarView::date_at_cell(Point local) const {
     const int column = (local.x - x_offset) / 3;
     const int row = local.y - 2;
     if (column < 0 || column >= 7) return std::nullopt;
-    const int first_weekday = weekday_monday_zero(month_);
+    const int first_weekday = weekday_index(month_, first_weekday_);
     const int day = row * 7 + column - first_weekday + 1;
     if (day < 1 || day > days_in_month(month_.year, month_.month)) return std::nullopt;
     return DateValue{month_.year, month_.month, day};
@@ -208,7 +223,7 @@ void CalendarView::draw(scene::Painter& painter) {
     for (int i = 0; i < 7; ++i) painter.draw_text(Point{x_offset + i * 3, 1}, weekday_labels_[i], normal);
     for (int day = 1; day <= days_in_month(month_.year, month_.month); ++day) {
         const DateValue date{month_.year, month_.month, day};
-        const int index = weekday_monday_zero(month_) + day - 1;
+        const int index = weekday_index(month_, first_weekday_) + day - 1;
         const int row = index / 7;
         const int column = index % 7;
         // Disabled first: a day that cannot be chosen says so before
@@ -260,6 +275,223 @@ void CalendarView::on_focus(const FocusEvent& event) {
 
 ui::SizeHint CalendarView::horizontal_size_hint() const { return ui::SizeHint{21, show_iso_week_numbers_ ? 24 : 21, ui::kUnboundedExtent}; }
 ui::SizeHint CalendarView::vertical_size_hint() const { return ui::SizeHint{8, 8, 8}; }
+
+ClockView::ClockView() {
+    set_focus_policy(ui::FocusPolicy::None);
+    set_preferred_size(Size{8, 1});
+}
+
+void ClockView::set_time_provider(std::function<TimeValue()> provider) {
+    time_provider_ = std::move(provider);
+    refresh();
+    ensure_ticking();
+}
+
+void ClockView::set_show_seconds(bool show) {
+    if (show_seconds_ == show) return;
+    show_seconds_ = show;
+    refresh();
+}
+
+void ClockView::set_blinking_separator(bool blinking) {
+    if (blinking_separator_ == blinking) return;
+    blinking_separator_ = blinking;
+    separator_lit_ = true;
+    refresh();
+}
+
+void ClockView::set_hour_format(HourFormat format) {
+    if (hour_format_ == format) return;
+    hour_format_ = format;
+    refresh();
+}
+
+void ClockView::set_meridiem_labels(std::string am, std::string pm) {
+    am_label_ = std::move(am);
+    pm_label_ = std::move(pm);
+    refresh();
+}
+
+std::string ClockView::render() const {
+    if (!time_provider_) return {};
+    const TimeValue now = time_provider_();
+    int hour = now.hour;
+    std::string suffix;
+    if (hour_format_ == HourFormat::TwelveHour) {
+        const std::string& label = hour < 12 ? am_label_ : pm_label_;
+        hour = hour % 12;
+        if (hour == 0) hour = 12;  // midnight and noon read as twelve, not zero
+        if (!label.empty()) suffix = " " + label;
+    }
+    // Blinking hides the separator, never the digits: a clock whose numbers
+    // flicker is unreadable, and the separator carries no information.
+    const std::string separator = (blinking_separator_ && !separator_lit_) ? " " : ":";
+    std::string text = (hour_format_ == HourFormat::TwelveHour ? std::to_string(hour) : two_digit(hour)) +
+                       separator + two_digit(now.minute);
+    if (show_seconds_) text += separator + two_digit(now.second);
+    return text + suffix;
+}
+
+void ClockView::refresh() {
+    // The whole point: re-render every tick, repaint only on a difference.
+    // Without this a clock is a full repaint a second forever, seconds shown
+    // or not.
+    std::string next = render();
+    if (next == rendered_) return;
+    rendered_ = std::move(next);
+    invalidate();
+}
+
+void ClockView::ensure_ticking() {
+    if (ticking_ || context().app == nullptr) return;
+    ticking_ = true;
+    ui::Application* const app = context().app;
+    const std::weak_ptr<void> liveness = lifetime_token();
+    auto id = std::make_shared<ui::Application::TimerId>(0);
+    // One second, whether or not seconds are shown: the cost of a tick is a
+    // string comparison, and a minute-resolution clock that ticked once a
+    // minute would show each minute up to a second late.
+    *id = app->start_timer(1'000'000'000, /*repeating=*/true, [this, liveness, id, app] {
+        // The view is gone and nothing will cancel this but the callback
+        // itself; a repeating timer holding a dead pointer would fire
+        // forever.
+        if (liveness.expired()) {
+            app->cancel_timer(*id);
+            return;
+        }
+        if (blinking_separator_) separator_lit_ = !separator_lit_;
+        refresh();
+    });
+}
+
+void ClockView::set_open(bool open) {
+    if (open_ == open) return;
+    open_ = open;
+    invalidate();
+}
+
+void ClockView::on_attached() {
+    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.menu.bar.normal");
+    if (open_role_ == ui::kInvalidRole) open_role_ = context().roles->find("ckv.menu.bar.active");
+    refresh();
+    ensure_ticking();
+}
+
+void ClockView::draw(scene::Painter& painter) {
+    const Style style = context().theme->resolve(open_ ? open_role_ : role_);
+    // The padding is part of the highlight, as a menu title's is: without it
+    // the open state reads as coloured text rather than as a pressed item.
+    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", style));
+    painter.draw_text(Point{1, 0}, text::clip_to_width(rendered_, std::max(0, bounds().width - 1)), style);
+}
+
+bool ClockView::on_mouse(const MouseEvent& event) {
+    if (event.action == MouseAction::Down) {
+        pressed_ = true;
+        return true;
+    }
+    if (event.action == MouseAction::Up) {
+        const bool was_pressed = pressed_;
+        pressed_ = false;
+        const Rect abs = absolute_bounds();
+        const bool inside = event.cell.x >= abs.x && event.cell.x < abs.right() &&
+                            event.cell.y >= abs.y && event.cell.y < abs.bottom();
+        if (was_pressed && inside && on_click) on_click();
+        return was_pressed;
+    }
+    return false;
+}
+
+ui::SizeHint ClockView::horizontal_size_hint() const {
+    // Measured from what is actually shown, so a clock that gains seconds or
+    // a meridiem word is given room for them rather than clipped.
+    // One cell of padding either side, so the open highlight has the same
+    // shape a menu title's does.
+    const int width = std::max(1, text::text_width(rendered_)) + 2;
+    return ui::SizeHint{width, width, width};
+}
+
+ui::SizeHint ClockView::vertical_size_hint() const { return ui::SizeHint{1, 1, 1}; }
+
+CalendarDropdown::CalendarDropdown() {
+    set_focus_policy(ui::FocusPolicy::None);
+    auto calendar = std::make_unique<CalendarView>();
+    calendar_ = static_cast<CalendarView*>(add_child(std::move(calendar)));
+}
+
+void CalendarDropdown::on_resized() {
+    if (calendar_ != nullptr) calendar_->set_bounds(Rect{0, 0, bounds().width, bounds().height});
+}
+
+ui::SizeHint CalendarDropdown::horizontal_size_hint() const {
+    return calendar_ != nullptr ? calendar_->horizontal_size_hint() : ui::SizeHint{1, 1, 1};
+}
+
+ui::SizeHint CalendarDropdown::vertical_size_hint() const {
+    return calendar_ != nullptr ? calendar_->vertical_size_hint() : ui::SizeHint{1, 1, 1};
+}
+
+void CalendarDropdown::draw(scene::Painter&) {}  // the calendar child draws it all
+
+void CalendarDropdown::dismiss() {
+    if (dismissed_) return;
+    dismissed_ = true;
+    // Copied before calling: the handler is expected to destroy this view,
+    // so the member must not be touched once it starts running.
+    // Both copied before either runs: on_dismiss is expected to destroy
+    // this view, so neither member may be touched afterwards.
+    const std::function<void()> notify = on_closed;
+    const std::function<void()> callback = on_dismiss;
+    if (notify) notify();
+    if (callback) callback();
+}
+
+bool CalendarDropdown::on_mouse(const MouseEvent& event) {
+    const Rect abs = absolute_bounds();
+    const bool inside = event.cell.x >= abs.x && event.cell.x < abs.right() && event.cell.y >= abs.y &&
+                        event.cell.y < abs.bottom();
+    if (!inside) {
+        // Only a press closes it. Closing on a release would swallow the
+        // press that opened the next thing.
+        if (event.action == MouseAction::Down) dismiss();
+        return false;
+    }
+    // Input capture routes to this view, so the calendar underneath is
+    // handed the event rather than reached by hit-testing.
+    return calendar_ != nullptr && calendar_->on_mouse(event);
+}
+
+bool CalendarDropdown::on_key(const KeyEvent& event) {
+    if (event.action == KeyAction::Press && event.chord.key == Key::Escape) {
+        dismiss();
+        return true;
+    }
+    return calendar_ != nullptr && calendar_->on_key(event);
+}
+
+CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application& app, Desktop& desktop) {
+    const Rect desktop_abs = desktop.absolute_bounds();
+    const Rect anchor_abs = anchor.absolute_bounds();
+    auto* raw = desktop.add_popup(std::make_unique<CalendarDropdown>());
+    const ui::SizeHint w = raw->horizontal_size_hint();
+    const ui::SizeHint h = raw->vertical_size_hint();
+    // Hung below the anchor with their RIGHT edges aligned, the way a
+    // submenu hangs from the right end of a bar. A clock sits at the right
+    // end, so aligning the left edges would send the calendar off the screen
+    // and the clamp would then park it against the edge, visibly unrelated
+    // to the thing it came from.
+    const int x = std::clamp(anchor_abs.right() - w.preferred - desktop_abs.x, 0,
+                             std::max(0, desktop.bounds().width - w.preferred));
+    const int y = std::clamp(anchor_abs.bottom() - desktop_abs.y, 0,
+                             std::max(0, desktop.bounds().height - h.preferred));
+    raw->set_bounds(Rect{x, y, w.preferred, h.preferred});
+    raw->on_dismiss = [&app, &desktop, raw] {
+        if (app.input_capture() == raw) app.clear_input_capture();
+        desktop.remove_popup(raw);  // discards ownership -> destroys this view
+    };
+    app.set_input_capture(raw);
+    return raw;
+}
 
 void CalendarView::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");

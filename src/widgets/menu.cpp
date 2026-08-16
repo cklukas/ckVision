@@ -667,6 +667,28 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
     return false;
 }
 
+void MenuBar::on_resized() { layout_trailing_view(); }
+
+ui::View* MenuBar::set_trailing_view_impl(std::unique_ptr<ui::View> view) {
+    if (trailing_view_ != nullptr) {
+        (void)remove_child(trailing_view_);
+        trailing_view_ = nullptr;
+    }
+    if (view == nullptr) return nullptr;
+    trailing_view_ = add_child(std::move(view));
+    layout_trailing_view();
+    return trailing_view_;
+}
+
+void MenuBar::layout_trailing_view() {
+    if (trailing_view_ == nullptr) return;
+    // Its own preferred width, pinned to the right edge. Recomputed rather
+    // than remembered: a clock that gains seconds is a cell or two wider,
+    // and the right edge is wherever the bar ends now.
+    const int width = std::clamp(trailing_view_->horizontal_size_hint().preferred, 0, bounds().width);
+    trailing_view_->set_bounds(Rect{bounds().width - width, 0, width, 1});
+}
+
 void MenuBar::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const Style base = theme.resolve(normal_role_);

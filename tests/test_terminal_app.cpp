@@ -206,3 +206,40 @@ CK_TEST(the_help_command_answers_with_an_about_box) {
     f.app.step(0);
     CK_CHECK(f.app.is_modal());
 }
+
+CK_TEST(the_clock_sits_at_the_right_end_of_the_menu_bar_and_stays_there_on_resize) {
+    // Right-aligned means recomputed, not remembered: after a resize the
+    // right edge is somewhere else, and the clock has to be there too.
+    Fixture f;
+    f.app.step(0);
+    auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.example.desktop().top_dock());
+    CK_CHECK(menu_bar != nullptr);
+    auto* const clock = dynamic_cast<ckv::widgets::ClockView*>(menu_bar->trailing_view());
+    CK_CHECK(clock != nullptr);
+    CK_CHECK(clock->bounds().right() == menu_bar->bounds().width);
+    CK_CHECK(clock->bounds().width > 0);
+
+    f.terminal.resize(Size{140, 40});
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(menu_bar->bounds().width == 140);
+    CK_CHECK(clock->bounds().right() == menu_bar->bounds().width);
+}
+
+CK_TEST(clicking_the_clock_drops_a_calendar_out_of_it) {
+    Fixture f;
+    f.app.step(0);
+    auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.example.desktop().top_dock());
+    auto* const clock = dynamic_cast<ckv::widgets::ClockView*>(menu_bar->trailing_view());
+    CK_CHECK(clock != nullptr);
+    CK_CHECK(f.app.input_capture() == nullptr);
+
+    // A completed click, since the clock acts on release like every other
+    // command-like control here.
+    const ckv::Rect at = clock->absolute_bounds();
+    CK_CHECK(clock->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                              ckv::Point{at.x, at.y}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(clock->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                              ckv::Point{at.x, at.y}, std::nullopt, ckv::Modifier::None}));
+    f.app.step(0);
+    CK_CHECK(f.app.input_capture() != nullptr);  // the calendar took capture
+}

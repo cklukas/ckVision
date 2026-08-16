@@ -9,6 +9,7 @@
 
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/view.hpp"
+#include "cvision/widgets/desktop.hpp"
 
 namespace ckv::widgets {
 
@@ -27,6 +28,86 @@ struct TimeValue {
     int second = 0;
 
     friend bool operator==(const TimeValue&, const TimeValue&) = default;
+};
+
+// Whether an hour reads 0..23 or 1..12 with a meridiem word. Which one a
+// reader expects is a property of where they are, not of the clock, so the
+// host chooses it along with the words -- ckVision carries no locale data.
+enum class HourFormat { TwentyFour, TwelveHour };
+
+// The day a week starts on. Also a property of where the reader is: Monday
+// across most of Europe, Sunday across much of the Americas and Asia.
+enum class Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday };
+
+// A clock that repaints when the time it shows changes, and not otherwise.
+//
+// It ticks once a second and re-renders, but only asks for a repaint when
+// the rendered text actually differs. A clock without seconds therefore
+// costs one string comparison a second and one repaint a minute; the frame
+// diff never sees the other fifty-nine.
+//
+// The time comes from an injected provider, as the calendar's today does:
+// ckVision's Clock is monotonic with an implementation-defined epoch,
+// deliberately not a wall clock. The provider is what makes a clock
+// testable -- a test hands it a value and steps it.
+class ClockView : public ui::View {
+public:
+    ClockView();
+
+    void set_time_provider(std::function<TimeValue()> provider);
+    void set_show_seconds(bool show);
+    bool show_seconds() const noexcept { return show_seconds_; }
+    // The separator blinks off for half of each second. Nothing else about
+    // the display changes, so a blinking clock repaints once a second and a
+    // still one does not.
+    void set_blinking_separator(bool blinking);
+    bool blinking_separator() const noexcept { return blinking_separator_; }
+    void set_hour_format(HourFormat format);
+    HourFormat hour_format() const noexcept { return hour_format_; }
+    // The words for the two halves of a twelve-hour day. Empty labels
+    // suppress the suffix entirely.
+    void set_meridiem_labels(std::string am, std::string pm);
+
+    // What it is displaying right now, separator and all.
+    std::string text() const { return rendered_; }
+
+    // Fires on a completed click, so a clock can open something -- a
+    // calendar, say -- without knowing what.
+    std::function<void()> on_click;
+
+    // Whether whatever this clock opened is currently open. It then draws
+    // the way a menu title with its dropdown down does, using the same two
+    // roles, because to a reader it IS that: a thing on the bar that is
+    // showing something. Reusing the menu's roles rather than inventing a
+    // highlight also means a theme dresses both alike without being asked
+    // twice.
+    void set_open(bool open);
+    bool open() const noexcept { return open_; }
+
+    void draw(scene::Painter& painter) override;
+    bool on_mouse(const MouseEvent& event) override;
+    void on_attached() override;
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
+
+private:
+    std::string render() const;
+    void refresh();
+    void ensure_ticking();
+
+    std::function<TimeValue()> time_provider_;
+    bool show_seconds_ = false;
+    bool blinking_separator_ = false;
+    HourFormat hour_format_ = HourFormat::TwentyFour;
+    std::string am_label_ = "AM";
+    std::string pm_label_ = "PM";
+    std::string rendered_;
+    bool separator_lit_ = true;
+    bool open_ = false;
+    bool ticking_ = false;
+    bool pressed_ = false;
+    ui::RoleId role_ = ui::kInvalidRole;
+    ui::RoleId open_role_ = ui::kInvalidRole;
 };
 
 class CalendarView : public ui::View {
@@ -65,6 +146,10 @@ public:
     void set_range(std::optional<DateValue> minimum, std::optional<DateValue> maximum);
     void set_disabled_predicate(std::function<bool(DateValue)> predicate);
     void set_labels(std::vector<std::string> month_labels, std::vector<std::string> weekday_labels);
+    // The day the week starts on, which decides both the weekday header and
+    // where the first of the month falls in the grid.
+    void set_first_weekday(Weekday first);
+    Weekday first_weekday() const noexcept { return first_weekday_; }
     void set_show_iso_week_numbers(bool show);
     bool show_iso_week_numbers() const noexcept { return show_iso_week_numbers_; }
 
@@ -96,6 +181,7 @@ private:
     std::function<bool(DateValue)> disabled_;
     std::vector<std::string> month_labels_;
     std::vector<std::string> weekday_labels_;
+    Weekday first_weekday_ = Weekday::Monday;
     bool show_iso_week_numbers_ = false;
     bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
@@ -107,6 +193,46 @@ private:
     std::optional<DateValue> effective_today() const;
     bool within_marked_span(DateValue date) const noexcept;
 };
+
+// A CalendarView shown as a transient popup: it closes on Escape, and on a
+// click anywhere but itself. That behaviour is what separates a dropdown
+// from a small window, and it does not belong in CalendarView -- the same
+// calendar sits permanently in a dialog elsewhere and must not vanish when
+// the reader clicks beside it.
+class CalendarDropdown : public ui::View {
+public:
+    CalendarDropdown();
+
+    CalendarView& calendar() noexcept { return *calendar_; }
+
+    // Fires once, when the popup has decided it is finished. The owner
+    // removes it; this view never removes itself, having no say in who owns
+    // it.
+    std::function<void()> on_dismiss;
+
+    // Also called when the popup closes, and separately from on_dismiss:
+    // show_calendar_dropdown() claims on_dismiss to remove the popup, so a
+    // caller that also wants to know has nowhere else to put it.
+    std::function<void()> on_closed;
+
+    void draw(scene::Painter& painter) override;
+    bool on_mouse(const MouseEvent& event) override;
+    bool on_key(const KeyEvent& event) override;
+    void on_resized() override;
+    ui::SizeHint horizontal_size_hint() const override;
+    ui::SizeHint vertical_size_hint() const override;
+
+private:
+    void dismiss();
+
+    CalendarView* calendar_ = nullptr;
+    bool dismissed_ = false;
+};
+
+// Opens a calendar under `anchor` -- typically a ClockView -- and takes
+// input capture so the next click outside closes it. The caller configures
+// the returned dropdown's calendar() before the next frame.
+CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application& app, Desktop& desktop);
 
 class DatePicker : public ui::View {
 public:

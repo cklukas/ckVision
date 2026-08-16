@@ -3,6 +3,8 @@
 #include "terminal_app.hpp"
 
 #include <cstdlib>
+#include "cvision/widgets/common_components.hpp"
+#include <ctime>
 #include "cvision/term/sixel_encoder.hpp"
 #include <iterator>
 #include <cstdint>
@@ -94,6 +96,29 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
                    widgets::StatusLineItem{"Ctrl+Alt+Space: parent commands"},
                }});
     desktop_ = &shell.desktop();
+
+    // A clock at the right end of the menu bar, which stays at the right end
+    // when the terminal is resized because the bar re-places it rather than
+    // remembering where the edge was.
+    if (widgets::MenuBar* const menu_bar = shell.menu_bar()) {
+        auto clock = std::make_unique<widgets::ClockView>();
+        clock->set_time_provider([] {
+            const std::time_t now = std::time(nullptr);
+            std::tm local{};
+#if defined(_WIN32)
+            ::localtime_s(&local, &now);
+#else
+            ::localtime_r(&now, &local);
+#endif
+            return widgets::TimeValue{local.tm_hour, local.tm_min, local.tm_sec};
+        });
+        clock->set_blinking_separator(true);
+        clock_ = menu_bar->set_trailing_view(std::move(clock));
+        // Clicking the clock drops a calendar out of it -- the two widgets
+        // are independent, and this is the whole of the wiring between them.
+        clock_->on_click = [this] { open_calendar(); };
+    }
+
     (void)new_terminal();
 
     // F1 answers with something. Silence is the one response a reader
@@ -175,6 +200,34 @@ widgets::Window* TerminalApp::new_sixel_demo() {
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Sixel Demo " + std::to_string(next_terminal_number_++));
+}
+
+void TerminalApp::open_calendar() {
+    if (desktop_ == nullptr || clock_ == nullptr) return;
+    // Clicking an open clock closes it, the way clicking an open menu title
+    // does. Without this the only way out is to click elsewhere, which is
+    // not how anything else on the bar behaves.
+    if (clock_->open()) {
+        app_.clear_input_capture();
+        clock_->set_open(false);
+        return;
+    }
+    widgets::CalendarDropdown* const dropdown =
+        widgets::show_calendar_dropdown(*clock_, app_, *desktop_);
+    clock_->set_open(true);
+    widgets::ClockView* const clock = clock_;
+    dropdown->on_closed = [clock] { clock->set_open(false); };
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+#if defined(_WIN32)
+    ::localtime_s(&local, &now);
+#else
+    ::localtime_r(&now, &local);
+#endif
+    const widgets::DateValue today{local.tm_year + 1900, local.tm_mon + 1, local.tm_mday};
+    dropdown->calendar().set_month(widgets::DateValue{today.year, today.month, 1});
+    dropdown->calendar().set_selected(today);
+    dropdown->calendar().set_today(today);
 }
 
 widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std::string title) {

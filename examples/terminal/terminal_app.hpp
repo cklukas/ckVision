@@ -6,6 +6,7 @@
 
 #include "cvision/term/terminal_subsession.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/common_components.hpp"
 
 namespace ckv::widgets {
 class Desktop;
@@ -37,6 +38,8 @@ private:
 
     ui::Application& app_;
     widgets::Desktop* desktop_ = nullptr;
+    widgets::ClockView* clock_ = nullptr;
+    void open_calendar();
     std::size_t next_terminal_number_ = 1;
 };
 

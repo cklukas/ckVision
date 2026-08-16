@@ -226,6 +226,33 @@ month calendar where the user moves a date selection with arrows/page keys.
 Place it in a dialog or application content view; pair it with DatePicker for
 a compact field. It appears in the navigation capture above.
 
+## ClockView
+
+Header: `include/cvision/widgets/common_components.hpp`. A clock for a menu
+bar or status line. It ticks once a second, re-renders, and asks for a repaint
+only when the rendered text differs — so a clock without seconds costs one
+string comparison a second and one repaint a minute.
+
+The time comes from an injected provider rather than from ckVision, whose
+`Clock` is monotonic with an implementation-defined epoch and deliberately not
+a wall clock; the provider is also what makes a clock testable. Seconds,
+a blinking separator, and twelve- or twenty-four-hour display are options, and
+the meridiem words are the host's to supply, as ckVision carries no locale
+data. `on_click` lets a clock open something — see CalendarDropdown — and
+`set_open()` draws it with the menu bar's own active role while that thing is
+showing, so it reads as a menu title rather than as a second kind of control.
+
+## CalendarDropdown
+
+Header: `include/cvision/widgets/common_components.hpp`. A CalendarView shown
+as a transient popup: it closes on Escape and on a press anywhere but itself.
+That behaviour is what separates a dropdown from a small window, and it is
+deliberately not in CalendarView — the same calendar sits permanently in a
+dialog elsewhere and must not vanish when the reader clicks beside it. Open
+one with `show_calendar_dropdown()`, which hangs it under an anchor with their
+right edges aligned, the way a submenu hangs from the right end of a bar, and
+pulls it back inside the desktop rather than letting it run off the edge.
+
 ## DateValue
 
 Header: `include/cvision/widgets/common_components.hpp`. A plain deterministic
