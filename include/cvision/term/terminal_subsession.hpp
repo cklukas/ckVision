@@ -17,6 +17,7 @@ namespace ckv::term {
 using core::TerminalCapabilityProfile;
 using core::TerminalDiagnostic;
 using core::TerminalExitPolicy;
+using core::TerminalEnvironmentPolicy;
 using core::TerminalLaunchSpec;
 using core::TerminalMouseEncoding;
 using core::TerminalOscPolicy;

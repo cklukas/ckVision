@@ -240,7 +240,12 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.message_confirm_text, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_frame_active, Style{kMonoFg, kDarkFocus, Attr::Bold});
     theme.set(roles.window_frame_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
-    theme.set(roles.window_title_active, Style{kMonoFg, kDarkAccent, Attr::Bold});
+    // The caption sits IN the frame, so it carries the frame's own background
+    // and separates itself by weight and a brighter foreground. An accent
+    // background here instead reads as a selected item pasted onto the border
+    // rather than as the window's name, because that is what a differently
+    // coloured block surrounded by frame means everywhere else in the theme.
+    theme.set(roles.window_title_active, Style{kMonoFg, kDarkFocus, Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_control, Style{kDarkYellow, kDarkPanel, Attr::Bold});
     theme.set(roles.menu_bar_normal, Style{kDarkFg, kDarkPanel, Attr{}});
@@ -296,7 +301,9 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.message_confirm_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_frame_active, Style{kLightFg, kLightFocus, Attr::Bold});
     theme.set(roles.window_frame_inactive, Style{kLightFg, kLightPanel, Attr{}});
-    theme.set(roles.window_title_active, Style{kLightFg, kLightAccent, Attr::Bold});
+    // Same rule as the dark scheme: the caption takes the frame's background
+    // and stands out by weight, not by a block of accent colour.
+    theme.set(roles.window_title_active, Style{kLightFg, kLightFocus, Attr::Bold});
     theme.set(roles.window_title_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_control, Style{kLightRed, kLightPanel, Attr::Bold});
     theme.set(roles.menu_bar_normal, Style{kLightFg, kLightPanel, Attr{}});

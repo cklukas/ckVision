@@ -277,9 +277,13 @@ CK_TEST(posix_terminal_subsession_uses_explicit_launch_environment_and_directory
     CK_CHECK(screen_text(session->snapshot()).find("declareddirectory") != std::string::npos);
 }
 
-CK_TEST(posix_terminal_subsession_does_not_inherit_ambient_environment_or_directory) {
+CK_TEST(an_explicit_only_subsession_inherits_neither_environment_nor_directory) {
+    // Isolation is still available in full; it is now asked for rather than
+    // imposed. The default is the opposite, because a terminal whose shell
+    // has no HOME is a terminal that cannot run the user's own programs.
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "test \"$(pwd -P)\" = / && test -z \"$HOME\" && printf isolated"});
+    launch.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -414,3 +418,41 @@ CK_TEST(posix_terminal_subsession_decodes_the_example_sixel_child_output_private
 }
 
 #endif
+
+// --- The environment a child is given -------------------------------------
+
+CK_TEST(a_child_inherits_the_environment_its_owner_is_running_in) {
+    // A shell without HOME reports its own builtins as broken -- "cd: HOME
+    // not set" -- which reads as the program failing rather than as the host
+    // having withheld something the program had every reason to expect.
+    ::setenv("CKV_ENV_PROBE", "inherited", 1);
+    ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
+        "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
+    launch.profile.cells = ckv::Size{48, 4};
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "[inherited]"));
+    ::unsetenv("CKV_ENV_PROBE");
+}
+
+CK_TEST(a_spec_entry_replaces_the_inherited_one_rather_than_colliding_with_it) {
+    ::setenv("CKV_ENV_PROBE", "inherited", 1);
+    ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
+        "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
+    launch.profile.cells = ckv::Size{48, 4};
+    launch.environment = {{"CKV_ENV_PROBE", "overridden"}};
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "[overridden]"));
+    ::unsetenv("CKV_ENV_PROBE");
+}
+
+CK_TEST(an_explicit_only_child_sees_nothing_it_was_not_handed) {
+    // The sandboxed case still exists; it is simply no longer the default.
+    ::setenv("CKV_ENV_PROBE", "inherited", 1);
+    ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
+        "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
+    launch.profile.cells = ckv::Size{48, 4};
+    launch.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "[]"));
+    ::unsetenv("CKV_ENV_PROBE");
+}

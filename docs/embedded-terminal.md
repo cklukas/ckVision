@@ -45,18 +45,29 @@ open dropdown before release.
 ```cpp
 term::TerminalLaunchSpec shell = term::TerminalLaunchSpec::program("/bin/sh", {"-i"});
 shell.profile = term::embedded_xterm_sixel_profile();
-shell.environment = {{"TERM", "xterm-256color"}, {"COLORTERM", "truecolor"},
-                     {"PATH", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"}};
+shell.environment = {{"TERM", "xterm-256color"}, {"COLORTERM", "truecolor"}};
 
 term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(shell));
 auto terminal = std::make_unique<widgets::TerminalView>(session);
 window->set_content(std::move(terminal));
 ```
 
-`TerminalLaunchSpec` contains the executable, argv, working directory,
-complete child environment, child capability profile, and exit policy. No shell
-is inserted implicitly, and no environment or working directory is inferred
-from the parent process.
+`TerminalLaunchSpec` contains the executable, argv, working directory, child
+environment and the policy governing it, child capability profile, and exit
+policy. No shell is inserted implicitly.
+
+By default the child inherits the environment the host process is running in,
+and the entries in `environment` are applied on top: they replace their
+namesakes and add the rest. A terminal is a place to run the programs one
+already has, and those programs expect the environment their owner
+configured — `HOME`, `USER`, `LANG`, a shell's own settings. Withholding it
+does not produce a neutral machine; it produces one where a shell reports its
+own builtins as broken (`cd: HOME not set`), which reads as the program
+failing rather than as the host having withheld something.
+
+Set `environment_policy` to `TerminalEnvironmentPolicy::ExplicitOnly` for the
+sandboxed case, where the child sees exactly what it was handed and nothing
+else. The working directory is never inferred: it is whatever the spec says.
 
 `WaitForExit` requests a terminal hangup and waits for a graceful
 process-group exit during teardown; `TerminateAfterGrace` adds a bounded grace
@@ -78,10 +89,12 @@ steps instead of being silently discarded; bytes beyond the configured queue
 limit produce a private limit diagnostic and are dropped at that boundary.
 
 The embedded profile uses an explicit dark terminal default (black background,
-light foreground), while SGR and truecolor updates remain child-local. The
-POSIX demo also supplies the conventional Homebrew paths and 256-color/
-truecolor environment markers, so installed tools such as `btop` resolve by
-name without weakening the library's explicit-environment contract.
+a foreground below the palette's brightest white so that the bold a program
+asks for has somewhere to go), while SGR and truecolor updates remain
+child-local. The POSIX demo overrides only what a terminal itself has an
+opinion about — the 256-color and truecolor markers and its own prompt — and
+opens in the user's home directory, leaving `PATH` and the rest to the
+environment the user already has.
 
 PageUp and PageDown navigate the bounded local scrollback. Shift-drag selects
 the rows currently visible (including scrollback) and invokes the view's copy

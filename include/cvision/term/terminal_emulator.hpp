@@ -60,6 +60,8 @@ private:
     void reset_active_buffer();
     void diagnostic(TerminalDiagnostic::Kind kind, std::string message);
     bool append_control(char byte);
+    // Applies a completed OSC string, whichever terminator ended it.
+    void handle_osc();
     bool append_dcs_byte(char byte);
     static int parameter(std::string_view text, std::size_t index, int default_value);
 

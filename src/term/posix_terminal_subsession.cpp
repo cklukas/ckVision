@@ -4,6 +4,9 @@
 #if !defined(_WIN32)
 
 #include <algorithm>
+#if defined(__APPLE__)
+#include <crt_externs.h>
+#endif
 #include <cerrno>
 #include <csignal>
 #include <fcntl.h>
@@ -21,6 +24,19 @@
 #else
 #include <pty.h>
 #endif
+
+namespace {
+// The environment this process was given. Reaching for it belongs here, in
+// the platform adapter, and nowhere above it.
+char** parent_environment() noexcept {
+#if defined(__APPLE__)
+    return *::_NSGetEnviron();
+#else
+    extern char** environ;
+    return environ;
+#endif
+}
+}  // namespace
 
 namespace ckv::term {
 
@@ -46,15 +62,27 @@ bool PosixTerminalSubsession::spawn() {
     argv.push_back(nullptr);
 
     std::vector<std::string> child_environment;
-    child_environment.reserve(spec_.environment.size());
+    if (spec_.environment_policy == TerminalEnvironmentPolicy::InheritAndOverride) {
+        for (char** entry = parent_environment(); entry != nullptr && *entry != nullptr; ++entry)
+            child_environment.emplace_back(*entry);
+    }
+    const auto entry_named = [&child_environment](const std::string& name) {
+        return std::find_if(child_environment.begin(), child_environment.end(),
+                            [&name](const std::string& entry) {
+                                return entry.compare(0, name.size(), name) == 0 &&
+                                       entry.size() > name.size() && entry[name.size()] == '=';
+                            });
+    };
+    std::vector<std::string> named_by_spec;
     for (const auto& [name, value] : spec_.environment) {
         if (name.empty() || name.find('=') != std::string::npos) return false;
-        if (std::any_of(child_environment.begin(), child_environment.end(), [&name](const std::string& entry) {
-                return entry.compare(0, name.size(), name) == 0 && entry.size() > name.size() &&
-                       entry[name.size()] == '=';
-            }))
-            return false;
-        child_environment.push_back(name + "=" + value);
+        // Naming the same variable twice in one spec is a contradiction the
+        // caller has to resolve; overriding an inherited one is the point.
+        if (std::find(named_by_spec.begin(), named_by_spec.end(), name) != named_by_spec.end()) return false;
+        named_by_spec.push_back(name);
+        const auto existing = entry_named(name);
+        if (existing != child_environment.end()) *existing = name + "=" + value;
+        else child_environment.push_back(name + "=" + value);
     }
     std::vector<char*> environment;
     environment.reserve(child_environment.size() + 1);

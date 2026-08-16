@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "terminal_app.hpp"
 
+#include <cstdlib>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -18,13 +20,20 @@ namespace ckv::terminal_example {
 namespace {
 
 std::vector<std::pair<std::string, std::string>> demo_environment() {
-    // The library deliberately requires an explicit environment. Keep the
-    // demo deterministic and include both Homebrew locations so tools such as
-    // btop resolve by name without any hidden ambient-environment read.
+    // Only what this terminal itself has an opinion about. The rest --
+    // HOME, USER, LANG, PATH, whatever the shell was configured with --
+    // comes from the environment the user already has, because a terminal
+    // that does not offer that is not a terminal, and a shell without HOME
+    // reports its own basic commands as broken.
     return {{"TERM", "xterm-256color"},
             {"COLORTERM", "truecolor"},
-            {"PATH", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
             {"PS1", "ckvision$ "}};
+}
+
+// A shell opens where a shell opens.
+std::string home_directory() {
+    const char* home = std::getenv("HOME");
+    return home != nullptr && *home != '\0' ? std::string(home) : std::string("/");
 }
 
 }  // namespace
@@ -80,6 +89,7 @@ widgets::Window* TerminalApp::new_terminal() {
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {"-i"});
     launch.profile = term::embedded_xterm_sixel_profile();
     launch.environment = demo_environment();
+    launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Terminal " + std::to_string(next_terminal_number_++));
 }
 
@@ -91,6 +101,7 @@ widgets::Window* TerminalApp::new_sixel_demo() {
         "/bin/sh", {"-c", "printf '\\033Pq#0;2;100;0;0!32~-!32~-!32~-!32~-!32~-!32~\\033\\\\'; exec /bin/sh -i"});
     launch.profile = term::embedded_xterm_sixel_profile();
     launch.environment = demo_environment();
+    launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Sixel Demo " + std::to_string(next_terminal_number_++));
 }
 

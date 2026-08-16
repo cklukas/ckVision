@@ -665,3 +665,58 @@ CK_TEST(text_that_is_not_bold_keeps_the_colour_it_asked_for) {
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(205, 49, 49));  // plain red
 }
+
+CK_TEST(osc_two_sets_the_title_the_same_way_osc_zero_does) {
+    // OSC 2 is the ordinary "set window title": shells and editors emit it
+    // constantly. Recognising only OSC 0 left a host's caption frozen at
+    // whatever it started as under most programs.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.osc_policy = ckv::core::TerminalOscPolicy::StoreMetadata;
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b]0;first\a");
+    CK_CHECK(emulator.snapshot().title == "first");
+    emulator.feed_output("\x1b]2;second\a");
+    CK_CHECK(emulator.snapshot().title == "second");
+    // The string-terminator spelling is equally ordinary and must behave the
+    // same as BEL.
+    emulator.feed_output("\x1b]2;third\x1b\\");
+    CK_CHECK(emulator.snapshot().title == "third");
+    // An empty title is a real value: it is how a program hands the caption
+    // back rather than leaving its own stale text there.
+    emulator.feed_output("\x1b]2;\a");
+    CK_CHECK(emulator.snapshot().title.empty());
+}
+
+CK_TEST(osc_one_sets_the_icon_name_only_and_leaves_the_title_alone) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.osc_policy = ckv::core::TerminalOscPolicy::StoreMetadata;
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b]2;kept\a");
+    emulator.feed_output("\x1b]1;icon name\a");
+    CK_CHECK(emulator.snapshot().title == "kept");
+}
+
+CK_TEST(a_title_carrying_control_bytes_is_neutralised_before_any_host_sees_it) {
+    // The title is child-supplied text bound for a window frame. Control
+    // bytes there would be drawn as frame content, so they never leave here.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.osc_policy = ckv::core::TerminalOscPolicy::StoreMetadata;
+    ckv::term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b]2;a\rb\nc\td\a");
+    const std::string title = emulator.snapshot().title;
+    CK_CHECK(title.find('\r') == std::string::npos);
+    CK_CHECK(title.find('\n') == std::string::npos);
+    CK_CHECK(title.find('\t') == std::string::npos);
+    CK_CHECK(title.find('a') != std::string::npos);
+    CK_CHECK(title.find('d') != std::string::npos);
+}
+
+CK_TEST(the_title_stays_denied_unless_the_profile_asks_for_metadata) {
+    // Default policy: a contained child says nothing about itself.
+    ckv::term::TerminalEmulator emulator(ckv::term::embedded_xterm_sixel_profile());
+    emulator.feed_output("\x1b]2;ignored\a");
+    CK_CHECK(emulator.snapshot().title.empty());
+}

@@ -220,3 +220,29 @@ CK_TEST(high_contrast_theme_uses_only_black_white_and_inverts_selected_surfaces)
     CK_CHECK(theme.resolve(r.menu_dropdown_highlighted) == selected);
     CK_CHECK(theme.resolve(r.list_selected) == theme.resolve(r.menu_dropdown_highlighted));
 }
+
+CK_TEST(a_hued_scheme_draws_the_window_caption_on_the_frames_own_background) {
+    // The caption sits in the frame. Giving it a different background makes
+    // it read as a selected item pasted onto the border rather than as the
+    // window's name — which is exactly what a block of accent colour means
+    // everywhere else in these schemes.
+    //
+    // Mono and High Contrast are deliberately excluded: neither has colour to
+    // spend, so inverting the caption is the only way either can distinguish
+    // it at all.
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    const std::vector<ckv::ui::Theme> hued{
+        make_classic_theme(reg, r),
+        ckv::ui::make_dark_theme(reg, r),
+        ckv::ui::make_light_theme(reg, r),
+    };
+
+    for (const ckv::ui::Theme& theme : hued) {
+        CK_CHECK(theme.resolve(r.window_title_active).bg == theme.resolve(r.window_frame_active).bg);
+        CK_CHECK(theme.resolve(r.window_title_inactive).bg == theme.resolve(r.window_frame_inactive).bg);
+        // It still has to be legible as a caption: the active one is set
+        // apart by weight rather than by a coloured block behind it.
+        CK_CHECK(has_attr(theme.resolve(r.window_title_active).attrs, ckv::Attr::Bold));
+    }
+}

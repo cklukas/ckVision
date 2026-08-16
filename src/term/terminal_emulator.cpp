@@ -167,6 +167,21 @@ void TerminalEmulator::diagnostic(TerminalDiagnostic::Kind kind, std::string mes
     if (diagnostics_.size() > 64) diagnostics_.erase(diagnostics_.begin());
 }
 
+void TerminalEmulator::handle_osc() {
+    if (profile_.osc_policy != TerminalOscPolicy::StoreMetadata) return;
+    // OSC 0 sets the icon name and the window title together; OSC 2 sets the
+    // title alone. Both are how a program says what it is now working on, and
+    // a host that shows a caption wants either. OSC 1 is the icon name only
+    // and deliberately does not touch the title.
+    const bool sets_title = control_.rfind("0;", 0) == 0 || control_.rfind("2;", 0) == 0;
+    if (!sets_title) return;
+    // The title is child-supplied text on its way to a window frame. Control
+    // bytes in it would be drawn as frame content, so they are replaced here
+    // rather than trusted to whatever eventually renders it. Length is
+    // already bounded by max_control_bytes when the string was accumulated.
+    title_ = text::sanitize_display_text(std::string_view(control_).substr(2));
+}
+
 bool TerminalEmulator::append_control(char byte) {
     if (control_.size() < options_.max_control_bytes) {
         control_.push_back(byte);
@@ -264,12 +279,12 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else append_control(byte);
                 break;
             case ParseState::Osc:
-                if (byte == '\a') { if (profile_.osc_policy == TerminalOscPolicy::StoreMetadata && control_.rfind("0;", 0) == 0) title_ = control_.substr(2); control_.clear(); parse_state_ = ParseState::Ground; }
+                if (byte == '\a') { handle_osc(); control_.clear(); parse_state_ = ParseState::Ground; }
                 else if (byte == '\x1b') parse_state_ = ParseState::OscEscape;
                 else append_control(byte);
                 break;
             case ParseState::OscEscape:
-                if (byte == '\\') { if (profile_.osc_policy == TerminalOscPolicy::StoreMetadata && control_.rfind("0;", 0) == 0) title_ = control_.substr(2); control_.clear(); parse_state_ = ParseState::Ground; }
+                if (byte == '\\') { handle_osc(); control_.clear(); parse_state_ = ParseState::Ground; }
                 else {
                     const bool retained_escape = append_control('\x1b');
                     const bool retained_byte = retained_escape && append_control(byte);

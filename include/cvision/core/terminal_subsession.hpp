@@ -53,11 +53,30 @@ constexpr TerminalCapabilityProfile embedded_xterm_sixel_profile() noexcept {
     return profile;
 }
 
+// Where a child's environment comes from. A terminal is a place to run the
+// programs one already has, and those programs expect the environment their
+// owner configured: HOME, USER, LANG, an editor, a shell's own settings. A
+// child given only what a host thought to list gets a machine that is not
+// the one its user set up, and fails in ways ("HOME not set") that look
+// like the program is broken.
+//
+// Sandboxed uses want the opposite, so the choice is stated rather than
+// assumed -- but the default is the one that makes a terminal a terminal.
+enum class TerminalEnvironmentPolicy {
+    // Start from the environment this process was given; entries in
+    // `environment` replace their namesakes and add the rest.
+    InheritAndOverride,
+    // Start from nothing: the child sees `environment` and no more.
+    ExplicitOnly,
+};
+
 struct TerminalLaunchSpec {
     std::string executable;
     std::vector<std::string> arguments;
     std::string working_directory = "/";
+    // Applied on top of whatever `environment_policy` starts from.
     std::vector<std::pair<std::string, std::string>> environment;
+    TerminalEnvironmentPolicy environment_policy = TerminalEnvironmentPolicy::InheritAndOverride;
     TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
     TerminalExitPolicy exit_policy = TerminalExitPolicy::WaitForExit;
 
