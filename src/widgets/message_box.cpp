@@ -1,12 +1,14 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/message_box.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <vector>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/static_text.hpp"
 
 namespace ckv::widgets {
@@ -17,6 +19,22 @@ using ui::Column;
 using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
+
+class MessageBoxContent final : public Column {
+public:
+    explicit MessageBoxContent(int minimum_width) : minimum_width_(std::max(0, minimum_width)) {}
+
+    ui::SizeHint horizontal_size_hint() const override {
+        ui::SizeHint hint = Column::horizontal_size_hint();
+        hint.min = std::max(hint.min, minimum_width_);
+        hint.preferred = std::max(hint.preferred, minimum_width_);
+        if (hint.max != ui::kUnboundedExtent) hint.max = std::max(hint.max, hint.preferred);
+        return hint;
+    }
+
+private:
+    int minimum_width_ = 0;
+};
 
 std::vector<std::pair<MessageBoxResult, std::string>> button_specs(MessageBoxButtons buttons,
                                                                     const StandardStrings& strings) {
@@ -95,17 +113,42 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     window->set_resizable(false);
+    // An alert is a short panel of prose; holding it off the frame is what
+    // separates the message from the box drawn around it. The size hints
+    // budget this margin, so the alert grows to keep it rather than
+    // squeezing its own text.
+    window->set_content_margin(1, 1);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
     auto completion = std::make_shared<MessageBoxCompletion>(
         MessageBoxCompletion{window_ptr->lifetime_token(), std::move(on_result)});
 
-    auto column = std::make_unique<Column>();
+    auto column = std::make_unique<MessageBoxContent>(descriptor.minimum_content_width);
     column->set_spacing(1);
+    if (descriptor.graphic != nullptr && !descriptor.graphic->empty() &&
+        descriptor.graphic_cells.width > 0 && descriptor.graphic_cells.height > 0) {
+        auto graphic = std::make_unique<Canvas>();
+        graphic->set_preferred_size(descriptor.graphic_cells);
+        graphic->set_cell_metrics(app.terminal_cell_pixels());
+        const std::shared_ptr<const Image> source = descriptor.graphic;
+        graphic->set_draw_callback([source](Image& image) {
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    const int source_x = x * source->width() / image.width();
+                    const int source_y = y * source->height() / image.height();
+                    image.set_pixel(x, y, source->pixel(source_x, source_y));
+                }
+            }
+        });
+        column->add_item(std::move(graphic), LayoutSpec{SizePolicy::Fixed, descriptor.graphic_cells.height,
+                                                        descriptor.graphic_alignment});
+    }
     auto message = std::make_unique<StaticText>(descriptor.message);
     message->set_role_override(message_role(descriptor.kind, roles));
-    column->add_item(std::move(message), LayoutSpec{SizePolicy::Expanding, 1});
+    message->set_alignment(descriptor.message_alignment);
+    message->set_emphasized_leading_lines(descriptor.emphasized_leading_lines);
+    column->add_item(std::move(message), LayoutSpec{SizePolicy::Expanding, 1, ui::Alignment::Fill});
 
     auto button_row = std::make_unique<Row>();
     button_row->set_spacing(2);
@@ -124,7 +167,8 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
         };
         if (is_default) default_button = raw;
     }
-    column->add_item(std::move(button_row), LayoutSpec{SizePolicy::Fixed, 1});
+    column->add_item(std::move(button_row),
+                     LayoutSpec{SizePolicy::Fixed, 1, descriptor.button_alignment});
 
     window->set_content(std::move(column));
 

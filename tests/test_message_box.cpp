@@ -89,6 +89,21 @@ CK_TEST(message_box_kind_selects_the_matching_message_text_role) {
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.message_error_text));
 }
 
+CK_TEST(message_box_supports_deliberate_centered_graphic_composition) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 25});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", "Identity", MessageBoxButtons::Ok};
+    descriptor.minimum_content_width = 70;
+    descriptor.message_alignment = ckv::ui::Alignment::Center;
+    descriptor.button_alignment = ckv::ui::Alignment::Center;
+    auto handle = make_message_box(descriptor, f.roles, app, nullptr, nullptr);
+    // 70 content columns, the two frame cells, and the alert's one-cell
+    // margin on each side.
+    CK_CHECK(handle.window->horizontal_size_hint().preferred == 74);
+}
+
 // --- Ok-only box -----------------------------------------------------------
 
 CK_TEST(an_ok_only_box_fires_ok_and_closes_when_its_button_is_pressed) {

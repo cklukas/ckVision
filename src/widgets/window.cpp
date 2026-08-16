@@ -52,32 +52,42 @@ std::unique_ptr<ui::View> Window::set_content(std::unique_ptr<ui::View> content)
 }
 
 ui::SizeHint Window::horizontal_size_hint() const {
-    // draw() reserves ten columns for the close/zoom controls and their
+    // draw() reserves twelve columns for the close/zoom controls, their
     // padding before it places a title.  Include that exact budget here so a
     // freshly presented standard dialog never immediately elides its title.
-    const int title_width = text::text_width(title_) + 10;
+    const int title_width = text::text_width(title_) + 12;
     if (content_ == nullptr) return ui::SizeHint{min_size_.width, std::max(min_size_.width, title_width),
                                                   ui::kUnboundedExtent};
     const ui::SizeHint content = content_->horizontal_size_hint();
-    const int minimum = std::max(min_size_.width, content.min + 2);
-    const int preferred = std::max({minimum, content.preferred + 2, title_width});
-    const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + 2;
+    // The frame plus any content margin: a margin the window asks for but
+    // does not budget would be taken out of the content instead, silently
+    // re-wrapping text that was measured to fit.
+    const int chrome = 2 + 2 * horizontal_content_margin_;
+    const int minimum = std::max(min_size_.width, content.min + chrome);
+    const int preferred = std::max({minimum, content.preferred + chrome, title_width});
+    const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + chrome;
+    // A window the user cannot resize must not be stretched by its host
+    // either: an expanding child inside it means "share what this window
+    // has", not "make this window as large as the screen allows".
+    if (!resizable_) return ui::SizeHint{minimum, preferred, preferred};
     return ui::SizeHint{minimum, preferred, std::max(preferred, maximum)};
 }
 
 ui::SizeHint Window::vertical_size_hint() const {
     if (content_ == nullptr) return ui::SizeHint{min_size_.height, min_size_.height, ui::kUnboundedExtent};
     const ui::SizeHint content = content_->vertical_size_hint();
-    const int minimum = std::max(min_size_.height, content.min + 2);
-    const int preferred = std::max(minimum, content.preferred + 2);
-    const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + 2;
+    const int chrome = 2 + 2 * vertical_content_margin_;
+    const int minimum = std::max(min_size_.height, content.min + chrome);
+    const int preferred = std::max(minimum, content.preferred + chrome);
+    const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + chrome;
+    if (!resizable_) return ui::SizeHint{minimum, preferred, preferred};
     return ui::SizeHint{minimum, preferred, std::max(preferred, maximum)};
 }
 
 int Window::height_for_width(int width) const {
-    const int content_width = std::max(0, width - 2);
+    const int content_width = std::max(0, width - 2 - 2 * horizontal_content_margin_);
     const int content_height = content_ != nullptr ? content_->height_for_width(content_width) : 0;
-    return std::max(vertical_size_hint().min, content_height + 2);
+    return std::max(vertical_size_hint().min, content_height + 2 + 2 * vertical_content_margin_);
 }
 
 ui::AnchorPane& Window::content_pane() {
@@ -118,12 +128,17 @@ std::unique_ptr<ui::View> Window::remove_frame_overlay(ui::View* view) {
 
 void Window::set_min_size(Size min) noexcept {
     min_size_ = min;
-    set_bounds(clamp_size(bounds()));
+    // An all-zero rectangle is the Desktop's deliberate "not positioned yet"
+    // sentinel. Applying a size policy must not materialize that sentinel at
+    // the origin: Desktop will use the new hints to choose both size and
+    // centered position when this Window is presented.
+    if (bounds().width > 0 || bounds().height > 0) set_bounds(clamp_size(bounds()));
 }
 
 void Window::set_max_size(Size max) noexcept {
     max_size_ = max;
-    set_bounds(clamp_size(bounds()));
+    // Preserve the same unpositioned sentinel as set_min_size().
+    if (bounds().width > 0 || bounds().height > 0) set_bounds(clamp_size(bounds()));
 }
 
 bool Window::close() {
@@ -147,7 +162,16 @@ bool Window::close() {
     const std::function<void()> held_on_closed = on_closed;
     if (held_close_request && !held_close_request()) return false;  // vetoed
     if (window_liveness.expired()) return true;
-    if (held_on_closed) held_on_closed();
+    if (held_on_closed) {
+        held_on_closed();
+        return true;
+    }
+    // No on_closed installed: closing still has to mean something. A close
+    // box that changes nothing is indistinguishable from a broken one, so
+    // the default is the request's plain meaning — leave the tree. An
+    // application that wants bookkeeping installs on_closed and owns the
+    // detach itself, exactly as every dialog presentation does.
+    if (parent() != nullptr && context().app != nullptr) schedule_self_detach(*this, *context().app);
     return true;
 }
 
@@ -202,7 +226,20 @@ void Window::enter_resize_mode() {
 Rect Window::content_rect() const noexcept {
     const Rect b = bounds();
     if (b.width <= 2 || b.height <= 2) return Rect{1, 1, 0, 0};
-    return Rect{1, 1, b.width - 2, b.height - 2};
+    // A margin is a request, not a guarantee: a window narrow enough that
+    // honouring it would leave nothing for the content keeps the content
+    // and gives up the margin, since blank cells are worth less than the
+    // text they would displace.
+    const int h = std::min(horizontal_content_margin_, std::max(0, (b.width - 3) / 2));
+    const int v = std::min(vertical_content_margin_, std::max(0, (b.height - 3) / 2));
+    return Rect{1 + h, 1 + v, b.width - 2 - 2 * h, b.height - 2 - 2 * v};
+}
+
+void Window::set_content_margin(int horizontal, int vertical) {
+    horizontal_content_margin_ = std::max(0, horizontal);
+    vertical_content_margin_ = std::max(0, vertical);
+    if (content_ != nullptr) content_->set_bounds(content_rect());
+    invalidate();
 }
 
 Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
@@ -215,8 +252,9 @@ Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
     // controls draw() actually draws (point_in_close_control/
     // point_in_zoom_control's own gates), so a Start/End overlay never
     // sits under a control that happens not to be there at this width.
-    const int left_margin = slot.edge == Edge::Top ? (b.width > 6 ? 4 : 1) : 2;
-    const int right_margin = slot.edge == Edge::Top ? (b.width > 8 ? 3 : 1) : 2;
+    const int left_margin = slot.edge == Edge::Top ? (b.width > 6 ? 5 : 1) : 2;
+    const int right_margin =
+        slot.edge == Edge::Top ? (resizable_ && b.width > 8 ? 4 : 1) : 2;
     const int y = slot.edge == Edge::Top ? 0 : std::max(0, b.height - 1);
 
     const int preferred = view.horizontal_size_hint().preferred;
@@ -298,13 +336,16 @@ bool Window::point_in_close_control(Point local) const noexcept {
     // close control is drawn, its region must not extend into where
     // the (undrawn) zoom control's columns would otherwise be.
     if (bounds().width <= 6) return false;
-    return local.y == 0 && in_range(local.x, 1, 4);  // "[x]" at columns 1-3
+    return local.y == 0 && in_range(local.x, 2, 5);  // "[x]" at columns 2-4
 }
 
 bool Window::point_in_zoom_control(Point local) const noexcept {
-    if (bounds().width <= 8) return false;  // must match draw()'s own "b.width > 8" gate
+    // A fixed-size dialog has no meaningful zoom operation.  Its title bar
+    // deliberately keeps the close control only, matching the absence of
+    // resize grips and avoiding a visual affordance that cannot succeed.
+    if (!resizable_ || bounds().width <= 8) return false;
     const int w = bounds().width;
-    return local.y == 0 && in_range(local.x, w - 3, w - 1);  // "[]" at the last two columns before the corner
+    return local.y == 0 && in_range(local.x, w - 5, w - 2);  // "[]" leaves one frame cell before the corner
 }
 
 bool Window::point_in_resize_right_grip(Point local) const noexcept {
@@ -336,7 +377,11 @@ void Window::draw(scene::Painter& painter) {
     // window with sparse content (a couple of labels and buttons, not
     // a full-bleed panel) previously showed a visibly blank patch
     // instead of reading as one solid window.
-    painter.fill(content_rect(), Cell::from_grapheme(" ", frame_style));
+    // The whole interior, not just the content: a content margin belongs
+    // to the window, so those cells must carry the window's own surface
+    // rather than whatever the frame buffer last held there.
+    if (b.width > 2 && b.height > 2)
+        painter.fill(Rect{1, 1, b.width - 2, b.height - 2}, Cell::from_grapheme(" ", frame_style));
 
     // Active windows get a DOUBLE-line frame, inactive ones single —
     // the classic windowed-desktop convention for "this is the one
@@ -356,16 +401,17 @@ void Window::draw(scene::Painter& painter) {
         // as a "control" the way "x" doesn't, and needs no ASCII
         // fallback since box-drawing-adjacent glyphs are already
         // required for the frame itself).
-        painter.draw_text(Point{1, 0}, "[■]", frame_style);
-        // Up-arrow "maximize"; changes to an up/down arrow once
-        // zoomed, matching the convention's own "toggle" affordance —
-        // previously this drew empty brackets with no glyph at all.
-        // b.width - 4, not - 3: a 3-glyph "[X]" ending at b.width - 3
-        // would land its last character ON the frame's own top-right
-        // corner column (b.width - 1) — this must end one column short
-        // of the corner, matching the close control's own symmetric
-        // margin on the left.
-        const int control_x = b.width - 4;
+        // Keep one frame-rule cell between the corner and the control.  This
+        // makes the chrome read as ╔═[■] rather than a control fused into the
+        // corner, and matches the corresponding gap before the zoom control.
+        painter.draw_text(Point{2, 0}, "[", frame_style);
+        painter.draw_text(Point{3, 0}, "■", control_style);
+        painter.draw_text(Point{4, 0}, "]", frame_style);
+    }
+    if (resizable_ && b.width > 8) {
+        // Up-arrow "maximize"; changes to an up/down arrow once zoomed.
+        // A fixed-size dialog does not draw or expose this control.
+        const int control_x = b.width - 5;
         painter.draw_text(Point{control_x, 0}, "[", frame_style);
         painter.draw_text(Point{control_x + 1, 0}, maximized() ? "↕" : "↑", control_style);
         painter.draw_text(Point{control_x + 2, 0}, "]", frame_style);
@@ -376,14 +422,31 @@ void Window::draw(scene::Painter& painter) {
         // centered inside the remaining top border span. Previously this
         // drew the title left-aligned at a fixed column, immediately
         // abutting the close control with no padding at all.
-        const int reserved_for_controls = (b.width > 6) ? 10 : 4;  // both controls flank ~2 cells of margin each
-        const int available = std::max(0, b.width - reserved_for_controls);
-        const std::string shown = text::elide_to_width(title_, available);
-        const int shown_width = text::text_width(shown);
-        const int start = (b.width - shown_width) / 2;
-        if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
-        painter.draw_text(Point{start, 0}, shown, title_style);
-        if (start + shown_width < b.width) painter.draw_text(Point{start + shown_width, 0}, " ", frame_style);
+        if (resizable_) {
+            const int available = std::max(0, b.width - (b.width > 6 ? 10 : 4));
+            const std::string shown = text::elide_to_width(title_, available);
+            const int shown_width = text::text_width(shown);
+            const int start = (b.width - shown_width) / 2;
+            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
+            painter.draw_text(Point{start, 0}, shown, title_style);
+            if (start + shown_width < b.width)
+                painter.draw_text(Point{start + shown_width, 0}, " ", frame_style);
+        } else {
+            // A fixed dialog has only the close control, but its caption is
+            // still centered on the complete frame rather than the remaining
+            // span to the right of that control.  The title budget preserves
+            // the control's readable space; the title's position preserves
+            // the visual centre of the dialog.
+            const int available = std::max(0, b.width - (b.width > 6 ? 10 : 2));
+            const std::string shown = text::elide_to_width(title_, available);
+            const int shown_width = text::text_width(shown);
+            const int start = std::clamp((b.width - shown_width) / 2, b.width > 6 ? 5 : 1,
+                                         std::max(0, b.width - 1 - shown_width));
+            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
+            painter.draw_text(Point{start, 0}, shown, title_style);
+            if (start + shown_width < b.width - 1)
+                painter.draw_text(Point{start + shown_width, 0}, " ", frame_style);
+        }
     }
 }
 
@@ -397,7 +460,7 @@ bool Window::on_key(const KeyEvent& event) {
             cancel_request();
             return true;
         }
-        if (context().app != nullptr && activate_label_mnemonic(*this, event, *context().app))
+        if (context().app != nullptr && activate_control_mnemonic(*this, event, *context().app))
             return true;
         return false;
     }

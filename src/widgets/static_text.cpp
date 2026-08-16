@@ -43,6 +43,21 @@ std::vector<std::string> StaticText::wrap(int width) const {
     std::vector<std::string> lines;
     const int w = std::max(width, 1);
 
+    if (preformatted_) {
+        // Verbatim: the caller has already decided where lines end and
+        // what the spacing means. Painter clipping handles a line wider
+        // than the view; re-flowing it here would silently rewrite it.
+        std::size_t start = 0;
+        while (true) {
+            const std::size_t nl = raw_text_.find('\n', start);
+            lines.push_back(raw_text_.substr(start, nl == std::string::npos ? std::string::npos
+                                                                            : nl - start));
+            if (nl == std::string::npos) break;
+            start = nl + 1;
+        }
+        return lines;
+    }
+
     std::size_t para_start = 0;
     while (true) {
         const std::size_t nl = raw_text_.find('\n', para_start);
@@ -125,7 +140,9 @@ void StaticText::draw(scene::Painter& painter) {
                 x = std::max(0, bounds().width - line_width);
                 break;
         }
-        painter.draw_text(Point{x, static_cast<int>(row)}, lines[row], style);
+        Style line_style = style;
+        if (static_cast<int>(row) < emphasized_leading_lines_) line_style.attrs |= Attr::Bold;
+        painter.draw_text(Point{x, static_cast<int>(row)}, lines[row], line_style);
     }
 }
 

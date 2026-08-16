@@ -15,8 +15,11 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <string>
+#include <utility>
 
+#include "cvision/core/image.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
@@ -36,6 +39,31 @@ struct MessageBoxDescriptor {
     std::string title;
     std::string message;
     MessageBoxButtons buttons = MessageBoxButtons::Ok;
+    // Optional raster content for presentations such as About. The caller
+    // owns the immutable pixels; this factory scales them through Canvas and
+    // therefore retains Canvas' normal raster and textual fallback behavior.
+    std::shared_ptr<const Image> graphic;
+    Size graphic_cells{};
+    // A lower bound for the content area. This lets an information-rich
+    // presentation retain deliberate whitespace around compact content
+    // without encoding that whitespace into its message text or artwork.
+    int minimum_content_width = 0;
+    // Cross-axis placement inside a wider message box. Plain alerts keep
+    // their established left-aligned composition; callers with a visual
+    // identity panel may opt into a centered composition explicitly.
+    ui::Alignment graphic_alignment = ui::Alignment::Start;
+    ui::Alignment message_alignment = ui::Alignment::Start;
+    ui::Alignment button_alignment = ui::Alignment::Start;
+    // Leading message lines drawn bold — for an identity panel whose
+    // first line is the product name and whose remaining lines are the
+    // detail beneath it. Zero leaves the message uniformly styled.
+    int emphasized_leading_lines = 0;
+
+    MessageBoxDescriptor() = default;
+    MessageBoxDescriptor(MessageBoxKind message_kind, std::string message_title,
+                         std::string message_text, MessageBoxButtons message_buttons)
+        : kind(message_kind), title(std::move(message_title)), message(std::move(message_text)),
+          buttons(message_buttons) {}
 };
 
 // Builds (but does not attach to any Desktop) a Window presenting the

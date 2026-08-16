@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/tree_view.hpp"
 
+#include <string_view>
+
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -112,6 +114,28 @@ CK_TEST(box_drawing_connector_style_draws_box_branch_prefixes) {
 
     CK_CHECK(row_text(surface, 0).substr(0, 6) == "├▶");
     CK_CHECK(row_text(surface, 1).substr(0, 6) == "└─");
+}
+
+CK_TEST(outline_connector_style_draws_junctioned_group_and_leaf_branches) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 4});
+    tree.set_connector_style(TreeConnectorStyle::Outline);
+    tree.set_roots(sample_forest());
+    tree.on_key(key(Key::Right));
+
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+
+    // A tee while siblings follow, and a stem only under a parent that
+    // still has one. "parent" was just expanded, so it shows no "+": the
+    // marker offers to open a group, and this one is already open.
+    constexpr std::string_view group_prefix = "├──";
+    constexpr std::string_view nested_leaf_prefix = "│  ├──";
+    CK_CHECK(row_text(surface, 0).substr(0, group_prefix.size()) == group_prefix);
+    CK_CHECK(row_text(surface, 1).substr(0, nested_leaf_prefix.size()) == nested_leaf_prefix);
 }
 
 // --- Expand / collapse -----------------------------------------------

@@ -31,6 +31,7 @@ enum class TreeConnectorStyle {
     Minimal,     // existing compact "+ "/"- " twisties
     Ascii,       // "+-"/"--"/"`-" printable connectors
     BoxDrawing,  // box-drawing connectors for capable terminals
+    Outline,     // classic outline branches: ─+ groups, ── leaves, and │ ancestry guides
 };
 
 struct TreeNode {
@@ -130,11 +131,23 @@ private:
         TreeNode* node;
         int depth;
         TreeNode* parent;  // nullptr for a root — the parent-tracking pass Left-to-parent needs
+        // Whether this node is the final child of its parent, and which
+        // ancestor depths still have a following sibling. Branch drawing
+        // needs both: the first picks the elbow over the tee, the second
+        // says where a vertical stem passes through this row. A row knows
+        // this only from its whole ancestry, so the flattening pass — the
+        // one place that walks it — records it here.
+        bool last_sibling = true;
+        std::uint32_t stem_mask = 0;
     };
 
     void flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,
-                       std::vector<VisibleEntry>& out);
+                       std::vector<VisibleEntry>& out, std::uint32_t stem_mask);
     std::vector<VisibleEntry> visible_entries();
+    // Columns one nesting level occupies, which is also the width of a
+    // branch prefix. The outline convention draws a junction, a rule and
+    // a marker; the compact styles draw a two-cell twisty.
+    int branch_columns() const noexcept;
     void move_cursor(int delta);
     // Jumps the cursor directly to `node` (Left-to-parent) — the
     // absolute-target counterpart to move_cursor's relative delta.

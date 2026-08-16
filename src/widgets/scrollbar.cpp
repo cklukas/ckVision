@@ -25,7 +25,12 @@ int Scrollbar::thumb_length_cells() const noexcept {
     const int track = track_length();
     if (track <= 0) return 0;
     if (content_size_ <= viewport_size_) return track;  // nothing to scroll: thumb fills the track
-    return std::max(1, track * viewport_size_ / content_size_);
+    // A scrollable bar marks the position with a single cell rather than a
+    // proportional block. The indicator answers "where am I", which is the
+    // question a one-cell marker answers most precisely — and it keeps the
+    // whole travel available at every content size, instead of shrinking
+    // the range a long document can point into.
+    return 1;
 }
 
 int Scrollbar::thumb_start_cell() const noexcept {
@@ -154,21 +159,24 @@ void Scrollbar::draw(scene::Painter& painter) {
         painter.draw_text(p, glyph, style);
     };
 
-    // The CP437 scrollbar vocabulary used by the classic desktop: solid
-    // triangle arrows, a light-shade page area, and a full-block thumb.
-    // `░` is deliberately lighter than the old `▒`: its fine dot field
-    // leaves the role's background as the dominant surface, while `█`
-    // gives the thumb a continuous, unmistakable rectangle.  This remains
-    // legible after colour reduction without producing a high-contrast
-    // striped track in true-colour and browser renderers.
+    // The CP437 scrollbar vocabulary of the classic desktop: triangle
+    // arrows at the ends, a medium-shade page area, and a solid block as
+    // the position indicator. A bar with nothing to scroll drops both the
+    // page area and the indicator for one dark-shade run — the bar is
+    // still drawn, but it states plainly that there is nowhere to go.
     put(0, orientation_ == Orientation::Horizontal ? "◄" : "▲", track_style);
     if (total > 1) put(total - 1, orientation_ == Orientation::Horizontal ? "►" : "▼", track_style);
 
+    const int track = track_length();
+    if (max_position() == 0) {
+        for (int i = 0; i < track; ++i) put(1 + i, "▓", track_style);
+        return;
+    }
     const int thumb_start = thumb_start_cell();
     const int thumb_len = thumb_length_cells();
-    for (int i = 0; i < track_length(); ++i) {
+    for (int i = 0; i < track; ++i) {
         const bool is_thumb = i >= thumb_start && i < thumb_start + thumb_len;
-        put(1 + i, is_thumb ? "█" : "░", is_thumb ? thumb_style : track_style);
+        put(1 + i, is_thumb ? "■" : "▒", is_thumb ? thumb_style : track_style);
     }
 }
 

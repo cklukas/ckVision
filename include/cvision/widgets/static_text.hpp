@@ -34,6 +34,26 @@ public:
 
     void set_role_override(ui::RoleId role) noexcept { role_ = role; }
 
+    // Draws the first `count` rendered lines bold. A block whose opening
+    // line names what the rest is about — a product title above its
+    // version detail, a heading above its paragraph — then reads as one
+    // block with a heading, rather than as two views a caller has to
+    // keep adjacent and styled apart.
+    void set_emphasized_leading_lines(int count) noexcept {
+        emphasized_leading_lines_ = count;
+        invalidate();
+    }
+
+    // Treats the text as already laid out: lines break only where the
+    // text says, and runs of spaces survive. Text whose spacing carries
+    // meaning — aligned key/value columns, a small table — is destroyed
+    // by reflowing it, because wrapping rejoins words with a single
+    // space and the columns collapse.
+    void set_preformatted(bool preformatted) noexcept {
+        preformatted_ = preformatted;
+        invalidate();
+    }
+
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
@@ -46,6 +66,8 @@ private:
     std::string raw_text_;
     ui::Alignment alignment_ = ui::Alignment::Start;
     ui::RoleId role_ = ui::kInvalidRole;
+    int emphasized_leading_lines_ = 0;
+    bool preformatted_ = false;
 };
 
 }  // namespace ckv::widgets

@@ -37,16 +37,28 @@ void TreeView::set_roots(std::vector<TreeNode> roots) {
 }
 
 void TreeView::flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,
-                             std::vector<VisibleEntry>& out) {
-    for (auto& n : nodes) {
-        out.push_back(VisibleEntry{&n, depth, parent});
-        if (n.expanded && !n.children.empty()) flatten_into(n.children, depth + 1, &n, out);
+                             std::vector<VisibleEntry>& out, std::uint32_t stem_mask) {
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
+        TreeNode& n = nodes[i];
+        const bool last = i + 1 == nodes.size();
+        out.push_back(VisibleEntry{&n, depth, parent, last, stem_mask});
+        if (!n.expanded || n.children.empty()) continue;
+        // A stem passes under this node only while it still has siblings
+        // below it. Depths past the mask's width keep their parent's
+        // stems rather than inventing one.
+        const std::uint32_t child_mask =
+            last || depth >= 31 ? stem_mask : (stem_mask | (std::uint32_t{1} << depth));
+        flatten_into(n.children, depth + 1, &n, out, child_mask);
     }
+}
+
+int TreeView::branch_columns() const noexcept {
+    return connector_style_ == TreeConnectorStyle::Outline ? 3 : 2;
 }
 
 std::vector<TreeView::VisibleEntry> TreeView::visible_entries() {
     std::vector<VisibleEntry> out;
-    flatten_into(roots_, 0, nullptr, out);
+    flatten_into(roots_, 0, nullptr, out, 0);
     return out;
 }
 
@@ -180,9 +192,10 @@ bool TreeView::on_mouse(const MouseEvent& event) {
     const bool clicking_already_selected = entry.node == cursor_node_;
     cursor_node_ = entry.node;
     const int local_x = event.cell.x - abs.x;
-    const int twisty_x = entry.depth * 2;
+    const int columns = branch_columns();
+    const int twisty_x = entry.depth * columns;
     const bool clicked_twisty =
-        entry.node->might_have_children() && local_x >= twisty_x && local_x < twisty_x + 2;
+        entry.node->might_have_children() && local_x >= twisty_x && local_x < twisty_x + columns;
     if (clicked_twisty) set_expanded(*entry.node, !entry.node->expanded);
     invalidate();
     // A second click on the ALREADY-selected node (outside the twisty)
@@ -211,7 +224,8 @@ void TreeView::draw(scene::Painter& painter) {
         if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) continue;
 
         const VisibleEntry& entry = entries[static_cast<std::size_t>(index)];
-        const int indent = entry.depth * 2;
+        const int columns = branch_columns();
+        const int indent = entry.depth * columns;
         const std::string twisty = [&] {
             if (connector_style_ == TreeConnectorStyle::Minimal)
                 return !entry.node->might_have_children() ? std::string("  ")
@@ -221,12 +235,33 @@ void TreeView::draw(scene::Painter& painter) {
                 return !entry.node->might_have_children() ? std::string("`-")
                                                           : (entry.node->expanded ? std::string("--")
                                                                                   : std::string("+-"));
+            if (connector_style_ == TreeConnectorStyle::Outline) {
+                // The junction states the node's place among its siblings —
+                // a tee while more follow, an elbow at the last — and the
+                // marker states whether it opens.
+                const std::string junction = entry.last_sibling ? "└" : "├";
+                // The marker says what activating the row would do: a
+                // closed group offers to open, while an open group and a
+                // leaf offer nothing, so the branch simply runs on.
+                const bool closed = entry.node->might_have_children() && !entry.node->expanded;
+                return junction + (closed ? "─+" : "──");
+            }
             return !entry.node->might_have_children() ? std::string("└─")
                                                       : (entry.node->expanded ? std::string("├▼")
                                                                               : std::string("├▶"));
         }();
+        if (connector_style_ == TreeConnectorStyle::Outline) {
+            // An ancestry stem passes through this row only where that
+            // ancestor still has a sibling below; under a last child the
+            // branch has ended and the column is blank.
+            for (int ancestor = 0; ancestor < entry.depth; ++ancestor) {
+                const bool stem = ancestor < 32 &&
+                                  (entry.stem_mask & (std::uint32_t{1} << ancestor)) != 0;
+                painter.draw_text(Point{ancestor * columns, row}, stem ? "│  " : "   ", style);
+            }
+        }
         painter.draw_text(Point{indent, row}, twisty, style);
-        painter.draw_text(Point{indent + 2, row}, entry.node->label, style);
+        painter.draw_text(Point{indent + columns, row}, entry.node->label, style);
     }
 }
 

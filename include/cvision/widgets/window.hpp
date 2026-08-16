@@ -117,6 +117,16 @@ public:
     // resize.
     Rect content_rect() const noexcept;
 
+    // Blank cells held between the frame and the content on each axis.
+    // Text pressed against a border is harder to read than text with a
+    // margin, and a dialog that keeps one reads as a composed panel
+    // rather than as content stuffed into a box. Zero (the default)
+    // leaves the content flush with the frame, which is what a view
+    // meant to fill its window — an editor, a list — wants.
+    void set_content_margin(int horizontal, int vertical);
+    int horizontal_content_margin() const noexcept { return horizontal_content_margin_; }
+    int vertical_content_margin() const noexcept { return vertical_content_margin_; }
+
     // The free-placement, resize-aware alternative to hand-building a
     // set_content() call yourself (M10/WP-18): lazily installs a fresh
     // ui::AnchorPane as this window's content the first time it's
@@ -319,6 +329,8 @@ private:
     bool active_ = false;
     bool movable_ = true;
     bool resizable_ = true;
+    int horizontal_content_margin_ = 0;
+    int vertical_content_margin_ = 0;
     std::shared_ptr<CloseState> close_state_ = std::make_shared<CloseState>();
     Size min_size_{10, 4};
     Size max_size_{0, 0};

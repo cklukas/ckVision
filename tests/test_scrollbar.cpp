@@ -278,7 +278,7 @@ CK_TEST(a_horizontal_scrollbar_draws_solid_triangle_end_arrows) {
     CK_CHECK(s.at(Point{9, 0}).grapheme() == "►");
 }
 
-CK_TEST(the_scrollbar_uses_the_classic_light_shade_track_and_full_block_thumb) {
+CK_TEST(the_scrollbar_uses_the_classic_medium_shade_page_area_and_block_indicator) {
     // CP437's light-shade page area and full-block scroll box are distinct
     // in both glyph coverage and theme role.  In particular, do not replace
     // the track with the heavier medium shade (`▒`): browser renderers turn
@@ -295,26 +295,26 @@ CK_TEST(the_scrollbar_uses_the_classic_light_shade_track_and_full_block_thumb) {
     bool found_track = false, found_thumb = false;
     for (int y = 1; y < 11; ++y) {
         const std::string_view g = s.at(Point{0, y}).grapheme();
-        if (g == "░") found_track = true;
-        if (g == "█") found_thumb = true;
+        if (g == "▒") found_track = true;
+        if (g == "■") found_thumb = true;
     }
     CK_CHECK(found_track);
     CK_CHECK(found_thumb);
 }
 
-CK_TEST(a_thumb_that_fills_the_whole_track_leaves_no_bare_track_glyph_visible) {
+CK_TEST(a_bar_with_nothing_to_scroll_fills_its_track_with_the_dark_shade) {
     Fixture f;
     Scrollbar sb(Orientation::Vertical);
     sb.set_context(f.ctx());
     sb.set_bounds(Rect{0, 0, 1, 10});
-    sb.set_range(5, 20);  // content smaller than viewport: thumb fills the track
+    sb.set_range(5, 20);  // content smaller than viewport: nowhere to scroll
     ckv::scene::Surface s(ckv::Size{1, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     ckv::scene::Painter painter(s, Rect{0, 0, 1, 10});
     sb.draw(painter);
-    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "█");
+    for (int y = 1; y < 9; ++y) CK_CHECK(s.at(Point{0, y}).grapheme() == "▓");
 }
 
-CK_TEST(classic_scrollbar_uses_a_cyan_track_and_continuous_cyan_thumb) {
+CK_TEST(classic_scrollbar_styles_its_page_area_and_indicator_from_their_roles) {
     Fixture f;
     Scrollbar sb(Orientation::Vertical);
     sb.set_context(f.ctx());
@@ -328,11 +328,11 @@ CK_TEST(classic_scrollbar_uses_a_cyan_track_and_continuous_cyan_thumb) {
     bool found_thumb = false;
     for (int y = 1; y < 11; ++y) {
         const ckv::Cell& cell = s.at(Point{0, y});
-        if (cell.grapheme() == "░") {
+        if (cell.grapheme() == "▒") {
             found_track = true;
             CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_track));
         }
-        if (cell.grapheme() == "█") {
+        if (cell.grapheme() == "■") {
             found_thumb = true;
             CK_CHECK(cell.style() == f.theme.resolve(f.roles.scrollbar_thumb));
         }

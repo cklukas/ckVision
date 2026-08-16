@@ -94,6 +94,16 @@ CK_TEST(a_window_too_small_for_any_interior_reports_a_zero_size_content_rect_wit
     CK_CHECK(w->content()->bounds().height == 0);
 }
 
+CK_TEST(size_constraints_preserve_an_unpositioned_windows_centering_sentinel) {
+    Fixture f;
+    auto w = make_window(f);
+    w->set_min_size(ckv::Size{30, 12});
+    w->set_max_size(ckv::Size{60, 24});
+    CK_CHECK(w->bounds() == (Rect{}));
+    CK_CHECK(w->horizontal_size_hint().min >= 30);
+    CK_CHECK(w->vertical_size_hint().min >= 12);
+}
+
 // --- content_pane(): the free-placement, resize-aware content (M10/WP-18) --
 
 CK_TEST(content_pane_lazily_creates_an_anchor_pane_sized_to_the_interior) {
@@ -192,7 +202,7 @@ CK_TEST(clicking_the_close_control_invokes_close) {
     w->set_bounds(Rect{5, 5, 20, 10});
     bool closed = false;
     w->on_closed = [&] { closed = true; };
-    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 2, 5})));  // inside "[x]" at local x=1..3
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 3, 5})));  // inside "[x]" at local x=2..4
     CK_CHECK(closed);
 }
 
@@ -215,7 +225,7 @@ CK_TEST(clicking_the_zoom_control_toggles_zoom) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));  // inside "[]" near the top-right
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 17, 5})));  // inside "[]" near the top-right
     CK_CHECK(w->zoomed());
 }
 
@@ -223,7 +233,7 @@ CK_TEST(a_standalone_windows_zoom_control_uses_its_own_current_bounds_as_a_harml
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 17, 5})));
     CK_CHECK(w->zoomed());
     CK_CHECK(w->bounds() == (Rect{5, 5, 20, 10}));  // unchanged: no provider, nothing else to target
 }
@@ -498,9 +508,24 @@ CK_TEST(a_short_title_never_abuts_the_close_control_directly) {
     w->set_bounds(Rect{0, 0, 20, 5});
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
-    // Close control occupies columns 1-3 ("[■]"); the title, centered,
+    // Close control occupies columns 2-4 ("[■]"); the title, centered,
     // must start well clear of it with its own padding cell besides.
     CK_CHECK(s.at(Point{4, 0}).grapheme() != "X");
+}
+
+CK_TEST(a_fixed_dialog_title_is_centered_on_the_complete_frame) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f, "Fixed");
+    w->set_resizable(false);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+
+    // width 20, title width 5: (20 - 5) / 2 = 7. The close control
+    // remains present, but it does not displace the visual centre.
+    CK_CHECK(s.at(Point{7, 0}).grapheme() == "F");
+    CK_CHECK(s.at(Point{11, 0}).grapheme() == "d");
 }
 
 // --- Content interior fill (windowed-desktop fidelity) --------------------
@@ -651,10 +676,11 @@ CK_TEST(the_close_control_draws_a_filled_square_glyph) {
     w->set_bounds(Rect{0, 0, 20, 5});
     Painter painter(s, Rect{0, 0, 20, 5});
     w->draw(painter);
-    CK_CHECK(s.at(Point{1, 0}).grapheme() == "[");
-    CK_CHECK(s.at(Point{2, 0}).grapheme() == "■");
-    CK_CHECK(s.at(Point{3, 0}).grapheme() == "]");
-    CK_CHECK(s.at(Point{2, 0}).style() == f.theme.resolve(f.roles.window_frame_inactive));
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == "─");
+    CK_CHECK(s.at(Point{2, 0}).grapheme() == "[");
+    CK_CHECK(s.at(Point{3, 0}).grapheme() == "■");
+    CK_CHECK(s.at(Point{4, 0}).grapheme() == "]");
+    CK_CHECK(s.at(Point{3, 0}).style() == f.theme.resolve(f.roles.window_control));
 }
 
 CK_TEST(the_zoom_control_draws_an_up_arrow_when_not_zoomed) {
@@ -666,8 +692,22 @@ CK_TEST(the_zoom_control_draws_an_up_arrow_when_not_zoomed) {
     w->draw(painter);
     CK_CHECK(!w->zoomed());
     CK_CHECK(!w->maximized());
-    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↑");
-    CK_CHECK(s.at(Point{17, 0}).style() == f.theme.resolve(f.roles.window_control));
+    CK_CHECK(s.at(Point{16, 0}).grapheme() == "↑");
+    CK_CHECK(s.at(Point{16, 0}).style() == f.theme.resolve(f.roles.window_control));
+}
+
+CK_TEST(a_non_resizable_window_omits_and_ignores_the_zoom_control) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_resizable(false);
+    w->set_bounds(Rect{0, 0, 20, 5});
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+
+    CK_CHECK(s.at(Point{16, 0}).grapheme() != "↑");
+    (void)w->on_mouse(mouse(ckv::MouseAction::Down, Point{17, 0}));
+    CK_CHECK(!w->zoomed());
 }
 
 CK_TEST(the_zoom_control_draws_an_updown_arrow_once_zoomed) {
@@ -680,7 +720,7 @@ CK_TEST(the_zoom_control_draws_an_updown_arrow_once_zoomed) {
     w->draw(painter);
     CK_CHECK(w->zoomed());
     CK_CHECK(w->maximized());
-    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↕");
+    CK_CHECK(s.at(Point{16, 0}).grapheme() == "↕");
 }
 
 CK_TEST(a_permanently_filling_window_draws_the_restore_glyph_without_entering_restorable_zoom) {
@@ -693,7 +733,7 @@ CK_TEST(a_permanently_filling_window_draws_the_restore_glyph_without_entering_re
     w->draw(painter);
     CK_CHECK(!w->zoomed());
     CK_CHECK(w->maximized());
-    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↕");
+    CK_CHECK(s.at(Point{16, 0}).grapheme() == "↕");
 }
 
 CK_TEST(toggling_zoom_off_again_restores_the_up_arrow_glyph) {
@@ -707,7 +747,7 @@ CK_TEST(toggling_zoom_off_again_restores_the_up_arrow_glyph) {
     w->toggle_zoom(Rect{0, 0, 20, 5});
     CK_CHECK(!w->zoomed());
     w->draw(painter);
-    CK_CHECK(s.at(Point{17, 0}).grapheme() == "↑");
+    CK_CHECK(s.at(Point{16, 0}).grapheme() == "↑");
 }
 
 CK_TEST(the_zoom_control_hit_test_region_is_unaffected_by_the_glyph_change) {
@@ -719,7 +759,7 @@ CK_TEST(the_zoom_control_hit_test_region_is_unaffected_by_the_glyph_change) {
     Fixture f;
     auto w = make_window(f);
     w->set_bounds(Rect{5, 5, 20, 10});
-    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 18, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{5 + 17, 5})));
     CK_CHECK(w->zoomed());
 }
 
@@ -880,7 +920,7 @@ CK_TEST(a_top_start_overlay_sits_flush_after_the_close_control) {
     w->set_bounds(Rect{0, 0, 30, 10});  // wide enough for the close control (b.width > 6)
     const FrameSlot top_start{.edge = Edge::Top, .alignment = ui::Alignment::Start};
     auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), top_start);
-    CK_CHECK(overlay->bounds() == (Rect{4, 0, 4, 1}));  // close control occupies columns 1-3
+    CK_CHECK(overlay->bounds() == (Rect{5, 0, 4, 1}));  // close control occupies columns 2-4
 }
 
 CK_TEST(a_top_end_overlay_sits_flush_before_the_zoom_control) {
@@ -889,8 +929,8 @@ CK_TEST(a_top_end_overlay_sits_flush_before_the_zoom_control) {
     w->set_bounds(Rect{0, 0, 30, 10});  // wide enough for the zoom control (b.width > 8)
     const FrameSlot top_end{.edge = Edge::Top, .alignment = ui::Alignment::End};
     auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), top_end);
-    // The zoom control occupies the last 3 columns.
-    CK_CHECK(overlay->bounds() == (Rect{30 - 3 - 4, 0, 4, 1}));
+    // The zoom control occupies columns width-5 through width-3.
+    CK_CHECK(overlay->bounds() == (Rect{30 - 4 - 4, 0, 4, 1}));
 }
 
 CK_TEST(a_top_start_overlay_on_a_narrow_window_only_clears_the_corner) {

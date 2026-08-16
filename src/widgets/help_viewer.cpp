@@ -73,6 +73,8 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                                roles.dialog_background);
     window->set_resizable(false);
+    // A help topic is prose; hold it off the frame like every other dialog.
+    window->set_content_margin(1, 1);
     Window* window_ptr = window.get();
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
     const std::weak_ptr<void> window_liveness = window_ptr->lifetime_token();
