@@ -275,3 +275,102 @@ CK_TEST(a_focused_search_box_shows_a_caret_where_typing_will_land) {
     CK_CHECK(typed_caret.has_value());
     CK_CHECK(typed_caret->position.x == empty_caret->position.x + 2);  // follows the text
 }
+
+// --- Calendar: today, and a marked span --------------------------------------
+
+namespace {
+// The style of the cell holding `day`, for an August 2026 calendar drawn at
+// the origin. Mirrors CalendarView::draw's own layout arithmetic.
+ckv::Style day_style(ckv::scene::Surface& surface, CalendarView& calendar, int day) {
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 30, 10});
+    calendar.set_bounds(ckv::Rect{0, 0, 30, 10});
+    calendar.draw(painter);
+    // 1 Aug 2026 is a Saturday: Monday-zero index 5.
+    const int index = 5 + day - 1;
+    return surface.at(ckv::Point{(index % 7) * 3 + 1, 2 + index / 7}).style();
+}
+}  // namespace
+
+CK_TEST(a_calendar_marks_today_and_stops_when_told_there_is_no_today) {
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_selected(DateValue{2026, 8, 20});
+    ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+
+    const ckv::Style today_role = s.theme.resolve(s.roles.calendar_today);
+    calendar.set_today(DateValue{2026, 8, 9});
+    CK_CHECK(day_style(surface, calendar, 9).bg == today_role.bg);
+
+    // std::nullopt is the "do not mark today" option: a picker for a
+    // birthday has no use for it.
+    calendar.set_today(std::nullopt);
+    CK_CHECK(day_style(surface, calendar, 9).bg != today_role.bg);
+}
+
+CK_TEST(a_calendar_asks_again_for_today_so_it_can_turn_over_at_midnight) {
+    // Left open across midnight a calendar goes on marking yesterday, which
+    // is worse than marking nothing: confidently wrong about the one fact it
+    // exists to state.
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_selected(DateValue{2026, 8, 20});
+    ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+
+    DateValue now{2026, 8, 9};
+    calendar.set_today_provider([&] { return std::optional<DateValue>{now}; });
+    const ckv::Style today_role = s.theme.resolve(s.roles.calendar_today);
+    CK_CHECK(day_style(surface, calendar, 9).bg == today_role.bg);
+
+    now = DateValue{2026, 8, 10};  // the day rolls over
+    CK_CHECK(day_style(surface, calendar, 10).bg == today_role.bg);
+    CK_CHECK(day_style(surface, calendar, 9).bg != today_role.bg);
+}
+
+CK_TEST(a_marked_span_is_clipped_to_the_month_on_display) {
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_selected(DateValue{2026, 8, 28});
+    calendar.set_today(std::nullopt);
+    ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    const ckv::Style marked = s.theme.resolve(s.roles.calendar_marked);
+
+    // A span that starts in July and ends mid-August: only the August part
+    // is on display, and it is the part that gets marked.
+    calendar.set_marked_span(DateValue{2026, 7, 28}, DateValue{2026, 8, 5});
+    CK_CHECK(day_style(surface, calendar, 1).bg == marked.bg);
+    CK_CHECK(day_style(surface, calendar, 5).bg == marked.bg);
+    CK_CHECK(day_style(surface, calendar, 6).bg != marked.bg);
+
+    // Ends given the wrong way round mark nothing extra, not everything.
+    calendar.set_marked_span(DateValue{2026, 8, 5}, DateValue{2026, 8, 1});
+    CK_CHECK(day_style(surface, calendar, 3).bg == marked.bg);
+    CK_CHECK(day_style(surface, calendar, 6).bg != marked.bg);
+
+    // Cleared.
+    calendar.set_marked_span(std::nullopt, std::nullopt);
+    CK_CHECK(day_style(surface, calendar, 3).bg != marked.bg);
+}
+
+CK_TEST(the_day_a_reader_selected_outranks_today_and_the_marked_span) {
+    // Each claim on a cell is stronger than the next: what cannot be chosen,
+    // then what the reader chose, then what day it is, then the span.
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_selected(DateValue{2026, 8, 9});
+    calendar.set_today(DateValue{2026, 8, 9});
+    calendar.set_marked_span(DateValue{2026, 8, 1}, DateValue{2026, 8, 31});
+    ckv::scene::Surface surface(ckv::Size{30, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+
+    CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.list_selected).bg);
+    // A day that is today AND in the span shows today.
+    calendar.set_selected(DateValue{2026, 8, 20});
+    CK_CHECK(day_style(surface, calendar, 9).bg == s.theme.resolve(s.roles.calendar_today).bg);
+}

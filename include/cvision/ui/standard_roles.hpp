@@ -56,6 +56,12 @@ struct StandardRoles {
     // darkens, brightens or swaps is the theme's business, and a monochrome
     // theme has to answer it differently from a colour one.
     RoleId window_control_pressed;
+    // A calendar's today and its marked span. Their own roles rather than
+    // borrowed ones: today is a fact about the world, the marked span is a
+    // fact about the data, and the reader has to tell them apart from the
+    // day they themselves selected.
+    RoleId calendar_today;
+    RoleId calendar_marked;
 
     // Menu system (ARCHITECTURE.md §5 "Menus").
     RoleId menu_bar_normal;

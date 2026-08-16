@@ -194,6 +194,12 @@ void CalendarView::draw(scene::Painter& painter) {
     const Style normal = context().theme->resolve(normal_role_);
     const Style selected = context().theme->resolve(selected_role_);
     const Style disabled = context().theme->resolve(disabled_role_);
+    const Style today_style = context().theme->resolve(today_role_);
+    const Style marked_style = context().theme->resolve(marked_role_);
+    // Asked once per frame, not once per day drawn: a provider reading a
+    // system clock should be called a fixed, small number of times, and every
+    // cell in one frame has to agree about what day it is.
+    const std::optional<DateValue> today = effective_today();
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
     const std::string title = month_labels_[std::clamp(month_.month, 1, 12) - 1] + " " + std::to_string(month_.year);
     painter.draw_text(Point{0, 0}, text::clip_to_width(title, bounds().width), normal);
@@ -205,7 +211,14 @@ void CalendarView::draw(scene::Painter& painter) {
         const int index = weekday_monday_zero(month_) + day - 1;
         const int row = index / 7;
         const int column = index % 7;
-        const Style style = !selectable(date) ? disabled : (date == selected_ ? selected : normal);
+        // Disabled first: a day that cannot be chosen says so before
+        // anything else. Then the reader's own choice, then today, then the
+        // marked span -- each a stronger claim on the cell than the next.
+        const Style style = !selectable(date)          ? disabled
+                            : date == selected_        ? selected
+                            : (today && date == *today) ? today_style
+                            : within_marked_span(date)  ? marked_style
+                                                        : normal;
         painter.draw_text(Point{x_offset + column * 3, 2 + row}, (day < 10 ? " " : "") + std::to_string(day), style);
     }
 }
@@ -252,6 +265,38 @@ void CalendarView::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.list.normal");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.menu.dropdown.disabled");
+    if (today_role_ == ui::kInvalidRole) today_role_ = context().roles->find("ckv.calendar.today");
+    if (marked_role_ == ui::kInvalidRole) marked_role_ = context().roles->find("ckv.calendar.marked");
+}
+
+void CalendarView::set_today_provider(std::function<std::optional<DateValue>()> provider) {
+    today_provider_ = std::move(provider);
+    invalidate();
+}
+
+void CalendarView::set_marked_span(std::optional<DateValue> first, std::optional<DateValue> last) {
+    // An inverted span marks nothing rather than everything: a caller that
+    // hands over its ends the wrong way round has made a mistake, and the
+    // helpful reading of a mistake is the quiet one.
+    if (first && last && *last < *first) std::swap(first, last);
+    marked_first_ = first;
+    marked_last_ = last;
+    has_marked_span_ = first.has_value() || last.has_value();
+    invalidate();
+}
+
+std::optional<DateValue> CalendarView::effective_today() const {
+    // The provider wins when there is one: it is the answer that can still
+    // change, and a fixed today set once is the thing it exists to replace.
+    if (today_provider_) return today_provider_();
+    return today_;
+}
+
+bool CalendarView::within_marked_span(DateValue date) const noexcept {
+    if (!has_marked_span_) return false;
+    if (marked_first_ && date < *marked_first_) return false;
+    if (marked_last_ && *marked_last_ < date) return false;
+    return true;
 }
 
 DatePicker::DatePicker() {

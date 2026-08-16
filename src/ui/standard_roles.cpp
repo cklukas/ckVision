@@ -78,6 +78,8 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.window_control = registry.intern("ckv.window.control", Style{kGreen, kBlue, Attr::Bold});
     r.window_control_pressed =
         registry.intern("ckv.window.control.pressed", Style{kBlue, kGreen, Attr::Bold});
+    r.calendar_today = registry.intern("ckv.calendar.today", Style{kYellow, kBlue, Attr::Bold});
+    r.calendar_marked = registry.intern("ckv.calendar.marked", Style{kBlack, kCyan, Attr{}});
     r.menu_bar_normal = registry.intern("ckv.menu.bar.normal", Style{kBlack, kLightGray, Attr{}});
     r.menu_bar_active = registry.intern("ckv.menu.bar.active", Style{kBlack, kGreen, Attr{}});
     r.menu_dropdown_normal = registry.intern("ckv.menu.dropdown.normal", Style{kBlack, kLightGray, Attr{}});
@@ -164,6 +166,8 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.window_title_inactive, Style{kLightGray, kBlue, Attr{}});
     theme.set(roles.window_control, Style{kGreen, kBlue, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kBlue, kGreen, Attr::Bold});
+    theme.set(roles.calendar_today, Style{kYellow, kBlue, Attr::Bold});
+    theme.set(roles.calendar_marked, Style{kBlack, kCyan, Attr{}});
     theme.set(roles.menu_bar_normal, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.menu_bar_active, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.menu_dropdown_normal, Style{kBlack, kLightGray, Attr{}});
@@ -259,6 +263,8 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.window_title_inactive, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.window_control, Style{kDarkYellow, kDarkPanel, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kDarkPanel, kDarkYellow, Attr::Bold});
+    theme.set(roles.calendar_today, Style{kDarkYellow, kDarkPanel, Attr::Bold});
+    theme.set(roles.calendar_marked, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.menu_bar_normal, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.menu_bar_active, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_normal, Style{kDarkFg, kDarkPanel, Attr{}});
@@ -321,6 +327,8 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.window_title_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.window_control, Style{kLightRed, kLightPanel, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kLightPanel, kLightRed, Attr::Bold});
+    theme.set(roles.calendar_today, Style{kLightRed, kLightPanel, Attr::Bold});
+    theme.set(roles.calendar_marked, Style{kLightFg, kLightAccent, Attr{}});
     theme.set(roles.menu_bar_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.menu_bar_active, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.menu_dropdown_normal, Style{kLightFg, kLightPanel, Attr{}});
@@ -381,6 +389,8 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.window_title_inactive, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.window_control, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.window_control_pressed, Style{kMonoBg, kMonoFg, Attr::Bold});
+    theme.set(roles.calendar_today, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.calendar_marked, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.menu_bar_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.menu_bar_active, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.menu_dropdown_normal, Style{kMonoFg, kMonoBg, Attr{}});
@@ -429,6 +439,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
         roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
         roles.window_title_inactive, roles.window_control,           roles.window_control_pressed,
+        roles.calendar_today,        roles.calendar_marked,
         roles.menu_bar_normal,
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
@@ -463,6 +474,8 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.window_title_inactive, Style{white, black, Attr::Dim});
     theme.set(roles.window_control, Style{white, black, Attr::Bold});
     theme.set(roles.window_control_pressed, selected);
+    theme.set(roles.calendar_today, Style{white, black, Attr::Bold});
+    theme.set(roles.calendar_marked, Style{white, black, Attr::Underline});
     theme.set(roles.menu_bar_active, selected);
     theme.set(roles.menu_dropdown_highlighted, selected);
     theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Dim});

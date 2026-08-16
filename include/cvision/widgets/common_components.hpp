@@ -37,8 +37,31 @@ public:
     DateValue month() const noexcept { return month_; }
     void set_selected(DateValue selected);
     DateValue selected() const noexcept { return selected_; }
+    // Today, as a fixed value. std::nullopt is how a calendar is told not
+    // to mark today at all -- a date picker for a birthday has no use for it.
     void set_today(std::optional<DateValue> today);
     const std::optional<DateValue>& today() const noexcept { return today_; }
+
+    // Today, asked for afresh whenever the calendar repaints.
+    //
+    // A calendar left open across midnight goes on marking yesterday, which
+    // is worse than marking nothing: it is confidently wrong about the one
+    // fact it exists to state. The widget cannot fix that alone -- ckVision's
+    // Clock is monotonic with an implementation-defined epoch, deliberately
+    // not a wall clock, and reaching for the system date from a widget is
+    // exactly what keeps it out of headless tests. So the host supplies the
+    // date and the widget asks again each time it draws.
+    //
+    // Note what this does and does not buy: any repaint picks up the new
+    // date, but a calendar sitting on a still screen is not repainting. A
+    // host that wants the mark to turn over unattended has to invalidate it
+    // when the day does.
+    void set_today_provider(std::function<std::optional<DateValue>()> provider);
+
+    // A span of days to mark, clipped to whichever month is displayed.
+    // Either end may be absent, meaning open in that direction. Pass two
+    // absent ends to mark nothing.
+    void set_marked_span(std::optional<DateValue> first, std::optional<DateValue> last);
     void set_range(std::optional<DateValue> minimum, std::optional<DateValue> maximum);
     void set_disabled_predicate(std::function<bool(DateValue)> predicate);
     void set_labels(std::vector<std::string> month_labels, std::vector<std::string> weekday_labels);
@@ -64,6 +87,10 @@ private:
     DateValue month_{2026, 1, 1};
     DateValue selected_{2026, 1, 1};
     std::optional<DateValue> today_;
+    std::function<std::optional<DateValue>()> today_provider_;
+    std::optional<DateValue> marked_first_;
+    std::optional<DateValue> marked_last_;
+    bool has_marked_span_ = false;
     std::optional<DateValue> minimum_;
     std::optional<DateValue> maximum_;
     std::function<bool(DateValue)> disabled_;
@@ -74,6 +101,11 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
+    ui::RoleId today_role_ = ui::kInvalidRole;
+    ui::RoleId marked_role_ = ui::kInvalidRole;
+
+    std::optional<DateValue> effective_today() const;
+    bool within_marked_span(DateValue date) const noexcept;
 };
 
 class DatePicker : public ui::View {
