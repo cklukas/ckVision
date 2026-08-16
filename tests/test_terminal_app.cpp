@@ -21,7 +21,10 @@ using ckv::ui::Application;
 namespace {
 
 struct Fixture {
-    ckv::term::HeadlessTerminal terminal{Size{100, 30}};
+    // Graphics-capable, because the point of this example is graphics: a
+    // terminal without them draws every raster's fallback instead, which
+    // makes a test unable to tell a working picture from a missing one.
+    ckv::term::HeadlessTerminal terminal{Size{100, 30}, ckv::term::headless_sixel_profile()};
     ManualClock clock;
     Application app{terminal, clock};
     ckv::terminal_example::TerminalApp example{app};
@@ -177,6 +180,19 @@ CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
     // whichever fragment did arrive.
     for (const auto& diagnostic : view->session().snapshot().diagnostics)
         CK_CHECK(diagnostic.kind != ckv::core::TerminalDiagnostic::Kind::LimitExceeded);
+
+    // ...and it reaches the screen. Asking the emulator whether it holds a
+    // raster answers a different question from whether anything is drawn:
+    // the last two attempts at this both passed while the window stayed
+    // blank. A raster the view declines to draw is worth nothing.
+    for (const auto& raster : view->session().snapshot().rasters)
+        CK_CHECK(raster.id != 0);  // TerminalView skips id 0 outright
+    bool on_screen = false;
+    for (int attempt = 0; attempt < 200 && !on_screen; ++attempt) {
+        f.app.step(0);
+        on_screen = f.terminal.display().has_raster_pixels();
+    }
+    CK_CHECK(on_screen);
 }
 
 CK_TEST(the_help_command_answers_with_an_about_box) {

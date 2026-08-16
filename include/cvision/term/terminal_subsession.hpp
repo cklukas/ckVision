@@ -41,7 +41,16 @@ public:
         return false;
     }
     virtual void close() noexcept {}
-    virtual void set_raster_identity(int identity) noexcept { (void)identity; }
+    // The identity a host assigns so this session's rasters can be told
+    // apart from every other session's. A session that decodes graphics MUST
+    // carry it: a raster left at the default id is dropped by the view that
+    // would have drawn it, without a word, and the graphics never appear.
+    //
+    // Pure rather than defaulted, because a default that quietly does
+    // nothing is precisely how that came to be true of the POSIX session for
+    // as long as it had existed -- it forwarded every other call to its
+    // emulator and silently swallowed this one.
+    virtual void set_raster_identity(int identity) noexcept = 0;
 
     // Borrowed native readiness sources. Application presents them to the
     // outer Terminal's combined wait operation but never owns or closes them.
