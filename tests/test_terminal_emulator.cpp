@@ -603,7 +603,7 @@ CK_TEST(an_absurd_repeat_count_is_bounded_by_the_screen) {
 
 // --- Bold and the low eight colours ---------------------------------------
 
-CK_TEST(a_real_curses_frame_renders_its_emphasis_white_and_its_body_below_it) {
+CK_TEST(a_real_curses_frame_keeps_its_bars_plain_and_its_body_below_white) {
     // Bytes recorded from ncdu against a real pty. Emphasis has to be
     // visibly brighter than body text, not a shade above it: the whole
     // point of the convention is that a reader can see the difference.
@@ -612,22 +612,33 @@ CK_TEST(a_real_curses_frame_renders_its_emphasis_white_and_its_body_below_it) {
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     int bold_white = 0;
     int body = 0;
+    int reversed_bar = 0;
+    int printed = 0;
     for (const Cell& cell : snapshot.cell_buffer) {
         if (cell.grapheme() == " ") continue;
-        if (has_attr(cell.style().attrs, ckv::Attr::Bold)) {
-            if (cell.style().fg == ckv::Color::rgb(255, 255, 255)) ++bold_white;
-        } else if (cell.style().fg == ckv::Color::rgb(187, 187, 187)) {
+        ++printed;
+        const ckv::Style style = cell.style();
+        if (has_attr(style.attrs, ckv::Attr::Reverse)) {
+            // ncdu's header and footer bars. Their colours must be the plain
+            // pair whichever way round they are drawn -- brightening one of
+            // them puts a pale patch behind the emphasised words.
+            if (style.fg == ckv::Color::rgb(187, 187, 187)) ++reversed_bar;
+        } else if (has_attr(style.attrs, ckv::Attr::Bold)) {
+            if (style.fg == ckv::Color::rgb(255, 255, 255)) ++bold_white;
+        } else if (style.fg == ckv::Color::rgb(187, 187, 187)) {
             ++body;
         }
     }
-    CK_CHECK(bold_white > 0);
+    // This frame is ncdu's browse view, where every emphasised word lives
+    // inside a reversed bar — which is exactly the case that used to come
+    // out wrong, so it is the one worth pinning against real bytes. Bold
+    // against a normal background is covered synthetically below.
+    CK_CHECK(bold_white == 0);
     CK_CHECK(body > 0);
-    // Every printed cell is one or the other: nothing fell through as an
+    CK_CHECK(reversed_bar > 0);
+    // Every printed cell is accounted for: nothing fell through as an
     // unbrightened bold or an unexpected colour.
-    int printed = 0;
-    for (const Cell& cell : snapshot.cell_buffer)
-        if (cell.grapheme() != " ") ++printed;
-    CK_CHECK(bold_white + body == printed);
+    CK_CHECK(bold_white + body + reversed_bar == printed);
 }
 
 CK_TEST(bold_on_the_default_foreground_arrives_white_not_merely_heavier) {
@@ -719,4 +730,17 @@ CK_TEST(the_title_stays_denied_unless_the_profile_asks_for_metadata) {
     ckv::term::TerminalEmulator emulator(ckv::term::embedded_xterm_sixel_profile());
     emulator.feed_output("\x1b]2;ignored\a");
     CK_CHECK(emulator.snapshot().title.empty());
+}
+
+CK_TEST(bold_inside_reverse_video_does_not_pale_the_bar_behind_it) {
+    // A header bar drawn reversed, with its heading emphasised. The two
+    // colours must stay the plain pair: brightening the foreground before
+    // the swap turns the background pale exactly where the emphasis is.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[0;7mbar\x1b[0;1;7mBOLD");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == snapshot.cell_buffer[3].style().fg);
+    CK_CHECK(snapshot.cell_buffer[0].style().bg == snapshot.cell_buffer[3].style().bg);
+    CK_CHECK(has_attr(snapshot.cell_buffer[3].style().attrs, ckv::Attr::Bold));
+    CK_CHECK(has_attr(snapshot.cell_buffer[3].style().attrs, ckv::Attr::Reverse));
 }

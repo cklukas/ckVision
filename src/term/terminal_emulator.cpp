@@ -64,6 +64,12 @@ Color ansi_color(int index) noexcept {
 // convention.
 Style bold_brightened(Style style, const Style& default_style) noexcept {
     if (!has_attr(style.attrs, Attr::Bold)) return style;
+    // Reverse video swaps the two colours, so brightening the foreground
+    // here would land on what the reader sees as the background: a program
+    // asking for emphasis inside a header bar would get a paler patch behind
+    // its text instead of emphasis, which is the opposite of the intent and
+    // is not what terminals do. Bold still applies as weight.
+    if (has_attr(style.attrs, Attr::Reverse)) return style;
     // The default foreground brightens too, and to white. A terminal's
     // default behaves as the eighth colour does for this purpose, and it is
     // the case that matters most: a program reaching for emphasis without
