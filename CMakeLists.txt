@@ -112,6 +112,16 @@ if(CKVISION_BUILD_EXAMPLES)
     add_subdirectory(tools/docgen)
 endif()
 
+# A field diagnostic: what this terminal actually reports and sends, as
+# ckVision's own layer decodes it. Built with the library because the
+# question it answers ("why does the mouse behave differently here?")
+# arises on hosts that build neither examples nor tests.
+if(UNIX)
+    add_executable(ckvision_terminal_probe tools/diag/terminal_probe.cpp)
+    target_link_libraries(ckvision_terminal_probe PRIVATE cvision)
+    ckvision_strict(ckvision_terminal_probe)
+endif()
+
 option(CKVISION_BUILD_TESTING
     "Build ckVision tests and benchmarks" ${PROJECT_IS_TOP_LEVEL})
 if(CKVISION_BUILD_TESTING)

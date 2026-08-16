@@ -20,6 +20,10 @@ add_executable(generate_desktop_dialog_goldens generate_desktop_dialog_goldens.c
 target_link_libraries(generate_desktop_dialog_goldens PRIVATE ckvision::cvision)
 ckvision_strict(generate_desktop_dialog_goldens)
 
+add_executable(generate_window_z_order_golden generate_window_z_order_golden.cpp)
+target_link_libraries(generate_window_z_order_golden PRIVATE ckvision::cvision)
+ckvision_strict(generate_window_z_order_golden)
+
 if(NOT TARGET docgen_frame_svg)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
     target_link_libraries(docgen_frame_svg PRIVATE ckvision::cvision)
