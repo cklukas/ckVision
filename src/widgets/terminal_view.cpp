@@ -64,11 +64,18 @@ std::optional<CursorState> TerminalView::cursor_state() const {
     if (!focused_ || scrollback_offset_ != 0 || session_ == nullptr || bounds().width <= 0 || bounds().height <= 0)
         return std::nullopt;
     const core::TerminalSnapshot snapshot = session_->snapshot();
-    if (!snapshot.cursor.visible || snapshot.cursor.position.x < 0 || snapshot.cursor.position.y < 0 ||
-        snapshot.cursor.position.x >= bounds().width || snapshot.cursor.position.y >= bounds().height)
+    if (!snapshot.cursor.visible || snapshot.cursor.position.x < 0 || snapshot.cursor.position.y < 0)
         return std::nullopt;
+    // A cursor past the edge is held at the edge rather than withdrawn.
+    // Resizing tells the child its new size and then waits for it to redraw,
+    // so for those frames the child's cursor still belongs to the old, larger
+    // grid. Both answers are stale; this one is stale by a cell or two and
+    // settles, where withdrawing it says "there is no cursor" -- which is
+    // untrue, and blinks the cursor out of every drag.
+    const Point clamped{std::min(snapshot.cursor.position.x, bounds().width - 1),
+                        std::min(snapshot.cursor.position.y, bounds().height - 1)};
     const Rect absolute = absolute_bounds();
-    return CursorState{true, Point{absolute.x + snapshot.cursor.position.x, absolute.y + snapshot.cursor.position.y},
+    return CursorState{true, Point{absolute.x + clamped.x, absolute.y + clamped.y},
                        snapshot.cursor.shape, true};
 }
 

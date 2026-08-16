@@ -945,7 +945,10 @@ CK_TEST(a_window_retained_after_detaching_and_destroying_its_desktop_cannot_reac
 
     // width-4 is the maximize/restore control's glyph column: absolute 21
     // for this 20-wide window at x=5.
+    // The control acts on release, so the click has to be completed.
     CK_CHECK(retained->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                                ckv::Point{21, 5}, std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(retained->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
                                                 ckv::Point{21, 5}, std::nullopt, ckv::Modifier::None}));
     CK_CHECK(retained->zoomed());
     CK_CHECK(retained->bounds() == (Rect{5, 5, 20, 10}));
@@ -1071,6 +1074,9 @@ CK_TEST(terminal_mouse_zoom_and_restore_track_the_desktop_after_a_resize) {
     af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{26, 5},
                                          std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{26, 5},
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
     CK_CHECK(window->zoomed());
     CK_CHECK(window->bounds() == af.desktop->content_area());
 
@@ -1080,8 +1086,11 @@ CK_TEST(terminal_mouse_zoom_and_restore_track_the_desktop_after_a_resize) {
     CK_CHECK(window->bounds() == af.desktop->content_area());
 
     const Rect zoomed = window->absolute_bounds();
-    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                         ckv::Point{zoomed.x + window->bounds().width - 4, zoomed.y},
+    const ckv::Point on_control{zoomed.x + window->bounds().width - 4, zoomed.y};
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, on_control,
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, on_control,
                                          std::nullopt, ckv::Modifier::None});
     CK_CHECK(af.app.step(0));
     CK_CHECK(!window->zoomed());

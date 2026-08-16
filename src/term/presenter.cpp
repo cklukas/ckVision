@@ -411,14 +411,24 @@ void Presenter::present(FrameView frame, CursorState cursor,
     render_frame(frame, active_rasters_, raster_coverage_changed, out);
     emit_raster_slices(out, frame, active_rasters_);
 
-    if (force_full_ || !previous_cursor_ || cursor != *previous_cursor_) {
-        if (cursor.visible) {
+    // Writing cells moves the terminal's own cursor, so after any painting
+    // it sits wherever the last run happened to end -- and a VISIBLE cursor
+    // is then drawn there: a stray bright cell that wanders with whatever
+    // was repainted, which during a window drag is the window's edge.
+    // Putting it back is therefore part of finishing a frame, not something
+    // to do only when the application moved it.
+    const bool cursor_changed = force_full_ || !previous_cursor_ || cursor != *previous_cursor_;
+    if (cursor.visible) {
+        // Nothing was painted, so nothing moved it: leave the frame empty
+        // rather than spending bytes to restate where it already is.
+        if (cursor_changed || !out.empty())
             emit_cursor_move(out, cursor.position.x, cursor.position.y);
+        if (cursor_changed) {
             emit_cursor_shape(out, cursor.shape, cursor.blink);
             out += "\x1B[?25h";
-        } else {
-            out += "\x1B[?25l";
         }
+    } else if (cursor_changed) {
+        out += "\x1B[?25l";
     }
 
     if (terminal_.capabilities().synchronized_output && !out.empty()) {

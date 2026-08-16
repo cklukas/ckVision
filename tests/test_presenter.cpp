@@ -500,3 +500,57 @@ CK_TEST(a_moved_raster_also_repaints_the_cell_row_its_pixels_could_bleed_into) {
     // image no longer stands on.
     CK_CHECK(out.find("\x1B[4;") != std::string::npos);
 }
+
+// --- The cursor goes back where it belongs -----------------------------------
+
+CK_TEST(a_visible_cursor_is_put_back_after_every_frame_that_painted) {
+    // Writing cells moves the terminal's own cursor. A visible cursor is
+    // drawn wherever that leaves it, so without restoring it a stray bright
+    // cell wanders with whatever was repainted -- during a window drag, the
+    // window's edge.
+    HeadlessTerminal term(Size{10, 3});
+    Presenter presenter(term);
+    Surface s = make_surface(10, 3, " ");
+    const CursorState cursor{true, Point{2, 1}, CursorShape::Block};
+    presenter.present(s.view(), cursor);
+    term.clear_written();
+
+    // Paint far from the cursor without changing the cursor state at all.
+    s.set_cell(Point{9, 2}, Cell::from_grapheme("X", Style{}));
+    presenter.present(s.view(), cursor);
+    const std::string out{term.written_bytes()};
+    CK_CHECK(out.find("X") != std::string::npos);
+    CK_CHECK(out.find("\x1B[2;3H") != std::string::npos);
+    // ...and it is the LAST thing said, after the painting that displaced it.
+    CK_CHECK(out.rfind("\x1B[2;3H") + 6 == out.size());
+}
+
+CK_TEST(a_frame_that_paints_nothing_still_costs_nothing) {
+    // Nothing moved the cursor, so there is nothing to put back: restoring
+    // it unconditionally would turn every idle frame into traffic.
+    HeadlessTerminal term(Size{10, 3});
+    Presenter presenter(term);
+    Surface s = make_surface(10, 3, " ");
+    const CursorState cursor{true, Point{2, 1}, CursorShape::Block};
+    presenter.present(s.view(), cursor);
+    term.clear_written();
+
+    presenter.present(s.view(), cursor);
+    CK_CHECK(term.written_bytes().empty());
+    CK_CHECK(presenter.last_bytes_emitted() == 0);
+}
+
+CK_TEST(a_hidden_cursor_is_hidden_once_and_not_chased_around) {
+    HeadlessTerminal term(Size{10, 3});
+    Presenter presenter(term);
+    Surface s = make_surface(10, 3, " ");
+    const CursorState hidden{false, Point{0, 0}, CursorShape::Block};
+    presenter.present(s.view(), hidden);
+    term.clear_written();
+
+    s.set_cell(Point{5, 1}, Cell::from_grapheme("Y", Style{}));
+    presenter.present(s.view(), hidden);
+    const std::string out{term.written_bytes()};
+    CK_CHECK(out.find("Y") != std::string::npos);
+    CK_CHECK(out.find("\x1B[?25l") == std::string::npos);  // already hidden; said once
+}
