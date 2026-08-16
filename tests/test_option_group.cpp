@@ -431,3 +431,31 @@ CK_TEST(empty_radio_group_does_not_crash_on_key_or_mouse) {
     CK_CHECK(!group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 0},
                                               std::nullopt, Modifier::None}));
 }
+
+CK_TEST(space_ticks_a_box_and_enter_is_left_for_the_form_around_it) {
+    // Regression: the group used to toggle on Enter and report it handled,
+    // so a dialog's default button could not be reached from the keyboard
+    // while any box had focus — which, in a settings dialog, is from the
+    // moment it opens. Space is what ticks a box; Enter belongs to the form.
+    Fixture f;
+    CheckGroup group({"&One", "&Two"});
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+
+    CK_CHECK(group.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::None, " "}}));
+    CK_CHECK(group.checked(0));
+
+    CK_CHECK(!group.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}}));
+    CK_CHECK(group.checked(0));  // unchanged: Enter was not ours to act on
+}
+
+CK_TEST(a_radio_group_likewise_leaves_enter_to_the_form) {
+    Fixture f;
+    RadioGroup group({"&One", "&Two"});
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+
+    CK_CHECK(group.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Down, ckv::Modifier::None, ""}}));
+    CK_CHECK(group.selected() == 1);
+    // Arrows already select as they move, so Enter had nothing left to do.
+    CK_CHECK(!group.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}}));
+    CK_CHECK(group.selected() == 1);
+}

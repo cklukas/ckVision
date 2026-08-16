@@ -148,9 +148,12 @@ bool CheckGroup::on_key(const KeyEvent& event) {
         case Key::Right:
             move_cursor(+1);
             return true;
-        case Key::Enter:
-            if (!labels_.empty()) toggle(cursor_);
-            return true;
+        // Enter is deliberately not handled. Space is what ticks a box —
+        // in this toolkit and in every other — and Enter belongs to the
+        // form: it presses the dialog's default button. A group that
+        // swallowed it left OK unreachable from the keyboard for as long as
+        // any box had focus, which in a settings dialog is from the moment
+        // it opens.
         case Key::Char:
             if (is_space_request(event)) {
                 if (!labels_.empty()) toggle(cursor_);
@@ -282,9 +285,9 @@ bool RadioGroup::on_key(const KeyEvent& event) {
             move_cursor(+1);
             set_selected(static_cast<int>(cursor_));
             return true;
-        case Key::Enter:
-            if (!labels_.empty()) set_selected(static_cast<int>(cursor_));
-            return true;
+        // Enter is deliberately not handled, for the reason CheckGroup gives
+        // above. A radio group is doubly safe here: its arrow keys already
+        // select as they move, so there is nothing Enter was needed for.
         case Key::Char:
             if (is_space_request(event)) {
                 if (!labels_.empty()) set_selected(static_cast<int>(cursor_));
