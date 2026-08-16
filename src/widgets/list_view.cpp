@@ -170,12 +170,12 @@ void ListView::ensure_cursor_visible() {
     }
 }
 
-void ListView::set_scrollbar_auto_hide(bool enabled) {
-    if (scrollbar_ != nullptr) scrollbar_->set_auto_hide(enabled);
+void ListView::set_scrollbar_policy(ScrollbarPolicy policy) {
+    if (scrollbar_ != nullptr) scrollbar_->set_policy(policy);
 }
 
-bool ListView::scrollbar_auto_hide() const noexcept {
-    return scrollbar_ != nullptr && scrollbar_->auto_hide();
+ScrollbarPolicy ListView::scrollbar_policy() const noexcept {
+    return scrollbar_ != nullptr ? scrollbar_->policy() : ScrollbarPolicy::Always;
 }
 
 void ListView::on_resized() {

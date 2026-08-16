@@ -81,6 +81,20 @@ public:
     // new window before this operation returns.
     Window* present_modal(WindowHandle handle, ui::Application& app);
 
+    // Whether `child` should cast a shadow right now.
+    //
+    // A shadow says "this floats above that". When windows are tiled they
+    // leave no desktop between them, so nothing is floating: the shadow one
+    // casts on its neighbour is a dark smudge along a shared edge, and it
+    // eats a row and a column of the window beneath. Resizable windows that
+    // between them cover the whole content area therefore stop casting until
+    // a gap reappears.
+    //
+    // Fixed-size and modal windows keep theirs regardless. A dialog IS above
+    // the arrangement, whatever the arrangement happens to cover, and it is
+    // the shadow that says so.
+    bool child_casts_shadow(const ui::View& child) const;
+
     // The blocking sibling of present_modal (M9/WP-15, D-021's "blocking
     // convenience for applications that own the loop"): attaches and
     // focuses `handle` exactly like present_modal, then scopes event

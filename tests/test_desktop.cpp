@@ -1532,3 +1532,61 @@ CK_TEST(exec_modal_host_quit_never_pops_a_reentrant_replacement_modal) {
     CK_CHECK(detached.get() == replacement);
     CK_CHECK(!af.app.is_modal());
 }
+
+// --- Shadows and tiling ----------------------------------------------------
+
+CK_TEST(tiled_windows_leaving_no_desktop_between_them_stop_casting_shadows) {
+    // A shadow says "this floats above that". Tiled windows leave nothing to
+    // float over, so the shadow one casts on its neighbour is a dark smudge
+    // along a shared edge that eats a row and a column of the window beneath.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_context(f.ctx());
+    Window* left = desktop.add_window(make_window(f, "L"));
+    Window* right = desktop.add_window(make_window(f, "R"));
+    left->set_resizable(true);
+    right->set_resizable(true);
+    const Rect content = desktop.content_area();
+    left->set_bounds(Rect{content.x, content.y, content.width / 2, content.height});
+    right->set_bounds(Rect{content.x + content.width / 2, content.y,
+                           content.width - content.width / 2, content.height});
+
+    CK_CHECK(!desktop.child_casts_shadow(*left));
+    CK_CHECK(!desktop.child_casts_shadow(*right));
+}
+
+CK_TEST(one_visible_cell_of_desktop_is_enough_to_bring_the_shadows_back) {
+    // The windows are still arranged OVER a desktop, so the depth a shadow
+    // describes is real. One cell settles it either way.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_context(f.ctx());
+    Window* left = desktop.add_window(make_window(f, "L"));
+    Window* right = desktop.add_window(make_window(f, "R"));
+    left->set_resizable(true);
+    right->set_resizable(true);
+    const Rect content = desktop.content_area();
+    left->set_bounds(Rect{content.x, content.y, content.width / 2, content.height});
+    right->set_bounds(Rect{content.x + content.width / 2, content.y,
+                           content.width - content.width / 2, content.height - 1});
+
+    CK_CHECK(desktop.child_casts_shadow(*left));
+    CK_CHECK(desktop.child_casts_shadow(*right));
+}
+
+CK_TEST(a_fixed_size_window_keeps_its_shadow_over_a_full_tiling) {
+    // An About or alert is above the arrangement whatever the arrangement
+    // covers, and the shadow is what says so.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_context(f.ctx());
+    Window* filler = desktop.add_window(make_window(f, "F"));
+    filler->set_resizable(true);
+    filler->set_bounds(desktop.content_area());
+    Window* dialog = desktop.add_window(make_window(f, "About"));
+    dialog->set_resizable(false);
+    dialog->set_bounds(Rect{10, 5, 30, 8});
+
+    CK_CHECK(!desktop.child_casts_shadow(*filler));
+    CK_CHECK(desktop.child_casts_shadow(*dialog));
+}

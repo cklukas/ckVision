@@ -27,25 +27,6 @@ entry with which one applies:
   not recognised at all. Listed so that "unsupported" is a statement rather
   than a silence.
 
-## About `bce`
-
-`bce` ("back colour erase") is a **terminfo capability**, not a control
-sequence: it is how a terminal tells programs "when you erase, the cleared
-cells take the colour you have currently selected". It matters because a
-curses program paints a full-width coloured bar by selecting a colour and
-erasing the line, rather than by writing spaces across it. A terminal without
-`bce` shows that bar only underneath the characters actually written — which
-is precisely the htop table-header bug this document's work started from.
-
-- `infocmp -1 xterm-256color | grep bce` → **present**
-- `infocmp -1 tmux-256color | grep bce` → **absent** (multiplexers commonly
-  drop it)
-
-ckVision **advertises `TERM=xterm-256color` to its children and implements
-`bce`** (E). Advertising it in our own terminfo entry becomes real work when
-a `ckmux-256color` entry ships; until then `xterm-256color` is the honest
-description, because our supported set is a subset of it plus `bce`.
-
 ---
 
 ## Inner terminal: what a child program can use

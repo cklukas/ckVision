@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/desktop.hpp"
 
+#include "cvision/scene/rect_ops.hpp"
+
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
@@ -569,6 +571,31 @@ void Desktop::on_descendant_invalidated(const ui::View& source, Rect, ui::Invali
     }
 }
 
+bool Desktop::child_casts_shadow(const ui::View& child) const {
+    if (!child.casts_shadow()) return false;
+    const auto* window = dynamic_cast<const Window*>(&child);
+    if (window == nullptr || !window->resizable()) return true;
+    // A modal window is above the arrangement by definition.
+    if (context().app != nullptr && context().app->is_modal_root(child)) return true;
+
+    // Does any desktop show between the resizable windows? One visible cell
+    // is enough: it means they are still arranged over a desktop rather than
+    // filling it, and the depth a shadow describes is real.
+    std::vector<Rect> uncovered{content_area()};
+    for (const auto& other_ptr : children()) {
+        const auto* other = dynamic_cast<const Window*>(other_ptr.get());
+        if (other == nullptr || !other->visible() || !other->resizable()) continue;
+        std::vector<Rect> remaining;
+        for (const Rect& piece : uncovered) {
+            std::vector<Rect> cut = scene::subtract_rect(piece, other->bounds());
+            remaining.insert(remaining.end(), cut.begin(), cut.end());
+        }
+        uncovered = std::move(remaining);
+        if (uncovered.empty()) return false;
+    }
+    return true;
+}
+
 void Desktop::paint_children(const scene::Painter& own_painter) {
     // Shadows clip to content_area(), NOT the full desktop bounds: a
     // maximized window fills content_area() exactly (Window::toggle_zoom
@@ -582,7 +609,7 @@ void Desktop::paint_children(const scene::Painter& own_painter) {
         View& child = *child_ptr;
         if (!paint_one_child(child, own_painter)) continue;  // invisible: nothing to shadow either
 
-        if (!child.casts_shadow()) continue;
+        if (!child_casts_shadow(child)) continue;
 
         // Shadow is composited in DESKTOP-local space (own_painter's
         // own coordinate frame), not the window's translated space —
@@ -612,7 +639,7 @@ void Desktop::paint_retained(const scene::Painter& own_painter,
             layers.push_back(scene::Layer{window->compositor_layer_id_, &window->backing_surface(),
                                           Point{window->absolute_bounds().x,
                                                 window->absolute_bounds().y},
-                                          window->casts_shadow(), shadow_clip});
+                                          child_casts_shadow(*window), shadow_clip});
             continue;
         }
 

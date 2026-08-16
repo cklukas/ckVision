@@ -108,13 +108,17 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
         static_cast<SearchBox*>(index_pane->add_item(std::move(search_box), LayoutSpec{SizePolicy::Fixed, 1}));
 
     auto index_list = std::make_unique<ListView>(/*multi_select=*/false);
-    index_list->set_scrollbar_auto_hide(true);
+    index_list->set_scrollbar_policy(ScrollbarPolicy::Auto);
     index_list->set_preferred_size(Size{24, 12});
     auto* index_list_ptr =
         static_cast<ListView*>(index_pane->add_item(std::move(index_list), LayoutSpec{SizePolicy::Expanding, 1}));
     panes->add_item(std::move(index_pane), LayoutSpec{SizePolicy::Fixed, 1});
 
     auto text_view = std::make_unique<TextView>();
+    // Help is prose. Prose that runs off the right edge is prose the reader
+    // cannot finish, and a help window is resizable precisely so they can
+    // choose how wide a line should be.
+    text_view->set_word_wrap(true);
     // A viewer that is not told how much room its prose wants gets sized by
     // whatever children do ask for room, and comes out too narrow to read.
     // Nothing else can supply this: a TextView holds whatever text it is

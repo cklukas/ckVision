@@ -7,14 +7,14 @@ namespace ckv::widgets {
 
 ScrollViewport::ScrollViewport() {
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
-    v_scrollbar_->set_auto_hide(true);
+    v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     v_scrollbar_->on_position_changed = [this](int p) {
         scroll_y_ = p;
         reposition_content();
     };
 
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
-    h_scrollbar_->set_auto_hide(true);
+    h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     h_scrollbar_->on_position_changed = [this](int p) {
         scroll_x_ = p;
         reposition_content();
@@ -36,8 +36,10 @@ std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> 
 void ScrollViewport::set_scrollbars_always_visible(bool visible) noexcept {
     if (scrollbars_always_visible_ == visible) return;
     scrollbars_always_visible_ = visible;
-    if (v_scrollbar_ != nullptr) v_scrollbar_->set_auto_hide(!visible);
-    if (h_scrollbar_ != nullptr) h_scrollbar_->set_auto_hide(!visible);
+    if (v_scrollbar_ != nullptr)
+        v_scrollbar_->set_policy(visible ? ScrollbarPolicy::Always : ScrollbarPolicy::Auto);
+    if (h_scrollbar_ != nullptr)
+        h_scrollbar_->set_policy(visible ? ScrollbarPolicy::Always : ScrollbarPolicy::Auto);
     relayout();
     invalidate();
 }

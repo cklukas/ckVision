@@ -14,6 +14,24 @@
 
 namespace ckv::widgets {
 
+// When a scrollbar is on screen. This is about whether the content fits, and
+// nothing else — not focus, not the pointer being nearby. A bar that comes
+// and goes for any other reason moves the content under the reader's eyes
+// for a reason they cannot see.
+enum class ScrollbarPolicy {
+    // Shown exactly while the content is larger than the viewport. The
+    // ordinary choice, and the one a reader can reason about: a bar present
+    // means there is more, a bar absent means there is not.
+    Auto,
+    // Always on screen, reserving its column or row whether or not it can
+    // scroll. For a surface whose content changes constantly, where a bar
+    // appearing and disappearing would reflow everything around it.
+    Always,
+    // Never on screen. For a view whose scrolling is driven from outside —
+    // a containing viewport that owns the visible bars itself.
+    Hidden,
+};
+
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.scrollbar.track"/"ckv.scrollbar.thumb".
 class Scrollbar : public ui::View {
@@ -36,8 +54,12 @@ public:
     int position() const noexcept { return position_; }
     int max_position() const noexcept;
 
-    void set_auto_hide(bool enabled);
-    bool auto_hide() const noexcept { return auto_hide_; }
+    void set_policy(ScrollbarPolicy policy);
+    ScrollbarPolicy policy() const noexcept { return policy_; }
+    // Whether this bar would be on screen for the range it currently holds.
+    // Asking the bar keeps the rule in one place, so a container working out
+    // how much room its content has cannot disagree with what gets drawn.
+    bool should_show() const noexcept;
 
     // Fired whenever position changes for ANY reason (arrows, paging,
     // drag, or a direct set_position call) — one place for a scroll
@@ -63,7 +85,7 @@ private:
     bool dragging_ = false;
     int drag_start_cell_ = 0;
     int drag_start_position_ = 0;
-    bool auto_hide_ = false;
+    ScrollbarPolicy policy_ = ScrollbarPolicy::Always;
 
     ui::RoleId track_role_ = ui::kInvalidRole;
     ui::RoleId thumb_role_ = ui::kInvalidRole;

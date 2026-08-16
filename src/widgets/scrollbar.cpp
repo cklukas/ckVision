@@ -47,7 +47,7 @@ void Scrollbar::set_range(int content_size, int viewport_size) {
     content_size_ = std::max(0, content_size);
     viewport_size_ = std::max(1, viewport_size);
     set_position(position_);  // re-clamp to the new max_position(); fires on_position_changed if it moved
-    set_visible(!(auto_hide_ && max_position() == 0));
+    set_visible(should_show());
     invalidate();
 }
 
@@ -59,10 +59,23 @@ void Scrollbar::set_position(int position) {
     if (on_position_changed) on_position_changed(position_);
 }
 
-void Scrollbar::set_auto_hide(bool enabled) {
-    if (auto_hide_ == enabled) return;
-    auto_hide_ = enabled;
-    set_visible(!(auto_hide_ && max_position() == 0));
+bool Scrollbar::should_show() const noexcept {
+    switch (policy_) {
+        case ScrollbarPolicy::Always:
+            return true;
+        case ScrollbarPolicy::Hidden:
+            return false;
+        case ScrollbarPolicy::Auto:
+            break;
+    }
+    // There is something to scroll to, and therefore something a bar can say.
+    return max_position() > 0;
+}
+
+void Scrollbar::set_policy(ScrollbarPolicy policy) {
+    if (policy_ == policy) return;
+    policy_ = policy;
+    set_visible(should_show());
 }
 
 bool Scrollbar::on_key(const KeyEvent& event) {

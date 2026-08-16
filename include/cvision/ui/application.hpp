@@ -409,6 +409,14 @@ public:
 
     bool is_modal() const noexcept { return !modal_stack_.empty(); }
 
+    // Whether `view` is the root of the innermost active modal scope.
+    // Narrower than handing out modal_root() itself, which is a routing
+    // internal: a caller asking this wants to treat one view differently
+    // for being modal, not to reach into the scope stack.
+    bool is_modal_root(const View& view) const noexcept {
+        return !modal_stack_.empty() && modal_stack_.back().root == &view;
+    }
+
     // Requests loop shutdown and wakes a currently blocked terminal wait.
     // Also callable directly regardless of whether run() is in use at all —
     // e.g. from a Quit command's own handler — it is a plain flag, not

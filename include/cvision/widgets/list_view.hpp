@@ -96,15 +96,14 @@ public:
     std::vector<std::size_t> selected_indices() const;
     const std::vector<ListItemId>& selected_ids() const noexcept { return selected_ids_; }
 
-    // Whether the scrollbar disappears while every item already fits. Off by
-    // default: in a list large enough to be the point of its window, a
-    // permanently visible bar reads as part of the frame and its absence
-    // would be the surprise. It is the wrong default for a short list
-    // presented as a small group of choices — a help topic's cross-links,
-    // say — where a control that cannot do anything is the only thing
-    // suggesting the list has more to it than the reader can see.
-    void set_scrollbar_auto_hide(bool enabled);
-    bool scrollbar_auto_hide() const noexcept;
+    // When the scrollbar is on screen. Always by default: in a list large
+    // enough to be the point of its window, a permanently visible bar reads
+    // as part of the frame and its absence would be the surprise. Auto suits
+    // a short list presented as a small group of choices — a help topic's
+    // cross-links, say — where a control that cannot do anything is the only
+    // thing suggesting the list has more to it than the reader can see.
+    void set_scrollbar_policy(ScrollbarPolicy policy);
+    ScrollbarPolicy scrollbar_policy() const noexcept;
 
     int cursor() const noexcept { return cursor_; }  // display index, -1 if empty
 

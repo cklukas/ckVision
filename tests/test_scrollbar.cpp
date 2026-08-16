@@ -50,17 +50,30 @@ CK_TEST(content_smaller_than_viewport_has_zero_max_position) {
     CK_CHECK(sb.max_position() == 0);
 }
 
-CK_TEST(auto_hide_hides_the_scrollbar_only_when_no_scroll_range_exists) {
+CK_TEST(the_scrollbar_policy_decides_visibility_from_whether_content_fits) {
     Fixture f;
     Scrollbar sb(Orientation::Vertical);
-    sb.set_auto_hide(true);
+    // Auto: on screen exactly while there is something to scroll to, so a bar
+    // present means there is more and a bar absent means there is not.
+    sb.set_policy(ckv::widgets::ScrollbarPolicy::Auto);
     sb.set_range(5, 10);
     CK_CHECK(!sb.visible());
+    CK_CHECK(!sb.should_show());
     sb.set_range(20, 10);
     CK_CHECK(sb.visible());
-    sb.set_auto_hide(false);
+    CK_CHECK(sb.should_show());
+
+    // Always: keeps its column whether or not it can scroll, so a surface
+    // whose content changes constantly does not reflow around it.
+    sb.set_policy(ckv::widgets::ScrollbarPolicy::Always);
     sb.set_range(5, 10);
     CK_CHECK(sb.visible());
+
+    // Hidden: for a view whose scrolling a containing viewport owns.
+    sb.set_policy(ckv::widgets::ScrollbarPolicy::Hidden);
+    sb.set_range(50, 10);
+    CK_CHECK(!sb.visible());
+    CK_CHECK(!sb.should_show());
 }
 
 CK_TEST(set_position_clamps_to_the_valid_range) {

@@ -1,9 +1,16 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // TextView: read-only styled text, scrolling, activatable links, and a
-// deterministic OSC 8 export path (plans/widgets.md M6b). Text is split into
-// rows on '\n' only — no word-wrap. Long lines are horizontally clipped by the
-// Painter rather than wrapped, and there is no horizontal scrollbar in 0.1.
+// deterministic OSC 8 export path (plans/widgets.md M6b).
+//
+// Text is split into logical lines on '\n'. Those become DISPLAY lines either
+// one-for-one, or — with word wrap on — as many as the width needs. Both
+// scrollbars follow a ScrollbarPolicy, and the two are sized against each
+// other: a vertical bar costs a column, which can be what makes a line no
+// longer fit, and a horizontal bar costs a row, which can be what makes the
+// text no longer fit. That is resolved before either is drawn, rather than
+// leaving the reader with a bar that overlaps content or a row they cannot
+// reach.
 #pragma once
 
 #include <functional>
@@ -37,6 +44,33 @@ public:
     void set_vertical_scrollbar_visible(bool visible) noexcept;
     bool vertical_scrollbar_visible() const noexcept { return vertical_scrollbar_visible_; }
 
+    // When each bar is on screen. Both default to Auto: shown exactly while
+    // the content does not fit, which is the only rule a reader can draw a
+    // conclusion from.
+    void set_vertical_scrollbar_policy(ScrollbarPolicy policy);
+    void set_horizontal_scrollbar_policy(ScrollbarPolicy policy);
+    ScrollbarPolicy vertical_scrollbar_policy() const noexcept;
+    ScrollbarPolicy horizontal_scrollbar_policy() const noexcept;
+
+    // Whether a logical line too wide for the view continues on the next
+    // display line instead of running off the edge. Off by default, because
+    // preformatted text — a table, a diagram, code — means what it means only
+    // at its own line breaks.
+    //
+    // A word longer than the whole width is NOT broken: it stays on one
+    // display line and overflows, which is what makes the horizontal bar
+    // appear under Auto even with wrapping on. Breaking mid-word would hide
+    // that a path or an identifier is wider than the window.
+    void set_word_wrap(bool enabled);
+    bool word_wrap() const noexcept { return word_wrap_; }
+
+    // Display lines — what the reader scrolls through. Equal to the logical
+    // line count unless wrapping is on.
+    int display_line_count() const noexcept { return static_cast<int>(display_runs_.size()); }
+    // The widest display line, in cells. What the horizontal bar scrolls over.
+    int content_width() const noexcept { return content_width_; }
+    int left_column() const noexcept;
+
     void set_text(std::string text);
     void set_spans(std::vector<TextSpan> spans);
     const std::string& text() const noexcept { return raw_text_; }
@@ -66,6 +100,12 @@ private:
 
     void split_lines();
     void rebuild_from_spans();
+    // Turns the logical lines into the display lines actually drawn, and
+    // records how wide the widest of them is.
+    void rebuild_display();
+    // Resolves both bars' visibility together, since each one's presence
+    // changes the room left for the other, then applies bounds and ranges.
+    void relayout_scrollbars();
     std::optional<std::size_t> link_at(int line, int column) const;
 
     std::string raw_text_;
@@ -74,7 +114,16 @@ private:
     std::vector<std::vector<LineRun>> line_runs_;
     std::vector<std::string> link_targets_;
     std::optional<std::size_t> current_link_;
+    std::vector<std::vector<LineRun>> display_runs_;
+    int content_width_ = 0;
+    // The area left for text once whichever bars are showing have taken
+    // their column and row. Both wrapping and drawing measure against this,
+    // never against bounds(), so they cannot disagree with what is drawn.
+    int viewport_width_ = 0;
+    int viewport_height_ = 0;
+    bool word_wrap_ = false;
     Scrollbar* scrollbar_ = nullptr;
+    Scrollbar* h_scrollbar_ = nullptr;
     bool vertical_scrollbar_visible_ = true;
 
     ui::RoleId text_role_ = ui::kInvalidRole;
