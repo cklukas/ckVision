@@ -32,15 +32,38 @@ std::vector<std::pair<std::string, std::string>> demo_environment() {
     // comes from the environment the user already has, because a terminal
     // that does not offer that is not a terminal, and a shell without HOME
     // reports its own basic commands as broken.
-    return {{"TERM", "xterm-256color"},
-            {"COLORTERM", "truecolor"},
-            {"PS1", "ckvision$ "}};
+    //
+    // PS1 belongs to that second group and is deliberately absent. A prompt
+    // is something its reader has already decided, in the shell startup
+    // files they wrote; a terminal that replaces it announces itself in the
+    // one place its user is looking and makes every session look unlike
+    // every other terminal on the machine. This example is also the pattern
+    // adopters copy, so overriding the prompt here would teach the mistake
+    // rather than the rule: state what the terminal is (TERM, COLORTERM),
+    // never what the shell inside it should look like.
+    return {{"TERM", "xterm-256color"}, {"COLORTERM", "truecolor"}};
+}
+
+std::string environment_value(const char* name) {
+    const char* const value = std::getenv(name);
+    return value != nullptr && *value != '\0' ? std::string(value) : std::string();
+}
+
+// The shell its reader actually uses, since that is what a terminal is for.
+// Reading the environment is the host application's job and never the
+// library's: a TerminalLaunchSpec has to name its program outright, and only
+// the application around it knows whose machine this is. /bin/sh is the
+// fallback because a POSIX system is required to have one, not because it is
+// anybody's preference.
+std::string user_shell() {
+    std::string shell = environment_value("SHELL");
+    return shell.empty() ? std::string("/bin/sh") : shell;
 }
 
 // A shell opens where a shell opens.
 std::string home_directory() {
-    const char* home = std::getenv("HOME");
-    return home != nullptr && *home != '\0' ? std::string(home) : std::string("/");
+    std::string home = environment_value("HOME");
+    return home.empty() ? std::string("/") : home;
 }
 
 }  // namespace
@@ -129,7 +152,7 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
 }
 
 widgets::Window* TerminalApp::new_terminal() {
-    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {"-i"});
+    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(user_shell(), {"-i"});
     launch.profile = term::embedded_xterm_sixel_profile();
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
@@ -180,6 +203,10 @@ Image demo_picture(Size cell_pixels, Size cells) {
 }  // namespace
 
 widgets::Window* TerminalApp::new_sixel_demo() {
+    // /bin/sh here is the interpreter for the four lines of setup below, not
+    // a choice about anybody's shell: the script is written to POSIX sh so it
+    // runs the same everywhere, and its last act is to hand the window over
+    // to the reader's own shell.
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {});
     launch.profile = term::embedded_xterm_sixel_profile();
     // Sized from the child's own cell metric, so the picture lands on whole
@@ -195,8 +222,8 @@ widgets::Window* TerminalApp::new_sixel_demo() {
     launch.arguments = {
         "-c",
         "printf '%s\n\n' 'ckVision embedded terminal: Sixel from a child process'; "
-        "printf '%s' \"$1\"; printf '\n\n'; exec /bin/sh -i",
-        "sixel-demo", picture};
+        "printf '%s' \"$1\"; printf '\n\n'; exec \"$2\" -i",
+        "sixel-demo", picture, user_shell()};
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Sixel Demo " + std::to_string(next_terminal_number_++));
