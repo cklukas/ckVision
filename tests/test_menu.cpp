@@ -154,11 +154,16 @@ CK_TEST(enter_activates_the_highlighted_items_command) {
     bool ran = false;
     app.set_command_handler(kSave, [&] { ran = true; });
     bool dismissed = false;
+    auto reason = ckv::widgets::MenuDismissReason::Cancelled;
     auto menu = make_dropdown(f, app, {{"&Save", kSave, nullptr, false, {}, {}}});
-    menu->on_dismiss = [&] { dismissed = true; };
+    menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
+        dismissed = true;
+        reason = r;
+    };
     menu->on_key(key(Key::Enter));
     CK_CHECK(ran);
     CK_CHECK(dismissed);
+    CK_CHECK(reason == ckv::widgets::MenuDismissReason::ItemChosen);
 }
 
 CK_TEST(enter_activates_a_plain_on_activate_item_when_no_command_is_bound) {
@@ -191,11 +196,16 @@ CK_TEST(escape_dismisses_without_activating_anything) {
     Fixture f;
     bool ran = false;
     bool dismissed = false;
+    auto reason = ckv::widgets::MenuDismissReason::ItemChosen;
     auto menu = make_dropdown(f, app, {{"&Item", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}});
-    menu->on_dismiss = [&] { dismissed = true; };
+    menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
+        dismissed = true;
+        reason = r;
+    };
     menu->on_key(key(Key::Escape));
     CK_CHECK(!ran);
     CK_CHECK(dismissed);
+    CK_CHECK(reason == ckv::widgets::MenuDismissReason::Cancelled);
 }
 
 CK_TEST(clicking_a_disabled_item_does_not_activate_it) {
@@ -264,13 +274,18 @@ CK_TEST(clicking_outside_the_dropdowns_bounds_dismisses_it_without_activating) {
     bool dismissed = false;
     auto menu = make_dropdown(f, app, {{"&Item", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}});
     menu->set_bounds(Rect{5, 5, 20, 1});
-    menu->on_dismiss = [&] { dismissed = true; };
+    auto reason = ckv::widgets::MenuDismissReason::ItemChosen;
+    menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
+        dismissed = true;
+        reason = r;
+    };
     // Far outside the dropdown's bounds — this only reaches the
     // dropdown at all because Application routes it here via input
     // capture (exercised end-to-end in the MenuBar tests below).
     CK_CHECK(!menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
                                               ckv::Point{50, 50}, std::nullopt, Modifier::None}));
     CK_CHECK(dismissed);
+    CK_CHECK(reason == ckv::widgets::MenuDismissReason::Cancelled);
     CK_CHECK(!ran);
 }
 
@@ -457,6 +472,42 @@ CK_TEST(activate_gives_the_bar_focus_and_deactivate_restores_the_previous_focus)
     CK_CHECK(mf.app.focused() == other);
 }
 
+// Choosing an item ends the menu interaction, not just the popup. The bar
+// must be back out of the way — and focus back where the reader left it —
+// BEFORE the command runs, because a command that opens a dialog captures
+// whatever holds focus at that moment and restores it on close. A bar still
+// focused here is what makes a dialog hand focus back to the menu, which
+// then reappears highlighted over a window the reader was working in.
+CK_TEST(choosing_an_item_hands_focus_back_before_the_command_runs) {
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+
+    constexpr ui::CommandId kAbout = ui::kFirstApplicationCommandId;
+    mf.app.commands().register_command(kAbout, "About");
+    const ckv::ui::View* focused_when_command_ran = nullptr;
+    bool ran = false;
+    mf.app.set_command_handler(kAbout, [&] {
+        ran = true;
+        focused_when_command_ran = mf.app.focused();
+    });
+
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&Help", {{"&About", kAbout, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Down));   // open the dropdown
+    mf.app.dispatch(key(Key::Enter));  // choose "About"
+
+    CK_CHECK(ran);
+    // The command saw the reader's focus, not the menu that launched it.
+    CK_CHECK(focused_when_command_ran == other);
+    CK_CHECK(!bar->active());
+    CK_CHECK(mf.app.focused() == other);
+}
+
 // Regression (M8/WP-2): Application::dispatch's new click-to-focus must
 // not corrupt MenuBar's own previously_focused_ bookkeeping. A mouse
 // click on the bar (not a direct activate() call) drives MenuBar's
@@ -522,8 +573,11 @@ CK_TEST(active_menu_bar_highlight_includes_one_cell_of_visual_padding) {
     Surface surface(ckv::Size{20, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(surface, Rect{0, 0, 20, 1});
     bar->draw(painter);
-    CK_CHECK(surface.at(ckv::Point{0, 0}).style() != surface.at(ckv::Point{1, 0}).style());
-    CK_CHECK(surface.at(ckv::Point{6, 0}).style() != surface.at(ckv::Point{5, 0}).style());
+    // The 2-cell leading margin (matched to the classic layout so a
+    // dropped popup can hang one cell left of its title) puts the padded
+    // highlight at columns 1..7.
+    CK_CHECK(surface.at(ckv::Point{1, 0}).style() != surface.at(ckv::Point{2, 0}).style());
+    CK_CHECK(surface.at(ckv::Point{7, 0}).style() != surface.at(ckv::Point{6, 0}).style());
 }
 
 CK_TEST(mouse_drag_from_a_menu_bar_item_switches_dropdown_before_release) {
@@ -550,6 +604,49 @@ CK_TEST(mouse_drag_from_a_menu_bar_item_switches_dropdown_before_release) {
     CK_CHECK(ran);
 }
 
+CK_TEST(captured_menu_bar_pointer_gesture_keeps_dropdown_open_until_release_over_an_item) {
+    MenuBarFixture mf;
+    bool file_ran = false;
+    bool window_ran = false;
+    auto desktop_owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+    Desktop* desktop = static_cast<Desktop*>(mf.app.root().add_child(std::move(desktop_owned)));
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"&Open", ui::kInvalidCommand, [&] { file_ran = true; }, false, {}, {}}}},
+        {"&Window", {{"&Tile", ui::kInvalidCommand, [&] { window_ran = true; }, false, {}, {}}}},
+    });
+    MenuBar* bar = static_cast<MenuBar*>(desktop->add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 40, 1});
+
+    // One ordinary click opens File; its release remains part of the menu
+    // gesture and must not dismiss the captured dropdown.
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                     std::nullopt, Modifier::None});
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                     std::nullopt, Modifier::None});
+    CK_CHECK(desktop->popups().size() == 1U);
+    CK_CHECK(!file_ran && !window_ran);
+
+    // The capture also makes a fresh press on Window switch dropdowns before
+    // release, rather than treating the bar as an outside click.
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{10, 0},
+                                     std::nullopt, Modifier::None});
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{10, 0},
+                                     std::nullopt, Modifier::None});
+    CK_CHECK(desktop->popups().size() == 1U);
+    CK_CHECK(!file_ran && !window_ran);
+
+    // A later press-drag-release over the item, not the initially pressed
+    // top-level label, is the only action that executes the command.
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{10, 0},
+                                     std::nullopt, Modifier::None});
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{10, 2},
+                                     std::nullopt, Modifier::None});
+    mf.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{10, 2},
+                                     std::nullopt, Modifier::None});
+    CK_CHECK(!file_ran && window_ran);
+    CK_CHECK(desktop->popups().empty());
+}
+
 CK_TEST(escape_closes_an_open_dropdown_first_without_deactivating_the_bar) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
@@ -566,6 +663,25 @@ CK_TEST(escape_closes_an_open_dropdown_first_without_deactivating_the_bar) {
     static_cast<DropdownMenu*>(popup_view)->on_key(key(Key::Escape));
     CK_CHECK(mf.desktop.popups().empty());
     CK_CHECK(bar->active());  // the bar itself is still active — only the dropdown closed
+}
+
+CK_TEST(menu_bar_routes_item_mnemonics_to_its_open_dropdown) {
+    MenuBarFixture mf;
+    constexpr CommandId kOpen = ui::kFirstApplicationCommandId;
+    bool opened = false;
+    mf.app.commands().register_command(kOpen, "&Open");
+    mf.app.commands().set_handler(kOpen, [&] { opened = true; });
+
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{ {"&File", {{"", kOpen, nullptr, false, {}, {}}}} });
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->activate();
+    CK_CHECK(bar->on_key(key(Key::Enter)));
+    CK_CHECK(mf.desktop.popups().size() == 1U);
+
+    CK_CHECK(bar->on_key(key(Key::Char, "o")));
+    CK_CHECK(opened);
+    CK_CHECK(mf.desktop.popups().empty());
 }
 
 CK_TEST(destroying_the_bar_while_a_dropdown_is_open_cleans_up_the_popup_and_input_capture) {
@@ -639,9 +755,9 @@ CK_TEST(menu_mnemonics_use_the_shared_hotkey_accent_on_each_surface) {
     Surface bar_surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter bar_painter(bar_surface, Rect{0, 0, 12, 1});
     bar->draw(bar_painter);
-    CK_CHECK(bar_surface.at(ckv::Point{1, 0}).grapheme() == "F");
-    CK_CHECK(bar_surface.at(ckv::Point{1, 0}).style().fg == mf.f.theme.resolve(mf.f.roles.hotkey).fg);
-    CK_CHECK(bar_surface.at(ckv::Point{1, 0}).style().bg == mf.f.theme.resolve(mf.f.roles.menu_bar_normal).bg);
+    CK_CHECK(bar_surface.at(ckv::Point{2, 0}).grapheme() == "F");
+    CK_CHECK(bar_surface.at(ckv::Point{2, 0}).style().fg == mf.f.theme.resolve(mf.f.roles.hotkey).fg);
+    CK_CHECK(bar_surface.at(ckv::Point{2, 0}).style().bg == mf.f.theme.resolve(mf.f.roles.menu_bar_normal).bg);
 
     auto menu = make_dropdown(mf.f, mf.app, {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{0, 0, 12, 1});
@@ -677,8 +793,10 @@ CK_TEST(a_popup_dropdown_has_an_opaque_classic_frame_and_padded_item_interior) {
     CK_CHECK(surface.at(ckv::Point{2, 1}).grapheme() == "O");
     CK_CHECK(surface.at(ckv::Point{2, 1}).style().bg ==
              f.theme.resolve(f.roles.menu_dropdown_highlighted).bg);
-    CK_CHECK(surface.at(ckv::Point{0, 2}).grapheme() == "│");
-    CK_CHECK(surface.at(ckv::Point{width.preferred - 1, 2}).grapheme() == "│");
+    // The separator row runs into the side frames, so those cells are the
+    // junction the rule makes with the border, not a plain vertical.
+    CK_CHECK(surface.at(ckv::Point{0, 2}).grapheme() == "├");
+    CK_CHECK(surface.at(ckv::Point{width.preferred - 1, 2}).grapheme() == "┤");
 }
 
 CK_TEST(a_context_menu_keeps_its_frame_inside_the_desktop_at_the_bottom_right_edge) {
@@ -709,6 +827,24 @@ CK_TEST(attaching_a_menu_bar_installs_itself_as_f10s_default_handler) {
 
     mf.app.commands().execute(ui::std_commands::kMenu);
     CK_CHECK(bar->active());
+}
+
+CK_TEST(f10_restarts_top_level_mnemonic_navigation_after_a_previous_menu) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {{"Open", 1}}},
+                                                                          {"&Appearance", {{"Colors", 2}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    mf.app.commands().execute(ui::std_commands::kMenu);
+    CK_CHECK(bar->on_key(key(Key::Right)));
+
+    mf.app.commands().execute(ui::std_commands::kMenu);
+    CK_CHECK(bar->on_key(key(Key::Char, "a")));
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    if (mf.desktop.popups().size() != 1) return;
+    const auto* popup = dynamic_cast<const DropdownMenu*>(mf.desktop.popups().front());
+    CK_CHECK(popup != nullptr);
+    if (popup != nullptr && !popup->items().empty())
+        CK_CHECK(popup->items().front().label == "Colors");
 }
 
 CK_TEST(a_pre_existing_kmenu_handler_is_not_overridden_by_attaching_a_menu_bar) {
@@ -929,4 +1065,114 @@ CK_TEST(show_context_menu_for_focus_falls_back_to_the_desktop_origin_when_focus_
 
     CK_CHECK(popup->bounds().x == 0);
     CK_CHECK(popup->bounds().y == 0);
+}
+
+// --- Alt+<mnemonic> menu accelerators ---------------------------------
+//
+// Opening a menu by its mnemonic has to work from wherever the reader
+// happens to be, not only once the bar already holds focus — that is what
+// makes it an accelerator rather than a second navigation key.
+
+CK_TEST(alt_mnemonic_opens_its_menu_without_the_bar_being_active_first) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}}}},
+        {"&Help", {{"&About", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 30, 1});
+
+    // Nothing has focused the bar; the chord alone must reach it.
+    CK_CHECK(mf.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "h"}}));
+    CK_CHECK(mf.desktop.popups().size() == 1u);
+    const auto* dropdown = dynamic_cast<const DropdownMenu*>(mf.desktop.popups().front());
+    CK_CHECK(dropdown != nullptr);
+    if (dropdown == nullptr) return;
+    CK_CHECK(dropdown->items().size() == 1u);
+}
+
+CK_TEST(menu_accelerators_are_withdrawn_when_the_menus_are_replaced) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&Help", {{"&About", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 30, 1});
+    CK_CHECK(mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "h"}).has_value());
+
+    bar->set_menus(std::vector<MenuBarItem>{{"&File", {}}});
+    // The old chord must not survive to open a menu that no longer exists.
+    CK_CHECK(!mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "h"}).has_value());
+    CK_CHECK(mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "f"}).has_value());
+}
+
+// --- Press-drag menu opening ------------------------------------------
+//
+// Pressing on a menu title opens it with nothing selected: the pointer is
+// the indicator, and highlighting an item the reader has not pointed at
+// would claim a choice they never made. The selection appears when the
+// press ends, so the keyboard has a definite place to carry on from.
+
+CK_TEST(a_pointer_opened_menu_starts_with_nothing_selected) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}},
+                   {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 30, 1});
+
+    bar->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                  std::nullopt, Modifier::None});
+    auto* dropdown = dynamic_cast<DropdownMenu*>(mf.desktop.popups().front());
+    CK_CHECK(dropdown != nullptr);
+    if (dropdown == nullptr) return;
+    CK_CHECK(dropdown->highlighted() == -1);  // the press alone selects nothing
+
+    // Releasing over the title, having pointed at no item, settles on the
+    // first one — that is the state the arrow keys move from.
+    bar->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                  std::nullopt, Modifier::None});
+    CK_CHECK(dropdown->highlighted() == 0);
+}
+
+CK_TEST(a_keyboard_opened_menu_selects_its_first_item_at_once) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}},
+                   {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 30, 1});
+
+    // No pointer is involved, so there is no other indicator of position.
+    bar->activate();
+    bar->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    auto* dropdown = dynamic_cast<DropdownMenu*>(mf.desktop.popups().front());
+    CK_CHECK(dropdown != nullptr);
+    if (dropdown == nullptr) return;
+    CK_CHECK(dropdown->highlighted() == 0);
+}
+
+CK_TEST(dragging_from_the_title_onto_an_item_highlights_it_before_release) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}},
+                   {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 30, 1});
+
+    bar->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                  std::nullopt, Modifier::None});
+    auto* dropdown = dynamic_cast<DropdownMenu*>(mf.desktop.popups().front());
+    CK_CHECK(dropdown != nullptr);
+    if (dropdown == nullptr) return;
+    const Rect popup = dropdown->absolute_bounds();
+    // Onto the first item: the pointer is now the indicator.
+    dropdown->on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left,
+                                       ckv::Point{popup.x + 1, popup.y + 1}, std::nullopt,
+                                       Modifier::None});
+    CK_CHECK(dropdown->highlighted() == 0);
+    // Releasing there acts on the item the pointer chose, not on the one
+    // the menu happened to open with.
+    dropdown->on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                       ckv::Point{popup.x + 1, popup.y + 1}, std::nullopt,
+                                       Modifier::None});
+    CK_CHECK(mf.desktop.popups().empty());
 }

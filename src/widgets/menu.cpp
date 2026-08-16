@@ -23,7 +23,11 @@ bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
 }
 
 int menu_bar_offset_for(const std::vector<MenuBarItem>& menus, std::size_t index) {
-    int x = 1;  // leading margin
+    // Two cells of leading margin, so a dropped popup can sit one cell to
+    // the left of its title and still start on screen — see open_dropdown
+    // for why the popup hangs left rather than under the title's first
+    // letter.
+    int x = 2;
     for (std::size_t i = 0; i < index; ++i)
         x += text::text_width(parse_mnemonic(menus[i].label).display) + 2;  // label + 2-space gap
     return x;
@@ -68,8 +72,33 @@ void DropdownMenu::on_attached() {
         }
     }
     // Deferred from construction: item_enabled() below needs
-    // context().app, which is only valid from here on.
-    highlighted_ = step_selection(-1, +1);
+    // context().app, which is only valid from here on. A pointer-opened
+    // menu deliberately starts with nothing selected — see MenuOpenReason.
+    if (open_reason_ == MenuOpenReason::Keyboard) set_highlighted(step_selection(-1, +1));
+}
+
+void DropdownMenu::end_pointer_press() {
+    pointer_pressed_ = false;
+    // Releasing without having pointed at an item is how a menu is opened
+    // for browsing: it now needs a selection for the keyboard to move from.
+    if (highlighted_ < 0) {
+        set_highlighted(step_selection(-1, +1));
+        invalidate();
+    }
+}
+
+void DropdownMenu::set_highlighted(int index) {
+    if (highlighted_ == index) return;
+    highlighted_ = index;
+    if (on_highlight_changed) on_highlight_changed(highlighted_command());
+}
+
+ui::CommandId DropdownMenu::highlighted_command() const noexcept {
+    if (highlighted_ < 0 || static_cast<std::size_t>(highlighted_) >= items_.size())
+        return ui::kInvalidCommand;
+    const MenuItem& item = items_[static_cast<std::size_t>(highlighted_)];
+    if (item.separator || !item.submenu.empty()) return ui::kInvalidCommand;
+    return item_command(item);
 }
 
 bool DropdownMenu::item_enabled(std::size_t index) const {
@@ -104,27 +133,30 @@ void DropdownMenu::activate(int index) {
     const ui::CommandId command = item_command(items_[static_cast<std::size_t>(index)]);
     const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].on_activate;
     ui::Application& app = *context().app;
-    dismiss_chain();
+    // Chosen, not merely closed: the bar unwinds and returns focus where it
+    // found it BEFORE the command runs, so anything the command opens sees
+    // the reader's real focus rather than the menu that launched it.
+    dismiss_chain(MenuDismissReason::ItemChosen);
     if (command != ui::kInvalidCommand)
         app.execute_command(command);
     else if (on_activate)
         on_activate();
 }
 
-void DropdownMenu::dismiss() {
+void DropdownMenu::dismiss(MenuDismissReason reason) {
     if (dismissing_) return;
     dismissing_ = true;
     close_submenu(false);
     // Copy before invoking: the callback may destroy `this`, so
     // `this->on_dismiss` must not be touched after it starts running.
-    const std::function<void()> callback = on_dismiss;
-    if (callback) callback();
+    const std::function<void(MenuDismissReason)> callback = on_dismiss;
+    if (callback) callback(reason);
 }
 
-void DropdownMenu::dismiss_chain() {
+void DropdownMenu::dismiss_chain(MenuDismissReason reason) {
     DropdownMenu* root = this;
     while (root->parent_menu_ != nullptr) root = root->parent_menu_;
-    root->dismiss();
+    root->dismiss(reason);
 }
 
 void DropdownMenu::open_submenu(int index) {
@@ -146,7 +178,7 @@ void DropdownMenu::open_submenu(int index) {
     // than with the parent frame above it.
     const int local_y = abs.y + index + 1 - desktop_abs.y;
     raw->set_bounds(clamp_popup_to_desktop(Rect{local_x, local_y, w.preferred, h.preferred}, desktop_->bounds()));
-    raw->on_dismiss = [this, raw]() {
+    raw->on_dismiss = [this, raw](MenuDismissReason) {
         if (child_menu_ == raw) close_submenu(true);
     };
     child_menu_ = raw;
@@ -185,7 +217,7 @@ std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) c
     if (command == ui::kInvalidCommand) return std::nullopt;
     const auto chord = context().app->commands().chord_for_command(command);
     if (!chord) return std::nullopt;
-    return format(*chord);
+    return context().app->commands().format_chord(*chord);
 }
 
 ui::CommandId DropdownMenu::item_command(const MenuItem& item) const noexcept {
@@ -231,7 +263,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             close_submenu(true);
             const int next = step_selection(highlighted_, -1);
             if (next != highlighted_) {
-                highlighted_ = next;
+                set_highlighted(next);
                 invalidate();
             }
             return true;
@@ -240,7 +272,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             close_submenu(true);
             const int next = step_selection(highlighted_, +1);
             if (next != highlighted_) {
-                highlighted_ = next;
+                set_highlighted(next);
                 invalidate();
             }
             return true;
@@ -277,7 +309,11 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
 }
 
 bool DropdownMenu::on_mouse(const MouseEvent& event) {
-    if (event.action == MouseAction::Move && pointer_navigation_ && pointer_navigation_(event)) return true;
+    // A menu bar owns the full press-drag-release gesture while its dropdown
+    // has input capture. In particular, the captured popup must still hand a
+    // button release over the top bar back to MenuBar: treating that release
+    // as "outside" would immediately dismiss a just-opened menu.
+    if (pointer_navigation_ && pointer_navigation_(event)) return true;
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
     const bool inside = local.x >= 0 && local.x < abs.width && local.y >= 0 && local.y < abs.height;
@@ -296,14 +332,14 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
         }
         pointer_pressed_ = true;
         if (highlighted_ != candidate) {
-            highlighted_ = candidate;
+            set_highlighted(candidate);
             invalidate();
         }
         return true;
     }
     if (event.action == MouseAction::Move) {
         if (highlighted_ != candidate) {
-            highlighted_ = candidate;
+            set_highlighted(candidate);
             invalidate();
         }
         return pointer_pressed_ || inside;
@@ -341,7 +377,14 @@ void DropdownMenu::draw(scene::Painter& painter) {
                                                     : normal;
         painter.fill(Rect{item_left, item_top + i, item_width, 1}, Cell::from_grapheme(" ", style));
         if (item.separator) {
-            painter.hline(Point{item_left, item_top + i}, item_width, scene::LineStyle::Single, style);
+            // Run the rule into the frame itself rather than stopping one
+            // cell short: meeting the side borders is what lets junction
+            // merging turn them into tees, so the separator reads as part
+            // of the frame instead of a detached dash sitting inside it.
+            if (framed)
+                painter.hline(Point{0, item_top + i}, bounds().width, scene::LineStyle::Single, normal);
+            else
+                painter.hline(Point{item_left, item_top + i}, item_width, scene::LineStyle::Single, style);
         } else {
             const auto parsed = parse_mnemonic(item_source_text(item));
             const int label_x = item_left + (check_column ? 3 : 1);
@@ -382,7 +425,9 @@ MenuBar::~MenuBar() {
 
 void MenuBar::set_menus(std::vector<MenuBarItem> menus) {
     close_dropdown();
+    remove_menu_accelerators();
     menus_ = std::move(menus);
+    install_menu_accelerators();
     if (menus_.empty()) {
         highlighted_ = 0;
     } else if (highlighted_ >= menus_.size()) {
@@ -412,10 +457,58 @@ void MenuBar::on_attached() {
         app_->commands().set_handler(ui::std_commands::kMenu, [this] { activate(); });
         installed_default_menu_handler_ = true;
     }
+    // Menus set before the bar was attached have no accelerators yet: the
+    // registry only becomes reachable here.
+    install_menu_accelerators();
+}
+
+void MenuBar::install_menu_accelerators() {
+    if (app_ == nullptr || !menu_accelerators_.empty()) return;
+    for (std::size_t index = 0; index < menus_.size(); ++index) {
+        const ui::CommandId id =
+            ui::std_commands::kFirstMenuAccelerator + static_cast<ui::CommandId>(index);
+        if (id >= ui::std_commands::kMenuAcceleratorLimit) break;
+        const auto parsed = parse_mnemonic(menus_[index].label);
+        if (parsed.mnemonic.empty()) continue;
+        KeyChord chord;
+        chord.key = Key::Char;
+        chord.modifiers = Modifier::Alt;
+        // Mnemonics are matched case-insensitively; the chord carries the
+        // lowercase spelling the decoder produces.
+        chord.text = parsed.mnemonic;
+        if (chord.text.size() == 1)
+            chord.text[0] = static_cast<char>(
+                std::tolower(static_cast<unsigned char>(chord.text[0])));
+        app_->commands().register_command(id, parsed.display, "Menu", chord);
+        app_->commands().set_handler(id, [this, index] {
+            activate();
+            open_dropdown(static_cast<int>(index));
+        });
+        app_->commands().bind_key(chord, id);
+        menu_accelerators_.push_back(id);
+    }
+}
+
+void MenuBar::remove_menu_accelerators() {
+    if (app_ == nullptr) return;
+    for (const ui::CommandId id : menu_accelerators_) {
+        if (const auto chord = app_->commands().chord_for_command(id))
+            app_->commands().unbind_key(*chord);
+        app_->commands().retract_command(id);
+    }
+    menu_accelerators_.clear();
 }
 
 void MenuBar::activate() {
-    if (active_) return;
+    // Opening the bar starts at its first menu, the way a reader who just
+    // pressed F10 expects — a selection carried over from the last visit
+    // would make the following `A`, `C` land somewhere they never looked.
+    highlighted_ = 0;
+    if (active_) {
+        close_dropdown();
+        invalidate();
+        return;
+    }
     previously_focused_ = app_->focused();
     app_->set_focus(this);  // on_focus(true) below flips active_
 }
@@ -440,23 +533,47 @@ void MenuBar::on_focus(const FocusEvent& event) {
     invalidate();
 }
 
-void MenuBar::open_dropdown(std::size_t menu_index) {
+void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     CKV_ASSERT(menu_index < menus_.size());
     close_dropdown();
     highlighted_ = menu_index;
 
     auto dropdown = std::make_unique<DropdownMenu>(menus_[menu_index].items);
+    // Before add_popup(): on_attached() decides the initial selection from it.
+    dropdown->set_open_reason(reason);
     const Rect abs = absolute_bounds();
     const Rect desktop_abs = desktop_->absolute_bounds();
-    const int local_x = abs.x + menu_bar_offset_for(menus_, menu_index) - desktop_abs.x;
+    // The popup's FRAME hangs one cell left of its title, which puts the
+    // item text one cell right of the title's first letter. Aligning the
+    // frame with the title instead pushes every item two cells right and
+    // the popup visibly fails to hang under the menu it belongs to.
+    const int local_x = abs.x + menu_bar_offset_for(menus_, menu_index) - 1 - desktop_abs.x;
     const int local_y = abs.y + 1 - desktop_abs.y;
 
     auto* raw = desktop_->add_popup(std::move(dropdown));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
     raw->set_bounds(clamp_popup_to_desktop(Rect{local_x, local_y, w.preferred, h.preferred}, desktop_->bounds()));
-    raw->on_dismiss = [this]() { close_dropdown(); };
+    raw->on_dismiss = [this](MenuDismissReason reason) {
+        // A chosen item ends the menu interaction; anything else only
+        // closes the popup and leaves the bar where the reader left it.
+        if (reason == MenuDismissReason::ItemChosen)
+            deactivate();
+        else
+            close_dropdown();
+    };
     raw->set_pointer_navigation([this](const MouseEvent& event) { return navigate_pointer(event); });
+    // A menu opens and closes many times over a session; the application
+    // wires the bar once and hears about every highlight through it,
+    // rather than re-attaching to each popup as it appears.
+    raw->on_highlight_changed = [this](ui::CommandId command) {
+        if (on_highlight_changed) on_highlight_changed(command);
+    };
+    // The popup settles on its first selectable entry while attaching,
+    // which is before the line above could hear it. Report that opening
+    // position explicitly so a listener starts out describing the entry
+    // the reader is actually looking at.
+    if (on_highlight_changed) on_highlight_changed(raw->highlighted_command());
 
     open_dropdown_ = raw;
     app_->set_input_capture(raw);
@@ -468,6 +585,10 @@ void MenuBar::close_dropdown() {
     if (app_->input_capture() == open_dropdown_) app_->clear_input_capture();
     desktop_->remove_popup(open_dropdown_);
     open_dropdown_ = nullptr;
+    // Nothing is highlighted once the popup is gone: a surface showing
+    // the highlighted command's explanation has to stop showing it, or
+    // it would outlive the menu that produced it.
+    if (on_highlight_changed) on_highlight_changed(ui::kInvalidCommand);
     invalidate();
 }
 
@@ -476,6 +597,22 @@ SizeHint MenuBar::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
 
 bool MenuBar::on_key(const KeyEvent& event) {
     if (!active_ || menus_.empty()) return false;
+    // Keyboard focus remains on the bar while its popup owns mouse capture.
+    // Route popup-local navigation and mnemonics explicitly; otherwise a
+    // character intended for a menu item is examined only as a top-level
+    // mnemonic and cannot activate the item. Left/right deliberately remain
+    // bar-owned so they switch top-level menus in the established manner.
+    if (open_dropdown_ != nullptr) {
+        switch (event.chord.key) {
+            case Key::Up:
+            case Key::Down:
+            case Key::Enter:
+            case Key::Char:
+                return open_dropdown_->on_key(event);
+            default:
+                break;
+        }
+    }
     switch (event.chord.key) {
         case Key::Left:
             highlighted_ = (highlighted_ + menus_.size() - 1) % menus_.size();
@@ -518,7 +655,7 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
         const int w = text::text_width(parse_mnemonic(menus_[i].label).display);
         if (local_x >= x - 1 && local_x < x + w + 1) {
             if (!active_) activate();
-            open_dropdown(i);
+            open_dropdown(i, MenuOpenReason::PointerPress);
             if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
             return true;
         }
@@ -551,8 +688,14 @@ bool MenuBar::navigate_pointer(const MouseEvent& event) {
         const int x = menu_bar_offset_for(menus_, i);
         const int width = text::text_width(parse_mnemonic(menus_[i].label).display);
         if (local_x < x - 1 || local_x >= x + width + 1) continue;
-        if (open_dropdown_ == nullptr || highlighted_ != i) open_dropdown(i);
-        if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
+        if (open_dropdown_ == nullptr || highlighted_ != i)
+            open_dropdown(i, MenuOpenReason::PointerPress);
+        if (open_dropdown_ != nullptr) {
+            if (event.action == MouseAction::Up)
+                open_dropdown_->end_pointer_press();
+            else
+                open_dropdown_->begin_pointer_press();
+        }
         return true;
     }
     return false;
@@ -571,7 +714,7 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
         Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred, h.preferred},
         desktop.bounds()));
 
-    raw->on_dismiss = [&app, &desktop, raw]() {
+    raw->on_dismiss = [&app, &desktop, raw](MenuDismissReason) {
         if (app.input_capture() == raw) app.clear_input_capture();
         desktop.remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
     };

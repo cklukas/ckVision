@@ -429,3 +429,74 @@ CK_TEST(sanitize_osc_text_strips_embedded_terminator_bytes) {
 }
 
 CK_TEST(sanitize_osc_text_empty_input) { CK_CHECK(sanitize_osc_text("").empty()); }
+
+// --- Moving a raster ------------------------------------------------------
+
+namespace {
+std::vector<ckv::RasterSlice> one_raster(Rect where, const std::shared_ptr<ckv::Image>& image) {
+    return {ckv::RasterSlice{1, where, where, image, false}};
+}
+std::shared_ptr<ckv::Image> solid_image(int w, int h) {
+    auto image = std::make_shared<ckv::Image>(w, h);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) image->set_pixel(x, y, ckv::Image::Rgba{200, 30, 30, 255});
+    return image;
+}
+}  // namespace
+
+CK_TEST(a_raster_moved_left_repaints_every_cell_it_vacated) {
+    Capabilities caps = headless_sixel_profile();
+    caps.cell_pixels = Size{10, 20};
+    HeadlessTerminal term(Size{20, 4}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(20, 4, ".");
+    auto image = solid_image(40, 40);  // 4 cells x 2 rows at 10x20
+
+    presenter.present(s.view(), CursorState{}, one_raster(Rect{8, 1, 4, 2}, image));
+    term.clear_written();
+
+    presenter.present(s.view(), CursorState{}, one_raster(Rect{6, 1, 4, 2}, image));
+    const std::string out{term.written_bytes()};
+
+    // Columns 10 and 11 are no longer under the image and must be painted
+    // back to desktop content. Nothing else can put them right: a Sixel
+    // paints, it never erases what it moved away from.
+    CK_CHECK(out.find("..") != std::string::npos);
+}
+
+CK_TEST(a_raster_that_disappears_repaints_the_cells_it_held) {
+    Capabilities caps = headless_sixel_profile();
+    caps.cell_pixels = Size{10, 20};
+    HeadlessTerminal term(Size{20, 4}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(20, 4, ".");
+    auto image = solid_image(40, 40);
+
+    presenter.present(s.view(), CursorState{}, one_raster(Rect{8, 1, 4, 2}, image));
+    term.clear_written();
+
+    presenter.present(s.view(), CursorState{}, {});
+    const std::string out{term.written_bytes()};
+    CK_CHECK(out.find("....") != std::string::npos);
+}
+
+CK_TEST(a_moved_raster_also_repaints_the_cell_row_its_pixels_could_bleed_into) {
+    // The image is 2 rows and 5 px of a third: whatever the terminal makes
+    // of that, it can put pixels on row 3, so row 3 has to be repainted when
+    // the image leaves. Nothing else will ever clear it.
+    Capabilities caps = headless_sixel_profile();
+    caps.cell_pixels = Size{10, 20};
+    HeadlessTerminal term(Size{20, 6}, caps);
+    Presenter presenter(term);
+    Surface s = make_surface(20, 6, ".");
+    auto image = solid_image(40, 45);
+
+    presenter.present(s.view(), CursorState{}, one_raster(Rect{8, 1, 4, 2}, image));
+    term.clear_written();
+    presenter.present(s.view(), CursorState{}, one_raster(Rect{2, 1, 4, 2}, image));
+    const std::string out{term.written_bytes()};
+
+    // Row 3 (1-based row 4) must appear in the repaint, for the columns the
+    // image no longer stands on.
+    CK_CHECK(out.find("\x1B[4;") != std::string::npos);
+}

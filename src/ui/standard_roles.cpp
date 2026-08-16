@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/standard_roles.hpp"
 
+#include <array>
+
 namespace ckv::ui {
 namespace {
 
@@ -13,6 +15,7 @@ namespace {
 // with a green selection bar) — a convention, not any one framework's
 // copyrightable expression.
 constexpr Color kBlue = Color::rgb(0, 0, 170);
+constexpr Color kCyan = Color::rgb(0, 170, 170);
 constexpr Color kGreen = Color::rgb(0, 170, 0);
 constexpr Color kWhite = Color::rgb(255, 255, 255);
 constexpr Color kBlack = Color::rgb(0, 0, 0);
@@ -53,15 +56,16 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.dialog_frame = registry.intern("ckv.dialog.frame", Style{kWhite, kLightGray, Attr{}});
     r.dialog_background = registry.intern("ckv.dialog.background", Style{kBlack, kLightGray, Attr{}});
     r.label_text = registry.intern("ckv.label.text", Style{kBlack, kLightGray, Attr{}});
-    r.label_mnemonic = registry.intern("ckv.label.mnemonic", Style{kYellow, kLightGray, Attr::Underline});
+    r.label_mnemonic = registry.intern("ckv.label.mnemonic", Style{kYellow, kLightGray, Attr{}});
     r.hotkey = registry.intern("ckv.hotkey", Style{kRed, kLightGray, Attr{}});
     r.static_text = registry.intern("ckv.static.text", Style{kBlack, kLightGray, Attr{}});
+    r.help_text = registry.intern("ckv.help.text", Style{kYellow, kBlue, Attr{}});
     r.button_normal = registry.intern("ckv.button.normal", Style{kBlack, kGreen, Attr{}});
     r.button_focused = registry.intern("ckv.button.focused", Style{kWhite, kGreen, Attr{}});
     r.button_default = registry.intern("ckv.button.default", Style{kLightCyan, kGreen, Attr{}});
     r.button_shadow = registry.intern("ckv.button.shadow", Style{kBlack, kLightGray, Attr{}});
-    r.input_normal = registry.intern("ckv.input.normal", Style{kBlack, kWhite, Attr{}});
-    r.input_focused = registry.intern("ckv.input.focused", Style{kBlack, kWhite, Attr::Underline});
+    r.input_normal = registry.intern("ckv.input.normal", Style{kWhite, kBlue, Attr{}});
+    r.input_focused = registry.intern("ckv.input.focused", Style{kWhite, kBlue, Attr{}});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
     r.message_info_text = registry.intern("ckv.message.info.text", Style{kBlack, kLightGray, Attr{}});
     r.message_warning_text = registry.intern("ckv.message.warning.text", Style{kBlack, kLightGray, Attr::Bold});
@@ -86,8 +90,11 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.table_header = registry.intern("ckv.table.header", Style{kWhite, kLightGray, Attr{}});
     r.memo_normal = registry.intern("ckv.memo.normal", Style{kBlack, kWhite, Attr{}});
     r.memo_focused = registry.intern("ckv.memo.focused", Style{kBlack, kWhite, Attr::Underline});
-    r.option_normal = registry.intern("ckv.option.normal", Style{kBlack, kGreen, Attr{}});
-    r.option_focused = registry.intern("ckv.option.focused", Style{kWhite, kGreen, Attr{}});
+    // Choice groups are a selection surface, not an action button. Keeping
+    // their cyan fill distinct from the green button face preserves the
+    // classic visual hierarchy in dense preference dialogs.
+    r.option_normal = registry.intern("ckv.option.normal", Style{kBlack, kCyan, Attr{}});
+    r.option_focused = registry.intern("ckv.option.focused", Style{kWhite, kCyan, Attr{}});
     // The classic scrollbar is a cyan-on-blue dotted page area with a
     // continuous cyan scroll box, matching the established CP437 desktop
     // convention. The blue field stays visually quiet; the glyphs
@@ -97,8 +104,15 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.image_fallback = registry.intern("ckv.image.fallback", Style{kBlack, kLightGray, Attr{}});
     r.canvas_fallback = registry.intern("ckv.canvas.fallback", Style{kBlack, kLightGray, Attr{}});
     r.text_view_text = registry.intern("ckv.textview.text", Style{kBlack, kLightGray, Attr{}});
+    r.flow_view_text = registry.intern("ckv.flow.text", Style{kBlack, kLightGray, Attr{}});
     r.status_line_normal = registry.intern("ckv.statusline.normal", Style{kBlack, kLightGray, Attr{}});
     r.status_line_disabled = registry.intern("ckv.statusline.disabled", Style{kGray, kLightGray, Attr::Dim});
+    r.status_line_selected =
+        registry.intern("ckv.statusline.selected", Style{kBlack, kGreen, Attr{}});
+    r.status_line_selected_hotkey =
+        registry.intern("ckv.statusline.selected.hotkey", Style{kRed, kGreen, Attr{}});
+    r.status_line_selected_disabled =
+        registry.intern("ckv.statusline.selected.disabled", Style{kGray, kGreen, Attr::Dim});
     r.splitter_normal = registry.intern("ckv.splitter.normal", Style{kWhite, kLightGray, Attr{}});
     r.splitter_focused = registry.intern("ckv.splitter.focused", Style{kWhite, kGreen, Attr{}});
     r.editor_text = registry.intern("ckv.editor.text", Style{kBlack, kWhite, Attr{}});
@@ -125,15 +139,16 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.dialog_frame, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.dialog_background, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.label_text, Style{kBlack, kLightGray, Attr{}});
-    theme.set(roles.label_mnemonic, Style{kYellow, kLightGray, Attr::Underline});
+    theme.set(roles.label_mnemonic, Style{kYellow, kLightGray, Attr{}});
     theme.set(roles.hotkey, Style{kRed, kLightGray, Attr{}});
     theme.set(roles.static_text, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.help_text, Style{kYellow, kBlue, Attr{}});
     theme.set(roles.button_normal, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.button_focused, Style{kWhite, kGreen, Attr{}});
     theme.set(roles.button_default, Style{kLightCyan, kGreen, Attr{}});
     theme.set(roles.button_shadow, Style{kBlack, kLightGray, Attr{}});
-    theme.set(roles.input_normal, Style{kBlack, kWhite, Attr{}});
-    theme.set(roles.input_focused, Style{kBlack, kWhite, Attr::Underline});
+    theme.set(roles.input_normal, Style{kWhite, kBlue, Attr{}});
+    theme.set(roles.input_focused, Style{kWhite, kBlue, Attr{}});
     theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
     theme.set(roles.message_info_text, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.message_warning_text, Style{kBlack, kLightGray, Attr::Bold});
@@ -154,15 +169,19 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.table_header, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.memo_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.memo_focused, Style{kBlack, kWhite, Attr::Underline});
-    theme.set(roles.option_normal, Style{kBlack, kGreen, Attr{}});
-    theme.set(roles.option_focused, Style{kWhite, kGreen, Attr{}});
+    theme.set(roles.option_normal, Style{kBlack, kCyan, Attr{}});
+    theme.set(roles.option_focused, Style{kWhite, kCyan, Attr{}});
     theme.set(roles.scrollbar_track, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.scrollbar_thumb, Style{kLightCyan, kBlue, Attr{}});
     theme.set(roles.image_fallback, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.canvas_fallback, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.text_view_text, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.flow_view_text, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.status_line_normal, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.status_line_disabled, Style{kGray, kLightGray, Attr::Dim});
+    theme.set(roles.status_line_selected, Style{kBlack, kGreen, Attr{}});
+    theme.set(roles.status_line_selected_hotkey, Style{kRed, kGreen, Attr{}});
+    theme.set(roles.status_line_selected_disabled, Style{kGray, kGreen, Attr::Dim});
     theme.set(roles.splitter_normal, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.splitter_focused, Style{kWhite, kGreen, Attr{}});
     set_editor_roles(theme, roles, kBlack, kWhite, kGray, kBlue, kRed, kGreen, kRed);
@@ -204,15 +223,16 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.dialog_frame, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.dialog_background, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.label_text, Style{kDarkFg, kDarkPanel, Attr{}});
-    theme.set(roles.label_mnemonic, Style{kDarkYellow, kDarkPanel, Attr::Underline});
+    theme.set(roles.label_mnemonic, Style{kDarkYellow, kDarkPanel, Attr{}});
     theme.set(roles.hotkey, Style{kDarkYellow, kDarkPanel, Attr::Bold});
     theme.set(roles.static_text, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.help_text, Style{kDarkYellow, kDarkBg, Attr{}});
     theme.set(roles.button_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.button_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     theme.set(roles.button_default, Style{kDarkYellow, kDarkBg, Attr::Bold});
     theme.set(roles.button_shadow, Style{kDarkBg, kDarkPanel, Attr{}});
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
-    theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
+    theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.message_info_text, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.message_warning_text, Style{kDarkYellow, kDarkPanel, Attr::Bold});
@@ -240,8 +260,12 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.image_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.canvas_fallback, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.text_view_text, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.flow_view_text, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.status_line_normal, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.status_line_disabled, Style{kDarkFg, kDarkPanel, Attr::Dim});
+    theme.set(roles.status_line_selected, Style{kDarkBg, kDarkAccent, Attr{}});
+    theme.set(roles.status_line_selected_hotkey, Style{kDarkBg, kDarkAccent, Attr::Bold});
+    theme.set(roles.status_line_selected_disabled, Style{kDarkBg, kDarkAccent, Attr::Dim});
     theme.set(roles.splitter_normal, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.splitter_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kDarkFg, kDarkBg, Color::rgb(120, 150, 120), kDarkAccent, kDarkYellow,
@@ -255,15 +279,16 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.dialog_frame, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.dialog_background, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.label_text, Style{kLightFg, kLightPanel, Attr{}});
-    theme.set(roles.label_mnemonic, Style{kLightFg, kLightPanel, Attr::Underline | Attr::Bold});
+    theme.set(roles.label_mnemonic, Style{kLightFg, kLightPanel, Attr::Bold});
     theme.set(roles.hotkey, Style{kLightRed, kLightPanel, Attr::Bold});
     theme.set(roles.static_text, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.help_text, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.button_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.button_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.button_default, Style{kMonoBg, kLightYellow, Attr::Bold});
     theme.set(roles.button_shadow, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
-    theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr::Underline});
+    theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.message_info_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.message_warning_text, Style{kLightFg, kLightYellow, Attr::Bold});
@@ -291,8 +316,12 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.image_fallback, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.canvas_fallback, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.text_view_text, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.flow_view_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.status_line_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.status_line_disabled, Style{kLightFg, kLightPanel, Attr::Dim});
+    theme.set(roles.status_line_selected, Style{kLightPanel, kLightAccent, Attr{}});
+    theme.set(roles.status_line_selected_hotkey, Style{kLightPanel, kLightAccent, Attr::Bold});
+    theme.set(roles.status_line_selected_disabled, Style{kLightPanel, kLightAccent, Attr::Dim});
     theme.set(roles.splitter_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.splitter_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kLightFg, kLightBg, kLightFocus, kLightAccent, kLightRed,
@@ -306,9 +335,12 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.dialog_frame, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.dialog_background, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.label_text, Style{kMonoFg, kMonoBg, Attr{}});
+    // Monochrome has no second colour to mark a mnemonic with, so here the
+    // underline is the only available marker and stays.
     theme.set(roles.label_mnemonic, Style{kMonoFg, kMonoBg, Attr::Underline | Attr::Bold});
     theme.set(roles.hotkey, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.static_text, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.help_text, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.button_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.button_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.button_default, Style{kMonoFg, kMonoBg, Attr::Bold});
@@ -342,11 +374,90 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.image_fallback, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.canvas_fallback, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.text_view_text, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.flow_view_text, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.status_line_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.status_line_disabled, Style{kMonoGray, kMonoBg, Attr::Dim});
+    theme.set(roles.status_line_selected, Style{kMonoBg, kMonoFg, Attr{}});
+    theme.set(roles.status_line_selected_hotkey, Style{kMonoBg, kMonoFg, Attr::Bold});
+    theme.set(roles.status_line_selected_disabled, Style{kMonoBg, kMonoFg, Attr::Dim});
     theme.set(roles.splitter_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.splitter_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     set_editor_roles(theme, roles, kMonoFg, kMonoBg, kMonoGray, kMonoFg, kMonoFg, kMonoFg, kMonoFg);
+    return theme;
+}
+
+Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles& roles) {
+    constexpr Color black = Color::rgb(0, 0, 0);
+    constexpr Color white = Color::rgb(255, 255, 255);
+    const Style normal{white, black, Attr{}};
+    const Style selected{black, white, Attr{}};
+    Theme theme(registry);
+    const std::array<RoleId, 64> all_roles{
+        roles.desktop_background,    roles.dialog_frame,             roles.dialog_background,
+        roles.label_text,            roles.label_mnemonic,           roles.hotkey,
+        roles.static_text,           roles.help_text,                roles.button_normal,
+        roles.button_focused,
+        roles.button_default,        roles.button_shadow,            roles.input_normal,
+        roles.input_focused,         roles.input_invalid,            roles.message_info_text,
+        roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
+        roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
+        roles.window_title_inactive, roles.window_control,           roles.menu_bar_normal,
+        roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
+        roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
+        roles.table_header,          roles.memo_normal,              roles.memo_focused,
+        roles.option_normal,         roles.option_focused,           roles.scrollbar_track,
+        roles.scrollbar_thumb,       roles.image_fallback,           roles.canvas_fallback,
+        roles.text_view_text,        roles.flow_view_text,           roles.status_line_normal,
+        roles.status_line_disabled,  roles.status_line_selected,     roles.status_line_selected_hotkey,
+        roles.status_line_selected_disabled,
+        roles.splitter_normal,       roles.splitter_focused,
+        roles.editor_text,           roles.editor_gutter,            roles.editor_selection,
+        roles.editor_search,         roles.editor_syntax_plain,      roles.editor_syntax_keyword,
+        roles.editor_syntax_type,    roles.editor_syntax_property,   roles.editor_syntax_string,
+        roles.editor_syntax_number,  roles.editor_syntax_comment,    roles.editor_syntax_command,
+        roles.editor_syntax_operator, roles.editor_syntax_escape,    roles.editor_syntax_error,
+    };
+    for (const RoleId role : all_roles) theme.set(role, normal);
+
+    // High contrast, like monochrome, marks the mnemonic by underline.
+    theme.set(roles.label_mnemonic, Style{white, black, Attr::Underline | Attr::Bold});
+    theme.set(roles.hotkey, Style{white, black, Attr::Bold});
+    theme.set(roles.button_focused, selected);
+    theme.set(roles.button_default, Style{white, black, Attr::Bold});
+    theme.set(roles.input_focused, Style{white, black, Attr::Underline});
+    theme.set(roles.input_invalid, Style{black, white, Attr::Bold});
+    theme.set(roles.message_warning_text, Style{white, black, Attr::Bold});
+    theme.set(roles.message_error_text, Style{black, white, Attr::Bold});
+    theme.set(roles.window_frame_active, Style{white, black, Attr::Bold});
+    theme.set(roles.window_frame_inactive, Style{white, black, Attr::Dim});
+    theme.set(roles.window_title_active, selected);
+    theme.set(roles.window_title_inactive, Style{white, black, Attr::Dim});
+    theme.set(roles.window_control, Style{white, black, Attr::Bold});
+    theme.set(roles.menu_bar_active, selected);
+    theme.set(roles.menu_dropdown_highlighted, selected);
+    theme.set(roles.menu_dropdown_disabled, Style{white, black, Attr::Dim});
+    theme.set(roles.list_selected, selected);
+    theme.set(roles.table_header, Style{black, white, Attr::Bold});
+    theme.set(roles.memo_focused, Style{white, black, Attr::Underline});
+    theme.set(roles.option_focused, selected);
+    theme.set(roles.scrollbar_thumb, selected);
+    theme.set(roles.status_line_disabled, Style{white, black, Attr::Dim});
+    theme.set(roles.status_line_selected, selected);
+    theme.set(roles.status_line_selected_hotkey, Style{black, white, Attr::Bold});
+    theme.set(roles.status_line_selected_disabled, Style{black, white, Attr::Dim});
+    theme.set(roles.splitter_focused, selected);
+    theme.set(roles.editor_gutter, Style{white, black, Attr::Dim});
+    theme.set(roles.editor_selection, selected);
+    theme.set(roles.editor_search, Style{black, white, Attr::Bold});
+    theme.set(roles.editor_syntax_keyword, Style{white, black, Attr::Bold});
+    theme.set(roles.editor_syntax_type, Style{white, black, Attr::Underline});
+    theme.set(roles.editor_syntax_property, Style{white, black, Attr::Bold});
+    theme.set(roles.editor_syntax_string, Style{white, black, Attr::Underline});
+    theme.set(roles.editor_syntax_number, Style{white, black, Attr::Bold});
+    theme.set(roles.editor_syntax_comment, Style{white, black, Attr::Dim});
+    theme.set(roles.editor_syntax_command, Style{white, black, Attr::Bold});
+    theme.set(roles.editor_syntax_escape, Style{white, black, Attr::Underline});
+    theme.set(roles.editor_syntax_error, Style{black, white, Attr::Bold});
     return theme;
 }
 

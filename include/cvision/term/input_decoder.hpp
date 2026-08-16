@@ -80,6 +80,22 @@ public:
     void set_sgr_mouse_input_suppressed(bool suppressed) noexcept {
         sgr_mouse_input_suppressed_ = suppressed;
     }
+    // The terminal's current cell grid (columns, rows). It is the
+    // discriminator between cell and pixel SGR coordinates: a 1-based cell
+    // report can never exceed the grid the terminal itself renders, so a
+    // report beyond it is positive evidence of pixel coordinates — evidence
+    // that outranks a DECRPM answer, because terminals exist (iTerm2) that
+    // report mode 1016 as reset yet engage it anyway. It is also the divisor
+    // that turns an XTWINOPS 14 text-area reply into a cell metric when
+    // XTWINOPS 16 goes unanswered. The backend keeps it current across
+    // resizes; {0,0} disables both uses.
+    void set_cell_grid(Size grid) noexcept { cell_grid_ = grid; }
+    // How many SGR mouse reports this decoder has recognized in the byte
+    // stream, counted before any policy can consume them. Compared against
+    // the events an application actually dispatches, it separates "the
+    // terminal never sent one" from "something between here and there
+    // dropped it" — two failures that look identical from the UI.
+    std::size_t mouse_reports_seen() const noexcept { return mouse_reports_seen_; }
     // A resize invalidates a runtime XTSMGRAPHICS geometry limit. Until a
     // fresh, finite geometry reply arrives, a DA1 advertisement alone must
     // not re-enable raster output: its old limit may have been reduced by
@@ -151,6 +167,8 @@ private:
     bool color_scheme_from_osc11_ = false;
     bool sgr_mouse_input_suppressed_ = false;
     bool sixel_geometry_required_ = false;
+    Size cell_grid_{0, 0};
+    std::size_t mouse_reports_seen_ = 0;
     CapabilityUpdatePolicy capability_update_policy_ = CapabilityUpdatePolicy::AcceptProbeRefinements;
 };
 

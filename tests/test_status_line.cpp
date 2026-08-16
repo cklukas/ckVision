@@ -132,6 +132,9 @@ CK_TEST(clicking_an_items_label_fires_its_command) {
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
+    CK_CHECK(!ran);  // the press shows itself first
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                              std::nullopt, Modifier::None}));
     CK_CHECK(ran);
 }
 
@@ -172,7 +175,7 @@ CK_TEST(a_disabled_commands_item_still_fires_execute_command_which_itself_declin
     CK_CHECK(!ran);
 }
 
-CK_TEST(second_item_is_positioned_after_the_first_with_a_separator_between) {
+CK_TEST(second_item_is_positioned_after_the_first_across_their_shared_padding) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -192,9 +195,12 @@ CK_TEST(second_item_is_positioned_after_the_first_with_a_separator_between) {
     // text is "First" / "Second" from the registrations above.
     status.set_items({StatusLineItem{"AB", kFirst, 0}, StatusLineItem{"Second", kSecond, 0}});
 
-    // "First" occupies columns 0-4; " | " occupies 5-7; "Second" starts at 8.
+    // One cell of leading padding, so "First" occupies columns 1-5, the
+    // two-cell gap 6-7, and "Second" starts at 8.
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                              ckv::Point{9, 0}, std::nullopt, Modifier::None}));
+                                              ckv::Point{10, 0}, std::nullopt, Modifier::None}));
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                              ckv::Point{10, 0}, std::nullopt, Modifier::None}));
     CK_CHECK(second_ran);
 }
 
@@ -216,7 +222,12 @@ CK_TEST(draw_renders_the_hint_and_items_without_crashing) {
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});
     status.draw(painter);
-    CK_CHECK(row_text(s, 0).substr(0, 5) == "Ready");
+    // Items first, then the hint: the actionable legend keeps its cells and
+    // the explanation takes what is left.
+    const std::string rendered = row_text(s, 0);
+    CK_CHECK(rendered.substr(0, 5) == " Help");  // one cell of leading padding
+    CK_CHECK(rendered.find("Ready") != std::string::npos);
+    CK_CHECK(rendered.find("Help") < rendered.find("Ready"));
 }
 
 CK_TEST(command_chords_automatically_use_the_shared_hotkey_accent) {
@@ -233,9 +244,9 @@ CK_TEST(command_chords_automatically_use_the_shared_hotkey_accent) {
     Painter painter(s, Rect{0, 0, 40, 1});
     status.draw(painter);
 
-    CK_CHECK(row_text(s, 0).substr(0, 7) == "F1 Help");
-    CK_CHECK(s.at(Point{0, 0}).style().fg == f.theme.resolve(f.roles.hotkey).fg);
-    CK_CHECK(s.at(Point{2, 0}).style().fg == f.theme.resolve(f.roles.status_line_normal).fg);
+    CK_CHECK(row_text(s, 0).substr(0, 8) == " F1 Help");
+    CK_CHECK(s.at(Point{1, 0}).style().fg == f.theme.resolve(f.roles.hotkey).fg);
+    CK_CHECK(s.at(Point{3, 0}).style().fg == f.theme.resolve(f.roles.status_line_normal).fg);
 }
 
 CK_TEST(draw_stops_placing_items_that_would_start_past_the_available_width_without_crashing) {
@@ -252,6 +263,24 @@ CK_TEST(draw_stops_placing_items_that_would_start_past_the_available_width_witho
     Painter painter(s, Rect{0, 0, 5, 1});
     status.draw(painter);  // must not crash even though the item overflows the bounds
     CK_CHECK(true);
+}
+
+CK_TEST(equal_priority_status_items_keep_a_visible_prefix_of_the_final_item) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 12, 1});
+    status.set_items({StatusLineItem{"First"}, StatusLineItem{"Second"}});
+
+    Surface s(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 12, 1});
+    status.draw(painter);
+
+    // Items are set apart by the gap alone — no rule between them.
+    CK_CHECK(row_text(s, 0) == " First  Seco");
 }
 
 CK_TEST(narrow_status_line_keeps_higher_priority_items_visible_and_clickable) {
@@ -279,5 +308,132 @@ CK_TEST(narrow_status_line_keeps_higher_priority_items_visible_and_clickable) {
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
                                               ckv::Point{1, 0}, std::nullopt, Modifier::None}));
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                              ckv::Point{1, 0}, std::nullopt, Modifier::None}));
     CK_CHECK(high_ran);
+}
+
+// --- Item padding and press feedback ----------------------------------
+
+CK_TEST(the_first_status_item_is_inset_from_the_screen_edge) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    status.set_items({StatusLineItem{"Help", ui::kInvalidCommand, 0}});
+
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    status.draw(painter);
+    // Text begins one cell in: the padding is the item's, not the screen's.
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == " ");
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == "H");
+}
+
+CK_TEST(only_the_hint_is_fenced_off_never_one_item_from_the_next) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    status.set_items({StatusLineItem{"Help"}, StatusLineItem{"More"}});
+    status.set_transient_hint("Explains it");
+
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    status.draw(painter);
+
+    // "Help" occupies 1-4 and "More" 7-10: the cells between them are the
+    // two items' own padding and stay blank. A rule there would divide
+    // things that are alike.
+    CK_CHECK(s.at(Point{5, 0}).grapheme() == " ");
+    CK_CHECK(s.at(Point{6, 0}).grapheme() == " ");
+    // The one real boundary is drawn, one cell clear of the last item's
+    // padding so a pressed item keeps that cell.
+    CK_CHECK(s.at(Point{11, 0}).grapheme() == " ");
+    CK_CHECK(s.at(Point{12, 0}).grapheme() == "\u2502");
+    CK_CHECK(s.at(Point{14, 0}).grapheme() == "E");
+}
+
+CK_TEST(a_pressed_item_wears_the_themes_selected_colours_chord_accent_included) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    constexpr CommandId kFirst = ui::kFirstApplicationCommandId;
+    app.commands().register_command(kFirst, "Help browser...");
+    app.commands().bind_key(*ckv::KeyChord::parse("F1"), kFirst);
+    app.set_command_handler(kFirst, [] {});
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    status.on_attached();
+    status.set_items({StatusLineItem{"", kFirst, 0}});
+
+    status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 0},
+                                     std::nullopt, Modifier::None});
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    status.draw(painter);
+
+    const ckv::Style selected = f.theme.resolve(f.roles.status_line_selected);
+    const ckv::Style selected_hotkey = f.theme.resolve(f.roles.status_line_selected_hotkey);
+    // The padding carries the press too, which is what makes it a button.
+    CK_CHECK(s.at(Point{0, 0}).style().bg == selected.bg);
+    // "F1" is the chord: it keeps its own accent against the selected
+    // background rather than dissolving into the label.
+    CK_CHECK(s.at(Point{1, 0}).style().fg == selected_hotkey.fg);
+    CK_CHECK(s.at(Point{1, 0}).style().bg == selected.bg);
+    // ...and the label itself takes the plain selected colour.
+    CK_CHECK(s.at(Point{4, 0}).style().fg == selected.fg);
+    CK_CHECK(s.at(Point{4, 0}).style().bg == selected.bg);
+}
+
+CK_TEST(the_classic_theme_presses_a_status_item_the_way_the_oracle_does) {
+    // Turbo Vision's status palette: selected text is black on green
+    // (cpAppColor 0x20) and its chord red on green (0x24). Pinned because
+    // it is a deliberate match, not an incidental colour choice.
+    Fixture f;
+    const ckv::Style selected = f.theme.resolve(f.roles.status_line_selected);
+    const ckv::Style selected_hotkey = f.theme.resolve(f.roles.status_line_selected_hotkey);
+    CK_CHECK(selected.bg == ckv::Color::rgb(0, 170, 0));
+    CK_CHECK(selected.fg == ckv::Color::rgb(0, 0, 0));
+    CK_CHECK(selected_hotkey.bg == ckv::Color::rgb(0, 170, 0));
+    CK_CHECK(selected_hotkey.fg == ckv::Color::rgb(170, 0, 0));
+}
+
+CK_TEST(a_status_item_acts_on_release_and_can_be_taken_back) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 40, 1});
+    constexpr CommandId kRun = ui::kFirstApplicationCommandId + 7;
+    app.commands().register_command(kRun, "Run");
+    int runs = 0;
+    app.set_command_handler(kRun, [&] { ++runs; });
+    status.set_items({StatusLineItem{"Run", kRun, 0}});
+
+    const auto at = [](int x, ckv::MouseAction action) {
+        return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{x, 0}, std::nullopt,
+                               Modifier::None};
+    };
+    // Pressing shows the press; it does not act yet.
+    CK_CHECK(status.on_mouse(at(2, ckv::MouseAction::Down)));
+    CK_CHECK(runs == 0);
+    CK_CHECK(status.on_mouse(at(2, ckv::MouseAction::Up)));
+    CK_CHECK(runs == 1);
+
+    // Pressed here, released elsewhere: the press is taken back.
+    status.on_mouse(at(2, ckv::MouseAction::Down));
+    status.on_mouse(at(38, ckv::MouseAction::Move));
+    status.on_mouse(at(38, ckv::MouseAction::Up));
+    CK_CHECK(runs == 1);
 }

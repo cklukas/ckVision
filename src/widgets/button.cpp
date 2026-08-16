@@ -1,13 +1,19 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/button.hpp"
 
+#include "cvision/ui/application.hpp"
+
 #include <algorithm>
+#include <cctype>
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
+
+// How long a keyboard-activated button stays visibly depressed.
+constexpr std::int64_t kKeyPressFeedbackNanos = 90'000'000;  // 90 ms
 
 namespace {
 bool contains(const Rect& r, Point p) noexcept {
@@ -36,9 +42,28 @@ void Button::set_text(std::string text) {
     // the right, plus one cell of face margin on each side of the
     // label. Height: face row + shadow row — the classic button is two
     // rows tall by construction; the drop shadow IS part of the widget.
-    set_preferred_size(Size{text::text_width(display_text_) + 4, 2});
+    set_preferred_size(Size{std::max(minimum_width_, text::text_width(display_text_) + 4), 2});
     invalidate();
     size_hint_changed();
+}
+
+void Button::set_minimum_width(int width) {
+    minimum_width_ = std::max(3, width);
+    set_preferred_size(Size{std::max(minimum_width_, text::text_width(display_text_) + 4), 2});
+    invalidate();
+    size_hint_changed();
+}
+
+bool Button::activate_mnemonic(std::string_view mnemonic) {
+    const MnemonicText parsed = parse_mnemonic(raw_text_);
+    if (parsed.mnemonic.empty() || parsed.mnemonic.size() != mnemonic.size()) return false;
+    for (std::size_t i = 0; i < mnemonic.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(parsed.mnemonic[i])) !=
+            std::tolower(static_cast<unsigned char>(mnemonic[i])))
+            return false;
+    }
+    fire_press();
+    return true;
 }
 
 // ckVision's classic button drawing contract: face rows y = 0..h-2,
@@ -97,39 +122,111 @@ void Button::draw(scene::Painter& painter) {
 }
 
 SizeHint Button::horizontal_size_hint() const {
-    const int width = text::text_width(display_text_) + 4;
+    const int width = std::max(minimum_width_, text::text_width(display_text_) + 4);
     return SizeHint{width, width, width};
 }
 
 SizeHint Button::vertical_size_hint() const { return SizeHint{1, 2, 2}; }
 
 bool Button::on_key(const KeyEvent& event) {
-    if (event.action == KeyAction::Release) return false;
-    if (event.chord.key == Key::Enter || (event.chord.key == Key::Char && event.chord.text == " ")) {
-        fire_press();
+    const bool activates =
+        event.chord.key == Key::Enter || (event.chord.key == Key::Char && event.chord.text == " ");
+    if (!activates) return false;
+
+    // Whether THIS key will report a release. Asking the terminal's protocol
+    // instead was wrong: a kitty session reports events only for the keys it
+    // encodes as escape sequences, while Enter and Space keep arriving as
+    // legacy bytes that never report a release — so the button held itself
+    // down forever waiting for one, and never acted.
+    const bool reports_release = event.reports_release;
+
+    if (event.action == KeyAction::Release) {
+        if (!key_armed_) return false;
+        const bool fire = armed_ && has_focus_;
+        key_armed_ = false;
+        armed_ = false;
+        pressed_ = false;
+        invalidate();
+        // Releasing is what commits the press — and only if it was never
+        // taken back in between (Tab away, or the pointer leaving).
+        if (fire) fire_press();
+        return true;
+    }
+    // A held key under a release-reporting protocol repeats while it stays
+    // down: that is one press being held, not many, so it must not re-fire.
+    // A legacy terminal has no such state — its auto-repeat is literally a
+    // fresh keystroke each time, and activating again is the correct
+    // response to it.
+    if (event.action == KeyAction::Repeat && reports_release) return true;
+
+    pressed_ = true;
+    armed_ = true;
+    invalidate();
+    if (reports_release) {
+        // Stay depressed until the key comes back up.
+        key_armed_ = true;
+        return true;
+    }
+    // No release will arrive: hold the depressed state briefly so the
+    // keystroke is visibly acknowledged, then act. Without this a keyboard
+    // press produces no feedback at all and an accepted keystroke looks
+    // exactly like an ignored one.
+    if (context().app != nullptr) {
+        const std::weak_ptr<void> liveness = lifetime_token();
+        context().app->start_timer(kKeyPressFeedbackNanos, /*repeating=*/false, [this, liveness] {
+            if (liveness.expired()) return;
+            pressed_ = false;
+            invalidate();
+        });
+    }
+    armed_ = false;
+    fire_press();
+    return true;
+}
+
+bool Button::on_mouse(const MouseEvent& event) {
+    const bool inside = contains(absolute_bounds(), event.cell);
+    if (event.action == MouseAction::Down) {
+        pressed_ = true;
+        armed_ = true;
+        invalidate();
+        return true;
+    }
+    if (event.action == MouseAction::Move) {
+        // Dragging off the button lifts it and disarms the press; dragging
+        // back re-arms it. This is how a pointer press is taken back after
+        // it has begun — the button has to show that state, or the reader
+        // cannot tell whether releasing here will act.
+        if (armed_ || pressed_) {
+            const bool now_pressed = inside && armed_;
+            if (now_pressed != pressed_) {
+                pressed_ = now_pressed;
+                invalidate();
+            }
+        }
+        return true;  // still claim Move while a Down/Up pair is in flight
+    }
+    if (event.action == MouseAction::Up) {
+        const bool fire = armed_ && inside;
+        pressed_ = false;
+        armed_ = false;
+        invalidate();
+        if (fire) fire_press();
         return true;
     }
     return false;
 }
 
-bool Button::on_mouse(const MouseEvent& event) {
-    if (event.action == MouseAction::Down) {
-        pressed_ = true;
-        invalidate();
-        return true;
-    }
-    if (event.action == MouseAction::Up) {
-        const bool released_inside = contains(absolute_bounds(), event.cell);
-        pressed_ = false;
-        invalidate();
-        if (released_inside) fire_press();
-        return true;
-    }
-    return event.action == MouseAction::Move;  // still claim Move while a Down/Up pair is in flight
-}
-
 void Button::on_focus(const FocusEvent& event) {
     has_focus_ = event.gained;
+    // Focus moving away (Tab, or anything else) takes back a keyboard press
+    // in flight: the key that eventually comes up is no longer this
+    // button's, so it must neither look pressed nor act.
+    if (!event.gained && key_armed_) {
+        key_armed_ = false;
+        armed_ = false;
+        pressed_ = false;
+    }
     invalidate();
 }
 

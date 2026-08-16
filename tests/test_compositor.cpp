@@ -313,3 +313,32 @@ CK_TEST(cursor_state_is_stored_and_retrievable) {
     CK_CHECK(c.cursor().position == (ckv::Point{2, 3}));
     CK_CHECK(c.cursor().shape == ckv::scene::CursorShape::Bar);
 }
+
+// --- Rasters on a window dragged past an edge --------------------------
+
+CK_TEST(a_raster_reaching_past_the_frame_is_clipped_not_fitted) {
+    ckv::scene::Compositor compositor(ckv::Size{20, 10});
+    ckv::scene::Surface background(ckv::Size{20, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    // A window near the right edge whose image extends beyond it.
+    ckv::scene::Surface window(ckv::Size{12, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto image = std::make_shared<ckv::Image>(60, 30);
+    window.add_raster_region(ckv::scene::RasterRegion{1, ckv::Rect{0, 0, 12, 6}, image, false});
+    std::vector<Layer> layers(1);
+    layers[0].id = 1;
+    layers[0].surface = &window;
+    layers[0].position = ckv::Point{14, 2};
+
+    compositor.compose(layers, background);
+
+    for (const ckv::RasterSlice& slice : compositor.visible_rasters()) {
+        // Nothing may be reported outside the frame: those cells do not
+        // exist, and reading them is the crash this guards.
+        CK_CHECK(slice.visible_rect.x >= 0);
+        CK_CHECK(slice.visible_rect.y >= 0);
+        CK_CHECK(slice.visible_rect.x + slice.visible_rect.width <= 20);
+        CK_CHECK(slice.visible_rect.y + slice.visible_rect.height <= 10);
+        // The anchor keeps its full off-screen extent so the presenter
+        // crops the image rather than squeezing it into what is left.
+        CK_CHECK(slice.full_anchor.width == 12);
+    }
+}

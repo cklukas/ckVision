@@ -10,7 +10,16 @@ namespace ckv::ui {
 void CommandRegistry::register_command(CommandId id, std::string title, std::string category,
                                         std::optional<KeyChord> default_chord,
                                         std::string context) {
-    CKV_ASSERT(id >= kFirstApplicationCommandId);
+    // The reserved range is the library's own, with one deliberate opening:
+    // the menu-accelerator ids a MenuBar claims for its Alt+<mnemonic>
+    // chords. Those are library-owned too — a widget registering them is
+    // the framework populating its own range, not an application reaching
+    // into it — but they are allocated per menu at runtime rather than
+    // fixed at startup, so they cannot go through
+    // register_standard_commands().
+    CKV_ASSERT(id >= kFirstApplicationCommandId ||
+               (id >= std_commands::kFirstMenuAccelerator &&
+                id < std_commands::kMenuAcceleratorLimit));
     register_command_internal(id, std::move(title), std::move(category), default_chord,
                               std::move(context));
 }
@@ -164,6 +173,14 @@ std::optional<KeyChord> CommandRegistry::chord_for_command(CommandId id) const {
     for (const auto& [chord, existing_id] : keymap_)
         if (existing_id == id) return chord;
     return std::nullopt;
+}
+
+void CommandRegistry::set_chord_formatter(std::function<std::string(const KeyChord&)> formatter) {
+    chord_formatter_ = std::move(formatter);
+}
+
+std::string CommandRegistry::format_chord(const KeyChord& chord) const {
+    return chord_formatter_ ? chord_formatter_(chord) : format(chord);
 }
 
 void CommandRegistry::set_handler(CommandId id, std::function<void()> handler) {

@@ -17,6 +17,8 @@ enum class MouseButton : std::uint8_t {
     Right,
     WheelUp,
     WheelDown,
+    WheelLeft,
+    WheelRight,
 };
 
 enum class MouseAction : std::uint8_t {
@@ -57,6 +59,13 @@ struct MouseEvent {
 struct KeyEvent {
     KeyChord chord;
     KeyAction action = KeyAction::Press;
+    // Whether a matching Release will follow this press. It is per-event,
+    // not per-terminal: the kitty protocol's event-type flag covers only the
+    // keys it encodes as escape sequences, so a session can report releases
+    // for some keys while Enter and Space still arrive as legacy bytes that
+    // never report one. A control that holds itself down until release must
+    // consult this, or it waits forever for a release the key never sends.
+    bool reports_release = false;
 
     friend bool operator==(const KeyEvent&, const KeyEvent&) = default;
 };

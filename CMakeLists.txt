@@ -27,6 +27,7 @@ add_library(cvision
     src/scene/surface.cpp
     src/term/headless_terminal.cpp
     src/term/input_decoder.cpp
+    src/term/capability_report.cpp
     src/term/presenter.cpp
     src/term/sixel_encoder.cpp
     src/term/terminal_emulator.cpp

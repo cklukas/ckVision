@@ -18,6 +18,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -67,6 +68,13 @@ public:
     // treated the same as "no hint") shows the item list only.
     void set_hint_provider(std::function<std::string(const std::string&)> provider);
 
+    // A hint that outranks the focus-derived one until it is cleared
+    // (pass an empty string). While a menu is open the reader is asking
+    // about the entry under the highlight, not about whatever holds
+    // focus behind the popup — the caller decides when that is true and
+    // says so here, so this view keeps one hint-rendering path.
+    void set_transient_hint(std::string hint);
+
     // The hint text that WOULD be shown right now — exposed for
     // testing without needing to scrape rendered cells.
     std::string current_hint() const;
@@ -101,9 +109,19 @@ private:
 
     std::vector<StatusLineItem> items_;
     std::function<std::string(const std::string&)> hint_provider_;
+    std::string transient_hint_;
+    // The item currently held down by the pointer, and whether the pointer
+    // is still on it — a press dragged away un-highlights but stays claimed
+    // so returning to the item re-arms it.
+    std::optional<std::size_t> pressed_item_;
+    bool pressed_visible_ = true;
+    std::optional<std::size_t> item_at(Point cell) const;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId hotkey_role_ = ui::kInvalidRole;
+    ui::RoleId selected_role_ = ui::kInvalidRole;
+    ui::RoleId selected_hotkey_role_ = ui::kInvalidRole;
+    ui::RoleId selected_disabled_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

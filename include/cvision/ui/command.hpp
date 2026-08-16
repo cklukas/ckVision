@@ -90,6 +90,14 @@ inline constexpr CommandId kMenu = 9;
 inline constexpr CommandId kHelp = 10;
 inline constexpr CommandId kFocusNext = 11;
 inline constexpr CommandId kFocusPrevious = 12;
+
+// One reserved id per top-level menu, claimed by MenuBar for its
+// Alt+<mnemonic> accelerators. They are ordinary commands so the
+// accelerator works from anywhere the command keymap reaches, rather than
+// only while the bar already holds focus — which is the whole point of a
+// menu accelerator.
+inline constexpr CommandId kFirstMenuAccelerator = 3840;
+inline constexpr CommandId kMenuAcceleratorLimit = 4096;
 }  // namespace std_commands
 
 struct CommandInfo {
@@ -198,6 +206,17 @@ public:
     // unbinds a command's only chord sees that reflected here).
     std::optional<KeyChord> chord_for_command(CommandId id) const;
 
+    // How a chord is spelled wherever the framework renders one for the
+    // reader: menu chord hints, status-line items, the command palette.
+    // The default is ckv::format(). An application whose product has its
+    // own established key-label convention — "Alt-X" rather than
+    // "Alt+X", or a platform's glyph spelling — installs it once here
+    // instead of restating it at every surface that shows a chord, which
+    // is the only way those surfaces can agree. Chord *parsing* is
+    // unaffected: this is display spelling, not a syntax.
+    void set_chord_formatter(std::function<std::string(const KeyChord&)> formatter);
+    std::string format_chord(const KeyChord& chord) const;
+
     // Handler dispatch (M9/WP-10 — moved here from Application, whose
     // set_command_handler/execute_command now just forward, so add()'s
     // .handler field has somewhere to land without giving
@@ -228,6 +247,7 @@ private:
     std::unordered_map<CommandId, std::function<void()>> handlers_;
     std::vector<std::pair<KeyChord, CommandId>> keymap_;
     std::vector<std::pair<ContextScopeId, std::string>> active_contexts_;
+    std::function<std::string(const KeyChord&)> chord_formatter_;
     ContextScopeId next_context_scope_id_ = 1;
 };
 

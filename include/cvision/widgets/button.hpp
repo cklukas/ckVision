@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <string>
+#include <string_view>
 
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
@@ -39,6 +40,11 @@ using ui::View;
 // immediately whether called before or after attachment.
 class Button : public View {
 public:
+    // The classic desktop metric reserves a ten-cell button footprint even
+    // for a short caption such as "OK". Longer captions grow naturally;
+    // callers can request a wider uniform family where a dialog needs it.
+    static constexpr int kClassicMinimumWidth = 10;
+
     explicit Button(std::string text);
 
     void set_text(std::string text);
@@ -46,6 +52,9 @@ public:
 
     void set_default(bool is_default) noexcept { is_default_ = is_default; }
     bool is_default() const noexcept { return is_default_; }
+
+    void set_minimum_width(int width);
+    int minimum_width() const noexcept { return minimum_width_; }
 
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId default_role,
                             ui::RoleId shadow_role) noexcept {
@@ -56,6 +65,11 @@ public:
     }
     void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
+    // Invoked by a containing dialog/window for a matching Alt+mnemonic.
+    // The button remains independently activatable by Enter/Space when it
+    // owns focus; this route supplies the conventional direct accelerator.
+    bool activate_mnemonic(std::string_view mnemonic);
+
     std::function<void()> on_press;
 
     void draw(scene::Painter& painter) override;
@@ -64,6 +78,10 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
+
+    // Whether the button is currently drawn depressed — exposed so a press
+    // lifecycle can be asserted without scraping rendered cells.
+    bool pressed() const noexcept { return pressed_; }
     void on_attached() override;
 
 private:
@@ -77,8 +95,21 @@ private:
     ui::RoleId shadow_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     bool is_default_ = false;
+    int minimum_width_ = kClassicMinimumWidth;
     bool has_focus_ = false;
+    // Whether the button is drawn depressed right now. It follows the
+    // pointer or the key, and is not by itself a promise that releasing
+    // will act — `armed_` is.
     bool pressed_ = false;
+    // A press is in flight and still eligible to fire: the pointer went
+    // down on this button and has not been released elsewhere, or a key
+    // went down while this button held focus and focus has not moved. A
+    // press that leaves the button, or a focus change, disarms it — the
+    // action then never runs, which is how a press is taken back.
+    bool armed_ = false;
+    // A keyboard press is in flight (as opposed to a pointer press), so
+    // the release that ends it is a key release rather than a mouse-up.
+    bool key_armed_ = false;
 };
 
 }  // namespace ckv::widgets

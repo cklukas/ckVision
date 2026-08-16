@@ -1,18 +1,33 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/canvas.hpp"
 
+#include "cvision/ui/application.hpp"
+
 #include <algorithm>
 
 namespace ckv::widgets {
 
-namespace {
-int next_raster_id() {
-    static int counter = 1;
-    return counter++;
+Size fit_image_cells(Size image_pixels, Size cell_pixels, Size max_cells) noexcept {
+    if (image_pixels.width <= 0 || image_pixels.height <= 0) return Size{};
+    if (max_cells.width <= 0 || max_cells.height <= 0) return Size{};
+    if (cell_pixels.width <= 0 || cell_pixels.height <= 0) cell_pixels = kAssumedCellPixels;
+    // The image's width:height, expressed in cells rather than pixels: one
+    // cell of width buys cell_pixels.width pixels, one cell of height buys
+    // cell_pixels.height of them.
+    const double aspect_in_cells = static_cast<double>(image_pixels.width) * cell_pixels.height /
+                                   (static_cast<double>(image_pixels.height) * cell_pixels.width);
+    // Take the full width allowed, then give back whatever the height cap
+    // demands — so the box is as large as it may be and still proportionate.
+    int cols = max_cells.width;
+    int rows = static_cast<int>(cols / aspect_in_cells + 0.5);
+    if (rows > max_cells.height) {
+        rows = max_cells.height;
+        cols = static_cast<int>(rows * aspect_in_cells + 0.5);
+    }
+    return Size{std::clamp(cols, 1, max_cells.width), std::clamp(rows, 1, max_cells.height)};
 }
-}  // namespace
 
-Canvas::Canvas() : raster_id_(next_raster_id()) {}
+Canvas::Canvas() : raster_id_(0) {}
 
 void Canvas::on_attached() {
     if (fallback_role_ == ui::kInvalidRole)
@@ -29,9 +44,33 @@ Size Canvas::pixel_size() const noexcept {
 }
 
 void Canvas::set_cell_metrics(Size cell_pixels) {
+    // A terminal that draws images but never answered the cell-metric probe
+    // reports {0,0}. Sizing a backing image from that yields no pixels at
+    // all — the picture silently disappears where the terminal could in
+    // fact have shown it. Fall back to a common modern cell so the image
+    // renders; a host that cares about exactness supplies a measured metric
+    // (that is what a calibration control is for).
+    static constexpr Size kAssumedCell = kAssumedCellPixels;
+    // Remember whether a real metric was supplied. The probe that measures
+    // the cell answers milliseconds AFTER a dialog is built, so a canvas
+    // created in between would otherwise keep the assumed cell forever and
+    // draw an image sized for a cell this terminal does not have — visibly
+    // too small, in exactly the proportion the two cells differ by.
+    awaiting_measured_metrics_ = cell_pixels.width <= 0 || cell_pixels.height <= 0;
+    if (awaiting_measured_metrics_) cell_pixels = kAssumedCell;
     cell_pixels_.width = std::max(0, cell_pixels.width);
     cell_pixels_.height = std::max(0, cell_pixels.height);
     derive_pixel_size_from_metrics_ = cell_pixels_.width > 0 && cell_pixels_.height > 0;
+    update_pixel_size_from_metrics();
+}
+
+void Canvas::adopt_measured_cell_metrics() {
+    if (!awaiting_measured_metrics_ || context().app == nullptr) return;
+    const Size measured = context().app->terminal_cell_pixels();
+    if (measured.width <= 0 || measured.height <= 0) return;
+    awaiting_measured_metrics_ = false;
+    if (measured == cell_pixels_) return;
+    cell_pixels_ = measured;
     update_pixel_size_from_metrics();
 }
 
@@ -61,6 +100,10 @@ void Canvas::invalidate_content() {
 }
 
 void Canvas::draw(scene::Painter& painter) {
+    // The probe answers after the first frames; adopt the real cell as soon
+    // as it exists rather than keeping the assumed one for this canvas's
+    // whole life.
+    adopt_measured_cell_metrics();
     const Style style = context().theme->resolve(fallback_role_);
     const Rect area{0, 0, bounds().width, bounds().height};
 
@@ -86,6 +129,9 @@ bool Canvas::on_mouse(const MouseEvent& event) {
     return true;
 }
 
-void Canvas::on_resized() { update_pixel_size_from_metrics(); }
+void Canvas::on_resized() {
+    adopt_measured_cell_metrics();
+    update_pixel_size_from_metrics();
+}
 
 }  // namespace ckv::widgets

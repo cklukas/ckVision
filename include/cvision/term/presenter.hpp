@@ -65,6 +65,9 @@ private:
     static bool same_rasters(const std::vector<ActiveRaster>& lhs,
                              const std::vector<ActiveRaster>& rhs) noexcept;
     bool raster_coverage_contains(Point point, const std::vector<ActiveRaster>& rasters) const noexcept;
+    // The cells a raster's pixels can reach, which may exceed the cells it
+    // was allotted when its pixel size is not a whole number of them.
+    static Rect raster_footprint(const RasterSlice& slice) noexcept;
 
     Terminal& terminal_;
     std::vector<Cell> previous_cells_;

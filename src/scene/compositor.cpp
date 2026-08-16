@@ -196,6 +196,21 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
 
 void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background) {
     visible_rasters_.clear();
+    // Every slice is clipped to the frame. A window dragged past an edge
+    // still anchors its raster at the window's own position, so the
+    // difference against occluders alone can leave a rect reaching off
+    // screen: reading those cells is out of bounds, and handing the whole
+    // anchor to the presenter with an off-screen visible rect makes it fit
+    // the image to what remains instead of cropping. Keeping full_anchor
+    // intact while clipping `visible` is what makes the crop a crop.
+    const Rect frame_bounds{0, 0, frame_.size().width, frame_.size().height};
+    const auto push_visible = [this, &frame_bounds](const Rect& visible, const Rect& full_anchor,
+                                                     const RasterRegion& region) {
+        const Rect clipped = visible.intersected(frame_bounds);
+        if (clipped.empty()) return;
+        visible_rasters_.push_back(
+            RasterSlice{region.id, clipped, full_anchor, region.image, region.fallback_active});
+    };
     // The root/base surface is also a legal Painter target. Its rasters have
     // no layer offset, but windows and popups above them still occlude them
     // exactly as they occlude base cells.
@@ -211,9 +226,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
             rect_scratch_a_.swap(rect_scratch_b_);
             if (rect_scratch_a_.empty()) break;
         }
-        for (const Rect& visible : rect_scratch_a_)
-            visible_rasters_.push_back(
-                RasterSlice{region.id, visible, full_anchor, region.image, region.fallback_active});
+        for (const Rect& visible : rect_scratch_a_) push_visible(visible, full_anchor, region);
     }
     for (std::size_t i = 0; i < layers.size(); ++i) {
         const Layer& layer = layers[i];
@@ -231,9 +244,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                 rect_scratch_a_.swap(rect_scratch_b_);
                 if (rect_scratch_a_.empty()) break;
             }
-            for (const Rect& visible : rect_scratch_a_)
-                visible_rasters_.push_back(
-                    RasterSlice{region.id, visible, full_anchor, region.image, region.fallback_active});
+            for (const Rect& visible : rect_scratch_a_) push_visible(visible, full_anchor, region);
         }
     }
 }

@@ -17,6 +17,8 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::Canvas;
+using ckv::widgets::fit_image_cells;
+using ckv::Size;
 
 namespace {
 struct Fixture {
@@ -268,4 +270,38 @@ CK_TEST(with_no_on_click_handler_mouse_events_are_still_reported_as_handled) {
     canvas.set_context(f.ctx());
     CK_CHECK(canvas.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 1},
                                               std::nullopt, Modifier::None}));
+}
+
+// --- fit_image_cells ------------------------------------------------------
+
+CK_TEST(a_pictures_proportions_survive_a_cell_that_is_nothing_like_square) {
+    // 1528x1029 artwork (w:h 1.485) on a 11x51 cell — a real terminal
+    // report, and nearly five times taller than wide.
+    const Size box = fit_image_cells(Size{1528, 1029}, Size{11, 51}, Size{64, 12});
+    const double drawn = static_cast<double>(box.width * 11) / (box.height * 51);
+    CK_CHECK(drawn > 1.33 && drawn < 1.65);  // still the artwork's shape
+}
+
+CK_TEST(the_same_picture_on_a_conventional_cell_keeps_the_same_proportions) {
+    const Size box = fit_image_cells(Size{1528, 1029}, Size{11, 24}, Size{64, 12});
+    const double drawn = static_cast<double>(box.width * 11) / (box.height * 24);
+    CK_CHECK(drawn > 1.33 && drawn < 1.65);
+}
+
+CK_TEST(a_fitted_box_never_exceeds_the_cells_it_was_allowed) {
+    for (const Size cell : {Size{11, 51}, Size{11, 24}, Size{6, 12}, Size{20, 20}}) {
+        const Size box = fit_image_cells(Size{1528, 1029}, cell, Size{64, 12});
+        CK_CHECK(box.width >= 1 && box.width <= 64);
+        CK_CHECK(box.height >= 1 && box.height <= 12);
+    }
+}
+
+CK_TEST(a_terminal_that_reports_no_cell_is_fitted_against_the_assumed_one) {
+    CK_CHECK(fit_image_cells(Size{1528, 1029}, Size{0, 0}, Size{64, 12}) ==
+             fit_image_cells(Size{1528, 1029}, ckv::widgets::kAssumedCellPixels, Size{64, 12}));
+}
+
+CK_TEST(an_empty_image_or_an_empty_allowance_yields_no_box) {
+    CK_CHECK(fit_image_cells(Size{0, 0}, Size{11, 24}, Size{64, 12}) == Size{});
+    CK_CHECK(fit_image_cells(Size{1528, 1029}, Size{11, 24}, Size{0, 0}) == Size{});
 }

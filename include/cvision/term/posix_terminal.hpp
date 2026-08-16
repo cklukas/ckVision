@@ -55,7 +55,17 @@ public:
     PosixTerminal(PosixTerminal&&) = delete;
     PosixTerminal& operator=(PosixTerminal&&) = delete;
 
+    // Diagnostic: SGR mouse reports recognized in the input stream.
+    std::size_t mouse_reports_seen() const noexcept { return decoder_.mouse_reports_seen(); }
+
     Capabilities capabilities() const noexcept override { return caps_; }
+    // Replaces the explicit client policy layered over probe evidence. A
+    // meaningful effective-capability change is delivered through the next
+    // poll() as CapabilityChangedEvent and wakes an application blocked in
+    // that poll, so callers never need to manufacture a redraw themselves.
+    // Fixed cell metrics and color-register caps must be positive.
+    void set_capability_overrides(CapabilityOverrides overrides);
+    const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
     Size size() const noexcept override;
     std::span<const WaitHandle> wait_handles() const noexcept override {
         return std::span<const WaitHandle>(wait_handles_.data(), wait_handle_count_);
@@ -88,7 +98,9 @@ private:
     const Clock& clock_;
     int output_fd_;
     int input_fd_;
+    Capabilities observed_caps_;
     Capabilities caps_;
+    CapabilityOverrides overrides_;
     InputDecoder decoder_;
     Size last_size_;
     int self_pipe_read_ = -1;
@@ -98,6 +110,7 @@ private:
     int session_slot_ = -1;
     bool capability_probes_enabled_ = true;
     std::int64_t probe_deadline_nanos_ = -1;
+    bool capability_change_pending_ = false;
 
     void begin_capability_probes();
     // Cell metrics and finite Sixel geometry can both change with a resize.
@@ -105,6 +118,9 @@ private:
     // session withdraws runtime evidence before starting the next bounded
     // probe window.
     bool invalidate_resize_dependent_capabilities() noexcept;
+    bool update_effective_capabilities() noexcept;
+    // TIOCGWINSZ's ws_xpixel/ws_ypixel; {0,0} when the terminal leaves them unset.
+    Size window_pixel_size() const noexcept;
     void configure_decoder_capability_update_policy() noexcept;
     void finish_capability_probes();
     void synchronize_sgr_mouse_input_policy() noexcept;

@@ -17,6 +17,8 @@
 #include <cerrno>
 #include <cstring>
 #include <cstdlib>
+#include <stdexcept>
+#include <utility>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/term/presenter.hpp"  // sanitize_osc_text
@@ -124,10 +126,15 @@ std::string make_session_restore_sequence(const Capabilities& caps, bool enable_
 // and our enabled mode 2031 (live color-preference notifications). Primary DA
 // advertises parameter 4 when Sixel graphics are available;
 // XTSMGRAPHICS requests the Sixel color-register and geometry limits; XTWINOPS
-// 16 reports the character-cell pixel size. InputDecoder turns changed replies
-// into CapabilityChangedEvent values.
+// 16 reports the character-cell pixel size, and 14 the text area's total
+// pixel size — the fallback cell-metric source for terminals (iTerm2) that
+// leave 16 unanswered. CSI ? u asks whether the kitty keyboard protocol
+// exists: only a terminal that answers may be switched to it, since one that
+// ignores the switch would keep sending legacy sequences that the kitty
+// decode path reads differently. InputDecoder turns changed replies into
+// CapabilityChangedEvent values.
 constexpr std::string_view kCapabilityProbeSequence =
-    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t";
+    "\x1B]10;?\x1B\\\x1B]11;?\x1B\\\x1B[?2026h\x1B[?2026$p\x1B[?2026l\x1B[?2031$p\x1B[c\x1B[?1;4;0S\x1B[?2;4;0S\x1B[?1016$p\x1B[16t\x1B[14t\x1B[?u";
 constexpr std::int64_t kCapabilityProbeTimeoutNanos = 250'000'000LL;
 
 struct SessionRecord {
@@ -341,6 +348,16 @@ int register_session(int output_fd, int input_fd, const struct termios& original
     return -1;
 }
 
+// Appends to a live session's restore ledger. The signal handler replays
+// that buffer verbatim, so this only grows it and never reorders what is
+// already recorded.
+void append_session_restore(int slot, std::string_view bytes) noexcept {
+    if (slot < 0 || slot >= kMaxSessions) return;
+    SessionRecord& record = g_sessions[slot];
+    if (record.restore_len + bytes.size() > kRestoreBufSize) return;
+    for (const char byte : bytes) record.restore_bytes[record.restore_len++] = byte;
+}
+
 void unregister_session(int slot) noexcept {
     if (slot < 0) return;
     g_sessions[slot].state.store(kFree, std::memory_order_release);
@@ -435,10 +452,15 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
     : clock_(clock),
       output_fd_(output_fd),
       input_fd_(input_fd),
+      observed_caps_(initial_caps),
       caps_(initial_caps),
       decoder_(initial_caps),
       last_size_(size()),
       capability_probes_enabled_(enable_capability_probes) {
+    // The decoder needs the current grid from the first byte on: it is what
+    // separates cell from pixel mouse coordinates and what an XTWINOPS 14
+    // reply is divided by. Kept current at every observed resize below.
+    decoder_.set_cell_grid(last_size_);
     // Establish the wake channel before touching the terminal.  A failed
     // construction must leave the caller's terminal entirely unchanged;
     // creating the pipe first makes that guarantee hold even when the OS
@@ -503,21 +525,24 @@ void PosixTerminal::begin_capability_probes() {
     // therefore discard any partially accumulated probe evidence from the
     // preceding one; otherwise a late DECRPM 1016 could be paired with a
     // future XTWINOPS reply and falsely enable pixel coordinates.
-    decoder_.begin_capability_probe_window(caps_);
+    decoder_.begin_capability_probe_window(observed_caps_);
+    // The deadline IS the window: it must exist before the suppression
+    // policy is derived from it, or the policy concludes no window is open
+    // and pixel-ambiguous reports sail through as fictitious cell clicks.
+    probe_deadline_nanos_ = clock_.now_nanos() + kCapabilityProbeTimeoutNanos;
     synchronize_sgr_mouse_input_policy();
     // Enable mode 1016 for this window before querying it. A prior failed
     // window resets the mode, so this must happen on every re-probe rather
     // than only at session construction.
-    if (caps_.mouse_protocol == MouseProtocol::SGR && !caps_.pixel_mouse)
+    if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse)
         write_all(output_fd_, "\x1B[?1016h");
     write_all(output_fd_, kCapabilityProbeSequence);
-    probe_deadline_nanos_ = clock_.now_nanos() + kCapabilityProbeTimeoutNanos;
 }
 
 void PosixTerminal::configure_decoder_capability_update_policy() noexcept {
     if (probe_deadline_nanos_ >= 0) {
         decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptProbeRefinements);
-    } else if (caps_.color_scheme_notifications) {
+    } else if (observed_caps_.color_scheme_notifications) {
         decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptLiveColorSchemeNotifications);
     } else {
         decoder_.set_capability_update_policy(CapabilityUpdatePolicy::Reject);
@@ -528,20 +553,55 @@ void PosixTerminal::synchronize_sgr_mouse_input_policy() noexcept {
     // While mode 1016 is in use but its metric has not been proved, a report's
     // numbers have no unambiguous interpretation. Consume rather than
     // delivering a potentially dangerous click at the wrong cell.
-    decoder_.set_sgr_mouse_input_suppressed(capability_probes_enabled_ &&
-                                            caps_.mouse_protocol == MouseProtocol::SGR &&
-                                            !caps_.pixel_mouse);
+    // Only while a probe window is actually OPEN. Gating on the
+    // probes-enabled setting instead would make the suppression permanent
+    // on every terminal that never proves mode 1016: the window closes,
+    // finish_capability_probes() lifts the suppression, and the next
+    // resize-triggered re-detection puts it straight back — leaving the
+    // application with no mouse at all rather than with cell-accurate
+    // mouse, which is the whole point of falling back.
+    // ...and only while that window has not yet elapsed. A terminal that
+    // simply never answers the probe must still end up with a working
+    // mouse: muting input until a reply that never comes is worse than
+    // reading a report as cell coordinates, which is what the fence
+    // restores the terminal to anyway.
+    const bool probe_window_open =
+        probe_deadline_nanos_ >= 0 && clock_.now_nanos() < probe_deadline_nanos_;
+    decoder_.set_sgr_mouse_input_suppressed(probe_window_open &&
+                                            observed_caps_.mouse_protocol == MouseProtocol::SGR &&
+                                            !observed_caps_.pixel_mouse);
 }
 
 void PosixTerminal::finish_capability_probes() {
     probe_deadline_nanos_ = -1;
-    decoder_.set_capabilities(caps_);
+    decoder_.set_capabilities(observed_caps_);
     // If mode 1016 did not become a usable capability, return the terminal to
     // ordinary SGR cell coordinates before accepting subsequent mouse input.
     // Keeping the mode enabled would make a late pixel report look like a
     // large cell coordinate after the probe fence closes.
-    if (caps_.mouse_protocol == MouseProtocol::SGR && !caps_.pixel_mouse)
+    if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
         write_all(output_fd_, "\x1B[?1016l");
+        // Re-assert tracking immediately afterwards. Disabling one mouse
+        // mode is not supposed to disturb the others, but terminals differ
+        // and a host that stops reporting entirely leaves the application
+        // with no mouse at all — an invisible, total failure. Re-enabling
+        // costs two short sequences once per probe window and makes the
+        // outcome independent of how the terminal interpreted the reset.
+        write_all(output_fd_, "\x1B[?1002h\x1B[?1006h");
+    }
+    // Adopting the kitty keyboard protocol waits until its own reply proved
+    // it exists. It reports modifiers explicitly — which is what makes a
+    // macOS Option chord arrive as Alt instead of as a composed character —
+    // and reports key releases, which is what lets a button stay down while
+    // its key is held.
+    if (observed_caps_.keyboard_protocol == KeyboardProtocol::Kitty &&
+        caps_.keyboard_protocol != KeyboardProtocol::Kitty) {
+        write_all(output_fd_, "\x1B[>3u");
+        // The matching pop belongs in the ledger the signal handler replays;
+        // pushing without recording it would strand a terminal in the
+        // protocol after a crash.
+        append_session_restore(session_slot_, "\x1B[<u");
+    }
     configure_decoder_capability_update_policy();
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
@@ -550,10 +610,12 @@ void PosixTerminal::finish_capability_probes() {
 bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
     if (!capability_probes_enabled_) return false;
 
-    const bool has_pixel_evidence = caps_.cell_pixels.width != 0 || caps_.cell_pixels.height != 0 ||
-                                    caps_.pixel_mouse;
-    const bool has_graphics_evidence = caps_.sixel_graphics || caps_.sixel_color_registers != 0 ||
-                                       caps_.sixel_max_geometry.width != 0 || caps_.sixel_max_geometry.height != 0;
+    const bool has_pixel_evidence = observed_caps_.cell_pixels.width != 0 ||
+                                    observed_caps_.cell_pixels.height != 0 || observed_caps_.pixel_mouse;
+    const bool has_graphics_evidence = observed_caps_.sixel_graphics ||
+                                       observed_caps_.sixel_color_registers != 0 ||
+                                       observed_caps_.sixel_max_geometry.width != 0 ||
+                                       observed_caps_.sixel_max_geometry.height != 0;
     if (!has_pixel_evidence && !has_graphics_evidence) return false;
 
     // A resize can also mean a font or display-scale change. Retaining the
@@ -561,19 +623,71 @@ bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
     // XTWINOPS 16 answers. The new probe window must establish both the cell
     // metric and DECRPM 1016 again; set_capabilities resets the decoder's
     // separately remembered mode proof for exactly that reason.
-    caps_.cell_pixels = {};
-    caps_.pixel_mouse = false;
+    observed_caps_.cell_pixels = {};
+    observed_caps_.pixel_mouse = false;
     // XTSMGRAPHICS maximum geometry is the minimum of its graphics limit and
     // the terminal window (xterm control-sequences reference). Retaining a
     // runtime result across a resize could therefore emit an image larger
     // than the newly allowed geometry. Fall back to cells until a fresh
     // finite geometry reply re-establishes graphics for this window.
-    caps_.sixel_graphics = false;
-    caps_.sixel_color_registers = 0;
-    caps_.sixel_max_geometry = {};
-    decoder_.set_capabilities(caps_);
+    observed_caps_.sixel_graphics = false;
+    observed_caps_.sixel_color_registers = 0;
+    observed_caps_.sixel_max_geometry = {};
+    decoder_.set_capabilities(observed_caps_);
     if (has_graphics_evidence) decoder_.require_verified_sixel_geometry(true);
+    return update_effective_capabilities();
+}
+
+namespace {
+// The character cell implied by a window pixel size, when the division
+// yields something a terminal could plausibly be drawing with. Terminals
+// that leave ws_xpixel/ws_ypixel unset report zero; stale or nonsensical
+// values are rejected here rather than propagated into image geometry.
+std::optional<Size> cell_from_window_pixels(Size window_pixels, Size grid) noexcept {
+    if (window_pixels.width <= 0 || window_pixels.height <= 0) return std::nullopt;
+    if (grid.width <= 0 || grid.height <= 0) return std::nullopt;
+    const Size cell{window_pixels.width / grid.width, window_pixels.height / grid.height};
+    if (cell.width < 2 || cell.height < 4) return std::nullopt;
+    if (cell.width > 128 || cell.height > 256) return std::nullopt;
+    return cell;
+}
+}  // namespace
+
+Size PosixTerminal::window_pixel_size() const noexcept {
+    struct winsize ws{};
+    if (::ioctl(output_fd_, TIOCGWINSZ, &ws) != 0) return Size{};
+    return Size{ws.ws_xpixel, ws.ws_ypixel};
+}
+
+bool PosixTerminal::update_effective_capabilities() noexcept {
+    Capabilities observed = observed_caps_;
+    observed.window_pixels = window_pixel_size();
+    // The kernel's window pixel size, divided by the grid, is a cell metric
+    // the terminal published without being asked — no round trip, so it is
+    // available before the first frame rather than milliseconds into the
+    // session, and it is what an image is measured against on the terminals
+    // where the escape-sequence answers and the drawn result disagree.
+    // XTWINOPS still wins when the window size is unset or implausible.
+    if (const std::optional<Size> from_window =
+            cell_from_window_pixels(observed.window_pixels, last_size_))
+        observed.cell_pixels = *from_window;
+    const Capabilities effective = apply_capability_overrides(observed, overrides_);
+    if (effective == caps_) return false;
+    caps_ = effective;
     return true;
+}
+
+void PosixTerminal::set_capability_overrides(CapabilityOverrides overrides) {
+    if ((overrides.cell_pixels && (overrides.cell_pixels->width <= 0 || overrides.cell_pixels->height <= 0)) ||
+        (overrides.sixel_color_registers && *overrides.sixel_color_registers <= 0)) {
+        throw std::invalid_argument("terminal capability overrides require positive cell metrics and color caps");
+    }
+    if (overrides == overrides_) return;
+    overrides_ = std::move(overrides);
+    if (update_effective_capabilities()) {
+        capability_change_pending_ = true;
+        wake();
+    }
 }
 
 std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
@@ -583,6 +697,11 @@ std::vector<TerminalEvent> PosixTerminal::poll(std::int64_t deadline_nanos) {
 std::vector<TerminalEvent> PosixTerminal::poll(
     std::int64_t deadline_nanos, std::span<const WaitHandle> additional_wait_handles) {
     std::vector<TerminalEvent> events;
+    if (capability_change_pending_) {
+        capability_change_pending_ = false;
+        events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+        return events;
+    }
     if (session_slot_ >= 0 &&
         g_sessions[session_slot_].resumed.exchange(false, std::memory_order_acq_rel)) {
         invalidate_resize_dependent_capabilities();
@@ -596,6 +715,7 @@ std::vector<TerminalEvent> PosixTerminal::poll(
         const Size observed = size();
         if (observed != last_size_) {
             last_size_ = observed;
+            decoder_.set_cell_grid(last_size_);
             events.push_back(TerminalEvent{ResizeEvent{observed}});
         }
         events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
@@ -613,9 +733,10 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 // InputDecoder emits only backend-authorized capability
                 // changes, so this state update cannot retroactively make a
                 // stale reply influence later bytes from the same read.
-                caps_ = changed->capabilities;
+                observed_caps_ = changed->capabilities;
+                if (!update_effective_capabilities()) continue;
                 synchronize_sgr_mouse_input_policy();
-                events.push_back(std::move(ev));
+                events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
                 continue;
             }
             events.push_back(std::move(ev));
@@ -625,6 +746,7 @@ std::vector<TerminalEvent> PosixTerminal::poll(
         const Size observed = size();
         if (observed == last_size_) return;
         last_size_ = observed;
+        decoder_.set_cell_grid(last_size_);
         const bool invalidated = invalidate_resize_dependent_capabilities();
         begin_capability_probes();
         events.push_back(TerminalEvent{ResizeEvent{observed}});

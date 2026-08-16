@@ -23,6 +23,26 @@
 
 namespace ckv::widgets {
 
+// The cell assumed when a terminal draws images but never reports a cell
+// metric. Sizing a backing image from {0,0} yields no pixels at all, so the
+// picture would silently vanish where the terminal could in fact show it.
+inline constexpr Size kAssumedCellPixels{10, 20};
+
+// The cell box that shows an image of `image_pixels` at its true
+// proportions on a terminal whose character cell is `cell_pixels`, never
+// exceeding `max_cells` in either direction.
+//
+// Terminal cells are nothing like square, and how far from square varies
+// enormously between terminals — 1:2 is typical, but 1:5 occurs. So a box
+// chosen directly in cells silently assumes one cell shape, and distorts
+// the picture by exactly the ratio between that assumption and the cell
+// the reader actually has. Deriving the box from the metric is what keeps
+// a picture's proportions independent of the terminal it is shown on.
+//
+// A `cell_pixels` with a non-positive extent falls back to
+// kAssumedCellPixels, for the same reason Canvas does.
+Size fit_image_cells(Size image_pixels, Size cell_pixels, Size max_cells) noexcept;
+
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.canvas.fallback".
 class Canvas : public ui::View {
@@ -64,6 +84,10 @@ private:
 
     std::shared_ptr<Image> image_;
     Size cell_pixels_{0, 0};
+    // True while this canvas is drawing at an assumed cell because the
+    // terminal had not measured one yet; cleared once a real metric lands.
+    bool awaiting_measured_metrics_ = false;
+    void adopt_measured_cell_metrics();
     bool derive_pixel_size_from_metrics_ = false;
     bool content_dirty_ = true;
     std::function<void(Image&)> draw_callback_;

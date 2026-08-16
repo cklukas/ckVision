@@ -79,6 +79,31 @@ struct MenuItem {
 // WP-7, D-028): "ckv.menu.dropdown.normal"/"highlighted"/"disabled".
 // Also reads context().app for command enablement — see the file
 // comment on why menus are one of the few widgets that need it.
+// How a dropdown came to be open, which decides whether it already has a
+// selection. A menu opened from the keyboard must land on an item at once —
+// there is no pointer to indicate one, and the next arrow key has to move
+// from somewhere. A menu opened by a pointer press has an indicator: the
+// pointer itself. It therefore opens with nothing selected and follows the
+// pointer, settling on its first item only when the press ends without
+// having chosen anything. Highlighting an item the reader has not pointed
+// at would claim a choice they have not made.
+enum class MenuOpenReason {
+    Keyboard,
+    PointerPress,
+};
+
+// Why a menu is going away. Choosing an item ends the whole menu
+// interaction, not merely the popup: the reader asked for a command and is
+// done with the menu. Cancelling leaves the menu system to decide how far
+// to unwind. The distinction matters beyond appearances — whatever the
+// command then does (open a dialog, say) sees the focus the menu left
+// behind, so a bar that stays focused hands the command a focus target the
+// reader never chose, and it comes back highlighted once the dialog closes.
+enum class MenuDismissReason {
+    Cancelled,
+    ItemChosen,
+};
+
 class DropdownMenu : public ui::View {
 public:
     explicit DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu = nullptr);
@@ -93,7 +118,9 @@ public:
     void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
 
     // Fires on Esc, on a click outside the dropdown's own bounds (light
-    // dismiss), after a successful item activation, AND unconditionally
+    // dismiss), after a successful item activation (carrying
+    // MenuDismissReason::ItemChosen — and BEFORE the command runs, so the
+    // handler can settle focus first), AND unconditionally
     // from the destructor — so an owner (MenuBar) always learns the
     // popup is going away regardless of WHO removed it (itself, or a
     // caller bypassing it via Desktop::remove_popup directly), and can
@@ -102,10 +129,21 @@ public:
     // from an explicit dismiss() and again from the destructor it
     // triggers); handlers must be idempotent — MenuBar::close_dropdown()
     // already is.
-    std::function<void()> on_dismiss;
+    std::function<void(MenuDismissReason)> on_dismiss;
+
+    // Fires whenever the highlighted item changes, carrying that item's
+    // command (kInvalidCommand for a separator, a submenu parent, or an
+    // item with no command). Browsing a menu is how a reader asks what a
+    // command does before committing to it, so a status line that
+    // explains the highlighted entry needs to hear about the move; the
+    // menu reports it rather than assuming what any particular surface
+    // wants to do with it.
+    std::function<void(ui::CommandId)> on_highlight_changed;
 
     const std::vector<MenuItem>& items() const noexcept { return items_; }
     int highlighted() const noexcept { return highlighted_; }
+    // The command behind the highlighted item, or kInvalidCommand.
+    ui::CommandId highlighted_command() const noexcept;
 
     // Preferred size: width fits the longest item label plus its chord
     // hint column (+ padding), height is exactly one row per item
@@ -121,6 +159,10 @@ public:
 
 private:
     friend class MenuBar;
+    // Single assignment point for the highlight, so every route that
+    // moves it — construction, arrows, the pointer — reports the move
+    // exactly once and none can forget to.
+    void set_highlighted(int index);
     // Source text for an item's mnemonic/label parsing (M9/WP-11): the
     // registered command's title when `item.command` is set — so a
     // menu item referencing a command stops carrying its own label
@@ -136,11 +178,18 @@ private:
     bool item_enabled(std::size_t index) const;
     int step_selection(int from, int direction) const;  // -1 if no selectable item exists at all
     void activate(int index);
-    void dismiss();
+    void dismiss(MenuDismissReason reason = MenuDismissReason::Cancelled);
     void open_submenu(int index);
     void close_submenu(bool restore_capture);
-    void dismiss_chain();
+    void dismiss_chain(MenuDismissReason reason = MenuDismissReason::Cancelled);
     void begin_pointer_press() noexcept { pointer_pressed_ = true; }
+    // The press that opened this menu has ended. If it ended without the
+    // pointer ever settling on an item, the menu now takes a selection so
+    // the keyboard can carry on from a definite place.
+    void end_pointer_press();
+    // Set before attaching. PointerPress defers the initial selection; see
+    // MenuOpenReason.
+    void set_open_reason(MenuOpenReason reason) noexcept { open_reason_ = reason; }
     void set_pointer_navigation(std::function<bool(const MouseEvent&)> navigation) {
         pointer_navigation_ = std::move(navigation);
     }
@@ -157,6 +206,7 @@ private:
     DropdownMenu* child_menu_ = nullptr;
     bool dismissing_ = false;
     bool pointer_pressed_ = false;
+    MenuOpenReason open_reason_ = MenuOpenReason::Keyboard;
     std::function<bool(const MouseEvent&)> pointer_navigation_;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId highlighted_role_ = ui::kInvalidRole;
@@ -210,6 +260,12 @@ public:
     void set_menus(std::vector<MenuBarItem> menus);
     const std::vector<MenuBarItem>& menus() const noexcept { return menus_; }
 
+    // The command under the highlight in whatever dropdown this bar has
+    // open, and kInvalidCommand once it closes. Wired once, it reports
+    // every move for as long as the bar lives — see
+    // DropdownMenu::on_highlight_changed for what a listener does with it.
+    std::function<void(ui::CommandId)> on_highlight_changed;
+
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
 
@@ -220,7 +276,8 @@ public:
     void on_attached() override;
 
 private:
-    void open_dropdown(std::size_t menu_index);
+    void open_dropdown(std::size_t menu_index,
+                        MenuOpenReason reason = MenuOpenReason::Keyboard);
     void close_dropdown();
     bool navigate_pointer(const MouseEvent& event);
 
@@ -240,6 +297,12 @@ private:
     // found kMenu already claimed by something else must not touch it
     // on the way out.
     bool installed_default_menu_handler_ = false;
+    // Alt+<mnemonic> accelerators this bar currently owns, so they can be
+    // withdrawn when the menus change or the bar goes away — a stale
+    // accelerator would open a menu that no longer exists.
+    std::vector<ui::CommandId> menu_accelerators_;
+    void install_menu_accelerators();
+    void remove_menu_accelerators();
 };
 
 // Opens `items` as a positional pop-up context menu at `screen_position`

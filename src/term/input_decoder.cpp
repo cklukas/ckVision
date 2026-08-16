@@ -256,8 +256,18 @@ bool InputDecoder::accepts_capability_update(const Capabilities& candidate) cons
     switch (capability_update_policy_) {
         case CapabilityUpdatePolicy::AcceptProbeRefinements:
             return true;
-        case CapabilityUpdatePolicy::Reject:
-            return false;
+        case CapabilityUpdatePolicy::Reject: {
+            // A cell metric is a measurement, not a negotiated capability:
+            // it cannot be spoofed into enabling anything, and a terminal
+            // that answers XTWINOPS after the probe window still answers
+            // truthfully. Refusing it strands pixel-coordinate mouse input
+            // with nothing to divide by. Accept a candidate that differs
+            // only in geometry; reject everything else as before.
+            Capabilities geometry_only = candidate;
+            geometry_only.cell_pixels = caps_.cell_pixels;
+            geometry_only.text_area_pixels = caps_.text_area_pixels;
+            return geometry_only == caps_;
+        }
         case CapabilityUpdatePolicy::AcceptLiveColorSchemeNotifications: {
             if (!caps_.color_scheme_notifications || !candidate.color_scheme_notifications ||
                 candidate.color_scheme == caps_.color_scheme)
@@ -489,8 +499,13 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
                 // do not silently reinterpret it as a press.
                 return {Status::Complete, consumed, std::nullopt, std::nullopt};
             }
+            // Only a key that carried an explicit event type will report a
+            // release; the same session leaves other keys on their legacy
+            // encoding, which never does.
             return {Status::Complete, consumed,
-                    TerminalEvent{KeyEvent{key_from_codepoint(params[0], mod), action}}, std::nullopt};
+                    TerminalEvent{KeyEvent{key_from_codepoint(params[0], mod), action,
+                                           has_subparameter}},
+                    std::nullopt};
         }
         return {Status::Complete, consumed, std::nullopt, std::nullopt};
     }
@@ -521,22 +536,37 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
 
     if (caps_.mouse_protocol == MouseProtocol::SGR && private_marker && marker == '<' && params.size() == 3 &&
         (final_byte == 'M' || final_byte == 'm')) {
+        ++mouse_reports_seen_;
+        const bool is_press = (final_byte == 'M');
+        const int cb = params[0];
+        const int cx = params[1];
+        const int cy = params[2];
+        // A 1-based cell coordinate can never exceed the grid the terminal
+        // itself renders, so a report beyond it is pixel data no matter
+        // what DECRPM claimed: iTerm2 answers mode 1016 as "permanently
+        // reset" and then engages it anyway. The reports are the authority
+        // on what the terminal is actually sending, and the evidence is
+        // recorded even when the report itself is consumed below.
+        const bool beyond_grid = cell_grid_.width > 0 && cell_grid_.height > 0 &&
+                                 (cx > cell_grid_.width || cy > cell_grid_.height);
+        if (beyond_grid) pixel_mouse_mode_enabled_ = true;
         // SGR-pixel mode changes the meaning of x/y before the backend can
         // safely expose it: mode 1016 is enabled while probing, but a
         // DECRPM reply alone does not provide the cell metric. Do not guess
         // that these are ordinary cell coordinates in that interval.
         if (sgr_mouse_input_suppressed_ && !caps_.pixel_mouse)
             return {Status::Complete, consumed, std::nullopt, std::nullopt};
-        const bool is_press = (final_byte == 'M');
-        const int cb = params[0];
-        const int cx = params[1];
-        const int cy = params[2];
         MouseEvent ev;
         const int button_bits = cb & 0x03;
         const bool is_wheel = (cb & 0x40) != 0;
         const bool is_motion = (cb & 0x20) != 0;
         if (is_wheel) {
-            ev.button = (button_bits == 0) ? MouseButton::WheelUp : MouseButton::WheelDown;
+            switch (button_bits) {
+                case 0: ev.button = MouseButton::WheelUp; break;
+                case 1: ev.button = MouseButton::WheelDown; break;
+                case 2: ev.button = MouseButton::WheelLeft; break;
+                default: ev.button = MouseButton::WheelRight; break;
+            }
             ev.action = MouseAction::Wheel;
         } else {
             switch (button_bits) {
@@ -561,16 +591,39 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // click there) if the expectation is ever violated: with no
         // known cell size, cx/cy are the best available cell-position
         // estimate, exactly like the non-pixel-mouse path.
-        if (caps_.pixel_mouse) {
+        if (caps_.pixel_mouse || beyond_grid) {
             ev.pixel = PixelPoint{cx - 1, cy - 1};
-            if (caps_.cell_pixels.width > 0 && caps_.cell_pixels.height > 0)
+            if (caps_.cell_pixels.width > 0 && caps_.cell_pixels.height > 0) {
                 ev.cell = Point{(cx - 1) / caps_.cell_pixels.width, (cy - 1) / caps_.cell_pixels.height};
-            else
+            } else if (caps_.text_area_pixels.width > 0 && caps_.text_area_pixels.height > 0 &&
+                       cell_grid_.width > 0 && cell_grid_.height > 0) {
+                // No direct metric, but the text area and the grid give one.
+                const int cw = std::max(1, caps_.text_area_pixels.width / cell_grid_.width);
+                const int ch = std::max(1, caps_.text_area_pixels.height / cell_grid_.height);
+                ev.cell = Point{(cx - 1) / cw, (cy - 1) / ch};
+            } else if (caps_.pixel_mouse) {
                 ev.cell = Point{cx - 1, cy - 1};
+            } else {
+                // Pixel evidence and nothing to map it with: a fabricated
+                // cell would land the click on an arbitrary control.
+                return {Status::Complete, consumed, std::nullopt, std::nullopt};
+            }
         } else {
             ev.cell = Point{cx - 1, cy - 1};
         }
         return {Status::Complete, consumed, TerminalEvent{ev}, std::nullopt};
+    }
+
+    if (private_marker && marker == '?' && final_byte == 'u') {
+        // The kitty keyboard protocol answers CSI ? <flags> u to CSI ? u.
+        // Any answer at all is the evidence that matters: a terminal without
+        // the protocol stays silent, and the flags only report what is
+        // currently enabled, not what is supported.
+        if (caps_.keyboard_protocol == KeyboardProtocol::Kitty)
+            return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        Capabilities updated = caps_;
+        updated.keyboard_protocol = KeyboardProtocol::Kitty;
+        return {Status::Complete, consumed, std::nullopt, updated};
     }
 
     if (private_marker && marker == '?' && final_byte == 'c') {
@@ -656,6 +709,28 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         Capabilities updated = caps_;
         updated.cell_pixels = Size{params[2], params[1]};
         updated.pixel_mouse = pixel_mouse_mode_enabled_;
+        return {Status::Complete, consumed, std::nullopt, updated};
+    }
+
+    if (!private_marker && final_byte == 't' && params.size() == 3 && params[0] == 4 &&
+        params[1] > 0 && params[2] > 0) {
+        // XTWINOPS 14 replies CSI 4 ; height ; width t with the text area's
+        // total pixel size. When XTWINOPS 16 went unanswered — iTerm2
+        // answers 14 but not 16 — the area divided by the cell grid IS the
+        // cell metric: the same numbers the terminal itself uses to place
+        // glyphs and images. A direct 16 reply keeps precedence in either
+        // arrival order: it overwrites, and this derivation defers.
+        Capabilities updated = caps_;
+        updated.text_area_pixels = Size{params[2], params[1]};
+        if ((updated.cell_pixels.width <= 0 || updated.cell_pixels.height <= 0) &&
+            cell_grid_.width > 0 && cell_grid_.height > 0) {
+            const int cell_width = params[2] / cell_grid_.width;
+            const int cell_height = params[1] / cell_grid_.height;
+            if (cell_width > 0 && cell_height > 0) {
+                updated.cell_pixels = Size{cell_width, cell_height};
+                updated.pixel_mouse = pixel_mouse_mode_enabled_;
+            }
+        }
         return {Status::Complete, consumed, std::nullopt, updated};
     }
 

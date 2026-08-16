@@ -26,6 +26,10 @@ struct StandardRoles {
     // role's foreground and attributes.
     RoleId hotkey;
     RoleId static_text;
+    // Read-only reference/document content hosted on a window surface.
+    // Kept separate from static_text so help can remain legible on blue
+    // document windows without changing ordinary dialog labels.
+    RoleId help_text;
     RoleId button_normal;
     RoleId button_focused;
     RoleId button_default;
@@ -74,8 +78,16 @@ struct StandardRoles {
     RoleId image_fallback;   // ImageView's no-graphics-capability text fallback
     RoleId canvas_fallback;  // Canvas's no-graphics-capability text fallback
     RoleId text_view_text;
+    RoleId flow_view_text;   // FlowView's wrapped text and raster fallback surface
     RoleId status_line_normal;
     RoleId status_line_disabled;
+    // A status item under the pointer. Distinct roles rather than an
+    // inversion of the normal ones: a status item is a button, and which
+    // colour a theme wants a pressed button to wear is the theme's call,
+    // not a transformation the widget can guess.
+    RoleId status_line_selected;
+    RoleId status_line_selected_hotkey;
+    RoleId status_line_selected_disabled;
     RoleId splitter_normal;   // widgets::Splitter's divider bar, unfocused
     RoleId splitter_focused;  // widgets::Splitter's divider bar while it holds keyboard focus
 
@@ -124,5 +136,10 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
 Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles);
 Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles);
 Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles);
+
+// Accessibility-grade high contrast: bright white text on black, with
+// black-on-white focused and selected surfaces. Unlike Mono, it does not
+// preserve a muted gray hierarchy that could reduce legibility.
+Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles& roles);
 
 }  // namespace ckv::ui

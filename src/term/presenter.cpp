@@ -354,8 +354,27 @@ bool Presenter::same_rasters(const std::vector<ActiveRaster>& lhs,
 
 bool Presenter::raster_coverage_contains(Point point, const std::vector<ActiveRaster>& rasters) const noexcept {
     for (const ActiveRaster& raster : rasters)
-        if (raster.slice.visible_rect.contains(point)) return true;
+        if (raster_footprint(raster.slice).contains(point)) return true;
     return false;
+}
+
+Rect Presenter::raster_footprint(const RasterSlice& slice) noexcept {
+    // The cells an image can put pixels on — which is not always the cells
+    // it was given. Its pixel size need not be a whole number of cells: the
+    // metric it was built from is the terminal's own report, and that report
+    // is rounded, sometimes wrong, and in either case says nothing about
+    // where the terminal will stop drawing. An image that ends part-way
+    // through the next row still colours that row.
+    //
+    // Which matters because a Sixel only ever paints. Nothing erases what it
+    // covered except a later repaint of those exact cells, so a cell inside
+    // the real footprint but outside the reservation keeps its pixels for
+    // good — and once the image moves on, they stay where the image used to
+    // be. Reaching one cell further costs a repaint of a cell that likely
+    // needed none; not reaching it leaves a smear that never goes away.
+    const Rect& visible = slice.visible_rect;
+    if (visible.empty()) return visible;
+    return Rect{visible.x, visible.y, visible.width + 1, visible.height + 1};
 }
 
 void Presenter::present(FrameView frame, CursorState cursor,

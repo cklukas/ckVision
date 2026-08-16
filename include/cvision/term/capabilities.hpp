@@ -5,6 +5,8 @@
 // overridable by applications. Every field has a defined degradation.
 #pragma once
 
+#include <optional>
+
 #include "cvision/core/geometry.hpp"
 
 namespace ckv::term {
@@ -54,7 +56,22 @@ struct Capabilities {
     KeyboardProtocol keyboard_protocol = KeyboardProtocol::Legacy;
     MouseProtocol mouse_protocol = MouseProtocol::SGR;
     bool pixel_mouse = false;        // SGR-Pixels (mode 1016): mouse events carry pixel coords
-    Size cell_pixels;                // reported cell pixel size (XTWINOPS); {0,0} = unknown
+    Size cell_pixels;                // reported cell pixel size (XTWINOPS 16); {0,0} = unknown
+    // The text area's total pixel size (XTWINOPS 14); {0,0} = unknown.
+    // Terminals exist (iTerm2) that answer 14 while leaving 16 unanswered;
+    // divided by the cell grid this is the fallback cell-metric source.
+    Size text_area_pixels;
+    // The window pixel size the kernel reports in TIOCGWINSZ's
+    // ws_xpixel/ws_ypixel; {0,0} = the terminal left them unset.
+    //
+    // Worth carrying alongside the escape-sequence answers because it is a
+    // genuinely independent source: it needs no round trip, so it is known
+    // before the first frame, and terminals have been observed to disagree
+    // with their own XTWINOPS replies — notably on scaled (HiDPI) displays,
+    // where one answer is in points and the other in device pixels. An
+    // image is emitted in the pixels the terminal actually draws with, so
+    // that disagreement is not academic: it scales the picture.
+    Size window_pixels;
     bool sixel_graphics = false;
     // Verified Sixel limits reported by XTSMGRAPHICS. A zero value means the
     // host has not reported a finite limit; it is not a promise of support.
@@ -83,6 +100,44 @@ struct Capabilities {
 
     friend bool operator==(const Capabilities&, const Capabilities&) = default;
 };
+
+// Application-selected capability policy layered over terminal probe evidence.
+// A missing field preserves the observed value; an explicit value remains in
+// force across later probe replies and resize re-probes. This keeps a client
+// preference (for example, temporarily disabling graphics) separate from the
+// terminal's own reported facts and makes removing the preference unambiguous.
+struct CapabilityOverrides {
+    // Forces graphics presentation on or off. Forcing it on is an explicit
+    // client policy and does not manufacture unobserved geometry limits.
+    std::optional<bool> sixel_graphics;
+    // A positive, client-calibrated terminal cell size. `{0, 0}` is rejected
+    // by the backend setter; use std::nullopt to return to probe evidence.
+    std::optional<Size> cell_pixels;
+    // Positive cap for Sixel color registers. A cap refines a reported limit
+    // when one exists, otherwise it supplies the client-selected limit.
+    std::optional<int> sixel_color_registers;
+
+    friend bool operator==(const CapabilityOverrides&, const CapabilityOverrides&) = default;
+};
+
+// Applies client policy without changing the observed capability record.
+// This pure function is shared by live and headless terminal backends so a
+// scripted test observes the same effective presentation contract as a real
+// terminal session.
+constexpr Capabilities apply_capability_overrides(Capabilities observed,
+                                                   const CapabilityOverrides& overrides) noexcept {
+    if (overrides.sixel_graphics) observed.sixel_graphics = *overrides.sixel_graphics;
+    if (overrides.cell_pixels) observed.cell_pixels = *overrides.cell_pixels;
+    if (overrides.sixel_color_registers) {
+        const int cap = *overrides.sixel_color_registers;
+        observed.sixel_color_registers = observed.sixel_color_registers > 0
+                                            ? (observed.sixel_color_registers < cap
+                                                   ? observed.sixel_color_registers
+                                                   : cap)
+                                            : cap;
+    }
+    return observed;
+}
 
 // The conservative baseline every session starts on, before any probe
 // response arrives — the first frame ships on this, never blocking for

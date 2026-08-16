@@ -12,12 +12,13 @@ using ckv::ui::make_classic_theme;
 using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 
-CK_TEST(intern_standard_roles_produces_fiftynine_distinct_role_ids) {
+CK_TEST(intern_standard_roles_produces_sixty_four_distinct_role_ids) {
     RoleRegistry reg;
     const StandardRoles r = intern_standard_roles(reg);
     const std::set<ckv::ui::RoleId> ids{
         r.desktop_background,   r.dialog_frame,            r.dialog_background,
         r.label_text,           r.label_mnemonic,          r.hotkey,              r.static_text,
+        r.help_text,
         r.button_normal,        r.button_focused,          r.button_default,
         r.button_shadow,        r.input_normal,            r.input_focused,
         r.input_invalid,         r.message_info_text,      r.message_warning_text,
@@ -30,16 +31,19 @@ CK_TEST(intern_standard_roles_produces_fiftynine_distinct_role_ids) {
         r.memo_normal,          r.memo_focused,            r.option_normal,
         r.option_focused,       r.scrollbar_track,         r.scrollbar_thumb,
         r.image_fallback,       r.canvas_fallback,         r.text_view_text,
-        r.status_line_normal,   r.status_line_disabled,    r.splitter_normal,
+        r.flow_view_text,
+        r.status_line_normal,   r.status_line_disabled,    r.status_line_selected,
+        r.status_line_selected_hotkey, r.status_line_selected_disabled,
+        r.splitter_normal,
         r.splitter_focused,     r.editor_text,             r.editor_gutter,
         r.editor_selection,     r.editor_search,           r.editor_syntax_plain,
         r.editor_syntax_keyword, r.editor_syntax_type,      r.editor_syntax_property,
         r.editor_syntax_string, r.editor_syntax_number,    r.editor_syntax_comment,
         r.editor_syntax_command, r.editor_syntax_operator, r.editor_syntax_escape,
         r.editor_syntax_error};
-    CK_CHECK(ids.size() == 59);
+    CK_CHECK(ids.size() == 64);
     for (auto id : ids) CK_CHECK(id != kInvalidRole);
-    CK_CHECK(reg.size() == 59);
+    CK_CHECK(reg.size() == 64);
 }
 
 CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_registry) {
@@ -48,7 +52,7 @@ CK_TEST(intern_standard_roles_is_idempotent_across_repeated_calls_on_the_same_re
     const StandardRoles second = intern_standard_roles(reg);
     CK_CHECK(first.dialog_frame == second.dialog_frame);
     CK_CHECK(first.button_default == second.button_default);
-    CK_CHECK(reg.size() == 59);  // no duplicates from the second call
+    CK_CHECK(reg.size() == 64);  // no duplicates from the second call
 }
 
 CK_TEST(standard_role_names_are_namespaced_under_ckv_prefix) {
@@ -74,6 +78,10 @@ CK_TEST(classic_theme_resolves_every_standard_role_to_a_non_default_style) {
     // being visually distinct), and input_invalid must differ from
     // input_normal (the dialog-accept veto's visual signal).
     CK_CHECK(!(theme.resolve(r.button_default) == theme.resolve(r.button_normal)));
+    // A persistent radio/check selection is not an immediate action: Classic
+    // keeps its cyan choice surface distinct from a green button face.
+    CK_CHECK(!(theme.resolve(r.option_normal) == theme.resolve(r.button_normal)));
+    CK_CHECK(!(theme.resolve(r.input_normal) == theme.resolve(r.dialog_background)));
     CK_CHECK(!(theme.resolve(r.input_invalid) == theme.resolve(r.input_normal)));
 }
 
@@ -158,6 +166,7 @@ CK_TEST(the_mono_theme_uses_only_black_white_or_gray_never_a_hued_color) {
     const std::vector<ckv::ui::RoleId> all{
         r.desktop_background,    r.dialog_frame,             r.dialog_background,
         r.label_text,            r.label_mnemonic,           r.hotkey,               r.static_text,
+        r.help_text,
         r.button_normal,         r.button_focused,           r.button_default,
         r.button_shadow,         r.input_normal,             r.input_focused,
         r.input_invalid,
@@ -194,4 +203,20 @@ CK_TEST(each_built_in_scheme_produces_a_different_style_for_the_same_role) {
     CK_CHECK(!(classic.resolve(r.dialog_background) == light.resolve(r.dialog_background)));
     CK_CHECK(!(dark.resolve(r.dialog_background) == light.resolve(r.dialog_background)));
     CK_CHECK(!(dark.resolve(r.dialog_background) == mono.resolve(r.dialog_background)));
+}
+
+CK_TEST(high_contrast_theme_uses_only_black_white_and_inverts_selected_surfaces) {
+    RoleRegistry reg;
+    const StandardRoles r = intern_standard_roles(reg);
+    const auto theme = ckv::ui::make_high_contrast_theme(reg, r);
+    for (const ckv::Style style : {theme.resolve(r.dialog_background), theme.resolve(r.menu_bar_normal),
+                                   theme.resolve(r.editor_text), theme.resolve(r.editor_syntax_error)}) {
+        for (const ckv::Color color : {style.fg, style.bg}) {
+            CK_CHECK((color.r() == 0 || color.r() == 255));
+            CK_CHECK(color.r() == color.g() && color.g() == color.b());
+        }
+    }
+    const ckv::Style selected{ckv::Color::rgb(0, 0, 0), ckv::Color::rgb(255, 255, 255), ckv::Attr{}};
+    CK_CHECK(theme.resolve(r.menu_dropdown_highlighted) == selected);
+    CK_CHECK(theme.resolve(r.list_selected) == theme.resolve(r.menu_dropdown_highlighted));
 }
