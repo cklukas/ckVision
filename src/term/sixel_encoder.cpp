@@ -59,6 +59,45 @@ std::uint32_t pack(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
     return (static_cast<std::uint32_t>(r) << 16) | (static_cast<std::uint32_t>(g) << 8) | b;
 }
 
+// Colour → palette index, in first-appearance order. A tree or a hash map
+// with allocation per colour is a per-pixel cost on an image with a million
+// of them; this is a fixed open-addressed table, sized well above the 256
+// registers Sixel can carry, so a lookup is an index and a comparison.
+//
+// First-appearance order is not an implementation detail to be improved on:
+// it is the order the registers are declared in and therefore part of the
+// bytes this encoder emits.
+class PaletteIndex {
+public:
+    static constexpr std::size_t kSlots = 1024;  // ≥ 4x the register ceiling
+
+    // The index for `key`, assigning the next one if this is its first sight.
+    // Returns -1 when the palette is full, which the callers treat as "this
+    // colour has to be quantized" rather than as a failure.
+    int intern(std::uint32_t key, int max_entries) noexcept {
+        std::size_t slot = (key * 0x9E3779B1U) % kSlots;
+        for (;;) {
+            if (slots_[slot].index < 0) {
+                if (size_ >= max_entries) return -1;
+                slots_[slot] = Slot{key, size_};
+                return size_++;
+            }
+            if (slots_[slot].key == key) return slots_[slot].index;
+            slot = (slot + 1) % kSlots;
+        }
+    }
+
+    int size() const noexcept { return size_; }
+
+private:
+    struct Slot {
+        std::uint32_t key = 0;
+        int index = -1;
+    };
+    std::array<Slot, kSlots> slots_{};
+    int size_ = 0;
+};
+
 }  // namespace
 
 std::string encode_sixel(const Image& image, int max_color_registers) {
@@ -71,51 +110,55 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
     // appear (alpha is ignored — Sixel has no alpha channel), else a
     // deterministic 6-level-per-channel cube (<= 216 registers,
     // content-independent so it never exceeds the register budget).
-    std::map<std::uint32_t, int> exact_probe;
+    PaletteIndex exact_probe;
     bool use_cube = false;
     for (int y = 0; y < h && !use_cube; ++y) {
         for (int x = 0; x < w; ++x) {
             const Image::Rgba p = image.pixel(x, y);
-            const std::uint32_t key = pack(p.r, p.g, p.b);
-            if (exact_probe.find(key) == exact_probe.end()) {
-                if (exact_probe.size() >= static_cast<std::size_t>(max_colors)) {
-                    use_cube = true;
-                    break;
-                }
-                exact_probe.emplace(key, static_cast<int>(exact_probe.size()));
+            if (exact_probe.intern(pack(p.r, p.g, p.b), max_colors) < 0) {
+                use_cube = true;
+                break;
             }
         }
     }
 
     const std::array<int, 3> dimensions = palette_dimensions(max_colors);
-    std::map<std::uint32_t, int> palette;
+    // Quantization is a per-channel function of a byte, so it is 256 answers
+    // and not a computation to repeat a million times.
+    std::array<std::uint8_t, 256> level_r{};
+    std::array<std::uint8_t, 256> level_g{};
+    std::array<std::uint8_t, 256> level_b{};
+    const bool cube_666 = dimensions == std::array<int, 3>{6, 6, 6};
+    for (int value = 0; value < 256; ++value) {
+        const auto byte = static_cast<std::uint8_t>(value);
+        level_r[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[0]);
+        level_g[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[1]);
+        level_b[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[2]);
+    }
+
+    PaletteIndex palette;
+    std::vector<std::array<std::uint8_t, 3>> palette_colors;
+    palette_colors.reserve(static_cast<std::size_t>(max_colors));
     std::vector<int> pixel_index(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             Image::Rgba p = image.pixel(x, y);
             if (use_cube) {
-                if (dimensions == std::array<int, 3>{6, 6, 6}) {
-                    p.r = quantize_level_6(p.r);
-                    p.g = quantize_level_6(p.g);
-                    p.b = quantize_level_6(p.b);
-                } else {
-                    p.r = quantize_level(p.r, dimensions[0]);
-                    p.g = quantize_level(p.g, dimensions[1]);
-                    p.b = quantize_level(p.b, dimensions[2]);
-                }
+                p.r = level_r[p.r];
+                p.g = level_g[p.g];
+                p.b = level_b[p.b];
             }
-            const std::uint32_t key = pack(p.r, p.g, p.b);
-            const auto [it, inserted] = palette.try_emplace(key, static_cast<int>(palette.size()));
+            const int index = palette.intern(pack(p.r, p.g, p.b), max_colors);
+            // Every colour reaching here is either one of at most max_colors
+            // exact ones or a cube cell, so the palette cannot overflow; the
+            // clamp is what makes that a fact rather than a belief.
+            const int entry = index < 0 ? 0 : index;
+            if (static_cast<std::size_t>(entry) == palette_colors.size())
+                palette_colors.push_back({p.r, p.g, p.b});
             pixel_index[static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
-                         static_cast<std::size_t>(x)] = it->second;
+                         static_cast<std::size_t>(x)] = entry;
         }
     }
-
-    std::vector<std::array<std::uint8_t, 3>> palette_colors(palette.size());
-    for (const auto& [key, idx] : palette)
-        palette_colors[static_cast<std::size_t>(idx)] = {
-            static_cast<std::uint8_t>((key >> 16) & 0xFF), static_cast<std::uint8_t>((key >> 8) & 0xFF),
-            static_cast<std::uint8_t>(key & 0xFF)};
 
     // Pa=0 (device pixel aspect), Pb=0 (opaque background), Ph=0.
     // Raster attributes pin the exact width/height so the final partial
@@ -137,35 +180,56 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
         out += std::to_string(percent(palette_colors[i][2]));
     }
 
+    // One band, one pass. The obvious loop — for every colour, look through
+    // the band for it — reads the band once per register, so a photograph
+    // costs 216 sweeps of the same pixels before a single byte is written,
+    // and the encode grows with the palette rather than with the picture.
+    // Instead each pixel is visited once and deposits its bit in its own
+    // colour's column mask; only the colours the band actually contains are
+    // then written out. The output is unchanged, register order and run
+    // lengths included — this is the same encoding, arrived at once.
+    const std::size_t palette_size = palette_colors.size();
+    std::vector<unsigned char> column_bits(palette_size * static_cast<std::size_t>(w), 0);
+    std::vector<bool> present(palette_size, false);
+    std::vector<int> present_order;
+    present_order.reserve(palette_size);
+    std::string run;
+    run.reserve(static_cast<std::size_t>(w));
+
     for (int band_y = 0; band_y < h; band_y += 6) {
         const int band_height = std::min(6, h - band_y);
-        bool first_color_in_band = true;
-        for (std::size_t color_idx = 0; color_idx < palette_colors.size(); ++color_idx) {
-            bool present = false;
-            for (int dy = 0; dy < band_height && !present; ++dy)
-                for (int x = 0; x < w; ++x)
-                    if (pixel_index[static_cast<std::size_t>(band_y + dy) * static_cast<std::size_t>(w) +
-                                     static_cast<std::size_t>(x)] == static_cast<int>(color_idx)) {
-                        present = true;
-                        break;
-                    }
-            if (!present) continue;
+        present_order.clear();
+        for (int dy = 0; dy < band_height; ++dy) {
+            const std::size_t row = static_cast<std::size_t>(band_y + dy) * static_cast<std::size_t>(w);
+            const auto bit = static_cast<unsigned char>(1u << dy);
+            for (int x = 0; x < w; ++x) {
+                const auto color = static_cast<std::size_t>(pixel_index[row + static_cast<std::size_t>(x)]);
+                if (!present[color]) {
+                    present[color] = true;
+                    present_order.push_back(static_cast<int>(color));
+                }
+                column_bits[color * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)] |= bit;
+            }
+        }
+        // Ascending register order, which is the order the previous reading
+        // of this band produced and therefore the order the bytes are in.
+        std::sort(present_order.begin(), present_order.end());
 
+        bool first_color_in_band = true;
+        for (const int color_idx : present_order) {
             if (!first_color_in_band) out += '$';
             first_color_in_band = false;
             out += '#';
             out += std::to_string(color_idx);
 
-            std::string run;
-            run.reserve(static_cast<std::size_t>(w));
+            unsigned char* const bits = &column_bits[static_cast<std::size_t>(color_idx) * static_cast<std::size_t>(w)];
+            run.assign(static_cast<std::size_t>(w), '\0');
             for (int x = 0; x < w; ++x) {
-                unsigned char bits = 0;
-                for (int dy = 0; dy < band_height; ++dy)
-                    if (pixel_index[static_cast<std::size_t>(band_y + dy) * static_cast<std::size_t>(w) +
-                                     static_cast<std::size_t>(x)] == static_cast<int>(color_idx))
-                        bits |= static_cast<unsigned char>(1u << dy);
-                run += static_cast<char>(63 + bits);
+                run[static_cast<std::size_t>(x)] = static_cast<char>(63 + bits[x]);
+                bits[x] = 0;  // cleared as it is read, so the next band starts empty
             }
+            present[static_cast<std::size_t>(color_idx)] = false;
+
             std::size_t i = 0;
             while (i < run.size()) {
                 std::size_t j = i;
