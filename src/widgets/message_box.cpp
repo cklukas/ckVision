@@ -9,6 +9,7 @@
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/canvas.hpp"
+#include "cvision/widgets/image_view.hpp"
 #include "cvision/widgets/static_text.hpp"
 
 namespace ckv::widgets {
@@ -127,22 +128,17 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
     auto column = std::make_unique<MessageBoxContent>(descriptor.minimum_content_width);
     column->set_spacing(1);
     if (descriptor.graphic != nullptr && !descriptor.graphic->empty() &&
-        descriptor.graphic_cells.width > 0 && descriptor.graphic_cells.height > 0) {
-        auto graphic = std::make_unique<Canvas>();
-        graphic->set_preferred_size(descriptor.graphic_cells);
-        graphic->set_cell_metrics(app.terminal_cell_pixels());
-        const std::shared_ptr<const Image> source = descriptor.graphic;
-        graphic->set_draw_callback([source](Image& image) {
-            for (int y = 0; y < image.height(); ++y) {
-                for (int x = 0; x < image.width(); ++x) {
-                    const int source_x = x * source->width() / image.width();
-                    const int source_y = y * source->height() / image.height();
-                    image.set_pixel(x, y, source->pixel(source_x, source_y));
-                }
-            }
-        });
-        column->add_item(std::move(graphic), LayoutSpec{SizePolicy::Fixed, descriptor.graphic_cells.height,
-                                                        descriptor.graphic_alignment});
+        descriptor.graphic_max_cells.width > 0 && descriptor.graphic_max_cells.height > 0) {
+        // Fit here rather than reserving the ceiling: the rows the artwork
+        // does not need would otherwise become a blank band above the text.
+        const Size box = fit_image_cells(
+            Size{descriptor.graphic->width(), descriptor.graphic->height()},
+            app.terminal_cell_pixels(), descriptor.graphic_max_cells);
+        auto graphic = std::make_unique<ImageView>();
+        graphic->set_preferred_size(box);
+        graphic->set_image(descriptor.graphic);
+        column->add_item(std::move(graphic),
+                         LayoutSpec{SizePolicy::Fixed, box.height, descriptor.graphic_alignment});
     }
     auto message = std::make_unique<StaticText>(descriptor.message);
     message->set_role_override(message_role(descriptor.kind, roles));

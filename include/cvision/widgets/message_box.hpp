@@ -40,10 +40,15 @@ struct MessageBoxDescriptor {
     std::string message;
     MessageBoxButtons buttons = MessageBoxButtons::Ok;
     // Optional raster content for presentations such as About. The caller
-    // owns the immutable pixels; this factory scales them through Canvas and
-    // therefore retains Canvas' normal raster and textual fallback behavior.
+    // owns the immutable pixels; the box shows them through an ImageView and
+    // therefore keeps its raster and textual fallback behaviour.
     std::shared_ptr<const Image> graphic;
-    Size graphic_cells{};
+    // The most room the artwork may take, in cells. A maximum rather than a
+    // size: how many cells a picture needs to look like itself depends on
+    // the terminal's cell, which the caller would have to ask for and divide
+    // by to work out. Stating the ceiling and letting the box fit within it
+    // keeps that arithmetic in one place.
+    Size graphic_max_cells{};
     // A lower bound for the content area. This lets an information-rich
     // presentation retain deliberate whitespace around compact content
     // without encoding that whitespace into its message text or artwork.
