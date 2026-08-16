@@ -307,7 +307,10 @@ private:
     friend class Desktop;
 
     enum class KeyboardMode { None, Move, Resize };
-    enum class DragKind { None, Move, ResizeRight, ResizeLeft };
+    enum class DragKind { None, Move, Resize };
+    // Which corner a resize is anchored opposite to. Every corner resizes;
+    // only one of them says so while the window sits idle.
+    enum class Corner { TopLeft, TopRight, BottomLeft, BottomRight };
     // close() callbacks may detach and destroy their Window. The close state
     // therefore has independent lifetime; close() retains it on its stack
     // until its final reset is complete.
@@ -319,8 +322,15 @@ private:
     void relayout_frame_overlays() noexcept;
     bool point_in_close_control(Point local) const noexcept;
     bool point_in_zoom_control(Point local) const noexcept;
-    bool point_in_resize_right_grip(Point local) const noexcept;
-    bool point_in_resize_left_grip(Point local) const noexcept;
+    // The corner `local` grabs, if any. All four answer, whatever is drawn:
+    // the classic desktop marks one corner and resizes from any of them, and
+    // a reader who tries a corner should find it works.
+    std::optional<Corner> resize_corner_at(Point local) const noexcept;
+    // Where a grip is currently drawn. Idle, that is the bottom right alone,
+    // which is the mark the convention uses. During a resize it is all four:
+    // the moment the reader is resizing is the moment the other three are
+    // worth showing, and showing them only then keeps the idle frame quiet.
+    bool corner_shows_grip(Corner corner) const noexcept;
     // How many cells of the bottom border each corner grip occupies, and so
     // how large a target the pointer has to hit. One cell is a small thing
     // to aim at; drawing and hit-testing both read this, which is what keeps
@@ -371,6 +381,7 @@ private:
     Rect keyboard_mode_start_bounds_;
 
     DragKind drag_kind_ = DragKind::None;
+    Corner resize_corner_ = Corner::BottomRight;
     Point drag_start_mouse_;
     Rect drag_start_bounds_;
 

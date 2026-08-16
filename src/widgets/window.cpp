@@ -2,6 +2,7 @@
 #include "cvision/widgets/window.hpp"
 
 #include <algorithm>
+#include <string_view>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
@@ -382,15 +383,24 @@ int Window::resize_grip_width() const noexcept {
     return bounds().width >= 2 * kWide + 1 ? kWide : 1;
 }
 
-bool Window::point_in_resize_right_grip(Point local) const noexcept {
+std::optional<Window::Corner> Window::resize_corner_at(Point local) const noexcept {
     const int grip = resize_grip_width();
-    return grip > 0 && local.y == bounds().height - 1 && local.x >= bounds().width - grip &&
-           local.x < bounds().width;
+    if (grip <= 0) return std::nullopt;
+    const Rect b = bounds();
+    const bool left = local.x >= 0 && local.x < grip;
+    const bool right = local.x >= b.width - grip && local.x < b.width;
+    const bool top = local.y == 0;
+    const bool bottom = local.y == b.height - 1;
+    if (top && left) return Corner::TopLeft;
+    if (top && right) return Corner::TopRight;
+    if (bottom && left) return Corner::BottomLeft;
+    if (bottom && right) return Corner::BottomRight;
+    return std::nullopt;
 }
 
-bool Window::point_in_resize_left_grip(Point local) const noexcept {
-    const int grip = resize_grip_width();
-    return grip > 0 && local.y == bounds().height - 1 && local.x >= 0 && local.x < grip;
+bool Window::corner_shows_grip(Corner corner) const noexcept {
+    if (drag_kind_ == DragKind::Resize) return true;
+    return corner == Corner::BottomRight;
 }
 
 void Window::draw(scene::Painter& painter) {
@@ -440,19 +450,27 @@ void Window::draw(scene::Painter& painter) {
         // eye looks for the handle, but one cell is a hard thing to hit, and
         // the neighbouring border cells cost nothing to give away — they are
         // frame, not content.
-        // Drawn in the control colour, not the frame's: a grip is something
-        // to take hold of, the same kind of thing as the close and zoom
-        // controls, and the convention colours all three alike. Rendering it
-        // as frame makes the one part of the border you can grab look like
-        // the parts you cannot.
+        // Grips are drawn in the control colour, not the frame's: one is
+        // something to take hold of, the same kind of thing as the close and
+        // zoom controls, and the convention colours all three alike.
+        //
+        // Idle, only the bottom right is marked -- that is the mark the
+        // classic desktop uses, and four of them on a quiet window is three
+        // more than it needs. All four resize regardless; the other three
+        // appear for as long as a resize is under way, which is exactly when
+        // knowing they are there is of any use.
         const int grip = resize_grip_width();
-        const int y = b.height - 1;
-        painter.draw_text(Point{0, y}, "└", control_style);
-        painter.draw_text(Point{b.width - 1, y}, "┘", control_style);
-        for (int i = 1; i < grip; ++i) {
-            painter.draw_text(Point{i, y}, "─", control_style);
-            painter.draw_text(Point{b.width - 1 - i, y}, "─", control_style);
-        }
+        const int bottom = b.height - 1;
+        const auto mark = [&](Corner corner, Point at, std::string_view elbow, int inward) {
+            if (!corner_shows_grip(corner)) return;
+            painter.draw_text(at, std::string(elbow), control_style);
+            for (int i = 1; i < grip; ++i)
+                painter.draw_text(Point{at.x + inward * i, at.y}, "─", control_style);
+        };
+        mark(Corner::TopLeft, Point{0, 0}, "┌", 1);
+        mark(Corner::TopRight, Point{b.width - 1, 0}, "┐", -1);
+        mark(Corner::BottomLeft, Point{0, bottom}, "└", 1);
+        mark(Corner::BottomRight, Point{b.width - 1, bottom}, "┘", -1);
     }
     if (b.width > 6) {
         // U+25A0 BLACK SQUARE for close, matching the convention's
@@ -567,16 +585,14 @@ bool Window::on_mouse(const MouseEvent& event) {
             toggle_zoom(zoom_target());
             return true;
         }
-        if (point_in_resize_right_grip(local)) {
-            drag_kind_ = DragKind::ResizeRight;
+        // Before the title-bar move: the top corners sit on that row, and a
+        // reader who aimed at a corner meant the corner.
+        if (const std::optional<Corner> corner = resize_corner_at(local)) {
+            drag_kind_ = DragKind::Resize;
+            resize_corner_ = *corner;
             drag_start_mouse_ = event.cell;
             drag_start_bounds_ = bounds();
-            return true;
-        }
-        if (point_in_resize_left_grip(local)) {
-            drag_kind_ = DragKind::ResizeLeft;
-            drag_start_mouse_ = event.cell;
-            drag_start_bounds_ = bounds();
+            invalidate();  // the other three corners now show their grips
             return true;
         }
         if (movable_ && local.y == 0) {
@@ -596,22 +612,30 @@ bool Window::on_mouse(const MouseEvent& event) {
         if (drag_kind_ == DragKind::Move) {
             set_bounds(Rect{drag_start_bounds_.x + dx, drag_start_bounds_.y + dy, drag_start_bounds_.width,
                              drag_start_bounds_.height});
-        } else if (drag_kind_ == DragKind::ResizeLeft) {
-            const Rect resized = clamp_size(Rect{drag_start_bounds_.x + dx, drag_start_bounds_.y,
-                                                  drag_start_bounds_.width - dx,
-                                                  drag_start_bounds_.height + dy});
-            // Keep the opposite edge anchored if min/max size clamping limits
-            // how far the left edge can travel.
-            set_bounds(Rect{drag_start_bounds_.x + drag_start_bounds_.width - resized.width,
-                             resized.y, resized.width, resized.height});
-        } else {
-            set_bounds(clamp_size(Rect{drag_start_bounds_.x, drag_start_bounds_.y, drag_start_bounds_.width + dx,
-                                        drag_start_bounds_.height + dy}));
+            return true;
         }
+        // One rule for all four corners: the grabbed corner follows the
+        // pointer and the opposite one does not move. Which edges travel is
+        // the only thing that differs between them.
+        const bool moves_left =
+            resize_corner_ == Corner::TopLeft || resize_corner_ == Corner::BottomLeft;
+        const bool moves_top = resize_corner_ == Corner::TopLeft || resize_corner_ == Corner::TopRight;
+        const Rect resized = clamp_size(Rect{drag_start_bounds_.x, drag_start_bounds_.y,
+                                              drag_start_bounds_.width + (moves_left ? -dx : dx),
+                                              drag_start_bounds_.height + (moves_top ? -dy : dy)});
+        // Re-anchor after clamping, or a window that has hit its minimum
+        // keeps walking across the desktop while the pointer pushes into it.
+        set_bounds(Rect{moves_left ? drag_start_bounds_.x + drag_start_bounds_.width - resized.width
+                                   : drag_start_bounds_.x,
+                        moves_top ? drag_start_bounds_.y + drag_start_bounds_.height - resized.height
+                                  : drag_start_bounds_.y,
+                        resized.width, resized.height});
         return true;
     }
     if (event.action == MouseAction::Up) {
+        const bool was_resizing = drag_kind_ == DragKind::Resize;
         drag_kind_ = DragKind::None;
+        if (was_resizing) invalidate();  // the three temporary grips go away
         return true;
     }
     return false;

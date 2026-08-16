@@ -593,7 +593,9 @@ CK_TEST(an_active_window_draws_with_double_line_box_glyphs) {
     w->draw(painter);
     CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");
     CK_CHECK(s.at(Point{19, 0}).grapheme() == "╗");
-    CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
+    // Three corners are plain double-line frame; the bottom right carries
+    // the resize mark, which is single-line by convention.
+    CK_CHECK(s.at(Point{0, 4}).grapheme() == "╚");
     CK_CHECK(s.at(Point{19, 4}).grapheme() == "┘");
     CK_CHECK(s.at(Point{10, 4}).grapheme() == "═");
     CK_CHECK(s.at(Point{0, 2}).grapheme() == "║");
@@ -1069,10 +1071,11 @@ CK_TEST(a_resize_grip_reaches_along_the_border_and_the_whole_reach_resizes) {
 
     // The corner is still the corner; the cell beside it now belongs to the
     // grip too, drawn as border so it costs no content space.
-    CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
-    CK_CHECK(s.at(Point{1, 4}).grapheme() == "─");
+    // Idle, the bottom right alone is marked -- the mark the classic desktop
+    // uses -- and the cell beside it belongs to the grip too.
     CK_CHECK(s.at(Point{19, 4}).grapheme() == "┘");
     CK_CHECK(s.at(Point{18, 4}).grapheme() == "─");
+    CK_CHECK(s.at(Point{0, 4}).grapheme() == "╚");  // quiet until a resize starts
 
     // ...and the widened cells resize, exactly as the corners do. An
     // affordance the pointer can see but not use is worse than none.
@@ -1105,10 +1108,10 @@ CK_TEST(a_window_too_narrow_for_two_wide_grips_keeps_them_a_cell_each) {
     w->set_resizable(true);
     Painter painter(s, Rect{0, 0, 8, 5});
     w->draw(painter);
-    // Two two-cell grips would meet and read as one continuous edge.
-    CK_CHECK(s.at(Point{0, 4}).grapheme() == "└");
+    // Two two-cell grips would meet and read as one continuous edge, so a
+    // narrow window keeps them one cell each.
     CK_CHECK(s.at(Point{3, 4}).grapheme() == "┘");
-    CK_CHECK(s.at(Point{1, 4}).grapheme() != "─");
+    CK_CHECK(s.at(Point{2, 4}).grapheme() != "─");
 }
 
 CK_TEST(a_resize_grip_wears_the_control_colour_not_the_frames) {
@@ -1128,8 +1131,8 @@ CK_TEST(a_resize_grip_wears_the_control_colour_not_the_frames) {
     const ckv::Style control = f.theme.resolve(f.roles.window_control);
     const ckv::Style frame = f.theme.resolve(f.roles.window_frame_active);
     CK_CHECK(control.fg != frame.fg);  // the test would prove nothing otherwise
-    // Both corners and the widened cells beside them.
-    for (const int x : {0, 1, 18, 19}) CK_CHECK(s.at(Point{x, 4}).style().fg == control.fg);
+    // The marked corner and the widened cell beside it.
+    for (const int x : {18, 19}) CK_CHECK(s.at(Point{x, 4}).style().fg == control.fg);
     // The close glyph already wore it; the brackets around it stay frame.
     CK_CHECK(s.at(Point{3, 0}).style().fg == control.fg);
     CK_CHECK(s.at(Point{2, 0}).style().fg == frame.fg);
@@ -1198,4 +1201,101 @@ CK_TEST(a_row_mixing_a_button_with_other_content_keeps_the_margin) {
     row->add_item(std::make_unique<ckv::widgets::StaticText>("note"), ckv::ui::LayoutSpec{ckv::ui::SizePolicy::Fixed, 1});
     w->set_content(std::move(row));
     CK_CHECK(w->effective_bottom_margin() == 1);
+}
+
+// --- Four corners resize; one says so ---------------------------------------
+
+CK_TEST(an_idle_window_marks_only_the_corner_the_convention_marks) {
+    Fixture f;
+    Surface s(ckv::Size{20, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 6});
+    w->draw(painter);
+    // Bottom right marked, the other three plain frame. Four marks on a
+    // quiet window is three more than it needs.
+    CK_CHECK(s.at(Point{19, 5}).grapheme() == "┘");
+    CK_CHECK(s.at(Point{0, 5}).grapheme() == "╚");
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");
+    CK_CHECK(s.at(Point{19, 0}).grapheme() == "╗");
+}
+
+CK_TEST(every_corner_shows_its_grip_while_a_resize_is_under_way) {
+    Fixture f;
+    Surface s(ckv::Size{20, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 6});
+
+    // Grab the top-left corner: the other three are worth showing now, and
+    // only now.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{0, 0})));
+    w->draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "┌");
+    CK_CHECK(s.at(Point{19, 0}).grapheme() == "┐");
+    CK_CHECK(s.at(Point{0, 5}).grapheme() == "└");
+    CK_CHECK(s.at(Point{19, 5}).grapheme() == "┘");
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{0, 0})));
+    w->draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");  // quiet again
+    CK_CHECK(s.at(Point{19, 5}).grapheme() == "┘");
+}
+
+CK_TEST(each_corner_resizes_and_leaves_the_opposite_one_where_it_was) {
+    struct Case {
+        Point grab;
+        Point to;
+        bool right_edge_moves;
+        bool bottom_edge_moves;
+    };
+    // A window at (10,5) sized 20x8: corners (10,5) (29,5) (10,12) (29,12).
+    const Case cases[] = {
+        {Point{10, 5}, Point{6, 2}, false, false},    // top left
+        {Point{29, 5}, Point{33, 2}, true, false},    // top right
+        {Point{10, 12}, Point{6, 15}, false, true},   // bottom left
+        {Point{29, 12}, Point{33, 15}, true, true},   // bottom right
+    };
+    for (const Case& c : cases) {
+        Fixture f;
+        auto w = make_window(f);
+        w->set_bounds(Rect{10, 5, 20, 8});
+        w->set_resizable(true);
+        const Rect before = w->bounds();
+        CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, c.grab)));
+        CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, c.to)));
+        CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, c.to)));
+        const Rect after = w->bounds();
+        CK_CHECK(after.width > before.width);
+        CK_CHECK(after.height > before.height);
+        // The corner opposite the one grabbed does not move.
+        CK_CHECK((after.x + after.width != before.x + before.width) == c.right_edge_moves);
+        CK_CHECK((after.y + after.height != before.y + before.height) == c.bottom_edge_moves);
+    }
+}
+
+CK_TEST(a_top_corner_resizes_rather_than_moving_the_window) {
+    // The top corners sit on the title row, which is also the move handle.
+    // A reader who aimed at a corner meant the corner.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{10, 5, 20, 8});
+    w->set_resizable(true);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{10, 5})));
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Move, Point{8, 3})));
+    CK_CHECK(w->bounds().width != 20);  // resized, not merely relocated
+
+    // The title bar between the corners still moves it.
+    Fixture g;
+    auto m = make_window(g);
+    m->set_bounds(Rect{10, 5, 20, 8});
+    m->set_resizable(true);
+    CK_CHECK(m->on_mouse(mouse(ckv::MouseAction::Down, Point{20, 5})));
+    CK_CHECK(m->on_mouse(mouse(ckv::MouseAction::Move, Point{22, 7})));
+    CK_CHECK(m->bounds().width == 20);
+    CK_CHECK(m->bounds().x == 12);
 }
