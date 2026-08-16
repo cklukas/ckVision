@@ -336,6 +336,14 @@ void TerminalEmulator::handle_csi(char final_byte) {
                        std::to_string(std::max(1, profile_.cell_pixels.width)) + "t");
         return;
     }
+    if (final_byte == 't' && control_ == "14") {
+        // XTWINOPS 14: the text area's total pixel size — cell metric times
+        // the grid, exactly as a real terminal derives it.
+        if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
+            send_input("\x1b[4;" + std::to_string(std::max(1, profile_.cell_pixels.height) * cells_.height) +
+                       ";" + std::to_string(std::max(1, profile_.cell_pixels.width) * cells_.width) + "t");
+        return;
+    }
     if (final_byte == 's') {
         saved_cursor_ = cursor_;
         saved_cursor_valid_ = true;

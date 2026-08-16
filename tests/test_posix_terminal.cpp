@@ -1092,6 +1092,40 @@ CK_TEST(posix_terminal_keeps_authoritative_pixel_metrics_across_resize_without_p
     ::close(slave_fd);
 }
 
+CK_TEST(posix_terminal_applies_runtime_capability_overrides_and_reports_the_effective_change) {
+    int master_fd = -1;
+    int slave_fd = -1;
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    {
+        Capabilities observed = baseline_capabilities();
+        observed.sixel_graphics = true;
+        observed.sixel_color_registers = 256;
+        observed.cell_pixels = Size{8, 16};
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, slave_fd, slave_fd, observed, /*enable_capability_probes=*/false);
+
+        CapabilityOverrides overrides;
+        overrides.sixel_graphics = false;
+        overrides.sixel_color_registers = 64;
+        overrides.cell_pixels = Size{9, 18};
+        term.set_capability_overrides(overrides);
+
+        const auto forced_events = term.poll(clock.now_nanos());
+        CK_CHECK(forced_events.size() == 1);
+        const auto& forced = std::get<CapabilityChangedEvent>(forced_events.front()).capabilities;
+        CK_CHECK(!forced.sixel_graphics);
+        CK_CHECK(forced.sixel_color_registers == 64);
+        CK_CHECK(forced.cell_pixels == (Size{9, 18}));
+
+        term.set_capability_overrides({});
+        const auto restored_events = term.poll(clock.now_nanos());
+        CK_CHECK(restored_events.size() == 1);
+        CK_CHECK(std::get<CapabilityChangedEvent>(restored_events.front()).capabilities == observed);
+    }
+    ::close(master_fd);
+    ::close(slave_fd);
+}
+
 CK_TEST(posix_terminal_can_keep_an_explicit_capability_profile_authoritative) {
     // This contract is about the backend's explicit-profile policy, not
     // process teardown. A direct isolated PTY removes fork/ack scheduling

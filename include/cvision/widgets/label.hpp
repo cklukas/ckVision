@@ -60,4 +60,9 @@ private:
 // Label inside `scope`, and focuses its still-live, focusable buddy.
 bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
 
+// Extends label-to-buddy mnemonics with direct Button accelerators. Windows
+// use this one route so a dialog's Alt+mnemonic contract is consistent for
+// fields and buttons alike.
+bool activate_control_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
+
 }  // namespace ckv::widgets

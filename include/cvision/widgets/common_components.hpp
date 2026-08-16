@@ -236,7 +236,8 @@ private:
     std::string query_;
     std::size_t highlighted_ = 0;
     bool has_focus_ = false;
-    ui::RoleId role_ = ui::kInvalidRole;
+    ui::RoleId input_role_ = ui::kInvalidRole;
+    ui::RoleId result_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
 };
 

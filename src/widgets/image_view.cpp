@@ -3,14 +3,7 @@
 
 namespace ckv::widgets {
 
-namespace {
-int next_raster_id() {
-    static int counter = 1;
-    return counter++;
-}
-}  // namespace
-
-ImageView::ImageView() : raster_id_(next_raster_id()) {}
+ImageView::ImageView() : raster_id_(0) {}
 
 void ImageView::on_attached() {
     if (fallback_role_ == ui::kInvalidRole)

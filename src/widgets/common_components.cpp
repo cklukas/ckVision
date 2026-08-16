@@ -9,6 +9,8 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/mnemonic.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 namespace {
@@ -541,7 +543,9 @@ std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
     if (context().app == nullptr) return {};
     std::vector<ui::CommandInfo> out;
     for (const ui::CommandInfo& info : context().app->commands().all())
-        if (contains_ci(info.title, query_) && context().app->commands().is_available(info.id)) out.push_back(info);
+        if (info.id >= ui::kFirstApplicationCommandId && contains_ci(info.title, query_) &&
+            context().app->commands().is_available(info.id))
+            out.push_back(info);
     return out;
 }
 std::optional<ui::CommandId> CommandPalette::highlighted_command() const {
@@ -550,14 +554,71 @@ std::optional<ui::CommandId> CommandPalette::highlighted_command() const {
     return commands[std::min(highlighted_, commands.size() - 1)].id;
 }
 void CommandPalette::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(role_);
+    const Style input = context().theme->resolve(input_role_);
+    const Style normal = context().theme->resolve(result_role_);
     const Style selected = context().theme->resolve(selected_role_);
     painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", normal));
-    painter.draw_text(Point{0, 0}, text::clip_to_width(">" + query_, bounds().width), normal);
+
+    // The palette deliberately reserves a one-cell inset on every side: the
+    // search field reads as an edit control, while its results read as a
+    // separate, scrollable choice surface.  This is also what keeps a
+    // constrained palette legible when it sits above document content.
+    constexpr int kInset = 2;
+    constexpr int kSearchRow = 2;
+    constexpr int kFirstResultRow = 4;
+    const int result_width = std::max(0, bounds().width - 2 * kInset);
+    painter.fill(Rect{kInset, kSearchRow, result_width, 1}, Cell::from_grapheme(" ", input));
+    painter.draw_text(Point{kInset + 1, kSearchRow},
+                      text::clip_to_width(query_, std::max(0, result_width - 1)), input);
+
     const auto commands = filtered_commands();
-    for (std::size_t i = 0; i < commands.size() && static_cast<int>(i) + 1 < bounds().height; ++i)
-        painter.draw_text(Point{0, static_cast<int>(i) + 1}, text::clip_to_width(commands[i].title, bounds().width),
-                          i == highlighted_ ? selected : normal);
+    const int visible_rows = std::max(0, bounds().height - kFirstResultRow);
+    const std::size_t first = visible_rows == 0 || highlighted_ < static_cast<std::size_t>(visible_rows)
+                                  ? 0
+                                  : highlighted_ - static_cast<std::size_t>(visible_rows) + 1;
+    const bool needs_scrollbar = commands.size() > static_cast<std::size_t>(visible_rows);
+    const int text_columns = std::max(0, result_width - (needs_scrollbar ? 1 : 0));
+    const Style mnemonic = accent_style(normal, context().theme->resolve(context().roles->find("ckv.hotkey")));
+    const Style selected_mnemonic =
+        accent_style(selected, context().theme->resolve(context().roles->find("ckv.hotkey")));
+    for (std::size_t index = first;
+         index < commands.size() && index - first < static_cast<std::size_t>(visible_rows); ++index) {
+        const Style style = index == highlighted_ ? selected : normal;
+        const int row = kFirstResultRow + static_cast<int>(index - first);
+        painter.fill(Rect{kInset, row, result_width, 1}, Cell::from_grapheme(" ", style));
+        // A palette that hides the binding teaches nobody the keyboard: a
+        // command reached here once is meant to be reached by its chord
+        // next time, so the chord travels with the title.
+        const auto parsed = parse_mnemonic(commands[index].title);
+        const int title_columns = std::max(0, text_columns - 1);
+        draw_mnemonic(painter, Point{kInset + 1, row}, parsed, title_columns, style,
+                      index == highlighted_ ? selected_mnemonic : mnemonic);
+        const auto chord = context().app->commands().chord_for_command(commands[index].id);
+        if (!chord) continue;
+        const std::string annotation = "  (" + context().app->commands().format_chord(*chord) + ")";
+        const int title_width = text::text_width(parsed.display);
+        const int annotation_columns = title_columns - title_width;
+        if (annotation_columns <= 0) continue;
+        painter.draw_text(Point{kInset + 1 + title_width, row},
+                          text::clip_to_width(annotation, annotation_columns), style);
+    }
+    if (needs_scrollbar) {
+        const int column = kInset + result_width - 1;
+        const Style track = context().theme->resolve(context().roles->find("ckv.scrollbar.track"));
+        const Style thumb = context().theme->resolve(context().roles->find("ckv.scrollbar.thumb"));
+        // Same vocabulary as Scrollbar: arrows, a medium-shade page area
+        // and a single-cell indicator, so a palette's gutter is not a
+        // second, different-looking kind of scrollbar.
+        painter.fill(Rect{column, kFirstResultRow, 1, visible_rows}, Cell::from_grapheme("▒", track));
+        painter.draw_text(Point{column, kFirstResultRow}, "▲", track);
+        painter.draw_text(Point{column, kFirstResultRow + visible_rows - 1}, "▼", track);
+        const int travel = std::max(0, visible_rows - 3);
+        const std::size_t maximum_first = commands.size() - static_cast<std::size_t>(visible_rows);
+        const int thumb_row = kFirstResultRow + 1 +
+                              (maximum_first == 0 ? 0 : static_cast<int>(first * static_cast<std::size_t>(travel) /
+                                                                            maximum_first));
+        painter.draw_text(Point{column, thumb_row}, "■", thumb);
+    }
 }
 bool CommandPalette::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -573,8 +634,9 @@ bool CommandPalette::on_key(const KeyEvent& event) {
 bool CommandPalette::on_text(const TextEvent& event) { set_query(query_ + event.text); return true; }
 void CommandPalette::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
 void CommandPalette::on_attached() {
-    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.menu.dropdown.normal");
-    if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.menu.dropdown.highlighted");
+    if (input_role_ == ui::kInvalidRole) input_role_ = context().roles->find("ckv.input.normal");
+    if (result_role_ == ui::kInvalidRole) result_role_ = context().roles->find("ckv.option.normal");
+    if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.option.focused");
 }
 
 void BreadcrumbBar::set_segments(std::vector<std::string> segments) { segments_ = std::move(segments); focused_ = 0; invalidate(); }

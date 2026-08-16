@@ -3,6 +3,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/flow_view.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/memo.hpp"
@@ -43,6 +44,9 @@ CK_TEST(workbench_text_page_exposes_memo_history_and_links) {
     CK_CHECK(f.workbench.text_view()->activate_current_link());
     CK_CHECK(f.workbench.last_link() == std::string{"https://example.invalid/osc8"});
     CK_CHECK(f.workbench.text_view()->osc8_text().find("https://example.invalid/osc8") != std::string::npos);
+    CK_CHECK(f.workbench.flow_view()->link_count() == 1);
+    CK_CHECK(f.workbench.flow_view()->activate_current_link());
+    CK_CHECK(f.workbench.last_link() == std::string{"https://example.invalid/flow"});
 }
 
 CK_TEST(workbench_data_page_contains_table_tree_list_combo_and_progress) {
@@ -67,7 +71,8 @@ CK_TEST(workbench_help_page_contains_command_and_utility_components) {
     f.workbench.tabs()->set_active_index(2);
     f.app.step(0);
 
-    CK_CHECK(f.workbench.command_palette()->highlighted_command().has_value());
+    CK_CHECK(f.workbench.command_palette()->highlighted_command() ==
+             std::optional<ckv::ui::CommandId>{ckv::ui::kFirstApplicationCommandId});
     CK_CHECK(f.workbench.property_inspector()->items().size() == 2);
     CK_CHECK(f.workbench.notifications()->notifications().size() == 1);
     CK_CHECK(f.workbench.tooltip()->shown());

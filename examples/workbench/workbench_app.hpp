@@ -14,6 +14,7 @@ namespace ckv::widgets {
 class BreadcrumbBar;
 class CommandPalette;
 class ComboBox;
+class FlowView;
 class InputLine;
 class ListView;
 class Memo;
@@ -42,6 +43,7 @@ public:
     widgets::Memo* memo() const noexcept { return memo_; }
     widgets::InputLine* command_input() const noexcept { return command_input_; }
     widgets::TextView* text_view() const noexcept { return text_view_; }
+    widgets::FlowView* flow_view() const noexcept { return flow_view_; }
     widgets::Table* table() const noexcept { return table_; }
     widgets::TreeView* tree() const noexcept { return tree_; }
     widgets::ListView* list() const noexcept { return list_; }
@@ -73,6 +75,7 @@ private:
     widgets::Memo* memo_ = nullptr;
     widgets::InputLine* command_input_ = nullptr;
     widgets::TextView* text_view_ = nullptr;
+    widgets::FlowView* flow_view_ = nullptr;
     widgets::Table* table_ = nullptr;
     widgets::TreeView* tree_ = nullptr;
     widgets::ListView* list_ = nullptr;

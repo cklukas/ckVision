@@ -71,6 +71,10 @@ An explicit profile may instead set both `pixel_mouse` and a nonzero
 Each SGR mouse event then carries the terminal's pixel position as well as the
 cell position derived from that metric; the POSIX PTY contract exercises that
 dual-space delivery and the corresponding 1002/1006/1016 session restoration.
+The SGR wheel button codes map to the four directional `MouseButton` values:
+up/down (64/65) and left/right (66/67). Widgets that only scroll vertically
+may ignore the horizontal events, but a backend or terminal view never
+collapses them into vertical motion.
 An authoritative non-pixel profile never enables mode 1016. A probing SGR
 session enables it only while obtaining its DECRPM proof; until that proof and
 an XTWINOPS metric agree, SGR reports are consumed rather than misread as cell

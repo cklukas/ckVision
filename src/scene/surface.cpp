@@ -2,6 +2,7 @@
 #include "cvision/scene/surface.hpp"
 
 #include <algorithm>
+#include <limits>
 
 #include "cvision/core/assert.hpp"
 
@@ -140,6 +141,22 @@ void Surface::resize(Size new_size, Cell fill) {
         0);
     row_damage_.assign(static_cast<std::size_t>(new_size.height), DamageSpan{0, new_size.width});
     raster_regions_.clear();
+    next_raster_id_ = 1;
+}
+
+int Surface::allocate_raster_id() noexcept {
+    int candidate = next_raster_id_;
+    for (;;) {
+        CKV_ASSERT(candidate > 0);
+        const bool in_use = std::any_of(raster_regions_.begin(), raster_regions_.end(),
+                                        [candidate](const RasterRegion& region) { return region.id == candidate; });
+        if (!in_use) {
+            next_raster_id_ = candidate == std::numeric_limits<int>::max() ? 1 : candidate + 1;
+            return candidate;
+        }
+        CKV_ASSERT(candidate != std::numeric_limits<int>::max());
+        ++candidate;
+    }
 }
 
 void Surface::add_raster_region(RasterRegion region) {
@@ -164,6 +181,7 @@ void Surface::remove_raster_region(int id) noexcept {
 void Surface::clear_raster_regions() noexcept {
     for (const RasterRegion& region : raster_regions_) mark_damage(region.anchor);
     raster_regions_.clear();
+    next_raster_id_ = 1;
 }
 
 void Surface::set_raster_fallback_active(int id, bool active) noexcept {

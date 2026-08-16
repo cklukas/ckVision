@@ -83,7 +83,13 @@ void FormsApp::present_profile_dialog() {
 
 `present_message_box` owns the modal window and returns a typed presentation.
 `StandardStrings` supplies application-local wording without global locale
-state. The Forms app changes Ok/Cancel to `Accept`/`Dismiss`.
+state. The Forms app changes Ok/Cancel to `Accept`/`Dismiss`. A descriptor may
+also carry immutable raster artwork with a requested cell size and explicit
+cross-axis alignment; the shared factory retains Canvas' ordinary text
+fallback, so an About-style identity panel remains usable without graphics.
+`DialogDescriptor` likewise carries an optional measured minimum window size,
+action alignment, and bottom-anchoring policy for forms whose whitespace is
+part of their presentation rather than an accidental by-product of fields.
 
 ![Localized Forms information message](generated/screenshots/forms-info-message.svg)
 

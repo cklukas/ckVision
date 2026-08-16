@@ -78,10 +78,32 @@ void capture_menu(const std::filesystem::path& directory) {
     ckv::term::HeadlessTerminal terminal(ckv::Size{100, 30}, ckv::term::headless_no_graphics_profile());
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal, clock);
-    ckv::terminal_example::TerminalApp example(app);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    constexpr ckv::ui::CommandId kNewTerminal = ckv::ui::kFirstApplicationCommandId;
+    constexpr ckv::ui::CommandId kNewSixelDemo = ckv::ui::kFirstApplicationCommandId + 1;
+    app.commands().add({.id = kNewTerminal, .title = "&New Terminal", .category = "File", .handler = [] {}});
+    app.commands().add({.id = kNewSixelDemo, .title = "New &Sixel Demo", .category = "File", .handler = [] {}});
+    ckv::widgets::ApplicationShell shell(
+        app, {.theme = ckv::ui::make_classic_theme(app.roles(), roles),
+              .menus = {
+                  {"&File", {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{kNewTerminal}},
+                              ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{kNewSixelDemo}},
+                              ckv::widgets::MenuItem{"", ckv::ui::kInvalidCommand, {}, true},
+                              ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kQuit}}}},
+                  {"&Window", {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kNextWindow}},
+                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kPreviousWindow}},
+                                ckv::widgets::MenuItem{"", ckv::ui::kInvalidCommand, {}, true},
+                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kTile}},
+                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kCascade}}}},
+              }});
+    ckv::term::TerminalEmulator session(ckv::term::embedded_xterm_sixel_profile());
+    session.feed_output("ckvision$ printf 'terminal ready'\r\nterminal ready\r\nckvision$ ");
+    auto window = std::make_unique<ckv::widgets::Window>("Terminal 1");
+    window->set_bounds(ckv::Rect{2, 2, 76, 20});
+    window->set_content(std::make_unique<ckv::widgets::TerminalView>(session));
+    shell.desktop().add_window(std::move(window));
+    app.root().notify_terminal_subsession_changed(session);
     app.step(0);
-    app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char,
-                                             ckv::Modifier::Ctrl | ckv::Modifier::Alt, " "}});
     app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::F10, ckv::Modifier::None, ""}});
     app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
     app.step(0);

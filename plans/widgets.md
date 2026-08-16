@@ -52,16 +52,17 @@ widgets and dialogs, never per-widget state.
 | Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo | Word wrap toggle; grapheme-correct navigation; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word/document navigation/deletion, and Shift selection semantics |
 | Check group | Multi-select, arrow navigation, mnemonics | Tri-state option |
 | Radio group | Exclusive select, arrow navigation, mnemonics | — |
-| List view | Scrolling, single/multi select, keyboard search, injected-Clock double-click activate | Post-0.1 per D-041: virtualized model interface and columned modes |
+| List view | Provider-backed scrolling, stable single/multi selection, keyboard search, injected-Clock double-click activate | Application-defined row presentation and asynchronous cache policy; provider contract in D-043 |
 | Combo box | — (the classics lacked a true one) | Editable and pick-only variants, history integration, dropdown with shadow |
 | Scrollbar | Proportional thumb, arrows, paging, drag | Auto-hide policy option |
 | Scroll viewport | Scrolls any content view, keyboard and wheel | Semantic cell-line scrolling; scroll-region byte-diff optimization is renderer/performance scope per D-041 |
 | Tab control | — | Top tabs with mnemonics, keyboard cycling, per-tab pages, overflow |
-| Table | — | Columns with headers, resize, sort indicators, cell styling hook; virtualized rows are post-0.1 per D-041 |
+| Table | — | Provider-backed rows, typed editable cells, stable row/cell selection, headers, resize, sort requests, and cell styling; application-defined range/formula/database semantics per D-043 |
 | Tree / outline | Expand/collapse, keyboard navigation | Connector-line styles; virtualized model is post-0.1 per D-041 |
 | Progress | — | Determinate/indeterminate, label slot |
 | Splitter | — | Keyboard-adjustable split panes |
 | Text view | Read-only styled text, scrolling | Links (activatable; rendered as OSC 8 hyperlinks where supported), simple inline styles; the building block for help browsers and about boxes |
+| Flow view | Read-only wrapped styled content, scrolling, keyboard/mouse link activation | Inline raster atoms with mandatory fallback and ordinary scene composition; semantic document/chat models remain client-owned (D-043) |
 | Text editor | Revisioned UTF-8 document editing, selections, undo/redo, scrolling, gutter, and line/column indicator | Search/replace, deterministic profile detection, incremental syntax styling, and composable file-editor workflow; WP-39…WP-44 |
 | Terminal view | Private child PTY/ConPTY session, UTF-8 terminal cells, focus/input/resize, scrollback, and process lifecycle | Alternate buffer, mouse/paste/query policy, nested ckVision applications, and decoded Sixel re-composited with no spill; WP-45…WP-50 |
 | Help viewer | Context topics (F1 from any view via help-context keys), activatable cross-links, back navigation | Index/keyword lookup; content via an injected provider — the library defines no help file format |

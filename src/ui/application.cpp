@@ -552,6 +552,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     }
                     return false;
                 } else if constexpr (std::is_same_v<T, MouseEvent>) {
+                    ++mouse_events_dispatched_;
+                    last_mouse_event_ = e;
                     const bool press = e.action == MouseAction::Down || e.action == MouseAction::DoubleClick;
                     // Captured BEFORE target resolution: a popup (menu
                     // dropdown light-dismiss) already owning input capture
@@ -825,7 +827,7 @@ void Application::paint_and_present() {
     }
     dirty_ = false;
 
-    compositor_.compose(composition_layers_, surface_);
+    compositor_.compose(composition_layers_, surface_, shadow_spec_);
     CursorState cursor;
     if (focused_ != nullptr) {
         if (const std::optional<CursorState> focused_cursor = focused_->cursor_state()) cursor = *focused_cursor;

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/list_view.hpp"
 
+#include <algorithm>
+
 #include "cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
@@ -20,6 +22,9 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::ListView;
+using ckv::widgets::ListItem;
+using ckv::widgets::ListItemId;
+using ckv::widgets::ListModel;
 
 namespace {
 struct Fixture {
@@ -37,6 +42,21 @@ ckv::KeyEvent key(ckv::Key k, std::string text = "") {
 ckv::MouseEvent click(ckv::Point p) {
     return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, p, std::nullopt, Modifier::None};
 }
+
+struct Provider final : ListModel {
+    std::vector<ListItemId> ids;
+    mutable std::size_t item_queries = 0;
+
+    std::size_t item_count() const override { return ids.size(); }
+    ListItem item_at(std::size_t index) const override {
+        ++item_queries;
+        return ListItem{ids[index], "item " + std::to_string(ids[index]), std::nullopt};
+    }
+    std::optional<std::size_t> index_of(ListItemId id) const override {
+        const auto found = std::find(ids.begin(), ids.end(), id);
+        return found == ids.end() ? std::nullopt : std::optional<std::size_t>(found - ids.begin());
+    }
+};
 }  // namespace
 
 // --- Basics --------------------------------------------------------------
@@ -52,6 +72,21 @@ CK_TEST(setting_items_places_the_cursor_on_the_first_item) {
     auto list = make_list(f);
     list.set_items({"one", "two", "three"});
     CK_CHECK(list.cursor() == 0);
+}
+
+CK_TEST(the_initial_cursor_row_uses_the_selected_paint_role) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_items({"one", "two"});
+    list.set_bounds(Rect{0, 0, 8, 2});
+    ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 2});
+
+    list.draw(painter);
+
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected));
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
 }
 
 CK_TEST(re_setting_items_resets_selection_and_cursor) {
@@ -315,4 +350,35 @@ CK_TEST(is_selected_out_of_range_returns_false_rather_than_crashing) {
     auto list = make_list(f);
     list.set_items({"a"});
     CK_CHECK(!list.is_selected(50));
+}
+
+CK_TEST(provider_backed_list_queries_only_the_visible_slice) {
+    Fixture f;
+    Provider model;
+    model.ids.resize(1'000'000);
+    for (std::size_t index = 0; index < model.ids.size(); ++index) model.ids[index] = static_cast<ListItemId>(index + 1);
+    auto list = make_list(f);
+    list.set_model(model);
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_bounds(Rect{0, 0, 20, 4});
+    ckv::scene::Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 20, 4});
+    list.draw(painter);
+    CK_CHECK(model.item_queries <= 5);  // initial identity plus four visible rows
+}
+
+CK_TEST(provider_backed_list_preserves_cursor_and_selection_identity_across_reorder) {
+    Fixture f;
+    Provider model;
+    model.ids = {10, 20, 30};
+    auto list = make_list(f);
+    list.set_model(model);
+    list.on_key(key(Key::Down));  // cursor and single selection now identify item 20
+    CK_CHECK(list.cursor_id() == 20);
+    CK_CHECK(list.is_selected_id(20));
+    model.ids = {30, 10, 20};
+    list.model_changed();
+    CK_CHECK(list.cursor_id() == 20);
+    CK_CHECK(list.cursor() == 2);
+    CK_CHECK(list.is_selected_id(20));
 }

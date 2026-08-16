@@ -18,6 +18,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::ButtonDescriptor;
+using ckv::widgets::Button;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
 using ckv::widgets::materialize_dialog;
@@ -65,6 +66,32 @@ CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
     CK_CHECK(dialog.labels[0] != nullptr);
     CK_CHECK(dialog.inputs[0]->text() == "initial");
     CK_CHECK(dialog.buttons[0]->text() == "OK");
+}
+
+CK_TEST(classic_buttons_keep_a_ten_cell_footprint_and_can_be_widened) {
+    Button button{"&OK"};
+    CK_CHECK(button.horizontal_size_hint().min == Button::kClassicMinimumWidth);
+    CK_CHECK(button.horizontal_size_hint().preferred == Button::kClassicMinimumWidth);
+    CK_CHECK(button.horizontal_size_hint().max == Button::kClassicMinimumWidth);
+    button.set_minimum_width(14);
+    CK_CHECK(button.minimum_width() == 14);
+    CK_CHECK(button.horizontal_size_hint().min == 14);
+    button.set_minimum_width(1);
+    CK_CHECK(button.minimum_width() == 3);
+    CK_CHECK(button.horizontal_size_hint().min == 6);  // label plus chrome still wins
+}
+
+CK_TEST(a_password_field_materializes_an_echoed_input_without_changing_its_value) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    FieldDescriptor field{"&API key:", "secret", nullptr};
+    field.password_echo = true;
+    field.password_echo_char = '#';
+    descriptor.fields.push_back(std::move(field));
+    auto dialog = materialize_dialog(descriptor);
+    CK_CHECK(dialog.inputs[0]->text() == "secret");
+    CK_CHECK(dialog.inputs[0]->password_echo());
+    CK_CHECK(dialog.inputs[0]->password_echo_char() == '#');
 }
 
 CK_TEST(a_field_with_an_empty_label_produces_a_null_label_pointer_but_a_real_input) {

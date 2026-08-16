@@ -193,7 +193,9 @@ behavior in the Application registry and use the options only to present it.
 Header: `include/cvision/widgets/button.hpp`. Put buttons in a window or
 dialog content view; Space/Enter activate the focused/default button and a
 mouse click invokes `on_press`. Use it for an immediate action, not a command
-shortcut duplicated elsewhere. Forms shows default and ordinary buttons.
+shortcut duplicated elsewhere. Forms shows default and ordinary buttons. The
+classic metric is a ten-cell minimum footprint; use `set_minimum_width()` only
+to make a related button family deliberately wider.
 
 ## Canvas
 
@@ -274,8 +276,10 @@ enablement and executes the same handler as a menu/status item.
 ## CommandPalette
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for searchable
-command discovery. Give it command context and query state; activation remains
-the registry command path rather than a palette-only callback.
+command discovery. It presents an inset search field and an independently
+scrollable result viewport, excludes framework-only commands, preserves
+mnemonics, and activates through the registry command path rather than a
+palette-only callback.
 
 ## BreadcrumbBar
 
@@ -387,6 +391,10 @@ including whether it is the accept/default action.
 
 Header: `include/cvision/widgets/dialog.hpp`. Use for a standard form dialog
 when declarative fields and validation are sufficient; see [Dialogs](dialogs-and-commands.md).
+It can reserve a measured minimum framed size and align its action row. Set
+`anchor_buttons_to_bottom` when the measured height deliberately leaves room
+beneath the fields; the actions remain at the lower edge while the fields
+retain their ordinary layout and validation semantics.
 
 ## MaterializedDialog
 
@@ -457,11 +465,44 @@ Header: `include/cvision/widgets/image_view.hpp`. Use to display an `Image`.
 It renders raster output if the terminal supports it and a cell fallback if it
 does not; [Graphics](graphics.md) shows both captures.
 
+## FlowText
+
+Header: `include/cvision/widgets/flow_view.hpp`. A styled text run, optionally
+with a link target, inside a FlowDocument block.
+
+## FlowLineBreak
+
+Header: `include/cvision/widgets/flow_view.hpp`. An explicit visual line break
+inside a flow block.
+
+## FlowImage
+
+Header: `include/cvision/widgets/flow_view.hpp`. An inline raster atom with a
+cell extent and required text fallback.
+
+## FlowBlock
+
+Header: `include/cvision/widgets/flow_view.hpp`. An ordered group of flow
+atoms separated from adjacent blocks by a blank row.
+
+## FlowDocument
+
+Header: `include/cvision/widgets/flow_view.hpp`. The application-owned value
+set on a FlowView; see [Flow content](flow-view.md) for composition and link
+handling.
+
+## FlowView
+
+Header: `include/cvision/widgets/flow_view.hpp`. Use for wrapped styled
+read-only content with keyboard and pointer link navigation plus inline raster
+atoms. Workbench's text tab provides the compiled example.
+
 ## InputLine
 
 Header: `include/cvision/widgets/input_line.hpp`. Use for one-line text with
-grapheme-aware editing, selection, validation, masks, password echo, history,
-clipboard, and undo. Text events edit it; arrows/home/end and mouse adjust its
+grapheme-aware editing, selection, validation, optional per-grapheme admission
+filtering, masks, password echo, history, clipboard, and undo. Text events
+edit it; arrows/home/end and mouse adjust its
 cursor/selection. Ctrl+Left/Right moves by word, Ctrl+Home/End reaches the
 field boundaries, and Shift extends any cursor motion. Ctrl+C/X/V and
 Ctrl+Insert/Shift+Insert copy, cut, and paste; Ctrl+Backspace/Delete erase by
@@ -473,11 +514,23 @@ Header: `include/cvision/widgets/label.hpp`. Use a mnemonic label next to a
 control; it participates in mnemonic focus routing. Use StaticText for passive
 wrapped copy.
 
+## ListItem
+
+Header: `include/cvision/widgets/list_view.hpp`. A stable item identity, text,
+and optional presentation style returned by a ListModel.
+
+## ListModel
+
+Header: `include/cvision/widgets/list_view.hpp`. A caller-owned synchronous
+visible-slice provider for ListView. It supplies reverse identity lookup so
+selection survives refreshes and reordering; see [Data views](data-views.md).
+
 ## ListView
 
 Header: `include/cvision/widgets/list_view.hpp`. Use a linear selectable
 collection. Arrow keys select and Enter activates; File Browser connects it to
-TreeView selection.
+TreeView selection. For dynamic or large data, set a ListModel rather than
+materializing rows.
 
 ## Memo
 
@@ -526,7 +579,11 @@ Memo cursor and selection APIs.
 ## MessageBoxDescriptor
 
 Header: `include/cvision/widgets/message_box.hpp`. A kind/title/message/button
-set record for `present_message_box`; use a completion handler for its typed result.
+set record for `present_message_box`; use a completion handler for its typed
+result. It may additionally carry immutable raster artwork, requested cell
+dimensions, a minimum content width, and explicit graphic/text/button
+alignment for a deliberate identity presentation while ordinary alerts retain
+their compact composition.
 
 ## CheckGroup
 
@@ -543,7 +600,9 @@ Header: `include/cvision/widgets/option_group.hpp`. Use exactly one choice.
 Arrows and mnemonics change its selected index. Its visual contract is rounded
 `( )`/`(U+2022)` markers. `set_group_label()` gives the group an owned caption
 one row above the choices; the caption changes from its normal label colour to
-the focused-option foreground while the group owns keyboard focus.
+the focused-option foreground while the group owns keyboard focus. Use
+`set_column_width()` only for a measured form column; it clips long labels at
+that specified edge rather than changing the control's interaction model.
 
 ## Progress
 
@@ -554,7 +613,9 @@ with an optional label; application work updates it through `set_fraction`.
 
 Header: `include/cvision/widgets/scroll_viewport.hpp`. Use to expose a larger
 child view through a clipped scrollable region. Pair with Scrollbar when a
-visible position control helps. Both appear in the navigation capture above.
+visible position control helps. `set_scrollbars_always_visible(true)` retains
+both conventional tracks for document views whose content may grow. Both
+appear in the navigation capture above.
 
 ## Scrollbar
 
@@ -600,6 +661,27 @@ Header: `include/cvision/widgets/tab_control.hpp`. Use mutually exclusive
 pages within one window. Mnemonics/keyboard navigation change active page;
 Workbench and Graphics provide real tab captures.
 
+## TableCell
+
+Header: `include/cvision/widgets/table.hpp`. A typed value, independent display
+text, optional style, and editability flag supplied by a TableModel.
+
+## TableCellRef
+
+Header: `include/cvision/widgets/table.hpp`. Stable row identity plus column
+position used for selection, editing, sorting callbacks, and model commits.
+
+## TableEditResult
+
+Header: `include/cvision/widgets/table.hpp`. The provider's explicit accept or
+reject result for an edit, including a diagnostic retained by Table on failure.
+
+## TableModel
+
+Header: `include/cvision/widgets/table.hpp`. A caller-owned synchronous
+visible-slice provider for typed Table cells, ordering requests, and validated
+commits. See [Data views](data-views.md).
+
 ## TableColumn
 
 Header: `include/cvision/widgets/table.hpp`. Defines a Table header and sizing
@@ -607,8 +689,9 @@ constraints.
 
 ## Table
 
-Header: `include/cvision/widgets/table.hpp`. Use aligned sortable rows/columns.
-Arrow keys navigate; client code supplies columns/rows and chooses sorting.
+Header: `include/cvision/widgets/table.hpp`. Use aligned sortable typed
+rows/columns. Arrow keys navigate; F2, Enter, or typing begins an editable
+cell's provider-validated edit. Use a TableModel for dynamic or large data.
 
 ## TerminalView
 
@@ -624,9 +707,11 @@ used by TextView.
 
 ## TextView
 
-Header: `include/cvision/widgets/text_view.hpp`. Use passive rich/wrapped text
-or link content. Its link activation callback receives the target; Workbench
-shows an OSC 8-capable link span.
+Header: `include/cvision/widgets/text_view.hpp`. Use passive rich,
+preformatted text or link content. Its link activation callback receives the
+target; a containing ScrollViewport may own the visible scrollbars through
+`set_vertical_scrollbar_visible(false)`; Workbench shows an OSC 8-capable link
+span.
 
 ## TreeNode
 
@@ -638,6 +723,8 @@ children, expansion state, and optional client data.
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
 Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
 children. File Browser uses the public selection callback to update a ListView.
+`TreeConnectorStyle::Outline` provides the compact classic terminal-outline
+appearance: `─+` for groups, `──` for leaves, and `│` ancestry guides.
 
 ## FrameSlot
 
@@ -672,6 +759,17 @@ The Workbench source shows the text/data family in the exact compiled app:
 
 <!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="71-170" -->
 ```cpp
+
+    auto tabs = std::make_unique<widgets::TabControl>();
+    tabs->set_bounds(Rect{0, 0, 72, 18});
+    tabs_ = tabs.get();
+    tabs->add_tab("&Text", build_text_page());
+    tabs->add_tab("&Data", build_data_page());
+    tabs->add_tab("&Help", build_help_page());
+    window->set_content(std::move(tabs));
+    window_ = desktop_->add_window(std::move(window));
+}
+
 std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     auto page = std::make_unique<ui::View>();
 
@@ -712,6 +810,19 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     text_view_ = text.get();
     page->add_child(std::move(text));
 
+    auto flow = std::make_unique<widgets::FlowView>();
+    flow->set_bounds(Rect{39, 14, 30, 3});
+    auto chart = std::make_shared<Image>(4, 1);
+    for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
+    flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
+        widgets::FlowText{"Flow: ", static_cast<Attr>(0), std::nullopt},
+        widgets::FlowText{"interactive link", Attr::Underline, std::string{"https://example.invalid/flow"}},
+        widgets::FlowImage{std::move(chart), Size{7, 1}, "[chart]"},
+    }}}});
+    flow->on_link_activate = [this](const std::string& target) { last_link_ = target; };
+    flow_view_ = flow.get();
+    page->add_child(std::move(flow));
+
     return page;
 }
 
@@ -748,29 +859,5 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(table));
 
     auto combo = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
-    combo->set_bounds(Rect{1, 12, 18, 4});
-    combo->set_items({"debug", "release", "asan"});
-    combo->set_selected_index(1);
-    combo_ = combo.get();
-    page->add_child(std::move(combo));
-
-    auto progress = std::make_unique<widgets::Progress>();
-    progress->set_bounds(Rect{25, 13, 32, 1});
-    progress->set_fraction(0.625);
-    progress->set_label("62%");
-    progress_ = progress.get();
-    page->add_child(std::move(progress));
-
-    auto search = std::make_unique<widgets::SearchBox>();
-    search->set_bounds(Rect{1, 15, 22, 1});
-    search->set_query("alpha");
-    search_box_ = search.get();
-    page->add_child(std::move(search));
-
-    auto breadcrumb = std::make_unique<widgets::BreadcrumbBar>();
-    breadcrumb->set_bounds(Rect{25, 15, 30, 1});
-    breadcrumb->set_segments({"workspace", "src", "widgets"});
-    breadcrumb_ = breadcrumb.get();
-    page->add_child(std::move(breadcrumb));
 ```
 <!-- /ckvision-snippet -->

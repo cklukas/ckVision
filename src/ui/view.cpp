@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/view.hpp"
 
+#include <algorithm>
+
 #include "cvision/core/assert.hpp"
 
 namespace ckv::ui {
@@ -39,6 +41,18 @@ View* View::add_child(std::unique_ptr<View> child) {
     if (parent_liveness.expired() || child_liveness.expired() || observer->parent_ != this)
         return nullptr;
     return observer;
+}
+
+void View::lower_to_back(View* child) {
+    const auto found = std::find_if(children_.begin(), children_.end(),
+                                    [child](const std::unique_ptr<View>& candidate) {
+                                        return candidate.get() == child;
+                                    });
+    if (found == children_.end() || found == children_.begin()) return;
+    std::unique_ptr<View> owned = std::move(*found);
+    children_.erase(found);
+    children_.insert(children_.begin(), std::move(owned));
+    invalidate();
 }
 
 std::unique_ptr<View> View::remove_child(View* child) {

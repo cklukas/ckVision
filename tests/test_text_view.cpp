@@ -58,6 +58,19 @@ CK_TEST(text_with_no_newlines_is_a_single_line) {
     CK_CHECK(view.line_count() == 1);
 }
 
+CK_TEST(hiding_the_internal_scrollbar_preserves_the_final_text_column) {
+    Fixture f;
+    auto view = make_view(f);
+    view.set_context(f.ctx());
+    view.set_bounds(Rect{0, 0, 4, 1});
+    view.set_text("abcd");
+    view.set_vertical_scrollbar_visible(false);
+    Surface s(ckv::Size{4, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 4, 1});
+    view.draw(painter);
+    CK_CHECK(row_text(s, 0) == "abcd");
+}
+
 CK_TEST(newlines_split_into_separate_lines_including_a_trailing_empty_one) {
     Fixture f;
     auto view = make_view(f);

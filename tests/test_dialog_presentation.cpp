@@ -167,6 +167,26 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(f.desktop->windows().empty());
 }
 
+CK_TEST(descriptor_dialog_supports_measured_centered_bottom_actions) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Measured";
+    descriptor.fields.push_back(FieldDescriptor{"&Name:", "value", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"&OK", true, nullptr});
+    descriptor.minimum_window_size = Size{40, 12};
+    descriptor.button_alignment = ckv::ui::Alignment::Center;
+    descriptor.anchor_buttons_to_bottom = true;
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    Window* const window = f.desktop->windows().back();
+    CK_CHECK(window != nullptr);
+    CK_CHECK((window->bounds() == Rect{20, 6, 40, 12}));
+    CK_CHECK(window->content() != nullptr);
+    // Field, expanding spacer, and centered action row.
+    CK_CHECK(window->content()->children().size() == 3u);
+    (void)presentation;
+}
+
 CK_TEST(standard_modal_presentations_size_and_center_an_unpositioned_window) {
     Fixture f;
     auto message = present_message_box(

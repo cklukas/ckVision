@@ -17,8 +17,8 @@ its evidence, then move the next package to `In progress`.
 | 1 | WP-38-MAC — Mac release-gate closure | **Implementation complete — Mac gate passed** | [Mac traceability record](mac-first-traceability.md), complete CTest/fuzz/sanitizer evidence, documentation/link/provenance checks, and an explicit list of any remaining deferred rows |
 | 2 | WP-51 — Mac interaction and visual polish | **Implementation complete — Mac gate passed** | Public-path scripts and reviewed cell/pixel goldens for menus, focus, resize, modal routing, terminal redraw, editor states, all built-in themes, and the documented examples |
 | 3 | WP-52 — Mac performance and resilience hardening | **Implementation complete — Mac gate passed** | [Performance baseline](mac-performance-baseline.md), enforceable frame/allocation/parser/raster budgets, resilience tests, and focused sanitizer evidence |
-| 4 | WP-53 — Mac packaging and client handoff | **In progress** | Reproducible configure/build/run instructions, stable example executables, install/package smoke checks, generated documentation, and a clean-machine walkthrough |
-| 5 | WP-54 — Mac 0.1 release audit | **Queued** | Versioned release checklist, API/reference coverage report, example matrix, known-limitations page, release notes, and a signed-off Mac acceptance record |
+| 4 | WP-53 — Mac packaging and client handoff | **Implementation complete — handoff checks passed** | Reproducible configure/build/run instructions, stable example executables, install/package smoke checks, generated documentation, and a clean-machine walkthrough |
+| 5 | WP-54 — Mac 0.1 release audit | **In progress** | Versioned release checklist, API/reference coverage report, example matrix, known-limitations page, release notes, and a signed-off Mac acceptance record |
 
 ## WP-38-MAC — Mac release-gate closure
 

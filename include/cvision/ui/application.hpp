@@ -103,6 +103,17 @@ public:
     const scene::Surface& composed_surface() const noexcept { return compositor_.frame(); }
     CursorState current_cursor() const noexcept { return compositor_.cursor(); }
 
+    // How a cast shadow offsets, and how it restyles what it falls on.
+    // The default halves each channel, which reads as a soft dimming
+    // that lets the covered content show through; a product whose look
+    // calls for an opaque shadow installs its own transform here rather
+    // than reaching into the compositor.
+    void set_shadow_spec(scene::ShadowSpec spec) {
+        shadow_spec_ = spec;
+        invalidate_all();
+    }
+    const scene::ShadowSpec& shadow_spec() const noexcept { return shadow_spec_; }
+
     // Deterministic render-cost counters for the most recently presented
     // frame. They are application-local by construction and support the
     // machine-independent performance gates in ARCHITECTURE.md §8.
@@ -126,6 +137,28 @@ public:
     // terminal session use this only to size that child endpoint; child bytes
     // still have no route to the outer Terminal writer.
     Size terminal_cell_pixels() const noexcept { return terminal_.capabilities().cell_pixels; }
+    // What this terminal reported and what was concluded from it — the
+    // evidence behind graphics placement and pixel-mouse conversion. An
+    // application shows or exports this so a misbehaving host can be
+    // diagnosed from facts instead of from symptoms.
+    term::Capabilities terminal_capabilities() const noexcept { return terminal_.capabilities(); }
+    // How many mouse events have reached dispatch, and the last one. The
+    // difference between "the terminal never sent it", "it was decoded to
+    // the wrong cell", and "it arrived and nothing wanted it" is otherwise
+    // invisible from inside an application — and those three have entirely
+    // different causes.
+    std::size_t mouse_events_dispatched() const noexcept { return mouse_events_dispatched_; }
+    const std::optional<MouseEvent>& last_mouse_event() const noexcept { return last_mouse_event_; }
+    Size terminal_cell_grid() const noexcept { return terminal_.size(); }
+
+    // Whether this terminal can actually show a raster image right now.
+    // A caller that would otherwise reserve cells for a picture asks first,
+    // rather than leaving a hole where the picture would have been.
+    bool terminal_shows_graphics() const noexcept {
+        // Only whether it draws images at all. An unknown cell metric is not
+        // a refusal — Canvas assumes a cell rather than dropping the image.
+        return terminal_.capabilities().sixel_graphics;
+    }
 
     // Launches a contained child session owned by this application.  A
     // TerminalView borrows the returned object; the application therefore
@@ -465,6 +498,9 @@ private:
     scene::Surface surface_;
     std::vector<scene::Layer> composition_layers_;
     scene::Compositor compositor_;
+    scene::ShadowSpec shadow_spec_;
+    std::size_t mouse_events_dispatched_ = 0;
+    std::optional<MouseEvent> last_mouse_event_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
     std::atomic<bool> quit_requested_{false};

@@ -24,10 +24,22 @@ ScrollViewport::ScrollViewport() {
 std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> content) {
     std::unique_ptr<ui::View> previous = content_ != nullptr ? remove_child(content_) : nullptr;
     content_ = content != nullptr ? add_child(std::move(content)) : nullptr;
+    // Scrollbars are persistent siblings created by the constructor. Keep
+    // them above document content for both painting and hit-testing.
+    if (content_ != nullptr) lower_to_back(content_);
     scroll_x_ = 0;
     scroll_y_ = 0;
     relayout();
     return previous;
+}
+
+void ScrollViewport::set_scrollbars_always_visible(bool visible) noexcept {
+    if (scrollbars_always_visible_ == visible) return;
+    scrollbars_always_visible_ = visible;
+    if (v_scrollbar_ != nullptr) v_scrollbar_->set_auto_hide(!visible);
+    if (h_scrollbar_ != nullptr) h_scrollbar_->set_auto_hide(!visible);
+    relayout();
+    invalidate();
 }
 
 void ScrollViewport::set_scroll(int x, int y) {
@@ -52,9 +64,9 @@ void ScrollViewport::relayout() {
         preferred_h = std::max(0, content_->vertical_size_hint().preferred);
     }
 
-    bool need_v = preferred_h > height;
-    bool need_h = preferred_w > std::max(0, width - (need_v ? 1 : 0));
-    need_v = preferred_h > std::max(0, height - (need_h ? 1 : 0));
+    bool need_v = scrollbars_always_visible_ || preferred_h > height;
+    bool need_h = scrollbars_always_visible_ || preferred_w > std::max(0, width - (need_v ? 1 : 0));
+    need_v = scrollbars_always_visible_ || preferred_h > std::max(0, height - (need_h ? 1 : 0));
 
     const int content_area_w = std::max(0, width - (need_v ? 1 : 0));
     const int content_area_h = std::max(0, height - (need_h ? 1 : 0));

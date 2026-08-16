@@ -93,11 +93,9 @@ CK_TEST(draw_with_a_real_image_adds_a_raster_region_at_the_widget_cell_anchor) {
     CK_CHECK(s.raster_regions()[0].fallback_active);
 }
 
-CK_TEST(replacing_the_image_uses_a_different_raster_id_each_time_a_new_view_is_constructed) {
-    // Each ImageView instance must have its own stable raster id
-    // (Painter::draw_image requires uniqueness "among this surface's
-    // raster regions") — verified indirectly: two ImageViews sharing a
-    // Surface must not crash when both draw an image in the same frame.
+CK_TEST(surface_local_raster_identity_keeps_two_image_views_distinct_in_one_frame) {
+    // Widgets request a Surface-local identity (id zero); two image views can
+    // therefore share a frame without process-global mutable allocation.
     Fixture f;
     ImageView a;
     ImageView b;
@@ -111,7 +109,20 @@ CK_TEST(replacing_the_image_uses_a_different_raster_id_each_time_a_new_view_is_c
     Painter painter(s, Rect{0, 0, 10, 5});
     a.draw(painter);
     b.draw(painter);
-    CK_CHECK(true);
+    CK_CHECK(s.raster_regions().size() == 2);
+    CK_CHECK(s.raster_regions()[0].id != s.raster_regions()[1].id);
+}
+
+CK_TEST(surface_local_raster_identity_does_not_collide_with_a_caller_supplied_id) {
+    Fixture f;
+    Surface s(ckv::Size{10, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 10, 5});
+    auto image = std::make_shared<Image>(1, 1);
+    painter.draw_image(Rect{0, 0, 1, 1}, 1, image, [](Painter&) {});
+    painter.draw_image(Rect{1, 0, 1, 1}, 0, image, [](Painter&) {});
+    CK_CHECK(s.raster_regions().size() == 2);
+    CK_CHECK(s.raster_regions()[0].id == 1);
+    CK_CHECK(s.raster_regions()[1].id != 1);
 }
 
 // --- Degenerate sizes ----------------------------------------------

@@ -239,6 +239,8 @@ std::string TerminalView::encode_mouse(const MouseEvent& event, core::TerminalMo
         case MouseButton::Right: button = 2; break;
         case MouseButton::WheelUp: button = 64; break;
         case MouseButton::WheelDown: button = 65; break;
+        case MouseButton::WheelLeft: button = 66; break;
+        case MouseButton::WheelRight: button = 67; break;
         case MouseButton::None: button = 3; break;
     }
     if (event.action == MouseAction::Move) button |= 32;

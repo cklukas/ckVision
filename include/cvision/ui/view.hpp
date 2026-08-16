@@ -133,6 +133,11 @@ public:
     // this view.
     void raise_to_front(View* child);
 
+    // Moves `child` to the beginning of this view's child list — the
+    // backmost z-position. Like raise_to_front(), this is a pure in-place
+    // reorder and never detaches or re-attaches the child.
+    void lower_to_back(View* child);
+
     // --- Geometry -------------------------------------------------------
 
     Rect bounds() const noexcept { return bounds_; }  // parent-local

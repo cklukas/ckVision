@@ -113,9 +113,9 @@ public:
     // above that newly painted content to apply normally.
     void apply_shadow(Rect rect, StyleTransform transform);
 
-    // Places a cell-anchored raster image (ARCHITECTURE.md §7). `id`
-    // must be unique among this surface's raster regions (encoder cache
-    // identity, term-layer concern later). `fallback` is invoked with a
+    // Places a cell-anchored raster image (ARCHITECTURE.md §7). A positive
+    // `id` must be unique among this surface's raster regions; passing zero
+    // requests a deterministic Surface-local identity. `fallback` is invoked with a
     // Painter clipped to `anchor` and MUST paint equivalent cell
     // content — this is what makes the fallback mandatory by
     // construction (D-017): there is no other way to place raster

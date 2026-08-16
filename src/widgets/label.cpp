@@ -5,6 +5,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/button.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
 
@@ -48,6 +49,25 @@ bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const st
     }
     for (const auto& child : view.children())
         if (activate_label_mnemonic_recursive(*child, scope, query, app)) return true;
+    return false;
+}
+
+bool activate_control_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
+                                         ui::Application& app) {
+    if (!view.visible() || !view.enabled()) return false;
+    if (auto* label = dynamic_cast<Label*>(&view); label != nullptr &&
+        !label->mnemonic().empty() && ascii_ci_equal(label->mnemonic(), query)) {
+        ui::View* const buddy = label->buddy();
+        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) {
+            app.set_focus(buddy);
+            return true;
+        }
+    }
+    if (auto* button = dynamic_cast<Button*>(&view); button != nullptr &&
+        button->activate_mnemonic(query))
+        return true;
+    for (const auto& child : view.children())
+        if (activate_control_mnemonic_recursive(*child, scope, query, app)) return true;
     return false;
 }
 
@@ -96,6 +116,11 @@ SizeHint Label::horizontal_size_hint() const {
 bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app) {
     if (!is_label_mnemonic_request(event)) return false;
     return activate_label_mnemonic_recursive(scope, scope, event.chord.text, app);
+}
+
+bool activate_control_mnemonic(View& scope, const KeyEvent& event, ui::Application& app) {
+    if (!is_label_mnemonic_request(event)) return false;
+    return activate_control_mnemonic_recursive(scope, scope, event.chord.text, app);
 }
 
 }  // namespace ckv::widgets

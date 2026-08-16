@@ -63,6 +63,17 @@ CK_TEST(raise_to_front_restacks_an_existing_child_above_its_siblings) {
     CK_CHECK(overlay.children()[1].get() == bottom);
 }
 
+CK_TEST(lower_to_back_restacks_an_existing_child_below_its_siblings) {
+    Overlay overlay(Rect{0, 0, 40, 20});
+    auto* bottom = overlay.add_item(std::make_unique<View>());
+    auto* top = overlay.add_item(std::make_unique<View>());
+
+    overlay.lower_to_back(top);
+
+    CK_CHECK(overlay.children()[0].get() == top);
+    CK_CHECK(overlay.children()[1].get() == bottom);
+}
+
 CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_mode) {
     Overlay overlay(Rect{0, 0, 40, 20});
     View* raw = overlay.add_item(std::make_unique<View>());

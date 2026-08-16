@@ -38,6 +38,10 @@ public:
     // group has keyboard focus.
     void set_group_label(std::string label);
     const std::string& group_label() const noexcept { return group_label_; }
+    // Optional exact display width for a measured form column. Long labels
+    // clip at this edge; zero restores the natural-width contract.
+    void set_column_width(int columns);
+    int column_width() const noexcept { return column_width_; }
 
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
         normal_role_ = normal_role;
@@ -80,6 +84,7 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     ui::RoleId group_label_role_ = ui::kInvalidRole;
+    int column_width_ = 0;
 };
 
 // Resolves its own theme roles from context() once attached (M9
@@ -93,6 +98,10 @@ public:
     // group has keyboard focus.
     void set_group_label(std::string label);
     const std::string& group_label() const noexcept { return group_label_; }
+    // Optional exact display width for a measured form column. Long labels
+    // clip at this edge; zero restores the natural-width contract.
+    void set_column_width(int columns);
+    int column_width() const noexcept { return column_width_; }
 
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
         normal_role_ = normal_role;
@@ -126,6 +135,7 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     ui::RoleId group_label_role_ = ui::kInvalidRole;
+    int column_width_ = 0;
 };
 
 }  // namespace ckv::widgets

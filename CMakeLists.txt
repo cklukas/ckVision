@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.25)
 project(ckvision VERSION 0.1.0 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 option(CKVISION_BUILD_FUZZERS
     "Build libFuzzer targets and bounded corpus tests (Clang only)" OFF)
@@ -57,6 +59,7 @@ add_library(cvision
     src/widgets/editor_window.cpp
     src/widgets/file_editor_controller.cpp
     src/widgets/file_dialog.cpp
+    src/widgets/flow_view.cpp
     src/widgets/help_viewer.cpp
     src/widgets/image_view.cpp
     src/widgets/input_line.cpp
@@ -86,7 +89,12 @@ add_library(cvision
     src/widgets/window_list_dialog.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+# The public headers use C++20 library types.  Export the requirement with the
+# package target so an independent consumer is configured correctly instead
+# of depending on this project's directory-wide build setting.
+target_compile_features(cvision PUBLIC cxx_std_20)
 ckvision_strict(cvision)
 if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
@@ -133,3 +141,30 @@ endif()
 if(CKVISION_BUILD_FUZZERS)
     add_subdirectory(fuzz)
 endif()
+
+# The public package is deliberately small: the framework library and headers
+# are always installed; runnable examples are installed only when the caller
+# elected to build them.  This makes the documented find_package contract work
+# for both library consumers and a local client-handoff build.
+install(TARGETS cvision
+    EXPORT ckvisionTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY include/cvision DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT ckvisionTargets
+    FILE ckvisionTargets.cmake
+    NAMESPACE ckvision::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)
+configure_package_config_file(
+    cmake/ckvisionConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/ckvisionConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ckvision)

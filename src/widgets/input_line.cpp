@@ -66,6 +66,10 @@ void InputLine::set_validator(std::function<bool(const std::string&)> validator)
     revalidate();
 }
 
+void InputLine::set_grapheme_filter(std::function<bool(std::string_view)> filter) {
+    grapheme_filter_ = std::move(filter);
+}
+
 void InputLine::revalidate() {
     if (!validator_) return;
     set_valid(validator_(text()));
@@ -328,6 +332,7 @@ bool InputLine::on_text_masked(const TextEvent& event) {
     }
     bool changed = false;
     for (std::string_view g : text::split_graphemes(event.text)) {
+        if (grapheme_filter_ && !grapheme_filter_(g)) continue;
         const std::size_t pos = mask_next_editable(cursor_);
         if (pos >= graphemes_.size()) break;
         if (!mask_char_accepts(mask_[pos], g)) continue;
@@ -487,7 +492,9 @@ bool InputLine::on_key(const KeyEvent& event) {
 bool InputLine::on_text(const TextEvent& event) {
     if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;
-    for (std::string_view g : text::split_graphemes(event.text)) graphemes.emplace_back(g);
+    for (std::string_view g : text::split_graphemes(event.text)) {
+        if (!grapheme_filter_ || grapheme_filter_(g)) graphemes.emplace_back(g);
+    }
     if (!graphemes.empty()) record_undo_state();
     insert_graphemes(graphemes);
     return true;

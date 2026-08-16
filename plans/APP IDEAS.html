@@ -1,0 +1,399 @@
+<style>
+  :root {
+    --paper:#FBFCFE; --surface:#FFFFFF; --surface-2:#F1F4FA; --surface-3:#F6F1FC;
+    --ink:#12151C; --ink-soft:#3B4250; --ink-faint:#6C7482; --line:#E3E8F1;
+    --accent:#2949C6; --accent-soft:#E7ECFB; --accent-ink:#1E3AA8;
+    --now:#1F7A54; --now-bg:#E4F3EC; --next:#9A5B00; --next-bg:#F8ECD9;
+    --dream:#6A3FCB; --dream-bg:#EEE8FB; --dream-line:#DBCDF6; --dream-strong:#5B31BE;
+    --shadow:0 1px 2px rgba(18,21,28,.04),0 8px 24px rgba(18,21,28,.05);
+    --serif:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI","Helvetica Neue",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#0C0F16; --surface:#141a27; --surface-2:#10141f; --surface-3:#181327;
+      --ink:#EAEEF6; --ink-soft:#AFB7C7; --ink-faint:#7C8598; --line:#232C3D;
+      --accent:#8AA1F6; --accent-soft:#1B2440; --accent-ink:#AEBFFB;
+      --now:#54CE95; --now-bg:#122720; --next:#E2A852; --next-bg:#2A2113;
+      --dream:#BBA0F5; --dream-bg:#201A36; --dream-line:#3A2E5C; --dream-strong:#C3AAF8;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0C0F16; --surface:#141a27; --surface-2:#10141f; --surface-3:#181327;
+    --ink:#EAEEF6; --ink-soft:#AFB7C7; --ink-faint:#7C8598; --line:#232C3D;
+    --accent:#8AA1F6; --accent-soft:#1B2440; --accent-ink:#AEBFFB;
+    --now:#54CE95; --now-bg:#122720; --next:#E2A852; --next-bg:#2A2113;
+    --dream:#BBA0F5; --dream-bg:#201A36; --dream-line:#3A2E5C; --dream-strong:#C3AAF8;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"]{
+    --paper:#FBFCFE; --surface:#FFFFFF; --surface-2:#F1F4FA; --surface-3:#F6F1FC;
+    --ink:#12151C; --ink-soft:#3B4250; --ink-faint:#6C7482; --line:#E3E8F1;
+    --accent:#2949C6; --accent-soft:#E7ECFB; --accent-ink:#1E3AA8;
+    --now:#1F7A54; --now-bg:#E4F3EC; --next:#9A5B00; --next-bg:#F8ECD9;
+    --dream:#6A3FCB; --dream-bg:#EEE8FB; --dream-line:#DBCDF6; --dream-strong:#5B31BE;
+    --shadow:0 1px 2px rgba(18,21,28,.04),0 8px 24px rgba(18,21,28,.05);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);
+    line-height:1.62;-webkit-font-smoothing:antialiased;font-size:17px}
+  .wrap{max-width:1080px;margin:0 auto;padding:clamp(28px,6vw,72px) clamp(20px,5vw,48px) 96px}
+  .measure{max-width:66ch}
+  a{color:var(--accent);text-underline-offset:2px}
+
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);font-weight:600;display:flex;
+    align-items:center;gap:.7em}
+  .eyebrow::after{content:"";height:1px;flex:1;background:var(--line);min-width:24px}
+
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(2.15rem,5.2vw,3.4rem);
+    line-height:1.05;letter-spacing:-.01em;text-wrap:balance;margin:.5rem 0 0}
+  h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.5rem,3vw,1.95rem);
+    line-height:1.12;letter-spacing:-.01em;text-wrap:balance;margin:0}
+  h3{font-family:var(--sans);font-weight:650;font-size:1.02rem;margin:0;letter-spacing:-.005em}
+  p{margin:0}
+  .lead{font-size:clamp(1.06rem,1.9vw,1.22rem);color:var(--ink-soft);margin-top:1.1rem}
+  .dim{color:var(--ink-soft)}
+  .faint{color:var(--ink-faint)}
+  strong{font-weight:650;color:var(--ink)}
+  code,.expr{font-family:var(--mono);font-size:.9em;background:var(--surface-2);
+    padding:.08em .38em;border-radius:5px;border:1px solid var(--line);white-space:nowrap}
+
+  section{margin-top:clamp(52px,8vw,84px)}
+  .sec-head{margin-bottom:26px}
+  .sec-head h2{margin-top:.5rem}
+  .sec-head .note{margin-top:.6rem;color:var(--ink-soft);max-width:64ch}
+
+  /* hero moat strip */
+  .moat{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+    gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;
+    overflow:hidden;margin-top:34px}
+  .moat > div{background:var(--surface);padding:18px 18px 20px}
+  .moat .k{font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--accent);font-weight:600}
+  .moat .t{margin-top:.5rem;font-size:.94rem;color:var(--ink-soft);line-height:1.5}
+  .moat .t b{color:var(--ink);font-weight:640}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:20px;align-items:center;
+    padding:16px 18px;border:1px solid var(--line);border-radius:12px;
+    background:var(--surface);margin-top:8px}
+  .legend .li{display:flex;gap:.6em;align-items:baseline;font-size:.9rem;color:var(--ink-soft)}
+  .chip{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.04em;
+    text-transform:uppercase;padding:.22em .6em;border-radius:999px;white-space:nowrap;
+    border:1px solid transparent}
+  .chip.now{color:var(--now);background:var(--now-bg);border-color:color-mix(in srgb,var(--now) 26%,transparent)}
+  .chip.next{color:var(--next);background:var(--next-bg);border-color:color-mix(in srgb,var(--next) 26%,transparent)}
+  .chip.dream{color:var(--dream);background:var(--dream-bg);border-color:color-mix(in srgb,var(--dream) 30%,transparent)}
+
+  /* scenario cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:16px;margin-top:8px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:20px 20px 22px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.55rem;
+    transition:transform .18s ease,border-color .18s ease}
+  .card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+  .card .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .card p{font-size:.93rem;color:var(--ink-soft);line-height:1.52}
+  .card .ex{margin-top:.2rem;font-family:var(--mono);font-size:.8rem;color:var(--ink-faint);
+    background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:.5em .7em;
+    white-space:normal;line-height:1.5}
+
+  /* combos + boundaries */
+  .split{display:grid;grid-template-columns:1fr;gap:16px;margin-top:8px}
+  @media(min-width:760px){.split.two{grid-template-columns:1.4fr 1fr}}
+  .panel{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:8px 4px}
+  .panel .ph{padding:14px 20px 6px}
+  .rowlist{display:flex;flex-direction:column}
+  .rowlist .item{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:14px;align-items:baseline}
+  .rowlist .item:first-child{border-top:0}
+  .rowlist .lab{font-family:var(--sans);font-weight:640;color:var(--ink);min-width:0;flex:0 0 40%}
+  .rowlist .desc{color:var(--ink-soft);font-size:.92rem;line-height:1.5}
+  .panel.quiet{background:var(--surface-2)}
+  .panel.quiet .item .lab{color:var(--ink)}
+
+  /* phase 2 zone */
+  .phase2{background:var(--surface-3);border:1px solid var(--dream-line);border-radius:20px;
+    padding:clamp(26px,4vw,42px) clamp(20px,4vw,40px);margin-top:34px}
+  .phase2 .eyebrow{color:var(--dream)}
+  .phase2 .eyebrow::after{background:var(--dream-line)}
+  .spotlight{border:1px solid var(--dream-line);background:var(--surface);border-radius:16px;
+    padding:24px clamp(18px,3vw,28px);margin-top:26px;box-shadow:var(--shadow)}
+  .spotlight .tag{display:inline-flex;align-items:center;gap:.5em;font-family:var(--mono);
+    font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dream-strong);font-weight:640}
+  .spotlight h3{font-family:var(--serif);font-size:1.4rem;font-weight:600;margin-top:.5rem;letter-spacing:-.01em}
+  .spotlight .what{margin-top:.5rem;color:var(--ink-soft);max-width:70ch}
+  .unlocks{list-style:none;padding:0;margin:18px 0 0;display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 26px}
+  .unlocks li{position:relative;padding-left:1.4em;font-size:.93rem;color:var(--ink-soft);line-height:1.5}
+  .unlocks li::before{content:"→";position:absolute;left:0;color:var(--dream);font-family:var(--mono)}
+  .unlocks li b{color:var(--ink);font-weight:640}
+
+  .tablewrap{overflow-x:auto;margin-top:26px;border:1px solid var(--dream-line);border-radius:14px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:.92rem}
+  thead th{text-align:left;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--dream-strong);font-weight:640;padding:14px 18px;
+    border-bottom:1px solid var(--dream-line);background:var(--surface-3);position:sticky;top:0}
+  tbody td{padding:15px 18px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-soft);line-height:1.5}
+  tbody tr:last-child td{border-bottom:0}
+  td .name{color:var(--ink);font-weight:640;font-family:var(--sans)}
+  td .status{display:block;margin-top:.4em;font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)}
+  td.unblock b{color:var(--ink);font-weight:600}
+  .col-ext{width:26%;min-width:180px}
+  .col-stat{width:20%;min-width:150px}
+
+  /* start callout */
+  .start{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;
+    background:var(--surface);padding:22px 24px;margin-top:22px}
+  .start h3{font-family:var(--serif);font-size:1.2rem;font-weight:600;margin-bottom:.4rem}
+  .start p{color:var(--ink-soft);max-width:70ch}
+  .start p + p{margin-top:.7rem}
+
+  footer{margin-top:72px;padding-top:22px;border-top:1px solid var(--line);
+    color:var(--ink-faint);font-size:.82rem;line-height:1.6}
+  footer .mono{font-family:var(--mono)}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">ckmath · application map</p>
+    <h1>What you can build on an exact,<br>honest math engine</h1>
+    <p class="lead measure">ckmath is not another computer-algebra system. It is a deterministic, exact-first math engine whose value is trust: every answer arrives as <em>value + the domain it&#39;s valid in + how sure we are</em>, every derivation is a replayable, machine-checked object, and the same input produces the same bytes on every machine, forever. That specific character — not raw breadth or speed — decides what it is uniquely good to build.</p>
+
+    <div class="moat" role="list">
+      <div role="listitem"><div class="k">Exact</div><div class="t"><b>1/3 + 1/6 is 1/2</b>, and <span class="expr">x+1 where x≠1</span> — it refuses rather than guesses.</div></div>
+      <div role="listitem"><div class="k">Checkable</div><div class="t"><b>Every step is a proof object</b> with rule id and side conditions; the prose is generated from it.</div></div>
+      <div role="listitem"><div class="k">Deterministic</div><div class="t"><b>Byte-identical output</b> on every platform and compiler — diffable, cacheable, reproducible.</div></div>
+      <div role="listitem"><div class="k">Safe</div><div class="t"><b>Budgeted &amp; cancellable</b> everywhere, so user-supplied formulas can&#39;t hang or crash a host.</div></div>
+      <div role="listitem"><div class="k">Portable</div><div class="t"><b>Zero deps, permissive, headless</b> C ABI — links into anything, offline, from server to phone.</div></div>
+    </div>
+  </header>
+
+  <section aria-label="legend">
+    <div class="legend">
+      <span class="faint" style="font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase">Buildability</span>
+      <span class="li"><span class="chip now">Now</span> on the recovered 1.0 spine</span>
+      <span class="li"><span class="chip next">Planned</span> needs a 1.x track (integration, linear algebra)</span>
+      <span class="li"><span class="chip dream">Phase 2</span> needs a new capability — see the map below</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Surface 1</p>
+      <h2>As a library — embed the engine</h2>
+      <p class="note">The C++ API and the versioned C ABI drop a math brain into someone else&#39;s product. This is where the deepest value is: the host owns the experience, ckmath owns correctness.</p>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="row"><h3>Exact calculation engines</h3><span class="chip now">Now</span></div>
+        <p>A spreadsheet or finance/estimating tool where money and fractions are exact and errors are honest — a bad cell yields a real reason, not a silent wrong number.</p>
+        <div class="ex">spreadsheet MATH.* · accounting · engineering worksheets</div></div>
+      <div class="card"><div class="row"><h3>Documents that recompute</h3><span class="chip now">Now</span></div>
+        <p>Word-processor / Markdown directives where the mathematics is <em>computed and rendered</em> (to MathML or LaTeX) from a canonical source of truth, not hand-typed — and re-verifiable on export.</p>
+        <div class="ex">::derive · ::math · living technical docs</div></div>
+      <div class="card"><div class="row"><h3>A grapher that&#39;s actually correct</h3><span class="chip now">Now</span></div>
+        <p>Numeric programs plus domain metadata (exclusions, branch boundaries) so a plot never connects across a pole, marks discontinuities, and knows its asymptotes. ckmath gives correctness; the app owns pixels.</p>
+        <div class="ex">core: Now · roots/extrema overlays: Planned</div></div>
+      <div class="card"><div class="row"><h3>A safe math microservice</h3><span class="chip now">Now</span></div>
+        <p><span class="expr">parse · simplify · diff · solve · render</span> behind an API, safe on hostile input because every request is budgeted and cancellable. The conditioned JSON is the contract.</p>
+        <div class="ex">HTTP math API · form/rule validation backend</div></div>
+      <div class="card"><div class="row"><h3>An expression JIT-lite</h3><span class="chip now">Now</span></div>
+        <p>Compile an expression once, evaluate over a batch with status-aware results and dual-number derivatives — for plotting, tabulation, sweeps, and Newton/optimization inner loops.</p>
+        <div class="ex">compile → eval_batch / eval_dual</div></div>
+      <div class="card"><div class="row"><h3>A verifier / oracle for AI</h3><span class="chip now">Now</span></div>
+        <p>The deterministic core an LLM can <em>narrate but never fabricate</em>: the model proposes, ckmath checks and derives. The primitive that makes &ldquo;AI did the algebra&rdquo; defensible.</p>
+        <div class="ex">assistants stay outside the trust boundary</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Surface 2</p>
+      <h2>As the CLI — the no-link, scriptable surface</h2>
+      <p class="note">The <span class="expr">ckmath</span> binary is a first-class product, not a demo: a calculator, a pipeline filter, and — via JSON-Lines <span class="expr">batch</span> mode over a subprocess — a full math service any language can call without an FFI.</p>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="row"><h3>A calculator that never lies</h3><span class="chip now">Now</span></div>
+        <p>Exact, instant desk math in the shell — <span class="expr">bc</span>/<span class="expr">qalc</span> territory, but honest and symbolic.</p>
+        <div class="ex">ckmath '1/3+1/6' → 1/2</div></div>
+      <div class="card"><div class="row"><h3>Shell &amp; data pipelines</h3><span class="chip now">Now</span></div>
+        <p>POSIX filter mode, one result per line: canonicalize a column of formulas, extract LaTeX for a build, validate an expression corpus in CI with byte-exact goldens.</p>
+        <div class="ex">cat formulas.txt | ckmath --format latex</div></div>
+      <div class="card"><div class="row"><h3>A language-agnostic math service</h3><span class="chip now">Now</span></div>
+        <p>The universal FFI is <span class="expr">popen</span>: one long-running process, structured request/response, and Python/JS/Rust/Go get the whole engine with nothing to link.</p>
+        <div class="ex">ckmath batch  (JSON-Lines in/out)</div></div>
+      <div class="card"><div class="row"><h3>A deterministic LLM tool</h3><span class="chip now">Now</span></div>
+        <p>The JSON envelope — value, conditions, quality, diagnostics, optional trace — is a clean tool-call contract, so an agent gets a citable, conditioned answer instead of a hallucinated one.</p>
+        <div class="ex">tool-use / computer-use for math</div></div>
+      <div class="card"><div class="row"><h3>Doc &amp; build integration</h3><span class="chip now">Now</span></div>
+        <p>Generate verified MathML/LaTeX for a handbook straight from canonical sources, with <span class="expr">--steps</span> emitting worked solutions checked against the real binary.</p>
+        <div class="ex">Makefile equation rendering · verified goldens</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Surface 3</p>
+      <h2>As GUI frontends &amp; apps</h2>
+      <p class="note">Built on the C ABI, native and web apps paint engine truth. Two of these — the checkable tutor and the trustworthy-AI assistant — are things no off-the-shelf CAS gives you cleanly, and are ckmath&#39;s most differentiated products.</p>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="row"><h3>A native math app family</h3><span class="chip now">Now</span></div>
+        <p>Spreadsheet, writer-with-live-math, grapher, database-with-computed-fields — where the UI renders the engine&#39;s resolved appearance, never its own re-computation.</p>
+        <div class="ex">desktop suite on the C ABI</div></div>
+      <div class="card"><div class="row"><h3>A step-by-step tutor</h3><span class="chip now">Now</span></div>
+        <p>Enter an expression, get a <em>checkable</em> replayable derivation rendered as MathML or 2-D layout, with detail levels that are just filters over one trace — plus grading on the whole <em>conditioned solution set</em>, not a number.</p>
+        <div class="ex">e-learning · auto-grading · problem generation</div></div>
+      <div class="card"><div class="row"><h3>An interactive grapher</h3><span class="chip next">Planned</span></div>
+        <p>Type f(x); get a correct plot with roots, extrema, discontinuities and asymptotes annotated. The plotting is Now; the deeper analysis overlays ride the 1.x root/analysis tracks.</p>
+        <div class="ex">correct-by-construction plotting</div></div>
+      <div class="card"><div class="row"><h3>An exact smart scratchpad</h3><span class="chip now">Now</span></div>
+        <p>A clean exact-math notebook: each cell a conditioned result, definitions persist, deterministic export to LaTeX/MathML/PDF. Not Jupyter-scale — a focused surface.</p>
+        <div class="ex">notebook-lite · reproducible export</div></div>
+      <div class="card"><div class="row"><h3>Editor &amp; IDE plugins</h3><span class="chip now">Now</span></div>
+        <p>Inline evaluate / simplify / solve, a live MathML preview, and caret-accurate expression validation inside VS&nbsp;Code, Obsidian, or a LaTeX editor.</p>
+        <div class="ex">inline math · did-you-mean diagnostics</div></div>
+      <div class="card"><div class="row"><h3>Mobile &amp; accessible math</h3><span class="chip now">Now</span></div>
+        <p>Offline, small, zero-dependency exact CAS-lite with worked steps — and, because MathML carries a semantic annotation and the Unicode 2-D layout is font-free, screen-reader- and terminal-friendly math is native.</p>
+        <div class="ex">pocket CAS · accessible authoring</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="split two">
+      <div>
+        <div class="sec-head"><p class="eyebrow">The real leverage</p><h2>Combinations only ckmath makes possible</h2></div>
+        <div class="panel"><div class="rowlist">
+          <div class="item"><div class="lab">Auditable math</div><div class="desc">Deterministic + conditioned + traced = a result whose derivation is exportable and re-verifiable bit-for-bit. For regulated, engineering, and financial work that must show <em>why</em> and <em>under what conditions</em>.</div></div>
+          <div class="item"><div class="lab">Distributed &amp; cached math</div><div class="desc">Byte-determinism lets you memoize by canonical form and guarantee server and client agree exactly — reproducible scientific documents, cross-platform goldens.</div></div>
+          <div class="item"><div class="lab">Safe user formulas</div><div class="desc">Bounded evaluation makes &ldquo;let end users type formulas&rdquo; — spreadsheets, validators, low-code rule engines — safe by construction.</div></div>
+          <div class="item"><div class="lab">Trustworthy AI math</div><div class="desc">The assistant-outside-the-trust-boundary design is the missing piece that makes &ldquo;the model did the math&rdquo; something you can stand behind.</div></div>
+        </div></div>
+      </div>
+      <div>
+        <div class="sec-head"><p class="eyebrow">Aim right</p><h2>What not to build on it</h2></div>
+        <div class="panel quiet"><div class="rowlist">
+          <div class="item"><div class="lab">Not a research CAS</div><div class="desc">No Risch integration, Gröbner bases, ODE/PDE, theorem proving, or exhaustive special functions.</div></div>
+          <div class="item"><div class="lab">Not a numerics powerhouse</div><div class="desc">No arbitrary-precision floats yet, no BLAS/LAPACK scale, no FFT-class bignum — bring your own for heavy compute.</div></div>
+          <div class="item"><div class="lab">Not graphics or typesetting</div><div class="desc">It hands you correct data to plot and semantic forms to typeset; pixels and glyphs are yours.</div></div>
+          <div class="item"><div class="lab">Not a language or notebook runtime</div><div class="desc">Definitions only — no loops, no I/O, no user native code.</div></div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="phase2">
+      <p class="eyebrow">Phase 2 · dream extensions</p>
+      <h2 style="font-family:var(--serif);font-weight:600;font-size:clamp(1.6rem,3.2vw,2.1rem);letter-spacing:-.01em;margin-top:.5rem">The pieces that unlock the next tier of apps</h2>
+      <p class="lead measure" style="margin-top:.9rem">Everything above lives inside ckmath&#39;s deliberate scope. Each capability below is a real addition — some already named as deferred or 1.x in the plans, some genuinely new — and each one <em>opens a category of applications the core cannot reach today</em>. Adding them keeps the same conditioned-result, budget, trace, and determinism contracts; none may weaken them to gain breadth.</p>
+
+      <div class="spotlight">
+        <span class="tag">◆ spotlight · you asked about this one</span>
+        <h3>Arbitrary-precision floating point</h3>
+        <p class="what">Today ckmath is exact (integers, rationals, symbols) or IEEE double — nothing between. An owned big-float behind the existing numeric-mode seam (double-double first, then a true arbitrary-precision float — deliberately never an LGPL dependency) would let a computation ask for <em>N correct digits</em> instead of a machine double.</p>
+        <ul class="unlocks">
+          <li><b>Deep-zoom function graphing</b> — pan and zoom a plot arbitrarily far without the curve dissolving into floating-point noise.</li>
+          <li><b>Verified numeric tables &amp; constants</b> — physical constants, quadrature, and special values computed to a requested precision and pinned.</li>
+          <li><b>High-precision scientific &amp; engineering compute</b> — models where a double&#39;s 15–16 digits are simply not enough.</li>
+          <li><b>Finance &amp; actuarial at any scale</b> — long-horizon or large-magnitude models where rounding is unacceptable.</li>
+          <li><b>Oracle-grade internal evaluation</b> — raise ckmath&#39;s own verification precision, tightening every quality claim it makes.</li>
+          <li><b>Ill-conditioned &amp; chaotic exploration</b> — study systems where doubles silently diverge from the truth.</li>
+        </ul>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th class="col-ext">Extension</th><th class="col-stat">In the plans as</th><th>Applications it unblocks</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="name">Units &amp; dimensional analysis</span></td>
+              <td><span class="status">new — not yet scoped</span></td>
+              <td class="unblock"><b>Engineering &amp; physics calculators that catch unit errors</b> before they ship; unit-aware spreadsheets and computed documents; safe conversions and scientific worksheets.</td>
+            </tr>
+            <tr>
+              <td><span class="name">Symbolic integration, limits &amp; series</span></td>
+              <td><span class="status">planned · 1.x (M8)</span></td>
+              <td class="unblock"><b>Complete calculus tutoring with verified closed forms</b>; engineering hand-derivations; physics; &ldquo;solve this integral and show why it holds.&rdquo;</td>
+            </tr>
+            <tr>
+              <td><span class="name">Symbolic &amp; numeric linear algebra</span></td>
+              <td><span class="status">planned · 1.x (M9)</span></td>
+              <td class="unblock"><b>Systems solving, eigen/spectral analysis</b>, transforms for graphics and robotics, circuit and structural engineering, light data/ML tooling.</td>
+            </tr>
+            <tr>
+              <td><span class="name">Rigorous interval / validated arithmetic</span></td>
+              <td><span class="status">unscheduled</span></td>
+              <td class="unblock"><b>Guaranteed error bounds</b> for certified and safety-critical engineering; verified global optimization and root enclosures; &ldquo;provably correct to ± this.&rdquo;</td>
+            </tr>
+            <tr>
+              <td><span class="name">Multivariate polynomials / Gröbner bases</span></td>
+              <td><span class="status">out of scope · v1</span></td>
+              <td class="unblock"><b>CAD &amp; geometric constraint solving</b>; robotics inverse kinematics; geometric theorem proving; symbolic circuit and network analysis.</td>
+            </tr>
+            <tr>
+              <td><span class="name">LaTeX / MathML import</span></td>
+              <td><span class="status">later modules (bounded)</span></td>
+              <td class="unblock"><b>Ingest existing papers and documents</b>; turn OCR-captured math into computable expressions; migrate legacy content; &ldquo;paste an equation and compute with it.&rdquo;</td>
+            </tr>
+            <tr>
+              <td><span class="name">Probability &amp; statistics layer</span></td>
+              <td><span class="status">new</span></td>
+              <td class="unblock"><b>Statistics education with exact distributions</b>; quant/risk worksheets; data-analysis tooling with symbolic expectation and variance.</td>
+            </tr>
+            <tr>
+              <td><span class="name">Special-functions breadth</span></td>
+              <td><span class="status">new — 1.x expansion</span></td>
+              <td class="unblock"><b>Signal processing, physics, and statistics</b> that need Bessel, gamma/beta, erf, and friends as first-class, status-aware functions.</td>
+            </tr>
+            <tr>
+              <td><span class="name">Number theory</span></td>
+              <td><span class="status">new</span></td>
+              <td class="unblock"><b>Cryptography education and RSA-style demos</b>; competitive-math tooling; teaching modular arithmetic, primality, and integer factoring.</td>
+            </tr>
+            <tr>
+              <td><span class="name">Runtime plugin / function registry</span></td>
+              <td><span class="status">v1 excludes it (compiled-in only)</span></td>
+              <td class="unblock"><b>Domain-specific function packs</b> — finance, engineering, science — contributed without recompiling the engine; an extension ecosystem.</td>
+            </tr>
+            <tr>
+              <td><span class="name">SIMD / GPU / WASM numeric backends</span></td>
+              <td><span class="status">new — compile the bytecode further</span></td>
+              <td class="unblock"><b>Real-time graphing and million-point sweeps</b>; browser-native client-side math; fast edge and mobile evaluation.</td>
+            </tr>
+            <tr>
+              <td><span class="name">WebAssembly build of the C ABI</span></td>
+              <td><span class="status">new — packaging</span></td>
+              <td class="unblock"><b>No-install web apps</b>; privacy-preserving client-side computation; the engine embedded directly in web documents and tools.</td>
+            </tr>
+            <tr>
+              <td><span class="name">Stronger assumption / interval reasoning</span></td>
+              <td><span class="status">bounded now, extensible</span></td>
+              <td class="unblock"><b>More conditions resolved automatically</b>; fewer &ldquo;ambiguous&rdquo; parametric solves; tighter, more useful simplification.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><p class="eyebrow">Sequencing</p><h2>If you&#39;re choosing where to start</h2></div>
+    <div class="start">
+      <h3>Ship the trust story first; add breadth as tracks land.</h3>
+      <p>The <strong>exact-spreadsheet + computed-document + step-by-step-tutor</strong> trio is essentially ready on the recovered 1.0 spine — arithmetic, differentiation, conditioned simplification, rendering, and traces already carry it. Broad <strong>symbolic integration and solving</strong> and <strong>linear-algebra apps</strong> wait on the 1.x tracks; treat them as the second wave.</p>
+      <p>The two applications worth planting a flag on are the ones nothing off-the-shelf gives you cleanly: the <strong>checkable step-by-step tutor</strong>, built on replayable machine-checked traces, and the <strong>trustworthy-AI-math oracle</strong>, built on determinism plus the assistant trust boundary. Of the Phase&nbsp;2 pieces, <strong>arbitrary-precision floats</strong> and a <strong>units layer</strong> give the widest new reach for the least conceptual departure from what ckmath already is.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p><span class="mono">source</span> — synthesized from ckmath&#39;s own VISION, ARCHITECTURE, ROADMAP, and DECISIONS (v1.0 spine, the 1.x tracks, and the deliberately-unscheduled list). &ldquo;Now / Planned / Phase&nbsp;2&rdquo; reflects the post-recovery roadmap, not today&#39;s experimental surface.</p>
+    <p style="margin-top:.5rem">Private working document · application &amp; strategy map · 2026-08-08.</p>
+  </footer>
+
+</div>

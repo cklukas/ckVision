@@ -588,7 +588,8 @@ widget owns deterministic cursor/selection/drawing behavior, and tests cover
 keyboard, mouse, Unicode-safe clipping, and injected-clock activation. The
 0.1 contract does not include a virtualized row provider, million-row lazy
 fetching, columned `ListView` mode, typed/numeric table comparators, or a
-cell-level table editor.
+cell-level table editor. D-043 promotes the concrete list/table requirements
+without changing this release-scope record.
 
 `ComboBox` is the first 0.1 dropdown/history control: it owns editable and
 pick-only state, draws its own in-bounds dropdown, and integrates with the
@@ -608,6 +609,47 @@ forms/widget library rather than an application editor concern; making
 `InputLine` open popups when `ComboBox` is the explicit dropdown control; and
 calling scroll-region byte savings a catalog feature instead of a renderer
 optimization.
+
+**D-043 — Provider-backed data views and flow content are explicit widget
+contracts.** Cworks-class interactive applications establish concrete clients
+for large data navigation and rich read-only presentation. ckVision therefore
+provides separate provider contracts for `ListView` and `Table`, rather than
+one erased “items” interface. A provider is caller-owned, synchronous for one
+requested visible item/cell, and identifies every row/item with a stable,
+opaque value. It never owns UI state, starts work, reads a service, or calls a
+widget from another thread. An application that loads data asynchronously
+updates its own provider and calls the view’s explicit `model_changed()` on the
+UI thread (normally through `Application::post()`).
+
+Cursor, primary selection, and multi-selection store provider identities, not
+display offsets. Filtering, sorting, paging, and a refreshed backing store
+therefore preserve a selection whenever its identity remains present; a
+removed identity is cleared deterministically. The view paints and queries
+only its visible slice plus the cursor-resolution queries required after a
+model change. Ordering belongs to the provider: header activation requests a
+sort but the widget never silently materializes or reorders application data.
+
+`Table` exposes a closed, portable `CellValue` value vocabulary and a
+column-owned edit specification. It performs the standard text, Boolean,
+integer, and real conversion rules, but a provider remains the final authority
+for validation and commit. Failed commits retain the editor and report a
+caller-supplied diagnostic; successful commits preserve stable row/column
+selection. Application-specific types, formulas, database transactions, and
+range semantics remain application models built on this contract.
+
+`FlowView` is the reusable read-only counterpart to `TextEditor`: wrapped,
+styled text runs, links, explicit block breaks, and caller-owned inline raster
+objects share one deterministic layout and scrolling model. Raster content
+always goes through `Painter::draw_image`, so every inline image has an
+extent-bounded cell fallback and participates in ordinary clipping,
+occlusion, and capability degradation. Flow content is an application-owned
+value document; parsing Markdown, chat protocols, document layout policy, and
+background raster generation remain outside the widget.
+
+*Rejected:* indexing selection by a volatile display row; an asynchronous
+provider callback protocol (it would conceal threading, lifetime, and retry
+policy); a framework SQL/formula/document model; and treating rich flow as a
+special terminal-output path that bypasses the scene compositor.
 
 **D-042 — Embedded terminals are private emulated subsessions, never outer
 terminal pass-through.** An embedded terminal window owns an explicit child

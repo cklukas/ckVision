@@ -63,11 +63,12 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/editor_window.hpp` | optional editor/controller/window composition | [Editor](editor.md) |
 | `include/cvision/widgets/terminal_view.hpp` | `TerminalView` | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/widgets/text_view.hpp` | `TextView`, `TextSpan` | [Widget gallery](widget-gallery.md#textview) |
+| `include/cvision/widgets/flow_view.hpp` | `FlowView`, `FlowDocument` | [Flow content](flow-view.md) |
 | `include/cvision/widgets/option_group.hpp` | `CheckGroup`, `RadioGroup` | [Widget gallery](widget-gallery.md#checkgroup) |
 | `include/cvision/widgets/combo_box.hpp` | `ComboBox` | [Widget gallery](widget-gallery.md#combobox) |
-| `include/cvision/widgets/list_view.hpp` | `ListView` | [Widget gallery](widget-gallery.md#listview) |
+| `include/cvision/widgets/list_view.hpp` | `ListView`, `ListModel`, `ListItem` | [Data views](data-views.md) |
 | `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode` | [Widget gallery](widget-gallery.md#treeview) |
-| `include/cvision/widgets/table.hpp` | `Table`, `TableColumn` | [Widget gallery](widget-gallery.md#table) |
+| `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl` | [Widget gallery](widget-gallery.md#tabcontrol) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |
 | `include/cvision/widgets/scrollbar.hpp` | `Scrollbar` | [Widget gallery](widget-gallery.md#scrollbar) |

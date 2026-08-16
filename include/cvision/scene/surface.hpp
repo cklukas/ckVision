@@ -84,6 +84,10 @@ public:
     // fully damaged again, exactly as at construction.
     void resize(Size new_size, Cell fill = Cell{});
 
+    // Assigns a positive identity unique within this Surface. Painter uses it
+    // for callers that pass raster id 0, keeping ordinary widgets free of a
+    // process-global id allocator.
+    int allocate_raster_id() noexcept;
     void add_raster_region(RasterRegion region);
     void remove_raster_region(int id) noexcept;
     void clear_raster_regions() noexcept;
@@ -116,6 +120,7 @@ private:
     std::uint64_t next_junction_scope_ = 1;
     std::vector<DamageSpan> row_damage_;
     std::vector<RasterRegion> raster_regions_;
+    int next_raster_id_ = 1;
 };
 
 }  // namespace ckv::scene

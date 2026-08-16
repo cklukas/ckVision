@@ -75,6 +75,9 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     auto window = std::make_unique<Window>(retained_descriptor->title);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                               roles.dialog_background);
+    if (retained_descriptor->minimum_window_size.width > 0 ||
+        retained_descriptor->minimum_window_size.height > 0)
+        window->set_min_size(retained_descriptor->minimum_window_size);
     Window* const window_ptr = window.get();
     auto completion = std::make_shared<DescriptorDialogCompletion>(
         DescriptorDialogCompletion{window_ptr->lifetime_token(), std::nullopt, false});
@@ -134,6 +137,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 
         auto input = std::make_unique<InputLine>();
         input->set_text(field.initial_text);
+        input->set_password_echo(field.password_echo, field.password_echo_char);
         auto* input_ptr =
             static_cast<InputLine*>(row->add_item(std::move(input), LayoutSpec{SizePolicy::Expanding, 1}));
 
@@ -145,6 +149,11 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
     }
 
     if (!descriptor.buttons.empty()) {
+        if (descriptor.anchor_buttons_to_bottom) {
+            auto spacer = std::make_unique<ui::View>();
+            spacer->set_preferred_size(Size{0, 0});
+            column->add_item(std::move(spacer), LayoutSpec{SizePolicy::Expanding, 1});
+        }
         auto button_row = std::make_unique<Row>();
         button_row->set_spacing(2);
         for (const ButtonDescriptor& bd : descriptor.buttons) {
@@ -159,7 +168,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                 result.default_button = button_ptr;
             }
         }
-        column->add_item(std::move(button_row), LayoutSpec{SizePolicy::Fixed, 1});
+        column->add_item(std::move(button_row),
+                         LayoutSpec{SizePolicy::Fixed, 1, descriptor.button_alignment});
     }
 
     result.initial_focus = find_first_focusable(*column);

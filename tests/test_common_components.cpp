@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/common_components.hpp"
 
+#include <algorithm>
 #include <optional>
 
 #include "cktest.hpp"
@@ -126,6 +127,14 @@ CK_TEST(toolbar_and_command_palette_are_command_registry_surfaces) {
     auto palette = std::make_unique<CommandPalette>();
     CommandPalette* palette_ptr = palette.get();
     app.root().add(std::move(palette));
+    const auto palette_commands = palette_ptr->filtered_commands();
+    CK_CHECK(std::all_of(palette_commands.begin(), palette_commands.end(),
+                         [](const ckv::ui::CommandInfo& info) {
+                             return info.id >= ckv::ui::kFirstApplicationCommandId;
+                         }));
+    CK_CHECK(std::none_of(palette_commands.begin(), palette_commands.end(), [](const ckv::ui::CommandInfo& info) {
+        return info.id == ckv::ui::std_commands::kQuit;
+    }));
     palette_ptr->set_query("bui");
     CK_CHECK(palette_ptr->highlighted_command() == command);
     CK_CHECK(palette_ptr->on_key(key(Key::Enter)));

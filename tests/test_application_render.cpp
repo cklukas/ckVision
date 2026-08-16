@@ -202,10 +202,11 @@ CK_TEST(moving_a_window_recomposes_its_retained_backing_without_content_repaint)
     CK_CHECK(f.app.last_bytes_emitted() > 0);
     // A full 40x12 repaint is far larger. This captures the Presenter side
     // of the move budget as well as the compositor cells-touched bound.
-    // The green maximize/restore glyph adds two truecolor transitions to a
-    // title row; 2080 preserves the same "far below a full repaint" guard
-    // while accounting for that deliberate, independently visible control.
-    CK_CHECK(f.app.last_bytes_emitted() <= 2080);
+    // The separately colored close and maximize/restore glyphs each add a
+    // truecolor transition to a title row.  2120 preserves the same "far
+    // below a full repaint" guard while accounting for those deliberately
+    // visible controls.
+    CK_CHECK(f.app.last_bytes_emitted() <= 2120);
     CK_CHECK(!f.term.written_bytes().empty());
 }
 

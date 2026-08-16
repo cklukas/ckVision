@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/table.hpp"
 
+#include <algorithm>
+
 #include "cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -19,7 +21,12 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::Table;
+using ckv::widgets::TableCell;
+using ckv::widgets::TableCellRef;
 using ckv::widgets::TableColumn;
+using ckv::widgets::TableEditResult;
+using ckv::widgets::TableModel;
+using ckv::widgets::TableRowId;
 
 namespace {
 struct Fixture {
@@ -36,6 +43,34 @@ ckv::KeyEvent key(ckv::Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None,
 ckv::MouseEvent click(ckv::Point p) {
     return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, p, std::nullopt, Modifier::None};
 }
+
+struct Provider final : TableModel {
+    std::vector<TableRowId> order{10, 20, 30};
+    std::vector<std::int64_t> values{1, 2, 3};
+    mutable std::size_t cell_queries = 0;
+    std::optional<TableCellRef> committed;
+    std::optional<ckv::widgets::CellValue> committed_value;
+
+    std::size_t row_count() const override { return order.size(); }
+    TableRowId row_id_at(std::size_t index) const override { return order[index]; }
+    std::optional<std::size_t> index_of(TableRowId id) const override {
+        const auto found = std::find(order.begin(), order.end(), id);
+        return found == order.end() ? std::nullopt : std::optional<std::size_t>(found - order.begin());
+    }
+    TableCell cell(TableCellRef reference) const override {
+        ++cell_queries;
+        const auto index = index_of(reference.row);
+        return TableCell{values[*index], {}, std::nullopt, true};
+    }
+    TableEditResult commit(TableCellRef reference, const ckv::widgets::CellValue& value) override {
+        committed = reference;
+        committed_value = value;
+        const auto number = std::get_if<std::int64_t>(&value);
+        if (number == nullptr) return TableEditResult::reject("Expected integer");
+        values[*index_of(reference.row)] = *number;
+        return TableEditResult::accept();
+    }
+};
 }  // namespace
 
 // --- Basics --------------------------------------------------------------
@@ -245,4 +280,62 @@ CK_TEST(draw_does_not_crash_for_an_empty_table) {
     Painter painter(s, Rect{0, 0, 20, 5});
     table.draw(painter);
     CK_CHECK(true);
+}
+
+CK_TEST(provider_backed_table_queries_only_visible_cells) {
+    Fixture f;
+    Provider model;
+    model.order.resize(1'000'000);
+    model.values.resize(1'000'000);
+    for (std::size_t index = 0; index < model.order.size(); ++index) model.order[index] = static_cast<TableRowId>(index + 1);
+    auto table = make_table(f);
+    table.set_columns({TableColumn{"Value", 8, 3, ckv::widgets::TableCellType::Integer, true}});
+    table.set_model(model);
+    table.set_context(f.ctx());
+    table.set_bounds(Rect{0, 0, 20, 5});
+    Surface surface(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 5});
+    table.draw(painter);
+    CK_CHECK(model.cell_queries <= 5);  // four visible rows plus no hidden materialization
+}
+
+CK_TEST(provider_backed_table_preserves_the_selected_cell_through_reorder) {
+    Fixture f;
+    Provider model;
+    auto table = make_table(f);
+    table.set_columns({TableColumn{"Value", 8, 3, ckv::widgets::TableCellType::Integer, true}});
+    table.set_model(model);
+    table.on_key(key(Key::Down));
+    CK_CHECK((table.selected_cell() == TableCellRef{20, 0}));
+    model.order = {30, 10, 20};
+    table.model_changed();
+    CK_CHECK((table.selected_cell() == TableCellRef{20, 0}));
+    CK_CHECK(table.cursor_row() == 2);
+}
+
+CK_TEST(provider_backed_table_clears_a_removed_selection) {
+    Fixture f;
+    Provider model;
+    auto table = make_table(f);
+    table.set_columns({TableColumn{"Value", 8, 3, ckv::widgets::TableCellType::Integer, true}});
+    table.set_model(model);
+    table.on_key(key(Key::Down));
+    model.order = {10, 30};
+    table.model_changed();
+    CK_CHECK(!table.selected_cell());
+    CK_CHECK(table.cursor_row() == -1);
+}
+
+CK_TEST(provider_backed_table_commits_a_typed_edit_to_its_model) {
+    Fixture f;
+    Provider model;
+    auto table = make_table(f);
+    table.set_columns({TableColumn{"Count", 8, 3, ckv::widgets::TableCellType::Integer, true}});
+    table.set_model(model);
+    CK_CHECK(table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "42"}}));
+    CK_CHECK(table.editing());
+    CK_CHECK(table.on_key(key(Key::Enter)));
+    CK_CHECK(!table.editing());
+    CK_CHECK((model.committed == TableCellRef{10, 0}));
+    CK_CHECK(std::get<std::int64_t>(*model.committed_value) == 42);
 }

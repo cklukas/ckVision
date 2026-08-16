@@ -26,6 +26,13 @@ void TextView::on_attached() {
     if (text_role_ == ui::kInvalidRole) text_role_ = context().roles->find("ckv.textview.text");
 }
 
+void TextView::set_vertical_scrollbar_visible(bool visible) noexcept {
+    if (vertical_scrollbar_visible_ == visible) return;
+    vertical_scrollbar_visible_ = visible;
+    on_resized();
+    invalidate();
+}
+
 void TextView::split_lines() {
     lines_.clear();
     std::size_t start = 0;
@@ -132,7 +139,8 @@ std::string TextView::osc8_text() const {
 
 void TextView::on_resized() {
     if (scrollbar_ == nullptr) return;
-    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
+    const int scrollbar_width = vertical_scrollbar_visible_ ? std::min(1, bounds().width) : 0;
+    scrollbar_->set_bounds(Rect{std::max(0, bounds().width - scrollbar_width), 0, scrollbar_width, bounds().height});
     scrollbar_->set_range(static_cast<int>(lines_.size()), std::max(1, bounds().height));
 }
 
@@ -207,7 +215,7 @@ std::optional<std::size_t> TextView::link_at(int line, int column) const {
 
 void TextView::draw(scene::Painter& painter) {
     const Style base = context().theme->resolve(text_role_);
-    const int visible_width = std::max(0, bounds().width - 1);
+    const int visible_width = std::max(0, bounds().width - (vertical_scrollbar_visible_ ? 1 : 0));
     const int top = top_line();
     for (int row = 0; row < bounds().height; ++row) {
         const std::size_t index = static_cast<std::size_t>(top + row);

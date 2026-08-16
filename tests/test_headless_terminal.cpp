@@ -262,3 +262,43 @@ CK_TEST(capability_metric_refinement_updates_virtual_display_without_erasing_tex
     CK_CHECK(term.display().frame().at(Point{0, 0}).grapheme() == "X");
     CK_CHECK(!term.display().has_raster_pixels());
 }
+
+CK_TEST(capability_overrides_layer_client_policy_over_observed_terminal_evidence) {
+    Capabilities observed = headless_sixel_profile();
+    observed.sixel_color_registers = 256;
+    observed.cell_pixels = Size{8, 16};
+    HeadlessTerminal term(Size{20, 10}, observed);
+
+    CapabilityOverrides overrides;
+    overrides.sixel_graphics = false;
+    overrides.cell_pixels = Size{9, 18};
+    overrides.sixel_color_registers = 64;
+    term.set_capability_overrides(overrides);
+
+    const auto forced = term.poll(0);
+    CK_CHECK(forced.size() == 1);
+    const auto& forced_caps = std::get<CapabilityChangedEvent>(forced.front()).capabilities;
+    CK_CHECK(!forced_caps.sixel_graphics);
+    CK_CHECK(forced_caps.cell_pixels == (Size{9, 18}));
+    CK_CHECK(forced_caps.sixel_color_registers == 64);
+    CK_CHECK(term.display().cell_pixels() == (Size{9, 18}));
+
+    // New probe evidence remains observed, while the explicit policy stays
+    // effective until the client deliberately removes it.
+    Capabilities refined = observed;
+    refined.sixel_color_registers = 32;
+    refined.cell_pixels = Size{7, 14};
+    term.inject_capability_change(refined);
+    const auto refined_events = term.poll(1);
+    CK_CHECK(refined_events.size() == 1);
+    const auto& refined_caps = std::get<CapabilityChangedEvent>(refined_events.front()).capabilities;
+    CK_CHECK(!refined_caps.sixel_graphics);
+    CK_CHECK(refined_caps.cell_pixels == (Size{9, 18}));
+    CK_CHECK(refined_caps.sixel_color_registers == 32);
+
+    term.set_capability_overrides({});
+    const auto restored = term.poll(2);
+    CK_CHECK(restored.size() == 1);
+    CK_CHECK(std::get<CapabilityChangedEvent>(restored.front()).capabilities == refined);
+    CK_CHECK(term.display().cell_pixels() == (Size{7, 14}));
+}

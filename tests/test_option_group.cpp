@@ -48,6 +48,17 @@ CK_TEST(check_group_starts_with_everything_unchecked) {
     CK_CHECK(!group.checked(1));
 }
 
+CK_TEST(option_groups_can_use_an_exact_measured_column_width) {
+    CheckGroup checks({"A much longer check choice"});
+    checks.set_column_width(12);
+    CK_CHECK((checks.horizontal_size_hint() == ckv::ui::SizeHint{12, 12, 12}));
+    RadioGroup radios({"A much longer radio choice"});
+    radios.set_column_width(14);
+    CK_CHECK((radios.horizontal_size_hint() == ckv::ui::SizeHint{14, 14, 14}));
+    radios.set_column_width(0);
+    CK_CHECK(radios.horizontal_size_hint().preferred > 14);
+}
+
 CK_TEST(space_toggles_the_current_item) {
     Fixture f;
     CheckGroup group({"&A", "&B"});
@@ -126,6 +137,21 @@ CK_TEST(check_group_uses_square_brackets_and_an_uppercase_x_for_checked_items) {
     CK_CHECK(s.at(Point{2, 1}).grapheme() == "]");
 }
 
+CK_TEST(captioned_check_group_indents_choices_beneath_its_caption) {
+    Fixture f;
+    CheckGroup group({"Choice"});
+    group.set_group_label("Options");
+    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_bounds(Rect{0, 0, 16, 2});
+    Surface s(ckv::Size{16, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 16, 2});
+    group.draw(painter);
+
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "O");
+    CK_CHECK(s.at(Point{1, 1}).grapheme() == "[");
+    CK_CHECK(s.at(Point{5, 1}).grapheme() == "C");
+}
+
 CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     Fixture f;
     CheckGroup group({"First", "Second"});
@@ -139,7 +165,7 @@ CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     group.draw(normal_painter);
     CK_CHECK(normal.at(Point{0, 0}).grapheme() == "C");
     CK_CHECK(normal.at(Point{0, 0}).style() == f.theme.resolve(f.roles.label_text));
-    CK_CHECK(normal.at(Point{0, 1}).grapheme() == "[");
+    CK_CHECK(normal.at(Point{1, 1}).grapheme() == "[");
     CK_CHECK(!group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 0},
                                               std::nullopt, Modifier::None}));
     CK_CHECK(group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 1},
@@ -298,7 +324,7 @@ CK_TEST(a_radio_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     group.draw(normal_painter);
     CK_CHECK(normal.at(Point{0, 0}).grapheme() == "M");
     CK_CHECK(normal.at(Point{0, 0}).style() == f.theme.resolve(f.roles.label_text));
-    CK_CHECK(normal.at(Point{0, 1}).grapheme() == "(");
+    CK_CHECK(normal.at(Point{1, 1}).grapheme() == "(");
     CK_CHECK(!group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 0},
                                               std::nullopt, Modifier::None}));
     CK_CHECK(group.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{2, 2},

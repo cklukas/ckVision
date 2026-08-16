@@ -731,6 +731,22 @@ CK_TEST(validator_runs_automatically_after_every_edit) {
     CK_CHECK(!input.valid());  // "ab" — edit re-runs the validator, overriding the prior verdict
 }
 
+CK_TEST(grapheme_filter_applies_to_typed_and_pasted_text_but_not_programmatic_values) {
+    Fixture f;
+    InputLine input;
+    input.set_grapheme_filter([](std::string_view grapheme) {
+        return grapheme.size() == 1 && grapheme.front() >= '0' && grapheme.front() <= '9';
+    });
+
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "4"}}));
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "x"}}));
+    CK_CHECK(input.on_text(ckv::TextEvent{"5y6", true}));
+    CK_CHECK(input.text() == "456");
+
+    input.set_text("legacy-value");
+    CK_CHECK(input.text() == "legacy-value");
+}
+
 CK_TEST(external_set_valid_is_overridden_by_the_next_edit_when_a_validator_is_installed) {
     Fixture f;
     InputLine input;
@@ -910,4 +926,144 @@ CK_TEST(without_a_history_registry_up_and_down_are_unhandled_as_before) {
     InputLine input;
     CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Up, Modifier::None, ""}}));
     CK_CHECK(!input.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
+}
+
+// --- Button press lifecycle ----------------------------------------------
+//
+// A press is something that can be taken back. It begins on the way down,
+// shows itself while it lasts, and only acts on the way up — and only if it
+// was never revoked in between by moving off the control or by focus leaving
+// it. Terminals that cannot report a key release get the closest honest
+// substitute instead, which is asserted separately below.
+
+namespace {
+
+// A terminal profile that reports key releases (the kitty keyboard
+// protocol); the legacy default never does.
+ckv::term::Capabilities release_reporting_capabilities() {
+    ckv::term::Capabilities caps = ckv::term::baseline_capabilities();
+    caps.keyboard_protocol = ckv::term::KeyboardProtocol::Kitty;
+    return caps;
+}
+
+}  // namespace
+
+CK_TEST(a_held_enter_keeps_the_button_down_and_acts_only_on_release) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10}, release_reporting_capabilities());
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    auto* button = static_cast<Button*>(app.root().add_child(std::make_unique<Button>("OK")));
+    button->set_bounds(Rect{0, 0, 10, 1});
+    app.set_focus(button);
+    int presses = 0;
+    button->on_press = [&] { ++presses; };
+
+    CK_CHECK(button->on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Press, true}));
+    CK_CHECK(button->pressed());  // visibly down while the key is held
+    CK_CHECK(presses == 0);       // and nothing has happened yet
+    CK_CHECK(button->on_key(
+        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Repeat, true}));
+    CK_CHECK(presses == 0);  // one press held, not many
+    CK_CHECK(button->on_key(
+        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Release, true}));
+    CK_CHECK(!button->pressed());
+    CK_CHECK(presses == 1);
+}
+
+CK_TEST(a_held_space_behaves_exactly_as_a_held_enter) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10}, release_reporting_capabilities());
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    auto* button = static_cast<Button*>(app.root().add_child(std::make_unique<Button>("OK")));
+    button->set_bounds(Rect{0, 0, 10, 1});
+    app.set_focus(button);
+    int presses = 0;
+    button->on_press = [&] { ++presses; };
+
+    CK_CHECK(button->on_key(
+        ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, " "}, ckv::KeyAction::Press, true}));
+    CK_CHECK(button->pressed());
+    CK_CHECK(presses == 0);
+    CK_CHECK(button->on_key(
+        ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, " "}, ckv::KeyAction::Release, true}));
+    CK_CHECK(presses == 1);
+}
+
+CK_TEST(focus_leaving_during_a_held_key_takes_the_press_back) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10}, release_reporting_capabilities());
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    auto* button = static_cast<Button*>(app.root().add_child(std::make_unique<Button>("OK")));
+    button->set_bounds(Rect{0, 0, 10, 1});
+    auto* other = static_cast<Button*>(app.root().add_child(std::make_unique<Button>("Cancel")));
+    other->set_bounds(Rect{0, 2, 10, 1});
+    app.set_focus(button);
+    int presses = 0;
+    button->on_press = [&] { ++presses; };
+
+    CK_CHECK(button->on_key(
+        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Press, true}));
+    CK_CHECK(button->pressed());
+    app.set_focus(other);  // Tab away mid-press
+    CK_CHECK(!button->pressed());
+    // The key finally comes up, but it is no longer this button's press.
+    button->on_key(
+        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Release, true});
+    CK_CHECK(presses == 0);
+}
+
+CK_TEST(a_key_that_promises_no_release_acts_immediately) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 10});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    auto* button = static_cast<Button*>(app.root().add_child(std::make_unique<Button>("OK")));
+    button->set_bounds(Rect{0, 0, 10, 1});
+    app.set_focus(button);
+    int presses = 0;
+    button->on_press = [&] { ++presses; };
+
+    CK_CHECK(button->on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(button->pressed());  // still acknowledged visibly
+    CK_CHECK(presses == 1);       // but acts now: waiting would wait forever
+}
+
+CK_TEST(dragging_off_a_pressed_button_lifts_it_and_dragging_back_presses_it_again) {
+    Fixture f;
+    Button button("OK");
+    button.set_context(f.ctx());
+    button.set_bounds(Rect{0, 0, 10, 1});
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+
+    const auto at = [](int x, int y, ckv::MouseAction action) {
+        return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{x, y}, std::nullopt,
+                               Modifier::None};
+    };
+    CK_CHECK(button.on_mouse(at(2, 0, ckv::MouseAction::Down)));
+    CK_CHECK(button.pressed());
+    button.on_mouse(at(30, 5, ckv::MouseAction::Move));  // off the button
+    CK_CHECK(!button.pressed());
+    button.on_mouse(at(3, 0, ckv::MouseAction::Move));  // and back onto it
+    CK_CHECK(button.pressed());
+    button.on_mouse(at(3, 0, ckv::MouseAction::Up));
+    CK_CHECK(presses == 1);
+}
+
+CK_TEST(releasing_the_pointer_away_from_a_button_takes_the_press_back) {
+    Fixture f;
+    Button button("OK");
+    button.set_context(f.ctx());
+    button.set_bounds(Rect{0, 0, 10, 1});
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+
+    const auto at = [](int x, int y, ckv::MouseAction action) {
+        return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{x, y}, std::nullopt,
+                               Modifier::None};
+    };
+    button.on_mouse(at(2, 0, ckv::MouseAction::Down));
+    button.on_mouse(at(30, 5, ckv::MouseAction::Move));
+    button.on_mouse(at(30, 5, ckv::MouseAction::Up));
+    CK_CHECK(!button.pressed());
+    CK_CHECK(presses == 0);  // moving away before releasing cancels it
 }

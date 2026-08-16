@@ -75,6 +75,14 @@ void CheckGroup::set_group_label(std::string label) {
     size_hint_changed();
 }
 
+void CheckGroup::set_column_width(int columns) {
+    CKV_ASSERT(columns >= 0);
+    if (column_width_ == columns) return;
+    column_width_ = columns;
+    invalidate();
+    size_hint_changed();
+}
+
 void CheckGroup::on_attached() {
     if (normal_role_ == ui::kInvalidRole)
         normal_role_ = context().roles->find("ckv.option.normal");
@@ -119,8 +127,10 @@ void CheckGroup::move_cursor(int direction) {
 
 SizeHint CheckGroup::horizontal_size_hint() const {
     int max_width = text::text_width(group_label_);
+    const int item_indent = group_label_.empty() ? 0 : 1;
     for (const auto& label : labels_)
-        max_width = std::max(max_width, text::text_width(parse_mnemonic(label).display) + 4);
+        max_width = std::max(max_width, item_indent + text::text_width(parse_mnemonic(label).display) + 4);
+    if (column_width_ != 0) max_width = column_width_;
     return SizeHint{max_width, max_width, max_width};
 }
 SizeHint CheckGroup::vertical_size_hint() const {
@@ -188,12 +198,14 @@ void CheckGroup::draw(scene::Painter& painter) {
         const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
                                                           : theme.resolve(normal_role_);
         const int row = label_rows + static_cast<int>(i);
+        const int item_indent = label_rows == 0 ? 0 : 1;
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
         const std::string marker = states_[i] == CheckState::Checked ? "[X] "
                                  : states_[i] == CheckState::Mixed   ? "[~] "
                                                                      : "[ ] ";
-        painter.draw_text(Point{0, row}, marker, style);
-        draw_mnemonic(painter, Point{4, row}, parse_mnemonic(labels_[i]), bounds().width - 4,
+        painter.draw_text(Point{item_indent, row}, marker, style);
+        draw_mnemonic(painter, Point{item_indent + 4, row}, parse_mnemonic(labels_[i]),
+                      bounds().width - item_indent - 4,
                       style, accent_style(style, theme.resolve(mnemonic_role_)));
     }
 }
@@ -230,6 +242,14 @@ void RadioGroup::set_selected(int index) {
     if (on_changed) on_changed(selected_);
 }
 
+void RadioGroup::set_column_width(int columns) {
+    CKV_ASSERT(columns >= 0);
+    if (column_width_ == columns) return;
+    column_width_ = columns;
+    invalidate();
+    size_hint_changed();
+}
+
 void RadioGroup::move_cursor(int direction) {
     if (labels_.empty()) return;
     const int n = static_cast<int>(labels_.size());
@@ -239,8 +259,10 @@ void RadioGroup::move_cursor(int direction) {
 
 SizeHint RadioGroup::horizontal_size_hint() const {
     int max_width = text::text_width(group_label_);
+    const int item_indent = group_label_.empty() ? 0 : 1;
     for (const auto& label : labels_)
-        max_width = std::max(max_width, text::text_width(parse_mnemonic(label).display) + 4);
+        max_width = std::max(max_width, item_indent + text::text_width(parse_mnemonic(label).display) + 4);
+    if (column_width_ != 0) max_width = column_width_;
     return SizeHint{max_width, max_width, max_width};
 }
 SizeHint RadioGroup::vertical_size_hint() const {
@@ -310,10 +332,12 @@ void RadioGroup::draw(scene::Painter& painter) {
         const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
                                                           : theme.resolve(normal_role_);
         const int row = label_rows + static_cast<int>(i);
+        const int item_indent = label_rows == 0 ? 0 : 1;
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
         const std::string marker = (static_cast<int>(i) == selected_) ? "(•) " : "( ) ";
-        painter.draw_text(Point{0, row}, marker, style);
-        draw_mnemonic(painter, Point{4, row}, parse_mnemonic(labels_[i]), bounds().width - 4,
+        painter.draw_text(Point{item_indent, row}, marker, style);
+        draw_mnemonic(painter, Point{item_indent + 4, row}, parse_mnemonic(labels_[i]),
+                      bounds().width - item_indent - 4,
                       style, accent_style(style, theme.resolve(mnemonic_role_)));
     }
 }

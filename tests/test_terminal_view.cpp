@@ -161,6 +161,11 @@ CK_TEST(terminal_view_forwards_the_child_selected_mouse_encoding_only_to_private
     session.feed_output("\x1b[?1006h");
     CK_CHECK(view.on_mouse(click));
     CK_CHECK(session.take_pending_input() == "\x1b[<0;3;2M");
+
+    const ckv::MouseEvent horizontal_wheel{ckv::MouseAction::Wheel, ckv::MouseButton::WheelLeft,
+                                           ckv::Point{5, 5}, {}, ckv::Modifier::None};
+    CK_CHECK(view.on_mouse(horizontal_wheel));
+    CK_CHECK(session.take_pending_input() == "\x1b[<66;3;2M");
 }
 
 CK_TEST(terminal_view_shift_drag_selects_locally_without_child_mouse_bytes) {

@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
@@ -49,6 +50,13 @@ struct FieldDescriptor {
     // keystroke, since a field mid-edit is expected to be transiently
     // invalid.
     std::function<bool(const std::string&)> validate;
+
+    // Secret fields retain their real value for validation/completion while
+    // displaying only `password_echo_char`. This belongs on the descriptor,
+    // rather than requiring a caller to reconstruct a materialized dialog,
+    // so declarative input boxes can safely request password entry too.
+    bool password_echo = false;
+    char password_echo_char = '*';
 };
 
 struct ButtonDescriptor {
@@ -73,6 +81,17 @@ struct DialogDescriptor {
     // resizes; this flag only controls whether the USER is offered
     // that resize at all, not whether the layout could support it.
     bool resizable = false;
+
+    // Optional measured lower bound for the framed hosting window. This is
+    // presentation geometry, not field padding: a compact form can retain
+    // deliberate whitespace while every field still reflows in that space.
+    Size minimum_window_size{};
+    // Placement of the action row within a deliberately wider form.
+    ui::Alignment button_alignment = ui::Alignment::Start;
+    // When the minimum height leaves space below the fields, place actions at
+    // the bottom rather than treating that intentional space as a trailing
+    // blank area. Defaults preserve existing compact descriptor dialogs.
+    bool anchor_buttons_to_bottom = false;
 };
 
 struct MaterializedDialog {

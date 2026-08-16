@@ -167,7 +167,8 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     CKV_ASSERT(image->width() > 0 && image->height() > 0);
     Painter fallback_painter = clipped(anchor);  // clipped() already translates via to_absolute
     fallback(fallback_painter);
-    surface_.add_raster_region(RasterRegion{id, to_absolute(anchor), std::move(image), true});
+    surface_.add_raster_region(
+        RasterRegion{id == 0 ? surface_.allocate_raster_id() : id, to_absolute(anchor), std::move(image), true});
 }
 
 }  // namespace ckv::scene

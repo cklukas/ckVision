@@ -20,13 +20,16 @@ the baseline being committed.
 | WP-47 | Interactive TerminalView, input/focus/mouse/paste/scrollback and nested child path | `tests/test_terminal_view.cpp`, `tests/terminal_redraw_contract.cpp`, nested-child PTY cases |
 | WP-48 | Sixel decoder, scene raster bridge, clipping, fallback and hostile-input bounds | `tests/test_virtual_display_visual_golden.cpp`, terminal view raster tests, Sixel limits/recovery tests |
 | WP-49 | Runnable terminal example, menus/windows, docs and generated captures | `examples/terminal`, `docs/embedded-terminal.md`, `terminal_visual_capture`, terminal app tests |
+| WP-53 | Installable CMake package, runnable example handoff, client archive, and independent consumer | `tests/install_package_smoke.cmake`, `tests/client_bundle_smoke.cmake`, `tools/package_client_bundle.sh`, `docs/client-handoff.md` |
+| WP-54 | Versioned release audit, public API/example evidence index, limits, and acceptance checklist | `docs/release-audit.md`, `docs/api-index.md`, `plans/example-coverage.md` |
 
 ## Gate record
 
 | Gate | Command/evidence | Result |
 |---|---|---|
 | Build | `cmake --build build -j2` | Passed with the configured Mac toolchain |
-| Unit/integration/golden suite | `ctest --test-dir build --output-on-failure` | 130/130 passed |
+| Unit/integration/golden suite | `ctest --test-dir build --output-on-failure` | 133/133 passed |
+| Installed consumer and handoff archive | `ctest --test-dir build -R '(install_package_smoke|client_bundle_smoke)' --output-on-failure` | Passed |
 | Terminal fuzz corpus | `ctest --test-dir build-fuzz-llvm -L fuzz-corpus --output-on-failure` | 8/8 passed with Homebrew LLVM |
 | Terminal sanitizer suite | `ctest --test-dir build-asan-llvm -R 'suite_test_(terminal_emulator|terminal_view|posix_terminal_subsession|menu|terminal_cell_golden|presenter)' --output-on-failure` | 6/6 passed with ASan/UBSan |
 | Layer/provenance | `python3 tools/check_layers.py`; `python3 tools/check_provenance.py --root .` | Passed |

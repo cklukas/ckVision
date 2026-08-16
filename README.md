@@ -134,6 +134,8 @@ documentation visuals and rendered outputs with `tools/docgen/generate_docs.sh`.
 | [plans/embedded-terminal-delivery-target.md](plans/embedded-terminal-delivery-target.md) | WP-45…WP-50 terminal delivery order, acceptance matrix, and proof of no-spill graphics |
 | [docs/example-apps.md](docs/example-apps.md) | Example applications: what each one demonstrates, how it's tested, generated screenshots |
 | [docs/getting-started.md](docs/getting-started.md) | Build/run path and minimal host application |
+| [docs/client-handoff.md](docs/client-handoff.md) | Installable SDK, generated visual documentation, bundle workflow, and terminal troubleshooting |
+| [docs/release-audit.md](docs/release-audit.md) | Current 0.1 Mac release evidence and final acceptance checklist |
 | [docs/tutorial-hello.md](docs/tutorial-hello.md) | Complete Hello source, hierarchy, walkthrough, and generated frames |
 | [docs/object-model.md](docs/object-model.md) | Application/view/Desktop/window ownership, focus, events, and painting |
 | [docs/layout-guide.md](docs/layout-guide.md) | Layout container selection and resize evidence |

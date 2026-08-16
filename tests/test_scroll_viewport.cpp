@@ -60,6 +60,17 @@ CK_TEST(content_smaller_than_the_viewport_is_not_scrollable) {
     CK_CHECK(viewport.content()->bounds().height == 20);
 }
 
+CK_TEST(always_visible_scrollbars_reserve_their_tracks_for_fitting_content) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 40, 20});
+    viewport.set_scrollbars_always_visible(true);
+    viewport.set_content(make_content(10, 5));
+    CK_CHECK(viewport.scrollbars_always_visible());
+    CK_CHECK(viewport.content()->bounds().width == 39);
+    CK_CHECK(viewport.content()->bounds().height == 19);
+}
+
 CK_TEST(vertical_auto_hide_reclaims_horizontal_content_space_when_only_horizontal_scroll_is_unneeded) {
     Fixture f;
     ScrollViewport viewport;

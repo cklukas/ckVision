@@ -29,11 +29,12 @@ and executable test family. Screenshots are generated, not committed artwork.
 | `include/cvision/widgets/editor_window.hpp` | [Editor](editor.md) | editor | editor-initial/editor-close-confirm | test_editor_window |
 | `include/cvision/widgets/file_editor_controller.hpp` | [Editor](editor.md) | editor | editor-initial/editor-close-confirm | test_file_editor_controller |
 | `include/cvision/widgets/file_dialog.hpp` | [Platform services](platform-services.md) | filebrowser | filebrowser-initial | test_file_dialog |
+| `include/cvision/widgets/flow_view.hpp` | [Flow content](flow-view.md) | workbench | workbench-text | test_flow_view, test_workbench_smoke |
 | `include/cvision/widgets/help_viewer.hpp` | [Dialogs](dialogs-and-commands.md) | forms | forms-initial | test_help_viewer |
 | `include/cvision/widgets/image_view.hpp` | [Graphics](graphics.md) | graphics | graphics-sixel-image/graphics-no-graphics-image | test_graphics_smoke |
 | `include/cvision/widgets/input_line.hpp` | [Gallery](widget-gallery.md#inputline) | forms | forms-initial | test_widgets |
 | `include/cvision/widgets/label.hpp` | [Gallery](widget-gallery.md#label) | layouts | layouts-initial | test_widgets |
-| `include/cvision/widgets/list_view.hpp` | [Gallery](widget-gallery.md#listview) | filebrowser | filebrowser-initial | test_list_view |
+| `include/cvision/widgets/list_view.hpp` | [Data views](data-views.md) | filebrowser | filebrowser-initial | test_list_view |
 | `include/cvision/widgets/memo.hpp` | [Gallery](widget-gallery.md#memo) | workbench | workbench-text | test_memo |
 | `include/cvision/widgets/menu.hpp` | [Hello](tutorial-hello.md) | hello | hello-menu-open | test_menu |
 | `include/cvision/widgets/message_box.hpp` | [Dialogs](dialogs-and-commands.md) | hello/forms | hello-greeting/forms-info-message | test_message_box |
@@ -49,7 +50,7 @@ and executable test family. Screenshots are generated, not committed artwork.
 | `include/cvision/widgets/static_text.hpp` | [Gallery](widget-gallery.md#statictext) | layouts | layouts-initial | test_widgets |
 | `include/cvision/widgets/status_line.hpp` | [Hello](tutorial-hello.md) | hello | hello-initial | test_status_line |
 | `include/cvision/widgets/tab_control.hpp` | [Gallery](widget-gallery.md#tabcontrol) | workbench/graphics | workbench-data/graphics-sixel-image | test_tab_control |
-| `include/cvision/widgets/table.hpp` | [Gallery](widget-gallery.md#table) | workbench | workbench-data | test_table |
+| `include/cvision/widgets/table.hpp` | [Data views](data-views.md) | workbench | workbench-data | test_table |
 | `include/cvision/widgets/terminal_view.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | interactive session | test_terminal_view, test_terminal_app, terminal_redraw_contract |
 | `include/cvision/widgets/text_view.hpp` | [Gallery](widget-gallery.md#textview) | workbench | workbench-text | test_text_view |
 | `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md) | editor | editor-initial/editor-search | test_text_editor |

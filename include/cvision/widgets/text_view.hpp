@@ -31,6 +31,11 @@ public:
     TextView();
 
     void set_role_override(ui::RoleId text_role) noexcept { text_role_ = text_role; }
+    // A containing ScrollViewport can own the visible scrollbars for a
+    // document surface. Hiding this view's internal vertical track keeps the
+    // text preformatted while avoiding duplicate controls.
+    void set_vertical_scrollbar_visible(bool visible) noexcept;
+    bool vertical_scrollbar_visible() const noexcept { return vertical_scrollbar_visible_; }
 
     void set_text(std::string text);
     void set_spans(std::vector<TextSpan> spans);
@@ -70,6 +75,7 @@ private:
     std::vector<std::string> link_targets_;
     std::optional<std::size_t> current_link_;
     Scrollbar* scrollbar_ = nullptr;
+    bool vertical_scrollbar_visible_ = true;
 
     ui::RoleId text_role_ = ui::kInvalidRole;
 };

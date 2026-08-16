@@ -342,6 +342,13 @@ CK_TEST(sgr_mouse_motion_and_wheel) {
     auto wheel_up = decode_all("\x1B[<64;1;1M");
     CK_CHECK(as_mouse(wheel_up[0]).action == MouseAction::Wheel);
     CK_CHECK(as_mouse(wheel_up[0]).button == MouseButton::WheelUp);
+
+    auto wheel_left = decode_all("\x1B[<66;1;1M");
+    CK_CHECK(as_mouse(wheel_left[0]).action == MouseAction::Wheel);
+    CK_CHECK(as_mouse(wheel_left[0]).button == MouseButton::WheelLeft);
+
+    auto wheel_right = decode_all("\x1B[<67;1;1M");
+    CK_CHECK(as_mouse(wheel_right[0]).button == MouseButton::WheelRight);
 }
 
 CK_TEST(sgr_mouse_modifiers) {
@@ -669,8 +676,20 @@ CK_TEST(malformed_or_zero_xtwinops_cell_metrics_do_not_refine_capabilities) {
     InputDecoder decoder;
     CK_CHECK(decoder.feed("\x1B[6;0;8t", 0).empty());
     CK_CHECK(decoder.feed("\x1B[6;16;0t", 0).empty());
-    CK_CHECK(decoder.feed("\x1B[4;16;8t", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[4;0;8t", 0).empty());
+    CK_CHECK(decoder.feed("\x1B[4;16;0t", 0).empty());
     CK_CHECK(decoder.capabilities().cell_pixels == Size{});
+}
+
+CK_TEST(an_xtwinops_14_reply_without_a_grid_records_the_area_but_no_metric) {
+    InputDecoder decoder;  // no cell grid supplied
+    const auto events = decoder.feed("\x1B[4;16;8t", 0);
+    CK_CHECK(events.size() == 1);
+    if (events.size() != 1) return;
+    const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    CK_CHECK(caps.text_area_pixels == (Size{8, 16}));
+    CK_CHECK(caps.cell_pixels == Size{});  // no divisor, no derived metric
+    CK_CHECK(!caps.pixel_mouse);
 }
 
 CK_TEST(da1_sixel_advertisement_refines_the_graphics_capability) {
@@ -751,4 +770,101 @@ CK_TEST(adversarial_byte_soup_never_hangs_or_crashes) {
         }
         decoder.poll_timeout(1'000'000'000);  // flush any pending lone ESC
     }
+}
+
+// --- iTerm2 pixel-mouse reality (probed 2026-08-16) -------------------
+//
+// The observed behavior this replays: DECRQM answers mode 1016 with
+// "permanently reset" (4) yet ?1016h engages pixel reports anyway;
+// XTWINOPS 16 goes unanswered while XTWINOPS 14 answers with the text
+// area's pixel size. The decoder must survive the lie: derive the metric
+// from 14, and treat a report beyond the cell grid as the pixel data it
+// provably is.
+
+CK_TEST(xtwinops_14_derives_the_cell_metric_when_16_never_answers) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{89, 29});  // the grid behind a 890x637 px area
+    auto events = decoder.feed("\x1B[4;637;890t", 0);
+    CK_CHECK(events.size() == 1);
+    if (events.size() != 1) return;
+    const auto caps = std::get<CapabilityChangedEvent>(events[0]).capabilities;
+    CK_CHECK(caps.text_area_pixels == (Size{890, 637}));
+    CK_CHECK(caps.cell_pixels == (Size{10, 21}));  // 890/89, 637/29
+    CK_CHECK(!caps.pixel_mouse);  // DECRPM never confirmed the mode
+}
+
+CK_TEST(a_direct_xtwinops_16_reply_outranks_the_derived_metric) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{89, 29});
+    auto derived = decoder.feed("\x1B[4;637;890t", 0);
+    CK_CHECK(derived.size() == 1);
+    if (derived.size() != 1) return;
+    decoder.set_capabilities(std::get<CapabilityChangedEvent>(derived[0]).capabilities);
+    auto exact = decoder.feed("\x1B[6;20;9t", 0);
+    CK_CHECK(exact.size() == 1);
+    if (exact.size() != 1) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(exact[0]).capabilities.cell_pixels == (Size{9, 20}));
+}
+
+CK_TEST(a_report_beyond_the_grid_is_pixel_data_despite_a_lying_decrpm) {
+    Capabilities caps = baseline_capabilities();
+    caps.cell_pixels = Size{10, 21};  // metric known (e.g. derived from 14)
+    InputDecoder decoder(caps);
+    decoder.set_cell_grid(Size{89, 29});
+    // iTerm2's own click echo from the probe session: pixels, mode engaged,
+    // DECRPM having claimed "permanently reset" all along.
+    auto events = decoder.feed("\x1B[<0;608;517M", 0);
+    CK_CHECK(events.size() == 1);
+    if (events.size() != 1) return;
+    CK_CHECK(as_mouse(events[0]).cell == (Point{60, 24}));  // 607/10, 516/21
+    CK_CHECK(as_mouse(events[0]).pixel.has_value());
+    if (!as_mouse(events[0]).pixel.has_value()) return;
+    CK_CHECK(*as_mouse(events[0]).pixel == (PixelPoint{607, 516}));
+}
+
+CK_TEST(a_beyond_grid_report_without_any_metric_is_consumed_not_guessed) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{89, 29});
+    auto events = decoder.feed("\x1B[<0;608;517M", 0);
+    CK_CHECK(events.empty());  // a fabricated cell would click an arbitrary control
+}
+
+CK_TEST(a_cell_report_within_the_grid_still_decodes_as_cells) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{89, 29});
+    auto events = decoder.feed("\x1B[<0;10;20M", 0);
+    CK_CHECK(events.size() == 1);
+    if (events.size() != 1) return;
+    CK_CHECK(as_mouse(events[0]).cell == (Point{9, 19}));
+    CK_CHECK(!as_mouse(events[0]).pixel.has_value());
+}
+
+// --- kitty keyboard protocol discovery ---------------------------------
+//
+// Adopting the protocol without proof would break Alt on every terminal
+// that ignores the switch: the kitty path reads a bare ESC as Escape
+// immediately, so a legacy "ESC h" would arrive as Escape then h rather
+// than as Alt+h. The reply to CSI ? u is that proof.
+
+CK_TEST(a_kitty_keyboard_reply_establishes_the_protocol) {
+    InputDecoder decoder;
+    CK_CHECK(decoder.capabilities().keyboard_protocol == KeyboardProtocol::Legacy);
+    const auto events = decoder.feed("\x1B[?1u", 0);
+    CK_CHECK(events.size() == 1);
+    if (events.size() != 1) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(events[0]).capabilities.keyboard_protocol ==
+             KeyboardProtocol::Kitty);
+}
+
+CK_TEST(silence_about_the_kitty_protocol_leaves_legacy_alt_decoding_intact) {
+    InputDecoder decoder;  // no CSI ? u reply ever arrives
+    const auto events = decoder.feed("\x1B h", 0);
+    CK_CHECK(decoder.capabilities().keyboard_protocol == KeyboardProtocol::Legacy);
+    // ESC-prefixed byte is still the legacy spelling of Alt+<key>.
+    const auto alt = decode_all("\x1Bh");
+    CK_CHECK(alt.size() == 1);
+    if (alt.size() != 1) return;
+    CK_CHECK(as_key(alt[0]).chord.text == "h");
+    CK_CHECK(has_modifier(as_key(alt[0]).chord.modifiers, Modifier::Alt));
+    static_cast<void>(events);
 }

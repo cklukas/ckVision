@@ -45,6 +45,12 @@ public:
     int scroll_y() const noexcept { return scroll_y_; }
     void set_scroll(int x, int y);  // clamped to [0, content extent - viewport extent]
 
+    // Conventional document views may retain both scrollbar tracks even
+    // while their initial content happens to fit. This makes the available
+    // navigation affordances stable as content changes.
+    void set_scrollbars_always_visible(bool visible) noexcept;
+    bool scrollbars_always_visible() const noexcept { return scrollbars_always_visible_; }
+
     void on_resized() override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
@@ -59,6 +65,7 @@ private:
     Scrollbar* h_scrollbar_ = nullptr;
     int scroll_x_ = 0;
     int scroll_y_ = 0;
+    bool scrollbars_always_visible_ = false;
 };
 
 }  // namespace ckv::widgets

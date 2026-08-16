@@ -23,6 +23,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_editor_window.cpp
     test_file_dialog.cpp
     test_file_editor_controller.cpp
+    test_flow_view.cpp
     test_frame_view.cpp
     test_geometry.cpp
     test_golden_capture.cpp
@@ -328,6 +329,25 @@ if(TARGET capture_terminal_screenshots)
                 ${CMAKE_BINARY_DIR}/test-artifacts/terminal)
     set_tests_properties(terminal_visual_capture PROPERTIES
         LABELS "golden;visual;artifact;terminal" TIMEOUT 60)
+endif()
+
+add_test(NAME install_package_smoke
+    COMMAND ${CMAKE_COMMAND}
+        -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
+        -DCKVISION_SMOKE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/install-package
+        -DCKVISION_EXPECT_TERMINAL=$<BOOL:$<TARGET_EXISTS:ckvision_terminal>>
+        -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/install_package_smoke.cmake)
+set_tests_properties(install_package_smoke PROPERTIES LABELS "package;install;client" TIMEOUT 120)
+
+if(TARGET ckvision_terminal AND TARGET capture_terminal_screenshots)
+    add_test(NAME client_bundle_smoke
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DCKVISION_BUILD_DIR=${CMAKE_BINARY_DIR}
+            -DCKVISION_BUNDLE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/client-bundle
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/client_bundle_smoke.cmake)
+    set_tests_properties(client_bundle_smoke PROPERTIES LABELS "package;handoff;artifact;client" TIMEOUT 180)
 endif()
 
 # Python is build/CI tooling, not a library dependency (D-004 untouched).

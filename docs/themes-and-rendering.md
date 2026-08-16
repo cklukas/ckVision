@@ -51,10 +51,21 @@ buttons, checkboxes, and radio options inside dialogs (yellow in Classic).
 Both preserve the receiving surface's background, so a highlighted menu row or
 focused dialog control stays visually coherent.
 
+Classic keeps action buttons and choice groups deliberately distinct: buttons
+use green faces, while radio and check-group selection surfaces use cyan. This
+prevents a persistent selection from reading as an immediate action.
+Editable one-line fields use the dark-blue input surface, with a light-cyan
+focused value, so form entry stays distinct from both static dialog text and
+the cyan choice surface.
+
+`ckv.help.text` is the separate reference-document role: Classic uses yellow
+text on a blue window surface. This keeps preformatted help legible without
+changing ordinary static dialog text.
+
 `TextEditor` uses the standard `ckv.editor.*` family: text, gutter,
 selection, search, and `ckv.editor.syntax.{plain,keyword,type,property,string,
-number,comment,command,operator,escape,error}`. Classic, Dark, Light, and Mono
-all define these roles explicitly. The paint precedence is selection first,
+number,comment,command,operator,escape,error}`. Classic, Dark, Light, Mono,
+and High Contrast all define these roles explicitly. The paint precedence is selection first,
 then search, then syntax/base text; a selected match therefore remains legible
 under every built-in scheme. Applications may override any of these semantic
 roles in an ordinary `Theme` without changing editor behavior or using a

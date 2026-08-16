@@ -7,6 +7,7 @@
 #include "cvision/core/style.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/flow_view.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/list_view.hpp"
@@ -21,6 +22,11 @@
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::workbench {
+namespace {
+
+constexpr ui::CommandId kBuildProject = ui::kFirstApplicationCommandId;
+
+}  // namespace
 
 WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
@@ -32,6 +38,11 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
     build_chrome();
     build_window();
 
+    // CommandPalette deliberately presents application commands, rather than
+    // framework navigation commands. Give the workbench's Help tab a genuine
+    // app-level action so the example demonstrates that contract directly.
+    app_.commands().register_command(kBuildProject, "&Build project", "Build", KeyChord{Key::F7, Modifier::None, ""});
+    app_.commands().set_handler(kBuildProject, [] {});
     app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
     app_.set_focus(memo_);
 }
@@ -108,6 +119,19 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
     text_view_ = text.get();
     page->add_child(std::move(text));
 
+    auto flow = std::make_unique<widgets::FlowView>();
+    flow->set_bounds(Rect{39, 14, 30, 3});
+    auto chart = std::make_shared<Image>(4, 1);
+    for (int x = 0; x < chart->width(); ++x) chart->set_pixel(x, 0, Image::Rgba{0, 180, 120, 255});
+    flow->set_document(widgets::FlowDocument{{widgets::FlowBlock{{
+        widgets::FlowText{"Flow: ", static_cast<Attr>(0), std::nullopt},
+        widgets::FlowText{"interactive link", Attr::Underline, std::string{"https://example.invalid/flow"}},
+        widgets::FlowImage{std::move(chart), Size{7, 1}, "[chart]"},
+    }}}});
+    flow->on_link_activate = [this](const std::string& target) { last_link_ = target; };
+    flow_view_ = flow.get();
+    page->add_child(std::move(flow));
+
     return page;
 }
 
@@ -181,7 +205,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_help_page() {
 
     auto palette = std::make_unique<widgets::CommandPalette>();
     palette->set_bounds(Rect{1, 4, 28, 6});
-    palette->set_query("quit");
+    palette->set_query("build");
     command_palette_ = palette.get();
     page->add_child(std::move(palette));
 

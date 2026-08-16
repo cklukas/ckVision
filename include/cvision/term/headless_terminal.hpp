@@ -40,6 +40,7 @@ public:
     explicit HeadlessTerminal(Size size, Capabilities caps = baseline_capabilities(),
                               bool enable_capability_probes = true)
         : size_(size),
+          observed_caps_(caps),
           caps_(caps),
           decoder_(caps),
           display_(size, effective_cell_pixels(caps)) {
@@ -55,6 +56,11 @@ public:
         : HeadlessTerminal(size, capabilities_for_profile(profile), /*enable_capability_probes=*/false) {}
 
     Capabilities capabilities() const noexcept override { return caps_; }
+    // Mirrors PosixTerminal's live client policy so deterministic tests can
+    // exercise the same capability-change contract without a real terminal.
+    // Fixed metrics and color-register caps must be positive.
+    void set_capability_overrides(CapabilityOverrides overrides);
+    const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
     Size size() const noexcept override { return size_; }
 
     // Headless never blocks on real time — it just drains whatever was
@@ -99,7 +105,9 @@ private:
     }
 
     Size size_;
+    Capabilities observed_caps_;
     Capabilities caps_;
+    CapabilityOverrides overrides_;
     InputDecoder decoder_;
     VirtualDisplay display_;
     std::string written_;

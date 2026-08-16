@@ -157,6 +157,8 @@ CK_TEST(menu_and_status_present_one_command_with_surface_specific_labels_and_sam
     CK_CHECK(row_text(status_surface).find("Quit") != std::string::npos);
     CK_CHECK(status.on_mouse(
         MouseEvent{MouseAction::Down, MouseButton::Left, Point{1, 0}, std::nullopt, Modifier::None}));
+    CK_CHECK(status.on_mouse(
+        MouseEvent{MouseAction::Up, MouseButton::Left, Point{1, 0}, std::nullopt, Modifier::None}));
 
     CK_CHECK(quit_count == 2);
 }
@@ -197,7 +199,8 @@ CK_TEST(status_line_renders_disabled_command_entries_with_disabled_role) {
     Surface surface(Size{20, 1});
     Painter painter(surface, Rect{0, 0, 20, 1});
     status.draw(painter);
-    CK_CHECK(surface.at(Point{0, 0}).style() ==
+    // Column 0 is the leading padding; the item's own text starts at 1.
+    CK_CHECK(surface.at(Point{1, 0}).style() ==
              f.app.theme().resolve(f.roles.status_line_disabled));
 }
 

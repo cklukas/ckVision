@@ -1,9 +1,26 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/term/headless_terminal.hpp"
 
+#include <stdexcept>
+#include <utility>
+
 #include "cvision/core/assert.hpp"
 
 namespace ckv::term {
+
+void HeadlessTerminal::set_capability_overrides(CapabilityOverrides overrides) {
+    if ((overrides.cell_pixels && (overrides.cell_pixels->width <= 0 || overrides.cell_pixels->height <= 0)) ||
+        (overrides.sixel_color_registers && *overrides.sixel_color_registers <= 0)) {
+        throw std::invalid_argument("terminal capability overrides require positive cell metrics and color caps");
+    }
+    if (overrides == overrides_) return;
+    overrides_ = std::move(overrides);
+    const Capabilities effective = apply_capability_overrides(observed_caps_, overrides_);
+    if (effective == caps_) return;
+    caps_ = effective;
+    display_.set_cell_pixels(effective_cell_pixels(caps_));
+    pending_events_.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
+}
 
 std::vector<TerminalEvent> HeadlessTerminal::poll(std::int64_t /*deadline_nanos*/) {
     std::vector<TerminalEvent> out = std::move(pending_events_);
@@ -17,24 +34,31 @@ void HeadlessTerminal::write(std::string_view bytes) {
 }
 
 void HeadlessTerminal::inject_event(TerminalEvent event) {
-    if (const auto* changed = std::get_if<CapabilityChangedEvent>(&event)) set_capabilities(changed->capabilities);
+    if (const auto* changed = std::get_if<CapabilityChangedEvent>(&event)) {
+        set_capabilities(changed->capabilities);
+        event = TerminalEvent{CapabilityChangedEvent{caps_}};
+    }
     pending_events_.push_back(std::move(event));
 }
 
 void HeadlessTerminal::inject_capability_change(Capabilities caps) {
     set_capabilities(caps);
-    pending_events_.push_back(TerminalEvent{CapabilityChangedEvent{caps}});
+    pending_events_.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
 }
 
 void HeadlessTerminal::set_capabilities(Capabilities caps) noexcept {
-    caps_ = caps;
-    decoder_.set_capabilities(caps);
-    display_.set_cell_pixels(effective_cell_pixels(caps));
+    observed_caps_ = caps;
+    caps_ = apply_capability_overrides(observed_caps_, overrides_);
+    decoder_.set_capabilities(observed_caps_);
+    display_.set_cell_pixels(effective_cell_pixels(caps_));
 }
 
 void HeadlessTerminal::enqueue_decoded(std::vector<TerminalEvent> decoded) {
     for (auto& ev : decoded) {
-        if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev)) set_capabilities(changed->capabilities);
+        if (const auto* changed = std::get_if<CapabilityChangedEvent>(&ev)) {
+            set_capabilities(changed->capabilities);
+            ev = TerminalEvent{CapabilityChangedEvent{caps_}};
+        }
         pending_events_.push_back(std::move(ev));
     }
 }

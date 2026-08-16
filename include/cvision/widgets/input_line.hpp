@@ -23,6 +23,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -69,6 +70,13 @@ public:
     bool valid() const noexcept { return valid_; }
     void set_validator(std::function<bool(const std::string&)> validator);
 
+    // Optional per-grapheme admission rule for interactive input. It applies
+    // uniformly to typed characters and pasted TextEvents; rejected
+    // graphemes are consumed without changing the field. Programmatic
+    // set_text() deliberately bypasses the rule so an owner can display an
+    // existing value even while editing is constrained.
+    void set_grapheme_filter(std::function<bool(std::string_view)> filter);
+
     // Input mask: '9' = digit, 'A' = letter, '*' = any single
     // grapheme, any other character is a literal the user cannot edit
     // (auto-skipped by cursor movement and typing). Setting a mask
@@ -86,6 +94,8 @@ public:
     // the real content — editing/cursor/selection all still operate on
     // the real text, this is display-only.
     void set_password_echo(bool enabled, char echo_char = '*');
+    bool password_echo() const noexcept { return password_echo_; }
+    char password_echo_char() const noexcept { return echo_char_; }
 
     // `registry`/`key` for Up/Down history cycling; `registry` may be
     // nullptr to disable (the default). commit_to_history() records
@@ -148,6 +158,7 @@ private:
     bool has_focus_ = false;
     bool valid_ = true;
     std::function<bool(const std::string&)> validator_;
+    std::function<bool(std::string_view)> grapheme_filter_;
 
     std::string mask_;
     char mask_placeholder_ = '_';
