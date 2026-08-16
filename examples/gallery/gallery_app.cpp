@@ -145,6 +145,7 @@ void GalleryApp::build_image_window() {
     view->set_role_override(roles_.dialog_background);
     view->set_bounds(Rect{0, 0, 32, 14});
     view->set_image(make_demo_gradient());
+    image_view_ = view.get();
     window->set_content(std::move(view));
 
     image_window_ = desktop_->add_window(std::move(window));

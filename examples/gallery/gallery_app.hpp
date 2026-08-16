@@ -31,6 +31,7 @@ public:
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::Window* controls_window() const noexcept { return controls_window_; }
     widgets::Window* image_window() const noexcept { return image_window_; }
+    widgets::ImageView* image_view() const noexcept { return image_view_; }
     widgets::InputLine* name_input() const noexcept { return name_input_; }
 
 private:
@@ -46,6 +47,7 @@ private:
     widgets::StatusLine* status_ = nullptr;
     widgets::Window* controls_window_ = nullptr;
     widgets::Window* image_window_ = nullptr;
+    widgets::ImageView* image_view_ = nullptr;
     widgets::InputLine* name_input_ = nullptr;
 };
 

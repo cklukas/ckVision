@@ -9,6 +9,7 @@
 #include <string>
 
 #include "cktest.hpp"
+#include "cvision/widgets/image_view.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/virtual_display.hpp"
@@ -98,12 +99,30 @@ CK_TEST(gallery_sixel_visual_golden_is_decoded_from_the_presented_byte_stream) {
     CK_CHECK(presented.find("\x1B" "P") != std::string::npos);
     CK_CHECK(visual_manifest("sixel", sixel_term) == read_file("golden/gallery_sixel.visual"));
     CK_CHECK(!frame_contains(sixel_term.display().frame(), "[image]"));
-    CK_CHECK(pixel_equals(sixel_term.display().raster_plane().pixel(189, 126), Image::Rgba{0, 0, 255, 255}));
-    CK_CHECK(pixel_equals(sixel_term.display().raster_plane().pixel(252, 157), Image::Rgba{255, 255, 0, 255}));
-    CK_CHECK(pixel_equals(sixel_term.display().raster_plane().pixel(221, 142), Image::Rgba{153, 153, 102, 255}));
+    // Where the picture landed and how big it is, asked of the view rather
+    // than written down: it fills the cells it occupies, so pinning a pixel
+    // size would pin the source image's dimensions instead of the contract.
+    const ckv::Rect view_abs = sixel_gallery.image_view()->absolute_bounds();
+    const ckv::Rect anchor = sixel_gallery.image_view()->image_anchor();
+    const ckv::Size cell = sixel_term.display().cell_pixels();
+    const int px_x = (view_abs.x + anchor.x) * cell.width;
+    const int px_y = (view_abs.y + anchor.y) * cell.height;
+    const int px_w = anchor.width * cell.width;
+    const int px_h = anchor.height * cell.height;
+    const std::shared_ptr<const Image>& source = sixel_gallery.image_view()->image();
+    // Corners: nearest-neighbour scaling maps them exactly, so these also
+    // catch an image drawn flipped, offset, or from the wrong source.
+    const ckv::Image& plane = sixel_term.display().raster_plane();
+    CK_CHECK(pixel_equals(plane.pixel(px_x, px_y), source->pixel(0, 0)));
+    CK_CHECK(pixel_equals(plane.pixel(px_x + px_w - 1, px_y + px_h - 1),
+                          source->pixel(source->width() - 1, source->height() - 1)));
+    // The source is twice as wide as it is tall and stays that way.
+    CK_CHECK(px_w == 2 * px_h);
     const std::string sixel_svg = ckv::docgen::render_virtual_display_svg(sixel_term.display());
     CK_CHECK(sixel_svg.find("id=\"raster-plane\"") != std::string::npos);
-    CK_CHECK(sixel_svg.find("<image x=\"189\" y=\"126\" width=\"64\" height=\"32\"") != std::string::npos);
+    CK_CHECK(sixel_svg.find("<image x=\"" + std::to_string(px_x) + "\" y=\"" + std::to_string(px_y) +
+                            "\" width=\"" + std::to_string(px_w) + "\" height=\"" +
+                            std::to_string(px_h) + "\"") != std::string::npos);
     CK_CHECK(sixel_svg.find("[image]") == std::string::npos);
 
     // This second decoder is deliberately fed only Terminal::write bytes.

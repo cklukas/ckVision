@@ -313,9 +313,28 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         const int crop_h = px_y1 - px_y0;
         if (crop_w <= 0 || crop_h <= 0) continue;
 
-        Image cropped(crop_w, crop_h);
-        for (int y = 0; y < crop_h; ++y)
-            for (int x = 0; x < crop_w; ++x) cropped.set_pixel(x, y, image.pixel(px_x0 + x, px_y0 + y));
+        // Scale the cropped region to the pixels those cells actually are.
+        // A producer that sized its image from the cell metric hands over an
+        // exact match and this is a copy; one that hands over an image at its
+        // own natural size — the common case for a picture that came from a
+        // file — would otherwise be drawn at that size in the corner of a
+        // reservation many times larger, because a Sixel is emitted pixel for
+        // pixel and nothing downstream resizes it. Scaling here keeps that
+        // out of every widget: the scene says which cells an image occupies,
+        // and this layer is the one that knows how many pixels a cell is.
+        const Size cell = terminal_.capabilities().cell_pixels;
+        const int target_w =
+            cell.width > 0 ? std::max(1, slice.visible_rect.width * cell.width) : crop_w;
+        const int target_h =
+            cell.height > 0 ? std::max(1, slice.visible_rect.height * cell.height) : crop_h;
+        Image cropped(target_w, target_h);
+        for (int y = 0; y < target_h; ++y) {
+            const int src_y = px_y0 + (target_h == crop_h ? y : y * crop_h / target_h);
+            for (int x = 0; x < target_w; ++x) {
+                const int src_x = px_x0 + (target_w == crop_w ? x : x * crop_w / target_w);
+                cropped.set_pixel(x, y, image.pixel(src_x, src_y));
+            }
+        }
 
         emit_cursor_move(out, slice.visible_rect.x, slice.visible_rect.y);
         // P2=0 Sixel background pixels use the terminal's current

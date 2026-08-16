@@ -11,9 +11,13 @@
 // hook if a concrete need arises.
 //
 // Scope note: "scaled to its cell box" means the underlying Image is
-// handed to draw_image at the widget's own cell-box anchor — actual
-// pixel scaling/resampling is a term-layer/presenter concern per
-// ARCHITECTURE.md §7, not something this widget does itself.
+// handed to draw_image at a cell-box anchor and the term layer resizes
+// the pixels to fit it (ARCHITECTURE.md §7) — this widget never
+// resamples. What it does decide is WHICH cells to claim: a picture
+// stretched to whatever rectangle a layout happened to give it is not
+// the picture, so the anchor keeps the image's proportions on the cell
+// the terminal actually has, and the view centres it in the space left
+// over.
 #pragma once
 
 #include <functional>
@@ -36,6 +40,15 @@ public:
     void set_image(std::shared_ptr<const Image> image);
     const std::shared_ptr<const Image>& image() const noexcept { return image_; }
 
+    // Fill the whole view instead of keeping the image's proportions.
+    // For a picture this distorts it; for a deliberately generated
+    // texture or gradient, filling is the point.
+    void set_stretch_to_fill(bool stretch) noexcept;
+    bool stretch_to_fill() const noexcept { return stretch_; }
+
+    // The cells the image occupies inside `bounds()` right now.
+    Rect image_anchor() const noexcept;
+
     // Fires for every mouse event over this view, carrying the full
     // MouseEvent — which already natively carries both the cell
     // position (always) and the pixel position (whenever the terminal
@@ -51,6 +64,7 @@ public:
 private:
     std::shared_ptr<const Image> image_;
     int raster_id_;
+    bool stretch_ = false;
 
     ui::RoleId fallback_role_ = ui::kInvalidRole;
 };
