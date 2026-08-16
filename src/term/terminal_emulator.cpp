@@ -55,6 +55,24 @@ Color ansi_color(int index) noexcept {
     return colors[0];
 }
 
+// Bold has meant "brighter" for the low eight colours since the hardware
+// that had only eight, and programs still write for that: text asking for
+// bold on the default foreground expects white, not a heavier grey. The
+// eight base colours are the whole of it -- an explicit 256-colour or
+// true-colour foreground is a specific colour the program chose, and
+// brightening that would be overriding the choice rather than honouring a
+// convention.
+Style bold_brightened(Style style) noexcept {
+    if (!has_attr(style.attrs, Attr::Bold)) return style;
+    for (int index = 0; index < 8; ++index) {
+        if (style.fg == ansi_color(index)) {
+            style.fg = ansi_color(index + 8);
+            break;
+        }
+    }
+    return style;
+}
+
 std::size_t complete_utf8_prefix(std::string_view text) noexcept {
     if (text.empty()) return 0;
     std::size_t start = text.size() - 1;
@@ -471,6 +489,22 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 'B') { cursor_.position.y = std::min(cells_.height - 1, cursor_.position.y + parameter(control_, 0, 1)); return; }
     if (final_byte == 'C') { cursor_.position.x = std::min(cells_.width - 1, cursor_.position.x + parameter(control_, 0, 1)); return; }
     if (final_byte == 'D') { cursor_.position.x = std::max(0, cursor_.position.x - parameter(control_, 0, 1)); return; }
+    if (final_byte == 'b') {
+        // REP: repeat the last printed character. This is how a curses
+        // program draws a long run cheaply -- one character and a count
+        // instead of the whole run -- so an emulator without it shows the
+        // first cell of every rule and nothing after it, which is a frame
+        // with its edges missing rather than an obviously broken screen.
+        if (last_graphic_.empty()) return;
+        // Bounded by the screen: a count larger than that cannot describe
+        // anything visible, and an unbounded loop here is reachable from
+        // child output.
+        const int limit = std::max(1, cells_.width * cells_.height);
+        const int count = std::clamp(parameter(control_, 0, 1), 0, limit);
+        const std::string repeated = last_graphic_;  // put_grapheme rewrites the member
+        for (int i = 0; i < count; ++i) put_grapheme(repeated);
+        return;
+    }
     if (final_byte == '@') { insert_cells(parameter(control_, 0, 1)); return; }
     if (final_byte == 'P') { delete_cells(parameter(control_, 0, 1)); return; }
     if (final_byte == 'L') {
@@ -666,7 +700,9 @@ void TerminalEmulator::put_text(bool flush_incomplete) {
 
 void TerminalEmulator::put_grapheme(std::string_view grapheme) {
     if (cursor_.position.x >= cells_.width) { cursor_.position.x = 0; index(); }
-    Cell cell = Cell::from_grapheme(grapheme, style_);
+    last_graphic_.assign(grapheme);
+    const Style style = bold_brightened(style_);
+    Cell cell = Cell::from_grapheme(grapheme, style);
     active_cells()[static_cast<std::size_t>(cursor_.position.y * cells_.width + cursor_.position.x)] = cell;
     const int width = std::max(1, cell.width());
     if (width == 2 && cursor_.position.x + 1 < cells_.width)

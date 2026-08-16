@@ -208,3 +208,45 @@ CK_TEST(present_help_viewer_completes_after_modal_detachment) {
     CK_CHECK(completion == ckv::widgets::HelpViewerResult::Closed);
     CK_CHECK(!app.is_modal());
 }
+
+CK_TEST(a_presented_help_window_is_wide_and_deep_enough_to_show_its_topic) {
+    // Regression: the viewer used to state no room for its prose, so the
+    // automatic placement sized it from the links list and button row alone.
+    // The result was a window around two dozen cells wide with the topic
+    // text clipped out of existence — a help viewer showing no help.
+    ckv::term::HeadlessTerminal term(ckv::Size{100, 30});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 100, 30}));
+    auto provider = sample_provider();
+
+    auto presentation = present_help_viewer(provider, "intro", app, *desktop, roles);
+    app.step(0);
+    CK_CHECK(desktop->windows().size() == 1U);
+    const ckv::Rect bounds = desktop->windows()[0]->bounds();
+    // Prose needs a prose column, not a button's width.
+    CK_CHECK(bounds.width >= 50);
+    CK_CHECK(bounds.height >= 12);
+    // ...and it still fits the desktop it was placed on.
+    CK_CHECK(bounds.width <= desktop->content_area().width);
+    CK_CHECK(bounds.height <= desktop->content_area().height);
+}
+
+CK_TEST(a_help_window_on_a_small_terminal_is_clamped_rather_than_overflowing) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 12});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(ckv::Rect{0, 0, 40, 12}));
+    auto provider = sample_provider();
+
+    auto presentation = present_help_viewer(provider, "intro", app, *desktop, roles);
+    app.step(0);
+    const ckv::Rect bounds = desktop->windows()[0]->bounds();
+    CK_CHECK(bounds.width <= 40);
+    CK_CHECK(bounds.height <= 12);
+    CK_CHECK(bounds.width > 0 && bounds.height > 0);
+}

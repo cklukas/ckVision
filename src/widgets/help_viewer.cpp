@@ -83,6 +83,16 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     column->set_spacing(1);
 
     auto text_view = std::make_unique<TextView>();
+    // A help window that is not told how much room its prose wants gets sized
+    // by the only children that do ask for room — the links list and the
+    // button row — and comes out a couple of dozen cells wide, with the topic
+    // clipped away entirely. Nothing else can supply this: a TextView holds
+    // whatever text it is later given, and the placement pass runs before any
+    // topic has been loaded. So the viewer states the shape help wants,
+    // rather than the shape its buttons happen to need: a readable prose
+    // column, deep enough to be worth scrolling. Placement clamps both to the
+    // desktop, and the view scrolls, so a small terminal loses no content.
+    text_view->set_preferred_size(Size{60, 12});
     auto* text_view_ptr =
         static_cast<TextView*>(column->add_item(std::move(text_view), LayoutSpec{SizePolicy::Expanding, 1}));
 

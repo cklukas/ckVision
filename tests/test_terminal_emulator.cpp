@@ -552,3 +552,89 @@ CK_TEST(shift_out_and_shift_in_move_between_the_designated_sets) {
     CK_CHECK(snapshot.cell_buffer[1].grapheme() == "\u2500");
     CK_CHECK(snapshot.cell_buffer[2].grapheme() == "B");
 }
+
+// --- REP -------------------------------------------------------------------
+
+CK_TEST(a_repeat_draws_the_whole_run_a_curses_program_asked_for) {
+    // How a rule is actually sent: one character and a count. Without REP
+    // only the first cell of every rule appears, so a frame arrives with
+    // its corners drawn and its edges missing.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b(0q\x1b[4b");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    for (int i = 0; i < 5; ++i)
+        CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(i)].grapheme() == "\u2500");
+    CK_CHECK(snapshot.cell_buffer[5].grapheme() == " ");
+}
+
+CK_TEST(a_repeat_carries_the_style_the_run_was_started_in) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[1m-\x1b[3b");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    for (int i = 0; i < 4; ++i) {
+        CK_CHECK(snapshot.cell_buffer[static_cast<std::size_t>(i)].grapheme() == "-");
+        CK_CHECK(has_attr(snapshot.cell_buffer[static_cast<std::size_t>(i)].style().attrs, ckv::Attr::Bold));
+    }
+}
+
+CK_TEST(a_repeat_with_no_count_repeats_once) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("x\x1b[b");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "x");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "x");
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == " ");
+}
+
+CK_TEST(a_repeat_before_anything_was_printed_does_nothing) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[5b");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == " ");
+}
+
+CK_TEST(an_absurd_repeat_count_is_bounded_by_the_screen) {
+    // The count comes from the child, so it cannot be trusted to be sane.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("z\x1b[999999999b");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cells.width == 80);  // survived, and still coherent
+}
+
+// --- Bold and the low eight colours ---------------------------------------
+
+CK_TEST(bold_on_the_default_foreground_arrives_white_not_merely_heavier) {
+    // ncurses asks for bold against the default foreground and every other
+    // terminal answers with white. Emitting the same grey with a weight
+    // attribute is a visibly different thing.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[1mB");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(255, 255, 255));
+    CK_CHECK(has_attr(snapshot.cell_buffer[0].style().attrs, ckv::Attr::Bold));
+}
+
+CK_TEST(bold_brightens_each_of_the_low_eight_to_its_own_bright_form) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[1;31mR\x1b[1;34mB");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(241, 76, 76));   // bright red
+    CK_CHECK(snapshot.cell_buffer[1].style().fg == ckv::Color::rgb(59, 142, 234));  // bright blue
+}
+
+CK_TEST(bold_leaves_a_colour_the_program_chose_explicitly_alone) {
+    // A 256-colour or true-colour foreground is a specific choice;
+    // brightening it would override the program rather than honour a
+    // convention it was written for.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[1;38;2;10;20;30mX");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(10, 20, 30));
+}
+
+CK_TEST(text_that_is_not_bold_keeps_the_colour_it_asked_for) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[31mR");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].style().fg == ckv::Color::rgb(205, 49, 49));  // plain red
+}

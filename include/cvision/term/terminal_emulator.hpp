@@ -86,6 +86,8 @@ private:
     unsigned char active_charset_ = 0;
     unsigned char pending_charset_slot_ = 0;
     std::string printable_;
+    // The last character actually placed, which REP (CSI Ps b) repeats.
+    std::string last_graphic_;
     std::string control_;
     bool dcs_sixel_payload_ = false;
     std::string pending_output_;
