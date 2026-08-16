@@ -1239,6 +1239,14 @@ CK_TEST(every_corner_shows_its_grip_while_a_resize_is_under_way) {
     CK_CHECK(s.at(Point{19, 0}).grapheme() == "┐");
     CK_CHECK(s.at(Point{0, 5}).grapheme() == "└");
     CK_CHECK(s.at(Point{19, 5}).grapheme() == "┘");
+    // The three temporary ones change the frame's shape, not its colour --
+    // three corners lighting up mid-gesture says more than it needs to.
+    const ckv::Style frame = f.theme.resolve(f.roles.window_frame_active);
+    const ckv::Style control = f.theme.resolve(f.roles.window_control);
+    CK_CHECK(frame.fg != control.fg);  // the check would prove nothing otherwise
+    for (const Point at : {Point{0, 0}, Point{19, 0}, Point{0, 5}})
+        CK_CHECK(s.at(at).style().fg == frame.fg);
+    CK_CHECK(s.at(Point{19, 5}).style().fg == control.fg);  // the permanent one
 
     CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Up, Point{0, 0})));
     w->draw(painter);
@@ -1298,4 +1306,66 @@ CK_TEST(a_top_corner_resizes_rather_than_moving_the_window) {
     CK_CHECK(m->on_mouse(mouse(ckv::MouseAction::Move, Point{22, 7})));
     CK_CHECK(m->bounds().width == 20);
     CK_CHECK(m->bounds().x == 12);
+}
+
+// --- A drag that never gets its release --------------------------------------
+
+CK_TEST(pressing_again_ends_a_drag_that_never_got_its_release) {
+    // Drag a corner out of the terminal and let go: the release is delivered
+    // to somebody else, and this window is still holding the gesture. The
+    // next press is the first news it gets, so it takes it as such.
+    Fixture f;
+    Surface s(ckv::Size{20, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_active(true);
+    w->set_resizable(true);
+    Painter painter(s, Rect{0, 0, 20, 6});
+
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{0, 0})));
+    w->draw(painter);
+    CK_CHECK(s.at(Point{19, 0}).grapheme() == "┐");  // all four showing
+
+    // No Up ever arrives. Press the title bar to move the window instead.
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{10, 0})));
+    w->draw(painter);
+    CK_CHECK(s.at(Point{19, 0}).grapheme() == "╗");  // back to one mark
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "╔");
+}
+
+CK_TEST(motion_with_no_button_held_ends_the_drag_instead_of_following_it) {
+    // The pointer returning without a button down proves the release
+    // happened out of sight. Otherwise the window keeps following a pointer
+    // nobody is pressing.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{10, 5, 20, 8});
+    w->set_resizable(true);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{29, 12})));
+    const Rect held = w->bounds();
+
+    ckv::MouseEvent drifting{ckv::MouseAction::Move, ckv::MouseButton::None, Point{40, 20},
+                             std::nullopt, Modifier::None};
+    CK_CHECK(!w->on_mouse(drifting));
+    CK_CHECK(w->bounds() == held);  // did not follow
+
+    // ...and it really is over: further motion changes nothing either.
+    CK_CHECK(!w->on_mouse(mouse(ckv::MouseAction::Move, Point{50, 30})));
+    CK_CHECK(w->bounds() == held);
+}
+
+CK_TEST(deactivating_a_window_ends_a_drag_it_still_believed_in) {
+    Fixture f;
+    Surface s(ckv::Size{20, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 20, 6});
+    w->set_active(true);
+    w->set_resizable(true);
+    CK_CHECK(w->on_mouse(mouse(ckv::MouseAction::Down, Point{0, 5})));
+
+    w->set_active(false);
+    w->set_active(true);
+    Painter painter(s, Rect{0, 0, 20, 6});
+    w->draw(painter);
+    CK_CHECK(s.at(Point{0, 5}).grapheme() == "╚");  // not still held
 }

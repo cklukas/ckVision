@@ -36,9 +36,18 @@ void Window::set_title(std::string title) {
     invalidate();
 }
 
+void Window::end_drag() {
+    if (drag_kind_ == DragKind::None) return;
+    const bool was_resizing = drag_kind_ == DragKind::Resize;
+    drag_kind_ = DragKind::None;
+    if (was_resizing) invalidate();  // the three temporary grips go away
+}
+
 void Window::set_active(bool active) {
     if (active == active_) return;
     active_ = active;
+    // Attention moved elsewhere, so whatever was being dragged here is over.
+    end_drag();
     invalidate();
 }
 
@@ -459,13 +468,19 @@ void Window::draw(scene::Painter& painter) {
         // more than it needs. All four resize regardless; the other three
         // appear for as long as a resize is under way, which is exactly when
         // knowing they are there is of any use.
+        // Only the bottom right wears the control colour. The three that
+        // appear during a resize are drawn in the frame's own, so the frame
+        // changes shape without changing colour: the reader is in the middle
+        // of a gesture, and three corners lighting up would be a louder
+        // announcement than the information is worth.
         const int grip = resize_grip_width();
         const int bottom = b.height - 1;
         const auto mark = [&](Corner corner, Point at, std::string_view elbow, int inward) {
             if (!corner_shows_grip(corner)) return;
-            painter.draw_text(at, std::string(elbow), control_style);
+            const Style style = corner == Corner::BottomRight ? control_style : frame_style;
+            painter.draw_text(at, std::string(elbow), style);
             for (int i = 1; i < grip; ++i)
-                painter.draw_text(Point{at.x + inward * i, at.y}, "─", control_style);
+                painter.draw_text(Point{at.x + inward * i, at.y}, "─", style);
         };
         mark(Corner::TopLeft, Point{0, 0}, "┌", 1);
         mark(Corner::TopRight, Point{b.width - 1, 0}, "┐", -1);
@@ -577,6 +592,11 @@ bool Window::on_mouse(const MouseEvent& event) {
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
 
     if (event.action == MouseAction::Down) {
+        // A new press supersedes anything still believed to be in progress.
+        // Releasing outside the terminal delivers the release elsewhere, so
+        // pressing again is the first news this window gets that the last
+        // gesture ended.
+        end_drag();
         if (point_in_close_control(local)) {
             close();
             return true;
@@ -606,6 +626,14 @@ bool Window::on_mouse(const MouseEvent& event) {
 
     if (drag_kind_ == DragKind::None) return false;
 
+    // Motion with no button held: the release happened where this window
+    // could not see it, and the pointer coming back is the proof. Without
+    // this the window keeps following a pointer nobody is pressing.
+    if (event.action == MouseAction::Move && event.button == MouseButton::None) {
+        end_drag();
+        return false;
+    }
+
     if (event.action == MouseAction::Move) {
         const int dx = event.cell.x - drag_start_mouse_.x;
         const int dy = event.cell.y - drag_start_mouse_.y;
@@ -633,9 +661,7 @@ bool Window::on_mouse(const MouseEvent& event) {
         return true;
     }
     if (event.action == MouseAction::Up) {
-        const bool was_resizing = drag_kind_ == DragKind::Resize;
-        drag_kind_ = DragKind::None;
-        if (was_resizing) invalidate();  // the three temporary grips go away
+        end_drag();
         return true;
     }
     return false;

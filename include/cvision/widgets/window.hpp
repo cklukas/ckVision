@@ -382,6 +382,11 @@ private:
 
     DragKind drag_kind_ = DragKind::None;
     Corner resize_corner_ = Corner::BottomRight;
+    // Ends whatever drag is in progress and repaints if that changed what is
+    // drawn. A drag has no guaranteed ending: release the button outside the
+    // terminal and the release is delivered to somebody else, leaving this
+    // window believing a gesture is still under way.
+    void end_drag();
     Point drag_start_mouse_;
     Rect drag_start_bounds_;
 
