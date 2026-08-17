@@ -1024,6 +1024,7 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kTile));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kCascade));
+    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kWindowList));
 }
 
 CK_TEST(nonblocking_presentation_returns_null_when_focus_loss_removes_its_new_window) {
@@ -1159,6 +1160,7 @@ CK_TEST(destroying_the_desktop_clears_only_the_default_handlers_it_installed) {
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kTile));
     CK_CHECK(af.app.commands().has_handler(ui::std_commands::kCascade));
+    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kWindowList));
 
     af.app.root().detach_child(af.desktop).reset();  // destroys the Desktop
 
@@ -1169,6 +1171,7 @@ CK_TEST(destroying_the_desktop_clears_only_the_default_handlers_it_installed) {
     CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
     CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kTile));
     CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kCascade));
+    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kWindowList));
 }
 
 CK_TEST(kclose_default_closes_the_active_window) {
@@ -1407,6 +1410,82 @@ CK_TEST(kcascade_default_arranges_every_window_offset_diagonally) {
     af.app.commands().execute(ui::std_commands::kCascade);
 
     CK_CHECK(a->bounds().x != b->bounds().x || a->bounds().y != b->bounds().y);
+}
+
+// --- kWindowList default handler ---------------------------------------
+//
+// The dialog itself is covered in depth by test_window_list_dialog.cpp;
+// these prove the command reaches it, which is the part that was missing.
+// An unhandled command is still "available", so a menu bound to it looked
+// live and did nothing — the failure this wiring exists to end.
+
+CK_TEST(kwindowlist_default_puts_up_a_list_of_this_desktops_windows) {
+    AttachedFixture af;
+    af.desktop->add_window(make_window(af.f));
+    af.desktop->add_window(make_window(af.f));
+    const std::size_t before = af.desktop->windows().size();
+
+    CK_CHECK(af.app.commands().execute(ui::std_commands::kWindowList));
+
+    // The list is itself a Window on this Desktop, and it took focus.
+    CK_CHECK(af.desktop->windows().size() == before + 1);
+    CK_CHECK(af.desktop->active_window() == af.desktop->windows().back());
+}
+
+CK_TEST(kwindowlist_default_is_a_no_op_while_one_is_already_open) {
+    AttachedFixture af;
+    af.desktop->add_window(make_window(af.f));
+    af.app.commands().execute(ui::std_commands::kWindowList);
+    const std::size_t with_list = af.desktop->windows().size();
+
+    af.app.commands().execute(ui::std_commands::kWindowList);
+
+    CK_CHECK(af.desktop->windows().size() == with_list);  // not a second list
+}
+
+CK_TEST(kwindowlist_default_can_be_reopened_after_its_list_closes) {
+    AttachedFixture af;
+    af.desktop->add_window(make_window(af.f));
+    af.app.commands().execute(ui::std_commands::kWindowList);
+    Window* const list = af.desktop->windows().back();
+    const std::size_t with_list = af.desktop->windows().size();
+
+    list->close();
+    af.app.step(af.clock.now_nanos());  // the dialog self-detaches on a post
+    CK_CHECK(af.desktop->windows().size() == with_list - 1);
+
+    // The guard cleared with the dialog, rather than latching it shut.
+    af.app.commands().execute(ui::std_commands::kWindowList);
+    CK_CHECK(af.desktop->windows().size() == with_list);
+}
+
+CK_TEST(destroying_a_desktop_with_its_window_list_open_is_safe) {
+    // The completion handler outlives the Desktop that presented the dialog:
+    // destroying the Desktop detaches the list, which completes the
+    // presentation. It must not reach back into the Desktop to say so.
+    AttachedFixture af;
+    af.desktop->add_window(make_window(af.f));
+    af.app.commands().execute(ui::std_commands::kWindowList);
+
+    af.app.root().detach_child(af.desktop).reset();  // destroys it, list and all
+    af.app.step(af.clock.now_nanos());
+}
+
+CK_TEST(a_pre_existing_kwindowlist_handler_is_not_overridden_by_attaching_a_desktop) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    bool custom_ran = false;
+    app.commands().set_handler(ui::std_commands::kWindowList, [&] { custom_ran = true; });
+
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(owned)));
+
+    app.commands().execute(ui::std_commands::kWindowList);
+    CK_CHECK(custom_ran);
+    CK_CHECK(desktop->windows().empty());  // the default never presented anything
 }
 
 CK_TEST(exec_modal_blocks_until_the_window_closes) {

@@ -71,12 +71,20 @@ inline constexpr CommandId kInvalidCommand = 0;
 //     clears the handler again if it was the one that installed it,
 //     so a destroyed MenuBar can never be called through a stale
 //     handler.
-// Every other standard command (kQuit, kClose, kZoom, kNextWindow,
-// kPreviousWindow, kTile, kCascade, kWindowList) needs an
-// application- or Desktop-owned window to act on, which the
-// CommandRegistry has no way to reach — an application attaches its
-// own handler for whichever of these it needs, same as before this
-// mechanism existed.
+//   - kQuit, kClose, kZoom, kNextWindow, kPreviousWindow, kTile,
+//     kCascade and kWindowList are installed by Desktop::on_attached()
+//     under that same has_handler rule — a Desktop is exactly the
+//     thing that owns the windows they act on, and knows the one
+//     cycling order they all share. An application that claims one
+//     before its Desktop attaches keeps it.
+// Note that a command with NO handler is still "available":
+// is_available() consults the enablement predicate and the focus
+// context, neither of which can know whether anyone is listening. A
+// menu item bound to an unhandled command therefore draws live,
+// accepts its click, and does nothing at all. That is a defect in the
+// application rather than a state to design for — bind only commands
+// something handles, or give the command an enablement predicate
+// returning false, so every surface greys it and says so.
 namespace std_commands {
 inline constexpr CommandId kQuit = 1;
 inline constexpr CommandId kClose = 2;

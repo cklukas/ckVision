@@ -7,6 +7,8 @@
 
 #include "cvision/core/assert.hpp"
 #include "cvision/scene/compositor.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/window_list_dialog.hpp"
 
 namespace ckv::widgets {
 
@@ -61,6 +63,24 @@ void Desktop::on_attached() {
     install_default_handler(ui::std_commands::kPreviousWindow, [this] { activate_previous(); });
     install_default_handler(ui::std_commands::kTile, [this] { tile(); });
     install_default_handler(ui::std_commands::kCascade, [this] { cascade(); });
+    install_default_handler(ui::std_commands::kWindowList, [this] { show_window_list(); });
+}
+
+void Desktop::show_window_list() {
+    if (app_ == nullptr) return;
+    // One at a time. The command stays reachable by its key while the list is
+    // up, and a second modal list over the first would hide the very thing it
+    // was asked to show.
+    const std::shared_ptr<WindowListState> state = window_list_state_;
+    if (state->open) return;
+    state->open = true;
+    // Held by the completion handler rather than by this Desktop: the dialog
+    // is a child of ours, so our own destruction detaches it and completes the
+    // presentation — at a point where `this` is already partly gone.
+    auto presentation = std::make_shared<WindowListDialogPresentation>(
+        present_window_list_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
+    presentation->set_completion_handler(
+        [state, presentation](WindowListDialogResult) { state->open = false; });
 }
 
 void Desktop::on_child_size_hint_changed(ui::View& child) {

@@ -292,6 +292,16 @@ private:
     // default kQuit execution from one of those callbacks is a no-op: only
     // the outer request may observe later vetoes or request shutdown.
     void quit_sweep();
+    // kWindowList's default handler: presents make_window_list_dialog over
+    // this Desktop's own windows(), which is the same list, in the same
+    // cycling order, that select_by_number and activate_next() already walk.
+    // A Desktop is the only thing that knows that order, so an application
+    // that had to supply this handler itself could only reach for the same
+    // dialog over the same list — which is why it is here, beside kTile and
+    // kCascade, rather than copied into every application. Presenting it is a
+    // no-op while one is already open, and while this Desktop has no
+    // Application (nothing to present into).
+    void show_window_list();
     // kZoom's default handler: toggles the ACTIVE window's own zoom,
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
@@ -321,6 +331,13 @@ private:
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
     std::vector<ui::CommandId> installed_default_handlers_;
+    // Whether this Desktop's own kWindowList handler already has a list up.
+    // Shared, like the quit sweep below, so the dialog's completion can clear
+    // it even when what completed the dialog was this Desktop's destruction.
+    struct WindowListState {
+        bool open = false;
+    };
+    std::shared_ptr<WindowListState> window_list_state_ = std::make_shared<WindowListState>();
     struct QuitSweepState {
         bool in_progress = false;
     };
