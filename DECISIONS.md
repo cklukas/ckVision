@@ -886,6 +886,32 @@ shapes are established (couples hover highlighting to a capability users
 experience separately); and treating hover as an application opt-in (a
 default that leaves the feature invisible is a feature nobody has).
 
+**D-050 — A dialog button states its role, and the role is the behaviour.**
+`ButtonDescriptor` carries a `ButtonRole` — `Accept`, `Dismiss` or `Neutral` —
+in place of the `is_default` flag it had. The flag could describe exactly one
+of the three kinds of button an action row holds. Everything else was "not the
+default", which the descriptor path honoured by running that button's own
+handler and doing nothing further: a Cancel with nothing of its own to do was
+an inert control, and an application that wrote one shipped a dialog that
+ignored its own Cancel. A descriptor is written before its window exists, so no
+caller could wire the close from its own side either.
+
+`Accept` is the default button: Enter reaches it from anywhere in the dialog,
+the fields are validated first and a failing validator vetoes the press, and
+the completion carries the values. `Dismiss` runs its own handler if it has
+one and then takes the window's cancel path — the same closure Esc runs, so the
+two cannot drift apart — completing with `accepted == false` and no values.
+`Neutral` runs its handler and leaves the dialog up, which is what Apply,
+Browse… and Reset need; it is the default role because it is the one that does
+nothing on its own. At most one `Accept` per dialog, asserted at
+materialization as the flag was.
+
+*Rejected:* a second boolean beside `is_default` (two flags, three meaningful
+combinations, and the inert-Cancel spelling stays writable); making every
+non-default button close the dialog (silently turns an Apply into a close); and
+closing from `materialize_dialog` (it has no window — the wiring belongs where
+the window is).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

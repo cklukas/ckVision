@@ -52,6 +52,20 @@ The Forms app derives a descriptor from current state. Accept only completes
 when each validator succeeds; invalid input retains modality and focus moves to
 the failing field. Escape cancels.
 
+Each button states its `ButtonRole`, which is what pressing it does to the
+dialog around it:
+
+| Role | Enter reaches it | Validates | Completion | Dialog |
+|---|---|---|---|---|
+| `Accept` | yes (the default button) | yes — a veto blocks the press | `accepted == true`, with every field's value | closes |
+| `Dismiss` | no | no | `accepted == false`, no values | closes, exactly as Esc does |
+| `Neutral` | no | no | — | stays up |
+
+`Neutral` is the default, because it is the role that does nothing on its own:
+Apply, Browse…, Reset. A Cancel button is therefore written `ButtonRole::Dismiss`
+and needs no handler of its own — the role is the behaviour, and a button whose
+only instruction was "not the default" used to be an inert control.
+
 <!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="174-199" -->
 ```cpp
     help->set_bounds(Rect{33, 14, 12, 2});
@@ -76,8 +90,8 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     descriptor.fields.push_back(widgets::FieldDescriptor{"&Email:", "", [](const std::string& value) {
                                                              return value.find('@') != std::string::npos;
                                                          }});
-    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&OK", true, [] {}});
-    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", false, [] {}});
+    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&OK", widgets::ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     return descriptor;
 }
 ```

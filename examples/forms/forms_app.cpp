@@ -193,8 +193,8 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
     descriptor.fields.push_back(widgets::FieldDescriptor{"&Email:", "", [](const std::string& value) {
                                                              return value.find('@') != std::string::npos;
                                                          }});
-    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&OK", true, [] {}});
-    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", false, [] {}});
+    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&OK", widgets::ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     return descriptor;
 }
 

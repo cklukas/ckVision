@@ -18,6 +18,7 @@ using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::ui::Application;
 using ckv::widgets::ButtonDescriptor;
+using ckv::widgets::ButtonRole;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
 using ckv::widgets::materialize_dialog;
@@ -29,8 +30,8 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
     descriptor.fields.push_back(FieldDescriptor{"&Port:", "8080", nullptr});
     bool ok_pressed = false;
     bool cancel_pressed = false;
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_pressed = true; }});
-    descriptor.buttons.push_back(ButtonDescriptor{"Cancel", false, [&] { cancel_pressed = true; }});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { ok_pressed = true; }});
+    descriptor.buttons.push_back(ButtonDescriptor{"Cancel", ButtonRole::Dismiss, [&] { cancel_pressed = true; }});
 
     auto dialog = materialize_dialog(descriptor);
 
@@ -78,7 +79,7 @@ CK_TEST(a_two_field_dialog_driven_headlessly_end_to_end) {
 CK_TEST(tab_traversal_wraps_all_the_way_around_a_full_dialog_and_back) {
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", nullptr});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto dialog = materialize_dialog(descriptor);
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
@@ -97,7 +98,7 @@ CK_TEST(a_disabled_default_button_still_reports_default_but_a_disabled_input_is_
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&A:", "", nullptr});
     descriptor.fields.push_back(FieldDescriptor{"&B:", "", nullptr});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto dialog = materialize_dialog(descriptor);
     dialog.inputs[1]->set_enabled(false);

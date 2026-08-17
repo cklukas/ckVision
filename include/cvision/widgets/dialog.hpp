@@ -126,9 +126,32 @@ struct FieldDescriptor {
     std::optional<long long> maximum{};
 };
 
+// What pressing a button does to the dialog around it. A button descriptor is
+// written before its window exists, so the role is how a descriptor says what
+// the press means; the wiring that closes a window is done where the window is.
+//
+// This replaces an `is_default` flag, which could only say which button Enter
+// reaches. A dialog has three kinds of button and the flag could express one:
+// a Cancel written as a non-default button ran its own handler and nothing
+// else, so a dialog whose Cancel had nothing to do stayed on screen when the
+// reader pressed it. That was not a caller's mistake to make.
+enum class ButtonRole {
+    // Runs its handler and leaves the dialog open: Apply, Browse..., Reset.
+    // The default, because it is the role that does nothing on its own.
+    Neutral,
+    // The default button. Enter reaches it from anywhere in the dialog, the
+    // fields are validated first (a failing validator vetoes the press), and
+    // the completion carries `accepted == true`. At most one per dialog.
+    Accept,
+    // Dismisses the dialog exactly as Esc does: no validation, no values, and
+    // a completion carrying `accepted == false`. Its `on_press`, if it has
+    // one, runs before the dialog goes.
+    Dismiss,
+};
+
 struct ButtonDescriptor {
     std::string label;
-    bool is_default = false;
+    ButtonRole role = ButtonRole::Neutral;
     std::function<void()> on_press;
 };
 
@@ -225,6 +248,9 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 //    equally safe for that callback to detach and destroy the Window: the
 //    remaining accept state is independently owned and lifetime-checked.
 //  - cancel_request: closes the window directly, bypassing validation.
+//  - every ButtonRole::Dismiss button: runs its own on_press (if any) and
+//    then takes the cancel path, so a Cancel button and Esc are one
+//    behaviour rather than two that can drift apart.
 //  - on_closed (composed with any handler already set): restores
 //    focus to `restore_focus_to` if that exact view is still alive and
 //    focusable.

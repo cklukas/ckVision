@@ -444,8 +444,12 @@ as its own text) or `Note` (text the form states rather than asks). See
 
 ## ButtonDescriptor
 
-Header: `include/cvision/widgets/dialog.hpp`. Defines a dialog action,
-including whether it is the accept/default action.
+Header: `include/cvision/widgets/dialog.hpp`. Defines a dialog action: its
+label, its own handler, and a `ButtonRole` saying what pressing it does to the
+dialog — `Accept` (the default button: validate, answer, close), `Dismiss`
+(close exactly as Esc does, with no answer) or `Neutral` (run the handler and
+stay, as Apply or Browse… do). `Neutral` is the default, so a button that ends
+the dialog states which way it ends it.
 
 ## DialogDescriptor
 

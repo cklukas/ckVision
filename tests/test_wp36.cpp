@@ -37,6 +37,7 @@ using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
 using ckv::ui::StandardRoles;
 using ckv::widgets::ButtonDescriptor;
+using ckv::widgets::ButtonRole;
 using ckv::widgets::Desktop;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
@@ -179,7 +180,7 @@ CK_TEST(descriptor_dialog_validation_veto_and_escape_cancel_run_on_window_hooks)
                                                     return value == "valid";
                                                 }});
     bool ok_pressed = false;
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { ok_pressed = true; }});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { ok_pressed = true; }});
 
     auto dialog = ckv::widgets::materialize_dialog(descriptor);
     ckv::widgets::InputLine* invalid_input = dialog.inputs[0];
