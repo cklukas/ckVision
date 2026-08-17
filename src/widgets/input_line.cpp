@@ -561,6 +561,10 @@ int InputLine::scroll_offset_for_display() const {
         col_of[i + 1] = col_of[i] + (password_echo_ ? 1 : text::grapheme_width(graphemes_[i]));
 
     const int width = std::max(bounds().width, 1);
+    // Text that fits in the field never scrolls. Making room for the cursor
+    // past the last character would push the first one out of sight, so a
+    // four-cell field holding four digits would show three of them.
+    if (col_of.back() <= width) return 0;
     if (col_of[cursor_] < width) return 0;
     for (std::size_t scroll = cursor_; scroll-- > 0;) {
         if (col_of[cursor_] - col_of[scroll] > width - 1) return static_cast<int>(scroll) + 1;

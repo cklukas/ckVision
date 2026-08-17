@@ -271,7 +271,10 @@ void ComboBox::draw(scene::Painter& painter) {
         scene::Painter editor_painter = painter.translated(Point{0, 0}, Rect{0, 0, std::max(0, w - 2), 1});
         editor_.draw(editor_painter);
     } else {
-        painter.draw_text(Point{0, 0}, text::clip_to_width(text_, std::max(0, w - 2)), normal);
+        // Up to the arrow, not one cell short of it: a combo given exactly
+        // the room its longest item needs should show that item, not clip it
+        // to keep a blank nobody asked for.
+        painter.draw_text(Point{0, 0}, text::clip_to_width(text_, std::max(0, w - 1)), normal);
     }
     painter.draw_text(Point{w - 1, 0}, dropdown_open() ? "▴" : "▾", normal);
 }

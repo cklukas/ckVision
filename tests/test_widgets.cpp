@@ -1100,3 +1100,19 @@ CK_TEST(a_flat_button_is_one_row_of_label_and_shows_its_press_in_the_colours) {
     CK_CHECK(presses == 1);
     CK_CHECK(face_bg() == idle);
 }
+
+CK_TEST(an_input_line_exactly_as_wide_as_its_text_shows_all_of_it) {
+    Fixture f;
+    InputLine line;
+    line.set_context(f.ctx());
+    line.on_attached();
+    line.set_bounds(ckv::Rect{0, 0, 4, 1});
+    line.set_text("2026");  // set_text leaves the cursor past the last digit
+
+    Surface surface = make_surface(4, 1);
+    Painter painter(surface, ckv::Rect{0, 0, 4, 1});
+    line.draw(painter);
+    // Scrolling to make room for a cursor past the last character would cost
+    // the first one, which is not a trade a field that fits should make.
+    CK_CHECK(row_text(surface, 0) == "2026");
+}

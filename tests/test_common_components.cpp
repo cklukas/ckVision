@@ -717,11 +717,14 @@ CK_TEST(the_month_picker_is_as_wide_as_its_longest_month_and_no_wider) {
     DroppedCalendar c;
     // Space past the longest name is space the year beside it could have had,
     // and the year is on the same row.
-    CK_CHECK(c.dropdown->month_picker().bounds().width == 11);  // "September" plus its arrow
+    CK_CHECK(c.dropdown->month_picker().bounds().width == 10);  // "September" plus its arrow
     const ckv::Rect month = c.dropdown->month_picker().bounds();
     const ckv::Rect year = c.dropdown->year_field().bounds();
     CK_CHECK(year.y == month.y);
-    CK_CHECK(year.x > month.right());  // the steppers sit between them
+    CK_CHECK(year.width == 4);  // a year is four digits, and the field is four cells
+    // A stepper's two cells sit between them, with two blanks before it so
+    // the button stands clear of the picker's arrow.
+    CK_CHECK(year.x - 2 - month.right() == 2);
     CK_CHECK(year.right() < c.dropdown->bounds().width - 1);  // and one more, inside the frame
 }
 
@@ -762,6 +765,30 @@ CK_TEST(stepping_back_stops_at_the_first_year_the_calendar_can_draw) {
     const ckv::Rect year = c.dropdown->year_field().bounds();
     c.click(ckv::Point{abs.x + year.x - 1, abs.y + year.y});  // "<<"
     CK_CHECK(c.dropdown->calendar().month().year == ckv::widgets::kFirstCalendarYear);
+}
+
+CK_TEST(a_picker_that_takes_the_mouse_does_not_leave_the_calendar_holding_it) {
+    DroppedCalendar c;
+    const ckv::Rect abs = c.dropdown->absolute_bounds();
+    const ckv::Rect month = c.dropdown->month_picker().bounds();
+    // Pressing the picker opens its list, and the list takes the mouse -- so
+    // the release never comes back here. Left latched, that grab swallowed
+    // every later event: the popup could not be dismissed and the
+    // application behind it stopped responding.
+    c.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                   ckv::Point{abs.x + month.x + 1, abs.y + month.y}, std::nullopt,
+                                   ckv::Modifier::None});
+    c.app.step(0);
+    CK_CHECK(c.desktop->popups().size() == 2);  // the list is up
+    c.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 18},
+                                   std::nullopt, ckv::Modifier::None});
+    c.app.step(0);  // outside everything: the list goes
+    c.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 18},
+                                   std::nullopt, ckv::Modifier::None});
+    c.app.step(0);  // and so does the calendar
+    CK_CHECK(c.desktop->popups().empty());
+    CK_CHECK(c.app.input_capture() == nullptr);
+    CK_CHECK(!c.app.is_modal());
 }
 
 CK_TEST(escape_closes_a_dropped_calendar) {

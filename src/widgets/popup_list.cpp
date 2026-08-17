@@ -133,11 +133,24 @@ PopupList* show_popup_list(Rect anchor_absolute, std::vector<std::string> items,
     raw->set_bounds(Rect{x, std::clamp(y, 0, std::max(0, desktop.bounds().height - height)), width, height});
 
     const ui::Application::ModalScopeId scope = app.push_modal(*raw);
-    ui::View* const restore = app.focused();
-    const auto close = [&app, &desktop, raw, scope, restore] {
-        if (app.input_capture() == raw) app.clear_input_capture();
+    ui::View* const restore_focus = app.focused();
+    // What held the mouse before this popup took it. A list opened from
+    // inside another popup has to hand the mouse BACK when it closes, not
+    // merely let go: clearing it leaves the popup underneath with a modal
+    // scope and nothing listening, so its own light dismissal stops working
+    // and every click in the application goes nowhere. Application drops a
+    // capture that is no longer usable, so restoring one that has since gone
+    // is safe.
+    ui::View* const restore_capture = app.input_capture();
+    const auto close = [&app, &desktop, raw, scope, restore_focus, restore_capture] {
+        if (app.input_capture() == raw) {
+            if (restore_capture != nullptr)
+                app.set_input_capture(restore_capture);
+            else
+                app.clear_input_capture();
+        }
         app.pop_modal(scope);
-        if (restore != nullptr) app.set_focus(restore);
+        if (restore_focus != nullptr) app.set_focus(restore_focus);
         desktop.remove_popup(raw);  // discards ownership -> destroys this view
     };
     // Closing first, answering second: the caller may open something else in

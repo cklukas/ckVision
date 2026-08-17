@@ -457,9 +457,8 @@ constexpr int kContentLeft = 1 + kContentPad;  // frame, then the padding
 constexpr int kControlRow = 1;
 constexpr int kGridRow = 2;
 constexpr int kStepWidth = 2;  // "<<" and ">>"
-// Four digits and the cell the cursor sits in past them: a field exactly as
-// wide as its text scrolls the first character out of sight to make room.
-constexpr int kYearWidth = 5;
+constexpr int kGap = 2;        // between the month and the stepper beside it
+constexpr int kYearWidth = 4;  // the four digits a year is written in
 constexpr std::int64_t kInvalidHoldNanos = 3'000'000'000;
 }  // namespace
 
@@ -533,14 +532,15 @@ int CalendarDropdown::month_width() const noexcept {
     // beside it could have had.
     int widest = 0;
     for (const std::string& label : month_labels_) widest = std::max(widest, text::text_width(label));
-    // One cell for the arrow, one to keep the name off it.
-    const int wanted = widest + 2;
-    const int rest = kStepWidth + kYearWidth + kStepWidth;
+    // One cell for the arrow; the blank that keeps the picker off the stepper
+    // beside it belongs to the row, not to the picker.
+    const int wanted = widest + 1;
+    const int rest = kGap + kStepWidth + kYearWidth + kStepWidth;
     return std::clamp(wanted, 4, kGridWidth - rest);
 }
 
 Rect CalendarDropdown::year_rect() const noexcept {
-    return Rect{kContentLeft + month_width() + kStepWidth, kControlRow, kYearWidth, 1};
+    return Rect{kContentLeft + month_width() + kGap + kStepWidth, kControlRow, kYearWidth, 1};
 }
 
 void CalendarDropdown::set_control_row_visible(bool visible) {
@@ -661,10 +661,16 @@ ui::View* CalendarDropdown::child_at(Point local) const noexcept {
 }
 
 bool CalendarDropdown::on_mouse(const MouseEvent& event) {
-    // A press that began on a child stays with it until the button comes up,
-    // wherever the pointer goes meanwhile: that is what lets a button show
-    // itself disarmed when the pointer slides off it, and how the press is
-    // taken back rather than fired.
+    // A grab lives only while the button is down, so a fresh press means the
+    // release was never delivered here: the child took the mouse with it when
+    // it opened a popup of its own. Left latched, that grab swallowed every
+    // later event -- clicks outside stopped dismissing this popup, and the
+    // application behind it stopped responding at all.
+    if (event.action == MouseAction::Down) mouse_child_ = nullptr;
+    // Otherwise a press that began on a child stays with it until the button
+    // comes up, wherever the pointer goes meanwhile: that is what lets a
+    // button show itself disarmed when the pointer slides off it, and how the
+    // press is taken back rather than fired.
     if (mouse_child_ != nullptr) {
         ui::View* const child = mouse_child_;
         if (event.action == MouseAction::Up) mouse_child_ = nullptr;
@@ -684,9 +690,14 @@ bool CalendarDropdown::on_mouse(const MouseEvent& event) {
         else if (child == year_) focus_slot(1);
         else if (child == calendar_) focus_slot(2);
         mouse_child_ = child;
+        // The popup holds the mouse so a press beside it can dismiss it,
+        // which means every event inside arrives here and is handed on by
+        // hand. If handing it on gave the mouse to something else -- a
+        // picker's own list -- the grab is not ours to keep.
+        const bool handled = child->on_mouse(event);
+        if (context().app != nullptr && context().app->input_capture() != this) mouse_child_ = nullptr;
+        return handled;
     }
-    // The popup holds the mouse so a press beside it can dismiss it, which
-    // means every event inside arrives here and is handed on by hand.
     return child->on_mouse(event);
 }
 
