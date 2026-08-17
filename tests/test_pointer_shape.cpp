@@ -44,7 +44,8 @@ constexpr PointerShape kAllShapes[] = {
     PointerShape::Text,
     PointerShape::Pointer,
     PointerShape::Crosshair,
-    PointerShape::Move,
+    PointerShape::Grab,
+    PointerShape::Grabbing,
     PointerShape::ResizeEastWest,
     PointerShape::ResizeNorthSouth,
     PointerShape::ResizeNorthWestSouthEast,
@@ -118,13 +119,15 @@ struct AppFixture {
 // --- Vocabularies and degradation ---------------------------------------
 
 CK_TEST(every_shape_has_a_name_in_both_vocabularies) {
+    // Including Default. Having no opinion is the ordinary arrow and is
+    // named like anything else — the protocol's empty reset belongs to the
+    // end of a session, not to a frame in the middle of one.
     for (const PointerShape shape : kAllShapes) {
-        // Default is the protocol's reset, which is an empty payload by
-        // design; every other shape must actually name something.
-        const bool is_default = shape == PointerShape::Default;
-        CK_CHECK(pointer_shape_standard_name(shape).empty() == false);
-        CK_CHECK(pointer_shape_legacy_name(shape).empty() == is_default);
+        CK_CHECK(!pointer_shape_standard_name(shape).empty());
+        CK_CHECK(!pointer_shape_legacy_name(shape).empty());
     }
+    CK_CHECK(pointer_shape_legacy_name(PointerShape::Default) == "left_ptr");
+    CK_CHECK(kPointerShapeResetSequence == "\x1B]22;\x1B\\");
 }
 
 CK_TEST(the_legacy_vocabulary_uses_only_names_both_known_host_families_accept) {
@@ -133,9 +136,9 @@ CK_TEST(the_legacy_vocabulary_uses_only_names_both_known_host_families_accept) {
     // host implementing only the xterm proposal is known to draw. A name
     // outside this set is not a translation but a guess, and a guess that
     // misses resets the pointer rather than approximating it.
-    const std::string_view accepted[] = {"",           "xterm",  "hand2", "crosshair",
-                                          "fleur",     "watch",  "X_cursor",
-                                          "sb_h_double_arrow",   "sb_v_double_arrow"};
+    const std::string_view accepted[] = {"left_ptr", "xterm",    "hand2",
+                                          "crosshair", "fleur",   "watch",
+                                          "X_cursor",  "sb_h_double_arrow", "sb_v_double_arrow"};
     for (const PointerShape shape : kAllShapes) {
         const std::string_view name = pointer_shape_legacy_name(shape);
         bool found = false;
@@ -146,10 +149,20 @@ CK_TEST(the_legacy_vocabulary_uses_only_names_both_known_host_families_accept) {
 
 CK_TEST(the_diagonal_corners_degrade_to_a_pointer_the_legacy_vocabulary_really_has) {
     // Documented degradation, asserted rather than left to be discovered:
-    // no diagonal corner arrow is reliably present in the legacy set, and a
-    // corner grip is a handle, so it says "handle".
-    CK_CHECK(pointer_shape_legacy_name(PointerShape::ResizeNorthWestSouthEast) == "fleur");
-    CK_CHECK(pointer_shape_legacy_name(PointerShape::ResizeNorthEastSouthWest) == "fleur");
+    // no diagonal corner arrow is reliably present in the legacy set, so a
+    // corner says "resize" and understates only the axis. Deliberately not
+    // the move pointer, which would name the one gesture the title bar
+    // beside it really performs.
+    CK_CHECK(pointer_shape_legacy_name(PointerShape::ResizeNorthWestSouthEast) == "crosshair");
+    CK_CHECK(pointer_shape_legacy_name(PointerShape::ResizeNorthEastSouthWest) == "crosshair");
+    // The hand belongs to the title bar, not to a corner -- and it cannot
+    // close, so both halves of the grab pair are the open one here.
+    CK_CHECK(pointer_shape_legacy_name(PointerShape::Grab) == "fleur");
+    CK_CHECK(pointer_shape_legacy_name(PointerShape::Grabbing) == "fleur");
+    // Never hand1: this vocabulary's two hands disagree across hosts. kitty
+    // reads hand1 as the open "grab" hand, iTerm2 reads it as the pointing
+    // finger, so a grab written as hand1 would be a finger on one of them.
+    CK_CHECK(pointer_shape_legacy_name(PointerShape::Pointer) == "hand2");
     // The standard vocabulary keeps the distinction, because a host that
     // answers the query is a host that has the pointers.
     CK_CHECK(pointer_shape_standard_name(PointerShape::ResizeNorthWestSouthEast) == "nwse-resize");
@@ -234,7 +247,7 @@ CK_TEST(the_support_query_names_every_shape_in_enum_order) {
 CK_TEST(a_support_reply_earns_the_standard_vocabulary_and_its_own_flags) {
     InputDecoder decoder(baseline_capabilities());
     const std::vector<TerminalEvent> events =
-        decoder.feed("\x1B]22;1,1,1,1,1,1,1,0,0,1,1,0\x1B\\", 0);
+        decoder.feed("\x1B]22;1,1,1,1,1,1,1,1,0,0,1,1,0\x1B\\", 0);
     CK_CHECK(events.size() == 1);
     const auto& changed = std::get<CapabilityChangedEvent>(events.at(0));
     CK_CHECK(changed.capabilities.pointer_shape_vocabulary == PointerShapeVocabulary::Standard);
@@ -243,7 +256,7 @@ CK_TEST(a_support_reply_earns_the_standard_vocabulary_and_its_own_flags) {
     CK_CHECK(!host_draws_pointer_shape(changed.capabilities, PointerShape::Progress));
     // ...and the withdrawn ones degrade rather than disappearing.
     CK_CHECK(effective_pointer_shape(changed.capabilities, PointerShape::ResizeNorthWestSouthEast) ==
-             PointerShape::Move);
+             PointerShape::Crosshair);
     CK_CHECK(effective_pointer_shape(changed.capabilities, PointerShape::Progress) == PointerShape::Wait);
 }
 
@@ -271,18 +284,26 @@ CK_TEST(a_session_that_asks_for_no_shapes_ignores_an_answer_about_them) {
     Capabilities caps = baseline_capabilities();
     caps.pointer_shapes = false;
     InputDecoder decoder(caps);
-    CK_CHECK(decoder.feed("\x1B]22;1,1,1,1,1,1,1,1,1,1,1,1\x1B\\", 0).empty());
+    CK_CHECK(decoder.feed("\x1B]22;1,1,1,1,1,1,1,1,1,1,1,1,1\x1B\\", 0).empty());
 }
 
 // --- What reaches the wire ----------------------------------------------
 
-CK_TEST(a_session_with_no_opinion_never_spends_bytes_saying_so) {
-    // The host is already showing its own default. Telling it to keep doing
-    // that is not free, and on a host that draws a deliberate pointer while
-    // mouse reporting is on it is not even a no-op.
-    PresenterFixture f;
-    CK_CHECK(f.present(PointerShape::Default).empty());
-    CK_CHECK(f.present(PointerShape::Default).empty());
+CK_TEST(a_session_states_the_ordinary_arrow_rather_than_leaving_it_to_the_host) {
+    // The reverse of what politeness suggests, and deliberately. A host may
+    // draw its own pointer while mouse reporting is on -- iTerm2 draws an
+    // I-beam with a circle -- and over a full-screen application with
+    // windows and menus that reads as a text cursor everywhere. Staying
+    // quiet leaves it there, so the arrow is stated on the first frame.
+    HeadlessTerminal term{Size{20, 4}};
+    Presenter presenter{term};
+    std::vector<Cell> cells(static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{}));
+    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
+    CK_CHECK(std::string(term.written_bytes()).find("\x1B]22;left_ptr\x1B\\") != std::string::npos);
+    // ...and having said it once, it does not keep saying it.
+    term.clear_written();
+    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
+    CK_CHECK(term.written_bytes().empty());
 }
 
 CK_TEST(a_shape_is_written_once_and_not_restated_every_frame) {
@@ -290,8 +311,10 @@ CK_TEST(a_shape_is_written_once_and_not_restated_every_frame) {
     CK_CHECK(f.present(PointerShape::Text) == "\x1B]22;xterm\x1B\\");
     CK_CHECK(f.present(PointerShape::Text).empty());
     CK_CHECK(f.present(PointerShape::Pointer) == "\x1B]22;hand2\x1B\\");
-    // Back to having no opinion: that IS a change, and it is the reset.
-    CK_CHECK(f.present(PointerShape::Default) == "\x1B]22;\x1B\\");
+    // Back to having no opinion: that IS a change, and it is the arrow --
+    // not the reset, which would hand the pointer back to whatever the host
+    // draws over a program that is reporting the mouse.
+    CK_CHECK(f.present(PointerShape::Default) == "\x1B]22;left_ptr\x1B\\");
     CK_CHECK(f.present(PointerShape::Default).empty());
 }
 
@@ -300,9 +323,10 @@ CK_TEST(two_requests_this_host_cannot_tell_apart_are_written_once) {
     // pointer travels from one corner to the other would be bytes per
     // motion report for a screen that does not change.
     PresenterFixture f;
-    CK_CHECK(f.present(PointerShape::ResizeNorthWestSouthEast) == "\x1B]22;fleur\x1B\\");
-    CK_CHECK(f.present(PointerShape::ResizeNorthEastSouthWest).empty());
-    CK_CHECK(f.present(PointerShape::Move).empty());
+    CK_CHECK(f.present(PointerShape::Grab) == "\x1B]22;fleur\x1B\\");
+    CK_CHECK(f.present(PointerShape::Grabbing).empty());  // no closed hand to change to
+    // A shape that really is different still gets through.
+    CK_CHECK(f.present(PointerShape::ResizeEastWest) == "\x1B]22;sb_h_double_arrow\x1B\\");
 }
 
 CK_TEST(a_re_present_re_states_the_shape_because_a_probe_may_have_reset_it) {
@@ -416,7 +440,7 @@ CK_TEST(the_pointer_takes_the_shape_of_whatever_it_is_over) {
     f.move_to(Point{window_bounds.x + 8, window_bounds.y});
     CK_CHECK(!pressable->hovered());
     CK_CHECK(f.app.hovered_view() == window);
-    CK_CHECK(f.app.pointer_shape() == PointerShape::Move);
+    CK_CHECK(f.app.pointer_shape() == PointerShape::Grab);
 
     // Onto a corner, which resizes it along a diagonal.
     f.move_to(Point{window_bounds.x + window_bounds.width - 1,
@@ -474,7 +498,7 @@ CK_TEST(a_view_with_no_opinion_lets_the_frame_around_it_answer) {
     CK_CHECK(f.app.pointer_shape() == PointerShape::Default);  // and had nothing to say
 
     f.move_to(Point{bounds.x + 6, bounds.y});
-    CK_CHECK(f.app.pointer_shape() == PointerShape::Move);
+    CK_CHECK(f.app.pointer_shape() == PointerShape::Grab);
 }
 
 CK_TEST(a_view_destroyed_under_the_pointer_leaves_no_dangling_hover) {

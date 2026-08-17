@@ -26,7 +26,14 @@ enum class PointerShape : std::uint8_t {
     Text,        // selectable or editable text
     Pointer,     // something that activates when clicked
     Crosshair,   // a surface where the exact cell is the point
-    Move,        // a handle that relocates what it belongs to
+    // A handle that relocates what it belongs to, and the same handle while
+    // it is being held. Two shapes rather than one because the pair is the
+    // feedback: the hand closes as the drag begins and opens when it ends,
+    // which is how a reader knows the window came with them. A host with
+    // only one of the two shows no transition, which is a degradation and
+    // not a wrong picture.
+    Grab,
+    Grabbing,
     ResizeEastWest,            // a vertical edge or divider
     ResizeNorthSouth,          // a horizontal edge or divider
     ResizeNorthWestSouthEast,  // top-left and bottom-right corners
@@ -39,6 +46,6 @@ enum class PointerShape : std::uint8_t {
 // One past the last shape, for tables that must cover every member. Kept
 // beside the enum so adding a shape without extending its name tables is a
 // compile error rather than a silent Default at run time.
-inline constexpr int kPointerShapeCount = 12;
+inline constexpr int kPointerShapeCount = 13;
 
 }  // namespace ckv

@@ -31,10 +31,14 @@ enum class PointerShapeVocabulary : std::uint8_t {
 // terminates at Default for every member.
 constexpr PointerShape pointer_shape_fallback(PointerShape shape) noexcept {
     switch (shape) {
-        // A corner that cannot be drawn as a diagonal is still a handle the
-        // reader may take hold of, which is what Move says.
+        // A corner that cannot be drawn as a diagonal is still a resize, and
+        // saying "resize" along one axis is nearer the truth than saying
+        // "move" — which is a different gesture, and the one gesture the
+        // title bar right next to it actually performs.
         case PointerShape::ResizeNorthWestSouthEast:
-        case PointerShape::ResizeNorthEastSouthWest: return PointerShape::Move;
+        case PointerShape::ResizeNorthEastSouthWest: return PointerShape::Crosshair;
+        // A hand that cannot close is still the hand that took hold.
+        case PointerShape::Grabbing: return PointerShape::Grab;
         // Busy-but-usable degrades to busy before it degrades to nothing:
         // the wait pointer overstates the situation, silence understates it.
         case PointerShape::Progress: return PointerShape::Wait;
@@ -49,11 +53,12 @@ constexpr PointerShape pointer_shape_fallback(PointerShape shape) noexcept {
 // pointer_shape_fallback covers what it does not.
 constexpr std::string_view pointer_shape_standard_name(PointerShape shape) noexcept {
     switch (shape) {
-        case PointerShape::Default: return "default";
+        case PointerShape::Default: return "default";  // the ordinary arrow, stated not implied
         case PointerShape::Text: return "text";
         case PointerShape::Pointer: return "pointer";
         case PointerShape::Crosshair: return "crosshair";
-        case PointerShape::Move: return "move";
+        case PointerShape::Grab: return "grab";
+        case PointerShape::Grabbing: return "grabbing";
         case PointerShape::ResizeEastWest: return "ew-resize";
         case PointerShape::ResizeNorthSouth: return "ns-resize";
         case PointerShape::ResizeNorthWestSouthEast: return "nwse-resize";
@@ -73,31 +78,40 @@ constexpr std::string_view pointer_shape_standard_name(PointerShape shape) noexc
 //   - The diagonal corner resizes have X11 names (`top_left_corner` and
 //     friends), but a host that implements only the proposal maps names to
 //     whatever its platform's pointer set contains, and the diagonal
-//     corner arrow is not reliably in one. An unrecognized name is worse
-//     than a substituted one: it resets the pointer entirely, so the corner
-//     of a window would lose its shape rather than take a near one. They
-//     are written as the move pointer, which every host in this vocabulary
-//     has and which says the correct thing about a corner grip.
+//     corner arrow is not reliably in one — macOS has no public one at
+//     all. An unrecognized name is worse than a substituted one: it resets
+//     the pointer entirely, so a corner would lose its shape rather than
+//     take a near one. They are written as the horizontal resize arrow,
+//     which says "this resizes" — the part that matters — and leaves only
+//     the axis understated. Not the move pointer: moving is a different
+//     gesture, and it is the one the title bar an inch away really does.
 //   - Progress has no legacy name distinct from Wait, so it borrows it.
 //     The distinction survives on hosts that answer the query, which are
 //     the hosts that have a separate pointer for it.
 //
-// Default returns the empty name deliberately: the protocol's reset. It
-// hands the pointer back to the host's own default rather than pinning it
-// to an arrow, which matters because a host may draw a deliberate pointer
-// of its own while mouse reporting is on, and ckVision having no opinion
-// should not suppress it.
+// Default is the ordinary arrow, and is stated rather than left to the
+// host. Handing the pointer back with the protocol's reset would seem more
+// polite, but a host is entitled to draw its own pointer while mouse
+// reporting is on — iTerm2 draws an I-beam with a circle, to say that the
+// mouse is being sent to the running program — and over a full-screen
+// application with windows and menus that reads as a text cursor
+// everywhere, which is the one thing it is not. An application that has
+// taken over the screen owns the pointer on it. The reset belongs to the
+// end of the session, where it hands the pointer back for good.
 constexpr std::string_view pointer_shape_legacy_name(PointerShape shape) noexcept {
     switch (shape) {
-        case PointerShape::Default: return "";
+        case PointerShape::Default: return "left_ptr";
         case PointerShape::Text: return "xterm";
         case PointerShape::Pointer: return "hand2";
         case PointerShape::Crosshair: return "crosshair";
-        case PointerShape::Move: return "fleur";
+        case PointerShape::Grab: return "fleur";
+        // No host in this vocabulary has a closed hand, so the hand simply
+        // does not close. The open one still says the window is in hand.
+        case PointerShape::Grabbing: return "fleur";
         case PointerShape::ResizeEastWest: return "sb_h_double_arrow";
         case PointerShape::ResizeNorthSouth: return "sb_v_double_arrow";
         case PointerShape::ResizeNorthWestSouthEast:
-        case PointerShape::ResizeNorthEastSouthWest: return "fleur";
+        case PointerShape::ResizeNorthEastSouthWest: return "crosshair";
         case PointerShape::NotAllowed: return "X_cursor";
         case PointerShape::Wait:
         case PointerShape::Progress: return "watch";
@@ -117,8 +131,8 @@ constexpr std::string_view pointer_shape_name(PointerShape shape,
 // the reset for it rather than a name — but keeping the list aligned with
 // the enum is worth eight bytes sent once per session.
 inline constexpr std::string_view kPointerShapeQueryNames =
-    "default,text,pointer,crosshair,move,ew-resize,ns-resize,nwse-resize,nesw-resize,"
-    "not-allowed,wait,progress";
+    "default,text,pointer,crosshair,grab,grabbing,ew-resize,ns-resize,nwse-resize,"
+    "nesw-resize,not-allowed,wait,progress";
 
 // The full escape sequence asking which shapes a host has. A host that
 // implements the kitty specification answers `OSC 22 ; 1,0,1,… ST`; one
@@ -126,8 +140,8 @@ inline constexpr std::string_view kPointerShapeQueryNames =
 // shape name, fails to match it, and resets its pointer — which is why a
 // session re-asserts the shape it wants once the probe window closes.
 inline constexpr std::string_view kPointerShapeQuerySequence =
-    "\x1B]22;?default,text,pointer,crosshair,move,ew-resize,ns-resize,nwse-resize,nesw-resize,"
-    "not-allowed,wait,progress\x1B\\";
+    "\x1B]22;?default,text,pointer,crosshair,grab,grabbing,ew-resize,ns-resize,nwse-resize,"
+    "nesw-resize,not-allowed,wait,progress\x1B\\";
 
 // Returns the pointer to whatever the host would use of its own accord.
 // Written when a session ends, so a shape never outlives the application

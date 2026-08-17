@@ -499,7 +499,7 @@ PointerShape Window::corner_pointer_shape(Corner corner) noexcept {
         case Corner::TopRight:
         case Corner::BottomLeft: return PointerShape::ResizeNorthEastSouthWest;
     }
-    return PointerShape::Move;  // exhaustive enum fallback for defensive builds
+    return PointerShape::Grab;  // exhaustive enum fallback for defensive builds
 }
 
 std::optional<PointerShape> Window::pointer_shape_at(Point local) const {
@@ -509,14 +509,17 @@ std::optional<PointerShape> Window::pointer_shape_at(Point local) const {
     // pointer left the grip would be showing the corner's affordance only
     // while it was not being used.
     if (drag_kind_ == DragKind::Resize) return corner_pointer_shape(resize_corner_);
-    if (drag_kind_ == DragKind::Move) return PointerShape::Move;
+    // The hand closes while the window is actually in it, and opens again
+    // when the drag ends. On a host with only the open hand nothing visibly
+    // changes, which understates the moment rather than misstating it.
+    if (drag_kind_ == DragKind::Move) return PointerShape::Grabbing;
     // Controls before corners before the title row, matching the press
     // order in on_mouse(): the shape has to promise whatever the press
     // would actually do, and the top corners sit on the title row.
     if (point_in_close_control(local) || point_in_zoom_control(local)) return PointerShape::Pointer;
     if (const std::optional<Corner> corner = resize_corner_at(local))
         return corner_pointer_shape(*corner);
-    if (movable_ && local.y == 0) return PointerShape::Move;
+    if (movable_ && local.y == 0) return PointerShape::Grab;
     return std::nullopt;
 }
 

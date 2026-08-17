@@ -584,9 +584,11 @@ void Presenter::emit_pointer_shape(std::string& out, PointerShape shape) {
     // report for a screen that does not change.
     const std::string_view name = pointer_shape_name(effective, caps.pointer_shape_vocabulary);
     if (previous_pointer_shape_name_ && *previous_pointer_shape_name_ == name) return;
-    // Never asked, and still asking for nothing: the host is already
-    // showing whatever it shows by default.
-    if (!previous_pointer_shape_name_ && effective == PointerShape::Default) return;
+    // Nothing is skipped for having no opinion. "No opinion" is the ordinary
+    // arrow and is stated like any other shape, including on the very first
+    // frame: a host may be drawing a pointer of its own while mouse
+    // reporting is on, and staying quiet leaves that pointer in place over
+    // an application that has taken the whole screen.
     previous_pointer_shape_name_ = std::string(name);
     out += "\x1B]22;";
     out += name;

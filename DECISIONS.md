@@ -834,13 +834,33 @@ capability here would be, because an unrecognized OSC is discarded: the
 failure mode is that nothing happens. Contrast D-045's underline shapes,
 gated precisely because a host that misreads one draws the wrong thing.
 
+Shapes come in pairs where the pair is the feedback: a title bar is Grab and
+becomes Grabbing while the window is actually in hand. A host with only one of
+the two shows no transition, which understates the moment instead of
+misstating it. The legacy names are chosen for agreement rather than
+literalness for the same reason -- the two X11 hands mean different things on
+different hosts (kitty reads `hand1` as the open grab hand, iTerm2 as the
+pointing finger), so a grab is written `fleur`, which both agree on.
+
 The query is still sent, as refinement rather than permission. A host that
 answers has identified itself as implementing the kitty specification and has
 listed which shapes it has, so the session switches to the CSS vocabulary and
 degrades per shape against that list. A host that says nothing gets the X11
 cursorfont names of the original proposal — the vocabulary both host families
 accept — with two documented degradations: the diagonal corner resizes are
-written as the move pointer, and progress borrows the wait pointer. The query
+written as the crosshair (no host in this vocabulary has a diagonal, and the
+single-axis arrows would state an axis a corner does not have, since a corner
+pulls both; the crosshair claims no axis and marks the point being taken hold
+of), and a closing hand stays the open one, and progress borrows the wait pointer.
+
+Having no opinion is the ordinary arrow, stated rather than left to the host.
+Handing the pointer back with the protocol's reset looks more polite and is
+wrong: a host is entitled to draw its own pointer while mouse reporting is on
+— iTerm2 draws an I-beam with a circle, to say the mouse is going to the
+running program — and over a full-screen application with windows and menus
+that reads as a text cursor everywhere, including the desktop behind them. An
+application that has taken the screen owns the pointer on it. The reset is
+kept for the end of the session, where it hands the pointer back for good. The query
 is itself an unknown shape name to a host that does not implement it, and an
 unknown name resets the pointer, so a probe is followed by a re-present that
 states the shape again. The shape is reset when the session ends, from the
