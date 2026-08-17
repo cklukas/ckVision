@@ -191,6 +191,14 @@ private:
     // program may define a palette in one sequence and draw with it in the
     // next, so they outlive both.
     SixelPalette sixel_palette_;
+    // The last picture decoded, and the bytes it came from. A program
+    // redrawing itself sends the same picture again on every frame — a
+    // dialog being dragged sends a third of a megabyte per frame, all of it
+    // identical — and decoding it again produces, at some expense, exactly
+    // the image already in hand.
+    std::string last_sixel_payload_;
+    std::shared_ptr<Image> last_sixel_image_;
+    Size last_sixel_room_;
     int raster_identity_ = 0;
     bool alternate_buffer_ = false;
     int scroll_top_ = 0;

@@ -56,7 +56,12 @@ private:
     // way, is the same bytes wherever it is put. Dragging a window therefore
     // re-sends an encoding rather than recomputing one.
     struct EncodeKey {
-        const Image* image = nullptr;
+        // Deliberately not the image's address. A host re-decodes a child's
+        // picture into a fresh object every time the child sends it, and a
+        // child redrawing during a drag sends the same picture over and over:
+        // keying on the object made every one of those a fresh encode of
+        // pixels we had already encoded. The fingerprint is what identifies
+        // pixels; the address only identifies an allocation.
         std::uint64_t fingerprint = 0;
         int crop_x = 0;
         int crop_y = 0;

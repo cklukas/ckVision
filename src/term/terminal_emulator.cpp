@@ -666,6 +666,25 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                             };
                             const Size room{room_span(cells_.width, cursor_.position.x, cell_width),
                                             room_span(cells_.height, cursor_.position.y, cell_height)};
+                            // The same bytes into the same room are the same
+                            // picture. Reusing it also lets the presenter
+                            // recognise it as one it has already encoded and
+                            // already put on the screen.
+                            constexpr std::size_t kMaxCachedPayload = 2U * 1024U * 1024U;
+                            if (last_sixel_image_ != nullptr && room == last_sixel_room_ &&
+                                control_ == last_sixel_payload_) {
+                                if (graphics_log_enabled())
+                                    graphics_log("emulator: child re-sent the same Sixel (" +
+                                                 std::to_string(control_.size()) + " bytes); reused the decode");
+                                const Size extent{
+                                    std::max(1, ceil_div_positive(last_sixel_image_->width(), cell_width)),
+                                    std::max(1, ceil_div_positive(last_sixel_image_->height(), cell_height))};
+                                place_raster(last_sixel_image_, cursor_.position, extent);
+                                control_.clear();
+                                dcs_sixel_payload_ = false;
+                                parse_state_ = ParseState::Ground;
+                                break;
+                            }
                             std::string error;
                             const auto decode_started = graphics_log_enabled()
                                                             ? std::chrono::steady_clock::now()
@@ -686,8 +705,13 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                 const Size extent{
                                     std::max(1, ceil_div_positive(decoded->image.width(), cell_width)),
                                     std::max(1, ceil_div_positive(decoded->image.height(), cell_height))};
-                                place_raster(std::make_shared<Image>(std::move(decoded->image)),
-                                             cursor_.position, extent);
+                                auto picture = std::make_shared<Image>(std::move(decoded->image));
+                                if (control_.size() <= kMaxCachedPayload) {
+                                    last_sixel_payload_ = control_;
+                                    last_sixel_image_ = picture;
+                                    last_sixel_room_ = room;
+                                }
+                                place_raster(std::move(picture), cursor_.position, extent);
                             } else {
                                 diagnostic(TerminalDiagnostic::Kind::MalformedSequence,
                                            "malformed child Sixel sequence: " + error);

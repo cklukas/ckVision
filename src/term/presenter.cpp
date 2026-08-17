@@ -270,7 +270,6 @@ void emit_cursor_shape(std::string& out, CursorShape shape, bool blink) {
 
 Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64_t fingerprint) const noexcept {
     EncodeKey key;
-    key.image = slice.image.get();
     key.fingerprint = fingerprint;
     key.color_registers = terminal_.capabilities().sixel_color_registers;
     const Rect& anchor = slice.full_anchor;
