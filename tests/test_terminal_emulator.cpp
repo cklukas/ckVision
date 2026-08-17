@@ -1701,3 +1701,242 @@ CK_TEST(the_default_tab_stops_can_be_asked_for_by_name) {
     emulator.feed_output("\x1b[?5W\x1b[1;1H\t");
     CK_CHECK(emulator.snapshot().cursor.position.x == 8);
 }
+
+namespace {
+
+// A terminal whose host has opted into capturing print output.
+term::TerminalCapabilityProfile printing_profile(Size cells = Size{20, 4}) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = cells;
+    profile.printer_policy = core::TerminalPrinterPolicy::Capture;
+    return profile;
+}
+
+}  // namespace
+
+CK_TEST(a_child_cannot_print_unless_the_host_opted_in) {
+    // Deny is the default, so no existing application changes behaviour by
+    // upgrading: the child is told there is no printer, which is the truth.
+    term::TerminalEmulator denied;
+    denied.feed_output("\x1b[5i");
+    denied.feed_output("hidden output");
+    denied.feed_output("\x1b[4i");
+    // The controller never started, so the text went to the screen as usual...
+    CK_CHECK(denied.snapshot().cell_buffer[0].grapheme() == "h");
+    // ...and nothing was captured.
+    CK_CHECK(denied.take_printer_jobs().empty());
+    CK_CHECK(!denied.snapshot().printer_controller_active);
+
+    // DSR 15 says so rather than pretending.
+    (void)denied.take_pending_input();
+    denied.feed_output("\x1b[?15n");
+    CK_CHECK(denied.take_pending_input() == "\x1b[?13n");
+}
+
+CK_TEST(the_printer_controller_takes_the_output_off_the_screen_and_gives_it_back) {
+    term::TerminalEmulator emulator(printing_profile());
+    emulator.feed_output("before");
+    emulator.feed_output("\x1b[5i");
+    CK_CHECK(emulator.snapshot().printer_controller_active);
+    emulator.feed_output("printed text");
+    // The whole point of the controller: this is a document, not a screen.
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "b");
+    CK_CHECK(emulator.snapshot().printer_pending_bytes == 12U);
+    emulator.feed_output("\x1b[4i");
+    CK_CHECK(!emulator.snapshot().printer_controller_active);
+    CK_CHECK(emulator.snapshot().printer_jobs_ready == 1U);
+
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) {
+        CK_CHECK(jobs[0].origin == term::TerminalPrinterJob::Origin::Controller);
+        CK_CHECK(jobs[0].text == "printed text");
+        CK_CHECK(!jobs[0].overflowed);
+    }
+    // Taken exactly once: a job is a document, not a value to be read twice.
+    CK_CHECK(emulator.take_printer_jobs().empty());
+    CK_CHECK(emulator.snapshot().printer_jobs_ready == 0U);
+
+    // And the screen is the child's again.
+    emulator.feed_output("after");
+    CK_CHECK(emulator.snapshot().cell_buffer[6].grapheme() == "a");
+}
+
+CK_TEST(a_terminator_split_across_two_reads_is_still_a_terminator) {
+    // A pty hands over whatever happened to arrive, so `CSI 4 i` routinely
+    // arrives in pieces. An emulator that matches only within one read prints
+    // the escape sequence into the document and never comes back.
+    term::TerminalEmulator emulator(printing_profile());
+    emulator.feed_output("\x1b[5i");
+    emulator.feed_output("document\x1b");
+    emulator.feed_output("[");
+    emulator.feed_output("4");
+    emulator.feed_output("i");
+    CK_CHECK(!emulator.snapshot().printer_controller_active);
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) CK_CHECK(jobs[0].text == "document");
+}
+
+CK_TEST(an_escape_that_is_not_the_terminator_goes_into_the_document) {
+    // A print stream is a document formatted for a printer: the escape
+    // sequences in it are what the program meant to send, and holding one back
+    // because it started like a terminator would corrupt the page.
+    term::TerminalEmulator emulator(printing_profile());
+    emulator.feed_output("\x1b[5i");
+    emulator.feed_output("\x1b[1mbold\x1b[0m");
+    emulator.feed_output("\x1b[4i");
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) CK_CHECK(jobs[0].text == "\x1b[1mbold\x1b[0m");
+}
+
+CK_TEST(an_oversized_print_job_is_dropped_whole_rather_than_shown_in_part) {
+    term::TerminalSubsessionOptions options;
+    options.max_printer_spool_bytes = 16;
+    options.max_printable_run_bytes = 1024;
+    term::TerminalEmulator emulator(printing_profile(), options);
+    emulator.feed_output("\x1b[5i");
+    emulator.feed_output("0123456789");
+    emulator.feed_output("0123456789");  // past the bound
+    // Not resumed on the screen mid-document: the child is still printing,
+    // and painting the middle of its document across the reader's terminal
+    // would be the worst of both.
+    CK_CHECK(emulator.snapshot().printer_controller_active);
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == " ");
+
+    emulator.feed_output("\x1b[4i");
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) {
+        CK_CHECK(jobs[0].overflowed);
+        // Empty rather than the first sixteen bytes: half a document that
+        // looks whole is worse than one that says it was too big.
+        CK_CHECK(jobs[0].text.empty());
+    }
+    // The next job starts clean.
+    emulator.feed_output("\x1b[5i" "small\x1b[4i");
+    const std::vector<term::TerminalPrinterJob> second = emulator.take_printer_jobs();
+    CK_CHECK(second.size() == 1U);
+    if (second.size() == 1U) {
+        CK_CHECK(!second[0].overflowed);
+        CK_CHECK(second[0].text == "small");
+    }
+}
+
+CK_TEST(print_screen_prints_the_scrolling_region_unless_told_otherwise) {
+    term::TerminalEmulator emulator(printing_profile(Size{8, 4}));
+    emulator.feed_output("one\r\ntwo\r\nsix\r\nten");
+    emulator.feed_output("\x1b[2;3r");  // a scrolling region of rows 2-3
+    emulator.feed_output("\x1b[0i");
+    std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) {
+        CK_CHECK(jobs[0].origin == term::TerminalPrinterJob::Origin::Screen);
+        CK_CHECK(jobs[0].text == "two\nsix\n");
+    }
+    // DECPEX: the whole screen instead.
+    emulator.feed_output("\x1b[?19h\x1b[0i");
+    jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) CK_CHECK(jobs[0].text == "one\ntwo\nsix\nten\n");
+}
+
+CK_TEST(print_line_prints_the_line_the_cursor_is_on_and_decpff_ends_the_page) {
+    term::TerminalEmulator emulator(printing_profile(Size{8, 3}));
+    emulator.feed_output("alpha\r\nbeta\r\ngamma");
+    emulator.feed_output("\x1b[2;1H\x1b[?1i");
+    std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) {
+        CK_CHECK(jobs[0].origin == term::TerminalPrinterJob::Origin::Line);
+        CK_CHECK(jobs[0].text == "beta\n");
+    }
+    // DECPFF puts a form feed at the end of a job, which is what a printer
+    // needs to eject the page.
+    emulator.feed_output("\x1b[?18h\x1b[?1i");
+    jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) CK_CHECK(jobs[0].text == "beta\n\f");
+}
+
+CK_TEST(autoprint_collects_the_lines_a_session_produced_into_one_job) {
+    // One job per line would be unreadable: a printed session is a document.
+    term::TerminalEmulator emulator(printing_profile(Size{8, 4}));
+    emulator.feed_output("\x1b[?5i");  // autoprint on
+    emulator.feed_output("first\r\nsecond\r\nthird\r\n");
+    CK_CHECK(emulator.take_printer_jobs().empty());  // still collecting
+    emulator.feed_output("\x1b[?4i");                // autoprint off
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) {
+        CK_CHECK(jobs[0].origin == term::TerminalPrinterJob::Origin::Autoprint);
+        CK_CHECK(jobs[0].text == "first\nsecond\nthird\n");
+    }
+    // The text stayed on the screen too: autoprint copies lines, it does not
+    // take them away the way the controller does.
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "f");
+}
+
+CK_TEST(a_sinking_printer_answers_that_it_is_not_ready) {
+    // The honest middle answer of DSR 15, and the one state it is reachable
+    // in: a controller job swallows every byte including the query itself —
+    // that is what `CSI 5 i` means — but an autoprint job that overflowed
+    // leaves the parser running, and a program that asks then gets the truth.
+    term::TerminalSubsessionOptions options;
+    options.max_printer_spool_bytes = 8;
+    term::TerminalEmulator emulator(printing_profile(Size{16, 3}), options);
+    (void)emulator.take_pending_input();
+    emulator.feed_output("\x1b[?15n");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?10n");  // ready
+
+    emulator.feed_output("\x1b[?5i");
+    emulator.feed_output("a line of text\r\nand another\r\n");  // past the bound
+    emulator.feed_output("\x1b[?15n");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?11n");  // not ready
+
+    // ...and once the job is closed and gone, ready again.
+    emulator.feed_output("\x1b[?4i");
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) CK_CHECK(jobs[0].overflowed);
+    emulator.feed_output("\x1b[?15n");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?10n");
+}
+
+CK_TEST(a_reset_puts_the_printer_back_to_idle) {
+    // Everything about the printer that a child can leave switched on.
+    //
+    // The controller itself is deliberately NOT in this list: while it is on,
+    // no byte reaches the parser at all — including this reset — because that
+    // is precisely what `CSI 5 i` means. Its own terminator is the only way
+    // out, which is why the split-terminator case above matters so much.
+    term::TerminalEmulator emulator(printing_profile(Size{8, 3}));
+    emulator.feed_output("\x1b[?18h\x1b[?19h\x1b[?5i");  // form feed, full extent, autoprint
+    emulator.feed_output("collected\r\n");
+    emulator.feed_output("\x1b" "c");
+    CK_CHECK(emulator.snapshot().printer_pending_bytes == 0U);
+    CK_CHECK(emulator.take_printer_jobs().empty());  // the half-collected job went with it
+
+    // Autoprint really is off: a line the cursor leaves now collects nothing.
+    emulator.feed_output("after\r\n");
+    emulator.feed_output("\x1b[?4i");
+    CK_CHECK(emulator.take_printer_jobs().empty());
+    // ...and DECPEX went back to the scrolling region.
+    emulator.feed_output("\x1b[2;2r\x1b[0i");
+    const std::vector<term::TerminalPrinterJob> jobs = emulator.take_printer_jobs();
+    CK_CHECK(jobs.size() == 1U);
+    if (jobs.size() == 1U) CK_CHECK(jobs[0].text == "\n");  // one blank row, not the whole screen
+}
+
+CK_TEST(the_screen_dump_forms_this_terminal_does_not_have_say_so) {
+    // CSI 10 i and CSI 11 i are xterm's HTML and SVG dumps. Saying nothing
+    // beats writing an empty file that claims to be a screen.
+    term::TerminalEmulator emulator(printing_profile());
+    emulator.feed_output("\x1b[10i");
+    bool reported = false;
+    for (const term::TerminalDiagnostic& diagnostic : emulator.snapshot().diagnostics)
+        if (diagnostic.kind == term::TerminalDiagnostic::Kind::UnsupportedSequence) reported = true;
+    CK_CHECK(reported);
+    CK_CHECK(emulator.take_printer_jobs().empty());
+}

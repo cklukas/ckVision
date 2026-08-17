@@ -104,7 +104,10 @@ TerminalSnapshot TerminalEmulator::snapshot() const {
                             application_cursor_keys_, focus_reporting_enabled_, alternate_scroll_enabled_,
                             clipboard_text_, clipboard_serial_,
                             (alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_).flags,
-                            bell_serial_};
+                            bell_serial_,
+                            printer_controller_,
+                            printer_spool_.size(),
+                            printer_jobs_.size()};
 }
 
 void TerminalEmulator::diagnostic(TerminalDiagnostic::Kind kind, std::string message) {
@@ -344,6 +347,137 @@ void TerminalEmulator::handle_title_stack(bool push) {
     title_stack_.pop_back();
 }
 
+bool TerminalEmulator::printer_available() const noexcept {
+    return profile_.printer_policy == TerminalPrinterPolicy::Capture;
+}
+
+// Media Copy. The forms a real program uses, and honest silence for the ones
+// this terminal does not have.
+void TerminalEmulator::handle_media_copy() {
+    const bool private_form = !control_.empty() && control_.front() == '?';
+    const int what = parameter(control_, 0, 0);
+    if (!printer_available()) {
+        // Refused, and said so once per attempt rather than silently: a
+        // program that prints into a terminal with no printer should leave a
+        // trace a host can show its reader, since the reader will otherwise
+        // simply find that nothing happened.
+        diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                   "child asked to print; this terminal has no printer");
+        return;
+    }
+    if (private_form) {
+        switch (what) {
+            case 1:
+                // Print the cursor's line.
+                print_bytes(screen_text(cursor_.position.y, cursor_.position.y + 1));
+                finish_printer_job(TerminalPrinterJob::Origin::Line);
+                return;
+            case 4:
+                // Autoprint off — and the lines collected so far become one
+                // job, rather than one job per line, which is what makes a
+                // printed session readable.
+                if (autoprint_) {
+                    autoprint_ = false;
+                    finish_printer_job(TerminalPrinterJob::Origin::Autoprint);
+                }
+                return;
+            case 5:
+                autoprint_ = true;
+                return;
+            default:
+                diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                           "unsupported child print form");
+                return;
+        }
+    }
+    switch (what) {
+        case 0: {
+            // Print screen. DECPEX decides how much of it: the scrolling
+            // region by default, the whole screen when the program says so.
+            const int top = printer_print_extent_ ? 0 : scroll_top_;
+            const int bottom = printer_print_extent_ ? cells_.height : scroll_bottom_;
+            print_bytes(screen_text(top, bottom));
+            finish_printer_job(TerminalPrinterJob::Origin::Screen);
+            return;
+        }
+        case 4:
+            // The controller is already off; ending it twice is not an error.
+            return;
+        case 5:
+            printer_controller_ = true;
+            printer_terminator_.clear();
+            return;
+        default:
+            // CSI 10 i and CSI 11 i are xterm's HTML and SVG screen dumps.
+            // They are not implemented, and saying so beats writing an empty
+            // file that claims to be a screen.
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child print form");
+            return;
+    }
+}
+
+void TerminalEmulator::print_bytes(std::string_view bytes) {
+    if (bytes.empty()) return;
+    printer_job_open_ = true;
+    if (printer_overflowed_) return;  // sinking: the buffer is already gone
+    const std::size_t limit = std::max<std::size_t>(1, options_.max_printer_spool_bytes);
+    if (printer_spool_.size() + bytes.size() > limit) {
+        // Freed rather than truncated. Half a document that looks whole is
+        // worse than a job that says it was too big — and the screen is
+        // deliberately NOT resumed: the child is still sending a document,
+        // and painting the middle of it across the reader's terminal would be
+        // the worst of both.
+        printer_spool_.clear();
+        printer_spool_.shrink_to_fit();
+        printer_overflowed_ = true;
+        diagnostic(TerminalDiagnostic::Kind::LimitExceeded,
+                   "child print job exceeded configured limit");
+        return;
+    }
+    printer_spool_.append(bytes);
+}
+
+void TerminalEmulator::finish_printer_job(TerminalPrinterJob::Origin origin) {
+    if (!printer_job_open_ && !printer_overflowed_) return;
+    if (printer_form_feed_ && !printer_overflowed_) printer_spool_.push_back('\f');  // DECPFF
+    // A job queue has to have a bottom. A host that never drains is a host
+    // that has stopped looking; keeping the newest is the useful half.
+    constexpr std::size_t kMaxQueuedJobs = 32;
+    if (printer_jobs_.size() >= kMaxQueuedJobs) printer_jobs_.erase(printer_jobs_.begin());
+    printer_jobs_.push_back(
+        TerminalPrinterJob{origin, std::move(printer_spool_), printer_overflowed_});
+    printer_spool_.clear();
+    printer_overflowed_ = false;
+    printer_job_open_ = false;
+}
+
+std::vector<TerminalPrinterJob> TerminalEmulator::take_printer_jobs() {
+    std::vector<TerminalPrinterJob> jobs = std::move(printer_jobs_);
+    printer_jobs_.clear();
+    return jobs;
+}
+
+// The screen as a printer would have received it: one line per row, with the
+// blanks a grid pads a row with removed. Those spaces are how an empty cell is
+// stored, not something anybody printed.
+std::string TerminalEmulator::screen_text(int top, int bottom) const {
+    top = std::clamp(top, 0, cells_.height);
+    bottom = std::clamp(bottom, top, cells_.height);
+    const std::vector<Cell>& cells = active_cells();
+    std::string out;
+    for (int row = top; row < bottom; ++row) {
+        std::string line;
+        for (int column = 0; column < cells_.width; ++column) {
+            const Cell& cell = cells[static_cast<std::size_t>(row * cells_.width + column)];
+            if (!cell.is_continuation()) line += cell.grapheme();
+        }
+        while (!line.empty() && line.back() == ' ') line.pop_back();
+        out += line;
+        out += '\n';
+    }
+    return out;
+}
+
 bool TerminalEmulator::append_control(char byte) {
     if (control_.size() < options_.max_control_bytes) {
         control_.push_back(byte);
@@ -389,6 +523,30 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
         diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child output step exceeded parser work budget");
     for (std::size_t i = 0; i < budget; ++i) {
         const char byte = pending_output_[i];
+        // While the printer controller is on, every byte belongs to the
+        // printer and none of it reaches the screen — that is what `CSI 5 i`
+        // means. The only thing being looked for is the sequence that turns it
+        // off again, and that sequence may be split across two reads, so a
+        // partial match is held rather than printed and then regretted.
+        if (printer_controller_) {
+            printer_terminator_.push_back(byte);
+            const std::string_view candidate(printer_terminator_);
+            const bool could_be_terminator =
+                candidate == "\x1b" || candidate == "\x1b[" || candidate == "\x1b[?" ||
+                candidate == "\x1b[4" || candidate == "\x1b[?4";
+            if (could_be_terminator) continue;
+            if (candidate == "\x1b[4i" || candidate == "\x1b[?4i") {
+                printer_controller_ = false;
+                printer_terminator_.clear();
+                finish_printer_job(TerminalPrinterJob::Origin::Controller);
+                continue;
+            }
+            // Not the terminator after all: everything held goes to the
+            // printer, exactly as the child sent it.
+            print_bytes(printer_terminator_);
+            printer_terminator_.clear();
+            continue;
+        }
         switch (parse_state_) {
             case ParseState::Ground:
                 if (byte == '\x1b') { put_text(true); parse_state_ = ParseState::Escape; }
@@ -718,6 +876,10 @@ void TerminalEmulator::handle_csi(char final_byte) {
                 // keys. The emulator only records the request — turning a
                 // wheel into keys needs a wheel, and that is the view's end.
                 alternate_scroll_enabled_ = enabled;
+            } else if (mode == 18) {
+                printer_form_feed_ = enabled;  // DECPFF
+            } else if (mode == 19) {
+                printer_print_extent_ = enabled;  // DECPEX
             } else if (mode == 25) {
                 cursor_.visible = enabled;
             }
@@ -892,8 +1054,22 @@ void TerminalEmulator::handle_csi(char final_byte) {
         handle_sgr();
         return;
     }
+    if (final_byte == 'i') {
+        handle_media_copy();
+        return;
+    }
     if (final_byte == 'n' && profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
         const int query = parameter(control_, 0, 0);
+        // DSR 15: is there a printer? Answered honestly, because a program
+        // that is told there is one and then prints into silence has no way
+        // to find out otherwise. Ready, not-ready (a job overflowed and is
+        // being sunk), or no-printer at all.
+        if (!control_.empty() && control_.front() == '?' && query == 15) {
+            if (!printer_available()) send_input("\x1b[?13n");
+            else if (printer_overflowed_) send_input("\x1b[?11n");
+            else send_input("\x1b[?10n");
+            return;
+        }
         if (query == 5) send_input("\x1b[0n");
         else if (query == 6)
             send_input("\x1b[" + std::to_string(cursor_.position.y + 1) + ";" +
@@ -1524,6 +1700,11 @@ void TerminalEmulator::scroll_down_region(int top, int bottom, int rows) noexcep
 }
 
 void TerminalEmulator::index() noexcept {
+    // Autoprint: the line the cursor is leaving goes to the printer. Done
+    // here rather than at the newline, because a line the cursor left by
+    // wrapping was just as finished as one it left by newline.
+    if (autoprint_ && printer_available())
+        print_bytes(screen_text(cursor_.position.y, cursor_.position.y + 1));
     if (cursor_.position.y == scroll_bottom_ - 1) {
         scroll_up_region(scroll_top_, scroll_bottom_, 1);
     } else {
@@ -1624,6 +1805,17 @@ void TerminalEmulator::reset_terminal() {
     // itself stays — see above — but a stack of titles from before a reset is
     // a stack nothing will ever legitimately pop.
     title_stack_.clear();
+    // The printer goes back to idle: an unterminated job from before a reset
+    // is one nothing will ever close, and a controller left on would swallow
+    // the screen for good.
+    printer_controller_ = false;
+    autoprint_ = false;
+    printer_form_feed_ = false;
+    printer_print_extent_ = false;
+    printer_spool_.clear();
+    printer_terminator_.clear();
+    printer_overflowed_ = false;
+    printer_job_open_ = false;
 }
 
 // DECALN (ESC # 8). The screen fills with E and the cursor comes home, which

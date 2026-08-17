@@ -29,6 +29,12 @@ public:
     void set_raster_identity(int identity) noexcept override { raster_identity_ = identity; }
     void close() noexcept override { state_ = TerminalSubsessionState::Closed; }
 
+    // The print jobs the child has completed, handed over exactly once. A
+    // snapshot carries only how many are waiting, because a snapshot is a
+    // value that may be read as often as anyone likes and a job is a document
+    // that must be delivered once.
+    std::vector<TerminalPrinterJob> take_printer_jobs();
+
     void mark_exited(int exit_code);
     void mark_failed(std::string message);
     std::optional<int> exit_code() const noexcept { return exit_code_; }
@@ -120,6 +126,19 @@ private:
     // before replacing it, and pops on the way out. Without it a shell keeps
     // the name of the editor that exited an hour ago.
     void handle_title_stack(bool push);
+    // Media Copy (CSI Ps i and CSI ? Ps i): the printer controller, print
+    // screen, print line, and autoprint.
+    void handle_media_copy();
+    // Whether the child may print at all, which every printer answer below is
+    // derived from.
+    bool printer_available() const noexcept;
+    // Adds to the job in progress, or frees it and starts sinking when it
+    // would pass the bound.
+    void print_bytes(std::string_view bytes);
+    // Ends the job in progress, if there is one, and queues it.
+    void finish_printer_job(TerminalPrinterJob::Origin origin);
+    // The screen, or one line of it, as text a printer would have received.
+    std::string screen_text(int top, int bottom) const;
     void handle_palette_query(std::string_view body, bool bel_terminated);
     void handle_clipboard(std::string_view body);
     void reply_osc(std::string_view body, bool bel_terminated);
@@ -184,6 +203,24 @@ private:
     // rest of the line right instead of replacing what is under it.
     bool insert_mode_ = false;
     ParseState parse_state_ = ParseState::Ground;
+    // The printer controller (CSI 5 i): while it is on, the child's bytes go
+    // to the spool and not to the screen, until `CSI 4 i` — which may arrive
+    // split across two reads, so a partial terminator is held here rather
+    // than printed and then regretted.
+    bool printer_controller_ = false;
+    bool autoprint_ = false;
+    // DECPFF: a form feed at the end of each job. DECPEX: whether print-screen
+    // means the whole screen or only the scrolling region.
+    bool printer_form_feed_ = false;
+    bool printer_print_extent_ = false;
+    // The job being collected, and whether it has already overflowed — in
+    // which case the rest of it is sunk rather than the screen being resumed
+    // half way through a document.
+    std::string printer_spool_;
+    bool printer_overflowed_ = false;
+    bool printer_job_open_ = false;
+    std::string printer_terminator_;
+    std::vector<TerminalPrinterJob> printer_jobs_;
     // G0..G3 and which of them the printable range currently resolves
     // through. SI and SO move the pointer; ESC ( ) * + change the contents.
     Charset charsets_[4] = {Charset::Ascii, Charset::Ascii, Charset::Ascii, Charset::Ascii};

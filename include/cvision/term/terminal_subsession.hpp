@@ -23,6 +23,8 @@ using core::TerminalEnvironmentPolicy;
 using core::TerminalLaunchSpec;
 using core::TerminalMouseEncoding;
 using core::TerminalOscPolicy;
+using core::TerminalPrinterJob;
+using core::TerminalPrinterPolicy;
 using core::TerminalQueryPolicy;
 using core::TerminalRaster;
 using core::TerminalSnapshot;

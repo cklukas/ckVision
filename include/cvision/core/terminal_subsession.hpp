@@ -34,6 +34,24 @@ enum class TerminalOscPolicy : std::uint8_t { Deny, StoreMetadata };
 // choice — see `TerminalSnapshot::clipboard_text`.
 enum class TerminalClipboardPolicy : std::uint8_t { Deny, AllowWrite };
 
+// What happens when a child asks the terminal to print (Media Copy).
+//
+// Printing was on this library's never-list, and the reason was right about
+// the danger it named: a child must not be able to write to a printer. But
+// that danger is the SINK, not the sequence — xterm implements MC by piping
+// the captured stream to a shell command, and ships that command empty
+// precisely because `cat`-ing a hostile file must not reach a device.
+//
+// `Capture` replaces the sink and the hazard goes with it: the stream is
+// collected into a bounded in-memory spool and handed to the host, which
+// shows it to a person. No device is opened, no command is run, and nothing
+// reaches a disk without whatever the host asks its user first.
+//
+// The default is `Deny`, so no existing application changes behaviour by
+// upgrading: a child that asks to print is told there is no printer, which is
+// the truth for a host that has not opted in.
+enum class TerminalPrinterPolicy : std::uint8_t { Deny, Capture };
+
 // The kitty keyboard protocol's progressive-enhancement flags, as a child
 // program turns them on for itself.
 //
@@ -111,6 +129,7 @@ struct TerminalCapabilityProfile {
     TerminalQueryPolicy query_policy = TerminalQueryPolicy::DeclaredProfile;
     TerminalOscPolicy osc_policy = TerminalOscPolicy::Deny;
     TerminalClipboardPolicy clipboard_policy = TerminalClipboardPolicy::Deny;
+    TerminalPrinterPolicy printer_policy = TerminalPrinterPolicy::Deny;
 
     friend bool operator==(const TerminalCapabilityProfile&, const TerminalCapabilityProfile&) = default;
 };
@@ -190,6 +209,13 @@ struct TerminalSubsessionOptions {
     // felt like sending, at frame rate, forever. Cut on a character boundary,
     // never mid-sequence.
     std::size_t max_title_bytes = 1'024;
+    // How much captured print output one job may hold. A print job is held in
+    // memory and shown to a person, so this is a page count in disguise: a
+    // megabyte is several hundred pages of text, and past it what a child is
+    // doing is not printing. Overflow frees the buffer rather than truncating
+    // it — half a document that looks whole is worse than a job that says it
+    // was too big (see TerminalPrinterJob::overflowed).
+    std::size_t max_printer_spool_bytes = 1024 * 1024;
     // How many titles a child may push with XTWINOPS 22. A program that
     // pushes without ever popping — one that died between the two — must not
     // grow this without limit, and nothing legitimately nests captions deeper
@@ -224,6 +250,36 @@ struct TerminalDiagnostic {
     std::string message;
 
     friend bool operator==(const TerminalDiagnostic&, const TerminalDiagnostic&) = default;
+};
+
+// One completed print job, as the child produced it.
+//
+// The text is verbatim: this is a document on its way to a person, and the
+// escape sequences in it are what a program formatting a page for a printer
+// meant to send. A host that renders it decides what to do with them — which
+// is why `[printer] save-format` in an application can offer both plain text
+// and the original stream.
+struct TerminalPrinterJob {
+    enum class Origin : std::uint8_t {
+        // Everything the child sent between `CSI 5 i` and `CSI 4 i`.
+        Controller,
+        // `CSI 0 i` — the screen as it stands.
+        Screen,
+        // `CSI ? 1 i` — the line the cursor is on.
+        Line,
+        // `CSI ? 5 i` … `CSI ? 4 i` — each line as the cursor left it,
+        // coalesced into one job rather than one job per line.
+        Autoprint,
+    };
+    Origin origin = Origin::Controller;
+    std::string text;
+    // The job exceeded `max_printer_spool_bytes` and its buffer was freed. The
+    // text is empty rather than partial: a host that showed the first megabyte
+    // of a longer document as though it were the document would be lying about
+    // what was printed.
+    bool overflowed = false;
+
+    friend bool operator==(const TerminalPrinterJob&, const TerminalPrinterJob&) = default;
 };
 
 struct TerminalRaster {
@@ -276,6 +332,22 @@ struct TerminalSnapshot {
     // last acted on, and a host that does nothing with it costs the child
     // nothing.
     std::uint64_t bell_serial = 0;
+    // The printer, in three scalars — everything a host needs to show a badge
+    // and a button without the snapshot carrying the spool itself. The jobs
+    // are drained out of band with `take_printer_jobs()`, because a snapshot
+    // is a value that may be read as often as anyone likes and a job is a
+    // thing that must be delivered exactly once.
+    //
+    // While the controller is on, the child's output is going to the printer
+    // and NOT to the screen: a host that does not say so leaves a reader
+    // watching a terminal that has apparently stopped responding.
+    bool printer_controller_active = false;
+    // How much the job in progress has collected so far, for the "PRINT? ·
+    // 12.4 KB" a host can put on the window it belongs to.
+    std::size_t printer_pending_bytes = 0;
+    // Completed jobs waiting to be taken. A count rather than a flag, for the
+    // same reason `bell_serial` is one.
+    std::size_t printer_jobs_ready = 0;
 };
 
 // UI-facing seam. Platform adapters may add readiness and child-process
