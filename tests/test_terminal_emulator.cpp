@@ -483,6 +483,48 @@ CK_TEST(terminal_emulator_retains_bounded_primary_scrollback) {
     CK_CHECK(snapshot.scrollback[0].grapheme() == "a");
 }
 
+CK_TEST(terminal_emulator_keeps_no_history_at_all_when_scrollback_capacity_is_zero) {
+    // "Remember nothing" is a real request, not merely the smallest number:
+    // a shell that has just read a password, or a host with a memory budget.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{2, 2};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 0;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("aa\r\nbb\r\ncc\r\ndd");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.scrollback.empty());
+    // The screen itself still scrolls; only the history is refused.
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "c");
+}
+
+CK_TEST(terminal_emulator_relays_stored_history_lines_when_the_width_changes) {
+    // The history is flat rows of the grid's width. Without re-laying them a
+    // resize leaves every stored line read at the wrong offset, and what the
+    // reader scrolls back to is not what was ever on their screen.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{4, 2};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 8;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("ab\r\ncd\r\nef\r\ngh");
+    CK_CHECK(emulator.snapshot().scrollback.size() == 8U);  // two lines of four
+
+    emulator.resize(Size{6, 2}, Size{9, 18});
+    const term::TerminalSnapshot wider = emulator.snapshot();
+    CK_CHECK(wider.scrollback.size() == 12U);  // still two lines, now of six
+    CK_CHECK(wider.scrollback[0].grapheme() == "a");
+    CK_CHECK(wider.scrollback[1].grapheme() == "b");
+    CK_CHECK(wider.scrollback[6].grapheme() == "c");  // the second line starts here
+    CK_CHECK(wider.scrollback[7].grapheme() == "d");
+
+    emulator.resize(Size{1, 2}, Size{9, 18});
+    const term::TerminalSnapshot narrower = emulator.snapshot();
+    CK_CHECK(narrower.scrollback.size() == 2U);  // two lines of one
+    CK_CHECK(narrower.scrollback[0].grapheme() == "a");
+    CK_CHECK(narrower.scrollback[1].grapheme() == "c");
+}
+
 CK_TEST(terminal_emulator_survives_repeated_resize_and_noisy_scrollback_cycles) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{40, 12};
@@ -1357,4 +1399,113 @@ CK_TEST(a_bare_cursor_restore_is_still_a_cursor_restore) {
     emulator.feed_output("\x1b[3;4H\x1b[s\x1b[1;1H\x1b[u");
     CK_CHECK(emulator.snapshot().cursor.position == (ckv::Point{3, 2}));
     CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
+}
+
+CK_TEST(a_childs_bell_is_counted_rather_than_latched) {
+    // A flag reading clears makes the first reader the only one to see the
+    // bell; a flag reading does not clear cannot say a second one arrived.
+    term::TerminalEmulator emulator;
+    CK_CHECK(emulator.snapshot().bell_serial == 0U);
+    emulator.feed_output("ding\a");
+    CK_CHECK(emulator.snapshot().bell_serial == 1U);
+    CK_CHECK(emulator.snapshot().bell_serial == 1U);  // reading it changes nothing
+    emulator.feed_output("\a\a");
+    CK_CHECK(emulator.snapshot().bell_serial == 3U);
+    // It rang; it did not write. The text around it is untouched and the
+    // cursor has not moved past what was printed.
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "d");
+    CK_CHECK(emulator.snapshot().cursor.position == (Point{4, 0}));
+}
+
+CK_TEST(a_bell_between_the_halves_of_a_character_does_not_split_it) {
+    // BEL writes nothing, so it must not flush a grapheme that has not
+    // finished arriving — an emulator that flushes here shows a replacement
+    // character wherever a program happened to ring mid-word.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\xc3");
+    emulator.feed_output("\a");
+    emulator.feed_output("\xa9");
+    CK_CHECK(emulator.snapshot().bell_serial == 1U);
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "é");
+}
+
+CK_TEST(a_full_reset_puts_a_wedged_terminal_back) {
+    // What `reset(1)` sends, and what an emulator that ignores it leaves the
+    // reader stuck with: an alternate screen, a scroll region, a colour, a
+    // charset drawing letters as box pieces, and the cursor hidden.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{4, 3};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("one\r\ntwo\r\nsix\r\nten");  // scrolls, so there is history
+    emulator.feed_output("\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?2004h\x1b[?1h\x1b[31m\x1b[2;3r\x1b(0\x1b[?7l");
+    const term::TerminalSnapshot wedged = emulator.snapshot();
+    CK_CHECK(wedged.alternate_buffer);
+    CK_CHECK(!wedged.cursor.visible);
+    CK_CHECK(wedged.mouse_reporting_enabled);
+
+    emulator.feed_output("\x1b" "c");
+    const term::TerminalSnapshot reset = emulator.snapshot();
+    CK_CHECK(!reset.alternate_buffer);
+    CK_CHECK(reset.cursor.visible);
+    CK_CHECK(reset.cursor.position == (Point{0, 0}));
+    CK_CHECK(!reset.mouse_reporting_enabled);
+    CK_CHECK(!reset.bracketed_paste_enabled);
+    CK_CHECK(!reset.application_cursor_keys);
+    CK_CHECK(reset.scrollback.empty());
+    for (const Cell& cell : reset.cell_buffer) CK_CHECK(cell.grapheme() == " ");
+
+    // The modes really went back, rather than the screen merely being blanked:
+    // the letters below are the DEC line-drawing set's, the scroll region is
+    // the whole screen again, and the colour is the profile's own.
+    emulator.feed_output("qq");
+    const term::TerminalSnapshot after = emulator.snapshot();
+    CK_CHECK(after.cell_buffer[0].grapheme() == "q");
+    CK_CHECK(after.cell_buffer[0].style() == profile.default_style);
+}
+
+CK_TEST(a_full_reset_keeps_the_window_caption_and_the_childs_fate) {
+    // A program clearing its own screen has not said the window is nameless,
+    // and a reset cannot bring a dead child back to life.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]2;building\a");
+    emulator.feed_output("\x1b" "c");
+    CK_CHECK(emulator.snapshot().title == "building");
+
+    emulator.mark_exited(0);
+    emulator.feed_output("\x1b" "c");
+    CK_CHECK(emulator.snapshot().state == core::TerminalSubsessionState::Exited);
+}
+
+CK_TEST(the_alignment_pattern_fills_the_screen_and_takes_the_margins_with_it) {
+    // DECALN, which is how a terminal's alignment is checked and how most of
+    // vttest's chapters begin.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{3, 3};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[2;2r\x1b[3;3H");
+    emulator.feed_output("\x1b#8");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    for (const Cell& cell : snapshot.cell_buffer) CK_CHECK(cell.grapheme() == "E");
+    CK_CHECK(snapshot.cursor.position == (Point{0, 0}));
+
+    // The margins are the whole screen again: three newlines from the top row
+    // reach the bottom row rather than scrolling a two-row region.
+    emulator.feed_output("\x1b[1;1HZ\n\n");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "Z");
+}
+
+CK_TEST(an_unknown_dec_line_attribute_is_reported_rather_than_printed) {
+    // ESC # 3 (double-height top half) is not implemented; what must not
+    // happen is the '3' landing on the screen as text.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b#3ok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+    bool reported = false;
+    for (const term::TerminalDiagnostic& diagnostic : snapshot.diagnostics)
+        if (diagnostic.kind == term::TerminalDiagnostic::Kind::UnsupportedSequence) reported = true;
+    CK_CHECK(reported);
 }
