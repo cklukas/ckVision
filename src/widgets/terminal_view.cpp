@@ -221,6 +221,20 @@ void TerminalView::on_resized() {
 }
 
 void TerminalView::draw(scene::Painter& painter) {
+    // The host's cell metric is not known when a view is attached: it arrives
+    // with the capability probe, a frame or two into the session, and until
+    // then the application reports nothing. A child resized in that window was
+    // told its cells were one pixel across — so it believed its whole screen
+    // was a hundred pixels wide and quietly stopped sending pictures, which is
+    // what "no graphics in ckmux, graphics in the example" turned out to be.
+    // The metric is therefore followed when it lands, not sampled once.
+    if (!has_explicit_cell_metrics_ && context().app != nullptr && session_ != nullptr) {
+        const Size metric = context().app->terminal_cell_pixels();
+        if (metric.width > 0 && metric.height > 0 && !(metric == cell_pixels_)) {
+            cell_pixels_ = metric;
+            session_->resize(Size{bounds().width, bounds().height}, cell_pixels_);
+        }
+    }
     const Style fallback = session_ != nullptr ? session_->profile().default_style
                                                : context().theme->resolve(text_role_);
     const Rect area{0, 0, bounds().width, bounds().height};

@@ -2,11 +2,13 @@
 #include "cvision/term/presenter.hpp"
 
 #include <array>
+#include <chrono>
 #include <climits>
 #include <string>
 
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
+#include "cvision/term/graphics_log.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 
 namespace ckv::term {
@@ -266,7 +268,47 @@ void emit_cursor_shape(std::string& out, CursorShape shape, bool blink) {
     out += "\x1B[" + std::to_string(parameter) + " q";
 }
 
-void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& rasters,
+Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64_t fingerprint) const noexcept {
+    EncodeKey key;
+    key.image = slice.image.get();
+    key.fingerprint = fingerprint;
+    key.color_registers = terminal_.capabilities().sixel_color_registers;
+    const Rect& anchor = slice.full_anchor;
+    if (anchor.width <= 0 || anchor.height <= 0 || slice.image == nullptr) return key;
+    const int img_w = slice.image->width();
+    const int img_h = slice.image->height();
+    key.crop_x = (slice.visible_rect.x - anchor.x) * img_w / anchor.width;
+    key.crop_y = (slice.visible_rect.y - anchor.y) * img_h / anchor.height;
+    key.crop_width = (slice.visible_rect.x + slice.visible_rect.width - anchor.x) * img_w / anchor.width - key.crop_x;
+    key.crop_height = (slice.visible_rect.y + slice.visible_rect.height - anchor.y) * img_h / anchor.height - key.crop_y;
+    const Size cell = terminal_.capabilities().cell_pixels;
+    key.target_width = cell.width > 0 ? std::max(1, slice.visible_rect.width * cell.width) : key.crop_width;
+    key.target_height = cell.height > 0 ? std::max(1, slice.visible_rect.height * cell.height) : key.crop_height;
+    return key;
+}
+
+void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRaster>& rasters) {
+    const Size size = frame.size();
+    presentation_cells_.resize(static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height));
+    for (int y = 0; y < size.height; ++y)
+        for (int x = 0; x < size.width; ++x)
+            presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) +
+                                static_cast<std::size_t>(x)] = presentation_cell(frame, Point{x, y}, rasters);
+}
+
+void Presenter::mark_rasters_repainted(std::vector<ActiveRaster>& rasters, int y, int x, int end) noexcept {
+    for (ActiveRaster& raster : rasters) {
+        // A picture deliberately held back mid-drag is not woken by the very
+        // repaint that is dragging it.
+        if (raster.needs_emit || raster.awaiting_send) continue;
+        const Rect footprint = raster_footprint(raster.slice);
+        if (y < footprint.y || y >= footprint.y + footprint.height) continue;
+        if (end <= footprint.x || x >= footprint.x + footprint.width) continue;
+        raster.needs_emit = true;
+    }
+}
+
+void Presenter::render_frame(FrameView frame, std::vector<ActiveRaster>& rasters,
                              bool raster_coverage_changed, std::string& out) {
     const Size size = frame.size();
     const Capabilities& caps = terminal_.capabilities();
@@ -278,7 +320,7 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
     for (int y = 0; y < size.height; ++y) {
         int x = 0;
         while (x < size.width) {
-            const Cell first = presentation_cell(frame, Point{x, y}, rasters);
+            const Cell& first = presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) + static_cast<std::size_t>(x)];
             const Point point{x, y};
             const bool raster_dirty = raster_coverage_changed &&
                                       (raster_coverage_contains(point, rasters) ||
@@ -297,7 +339,7 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
             int run_end = x;
             bool unsafe_in_run = false;
             while (run_end < size.width) {
-                const Cell c = presentation_cell(frame, Point{run_end, y}, rasters);
+                const Cell& c = presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) + static_cast<std::size_t>(run_end)];
                 if (c.is_continuation()) {
                     ++run_end;
                     continue;
@@ -323,7 +365,9 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
                     // a row change), so the safety reset was never
                     // actually observable.
                     while (run_end < size.width &&
-                           presentation_cell(frame, Point{run_end, y}, rasters).is_continuation())
+                           presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) +
+                                               static_cast<std::size_t>(run_end)]
+                               .is_continuation())
                         ++run_end;
                     unsafe_in_run = true;
                     break;
@@ -331,7 +375,7 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
             }
 
             for (int rx = x; rx < run_end; ++rx) {
-                const Cell c = presentation_cell(frame, Point{rx, y}, rasters);
+                const Cell& c = presentation_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(size.width) + static_cast<std::size_t>(rx)];
                 if (c.is_continuation()) continue;
                 if (!style_known || !(c.style() == current_style)) {
                     out += style_to_sgr(c.style(), caps);
@@ -341,6 +385,10 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
                 out += c.grapheme();
             }
 
+            // Those cells are now text on the host, which is to say the
+            // pixels any picture had there are gone.
+            mark_rasters_repainted(rasters, y, x, run_end);
+
             believed_cursor = unsafe_in_run ? Point{-1, -1} : Point{run_end, y};
             x = run_end;
         }
@@ -348,31 +396,29 @@ void Presenter::render_frame(FrameView frame, const std::vector<ActiveRaster>& r
 }
 
 void Presenter::emit_raster_slices(std::string& out, FrameView frame,
-                                   const std::vector<ActiveRaster>& rasters) const {
+                                   std::vector<ActiveRaster>& rasters) const {
     // No graphics capability: the fallback cells the cell-diff pass
     // already rendered are the whole story — nothing more to emit.
-    for (const ActiveRaster& active : rasters) {
+    for (ActiveRaster& active : rasters) {
+        // A picture already on the host, on cells nothing repainted, is
+        // already right. Re-sending it every frame was the whole cost of
+        // having one on screen: a re-encode and a quarter of a megabyte,
+        // per frame, to arrive at the pixels that were already there.
+        if (!active.needs_emit) continue;
         const RasterSlice& slice = active.slice;
         const Rect& anchor = slice.full_anchor;
         if (anchor.width <= 0 || anchor.height <= 0) continue;
         const Image& image = *slice.image;
-        const int img_w = image.width();
-        const int img_h = image.height();
 
         // Occlusion may have sliced visible_rect down to a sub-rect of
-        // full_anchor; the image itself is never cropped, so map the
-        // cell-space sub-rect back to a proportional pixel-space
-        // sub-rect and encode ONLY that — emitting the whole image at
-        // the slice's position would redraw pixels a higher layer is
-        // supposed to be occluding.
-        const int px_x0 = (slice.visible_rect.x - anchor.x) * img_w / anchor.width;
-        const int px_y0 = (slice.visible_rect.y - anchor.y) * img_h / anchor.height;
-        const int px_x1 =
-            (slice.visible_rect.x + slice.visible_rect.width - anchor.x) * img_w / anchor.width;
-        const int px_y1 =
-            (slice.visible_rect.y + slice.visible_rect.height - anchor.y) * img_h / anchor.height;
-        const int crop_w = px_x1 - px_x0;
-        const int crop_h = px_y1 - px_y0;
+        // full_anchor; the image itself is never cropped, so the key holds
+        // the proportional pixel-space sub-rect and ONLY that is encoded —
+        // emitting the whole image at the slice's position would redraw
+        // pixels a higher layer is supposed to be occluding.
+        const int px_x0 = active.key.crop_x;
+        const int px_y0 = active.key.crop_y;
+        const int crop_w = active.key.crop_width;
+        const int crop_h = active.key.crop_height;
         if (crop_w <= 0 || crop_h <= 0) continue;
 
         // Scale the cropped region to the pixels those cells actually are.
@@ -384,18 +430,26 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         // pixel and nothing downstream resizes it. Scaling here keeps that
         // out of every widget: the scene says which cells an image occupies,
         // and this layer is the one that knows how many pixels a cell is.
-        const Size cell = terminal_.capabilities().cell_pixels;
-        const int target_w =
-            cell.width > 0 ? std::max(1, slice.visible_rect.width * cell.width) : crop_w;
-        const int target_h =
-            cell.height > 0 ? std::max(1, slice.visible_rect.height * cell.height) : crop_h;
-        Image cropped(target_w, target_h);
-        for (int y = 0; y < target_h; ++y) {
-            const int src_y = px_y0 + (target_h == crop_h ? y : y * crop_h / target_h);
-            for (int x = 0; x < target_w; ++x) {
-                const int src_x = px_x0 + (target_w == crop_w ? x : x * crop_w / target_w);
-                cropped.set_pixel(x, y, image.pixel(src_x, src_y));
+        // Cropping, scaling and encoding all depend only on the image and
+        // this slice's geometry, so the answer survives as long as both do:
+        // a picture repainted over is re-sent from these bytes rather than
+        // computed again.
+        const auto encode_started = graphics_log_enabled() ? std::chrono::steady_clock::now()
+                                                           : std::chrono::steady_clock::time_point{};
+        const bool had_encoding = active.encoded != nullptr;
+        if (active.encoded == nullptr) {
+            const int target_w = active.key.target_width;
+            const int target_h = active.key.target_height;
+            Image cropped(target_w, target_h);
+            for (int y = 0; y < target_h; ++y) {
+                const int src_y = px_y0 + (target_h == crop_h ? y : y * crop_h / target_h);
+                for (int x = 0; x < target_w; ++x) {
+                    const int src_x = px_x0 + (target_w == crop_w ? x : x * crop_w / target_w);
+                    cropped.set_pixel(x, y, image.pixel(src_x, src_y));
+                }
             }
+            active.encoded = std::make_shared<const std::string>(
+                encode_sixel(cropped, active.key.color_registers));
         }
 
         emit_cursor_move(out, slice.visible_rect.x, slice.visible_rect.y);
@@ -405,16 +459,37 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         // style happened to end the cell-diff traversal.
         out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
                             terminal_.capabilities());
-        out += encode_sixel(cropped, terminal_.capabilities().sixel_color_registers);
+        out += *active.encoded;
+        if (graphics_log_enabled() && !had_encoding) {
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
+                                                                        encode_started)
+                                  .count();
+            graphics_log("  encoded a " + std::to_string(active.key.target_width) + "x" +
+                         std::to_string(active.key.target_height) + " picture into " +
+                         std::to_string(active.encoded->size() / 1024) + " KiB in " + std::to_string(ms) + " ms");
+        }
     }
 }
 
 std::uint64_t Presenter::image_fingerprint(const Image& image) noexcept {
+    // Eight bytes at a time. This runs on every image on screen, every
+    // frame, purely to notice a picture that was rewritten in place through
+    // the same pointer; a byte at a time made simply having a picture on
+    // screen cost a megabyte of hashing per frame.
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     constexpr std::uint64_t prime = 0x100000001b3ULL;
     const std::size_t bytes = static_cast<std::size_t>(image.stride()) * static_cast<std::size_t>(image.height());
-    for (std::size_t index = 0; index < bytes; ++index) {
-        hash ^= image.data()[index];
+    const unsigned char* const data = image.data();
+    std::size_t index = 0;
+    for (; index + sizeof(std::uint64_t) <= bytes; index += sizeof(std::uint64_t)) {
+        std::uint64_t word = 0;
+        for (std::size_t byte = 0; byte < sizeof(std::uint64_t); ++byte)
+            word |= static_cast<std::uint64_t>(data[index + byte]) << (byte * 8);
+        hash ^= word;
+        hash *= prime;
+    }
+    for (; index < bytes; ++index) {
+        hash ^= data[index];
         hash *= prime;
     }
     return hash;
@@ -460,16 +535,55 @@ Rect Presenter::raster_footprint(const RasterSlice& slice) noexcept {
 
 void Presenter::present(FrameView frame, CursorState cursor,
                          const std::vector<RasterSlice>& rasters) {
+    // Live timing of one frame, end to end. The interesting number is not the
+    // work this process does but how long the host takes to swallow it: a
+    // terminal decoding a quarter-megabyte Sixel blocks the write, and that
+    // shows up here and nowhere else.
+    const bool tracing = graphics_log_enabled();
+    const auto frame_started = tracing ? std::chrono::steady_clock::now()
+                                       : std::chrono::steady_clock::time_point{};
+    double idle_ms = 0;
+    if (tracing && last_present_finished_ != std::chrono::steady_clock::time_point{})
+        idle_ms = std::chrono::duration<double, std::milli>(frame_started - last_present_finished_).count();
     active_rasters_.clear();
     if (active_rasters_.capacity() < rasters.size()) active_rasters_.reserve(rasters.size());
     for (const RasterSlice& slice : rasters) {
         if (!can_emit_raster_slice(slice)) continue;
-        active_rasters_.push_back(ActiveRaster{slice, image_fingerprint(*slice.image)});
+        const std::uint64_t fingerprint = image_fingerprint(*slice.image);
+        ActiveRaster active{slice, fingerprint, encode_key(slice, fingerprint), nullptr, true};
+        // Two separate questions, and answering them as one is what made a
+        // dragged window re-encode its picture every frame. Does this need
+        // *encoding*? Only if no previous slice produced these very bytes.
+        // Does it need *sending*? Only if it moved, changed, or was painted
+        // over. A full repaint keeps neither answer, since the cell metric
+        // the picture was scaled to may itself have changed.
+        if (!force_full_) {
+            for (const ActiveRaster& previous : previous_active_rasters_) {
+                if (!(previous.key == active.key)) continue;
+                active.encoded = previous.encoded;
+                const bool moved = !(previous.slice.visible_rect == slice.visible_rect) ||
+                                   !(previous.slice.full_anchor == slice.full_anchor);
+                active.moving = moved;
+                active.needs_emit = previous.slice.id != slice.id || moved || previous.awaiting_send;
+                // Two frames of movement is a drag, not a jump. Sending the
+                // picture to every position it passes through costs the host
+                // a full decode per frame for pixels that are about to be
+                // wrong again; it goes down on the first frame that holds
+                // still, which is the position anybody was looking for.
+                if (moved && previous.moving) {
+                    active.needs_emit = false;
+                    active.awaiting_send = true;
+                }
+                break;
+            }
+        }
+        active_rasters_.push_back(std::move(active));
     }
     const bool raster_coverage_changed = !same_rasters(active_rasters_, previous_active_rasters_);
 
     std::string& out = output_buffer_;
     out.clear();
+    build_presentation(frame, active_rasters_);
     render_frame(frame, active_rasters_, raster_coverage_changed, out);
     emit_raster_slices(out, frame, active_rasters_);
 
@@ -501,16 +615,38 @@ void Presenter::present(FrameView frame, CursorState cursor,
         out += kSynchronizedOutputEnd;
     }
 
+    if (graphics_log_enabled() && (!active_rasters_.empty() || !previous_active_rasters_.empty())) {
+        std::size_t sending = 0;
+        for (const ActiveRaster& active : active_rasters_) sending += active.needs_emit ? 1U : 0U;
+        graphics_log("presenter: frame with " + std::to_string(active_rasters_.size()) + " picture(s), " +
+                     std::to_string(sending) + " re-sent, host sixel=" +
+                     (terminal_.capabilities().sixel_graphics ? "yes" : "NO") + ", " +
+                     std::to_string(out.size() / 1024) + " KiB total");
+    }
     last_bytes_emitted_ = out.size();
+    const auto write_started = tracing ? std::chrono::steady_clock::now()
+                                       : std::chrono::steady_clock::time_point{};
     if (!out.empty()) terminal_.write(out);
+    if (tracing) {
+        const auto finished = std::chrono::steady_clock::now();
+        const double write_ms = std::chrono::duration<double, std::milli>(finished - write_started).count();
+        const double frame_ms = std::chrono::duration<double, std::milli>(finished - frame_started).count();
+        std::size_t pictures_sent = 0;
+        for (const ActiveRaster& active : active_rasters_) pictures_sent += active.needs_emit ? 1U : 0U;
+        if (!out.empty() || !active_rasters_.empty())
+            graphics_log("frame: " + std::to_string(frame_ms) + " ms (write " + std::to_string(write_ms) +
+                         " ms of " + std::to_string(out.size() / 1024) + " KiB), " +
+                         std::to_string(active_rasters_.size()) + " picture(s), " +
+                         std::to_string(pictures_sent) + " sent, " + std::to_string(idle_ms) +
+                         " ms since the last frame");
+        last_present_finished_ = finished;
+    }
 
-    previous_cells_.resize(static_cast<std::size_t>(frame.size().width) *
-                           static_cast<std::size_t>(frame.size().height));
-    for (int y = 0; y < frame.size().height; ++y)
-        for (int x = 0; x < frame.size().width; ++x)
-            previous_cells_[static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.size().width) +
-                             static_cast<std::size_t>(x)] =
-                             presentation_cell(frame, Point{x, y}, active_rasters_);
+    // The frame just presented becomes the next one's basis, and the buffer
+    // it displaced becomes the next one's scratch — sized now, so a steady
+    // frame allocates nothing at all.
+    previous_cells_.swap(presentation_cells_);
+    presentation_cells_.resize(previous_cells_.size());
     previous_size_ = frame.size();
     previous_cursor_ = cursor;
     if (previous_active_rasters_.capacity() < active_rasters_.size())

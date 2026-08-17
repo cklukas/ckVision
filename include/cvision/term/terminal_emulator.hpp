@@ -5,6 +5,9 @@
 #include <string_view>
 #include <vector>
 
+#include <memory>
+
+#include "cvision/term/sixel_decoder.hpp"
 #include "cvision/term/terminal_subsession.hpp"
 
 namespace ckv::term {
@@ -31,7 +34,7 @@ public:
     std::optional<int> exit_code() const noexcept { return exit_code_; }
 
 private:
-    enum class ParseState : unsigned char { Ground, Escape, Csi, Osc, OscEscape, Dcs, DcsEscape, Discard, DiscardEscape, Scs };
+    enum class ParseState : unsigned char { Ground, Escape, Csi, Osc, OscEscape, Dcs, DcsEscape, Discard, DiscardEscape, Scs, Hash };
 
     // Which repertoire the printable bytes currently stand for. A program
     // drawing a frame with ncurses does not send box-drawing characters: it
@@ -89,6 +92,14 @@ private:
     void index() noexcept;
     void reverse_index() noexcept;
     void reset_active_buffer();
+    // RIS (ESC c). Everything a child can change goes back to what this
+    // emulator was constructed with — which is what `reset(1)` is for, and
+    // what a program that has wedged the terminal is asking for when it sends
+    // this and nothing else.
+    void reset_terminal();
+    // DECALN (ESC # 8): the screen filled with E, which is how a terminal is
+    // checked for alignment and how vttest starts most of its chapters.
+    void screen_alignment_pattern();
     void diagnostic(TerminalDiagnostic::Kind kind, std::string message);
     bool append_control(char byte);
     // Applies a completed OSC string. A reply goes back with the same
@@ -102,6 +113,35 @@ private:
     bool append_dcs_byte(char byte);
     static int parameter(std::string_view text, std::size_t index, int default_value);
 
+    // What a terminal does with a picture, which is the part an emulator that
+    // only ever adds one gets wrong. A Sixel paints pixels onto the screen
+    // and nothing takes them off again except writing over the cells it
+    // covers — so a picture is not a decoration held until something clears
+    // the screen, it is pixels that go away one cell at a time as the program
+    // repaints. Every cell-writing path therefore reports what it wrote.
+    void damage_rasters(int left, int top, int right, int bottom);
+    // Adds a decoded picture at `anchor`, erasing whatever earlier picture it
+    // covers — two pictures side by side both stay, which is what a program
+    // drawing an image in pieces (or a nested ckVision slicing one around a
+    // window) depends on.
+    void place_raster(std::shared_ptr<Image> image, Point anchor, Size cell_extent);
+    void clear_rasters() noexcept;
+    // Pictures ride with the text they were drawn beside; one that would land
+    // outside the scrolled region leaves, since a cell-anchored picture
+    // cannot be shown half-way off.
+    void scroll_rasters(int top, int bottom, int rows) noexcept;
+
+    // A picture's own bookkeeping, kept beside `rasters_` rather than in the
+    // public snapshot type: the emulator's writable handle to the pixels,
+    // which cells of it still have any, and whether a snapshot is holding the
+    // same pixels — the one copy that has to be made before erasing into it.
+    struct RasterCoverage {
+        std::shared_ptr<Image> image;
+        std::vector<bool> live_cells;
+        std::size_t live_count = 0;
+        mutable bool handed_out = false;
+    };
+
     TerminalCapabilityProfile profile_;
     TerminalSubsessionOptions options_;
     Size cells_;
@@ -113,6 +153,11 @@ private:
     std::vector<Cell> alternate_;
     std::vector<Cell> scrollback_;
     std::vector<TerminalRaster> rasters_;
+    std::vector<RasterCoverage> raster_coverage_;  // one entry per raster, same order
+    // Sixel colour registers belong to the terminal, not to one picture: a
+    // program may define a palette in one sequence and draw with it in the
+    // next, so they outlive both.
+    SixelPalette sixel_palette_;
     int raster_identity_ = 0;
     bool alternate_buffer_ = false;
     int scroll_top_ = 0;
@@ -149,6 +194,8 @@ private:
     bool alternate_scroll_enabled_ = profile_.alternate_scroll;
     std::string clipboard_text_;
     std::uint64_t clipboard_serial_ = 0;
+    // BEL, counted rather than latched — see TerminalSnapshot::bell_serial.
+    std::uint64_t bell_serial_ = 0;
     KeyboardState primary_keyboard_;
     KeyboardState alternate_keyboard_;
 };

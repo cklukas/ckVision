@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -31,15 +32,45 @@ std::string screen_text(const ckv::term::TerminalSnapshot& snapshot) {
     return text;
 }
 
+// Waits for `needle` for up to `budget_ms` of real time.
+//
+// The budget is wall-clock and not a number of attempts, because an attempt
+// is not a unit of waiting: `poll` returns immediately while a child is
+// producing, so the same loop that spans seconds in a debug build spans
+// milliseconds in an optimised one, and a child that needs a quarter of a
+// second to finish counting is declared silent. What these tests mean is
+// "within a few seconds", so that is what they now say.
 bool pump_until(ckv::term::PosixTerminalSubsession& session, std::string_view needle,
-                int attempts = 200, int timeout_ms = 10) {
-    for (int attempt = 0; attempt < attempts; ++attempt) {
+                int budget_ms = 5'000, int poll_ms = 10) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(budget_ms);
+    for (;;) {
         if (session.file_descriptor() >= 0) {
             pollfd ready{session.file_descriptor(), POLLIN | POLLHUP, 0};
-            (void)::poll(&ready, 1, timeout_ms);
+            (void)::poll(&ready, 1, poll_ms);
         }
         (void)session.drain(32 * 1024);
         if (screen_text(session.snapshot()).find(needle) != std::string::npos) return true;
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+    }
+}
+
+// Drains until the child has exited and its output has been read to the end.
+//
+// This is what the bounded-drain tests below should wait for. A child's exit
+// is a definite event: after EOF there is, by definition, nothing further to
+// read, so "did the tail arrive" becomes a statement about the contract
+// rather than about how far this machine got through a loop before giving
+// up. The deadline is a guard against hanging a test run, not the thing
+// being waited for — reaching it is a failure.
+bool pump_until_exit(ckv::term::PosixTerminalSubsession& session, int guard_ms = 30'000) {
+    const auto guard = std::chrono::steady_clock::now() + std::chrono::milliseconds(guard_ms);
+    while (std::chrono::steady_clock::now() < guard) {
+        if (session.file_descriptor() >= 0) {
+            pollfd ready{session.file_descriptor(), POLLIN | POLLHUP, 0};
+            (void)::poll(&ready, 1, 10);
+        }
+        (void)session.drain(32 * 1024);
+        if (session.state() == ckv::term::TerminalSubsessionState::Exited) return true;
     }
     return false;
 }
@@ -78,28 +109,24 @@ CK_TEST(posix_terminal_subsession_bounds_a_noisy_child_without_losing_later_outp
     // a parser that blocks, drops its framing state, or starves the owner
     // thread cannot satisfy this contract.
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
-        "/bin/sh", {"-c", "i=0; while [ $i -lt 50000 ]; do printf x; i=$((i + 1)); done; printf FLOOD-DONE"});
+        "/bin/sh", {"-c", "head -c 50000 /dev/zero | tr '\\000' x; printf FLOOD-DONE"});
     launch.profile.cells = ckv::Size{80, 24};
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    CK_CHECK(pump_until(*session, "FLOOD-DONE", 1'200, 5));
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(screen_text(session->snapshot()).find("FLOOD-DONE") != std::string::npos);
     CK_CHECK(session->snapshot().diagnostics.size() <= 64U);
 }
 
 CK_TEST(posix_terminal_subsession_preserves_output_tail_when_child_exits_between_bounded_drains) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
-        "/bin/sh", {"-c", "i=0; while [ $i -lt 100000 ]; do printf x; i=$((i + 1)); done; printf EXIT-TAIL"});
+        "/bin/sh", {"-c", "head -c 100000 /dev/zero | tr '\\000' x; printf EXIT-TAIL"});
     launch.profile.cells = ckv::Size{80, 24};
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
-    CK_CHECK(pump_until(*session, "EXIT-TAIL", 2'000, 2));
-    for (int attempt = 0; attempt < 100 && session->state() != ckv::term::TerminalSubsessionState::Exited;
-         ++attempt) {
-        (void)session->drain(16 * 1024);
-        if (session->file_descriptor() >= 0) {
-            pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
-            (void)::poll(&ready, 1, 2);
-        }
-    }
-    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
+    // The tail is written and the child is gone before the last drains run,
+    // which is the case this exists for: what was already in the pipe must
+    // survive the exit that closed it.
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(screen_text(session->snapshot()).find("EXIT-TAIL") != std::string::npos);
     CK_CHECK(session->file_descriptor() < 0);
 }
 

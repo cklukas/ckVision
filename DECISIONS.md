@@ -748,6 +748,43 @@ do not cover. *Rejected:* storing every requested flag and honouring a subset
 (reports a promise the terminal does not keep); one stack shared by both
 screens (leaks a dead program's settings to the shell).
 
+**D-048 — A child's picture is pixels on a screen, decoded at its own size and
+erased by writing over it.** A Sixel arriving from a child is decoded into an
+image the size of the picture, anchored to the cell the cursor was on. It is
+not decoded into a plane the size of the terminal and searched for afterwards:
+that made the cost of a small logo a function of how large the reader had made
+their window (0.7 ms in a small one, 15 ms in a large one, for identical
+bytes), and made the pixel budget a window budget, so a maximised terminal
+silently had no graphics at all. A picture larger than the room it has is cut
+off at the edge of the screen, as any terminal cuts one off, rather than
+refused; `max_image_pixels` bounds the picture, which is the quantity a child
+controls.
+
+Once placed, a picture behaves the way a terminal's pixels behave. Writing or
+erasing the cells it covers takes those pixels away, one cell at a time, and a
+picture with no cells left is gone — this is what makes a program's repaint
+remove its own image instead of leaving it stranded over the new text.
+Pictures accumulate rather than replace: a child drawing two of them has two,
+and a nested ckVision emitting one Sixel per visible slice of an occluded
+image gets all of its slices. They ride with the text when it scrolls and
+leave when they would have gone off the edge, since a cell-anchored picture
+cannot be shown half-way off.
+
+The presenter states the same rule from the other side: a picture already on
+the host, on cells nothing repainted this frame, is not sent again, and what
+is sent again is re-sent from its cached encoding. Re-encoding and re-sending
+every frame cost hundreds of milliseconds per frame for a dialog-sized image —
+a terminal with a picture in it was slower than one without, for pixels that
+were already correct.
+
+*Rejected:* holding one picture at a time (loses every slice of an occluded
+image but the last); dropping a whole picture when any cell of it is written
+(a status line beside an image would erase it, and the program has no reason
+to send it again); clipping a scrolled picture to the region (a half picture
+anchored to a cell it no longer starts at); and re-emitting every frame as
+insurance against a host that might have lost it (the cost is certain, the
+loss is not, and `invalidate()` already exists for the cases that are).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

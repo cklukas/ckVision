@@ -7,6 +7,8 @@
 
 #include <array>
 
+#include <chrono>
+
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/standard_roles.hpp"
@@ -165,8 +167,13 @@ CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
     CK_CHECK(f.app.commands().execute(ckv::terminal_example::TerminalApp::kNewSixelDemoCommand));
     auto* view = dynamic_cast<ckv::widgets::TerminalView*>(f.example.desktop().active_window()->content());
     CK_CHECK(view != nullptr);
+    // Waited out in real time rather than in iterations: a child process
+    // needs the same fraction of a second to start and draw however fast the
+    // loop asking about it runs, and an optimised build spends 400 turns of
+    // this loop in less time than the fork takes.
     bool sized = false;
-    for (int attempt = 0; attempt < 400 && !sized; ++attempt) {
+    const auto sized_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!sized && std::chrono::steady_clock::now() < sized_deadline) {
         f.app.step(0);
         for (const auto& raster : view->session().snapshot().rasters)
             if (raster.cell_extent.width >= 40 && raster.cell_extent.height >= 8) sized = true;
@@ -188,7 +195,8 @@ CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
     for (const auto& raster : view->session().snapshot().rasters)
         CK_CHECK(raster.id != 0);  // TerminalView skips id 0 outright
     bool on_screen = false;
-    for (int attempt = 0; attempt < 200 && !on_screen; ++attempt) {
+    const auto screen_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!on_screen && std::chrono::steady_clock::now() < screen_deadline) {
         f.app.step(0);
         on_screen = f.terminal.display().has_raster_pixels();
     }

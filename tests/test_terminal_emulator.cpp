@@ -287,59 +287,169 @@ CK_TEST(terminal_emulator_clear_removes_child_raster_before_next_snapshot) {
     CK_CHECK(emulator.snapshot().rasters.empty());
 }
 
-CK_TEST(terminal_emulator_rejects_a_child_sixel_image_over_its_declared_pixel_limit) {
+CK_TEST(terminal_emulator_rejects_a_child_sixel_picture_over_its_declared_pixel_limit) {
+    // The limit is on the picture, which is the thing a child controls. It
+    // used to be applied to the terminal's own plane, so the same small
+    // picture was accepted or dropped depending on how large the reader had
+    // made their window — and a large window had no graphics at all.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
-    profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
+    profile.cells = Size{80, 24};
+    profile.cell_pixels = Size{8, 16};
     term::TerminalSubsessionOptions options;
-    options.max_image_pixels = 95;  // The declared terminal plane is 2 * 2 * 4 * 6 = 96 pixels.
+    options.max_image_pixels = 95;  // the picture below is 16 x 6 = 96 pixels
     term::TerminalEmulator emulator(profile, options);
-    emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    emulator.feed_output("\x1bPq#0;2;100;0;0!16~\x1b\\");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
     CK_CHECK(snapshot.rasters.empty());
     CK_CHECK(!snapshot.diagnostics.empty());
-    CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::LimitExceeded);
+    // And it says which picture and which limit, so the reader can act on it.
+    CK_CHECK(snapshot.diagnostics.back().message.find("16x6") != std::string::npos);
+    CK_CHECK(snapshot.diagnostics.back().message.find("95") != std::string::npos);
 }
 
-CK_TEST(terminal_emulator_decodes_a_child_sixel_in_a_full_screen_window) {
-    // A near-full-screen terminal on a HiDPI display: 137 x 45 cells at
-    // 16 x 48 px is a 4.7 Mpx plane. The pixel limit is a guard against
-    // absurd geometry, not a cap on ordinary windows — set near one, as it
-    // once was, it silently removes graphics from every large screen.
+CK_TEST(terminal_emulator_decodes_a_picture_at_its_own_size_not_the_windows) {
+    // The same picture in a small terminal and in a large one is the same
+    // picture: decoding it into a plane the size of the window made a logo
+    // cost twenty times more in a full-screen window than in a small one.
+    const std::string picture = "\x1bPq#0;2;100;0;0!24~-!24~\x1b\\";
+    for (const Size cells : {Size{20, 6}, Size{200, 60}}) {
+        term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+        profile.cells = cells;
+        profile.cell_pixels = Size{8, 16};
+        term::TerminalEmulator emulator(profile);
+        emulator.feed_output(picture);
+        const term::TerminalSnapshot snapshot = emulator.snapshot();
+        CK_CHECK(snapshot.rasters.size() == 1U);
+        CK_CHECK(snapshot.rasters[0].image->width() == 24);
+        CK_CHECK(snapshot.rasters[0].image->height() == 12);
+        CK_CHECK(snapshot.diagnostics.empty());
+    }
+}
+
+CK_TEST(terminal_emulator_cuts_a_picture_off_at_the_edge_of_the_screen) {
+    // Wider than the screen is not too wide to show: a terminal draws what
+    // fits and stops, which is also all that can ever be seen — a picture is
+    // anchored to the cell it started on and cannot be scrolled sideways.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
-    profile.cells = Size{137, 45};
+    profile.cells = Size{10, 4};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1bPq#0;2;100;0;0!10000~\x1b\\");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    CK_CHECK(snapshot.rasters[0].image->width() == 80);  // 10 cells of 8 px
+    CK_CHECK(snapshot.diagnostics.empty());
+}
+
+CK_TEST(terminal_emulator_advertises_graphics_however_large_the_window_is) {
+    // A window of any size can be drawn in, because what is decoded is the
+    // picture and not the window. This once answered "no graphics" for a
+    // window past the pixel budget, which is how a maximised terminal came to
+    // have no pictures in it at all.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{300, 100};
     profile.cell_pixels = Size{16, 48};
     term::TerminalEmulator emulator(profile);
-    emulator.feed_output("\x1b[c\x1bPq#0;2;100;0;0#0~~~~~~\x1b\\");
-    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c");
-    CK_CHECK(!emulator.snapshot().rasters.empty());
+    emulator.feed_output("\x1b[c\x1b[?2;4;0S");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c\x1b[?2;0;4800;4800S");
+    emulator.feed_output("\x1bPq#0;2;100;0;0!32~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
     CK_CHECK(emulator.snapshot().diagnostics.empty());
 }
 
-CK_TEST(terminal_emulator_stops_advertising_graphics_it_could_not_decode) {
+CK_TEST(text_written_over_a_child_picture_erases_it_the_way_a_terminal_does) {
+    // Reported from a running ckmux: a dialog with a logo in it was closed,
+    // the program repainted those cells with text, and the picture stayed on
+    // screen on top of the new text. A Sixel is pixels on the screen, and
+    // writing over the cells it covers is what takes them off again.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
-    profile.cells = Size{2, 2};
-    profile.cell_pixels = Size{4, 6};
-    term::TerminalSubsessionOptions options;
-    options.max_image_pixels = 95;  // one pixel short of this window's 2 * 2 * 4 * 6
-    term::TerminalEmulator emulator(profile, options);
-    emulator.feed_output("\x1b[c\x1b[?2;4;0S");
-    // Advertising Sixel from a window this large asks for an image the
-    // decoder then drops, leaving a blank where the program's own text
-    // fallback would have been.
-    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2c\x1b[?2;3;0S");
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1bPq#0;2;100;0;0!24~-!24~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    const Size covered = emulator.snapshot().rasters[0].cell_extent;
+    CK_CHECK(covered.width == 3 && covered.height == 1);
+
+    // One cell of it, and the rest of the picture is still there.
+    emulator.feed_output("\x1b[1;1Hx");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    // The rest of its cells, and it is gone entirely.
+    emulator.feed_output("xx");
+    CK_CHECK(emulator.snapshot().rasters.empty());
 }
 
-CK_TEST(terminal_emulator_rejects_overflowing_pixel_geometry_before_decoder_allocation) {
+CK_TEST(erasing_the_cells_under_a_child_picture_removes_it) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[3;1H\x1bPq#0;2;100;0;0!24~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    emulator.feed_output("\x1b[3;1H\x1b[K");  // erase that line
+    CK_CHECK(emulator.snapshot().rasters.empty());
+}
+
+CK_TEST(two_child_pictures_side_by_side_are_both_kept) {
+    // A nested ckVision emits one Sixel per visible slice when a window
+    // overlaps its picture. Keeping only the last one showed a fragment of
+    // the image and nothing else.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0!8~\x1b\\");
+    emulator.feed_output("\x1b[3;5H\x1bPq#0;2;0;100;0!8~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 2U);
+    CK_CHECK(emulator.snapshot().rasters[0].anchor == (Point{0, 0}));
+    CK_CHECK(emulator.snapshot().rasters[1].anchor == (Point{4, 2}));
+}
+
+CK_TEST(a_child_picture_drawn_over_another_replaces_what_it_covers) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0!8~\x1b\\");
+    emulator.feed_output("\x1b[1;1H\x1bPq#0;2;0;100;0!8~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+}
+
+CK_TEST(a_child_picture_scrolls_with_the_text_it_was_drawn_beside) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[3;1H\x1bPq#0;2;100;0;0!8~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(emulator.snapshot().rasters[0].anchor.y == 2);
+    emulator.feed_output("\x1b[6;1H\n");  // one scroll of the whole screen
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(emulator.snapshot().rasters[0].anchor.y == 1);
+    // ...and off the top, where a picture anchored to a cell cannot follow.
+    emulator.feed_output("\n\n");
+    CK_CHECK(emulator.snapshot().rasters.empty());
+}
+
+CK_TEST(terminal_emulator_survives_an_absurd_cell_metric_without_overflowing) {
+    // A cell metric is something a host reports, and a host can report
+    // nonsense. It used to decide the size of the plane a picture was decoded
+    // into, so nonsense there had to be refused before it was multiplied out.
+    // A picture is now decoded at its own size and this cannot reach an
+    // allocation at all — but every pixel bound derived from the metric is
+    // still computed in 64 bits, and this is what says so.
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
     profile.cell_pixels = Size{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
     const term::TerminalSnapshot snapshot = emulator.snapshot();
-    CK_CHECK(snapshot.rasters.empty());
-    CK_CHECK(!snapshot.diagnostics.empty());
-    CK_CHECK(snapshot.diagnostics.back().kind == term::TerminalDiagnostic::Kind::LimitExceeded);
+    CK_CHECK(snapshot.rasters.size() == 1U);
+    CK_CHECK(snapshot.rasters[0].image->width() == 1);
+    CK_CHECK(snapshot.rasters[0].cell_extent == (Size{1, 1}));
+    // ...and writing over it still takes it away, bounds and all.
+    emulator.feed_output("\x1b[1;1Hx");
+    CK_CHECK(emulator.snapshot().rasters.empty());
 }
 
 CK_TEST(terminal_emulator_recovers_from_malformed_child_sixel_without_leaking_state_to_another_session) {

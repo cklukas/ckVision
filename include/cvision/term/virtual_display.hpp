@@ -16,13 +16,9 @@
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/image.hpp"
+#include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
-
-// The Sixel colour registers this decoder holds. Sixel numbers its registers
-// `#0` … `#255`, and a child that asks XTSMGRAPHICS how many the terminal it
-// is talking to has is told this number.
-inline constexpr int kSixelColorRegisters = 256;
 
 class VirtualDisplay {
 public:
@@ -98,7 +94,6 @@ private:
     void clear_cell_pixels(int cell_x, int cell_y, int cell_width = 1) noexcept;
     void clear_pixel_rect(std::int64_t left, std::int64_t top, std::int64_t right,
                           std::int64_t bottom) noexcept;
-    void plot_sixel_run(int x, int y, int repeat, unsigned char bits, Rgba color) noexcept;
     void begin_synchronized_output();
     void end_synchronized_output() noexcept;
     void discard_synchronized_snapshot() noexcept;
@@ -118,8 +113,7 @@ private:
     std::string text_buffer_;
     std::string control_buffer_;
     std::string error_;
-    std::array<Rgba, kSixelColorRegisters> sixel_palette_{};
-    std::array<bool, kSixelColorRegisters> sixel_palette_defined_{};
+    SixelPalette sixel_palette_;
 };
 
 }  // namespace ckv::term

@@ -11,12 +11,12 @@
 #include <vector>
 
 #include "cvision/core/text.hpp"
+#include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
 namespace {
 
 constexpr std::size_t kMaxControlBytes = 16U * 1024U * 1024U;
-constexpr int kMaxSixelRepeat = 1'000'000;
 
 bool parse_unsigned(std::string_view text, std::size_t& pos, int& value) noexcept {
     if (pos >= text.size() || !std::isdigit(static_cast<unsigned char>(text[pos]))) return false;
@@ -110,12 +110,6 @@ Attr without_attr(Attr attrs, Attr removed) noexcept {
     return static_cast<Attr>(bits & static_cast<std::uint8_t>(~mask));
 }
 
-int advance_saturated(int value, int delta) noexcept {
-    if (delta > 0 && value > std::numeric_limits<int>::max() - delta) {
-        return std::numeric_limits<int>::max();
-    }
-    return value + delta;
-}
 
 }  // namespace
 
@@ -624,166 +618,49 @@ void VirtualDisplay::scroll_rows(int rows) noexcept {
     raster_plane_ = std::move(next_raster);
 }
 
-void VirtualDisplay::plot_sixel_run(int x, int y, int repeat, unsigned char bits, Rgba color) noexcept {
-    if (repeat <= 0 || bits == 0) return;
-
-    const std::int64_t origin_x = static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width + x;
-    const std::int64_t origin_y = static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height + y;
-    const std::int64_t plane_width = raster_plane_.width();
-    const std::int64_t plane_height = raster_plane_.height();
-    const std::int64_t first_column = std::max(std::int64_t{0}, -origin_x);
-    const std::int64_t end_column = std::min(static_cast<std::int64_t>(repeat), plane_width - origin_x);
-    if (first_column >= end_column) return;
-
-    for (int bit = 0; bit < 6; ++bit) {
-        if ((bits & (1U << bit)) == 0) continue;
-        const std::int64_t py = origin_y + bit;
-        if (py < 0 || py >= plane_height) continue;
-        for (std::int64_t column = first_column; column < end_column; ++column) {
-            const std::int64_t px = origin_x + column;
-            raster_plane_.set_pixel(static_cast<int>(px), static_cast<int>(py),
-                                    Image::Rgba{color.r, color.g, color.b, color.a});
-        }
-    }
-}
-
 bool VirtualDisplay::decode_sixel(std::string_view body) {
-    const std::size_t q = body.find('q');
-    if (q == std::string_view::npos) {
-        fail("DCS is not a Sixel sequence");
-        return false;
-    }
-    for (std::size_t i = 0; i < q; ++i) {
-        const char c = body[i];
-        if (!std::isdigit(static_cast<unsigned char>(c)) && c != ';') {
-            fail("unsupported Sixel DCS parameter byte");
-            return false;
-        }
-    }
-
-    bool params_ok = false;
-    const std::vector<int> dcs_params = parse_csi_params(body.substr(0, q), params_ok);
-    if (!params_ok || dcs_params.size() > 3) {
-        fail("invalid Sixel DCS parameters");
-        return false;
-    }
-    const int background_mode = dcs_params.size() > 1 ? dcs_params[1] : 0;
-    if (background_mode != 0 && background_mode != 1) {
-        fail("unsupported Sixel background mode");
+    // The picture is decoded on its own terms and then blitted here. This
+    // display used to read the Sixel grammar itself, straight into its plane;
+    // the emulator that hosts child graphics then had to build a whole
+    // display, the size of the terminal, to borrow that reading for one
+    // picture. One decoder, at the size of the picture, serves both.
+    std::string error;
+    const std::int64_t start_x = static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width;
+    const std::int64_t start_y = static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height;
+    const Size room{static_cast<int>(std::clamp<std::int64_t>(raster_plane_.width() - start_x, 0,
+                                                             raster_plane_.width())),
+                    static_cast<int>(std::clamp<std::int64_t>(raster_plane_.height() - start_y, 0,
+                                                              raster_plane_.height()))};
+    const std::size_t plane_pixels = static_cast<std::size_t>(std::max(1, raster_plane_.width())) *
+                                     static_cast<std::size_t>(std::max(1, raster_plane_.height()));
+    const std::optional<DecodedSixel> decoded =
+        ckv::term::decode_sixel(body, room, plane_pixels, sixel_palette_, error);
+    if (!decoded) {
+        fail(error);
         return false;
     }
 
-    int x = 0;
-    int y = 0;
-    int selected_color = 0;
-    int raster_width = 0;
-    int raster_height = 0;
-    std::size_t pos = q + 1;
-    while (pos < body.size()) {
-        const unsigned char c = static_cast<unsigned char>(body[pos]);
-        if (c >= 63 && c <= 126) {
-            const unsigned char bits = static_cast<unsigned char>(c - 63);
-            const Rgba color = sixel_palette_[static_cast<std::size_t>(selected_color)];
-            plot_sixel_run(x, y, 1, bits, color);
-            x = advance_saturated(x, 1);
-            ++pos;
-            continue;
-        }
-        if (c == '$') {
-            x = 0;
-            ++pos;
-            continue;
-        }
-        if (c == '-') {
-            x = 0;
-            y += 6;
-            ++pos;
-            continue;
-        }
-        if (c == '#') {
-            ++pos;
-            int index = 0;
-            if (!parse_unsigned(body, pos, index) || index < 0 || index >= kSixelColorRegisters) {
-                fail("invalid Sixel color register");
-                return false;
-            }
-            selected_color = index;
-            if (pos < body.size() && body[pos] == ';') {
-                ++pos;
-                int mode = 0;
-                int r = 0;
-                int g = 0;
-                int b = 0;
-                if (!parse_unsigned(body, pos, mode) || pos >= body.size() || body[pos++] != ';' ||
-                    !parse_unsigned(body, pos, r) || pos >= body.size() || body[pos++] != ';' ||
-                    !parse_unsigned(body, pos, g) || pos >= body.size() || body[pos++] != ';' ||
-                    !parse_unsigned(body, pos, b) || mode != 2 || r < 0 || r > 100 || g < 0 ||
-                    g > 100 || b < 0 || b > 100) {
-                    fail("unsupported or invalid Sixel color definition");
-                    return false;
-                }
-                sixel_palette_[static_cast<std::size_t>(index)] =
-                    Rgba{static_cast<std::uint8_t>((r * 255 + 50) / 100),
-                         static_cast<std::uint8_t>((g * 255 + 50) / 100),
-                         static_cast<std::uint8_t>((b * 255 + 50) / 100), 255};
-                sixel_palette_defined_[static_cast<std::size_t>(index)] = true;
-            } else if (!sixel_palette_defined_[static_cast<std::size_t>(index)]) {
-                sixel_palette_[static_cast<std::size_t>(index)] = Rgba{0, 0, 0, 255};
-            }
-            continue;
-        }
-        if (c == '!') {
-            ++pos;
-            int repeat = 0;
-            if (!parse_unsigned(body, pos, repeat) || repeat <= 0 || repeat > kMaxSixelRepeat ||
-                pos >= body.size()) {
-                fail("invalid or excessive Sixel repeat introducer");
-                return false;
-            }
-            const unsigned char data = static_cast<unsigned char>(body[pos++]);
-            if (data < 63 || data > 126) {
-                fail("Sixel repeat target is not a data byte");
-                return false;
-            }
-            const unsigned char bits = static_cast<unsigned char>(data - 63);
-            const Rgba color = sixel_palette_[static_cast<std::size_t>(selected_color)];
-            plot_sixel_run(x, y, repeat, bits, color);
-            x = advance_saturated(x, repeat);
-            continue;
-        }
-        if (c == '"') {
-            ++pos;
-            std::array<int, 4> fields{};
-            int field_count = 0;
-            while (pos < body.size() && field_count < 4) {
-                if (!parse_unsigned(body, pos, fields[static_cast<std::size_t>(field_count)])) {
-                    fail("invalid Sixel raster attribute");
-                    return false;
-                }
-                ++field_count;
-                if (pos >= body.size() || body[pos] != ';') break;
-                ++pos;
-            }
-            if (field_count == 4) {
-                raster_width = fields[2];
-                raster_height = fields[3];
-                if (raster_width <= 0 || raster_height <= 0) {
-                    fail("invalid Sixel raster dimensions");
-                    return false;
-                }
-                if (background_mode == 0)
-                    clear_pixel_rect(static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width,
-                                     static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height,
-                                     static_cast<std::int64_t>(cursor_.position.x) * cell_pixels_.width +
-                                         raster_width,
-                                     static_cast<std::int64_t>(cursor_.position.y) * cell_pixels_.height +
-                                         raster_height);
-            }
-            continue;
-        }
+    const std::int64_t origin_x = start_x;
+    const std::int64_t origin_y = start_y;
+    // P2 = 0 with a declared raster size clears that whole rectangle first,
+    // including the part of it the picture leaves untouched.
+    if (decoded->erases_background && decoded->declared.width > 0 && decoded->declared.height > 0)
+        clear_pixel_rect(origin_x, origin_y, origin_x + decoded->declared.width,
+                         origin_y + decoded->declared.height);
 
-        fail("unsupported byte in Sixel payload");
-        return false;
+    const Image& picture = decoded->image;
+    for (int y = 0; y < picture.height(); ++y) {
+        const std::int64_t py = origin_y + y;
+        if (py < 0 || py >= raster_plane_.height()) continue;
+        for (int x = 0; x < picture.width(); ++x) {
+            const std::int64_t px = origin_x + x;
+            if (px < 0 || px >= raster_plane_.width()) continue;
+            const Image::Rgba pixel = picture.pixel(x, y);
+            // Transparent means the sequence never drew here, and what was
+            // under it stays — a Sixel paints, it does not blank.
+            if (pixel.a == 0) continue;
+            raster_plane_.set_pixel(static_cast<int>(px), static_cast<int>(py), pixel);
+        }
     }
     return true;
 }
@@ -812,8 +689,7 @@ void VirtualDisplay::clear() {
     text_buffer_.clear();
     control_buffer_.clear();
     error_.clear();
-    sixel_palette_.fill(Rgba{});
-    sixel_palette_defined_.fill(false);
+    sixel_palette_ = SixelPalette{};
     discard_synchronized_snapshot();
 }
 

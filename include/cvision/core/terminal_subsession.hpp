@@ -183,6 +183,13 @@ struct TerminalSubsessionOptions {
     // copy, small enough that a hostile child cannot use the clipboard as
     // storage for a megabyte the reader will never see.
     std::size_t max_clipboard_bytes = 64 * 1024;
+    // How many lines that have scrolled off the top of the primary screen are
+    // kept. Zero means none at all — a terminal that remembers nothing, which
+    // is a real request (a shell reading a password, a host with a memory
+    // budget) and not merely the smallest number: with zero, a line leaving
+    // the screen is never copied anywhere, rather than copied and immediately
+    // dropped. The alternate screen never contributes, whatever this says,
+    // because a full-screen program's transient frames are not history.
     std::size_t max_scrollback_lines = 2'000;
     // The raster plane a child's Sixel is decoded into, in pixels. That plane
     // is the child's own window — its grid times the cell metric — so its
@@ -248,6 +255,15 @@ struct TerminalSnapshot {
     // The kitty keyboard enhancements the child currently has on. Empty is
     // the legacy encoding, which remains correct — only coarser.
     TerminalKeyboardFlags keyboard_flags = TerminalKeyboardFlags::None;
+    // How many times the child has rung the bell (BEL, 0x07). A count and not
+    // a flag, for the same reason `clipboard_serial` is one: a snapshot is a
+    // value that may be read as often as anyone likes, and a flag that reading
+    // clears would make the first reader the only one to see the bell — while
+    // a flag that reading does not clear cannot say a second bell arrived. A
+    // host rings, flashes or badges when the count differs from the one it
+    // last acted on, and a host that does nothing with it costs the child
+    // nothing.
+    std::uint64_t bell_serial = 0;
 };
 
 // UI-facing seam. Platform adapters may add readiness and child-process

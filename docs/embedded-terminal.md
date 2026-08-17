@@ -213,17 +213,38 @@ leave the asking program waiting out a timeout. XTSMGRAPHICS shares its final
 byte with SU (scroll up); it is the private marker that keeps a probe from
 scrolling away the screen it was asking about.
 
-Both answers also fall back to "no graphics" for a child window whose raster
-plane would exceed `max_image_pixels`, because at that size every image the
-child sends is dropped by the decoder. Telling such a window the truth costs
-it a picture it was never going to get and buys it the program's own text
-fallback, instead of the blank that an unheeded advertisement leaves behind.
-That limit guards against absurd or overflowing geometry reaching the
-decoder's allocator, so it sits far above any real window (64 Mpx; a 4K
-screen at 2x scaling is ~33 Mpx). The plane is the child's own window, which
-the host sizes and the child cannot inflate — the child-controlled quantity
-is `max_graphics_payload_bytes` — so a limit set near a plausible window size
-protects nothing and silently removes graphics from large screens.
+`max_image_pixels` bounds the picture — the thing a child controls — and not
+the terminal it arrives in. A picture is decoded at its own size, so how large
+the reader has made their window has no bearing on whether one can be drawn in
+it; a picture wider or taller than the room it has is cut off at the edge of
+the screen, the way any terminal cuts one off, rather than refused. What the
+budget stops is an absurd geometry reaching the allocator, and a refusal names
+the picture and the limit so the reader can raise one or shrink the other.
+
+## What a picture is, once it is on screen
+
+A Sixel paints pixels and nothing takes them off again except writing over the
+cells it covers. That is the whole model, and every part of it is observable:
+
+- **Text written over a picture erases it, one cell at a time.** A program
+  that repaints the area a picture occupied — closing a dialog, redrawing a
+  pane — gets its text, not its text under an image that outlived it. A
+  picture with no cells left is gone.
+- **Pictures accumulate rather than replace.** A child drawing two of them
+  side by side has two; a nested ckVision emitting one Sixel per visible slice
+  of an image occluded by a window gets all of its slices. A new picture
+  erases only the cells it actually covers.
+- **They scroll with the text they were drawn beside**, and leave when they
+  would have scrolled off. A cell-anchored picture cannot be shown half-way
+  off the top, so it goes rather than sliding under the chrome.
+- **Erasing the screen, switching to the alternate buffer, or a reset takes
+  them all** — the same points at which a real terminal's graphics go.
+
+The presenter on the other side works to the same rule: a picture already on
+the host, on cells nothing repainted, is not sent again. Re-sending one every
+frame — re-encoding a quarter of a megabyte to arrive at the pixels already
+there — is what made having a picture on screen cost hundreds of milliseconds
+per frame instead of microseconds.
 
 Child Sixel data is decoded into an RGBA raster snapshot. Parameterized Sixel
 DCS commands are accepted, and graphics payloads have their own bounded limit

@@ -128,7 +128,7 @@ has said it can draw one.
 
 | Sequence | Name | Answer |
 |---|---|---|
-| `CSI c` | DA1 | reflects the capability profile, so a child that probes gets the truth — including **parameter 4 when the profile declares Sixel and the window is one the decoder can hold** (`max_image_pixels`), which is the advertisement `img2sixel`, `chafa` and gnuplot decide from |
+| `CSI c` | DA1 | reflects the capability profile, so a child that probes gets the truth — including **parameter 4 when the profile declares Sixel**, which is the advertisement `img2sixel`, `chafa` and gnuplot decide from |
 | `CSI n` (5/6) | DSR | status and cursor position, origin-mode aware |
 | `CSI 14 t` / `CSI 16 t` | XTWINOPS | pixel geometry, which Sixel-emitting programs ask for |
 | `CSI ? Pi ; Pa ; Pv S` | XTSMGRAPHICS | the graphics limits behind that advertisement: the decoder's 256 colour registers, and a maximum geometry of the child's own window in pixels. Requests to *set* a limit, ReGIS geometry, and every request under a profile without Sixel are refused with a status — never with silence, which costs the asking program a timeout |
@@ -139,7 +139,7 @@ has said it can draw one.
 
 | Sequence | Case | Notes |
 |---|---|---|
-| `DCS q … ST` | **E+H** | Sixel is **decoded always**, into a scene raster. It reaches the screen as pixels where the host supports Sixel, and as a text placeholder where it does not — never as leaked escape bytes |
+| `DCS q … ST` | **E+H** | Sixel is **decoded always**, at the size of the picture (not of the window), into a scene raster. Writing over the cells a picture covers erases it there, as on a real terminal; pictures accumulate, scroll with their text, and go when the screen is cleared or the alternate buffer is entered. It reaches the screen as pixels where the host supports Sixel, and as a text placeholder where it does not — never as leaked escape bytes |
 | `OSC 0` / `OSC 2` | E | window title, sanitised and length-bounded; policy-gated (`TerminalOscPolicy`) |
 | `OSC 1` | E | icon name — deliberately does not change the title |
 | `OSC 52` (clipboard write) | E | opt-in per profile (`TerminalClipboardPolicy`), size-capped, sanitised — see below |
