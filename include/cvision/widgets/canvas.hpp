@@ -14,6 +14,8 @@
 // from its cell bounds automatically on metric or widget resize.
 #pragma once
 
+#include <optional>
+
 #include <functional>
 #include <memory>
 
@@ -88,6 +90,11 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    // A drawing surface, where which cell the pointer is on is the whole
+    // question and an arrow tip is a poor way to answer it.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Crosshair;
+    }
     void on_resized() override;
     void on_attached() override;
 

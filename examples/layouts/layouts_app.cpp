@@ -40,11 +40,11 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 
 void LayoutsApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().tile}});
-    window_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().cascade}});
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().tile}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().cascade}));
 
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(window_menu)}));

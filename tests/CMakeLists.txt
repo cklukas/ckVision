@@ -54,6 +54,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_painter.cpp
     test_paste_security.cpp
     test_platform_services.cpp
+    test_pointer_shape.cpp
     test_presenter.cpp
     test_progress.cpp
     test_record_replay_terminal.cpp

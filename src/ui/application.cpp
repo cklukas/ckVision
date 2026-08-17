@@ -81,6 +81,13 @@ Application::Application(term::Terminal& terminal, Clock& clock,
             focused_ = nullptr;
         if (mouse_capture_ != nullptr && tree_contains(v, mouse_capture_))
             mouse_capture_ = nullptr;
+        // A view that leaves while the pointer is over it is no longer
+        // under it. Dropped rather than re-resolved here: the tree is
+        // mid-teardown and hit-testing it would be asking a question of a
+        // structure that is still changing. The next reported motion
+        // resolves hover again from whatever is actually there.
+        if (hovered_ != nullptr && tree_contains(v, hovered_))
+            hovered_ = nullptr;
         if (input_capture_ != nullptr && tree_contains(v, input_capture_))
             input_capture_ = nullptr;
         // A public removal path may detach a modal before its owner has
@@ -436,6 +443,45 @@ View* Application::topmost_view_at(Point absolute_point) noexcept {
     return topmost_view_at_recursive(scope_root != nullptr ? *scope_root : root_, absolute_point);
 }
 
+void Application::update_hover(Point absolute_point, View* holder) {
+    View* const next = holder != nullptr ? holder : topmost_view_at(absolute_point);
+    if (next == hovered_) return;
+    // Both sides are held as handles across the notifications: a hover
+    // callback is ordinary widget code and may detach or destroy either
+    // view — including, by way of a container reacting to the repaint, the
+    // one that is about to be entered.
+    const ViewHandle left = hovered_ != nullptr ? make_view_handle(*hovered_) : ViewHandle{};
+    const ViewHandle entered = next != nullptr ? make_view_handle(*next) : ViewHandle{};
+    // Published before either callback runs, so a widget that asks the
+    // Application what the pointer is over during its own transition is
+    // told the new answer rather than the one being replaced.
+    hovered_ = next;
+    if (View* const previous = resolve_attached_view(left)) previous->set_hovered(false);
+    if (View* const current = resolve_attached_view(entered)) current->set_hovered(true);
+}
+
+PointerShape Application::pointer_shape() const noexcept {
+    PointerShape requested = PointerShape::Default;
+    if (hovered_ != nullptr && last_mouse_event_) {
+        const Point pointer = last_mouse_event_->cell;
+        // Up the ancestry until somebody has an opinion: the deepest view
+        // under the pointer answers for itself, and one with nothing to say
+        // lets the container around it answer — which is how a window's
+        // border keeps its resize pointer under a content pane that fills
+        // the window and cares about none of it.
+        for (const View* view = hovered_; view != nullptr; view = view->parent()) {
+            const Rect absolute = view->absolute_bounds();
+            const std::optional<PointerShape> shape =
+                view->pointer_shape_at(Point{pointer.x - absolute.x, pointer.y - absolute.y});
+            if (shape) {
+                requested = *shape;
+                break;
+            }
+        }
+    }
+    return term::effective_pointer_shape(terminal_.capabilities(), requested);
+}
+
 View* Application::topmost_view_at_recursive(View& view, Point absolute_point) noexcept {
     if (!view.visible() || !contains(view.absolute_bounds(), absolute_point))
         return nullptr;
@@ -568,6 +614,13 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         input_capture_ = nullptr;
                     if (!usable_capture(mouse_capture_))
                         mouse_capture_ = nullptr;
+                    // Before target resolution and before the early return
+                    // for a report that lands on nothing: moving off the
+                    // last control onto bare desktop is precisely the
+                    // transition that has to clear a highlight and put the
+                    // pointer back to its ordinary shape, and that report
+                    // has no delivery target at all.
+                    update_hover(e.cell, mouse_capture_);
                     const bool had_input_capture = input_capture_ != nullptr;
                     View* target = input_capture_;
                     if (target == nullptr)
@@ -711,6 +764,8 @@ void Application::set_frame_completion_tracking(bool enabled) {
     terminal_acknowledgements_seen_ = terminal_.frame_acknowledgements();
     oldest_unanswered_frame_nanos_.reset();
     frame_completion_timeouts_ = 0;
+    terminal_ever_acknowledged_ = false;
+    longest_terminal_round_trip_nanos_ = 0;
 }
 
 void Application::reconcile_frame_completion(std::int64_t now_nanos) {
@@ -725,8 +780,12 @@ void Application::reconcile_frame_completion(std::int64_t now_nanos) {
         const std::size_t fresh = acknowledged - terminal_acknowledgements_seen_;
         terminal_acknowledgements_seen_ = acknowledged;
         frames_settled_ = std::min(marked, frames_settled_ + fresh);
-        if (oldest_unanswered_frame_nanos_)
+        if (oldest_unanswered_frame_nanos_) {
             last_terminal_round_trip_nanos_ = now_nanos - *oldest_unanswered_frame_nanos_;
+            longest_terminal_round_trip_nanos_ =
+                std::max(longest_terminal_round_trip_nanos_, last_terminal_round_trip_nanos_);
+        }
+        terminal_ever_acknowledged_ = true;
         frame_completion_timeouts_ = 0;
         // Whatever is still outstanding has been waiting since at least now.
         if (frames_settled_ < marked) oldest_unanswered_frame_nanos_ = now_nanos;
@@ -735,12 +794,26 @@ void Application::reconcile_frame_completion(std::int64_t now_nanos) {
     }
 
     if (frames_settled_ >= marked || !oldest_unanswered_frame_nanos_) return;
-    if (now_nanos - *oldest_unanswered_frame_nanos_ < kFrameCompletionTimeoutNanos) return;
+    // A host that has answered before is waited for as long as its own
+    // slowest answer suggests it needs. Giving up on it early is worse than
+    // not asking at all: the wait IS the back-pressure, and abandoning it
+    // sends the next frame into a picture the terminal is still drawing.
+    const std::int64_t deadline =
+        terminal_ever_acknowledged_
+            ? std::max(kFrameCompletionTimeoutNanos,
+                       longest_terminal_round_trip_nanos_ * kFrameCompletionPatienceFactor)
+            : kFrameCompletionTimeoutNanos;
+    if (now_nanos - *oldest_unanswered_frame_nanos_ < deadline) return;
 
     // Written off. A terminal that does not answer must cost an application
     // the wait once, never its animation.
     frames_settled_ = marked;
     oldest_unanswered_frame_nanos_.reset();
+    // Only a host that has never answered can be concluded not to answer.
+    // One that has is merely late, however often: its replies are evidence
+    // that the facility works here, and no amount of slowness turns that
+    // into evidence that it does not.
+    if (terminal_ever_acknowledged_) return;
     if (++frame_completion_timeouts_ >= kFrameCompletionGiveUpCount) {
         diagnostics().log(LogLevel::Info,
                           "frame completion: this terminal does not answer DSR, so pacing against it "
@@ -849,7 +922,25 @@ bool Application::step(std::int64_t deadline_nanos) {
         }
 
         restore_modal_focus_if_needed();
-        paint_and_present();
+        // Coalesce rather than pile on. A picture costs the host far more
+        // than the cells around it, and the events that produce new frames
+        // — a window being dragged, a resize in progress — arrive at the
+        // pointer's rate, not at one the terminal agreed to. While it has
+        // not finished the last frame that carried a picture, the newest
+        // state simply waits here: nothing is queued, nothing is lost, and
+        // the frame that does go out is the current one rather than one of
+        // the positions passed through on the way. dirty_ stays set, and a
+        // host that never answers is released by the write-off deadline.
+        // ...but only where the host has actually answered. A terminal that
+        // never replies would otherwise hold every frame back until the
+        // write-off deadline, which is a stall invented out of silence.
+        // Where there is no measurement there is no back-pressure to
+        // respect, and an application that needs one guesses a rate instead.
+        const bool waiting_on_a_host_that_answers = presenter_.frame_completion_tracking() &&
+                                                    last_terminal_round_trip_nanos_ >= 0 &&
+                                                    frames_awaiting_terminal() > 0 &&
+                                                    presenter_.last_frame_carried_rasters();
+        if (!waiting_on_a_host_that_answers) paint_and_present();
         return did_work;
     } catch (...) {
         terminal_.terminate_after_callback_failure();
@@ -929,7 +1020,7 @@ void Application::paint_and_present() {
     }
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
-                       compositor_.visible_rasters());
+                       compositor_.visible_rasters(), pointer_shape());
     // The clock starts when the question goes out, not when the next step
     // notices it did: an application that paces against the terminal is
     // asking how long the terminal took, not how long we took to look.

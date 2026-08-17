@@ -20,6 +20,10 @@
 //                            example's own target. The pacer still widens
 //                            it under load, so this raises the ceiling
 //                            rather than removing the floor.
+//   CKVISION_SPIN_PIXEL_RATE=<n>
+//                            raster pixels per second this terminal can
+//                            actually paint. The default is cautious; a
+//                            host that keeps up takes far more.
 //   CKVISION_NO_SYNC=1       stop bracketing frames as one atomic update
 //                            (DEC 2026). For a host that answers the query
 //                            and then applies a picture outside the bracket
@@ -77,6 +81,8 @@ int main() {
     ckv::spin::SpinApp spin(app);
     if (const int fps = std::atoi(environment_value("CKVISION_SPIN_FPS").c_str()); fps > 0)
         spin.set_target_frame_interval(1'000'000'000LL / fps);
+    if (const double rate = std::atof(environment_value("CKVISION_SPIN_PIXEL_RATE").c_str()); rate > 0.0)
+        spin.set_raster_pixel_rate(rate);
     app.run();
     return 0;
 }

@@ -59,10 +59,10 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 
 void FormsApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
 
     widgets::MenuBarItem help_menu{"&Help", {}};
-    help_menu.items.push_back(widgets::MenuItem{"&Forms help", ui::kInvalidCommand, [this] { present_help(); }});
+    help_menu.items.push_back(widgets::MenuItem::action("&Forms help", [this] { present_help(); }));
 
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(help_menu)}));

@@ -39,8 +39,8 @@ justify claiming SGR or pixel mouse support.
 `PosixTerminal` enters only input modes authorized by the selected capabilities
 and resets only modes it established, in addition to its unconditional
 alternate-screen and raw-mode lifecycle. In particular, a non-probing
-`ModernVt` session resets its 1002/1006 SGR modes but does not alter the
-distinct 1000 mouse protocol or pixel mode 1016. An SGR profile also requests mode 1016
+`ModernVt` session resets its 1003/1006 SGR modes but does not alter the
+distinct 1000 or 1002 mouse protocols or pixel mode 1016. An SGR profile also requests mode 1016
 only in a bounded capability probe (or when an explicit trusted pixel profile
 requires it); that request alone never turns on
 `Capabilities::pixel_mouse`. When runtime probing is enabled, the backend also
@@ -70,11 +70,32 @@ An explicit profile may instead set both `pixel_mouse` and a nonzero
 `cell_pixels` metric when the host has already established SGR-pixel reporting.
 Each SGR mouse event then carries the terminal's pixel position as well as the
 cell position derived from that metric; the POSIX PTY contract exercises that
-dual-space delivery and the corresponding 1002/1006/1016 session restoration.
+dual-space delivery and the corresponding 1003/1006/1016 session restoration.
 The SGR wheel button codes map to the four directional `MouseButton` values:
 up/down (64/65) and left/right (66/67). Widgets that only scroll vertically
 may ignore the horizontal events, but a backend or terminal view never
 collapses them into vertical motion.
+An SGR session enters mode 1003, not 1002, so motion is reported whether or
+not a button is held (D-049). That is what makes the pointer's position known
+between clicks, which is what a pointer shape and a hover highlight are
+functions of; 1002 would report motion only during a drag. The extra traffic
+is one report per cell crossed, and a report that hovers the same view as the
+last one is resolved and dropped before it reaches a widget.
+
+Such a session also writes mouse pointer shapes (OSC 22) and resets the shape
+on exit from the same ledger a fatal signal replays. Unlike every other
+capability here, that is not gated on the host having said it can: the
+protocol's support query is optional, hosts implementing only the original
+xterm proposal draw the shapes while never replying, and an unrecognized OSC
+is discarded — so silence is not evidence of absence, and writing it costs
+nothing where it is not understood. The query is still sent, and a host that
+answers earns the CSS vocabulary and per-shape degradation; a host that says
+nothing gets the X11 cursorfont names both host families accept.
+`CapabilityOverrides::pointer_shapes` silences it for a host observed to do
+something other than ignore it. Profiles with no mouse never emit it at all,
+since a shape is a statement about where the pointer is and they are never
+told.
+
 An authoritative non-pixel profile never enables mode 1016. A probing SGR
 session enables it only while obtaining its DECRPM proof; until that proof and
 an XTWINOPS metric agree, SGR reports are consumed rather than misread as cell

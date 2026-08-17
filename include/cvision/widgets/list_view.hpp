@@ -119,6 +119,23 @@ public:
 
     // Index callbacks remain useful for compact materialized clients. Provider
     // clients should use the identity callbacks, which survive reordering.
+    // The cursor moved to another row — browsing, not choosing.
+    //
+    // A list is very often one half of a master/detail pair, and the
+    // other half has to know which row the reader is looking at before
+    // they commit to it: a footer naming the current item, a status
+    // hint, a pane that previews it. Activation (below) is the other
+    // half of that grammar and deliberately separate — an application
+    // that wants an expensive detail view to follow only a deliberate
+    // choice listens to on_activate and ignores this, and one that
+    // wants a cheap caption to track the highlight does the reverse.
+    // MenuBar::on_highlight_changed is the same distinction for menus.
+    //
+    // Fires for every route that moves the cursor — keys, mouse,
+    // set_cursor() — from the single assignment point, so no caller can
+    // move it silently.
+    std::function<void(std::size_t)> on_cursor_changed;
+
     std::function<void(std::size_t)> on_activate;
     std::function<void(ListItemId)> on_activate_id;
     std::function<void(std::size_t)> on_selection_changed;

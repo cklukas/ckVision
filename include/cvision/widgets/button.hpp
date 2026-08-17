@@ -2,6 +2,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -92,20 +93,41 @@ public:
     bool trailing_row_is_shadow() const noexcept override { return !flat_; }
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // A button is the plain case of something that acts when clicked;
+    // a disabled one is still there, still hit-tested, and still refusing.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+    }
     void on_focus(const FocusEvent& event) override;
+    // A button is one of the few views that really does look different
+    // under the pointer, so it is one of the few that pays for a repaint.
+    void on_hover_changed(bool) override { invalidate(); }
 
     // Whether the button is currently drawn depressed — exposed so a press
     // lifecycle can be asserted without scraping rendered cells.
     bool pressed() const noexcept { return pressed_; }
+
     void on_attached() override;
 
 private:
+    // Which of the five faces this button is currently wearing. Ordered by
+    // how much each state tells the reader: a press is happening now, focus
+    // says where the keyboard is, and hover only says where the pointer
+    // happens to be resting -- so hover is the first to be overruled.
+    ui::RoleId face_role() const noexcept {
+        if (pressed_) return pressed_role_;
+        if (has_focus_) return focused_role_;
+        if (hovered()) return hovered_role_;
+        return is_default_ ? default_role_ : normal_role_;
+    }
+
     void fire_press();
 
     std::string raw_text_;
     std::string display_text_;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId hovered_role_ = ui::kInvalidRole;
     ui::RoleId default_role_ = ui::kInvalidRole;
     ui::RoleId shadow_role_ = ui::kInvalidRole;
     ui::RoleId pressed_role_ = ui::kInvalidRole;

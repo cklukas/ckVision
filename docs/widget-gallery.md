@@ -609,15 +609,81 @@ used by controls that accept `&` mnemonic notation.
 
 ## MenuItem
 
-Header: `include/cvision/widgets/menu.hpp`. A menu row: prefer a
-`CommandPresentation` for command actions; use a callback row only for a truly
-local action such as opening a contextual dialog.
+Header: `include/cvision/widgets/menu.hpp`. A menu row, and exactly one kind
+of row: `MenuItem::command()`, `MenuItem::action()`, `MenuItem::submenu()` or
+`MenuItem::separator()`. The kind comes from the named constructor that made
+the row rather than from which of several optional fields happen to be filled
+in, so "a separator that also has a submenu" is not a state a menu can be
+asked to draw.
+
+Prefer a command row: its wording, chord hint and availability come from the
+registry, so the menu cannot disagree with the palette or the status line
+about them. A callback row is for a genuinely local action — opening a
+contextual dialog — and carries its own label and its own enabled flag,
+because nothing else could know either.
+
+Refinements chain onto any row: `.with_mark()` puts a check box or a radio
+mark in the left column, `.with_help()` names the topic F1 answers with while
+the row is highlighted, and `.with_disabled_reason()` gives a surface the
+words to explain a grey verb instead of leaving the reader to guess.
+
+## MenuMark
+
+Header: `include/cvision/widgets/menu.hpp`. What a row's left column shows:
+nothing, a check box (an independent switch), or a round mark (one choice out
+of a set). The two shapes differ because the promises differ — turning a radio
+row on turns its neighbour off, which a column of boxes would not say.
+
+## MenuItemKind
+
+Header: `include/cvision/widgets/menu.hpp`. Which of the four kinds a
+[MenuItem](#menuitem) is. Read it when walking a menu someone else built;
+never needed to construct one.
+
+## MenuHighlight
+
+Header: `include/cvision/widgets/menu.hpp`. What a menu reports about the row
+the reader is standing on: its command, its help topic, whether it is
+available and why not, or `none` once the menu closes. Following an open
+submenu chain to its innermost menu, because that is where the reader actually
+is. A status line explaining the current entry and an F1 that answers about it
+both read this, so the two cannot disagree about which row is meant.
 
 ## DropdownMenu
 
 Header: `include/cvision/widgets/menu.hpp`. A transient menu surface owned by
 the menu system. Arrow keys/mnemonics select, Enter activates, and Escape/light
 dismiss returns focus. Its `&` mnemonic uses the shared `ckv.hotkey` accent.
+
+Home and End go to the first and last row that can be chosen in whichever
+menu the reader is in, skipping a leading separator or a greyed first entry
+rather than being swallowed by one. With no menu open they are the menu bar's
+own ends.
+
+A submenu is a keyboard destination, not a pointer-only one. Right or Enter on
+an entry that has one opens it and the keys go to it — arrows move inside it,
+its own mnemonics reach its own entries — while the entry that opened it stays
+highlighted to mark the way in. Left or Escape steps back out onto that entry,
+one level at a time. Right where there is nothing deeper to open is not
+swallowed: below a [MenuBar](#menubar) it carries the walk on to the next
+top-level menu, closing the chain behind it. The highlight a listener hears
+about is the innermost menu's, so a status line explaining the current entry
+follows the reader into a submenu and back out again.
+
+The pointer reaches the same places. Hovering a row that has children opens
+them, and moving to a sibling closes them again — a submenu left standing over
+a row the reader has already left is a menu that no longer describes where the
+pointer is. Pressing such a row opens it too, so a drag can go straight down
+into a submenu and choose from it in one gesture.
+
+That works because a pointer gesture belongs to the whole chain of menus, not
+to whichever one holds the input capture at the moment. Capture follows the
+innermost menu, but a press that opens a submenu lands on the parent row and
+its release arrives after the new submenu has taken the capture over — so
+every pointer event goes to the menu of the chain the pointer is actually
+over, and to the chain's root when it is over none of them. A press that ends
+up outside every one of them therefore closes the whole chain in one click,
+not one level of it.
 
 ## MenuBarItem
 
@@ -629,6 +695,10 @@ rows, normally constructed before making a MenuBar.
 Header: `include/cvision/widgets/menu.hpp`. Dock it at the Desktop top. F10
 activates the standard menu command, mnemonics enter menus, Escape restores
 the preceding focus. Its mnemonic letters use the shared `ckv.hotkey` accent.
+Focus stays on the bar for as long as any of its menus is open, so the bar is
+what delivers keys to them — always to the innermost one, which is where the
+reader's highlight is. Left and Right walk the top-level menus, except where a
+[DropdownMenu](#dropdownmenu) has a submenu to enter or leave.
 The [Hello tutorial](tutorial-hello.md) shows it open.
 
 ## MenuBarAccessory

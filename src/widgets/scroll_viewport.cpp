@@ -33,6 +33,13 @@ std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> 
     return previous;
 }
 
+void ScrollViewport::scroll_to_bottom() {
+    // set_scroll clamps, so asking for more than there is lands exactly
+    // at the end rather than needing the extent computed here.
+    const int reach = content_ != nullptr ? content_->vertical_size_hint().preferred : 0;
+    set_scroll(scroll_x_, std::max(0, reach));
+}
+
 void ScrollViewport::set_scrollbars_always_visible(bool visible) noexcept {
     if (scrollbars_always_visible_ == visible) return;
     scrollbars_always_visible_ = visible;

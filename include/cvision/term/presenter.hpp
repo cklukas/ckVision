@@ -16,6 +16,7 @@
 
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
+#include "cvision/core/pointer_shape.hpp"
 #include "cvision/term/capabilities.hpp"
 #include "cvision/term/terminal.hpp"
 
@@ -35,13 +36,30 @@ public:
     // slice is cropped to its occlusion-sliced sub-rect (never the
     // whole image — a higher layer may be occluding the rest) and
     // emitted as Sixel data on top, per D-017/ARCHITECTURE.md §7.
+    // `pointer` is the shape the host's own mouse pointer should take,
+    // resolved by the ui layer from whatever the pointer is currently over.
+    // It is written after the frame and outside its synchronized bracket,
+    // because it is not part of the frame: a shape change with no cell
+    // change must still reach the host, and a frame with no cell change
+    // must still count as empty for frame-completion purposes.
     void present(FrameView frame, CursorState cursor,
-                 const std::vector<RasterSlice>& rasters = {});
+                 const std::vector<RasterSlice>& rasters = {},
+                 PointerShape pointer = PointerShape::Default);
 
     // Forces the next present() to treat the whole frame as changed —
     // callers use this after a resize or a capability change that
     // affects rendering (e.g. color depth).
-    void invalidate() noexcept { force_full_ = true; }
+    //
+    // It forgets the pointer shape as well, which is what re-states it
+    // after a capability probe: the query asking a host which shapes it has
+    // is, to a host that implements only the xterm proposal, an unknown
+    // shape name — and an unknown name resets the pointer. Forgetting means
+    // the next frame asks again rather than assuming the host still has
+    // what it was last told.
+    void invalidate() noexcept {
+        force_full_ = true;
+        previous_pointer_shape_name_.reset();
+    }
 
     // Exact payload size passed to Terminal::write() by the most recent
     // present(). This is a deterministic frame-cost counter: an unchanged
@@ -68,6 +86,12 @@ public:
     // Presenter was made. Compared against the backend's acknowledgement
     // count, the difference is how far ahead of the terminal we are.
     std::size_t frames_marked() const noexcept { return frames_marked_; }
+
+    // Whether the most recent present() put a picture on the wire. A frame
+    // that did is the expensive kind — a host decodes raster pixels, and
+    // that cost is why an application may want to let one finish before
+    // producing the next.
+    bool last_frame_carried_rasters() const noexcept { return last_frame_carried_rasters_; }
 
 private:
     // Everything an encoding depends on, and nothing else. Notably not where
@@ -124,6 +148,11 @@ private:
                       bool raster_coverage_changed, std::string& out);
     bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
+    // Writes the OSC 22 request for `shape` if the host would draw a
+    // different pointer than it is already drawing. Degradation happens
+    // here, against this terminal's own capabilities, so callers name the
+    // shape they mean and never the shape a particular host can manage.
+    void emit_pointer_shape(std::string& out, PointerShape shape);
     void emit_style(std::string& out, const Style& style) const;
     void emit_raster_slices(std::string& out, FrameView frame, std::vector<ActiveRaster>& rasters) const;
     // Marks every raster whose footprint the run [x, end) on row `y` paints
@@ -133,7 +162,7 @@ private:
     // the cache and the encoder cannot disagree about what was cached.
     EncodeKey encode_key(const RasterSlice& slice, std::uint64_t fingerprint) const noexcept;
     static std::uint64_t image_fingerprint(const Image& image) noexcept;
-    static bool same_rasters(const std::vector<ActiveRaster>& lhs,
+    static bool same_raster_geometry(const std::vector<ActiveRaster>& lhs,
                              const std::vector<ActiveRaster>& rhs) noexcept;
     bool raster_coverage_contains(Point point, const std::vector<ActiveRaster>& rasters) const noexcept;
     // The cells a raster's pixels can reach, which may exceed the cells it
@@ -146,6 +175,18 @@ private:
     std::string output_buffer_;
     Size previous_size_;
     std::optional<CursorState> previous_cursor_;
+    // The pointer-shape name this session last gave the host, or nothing
+    // while it has never given one. Held as the name rather than the shape
+    // because the name is what the host received: two shapes that degrade
+    // to one name are one request, and a vocabulary that changed mid-session
+    // makes the same shape a different request.
+    //
+    // The empty-versus-absent distinction matters on the first frame. A
+    // session with no opinion must not spend the reset sequence telling a
+    // host to keep the pointer it already has — and on a host that draws a
+    // deliberate pointer of its own while mouse reporting is on, that reset
+    // would be a visible change rather than a no-op.
+    std::optional<std::string> previous_pointer_shape_name_;
     // Reused scratch storage avoids repeated allocation for raster-state
     // tracking while retaining the previous frame's coverage for stale-pixel
     // removal.
@@ -158,6 +199,7 @@ private:
     std::size_t last_bytes_emitted_ = 0;
     bool track_frame_completion_ = false;
     std::size_t frames_marked_ = 0;
+    bool last_frame_carried_rasters_ = false;
 };
 
 // Encodes a style as the SGR sequence a host with these capabilities can

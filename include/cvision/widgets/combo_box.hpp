@@ -60,6 +60,10 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Opens its list when clicked, anywhere on it.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_resized() override;
 

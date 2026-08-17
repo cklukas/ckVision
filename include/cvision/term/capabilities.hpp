@@ -5,9 +5,11 @@
 // overridable by applications. Every field has a defined degradation.
 #pragma once
 
+#include <cstdint>
 #include <optional>
 
 #include "cvision/core/geometry.hpp"
+#include "cvision/term/pointer_shape_names.hpp"
 
 namespace ckv::term {
 
@@ -31,7 +33,15 @@ enum class KeyboardProtocol {
 enum class MouseProtocol {
     None,
     X10,  // legacy, no release events, coordinates capped at 223
-    SGR,  // modern, unlimited coordinates, distinguishes press/release
+    // Modern: unlimited coordinates, distinguishes press from release, and
+    // reports motion whether or not a button is held (DEC mode 1003 rather
+    // than 1002). The pointer's position between clicks is not a luxury —
+    // without it nothing can know what the pointer is over, so neither a
+    // pointer shape nor a hover highlight can exist at all. The cost is one
+    // report per cell the pointer crosses, decoded and routed like any
+    // other; a report the ui layer finds nothing new under is dropped
+    // before it reaches a view.
+    SGR,
 };
 
 enum class ColorScheme {
@@ -83,6 +93,34 @@ struct Capabilities {
     bool focus_events = false;         // DEC mode 1004
     bool bracketed_paste = false;      // DEC mode 2004
     bool hyperlinks = false;           // OSC 8
+    // Whether this session writes mouse pointer shapes (OSC 22).
+    //
+    // Alone among the fields here it does not record what a host answered,
+    // because the protocol affords no answer to record. Its query is
+    // optional, and the hosts that implement only the original xterm
+    // proposal — which is to say the hosts that draw the shapes perfectly
+    // well — never reply to anything. Silence is therefore not evidence of
+    // absence, and a capability that waited for proof would switch the
+    // feature off precisely where it works.
+    //
+    // Defaulting it on is safe in a way that no other unproven capability
+    // here would be: an unrecognized OSC is discarded by every conforming
+    // host, so the failure mode is that nothing happens. Contrast
+    // underline_styles, off by default because a host that misreads it
+    // draws the wrong thing. `CapabilityOverrides::pointer_shapes` turns it
+    // off for a host observed to do something stranger than ignore it.
+    bool pointer_shapes = true;
+    // Which spelling the session writes. Legacy until a host answers the
+    // support query, which only a host implementing the kitty
+    // specification does — and answering is what proves it can read the
+    // CSS names in the first place.
+    PointerShapeVocabulary pointer_shape_vocabulary = PointerShapeVocabulary::Legacy;
+    // One bit per PointerShape, in enum order, from a host's own answer to
+    // the support query. Meaningful only while pointer_shape_vocabulary is
+    // Standard; under Legacy no host has said anything and every shape is
+    // attempted. See host_draws_pointer_shape() below, which is what
+    // callers should ask rather than reading this directly.
+    std::uint32_t pointer_shapes_supported = 0;
     // The sub-parameter form of SGR 4 (`4:3` and friends) and the underline
     // colour SGR 58. Off by default and never assumed: a terminal that does
     // not know the colon form reads `4:3` as two parameters and applies
@@ -128,9 +166,40 @@ struct CapabilityOverrides {
     // outside the bracket that brackets the cells around it tears, and only
     // the person watching it can say so.
     std::optional<bool> synchronized_output;
+    // Silences OSC 22 for a host that does something other than ignore it.
+    // Forcing it on is meaningless and therefore not offered: it is already
+    // on, for every host, until this says otherwise.
+    std::optional<bool> pointer_shapes;
 
     friend bool operator==(const CapabilityOverrides&, const CapabilityOverrides&) = default;
 };
+
+// The bit `shape` occupies in Capabilities::pointer_shapes_supported.
+constexpr std::uint32_t pointer_shape_bit(PointerShape shape) noexcept {
+    return std::uint32_t{1} << static_cast<int>(shape);
+}
+
+// Whether this host will draw `shape` if asked. Under the legacy
+// vocabulary the honest answer is "nobody said otherwise", and that is the
+// answer given: the shapes are attempted, and a host that lacks one simply
+// does not change its pointer.
+constexpr bool host_draws_pointer_shape(const Capabilities& caps, PointerShape shape) noexcept {
+    if (!caps.pointer_shapes) return false;
+    if (caps.pointer_shape_vocabulary != PointerShapeVocabulary::Standard) return true;
+    return (caps.pointer_shapes_supported & pointer_shape_bit(shape)) != 0;
+}
+
+// The shape this host will actually be asked for when a view wants
+// `shape`: the request itself, or the nearest thing down its fallback
+// chain that the host has. Terminates because pointer_shape_fallback does.
+constexpr PointerShape effective_pointer_shape(const Capabilities& caps,
+                                               PointerShape shape) noexcept {
+    for (int guard = 0; guard < kPointerShapeCount; ++guard) {
+        if (shape == PointerShape::Default || host_draws_pointer_shape(caps, shape)) return shape;
+        shape = pointer_shape_fallback(shape);
+    }
+    return PointerShape::Default;
+}
 
 // Applies client policy without changing the observed capability record.
 // This pure function is shared by live and headless terminal backends so a
@@ -139,6 +208,7 @@ struct CapabilityOverrides {
 constexpr Capabilities apply_capability_overrides(Capabilities observed,
                                                    const CapabilityOverrides& overrides) noexcept {
     if (overrides.sixel_graphics) observed.sixel_graphics = *overrides.sixel_graphics;
+    if (overrides.pointer_shapes) observed.pointer_shapes = *overrides.pointer_shapes;
     if (overrides.cell_pixels) observed.cell_pixels = *overrides.cell_pixels;
     if (overrides.synchronized_output) observed.synchronized_output = *overrides.synchronized_output;
     if (overrides.sixel_color_registers) {
@@ -168,6 +238,9 @@ constexpr Capabilities baseline_capabilities() noexcept {
     caps.focus_events = true;
     caps.bracketed_paste = true;
     caps.hyperlinks = false;
+    caps.pointer_shapes = true;
+    caps.pointer_shape_vocabulary = PointerShapeVocabulary::Legacy;
+    caps.pointer_shapes_supported = 0;
     caps.underline_styles = false;
     caps.color_scheme = ColorScheme::Unknown;
     caps.color_scheme_notifications = false;
@@ -184,6 +257,10 @@ constexpr Capabilities capabilities_for_profile(TerminalProfile profile) noexcep
         case TerminalProfile::TmuxConservative: {
             Capabilities caps = baseline_capabilities();
             caps.mouse_protocol = MouseProtocol::None;
+            // A pointer shape is a statement about where the pointer is,
+            // and this profile is never told. Silence here is not caution
+            // about the escape code; it is that there is nothing to say.
+            caps.pointer_shapes = false;
             caps.focus_events = false;
             caps.bracketed_paste = false;
             caps.clipboard_write = false;

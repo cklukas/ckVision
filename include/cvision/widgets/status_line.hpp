@@ -84,6 +84,10 @@ public:
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Every item on it is a command that fires when clicked.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Pointer;
+    }
     void on_attached() override;
 
 private:

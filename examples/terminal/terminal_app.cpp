@@ -86,20 +86,20 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     widgets::MenuBarItem file_menu{
         "&File",
         {
-            widgets::MenuItem{widgets::CommandPresentation{new_terminal_command_}},
-            widgets::MenuItem{widgets::CommandPresentation{new_sixel_demo_command_}},
-            widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}},
+            widgets::MenuItem::command(widgets::CommandPresentation{new_terminal_command_}),
+            widgets::MenuItem::command(widgets::CommandPresentation{new_sixel_demo_command_}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}),
         },
     };
     widgets::MenuBarItem window_menu{
         "&Window",
         {
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().previous_window}},
-            widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().tile}},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().cascade}},
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().next_window}),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().previous_window}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().tile}),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().cascade}),
         },
     };
     // A focused terminal forwards its keys to the child, F1 included --
@@ -107,8 +107,8 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     // About where it can always be reached.
     widgets::MenuBarItem help_menu{
         "&Help",
-        {widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().help,
-                                                        "&About..."}}},
+        {widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help,
+                                                        "&About..."})},
     };
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles),

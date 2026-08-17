@@ -9,6 +9,7 @@
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
 #include "cvision/term/graphics_log.hpp"
+#include "cvision/term/pointer_shape_names.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 
 namespace ckv::term {
@@ -523,14 +524,21 @@ std::uint64_t Presenter::image_fingerprint(const Image& image) noexcept {
     return hash;
 }
 
-bool Presenter::same_rasters(const std::vector<ActiveRaster>& lhs,
-                             const std::vector<ActiveRaster>& rhs) noexcept {
+bool Presenter::same_raster_geometry(const std::vector<ActiveRaster>& lhs,
+                                     const std::vector<ActiveRaster>& rhs) noexcept {
+    // Geometry only, deliberately: what this comparison decides is whether
+    // the CELLS beneath the pictures have to be re-established, and cells
+    // care about where pictures are, not what they show. A picture replaced
+    // in place paints over every pixel of its predecessor, so re-clearing
+    // the cells under it buys nothing and costs the reader a visible hole:
+    // any render a host performs between the clear and the picture shows
+    // the cleared surface where the picture was (observed on iTerm2 as a
+    // blue flash, once per animation frame).
     if (lhs.size() != rhs.size()) return false;
     for (std::size_t index = 0; index < lhs.size(); ++index) {
         const RasterSlice& a = lhs[index].slice;
         const RasterSlice& b = rhs[index].slice;
-        if (a.id != b.id || !(a.visible_rect == b.visible_rect) || !(a.full_anchor == b.full_anchor) ||
-            a.image.get() != b.image.get() || lhs[index].fingerprint != rhs[index].fingerprint)
+        if (a.id != b.id || !(a.visible_rect == b.visible_rect) || !(a.full_anchor == b.full_anchor))
             return false;
     }
     return true;
@@ -561,8 +569,32 @@ Rect Presenter::raster_footprint(const RasterSlice& slice) noexcept {
     return Rect{visible.x, visible.y, visible.width + 1, visible.height + 1};
 }
 
+void Presenter::emit_pointer_shape(std::string& out, PointerShape shape) {
+    const Capabilities caps = terminal_.capabilities();
+    if (!caps.pointer_shapes) return;
+    // What this host will actually draw, which is what has to be compared
+    // against last time: two shapes that both degrade to the same pointer
+    // are the same request, and re-sending one of them changes nothing on
+    // screen while still costing bytes on every pointer move.
+    const PointerShape effective = effective_pointer_shape(caps, shape);
+    // Compared as the NAME rather than the shape, because the name is what
+    // the host is told and two shapes can share one. Both window corners
+    // resolve to the same legacy pointer, and the pointer crossing from one
+    // to the other would otherwise re-send identical bytes on every motion
+    // report for a screen that does not change.
+    const std::string_view name = pointer_shape_name(effective, caps.pointer_shape_vocabulary);
+    if (previous_pointer_shape_name_ && *previous_pointer_shape_name_ == name) return;
+    // Never asked, and still asking for nothing: the host is already
+    // showing whatever it shows by default.
+    if (!previous_pointer_shape_name_ && effective == PointerShape::Default) return;
+    previous_pointer_shape_name_ = std::string(name);
+    out += "\x1B]22;";
+    out += name;
+    out += "\x1B\\";
+}
+
 void Presenter::present(FrameView frame, CursorState cursor,
-                         const std::vector<RasterSlice>& rasters) {
+                         const std::vector<RasterSlice>& rasters, PointerShape pointer) {
     // Live timing of one frame, end to end. The interesting number is not the
     // work this process does but how long the host takes to swallow it: a
     // terminal decoding a quarter-megabyte Sixel blocks the write, and that
@@ -615,7 +647,8 @@ void Presenter::present(FrameView frame, CursorState cursor,
         }
         active_rasters_.push_back(std::move(active));
     }
-    const bool raster_coverage_changed = !same_rasters(active_rasters_, previous_active_rasters_);
+    const bool raster_coverage_changed =
+        !same_raster_geometry(active_rasters_, previous_active_rasters_);
 
     std::string& out = output_buffer_;
     out.clear();
@@ -643,6 +676,10 @@ void Presenter::present(FrameView frame, CursorState cursor,
         out += "\x1B[?25l";
     }
 
+    bool frame_sends_raster = false;
+    for (const ActiveRaster& active : active_rasters_)
+        frame_sends_raster = frame_sends_raster || active.needs_emit;
+
     if (terminal_.capabilities().synchronized_output && !out.empty()) {
         constexpr std::string_view kSynchronizedOutputBegin = "\x1B[?2026h";
         constexpr std::string_view kSynchronizedOutputEnd = "\x1B[?2026l";
@@ -664,10 +701,17 @@ void Presenter::present(FrameView frame, CursorState cursor,
     // frame is not asked about: there is nothing for the terminal to have
     // finished, and a question with no frame in front of it would only
     // measure the round trip of the question.
+    last_frame_carried_rasters_ = frame_sends_raster;
     if (track_frame_completion_ && !out.empty()) {
         out += "\x1B[5n";
         ++frames_marked_;
     }
+    // Last, and deliberately after both the synchronized bracket and the
+    // completion marker. The pointer is host state rather than frame
+    // content: a frame that changed no cell is still an empty frame, and
+    // must neither be bracketed nor asked about merely because the pointer
+    // moved from a button onto a window border.
+    emit_pointer_shape(out, pointer);
     last_bytes_emitted_ = out.size();
     const auto write_started = tracing ? std::chrono::steady_clock::now()
                                        : std::chrono::steady_clock::time_point{};

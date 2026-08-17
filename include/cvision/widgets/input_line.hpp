@@ -68,6 +68,17 @@ public:
     // owner's next accept attempt re-checks anyway.
     void set_valid(bool valid) noexcept;
     bool valid() const noexcept { return valid_; }
+    // Enter was pressed here — the reader is done with this field.
+    //
+    // A one-line field is very often the whole of a small interaction: a
+    // search box, a filter, a chat prompt, a rename. Without this, each
+    // of those has to subclass the widget to catch one key, which is how
+    // a toolkit ends up with five nearly identical subclasses. A dialog
+    // that wants Enter to mean "accept the form" leaves this unset and
+    // lets the window's own accept_request have it, which is why this
+    // fires only when something is listening.
+    std::function<void()> on_accept;
+
     void set_validator(std::function<bool(const std::string&)> validator);
 
     // Optional per-grapheme admission rule for interactive input. It applies
@@ -114,6 +125,11 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // A field the pointer can place a caret in and drag a selection
+    // across is text, by exactly the definition the shape exists for.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return enabled() ? PointerShape::Text : PointerShape::NotAllowed;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 

@@ -62,6 +62,20 @@ namespace ckv::spin {
 // slow rotation reads as motion.
 inline constexpr std::int64_t kFrameIntervalNanos = 60'000'000;
 
+// How many raster pixels a second this application will ask a terminal to
+// take in. It is not a property of the machine ckVision runs on: it is what
+// the TERMINAL can decode and paint, and terminals differ by an order of
+// magnitude. Sixel carries no completion report — a host answers a status
+// query from its parser long before its renderer has finished the picture
+// that query followed — so a rate is the only defence there is against
+// sending the next frame into a picture that is still being drawn, and the
+// symptom of getting it wrong is a half-painted image.
+//
+// The default is deliberately cautious. An application that has measured
+// its host raises it; CKVISION_SPIN_PIXEL_RATE does that from the command
+// line, and the frame-rate readout shows what was actually achieved.
+inline constexpr double kRasterPixelsPerSecond = 8'000'000.0;
+
 // The slowest the animation is allowed to become when the loop is
 // overloaded. A floor rather than a cliff: two frames a second still says
 // the application is alive and still leaves the loop almost entirely to
@@ -205,6 +219,13 @@ public:
     // ceiling an application asks for rather than one it imposes.
     void set_target_frame_interval(std::int64_t nanos);
     std::int64_t target_frame_interval_nanos() const noexcept { return target_interval_nanos_; }
+    // The raster budget above, as an application may tune it for a host it
+    // has measured. Zero or less restores the default.
+    void set_raster_pixel_rate(double pixels_per_second) noexcept;
+    double raster_pixel_rate() const noexcept { return raster_pixel_rate_; }
+    // The interval the pictures currently on screen need at that rate —
+    // what the pacer will not go faster than, whatever the target says.
+    std::int64_t raster_paced_interval_nanos() const;
     SpinView* view_at(std::size_t index) const noexcept;
     FrameReadout* readout_at(std::size_t index) const noexcept;
     // What this terminal said about pictures, in one sentence — the
@@ -240,6 +261,7 @@ private:
     std::vector<Panel> panels_;
     std::array<ui::CommandId, kShapeCount> commands_{};
     std::optional<ui::Application::TimerId> timer_;
+    double raster_pixel_rate_ = kRasterPixelsPerSecond;
     std::int64_t target_interval_nanos_ = kFrameIntervalNanos;
     std::int64_t interval_nanos_ = kFrameIntervalNanos;
     std::optional<std::int64_t> last_tick_nanos_;

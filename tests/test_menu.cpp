@@ -28,7 +28,7 @@ using ckv::widgets::Desktop;
 using ckv::widgets::DropdownMenu;
 using ckv::widgets::MenuBar;
 using ckv::widgets::MenuBarItem;
-using ckv::widgets::MenuItemCheck;
+using ckv::widgets::MenuMark;
 using ckv::widgets::MenuItem;
 using ckv::widgets::is_keyboard_context_menu_request;
 using ckv::widgets::show_context_menu;
@@ -78,12 +78,12 @@ CK_TEST(dropdown_highlights_the_first_item_by_default) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    auto menu = make_dropdown(f, app, {{"One", ui::kInvalidCommand, nullptr, false, {}, {}},
-                                        {"Two", ui::kInvalidCommand, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("One", {}),
+                                        MenuItem::action("Two", {})});
     CK_CHECK(menu->highlighted() == 0);
 }
 
-CK_TEST(dropdown_with_the_first_item_disabled_skips_it_at_construction) {
+CK_TEST(a_dropdown_opens_on_its_first_row_even_when_that_row_is_unavailable) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -91,9 +91,12 @@ CK_TEST(dropdown_with_the_first_item_disabled_skips_it_at_construction) {
     const ui::CommandId disabled_command = app.commands().declare(
         {.key = "test.disabled", .title = "Disabled"});
     app.commands().set_enabled_predicate(disabled_command, [] { return false; });
-    auto menu = make_dropdown(f, app, {{"One", disabled_command, nullptr, false, {}, {}},
-                                        {"Two", ui::kInvalidCommand, nullptr, false, {}, {}}});
-    CK_CHECK(menu->highlighted() == 1);
+    auto menu = make_dropdown(f, app, {MenuItem::command(disabled_command),
+                                        MenuItem::action("Two", {})});
+    // A grey verb is reachable: a reader who cannot stand on it cannot be
+    // told why it is grey, and that is the question a grey verb provokes.
+    CK_CHECK(menu->highlighted() == 0);
+    CK_CHECK(!menu->highlight().enabled);
 }
 
 CK_TEST(down_arrow_moves_to_the_next_item_and_wraps) {
@@ -101,8 +104,8 @@ CK_TEST(down_arrow_moves_to_the_next_item_and_wraps) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    auto menu = make_dropdown(f, app, {{"One", ui::kInvalidCommand, nullptr, false, {}, {}},
-                                        {"Two", ui::kInvalidCommand, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("One", {}),
+                                        MenuItem::action("Two", {})});
     menu->on_key(key(Key::Down));
     CK_CHECK(menu->highlighted() == 1);
     menu->on_key(key(Key::Down));
@@ -114,13 +117,13 @@ CK_TEST(up_arrow_wraps_backward_from_the_first_item) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    auto menu = make_dropdown(f, app, {{"One", ui::kInvalidCommand, nullptr, false, {}, {}},
-                                        {"Two", ui::kInvalidCommand, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("One", {}),
+                                        MenuItem::action("Two", {})});
     menu->on_key(key(Key::Up));
     CK_CHECK(menu->highlighted() == 1);
 }
 
-CK_TEST(navigation_skips_disabled_items_and_separators) {
+CK_TEST(navigation_skips_separators_but_stops_on_unavailable_rows) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -129,13 +132,18 @@ CK_TEST(navigation_skips_disabled_items_and_separators) {
         {.key = "test.disabled", .title = "Disabled"});
     app.commands().set_enabled_predicate(disabled_command, [] { return false; });
     auto menu = make_dropdown(f, app,
-                               {{"One", ui::kInvalidCommand, nullptr, false, {}, {}},
-                                {"", ui::kInvalidCommand, nullptr, true, {}, {}},  // separator
-                                {"Disabled", disabled_command, nullptr, false, {}, {}},
-                                {"Four", ui::kInvalidCommand, nullptr, false, {}, {}}});
+                               {MenuItem::action("One", {}),
+                                MenuItem::separator(),  // separator
+                                MenuItem::command(disabled_command),
+                                MenuItem::action("Four", {})});
     CK_CHECK(menu->highlighted() == 0);
     menu->on_key(key(Key::Down));
-    CK_CHECK(menu->highlighted() == 3);  // skips both the separator and the disabled item
+    // Over the separator — which is scenery — and onto the unavailable
+    // row, which is a place the reader may stand and read about.
+    CK_CHECK(menu->highlighted() == 2);
+    CK_CHECK(!menu->highlight().enabled);
+    menu->on_key(key(Key::Down));
+    CK_CHECK(menu->highlighted() == 3);
 }
 
 CK_TEST(a_dropdown_with_every_item_disabled_or_a_separator_has_no_selection) {
@@ -143,7 +151,7 @@ CK_TEST(a_dropdown_with_every_item_disabled_or_a_separator_has_no_selection) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    auto menu = make_dropdown(f, app, {{"", ui::kInvalidCommand, nullptr, true, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::separator()});
     CK_CHECK(menu->highlighted() == -1);
     // Enter is still consumed (the popup owns the key while open) even
     // though there's nothing to activate — it must not crash.
@@ -163,7 +171,7 @@ CK_TEST(enter_activates_the_highlighted_items_command) {
     app.set_command_handler(save_command, [&] { ran = true; });
     bool dismissed = false;
     auto reason = ckv::widgets::MenuDismissReason::Cancelled;
-    auto menu = make_dropdown(f, app, {{"&Save", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
     menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
         dismissed = true;
         reason = r;
@@ -180,7 +188,7 @@ CK_TEST(enter_activates_a_plain_on_activate_item_when_no_command_is_bound) {
     Application app(term, clock);
     Fixture f;
     bool ran = false;
-    auto menu = make_dropdown(f, app, {{"&Item", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("&Item", [&] { ran = true; })});
     menu->on_key(key(Key::Enter));
     CK_CHECK(ran);
 }
@@ -191,8 +199,8 @@ CK_TEST(mnemonic_key_activates_the_matching_item_directly) {
     Application app(term, clock);
     Fixture f;
     bool ran = false;
-    auto menu = make_dropdown(f, app, {{"&One", ui::kInvalidCommand, nullptr, false, {}, {}},
-                                        {"&Two", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("&One", {}),
+                                        MenuItem::action("&Two", [&] { ran = true; })});
     CK_CHECK(menu->on_key(key(Key::Char, "t")));  // case-insensitive
     CK_CHECK(ran);
 }
@@ -205,7 +213,7 @@ CK_TEST(escape_dismisses_without_activating_anything) {
     bool ran = false;
     bool dismissed = false;
     auto reason = ckv::widgets::MenuDismissReason::ItemChosen;
-    auto menu = make_dropdown(f, app, {{"&Item", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("&Item", [&] { ran = true; })});
     menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
         dismissed = true;
         reason = r;
@@ -226,7 +234,7 @@ CK_TEST(clicking_a_disabled_item_does_not_activate_it) {
     app.commands().set_enabled_predicate(disabled_command, [] { return false; });
     bool ran = false;
     app.set_command_handler(disabled_command, [&] { ran = true; });
-    auto menu = make_dropdown(f, app, {{"Disabled", disabled_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(disabled_command)});
     menu->set_bounds(Rect{5, 5, 20, 1});
     menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 5},
                                     std::nullopt, Modifier::None});
@@ -240,8 +248,8 @@ CK_TEST(mouse_activation_is_deferred_until_release_and_tracks_dragged_item) {
     Fixture f;
     bool first = false;
     bool second = false;
-    auto menu = make_dropdown(f, app, {{"First", ui::kInvalidCommand, [&] { first = true; }, false, {}, {}},
-                                        {"Second", ui::kInvalidCommand, [&] { second = true; }, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("First", [&] { first = true; }),
+                                        MenuItem::action("Second", [&] { second = true; })});
     menu->set_bounds(Rect{5, 5, 14, 2});
     menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 5},
                                    std::nullopt, Modifier::None});
@@ -260,9 +268,9 @@ CK_TEST(mouse_release_on_a_divider_cancels_the_pending_activation) {
     Application app(term, clock);
     Fixture f;
     bool ran = false;
-    auto menu = make_dropdown(f, app, {{"Run", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}},
-                                        {"", ui::kInvalidCommand, {}, true, {}, {}},
-                                        {"Other", ui::kInvalidCommand, {}, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("Run", [&] { ran = true; }),
+                                        MenuItem::separator(),
+                                        MenuItem::action("Other", {})});
     menu->set_bounds(Rect{5, 5, 14, 3});
     menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 5},
                                    std::nullopt, Modifier::None});
@@ -280,7 +288,7 @@ CK_TEST(clicking_outside_the_dropdowns_bounds_dismisses_it_without_activating) {
     Fixture f;
     bool ran = false;
     bool dismissed = false;
-    auto menu = make_dropdown(f, app, {{"&Item", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::action("&Item", [&] { ran = true; })});
     menu->set_bounds(Rect{5, 5, 20, 1});
     auto reason = ckv::widgets::MenuDismissReason::ItemChosen;
     menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
@@ -308,7 +316,7 @@ CK_TEST(an_item_referencing_a_command_renders_the_registered_title_not_its_own_l
         {.key = "test.save", .title = "&Save"});
     // The label below ("Ignored") must never appear anywhere — an item
     // referencing a command carries no label text of its own.
-    auto menu = make_dropdown(f, app, {{"Ignored", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -327,7 +335,7 @@ CK_TEST(an_item_referencing_a_command_with_no_chord_bound_shows_no_chord_hint) {
     Fixture f;
     const ui::CommandId save_command = app.commands().declare(
         {.key = "test.save", .title = "&Save"});  // no default_chord
-    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -346,7 +354,7 @@ CK_TEST(an_item_referencing_a_command_with_a_bound_chord_shows_it_right_aligned)
     Fixture f;
     const ui::CommandId save_command = app.commands().declare(
         {.key = "test.save", .title = "&Save", .category = "File", .chord = "Ctrl+S"});
-    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -371,7 +379,7 @@ CK_TEST(a_runtime_rebind_changes_the_rendered_chord_hint_without_touching_the_it
     Fixture f;
     const ui::CommandId save_command = app.commands().declare(
         {.key = "test.save", .title = "&Save", .category = "File", .chord = "Ctrl+S"});
-    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     app.commands().unbind_key(KeyChord{Key::Char, Modifier::Ctrl, "s"});
@@ -393,7 +401,7 @@ CK_TEST(a_narrow_dropdown_clips_label_and_chord_columns_without_leaving_garbage)
     Fixture f;
     const ui::CommandId save_command = app.commands().declare(
         {.key = "test.save", .title = "&Very Long Save Command", .category = "File", .chord = "Ctrl+S"});
-    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
     menu->set_bounds(Rect{0, 0, 5, 1});
 
     Surface s(ckv::Size{5, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -415,7 +423,7 @@ CK_TEST(mnemonic_navigation_uses_the_registered_title_not_the_items_own_label) {
     bool ran = false;
     const CommandId save_command = app.commands().declare({.key = "test.save", .title = "&Save"});
     app.set_command_handler(save_command, [&] { ran = true; });
-    auto menu = make_dropdown(f, app, {{"&Ignored", save_command, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {MenuItem::command(save_command)});
 
     CK_CHECK(!menu->on_key(key(Key::Char, "i")));
     CK_CHECK(!ran);
@@ -428,10 +436,9 @@ CK_TEST(checkable_items_render_a_stable_check_column) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    MenuItem checked{"&Checked", ui::kInvalidCommand, [] {}, false, {}, {}};
-    checked.check = MenuItemCheck::Checked;
-    MenuItem unchecked{"&Unchecked", ui::kInvalidCommand, [] {}, false, {}, {}};
-    unchecked.check = MenuItemCheck::Unchecked;
+    const MenuItem checked = MenuItem::action("&Checked", [] {}).with_mark(MenuMark::Checked);
+    const MenuItem unchecked =
+        MenuItem::action("&Unchecked", [] {}).with_mark(MenuMark::Unchecked);
     auto menu = make_dropdown(f, app, {checked, unchecked});
     menu->set_bounds(Rect{0, 0, 16, 2});
 
@@ -464,7 +471,7 @@ CK_TEST(activate_gives_the_bar_focus_and_deactivate_restores_the_previous_focus)
     mf.app.set_focus(other);
 
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
 
     bar->activate();
@@ -498,7 +505,7 @@ CK_TEST(choosing_an_item_hands_focus_back_before_the_command_runs) {
     });
 
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&Help", {{"&About", about_command, nullptr, false, {}, {}}}}});
+        {"&Help", {MenuItem::command(about_command)}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
 
     bar->activate();
@@ -540,7 +547,7 @@ CK_TEST(clicking_the_bar_to_open_it_still_restores_the_true_prior_focus_on_escap
     Desktop* desktop = static_cast<Desktop*>(mf.app.root().add_child(std::move(desktop_owned)));
 
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(desktop->add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 80, 1});
 
@@ -557,7 +564,7 @@ CK_TEST(clicking_the_bar_to_open_it_still_restores_the_true_prior_focus_on_escap
 CK_TEST(enter_opens_a_dropdown_as_a_desktop_popup) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
 
     bar->activate();
@@ -588,8 +595,8 @@ CK_TEST(mouse_drag_from_a_menu_bar_item_switches_dropdown_before_release) {
     MenuBarFixture mf;
     bool ran = false;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"Open", ui::kInvalidCommand, {}, false, {}, {}}}},
-        {"&Window", {{"Tile", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}}},
+        {"&File", {MenuItem::action("Open", {})}},
+        {"&Window", {MenuItem::action("Tile", [&] { ran = true; })}},
     });
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 40, 1});
@@ -615,8 +622,8 @@ CK_TEST(captured_menu_bar_pointer_gesture_keeps_dropdown_open_until_release_over
     auto desktop_owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(mf.app.root().add_child(std::move(desktop_owned)));
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&Open", ui::kInvalidCommand, [&] { file_ran = true; }, false, {}, {}}}},
-        {"&Window", {{"&Tile", ui::kInvalidCommand, [&] { window_ran = true; }, false, {}, {}}}},
+        {"&File", {MenuItem::action("&Open", [&] { file_ran = true; })}},
+        {"&Window", {MenuItem::action("&Tile", [&] { window_ran = true; })}},
     });
     MenuBar* bar = static_cast<MenuBar*>(desktop->add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 40, 1});
@@ -669,8 +676,8 @@ private:
 
 MenuBar* bar_with_trailing_probe(MenuBarFixture& mf, TrailingProbe** probe) {
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}},
-        {"&Help", {{"&About", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        {"&File", {MenuItem::action("&Open", {})}},
+        {"&Help", {MenuItem::action("&About", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 80, 1});
     *probe = bar->set_trailing_view(std::make_unique<TrailingProbe>());
@@ -735,7 +742,7 @@ CK_TEST(a_menu_opened_by_mnemonic_takes_the_highlight_off_the_trailing_title) {
 CK_TEST(escape_closes_an_open_dropdown_first_without_deactivating_the_bar) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
     mf.app.dispatch(key(Key::Enter));  // opens the dropdown
@@ -757,7 +764,7 @@ CK_TEST(menu_bar_routes_item_mnemonics_to_its_open_dropdown) {
         {.key = "test.open", .title = "&Open", .handler = [&] { opened = true; }});
 
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{ {"&File", {{"", open_command, nullptr, false, {}, {}}}} });
+        std::vector<MenuBarItem>{ {"&File", {MenuItem::command(open_command)}} });
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
     CK_CHECK(bar->on_key(key(Key::Enter)));
@@ -771,7 +778,7 @@ CK_TEST(menu_bar_routes_item_mnemonics_to_its_open_dropdown) {
 CK_TEST(destroying_the_bar_while_a_dropdown_is_open_cleans_up_the_popup_and_input_capture) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
     mf.app.dispatch(key(Key::Enter));
@@ -801,8 +808,8 @@ CK_TEST(left_and_right_move_the_highlighted_menu_and_wrap) {
 CK_TEST(mnemonic_letter_opens_the_matching_top_level_menu) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}},
-                                  {"&Edit", {{"&Copy", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}},
+                                  {"&Edit", {MenuItem::action("&Copy", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
     CK_CHECK(bar->on_key(key(Key::Char, "e")));
@@ -843,7 +850,7 @@ CK_TEST(menu_mnemonics_use_the_shared_hotkey_accent_on_each_surface) {
     CK_CHECK(bar_surface.at(ckv::Point{2, 0}).style().fg == mf.f.theme.resolve(mf.f.roles.hotkey).fg);
     CK_CHECK(bar_surface.at(ckv::Point{2, 0}).style().bg == mf.f.theme.resolve(mf.f.roles.menu_bar_normal).bg);
 
-    auto menu = make_dropdown(mf.f, mf.app, {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(mf.f, mf.app, {MenuItem::action("&Open", {})});
     menu->set_bounds(Rect{0, 0, 12, 1});
     Surface menu_surface(ckv::Size{12, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter menu_painter(menu_surface, Rect{0, 0, 12, 1});
@@ -859,9 +866,9 @@ CK_TEST(a_popup_dropdown_has_an_opaque_classic_frame_and_padded_item_interior) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    auto menu = make_dropdown(f, app, { {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}},
-                                       {"", ui::kInvalidCommand, nullptr, true, {}, {}},
-                                       {"&Quit", ui::kInvalidCommand, nullptr, false, {}, {}} });
+    auto menu = make_dropdown(f, app, { MenuItem::action("&Open", {}),
+                                       MenuItem::separator(),
+                                       MenuItem::action("&Quit", {}) });
     const ui::SizeHint width = menu->horizontal_size_hint();
     const ui::SizeHint height = menu->vertical_size_hint();
     menu->set_bounds(Rect{0, 0, width.preferred, height.preferred});
@@ -888,10 +895,9 @@ CK_TEST(a_submenu_marker_and_a_chord_hint_end_at_the_same_column) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    MenuItem opens_submenu{"&New", ui::kInvalidCommand, nullptr, false, {}, {}};
-    opens_submenu.submenu = {MenuItem{"&Child", ui::kInvalidCommand, [] {}, false, {}, {}}};
+    const MenuItem opens_submenu = MenuItem::submenu("&New", {MenuItem::action("&Child", [] {})});
     auto menu = make_dropdown(
-        f, app, {opens_submenu, MenuItem{ckv::widgets::CommandPresentation{standard(app).quit}}});
+        f, app, {opens_submenu, MenuItem::command(ckv::widgets::CommandPresentation{standard(app).quit})});
     const int width = menu->horizontal_size_hint().preferred;
     const int height = menu->vertical_size_hint().preferred;
     menu->set_bounds(Rect{0, 0, width, height});
@@ -919,8 +925,8 @@ CK_TEST(a_submenu_marker_and_a_chord_hint_end_at_the_same_column) {
 CK_TEST(a_context_menu_keeps_its_frame_inside_the_desktop_at_the_bottom_right_edge) {
     MenuBarFixture mf;
     DropdownMenu* menu = show_context_menu(
-        {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}},
-         {"&Quit", ui::kInvalidCommand, nullptr, false, {}, {}}},
+        {MenuItem::action("&Open", {}),
+         MenuItem::action("&Quit", {})},
         ckv::Point{79, 23}, mf.app, mf.desktop);
 
     const Rect bounds = menu->bounds();
@@ -948,8 +954,8 @@ CK_TEST(attaching_a_menu_bar_installs_itself_as_f10s_default_handler) {
 
 CK_TEST(f10_restarts_top_level_mnemonic_navigation_after_a_previous_menu) {
     MenuBarFixture mf;
-    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {{"Open"}}},
-                                                                          {"&Appearance", {{"Colors"}}}});
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {MenuItem::action("Open", {})}},
+         {"&Appearance", {MenuItem::action("Colors", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     mf.app.commands().execute(standard(mf.app).menu);
     CK_CHECK(bar->on_key(key(Key::Right)));
@@ -961,7 +967,7 @@ CK_TEST(f10_restarts_top_level_mnemonic_navigation_after_a_previous_menu) {
     const auto* popup = dynamic_cast<const DropdownMenu*>(mf.desktop.popups().front());
     CK_CHECK(popup != nullptr);
     if (popup != nullptr && !popup->items().empty())
-        CK_CHECK(popup->items().front().label == "Colors");
+        CK_CHECK(popup->items().front().label() == "Colors");
 }
 
 CK_TEST(a_pre_existing_kmenu_handler_is_not_overridden_by_attaching_a_menu_bar) {
@@ -1022,17 +1028,26 @@ CK_TEST(an_items_on_activate_that_reopens_another_menu_does_not_crash_the_activa
     // menu, which must close (and destroy) the dropdown this activation
     // started from.
     MenuBarFixture mf;
+    // The item's own action reopens another menu, destroying the dropdown
+    // it is being activated from — the hazard the original bug required.
+    // The action is part of the item, so it is written when the menu is
+    // built; the bar it needs does not exist until just after, which the
+    // holder bridges.
+    auto bar_holder = std::make_shared<MenuBar*>(nullptr);
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&Reopen", ui::kInvalidCommand, nullptr, false, {}, {}}}}, {"&Edit", {}}});
+        {"&File", {MenuItem::action("&Reopen",
+                                    [bar_holder] {
+                                        if (*bar_holder != nullptr)
+                                            (*bar_holder)->on_key(key(Key::Right));
+                                    })}},
+        {"&Edit", {}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    *bar_holder = bar;
     bar->activate();
     bar->on_key(key(Key::Enter));  // opens File's dropdown
     CK_CHECK(mf.desktop.popups().size() == 1);
 
     auto* dropdown = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
-    // Reassign on_activate on the live item to close-and-reopen — the
-    // hazard the original bug required.
-    const_cast<MenuItem&>(dropdown->items()[0]).on_activate = [bar] { bar->on_key(key(Key::Right)); };
     dropdown->on_key(key(Key::Enter));  // activates the item, which reopens Edit's (empty) dropdown
     CK_CHECK(true);  // reaching this line without a crash/ASan report IS the assertion
 }
@@ -1042,7 +1057,7 @@ CK_TEST(an_items_on_activate_that_reopens_another_menu_does_not_crash_the_activa
 CK_TEST(a_popup_removed_by_something_other_than_the_bar_still_lets_the_bar_recover_correctly) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&File", {{"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
     mf.app.dispatch(key(Key::Enter));
@@ -1066,8 +1081,8 @@ CK_TEST(a_popup_removed_by_something_other_than_the_bar_still_lets_the_bar_recov
 
 CK_TEST(right_arrow_opens_a_nested_submenu_and_escape_closes_one_level) {
     MenuBarFixture mf;
-    MenuItem more{"&More", ui::kInvalidCommand, nullptr, false, {}, {}};
-    more.submenu = {MenuItem{"&Child", ui::kInvalidCommand, [] {}, false, {}, {}}};
+    const MenuItem more =
+        MenuItem::submenu("&More", {MenuItem::action("&Child", [] {})});
     DropdownMenu* root = show_context_menu({more}, ckv::Point{2, 2}, mf.app, mf.desktop);
 
     CK_CHECK(mf.desktop.popups().size() == 1);
@@ -1086,18 +1101,313 @@ CK_TEST(right_arrow_opens_a_nested_submenu_and_escape_closes_one_level) {
 CK_TEST(activating_a_nested_leaf_closes_the_whole_menu_chain_before_running_it) {
     MenuBarFixture mf;
     bool ran = false;
-    MenuItem more{"&More", ui::kInvalidCommand, nullptr, false, {}, {}};
-    more.submenu = {MenuItem{"&Child", ui::kInvalidCommand, [&] {
+    const MenuItem more = MenuItem::submenu("&More", {MenuItem::action("&Child", [&] {
                                   CK_CHECK(mf.desktop.popups().empty());
                                   CK_CHECK(mf.app.input_capture() == nullptr);
                                   ran = true;
-                              }, false, {}, {}}};
+                              })});
     DropdownMenu* root = show_context_menu({more}, ckv::Point{2, 2}, mf.app, mf.desktop);
     CK_CHECK(root->on_key(key(Key::Right)));
     auto* child = static_cast<DropdownMenu*>(mf.desktop.popups()[1]);
 
     CK_CHECK(child->on_key(key(Key::Enter)));
     CK_CHECK(ran);
+}
+
+// --- A submenu below a menu bar is a keyboard destination -----------------
+
+namespace {
+// The shape a document application's File menu has: an entry that opens a
+// submenu, a plain entry beside it, and a second top-level menu — enough to
+// tell "step deeper" from "step along" and to prove each still happens where
+// the other does not.
+MenuBar* bar_with_a_submenu(MenuBarFixture& mf, bool& chose_text) {
+    const MenuItem new_item = MenuItem::submenu("&New", {MenuItem::action("&Sheet", [] {}),
+        MenuItem::action("&Text", [&chose_text] { chose_text = true; })});
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {new_item, MenuItem::action("&Close", [] {})}},
+        {"&Window", {MenuItem::action("&Tile", [] {})}},
+    });
+    return static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+}
+
+// Opens File and steps into New's submenu, the way a reader does: F10-
+// equivalent activation, Enter to drop the menu, Right to go deeper.
+MenuBar* open_the_submenu(MenuBarFixture& mf, bool& chose_text) {
+    MenuBar* bar = bar_with_a_submenu(mf, chose_text);
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));
+    mf.app.dispatch(key(Key::Right));
+    return bar;
+}
+}  // namespace
+
+CK_TEST(right_enters_the_submenu_and_the_arrows_then_move_inside_it) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    MenuBar* bar = bar_with_a_submenu(mf, chose_text);
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));  // File drops, standing on "New"
+    CK_CHECK(mf.desktop.popups().size() == 1);
+
+    mf.app.dispatch(key(Key::Right));
+    CK_CHECK(mf.desktop.popups().size() == 2);
+    auto* root = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
+    auto* submenu = static_cast<DropdownMenu*>(mf.desktop.popups()[1]);
+    CK_CHECK(mf.app.input_capture() == submenu);
+    CK_CHECK(submenu->highlighted() == 0);
+
+    // The arrow belongs to the menu the reader is looking at. Before this,
+    // it went to the parent, which closed the submenu on the way past.
+    mf.app.dispatch(key(Key::Down));
+    CK_CHECK(mf.desktop.popups().size() == 2);
+    CK_CHECK(submenu->highlighted() == 1);
+    CK_CHECK(root->highlighted() == 0);  // "New" still marks the way in
+
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(chose_text);
+    CK_CHECK(mf.desktop.popups().empty());
+    CK_CHECK(!bar->active());
+}
+
+CK_TEST(enter_opens_a_submenu_the_same_way_right_does) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    MenuBar* bar = bar_with_a_submenu(mf, chose_text);
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));  // File drops, standing on "New"
+
+    mf.app.dispatch(key(Key::Enter));  // choosing an entry that IS a submenu
+    CK_CHECK(mf.desktop.popups().size() == 2);
+    CK_CHECK(static_cast<DropdownMenu*>(mf.desktop.popups()[1])->highlighted() == 0);
+}
+
+CK_TEST(a_submenu_mnemonic_reaches_the_submenus_own_items) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    open_the_submenu(mf, chose_text);
+
+    mf.app.dispatch(key(Key::Char, "t"));  // "&Text", inside the submenu
+    CK_CHECK(chose_text);
+    CK_CHECK(mf.desktop.popups().empty());
+}
+
+CK_TEST(left_inside_a_submenu_returns_to_the_item_that_opened_it) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    open_the_submenu(mf, chose_text);
+    auto* root = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
+
+    mf.app.dispatch(key(Key::Left));
+
+    CK_CHECK(mf.desktop.popups().size() == 1);  // one level, not the whole menu
+    CK_CHECK(mf.desktop.popups()[0] == root);
+    CK_CHECK(mf.app.input_capture() == root);
+    CK_CHECK(root->highlighted() == 0);  // back on "New", which is where it came from
+
+    // And the bar has Left back now that there is no submenu to leave: the
+    // next one steps to the previous top-level menu, wrapping onto Window.
+    mf.app.dispatch(key(Key::Left));
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(static_cast<DropdownMenu*>(mf.desktop.popups()[0])->items()[0].label() == "&Tile");
+}
+
+CK_TEST(escape_inside_a_submenu_closes_only_the_submenu) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    MenuBar* bar = open_the_submenu(mf, chose_text);
+    auto* root = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
+
+    mf.app.dispatch(key(Key::Escape));
+    CK_CHECK(bar->active());
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(mf.desktop.popups()[0] == root);
+    CK_CHECK(mf.app.input_capture() == root);
+
+    mf.app.dispatch(key(Key::Escape));  // the second one leaves the menu system
+    CK_CHECK(!bar->active());
+    CK_CHECK(mf.desktop.popups().empty());
+}
+
+CK_TEST(right_where_there_is_nowhere_deeper_still_walks_on_to_the_next_menu) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    MenuBar* bar = bar_with_a_submenu(mf, chose_text);
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));
+    mf.app.dispatch(key(Key::Down));  // "Close": an entry with no submenu
+
+    mf.app.dispatch(key(Key::Right));
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(static_cast<DropdownMenu*>(mf.desktop.popups()[0])->items()[0].label() == "&Tile");
+}
+
+CK_TEST(right_on_a_submenu_leaf_leaves_the_whole_chain_for_the_next_menu) {
+    MenuBarFixture mf;
+    bool chose_text = false;
+    open_the_submenu(mf, chose_text);  // standing on "Sheet", which opens nothing
+
+    mf.app.dispatch(key(Key::Right));
+    CK_CHECK(mf.desktop.popups().size() == 1);  // the submenu went with its parent
+    CK_CHECK(static_cast<DropdownMenu*>(mf.desktop.popups()[0])->items()[0].label() == "&Tile");
+    CK_CHECK(!chose_text);
+}
+
+CK_TEST(the_highlight_a_bar_reports_follows_the_reader_into_a_submenu) {
+    // Declared before the fixture so it is destroyed after it: tearing the
+    // bar down closes its drop-down, which reports one last highlight, and
+    // an observer capturing something already off the stack is read there.
+    std::vector<CommandId> reported;
+    MenuBarFixture mf;
+    const MenuItem new_item = MenuItem::submenu("&New", {MenuItem::command(ckv::widgets::CommandPresentation{standard(mf.app).quit})});
+    auto bar_owned =
+        std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {new_item}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->on_highlight_changed = [&reported](const ckv::widgets::MenuHighlight& highlight) {
+        reported.push_back(highlight.command);
+    };
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Enter));  // "New" runs nothing; it only opens
+    CK_CHECK(!reported.empty());
+    CK_CHECK(reported.back() == ui::kInvalidCommand);
+
+    mf.app.dispatch(key(Key::Right));
+    CK_CHECK(reported.back() == standard(mf.app).quit);  // what the reader is now on
+
+    mf.app.dispatch(key(Key::Left));
+    CK_CHECK(reported.back() == ui::kInvalidCommand);  // and back on the parent entry
+}
+
+// --- ...and a pointer destination, through the whole chain ----------------
+
+namespace {
+// The pointer tests go through Application::dispatch rather than calling
+// on_mouse directly, because what they are about IS the dispatch: input
+// capture moves to a submenu the instant it opens, and the release that ends
+// the press which opened it arrives afterwards. That needs a Desktop both
+// under app.root() — so the hit-test and capture can reach it — and the bar's
+// own parent, for MenuBar's parent-walk.
+struct PointerMenuFixture {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    Fixture f;
+    Desktop* desktop = nullptr;
+    MenuBar* bar = nullptr;
+    bool chose_text = false;
+
+    PointerMenuFixture() {
+        app.root().set_context(ui::Context{&f.theme, &f.registry, &app});
+        desktop = static_cast<Desktop*>(
+            app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 80, 24})));
+        auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+            {"&File", {MenuItem::submenu("&New", {MenuItem::action("&Sheet", [] {}),
+                                                   MenuItem::action("&Text", [this] { chose_text = true; })}),
+                        MenuItem::action("&Close", [] {})}},
+            {"&Window", {MenuItem::action("&Tile", [] {})}},
+        });
+        bar = static_cast<MenuBar*>(desktop->add_child(std::move(bar_owned)));
+        bar->set_bounds(Rect{0, 0, 80, 1});
+    }
+
+    DropdownMenu* popup(std::size_t index) const {
+        return static_cast<DropdownMenu*>(desktop->popups()[index]);
+    }
+    std::size_t popups() const noexcept { return desktop->popups().size(); }
+
+    void send(ckv::MouseAction action, ckv::Point cell) {
+        app.dispatch(ckv::MouseEvent{action, ckv::MouseButton::Left, cell, std::nullopt, Modifier::None});
+    }
+    // A press and release on the File title, which is how a reader opens it.
+    void click_the_file_title() {
+        send(ckv::MouseAction::Down, ckv::Point{3, 0});
+        send(ckv::MouseAction::Up, ckv::Point{3, 0});
+    }
+    // A cell on one row's label: inside the frame, clear of both borders.
+    static ckv::Point row(const DropdownMenu& menu, int index) {
+        const Rect b = menu.absolute_bounds();
+        return ckv::Point{b.x + 2, b.y + 1 + index};
+    }
+};
+}  // namespace
+
+CK_TEST(the_release_that_ends_the_press_which_opened_a_submenu_leaves_it_open) {
+    PointerMenuFixture pf;
+    pf.click_the_file_title();
+    CK_CHECK(pf.popups() == 1);
+    const ckv::Point on_new = PointerMenuFixture::row(*pf.popup(0), 0);
+
+    pf.send(ckv::MouseAction::Down, on_new);
+    CK_CHECK(pf.popups() == 2);  // the press opens it
+
+    // ...and the release does not take it straight back again. The submenu
+    // holds the capture by now, and this release is over a point it does not
+    // contain — read as a click outside itself it dismissed the menu in the
+    // same breath as opening it.
+    pf.send(ckv::MouseAction::Up, on_new);
+    CK_CHECK(pf.popups() == 2);
+}
+
+CK_TEST(a_submenu_row_can_be_clicked_once_the_submenu_stays_up) {
+    PointerMenuFixture pf;
+    pf.click_the_file_title();
+    const ckv::Point on_new = PointerMenuFixture::row(*pf.popup(0), 0);
+    pf.send(ckv::MouseAction::Down, on_new);
+    pf.send(ckv::MouseAction::Up, on_new);
+
+    const ckv::Point on_text = PointerMenuFixture::row(*pf.popup(1), 1);
+    pf.send(ckv::MouseAction::Move, on_text);
+    CK_CHECK(pf.popup(1)->highlight().command == ui::kInvalidCommand);  // an action row
+    pf.send(ckv::MouseAction::Down, on_text);
+    pf.send(ckv::MouseAction::Up, on_text);
+
+    CK_CHECK(pf.chose_text);
+    CK_CHECK(pf.popups() == 0);
+    CK_CHECK(!pf.bar->active());
+}
+
+CK_TEST(a_press_on_the_parent_row_can_be_dragged_into_the_submenu_and_released_there) {
+    PointerMenuFixture pf;
+    pf.click_the_file_title();
+    const ckv::Point on_new = PointerMenuFixture::row(*pf.popup(0), 0);
+
+    pf.send(ckv::MouseAction::Down, on_new);  // one gesture, begun on the parent...
+    const ckv::Point on_text = PointerMenuFixture::row(*pf.popup(1), 1);
+    pf.send(ckv::MouseAction::Move, on_text);
+    pf.send(ckv::MouseAction::Up, on_text);   // ...and ended in the child
+
+    CK_CHECK(pf.chose_text);
+    CK_CHECK(pf.popups() == 0);
+}
+
+CK_TEST(the_pointer_moving_back_onto_a_row_without_children_closes_the_submenu) {
+    PointerMenuFixture pf;
+    pf.click_the_file_title();
+    DropdownMenu* root = pf.popup(0);
+    pf.send(ckv::MouseAction::Down, PointerMenuFixture::row(*root, 0));
+    pf.send(ckv::MouseAction::Up, PointerMenuFixture::row(*root, 0));
+    CK_CHECK(pf.popups() == 2);
+
+    // The submenu holds the capture, so this move only reaches the parent
+    // because the chain hands it to the menu the pointer is actually over.
+    pf.send(ckv::MouseAction::Move, PointerMenuFixture::row(*root, 1));
+    CK_CHECK(pf.popups() == 1);
+    CK_CHECK(pf.desktop->popups()[0] == root);
+    CK_CHECK(pf.app.input_capture() == root);
+    CK_CHECK(root->highlighted() == 1);  // standing on "Close"
+}
+
+CK_TEST(a_press_outside_every_menu_of_the_chain_closes_all_of_them_at_once) {
+    PointerMenuFixture pf;
+    pf.click_the_file_title();
+    pf.send(ckv::MouseAction::Down, PointerMenuFixture::row(*pf.popup(0), 0));
+    pf.send(ckv::MouseAction::Up, PointerMenuFixture::row(*pf.popup(0), 0));
+    CK_CHECK(pf.popups() == 2);
+
+    pf.send(ckv::MouseAction::Down, ckv::Point{70, 20});
+    CK_CHECK(pf.popups() == 0);  // not one level, and not needing a second click
 }
 
 // --- Regression: Window::toggle_zoom bypassing clamp_size (review finding #4) ---
@@ -1120,7 +1430,7 @@ CK_TEST(zooming_into_an_area_smaller_than_the_windows_minimum_size_still_clamps)
 CK_TEST(show_context_menu_opens_a_popup_with_input_capture_at_the_given_position) {
     MenuBarFixture mf;
     auto* popup = ckv::widgets::show_context_menu(
-        {{"&Copy", ui::kInvalidCommand, nullptr, false, {}, {}}, {"&Paste", ui::kInvalidCommand, nullptr, false, {}, {}}},
+        {MenuItem::action("&Copy", {}), MenuItem::action("&Paste", {})},
         ckv::Point{10, 10}, mf.app, mf.desktop);
     CK_CHECK(mf.desktop.popups().size() == 1);
     CK_CHECK(mf.app.input_capture() == popup);
@@ -1130,7 +1440,7 @@ CK_TEST(show_context_menu_opens_a_popup_with_input_capture_at_the_given_position
 
 CK_TEST(show_context_menu_self_removes_and_clears_capture_on_escape) {
     MenuBarFixture mf;
-    auto* popup = ckv::widgets::show_context_menu({{"&Copy", ui::kInvalidCommand, nullptr, false, {}, {}}},
+    auto* popup = ckv::widgets::show_context_menu({MenuItem::action("&Copy", {})},
                                                     ckv::Point{10, 10}, mf.app, mf.desktop);
     popup->on_key(key(Key::Escape));
     CK_CHECK(mf.desktop.popups().empty());
@@ -1140,7 +1450,7 @@ CK_TEST(show_context_menu_self_removes_and_clears_capture_on_escape) {
 CK_TEST(show_context_menu_activating_an_item_closes_it_and_runs_the_action) {
     MenuBarFixture mf;
     bool ran = false;
-    auto* popup = ckv::widgets::show_context_menu({{"&Copy", ui::kInvalidCommand, [&] { ran = true; }, false, {}, {}}},
+    auto* popup = ckv::widgets::show_context_menu({MenuItem::action("&Copy", [&] { ran = true; })},
                                                     ckv::Point{10, 10}, mf.app, mf.desktop);
     popup->on_key(key(Key::Enter));
     CK_CHECK(ran);
@@ -1163,7 +1473,7 @@ CK_TEST(show_context_menu_for_focus_opens_at_the_focused_views_cell) {
     mf.app.set_focus(focused);
 
     DropdownMenu* popup = show_context_menu_for_focus(
-        {{"&Copy", ui::kInvalidCommand, nullptr, false, {}, {}}}, mf.app, mf.desktop);
+        {MenuItem::action("&Copy", {})}, mf.app, mf.desktop);
 
     CK_CHECK(mf.desktop.popups().size() == 1);
     CK_CHECK(mf.app.input_capture() == popup);
@@ -1178,7 +1488,7 @@ CK_TEST(show_context_menu_for_focus_falls_back_to_the_desktop_origin_when_focus_
     mf.app.set_focus(outside);
 
     DropdownMenu* popup = show_context_menu_for_focus(
-        {{"&Copy", ui::kInvalidCommand, nullptr, false, {}, {}}}, mf.app, mf.desktop);
+        {MenuItem::action("&Copy", {})}, mf.app, mf.desktop);
 
     CK_CHECK(popup->bounds().x == 0);
     CK_CHECK(popup->bounds().y == 0);
@@ -1193,8 +1503,8 @@ CK_TEST(show_context_menu_for_focus_falls_back_to_the_desktop_origin_when_focus_
 CK_TEST(alt_mnemonic_opens_its_menu_without_the_bar_being_active_first) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}}}},
-        {"&Help", {{"&About", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        {"&File", {MenuItem::action("&New", {})}},
+        {"&Help", {MenuItem::action("&About", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 30, 1});
 
@@ -1210,7 +1520,7 @@ CK_TEST(alt_mnemonic_opens_its_menu_without_the_bar_being_active_first) {
 CK_TEST(menu_accelerators_are_withdrawn_when_the_menus_are_replaced) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{{"&Help", {{"&About", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        std::vector<MenuBarItem>{{"&Help", {MenuItem::action("&About", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 30, 1});
     CK_CHECK(mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "h"}).has_value());
@@ -1231,8 +1541,8 @@ CK_TEST(menu_accelerators_are_withdrawn_when_the_menus_are_replaced) {
 CK_TEST(a_pointer_opened_menu_starts_with_nothing_selected) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}},
-                   {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        {"&File", {MenuItem::action("&New", {}),
+                   MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 30, 1});
 
@@ -1253,8 +1563,8 @@ CK_TEST(a_pointer_opened_menu_starts_with_nothing_selected) {
 CK_TEST(a_keyboard_opened_menu_selects_its_first_item_at_once) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}},
-                   {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        {"&File", {MenuItem::action("&New", {}),
+                   MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 30, 1});
 
@@ -1270,8 +1580,8 @@ CK_TEST(a_keyboard_opened_menu_selects_its_first_item_at_once) {
 CK_TEST(dragging_from_the_title_onto_an_item_highlights_it_before_release) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&File", {{"&New", ui::kInvalidCommand, nullptr, false, {}, {}},
-                   {"&Open", ui::kInvalidCommand, nullptr, false, {}, {}}}}});
+        {"&File", {MenuItem::action("&New", {}),
+                   MenuItem::action("&Open", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->set_bounds(Rect{0, 0, 30, 1});
 
@@ -1307,7 +1617,7 @@ CK_TEST(a_menu_item_can_state_the_chord_its_application_actually_uses) {
         {.key = "test.save", .title = "&Save", .category = "File", .chord = "Ctrl+S"});
     auto menu = make_dropdown(
         f, app,
-        {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{save_command, "&Save", "^B s"}}});
+        {ckv::widgets::MenuItem::command(ckv::widgets::CommandPresentation{save_command, "&Save", "^B s"})});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -1321,4 +1631,104 @@ CK_TEST(a_menu_item_can_state_the_chord_its_application_actually_uses) {
     CK_CHECK(row.find("Ctrl+S") == std::string::npos);
     // Presentation only: the registry binding is untouched and still fires.
     CK_CHECK(app.commands().command_for_key(KeyChord{Key::Char, Modifier::Ctrl, "s"}) == save_command);
+}
+
+// --- Home and End: the ends of the menu the reader is in ------------------
+
+CK_TEST(home_and_end_reach_the_first_and_last_choosable_row) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto menu = make_dropdown(f, app,
+                              {MenuItem::separator(), MenuItem::action("&One", {}),
+                               MenuItem::action("&Two", {}), MenuItem::action("T&hree", {}),
+                               MenuItem::separator()});
+    // Past the separators at both ends: End lands on a row that can be
+    // chosen, not on the divider that happens to be last.
+    menu->on_key(key(Key::End));
+    CK_CHECK(menu->highlighted() == 3);
+    menu->on_key(key(Key::Home));
+    CK_CHECK(menu->highlighted() == 1);
+}
+
+CK_TEST(home_and_end_act_on_the_submenu_the_reader_is_standing_in) {
+    MenuBarFixture mf;
+    const MenuItem more = MenuItem::submenu(
+        "&More", {MenuItem::action("&A", {}), MenuItem::action("&B", {}), MenuItem::action("&C", {})});
+    DropdownMenu* root = show_context_menu({more}, ckv::Point{2, 2}, mf.app, mf.desktop);
+    CK_CHECK(root->on_key(key(Key::Right)));
+    auto* child = static_cast<DropdownMenu*>(mf.desktop.popups()[1]);
+    child->on_key(key(Key::End));
+    CK_CHECK(child->highlighted() == 2);   // the submenu moved
+    CK_CHECK(root->highlighted() == 0);    // and the parent did not
+}
+
+CK_TEST(the_menu_bar_ends_are_its_first_and_last_menu) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+        {"&File", {MenuItem::action("a", {})}},
+        {"&Edit", {MenuItem::action("b", {})}},
+        {"&Help", {MenuItem::action("c", {})}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->activate();
+    CK_CHECK(bar->on_key(key(Key::End)));
+    bar->on_key(key(Key::Enter));
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    CK_CHECK(static_cast<DropdownMenu*>(mf.desktop.popups()[0])->items()[0].label() == "c");
+}
+
+// --- The pointer reaches submenus too -------------------------------------
+
+CK_TEST(hovering_a_row_with_children_opens_them_and_leaving_closes_them) {
+    MenuBarFixture mf;
+    const MenuItem more = MenuItem::submenu("&More", {MenuItem::action("&Child", [] {})});
+    DropdownMenu* root =
+        show_context_menu({more, MenuItem::action("&Plain", {})}, ckv::Point{2, 2}, mf.app, mf.desktop);
+    const ckv::Rect at = root->absolute_bounds();
+    const auto move_to = [&](int row) {
+        return ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left,
+                               ckv::Point{at.x + 2, at.y + 1 + row}, std::nullopt,
+                               ckv::Modifier::None};
+    };
+    root->on_mouse(move_to(1));  // the plain row: nothing open
+    CK_CHECK(mf.desktop.popups().size() == 1);
+    root->on_mouse(move_to(0));  // onto the parent row
+    CK_CHECK(mf.desktop.popups().size() == 2);  // the submenu followed the pointer
+    root->on_mouse(move_to(1));
+    CK_CHECK(mf.desktop.popups().size() == 1);  // and left with it
+}
+
+// --- What a menu says about the row under the highlight -------------------
+
+CK_TEST(the_highlight_carries_the_help_topic_and_the_reason_a_row_is_grey) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto menu = make_dropdown(
+        f, app,
+        {MenuItem::action("&Fill form", {})
+             .with_help("pdf.forms")
+             .with_disabled_reason("this document has no form fields")
+             .with_enabled(false),
+         MenuItem::action("&Plain", {})});
+    ckv::widgets::MenuHighlight seen;
+    menu->on_highlight_changed = [&seen](const ckv::widgets::MenuHighlight& h) { seen = h; };
+
+    // The menu already opens on row 0, so read the highlight directly for
+    // what it carries, and drive a real move to prove it is reported.
+    CK_CHECK(menu->highlight().help_context == "pdf.forms");
+    menu->on_key(key(Key::Down));
+    menu->on_key(key(Key::Up));
+    CK_CHECK(seen.help_context == "pdf.forms");
+    CK_CHECK(seen.disabled_reason == "this document has no form fields");
+    CK_CHECK(!seen.enabled);
+    CK_CHECK(!seen.none);
+}
+
+CK_TEST(a_command_row_cannot_be_told_it_is_available_when_its_command_is_not) {
+    // Enablement has one source per kind, so a menu cannot disagree with
+    // the palette about whether a verb can be used.
+    CK_EXPECT_ABORT({ (void)MenuItem::command(ui::kInvalidCommand).with_enabled(false); });
 }

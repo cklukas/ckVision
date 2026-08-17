@@ -22,6 +22,8 @@
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/base64.hpp"
+#include "cvision/term/graphics_log.hpp"
+#include "cvision/term/pointer_shape_names.hpp"
 #include "cvision/term/presenter.hpp"  // sanitize_osc_text
 
 namespace ckv::term {
@@ -73,7 +75,11 @@ std::string make_session_enter_sequence(const Capabilities& caps, bool enable_ca
         case MouseProtocol::None: break;
         case MouseProtocol::X10: sequence += "\x1B[?9h"; break;
         case MouseProtocol::SGR:
-            sequence += "\x1B[?1002h\x1B[?1006h";
+            // 1003 rather than 1002: motion is reported whether or not a
+            // button is held. Without it the pointer's position between
+            // clicks is unknown, and a pointer shape or a hover highlight
+            // has nothing to be a function of.
+            sequence += "\x1B[?1003h\x1B[?1006h";
             // Only a trusted explicit pixel profile enters this mode with the
             // session. A probing session enables it at the start of each
             // bounded probe window, so a failed probe can reset it and a
@@ -97,17 +103,23 @@ std::string make_session_restore_sequence(const Capabilities& caps, bool enable_
         case MouseProtocol::None: break;
         case MouseProtocol::X10: sequence += "\x1B[?9l"; break;
         case MouseProtocol::SGR:
-            // 1002 and 1006 are the only SGR modes the session always
-            // enters. Do not reset 1000 merely because it is another mouse
-            // tracking protocol: ckVision never set it. Likewise, 1016 is
-            // entered only for an explicit pixel profile or a probe window,
-            // so a non-probing cell-mouse session must leave it untouched.
-            sequence += "\x1B[?1002l\x1B[?1006l";
+            // 1003 and 1006 are the only SGR modes the session always
+            // enters. Do not reset 1000 or 1002 merely because they are
+            // other mouse tracking protocols: ckVision never set them.
+            // Likewise, 1016 is entered only for an explicit pixel profile
+            // or a probe window, so a non-probing cell-mouse session must
+            // leave it untouched.
+            sequence += "\x1B[?1003l\x1B[?1006l";
             if (caps.pixel_mouse || enable_capability_probes) sequence += "\x1B[?1016l";
             break;
     }
     if (caps.bracketed_paste) sequence += "\x1B[?2004l";
     if (caps.focus_events) sequence += "\x1B[?1004l";
+    // Hand the pointer back. This belongs in the ledger the signal handler
+    // replays and not merely in an orderly shutdown path: a shape is host
+    // state, so an application that dies mid-hover would otherwise leave a
+    // resize arrow over somebody's shell.
+    if (caps.pointer_shapes) sequence += kPointerShapeResetSequence;
     // The capability probe temporarily enables mode 2026 before asking
     // DECRQM, then resets it immediately. Keep this reset in the session
     // ledger too: a fatal signal between those bytes must never leave the
@@ -507,6 +519,14 @@ void PosixTerminal::begin_capability_probes() {
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse)
         write_all(output_fd_, "\x1B[?1016h");
     write_all(output_fd_, kCapabilityProbeSequence);
+    // Asked separately because it is the one probe whose silence is not an
+    // answer. A host implementing the kitty specification replies with a
+    // flag per shape and earns the CSS vocabulary; one implementing only
+    // the xterm proposal reads the query as a shape name it does not have
+    // and resets its pointer — harmless here, because a probe window is
+    // also a re-present, and the frame that follows re-states the shape.
+    if (observed_caps_.pointer_shapes)
+        write_all(output_fd_, kPointerShapeQuerySequence);
 }
 
 void PosixTerminal::configure_decoder_capability_update_policy() noexcept {
@@ -557,7 +577,7 @@ void PosixTerminal::finish_capability_probes() {
         // with no mouse at all — an invisible, total failure. Re-enabling
         // costs two short sequences once per probe window and makes the
         // outcome independent of how the terminal interpreted the reset.
-        write_all(output_fd_, "\x1B[?1002h\x1B[?1006h");
+        write_all(output_fd_, "\x1B[?1003h\x1B[?1006h");
     }
     // Adopting the kitty keyboard protocol waits until its own reply proved
     // it exists. It reports modifiers explicitly — which is what makes a
@@ -590,6 +610,26 @@ void PosixTerminal::finish_capability_probes() {
     decoder_.set_capabilities(observed_caps_);
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
+
+    // What this session concluded about the host, written where the frames
+    // are. Every question that starts "was that build/terminal/setting
+    // actually in use?" is answered by the line above the frames it is
+    // asking about, instead of by running the session again.
+    if (graphics_log_enabled()) {
+        const auto size_text = [](Size size) {
+            return std::to_string(size.width) + "x" + std::to_string(size.height);
+        };
+        graphics_log("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
+                     " cell=" + size_text(caps_.cell_pixels) + "px grid=" + size_text(last_size_) +
+                     " registers=" + std::to_string(caps_.sixel_color_registers) +
+                     " max-geometry=" + size_text(caps_.sixel_max_geometry) +
+                     " synchronized-output=" + (caps_.synchronized_output ? "yes" : "no") +
+                     " overrides{sixel=" +
+                     (overrides_.sixel_graphics ? (*overrides_.sixel_graphics ? "on" : "off") : "-") +
+                     " sync=" +
+                     (overrides_.synchronized_output ? (*overrides_.synchronized_output ? "on" : "off") : "-") +
+                     " cell=" + (overrides_.cell_pixels ? size_text(*overrides_.cell_pixels) : "-") + "}");
+    }
 }
 
 bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {

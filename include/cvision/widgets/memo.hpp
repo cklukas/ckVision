@@ -79,6 +79,11 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Editable text, over its whole area including the blank part of a
+    // short last line: the caret goes there too.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return enabled() ? PointerShape::Text : PointerShape::NotAllowed;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 

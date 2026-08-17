@@ -88,6 +88,18 @@ public:
     void set_title(std::string title);
     const std::string& title() const noexcept { return title_; }
 
+    // A line on the BOTTOM border, left-aligned: what this window is
+    // currently costing, counting, or waiting for.
+    //
+    // The top border says what a window IS and stays put; a footer says
+    // what it is doing right now and changes as it does. Putting the
+    // second on the frame rather than inside the content is what keeps a
+    // running total or a progress note from stealing a row from the
+    // thing the reader came to look at — and a window narrow enough that
+    // the note would collide with the resize grip simply elides it.
+    void set_footer(std::string footer);
+    const std::string& footer() const noexcept { return footer_; }
+
     // Desktop sets this on activation/deactivation (the topmost window
     // is active; exactly one window is active at a time, or none).
     void set_active(bool active);
@@ -268,6 +280,12 @@ public:
     void enter_resize_mode();
     bool in_keyboard_mode() const noexcept { return keyboard_mode_ != KeyboardMode::None; }
 
+    // Whether this window is currently painting without its pictures,
+    // which it does for the duration of a move or resize. Observable
+    // because "the picture went away while I dragged" is a question a
+    // reader — and a test — is entitled to an answer to.
+    bool rasters_suppressed() const noexcept { return rasters_suppressed_; }
+
     bool casts_shadow() const noexcept override { return true; }
 
     // Desktop's retained-scene path owns the layer relationship; a Window
@@ -298,6 +316,11 @@ public:
     void on_child_size_hint_changed(ui::View& child) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // The frame's own affordances, and only those it really has. A ckVision
+    // window resizes from its corners, so the corners say so and the plain
+    // edges between them say nothing rather than promising a resize that
+    // pressing there would not start.
+    std::optional<PointerShape> pointer_shape_at(Point local) const override;
 
 protected:
     void on_invalidated(Rect local_rect, ui::InvalidationKind kind) override;
@@ -327,6 +350,9 @@ private:
     // the classic desktop marks one corner and resizes from any of them, and
     // a reader who tries a corner should find it works.
     std::optional<Corner> resize_corner_at(Point local) const noexcept;
+    // Which diagonal a corner pulls along. Two corners share each diagonal,
+    // which is what makes this worth naming rather than repeating.
+    static PointerShape corner_pointer_shape(Corner corner) noexcept;
     // Where a grip is currently drawn. Idle, that is the bottom right alone,
     // which is the mark the convention uses. During a resize it is all four:
     // the moment the reader is resizing is the moment the other three are
@@ -346,6 +372,7 @@ private:
     void clear_desktop_zoom_target() noexcept;
 
     std::string title_;
+    std::string footer_;
     ui::RoleId frame_active_role_ = ui::kInvalidRole;
     ui::RoleId frame_inactive_role_ = ui::kInvalidRole;
     ui::RoleId title_active_role_ = ui::kInvalidRole;
@@ -382,6 +409,10 @@ private:
     Rect keyboard_mode_start_bounds_;
 
     DragKind drag_kind_ = DragKind::None;
+    bool rasters_suppressed_ = false;
+    bool gesture_active_ = false;
+    std::function<void(bool)> gesture_observer_;
+    std::weak_ptr<void> gesture_observer_lifetime_;
     Corner resize_corner_ = Corner::BottomRight;
     // A frame control the pointer is holding down. Command-like controls act
     // on release inside themselves, never on press: a press is a question
@@ -407,6 +438,22 @@ private:
     // terminal and the release is delivered to somebody else, leaving this
     // window believing a gesture is still under way.
     void end_drag();
+    // A move or resize paints without this window's pictures and brings
+    // them back when it ends — see scene::Surface::set_rasters_suppressed
+    // for why a gesture is the one time a picture is worth leaving out.
+    void suspend_rasters();
+    void resume_rasters();
+    // The gesture itself, as a bracket: begin on the first drag motion or
+    // keyboard mode entry, end when it finishes by any path. Distinct from
+    // suspend/resume because a gesture is news the OWNER needs — a window
+    // moving across a desktop churns every picture it passes over, not
+    // only its own, so Desktop rests them all for the duration.
+    void begin_gesture();
+    void end_gesture();
+    // Desktop owns this relationship, exactly like the zoom target: a
+    // closure capturing a Desktop must not outlive it.
+    void bind_gesture_observer(std::function<void(bool)> observer, std::weak_ptr<void> lifetime);
+    void clear_gesture_observer() noexcept;
     // Clamps `moved` so enough of the title bar stays inside move_bounds_ to
     // grab again. A window dragged entirely under the menu bar or past the
     // footer cannot be brought back with the mouse at all.

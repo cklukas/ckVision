@@ -142,7 +142,7 @@ CK_TEST(menu_and_status_present_one_command_with_surface_specific_labels_and_sam
                                                          .handler = [&] { ++quit_count; }});
 
     widgets::DropdownMenu menu(
-        {widgets::MenuItem{widgets::CommandPresentation{quit, "E&xit"}}});
+        {widgets::MenuItem::command(widgets::CommandPresentation{quit, "E&xit"})});
     menu.set_context(ui::Context{&f.app.theme(), &f.app.roles(), &f.app});
     menu.set_bounds(Rect{0, 0, menu.horizontal_size_hint().preferred, 1});
     Surface menu_surface(Size{20, 1});
@@ -172,15 +172,13 @@ CK_TEST(menu_bar_replaces_live_structure_and_closes_an_open_dropdown) {
     auto* desktop = f.app.root().add(std::make_unique<widgets::Desktop>(f.app.root().bounds()));
     auto* bar = desktop->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{{"&File",
-                                           {widgets::MenuItem{
-                                               widgets::CommandPresentation{standard(f.app).quit}}}}}));
+                                           {widgets::MenuItem::command(widgets::CommandPresentation{standard(f.app).quit})}}}));
     bar->activate();
     CK_CHECK(bar->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
     CK_CHECK(desktop->popups().size() == 1);
 
     bar->set_menus({{"&Tools",
-                     {widgets::MenuItem{
-                         widgets::CommandPresentation{standard(f.app).menu}}}}});
+                     {widgets::MenuItem::command(widgets::CommandPresentation{standard(f.app).menu})}}});
     CK_CHECK(desktop->popups().empty());
     CK_CHECK(bar->menus().size() == 1);
     CK_CHECK(bar->menus().front().label == "&Tools");
@@ -214,8 +212,7 @@ CK_TEST(application_shell_constructs_chrome_without_owning_loop_or_process_state
     widgets::ApplicationShell shell(
         f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles),
                 .menus = {{"&File",
-                           {widgets::MenuItem{
-                               widgets::CommandPresentation{standard(f.app).quit, "E&xit"}}}}},
+                           {widgets::MenuItem::command(widgets::CommandPresentation{standard(f.app).quit, "E&xit"})}}},
                 .status_items = {widgets::StatusLineItem{
                     widgets::CommandPresentation{standard(f.app).quit, "&Quit"}}}});
 

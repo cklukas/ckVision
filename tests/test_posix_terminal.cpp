@@ -503,20 +503,29 @@ CK_TEST(modern_vt_profile_enters_and_resets_only_its_documented_baseline_modes) 
     const std::string output = read_available(child.master_fd, 500);
     CK_CHECK(output.find("MODERN-VT-PROFILE") != std::string::npos);
     CK_CHECK(output.find("\x1B[?1049h") != std::string::npos);
-    CK_CHECK(output.find("\x1B[?1002h") != std::string::npos);
+    CK_CHECK(output.find("\x1B[?1003h") != std::string::npos);
     CK_CHECK(output.find("\x1B[?1006h") != std::string::npos);
     CK_CHECK(output.find("\x1B[?2004h") != std::string::npos);
     CK_CHECK(output.find("\x1B[?1004h") != std::string::npos);
-    CK_CHECK(output.find("\x1B[?1002l") != std::string::npos);
+    CK_CHECK(output.find("\x1B[?1003l") != std::string::npos);
     CK_CHECK(output.find("\x1B[?1006l") != std::string::npos);
     CK_CHECK(output.find("\x1B[?2004l") != std::string::npos);
     CK_CHECK(output.find("\x1B[?1004l") != std::string::npos);
 
-    // 1000 and 1016 are not part of this session. The first is a distinct
-    // mouse protocol, the second is pixel positioning; resetting either
-    // would mutate a host state this profile never established.
+    // The session hands the mouse pointer back on the way out, whether or
+    // not it ever asked for a shape: a shape is host state, and this
+    // profile enables the pointer-shape capability.
+    CK_CHECK(output.find("\x1B]22;\x1B\\") != std::string::npos);
+
+    // 1000, 1002 and 1016 are not part of this session. The first two are
+    // distinct mouse protocols — 1002 reports motion only while a button is
+    // held, which is not what this session asked for — and the third is
+    // pixel positioning; resetting any of them would mutate a host state
+    // this profile never established.
     CK_CHECK(output.find("\x1B[?1000h") == std::string::npos);
     CK_CHECK(output.find("\x1B[?1000l") == std::string::npos);
+    CK_CHECK(output.find("\x1B[?1002h") == std::string::npos);
+    CK_CHECK(output.find("\x1B[?1002l") == std::string::npos);
     CK_CHECK(output.find("\x1B[?1016h") == std::string::npos);
     CK_CHECK(output.find("\x1B[?1016l") == std::string::npos);
     CK_CHECK(output.find("\x1B]11;?\x1B\\") == std::string::npos);
@@ -655,7 +664,7 @@ CK_TEST(posix_terminal_enters_restores_and_decodes_an_explicit_x10_mouse_session
 
         const std::string entered = read_available(master_fd, 50);
         CK_CHECK(entered.find("\x1B[?9h") != std::string::npos);
-        CK_CHECK(entered.find("\x1B[?1002h") == std::string::npos);
+        CK_CHECK(entered.find("\x1B[?1003h") == std::string::npos);
 
         constexpr std::string_view kLeftPress = "\x1B[M \x2A\x25";
         CK_CHECK(::write(master_fd, kLeftPress.data(), kLeftPress.size()) ==
@@ -692,7 +701,7 @@ CK_TEST(posix_terminal_delivers_dual_space_sgr_pixel_mouse_events_over_a_pty) {
                            /*enable_capability_probes=*/false);
 
         const std::string entered = read_available(master_fd, 50);
-        CK_CHECK(entered.find("\x1B[?1002h") != std::string::npos);
+        CK_CHECK(entered.find("\x1B[?1003h") != std::string::npos);
         CK_CHECK(entered.find("\x1B[?1006h") != std::string::npos);
         CK_CHECK(entered.find("\x1B[?1016h") != std::string::npos);
 
@@ -711,7 +720,7 @@ CK_TEST(posix_terminal_delivers_dual_space_sgr_pixel_mouse_events_over_a_pty) {
         CK_CHECK(mouse.cell == (Point{5, 2}));
     }
     const std::string restored = read_available(master_fd, 50);
-    CK_CHECK(restored.find("\x1B[?1002l") != std::string::npos);
+    CK_CHECK(restored.find("\x1B[?1003l") != std::string::npos);
     CK_CHECK(restored.find("\x1B[?1006l") != std::string::npos);
     CK_CHECK(restored.find("\x1B[?1016l") != std::string::npos);
     CK_CHECK(restored.find("\x1B[?1016l") < restored.find("\x1B[?1049l"));
@@ -1728,8 +1737,8 @@ CK_TEST(sigcont_reenters_every_live_terminal_session) {
                      (second_current.c_lflag & (ICANON | ECHO)) == 0 &&
                      first_output.find("\x1B[?1049h") != std::string::npos &&
                      second_output.find("\x1B[?1049h") != std::string::npos &&
-                     first_output.find("\x1B[?1002h\x1B[?1006h") != std::string::npos &&
-                     second_output.find("\x1B[?1002h\x1B[?1006h") != std::string::npos;
+                     first_output.find("\x1B[?1003h\x1B[?1006h") != std::string::npos &&
+                     second_output.find("\x1B[?1003h\x1B[?1006h") != std::string::npos;
         }
         ::close(first_master_fd);
         ::close(first_slave_fd);

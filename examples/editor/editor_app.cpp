@@ -84,25 +84,24 @@ EditorApp::EditorApp(ui::Application& application)
     commands.set_enabled_predicate(find_selection, [this] { return editor_->selection().has_value(); });
     commands.set_enabled_predicate(find_next, [this] { return editor_->search_match_count() != 0U; });
 
-    widgets::MenuBarItem file{"&File", {widgets::MenuItem{widgets::CommandPresentation{save}},
-                                          widgets::MenuItem{"Open &Sample", ui::kInvalidCommand, {}, false,
-                                                            widgets::MenuItemCheck::None,
-                                                            {widgets::MenuItem{widgets::CommandPresentation{open_yaml}},
-                                                             widgets::MenuItem{widgets::CommandPresentation{open_json}},
-                                                             widgets::MenuItem{widgets::CommandPresentation{open_bash}},
-                                                             widgets::MenuItem{widgets::CommandPresentation{open_plain}}}},
-                                          widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                          widgets::MenuItem{widgets::CommandPresentation{commands.standard().quit}}}};
-    widgets::MenuBarItem edit{"&Edit", {widgets::MenuItem{widgets::CommandPresentation{undo}},
-                                          widgets::MenuItem{widgets::CommandPresentation{redo}},
-                                          widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                          widgets::MenuItem{widgets::CommandPresentation{cut}},
-                                          widgets::MenuItem{widgets::CommandPresentation{copy}},
-                                          widgets::MenuItem{widgets::CommandPresentation{paste}},
-                                          widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                          widgets::MenuItem{widgets::CommandPresentation{toggle_wrap}}}};
-    widgets::MenuBarItem search{"&Search", {widgets::MenuItem{widgets::CommandPresentation{find_selection}},
-                                              widgets::MenuItem{widgets::CommandPresentation{find_next}}}};
+    widgets::MenuBarItem file{"&File", {widgets::MenuItem::command(widgets::CommandPresentation{save}),
+                                          widgets::MenuItem::submenu("Open &Sample",
+                                                            {widgets::MenuItem::command(widgets::CommandPresentation{open_yaml}),
+                                                             widgets::MenuItem::command(widgets::CommandPresentation{open_json}),
+                                                             widgets::MenuItem::command(widgets::CommandPresentation{open_bash}),
+                                                             widgets::MenuItem::command(widgets::CommandPresentation{open_plain})}),
+                                          widgets::MenuItem::separator(),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{commands.standard().quit})}};
+    widgets::MenuBarItem edit{"&Edit", {widgets::MenuItem::command(widgets::CommandPresentation{undo}),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{redo}),
+                                          widgets::MenuItem::separator(),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{cut}),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{copy}),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{paste}),
+                                          widgets::MenuItem::separator(),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{toggle_wrap})}};
+    widgets::MenuBarItem search{"&Search", {widgets::MenuItem::command(widgets::CommandPresentation{find_selection}),
+                                              widgets::MenuItem::command(widgets::CommandPresentation{find_next})}};
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{
         std::move(file), std::move(edit), std::move(search)}));
     auto status = std::make_unique<widgets::StatusLine>();

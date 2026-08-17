@@ -1510,3 +1510,48 @@ CK_TEST(the_zoom_control_highlights_while_held_too) {
     w->draw(painter);
     for (const int x : {15, 16, 17}) CK_CHECK(s.at(Point{x, 0}).style().bg == pressed.bg);
 }
+
+// --- A footer on the bottom border ------------------------------------
+
+CK_TEST(a_window_footer_is_drawn_on_the_bottom_border) {
+    Fixture f;
+    Window window("Assistant");
+    window.set_context(f.ctx());
+    window.set_bounds(Rect{0, 0, 30, 6});
+    window.set_footer("$0.0031 this call");
+    Surface s(ckv::Size{30, 6}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 30, 6});
+    window.draw(painter);
+    std::string bottom;
+    for (int x = 0; x < 30; ++x) bottom += s.at(ckv::Point{x, 5}).grapheme();
+    CK_CHECK(bottom.find("$0.0031") != std::string::npos);
+    // The top border still says what the window is.
+    std::string top;
+    for (int x = 0; x < 30; ++x) top += s.at(ckv::Point{x, 0}).grapheme();
+    CK_CHECK(top.find("Assistant") != std::string::npos);
+}
+
+CK_TEST(a_footer_too_long_for_the_border_is_elided_rather_than_overrunning_it) {
+    Fixture f;
+    Window window("W");
+    window.set_context(f.ctx());
+    window.set_bounds(Rect{0, 0, 16, 4});
+    window.set_footer("a very long running total indeed");
+    Surface s(ckv::Size{16, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 16, 4});
+    window.draw(painter);
+    // The corner is still a corner: the footer never reaches it.
+    CK_CHECK(s.at(ckv::Point{15, 3}).grapheme() != "a");
+    CK_CHECK(s.at(ckv::Point{0, 3}).grapheme() != "a");
+}
+
+CK_TEST(a_window_with_no_footer_draws_an_unbroken_bottom_border) {
+    Fixture f;
+    Window plain("W");
+    plain.set_context(f.ctx());
+    plain.set_bounds(Rect{0, 0, 20, 4});
+    Surface s(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 4});
+    plain.draw(painter);
+    for (int x = 1; x < 19; ++x) CK_CHECK(s.at(ckv::Point{x, 3}).grapheme() != " ");
+}

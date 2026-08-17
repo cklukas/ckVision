@@ -162,6 +162,9 @@ bool VirtualDisplay::feed(std::string_view bytes) {
                 } else if (raw == 'P') {
                     control_buffer_.clear();
                     state_ = ParseState::Dcs;
+                } else if (raw == ']') {
+                    control_buffer_.clear();
+                    state_ = ParseState::Osc;
                 } else {
                     fail("unsupported ESC sequence in virtual display");
                     return false;
@@ -195,6 +198,38 @@ bool VirtualDisplay::feed(std::string_view bytes) {
                         return false;
                     }
                 }
+                break;
+
+            case ParseState::Osc:
+                // Both terminators a host must accept: BEL, and ST written
+                // as ESC \. BEL is a C0 byte that would be refused in
+                // ground state, which is exactly why it is handled here.
+                if (byte == 0x07) {
+                    if (!handle_osc(control_buffer_)) return false;
+                    control_buffer_.clear();
+                    state_ = ParseState::Ground;
+                } else if (byte == 0x1B) {
+                    state_ = ParseState::OscEscape;
+                } else if (byte < 0x20) {
+                    fail("invalid control byte inside OSC sequence in virtual display");
+                    return false;
+                } else {
+                    control_buffer_ += raw;
+                    if (control_buffer_.size() > kMaxControlBytes) {
+                        fail("OSC sequence exceeds bounded input size");
+                        return false;
+                    }
+                }
+                break;
+
+            case ParseState::OscEscape:
+                if (raw != '\\') {
+                    fail("unsupported ESC inside OSC sequence");
+                    return false;
+                }
+                if (!handle_osc(control_buffer_)) return false;
+                control_buffer_.clear();
+                state_ = ParseState::Ground;
                 break;
 
             case ParseState::DcsEscape:
@@ -231,6 +266,27 @@ bool VirtualDisplay::flush_text() {
     }
     text_buffer_.clear();
     return true;
+}
+
+bool VirtualDisplay::handle_osc(std::string_view body) {
+    // OSC 22 sets the mouse pointer shape. Recorded rather than acted on:
+    // this display has no pointer to draw, and what a headless verification
+    // wants to know is which name the host was given.
+    //
+    // Every other OSC is refused, matching this parser's posture everywhere
+    // else — it models exactly what ckVision emits, so an unmodelled
+    // sequence means the emitter and the model have drifted apart, and
+    // silently consuming it is how that goes unnoticed until a real host
+    // disagrees.
+    constexpr std::string_view kPointerShapePrefix = "22;";
+    if (body == "22" || body.substr(0, kPointerShapePrefix.size()) == kPointerShapePrefix) {
+        pointer_shape_name_ = body.size() > kPointerShapePrefix.size()
+                                  ? std::string(body.substr(kPointerShapePrefix.size()))
+                                  : std::string();
+        return true;
+    }
+    fail("unsupported OSC sequence in virtual display");
+    return false;
 }
 
 bool VirtualDisplay::handle_csi(char final_byte) {

@@ -38,6 +38,13 @@ public:
     }
     CursorState cursor() const noexcept { return synchronized_output_ ? visible_cursor_ : cursor_; }
 
+    // The mouse pointer shape this stream last asked for, as the host would
+    // have received it: the raw OSC 22 name, empty for the protocol's reset.
+    // A name rather than a PointerShape because that is what a host is told
+    // -- which vocabulary was chosen and which degradation was applied are
+    // exactly the things a test needs to be able to see.
+    const std::string& pointer_shape_name() const noexcept { return pointer_shape_name_; }
+
     bool has_raster_pixels() const noexcept;
     bool valid() const noexcept { return error_.empty(); }
     const std::string& error() const noexcept { return error_; }
@@ -64,6 +71,8 @@ private:
         Csi,
         Dcs,
         DcsEscape,
+        Osc,
+        OscEscape,
     };
 
     struct Rgba {
@@ -85,6 +94,7 @@ private:
     void fail(std::string message);
     bool flush_text();
     bool handle_csi(char final_byte);
+    bool handle_osc(std::string_view body);
     bool decode_sixel(std::string_view body);
     static std::vector<SgrParam> parse_sgr_params(std::string_view text, bool& ok);
     bool apply_sgr(const std::vector<SgrParam>& params);
@@ -113,6 +123,7 @@ private:
     std::string text_buffer_;
     std::string control_buffer_;
     std::string error_;
+    std::string pointer_shape_name_;
     SixelPalette sixel_palette_;
 };
 

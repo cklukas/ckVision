@@ -38,7 +38,10 @@ Desktop::~Desktop() {
     // Base View destruction happens only after this destructor body.  Clear
     // every Window's Desktop-only callback while both objects are still
     // alive, before a detach observer or retained Window can use it.
-    for (Window* window : windows_) window->clear_desktop_zoom_target();
+    for (Window* window : windows_) {
+        window->clear_desktop_zoom_target();
+        window->clear_gesture_observer();
+    }
     window_relationship_.reset();
 
     if (app_ != nullptr)
@@ -152,6 +155,12 @@ Window* Desktop::add_window(std::unique_ptr<Window> window) {
     // lifetime-bound capability is cleared before either participant can
     // detach, so a retained Window cannot call into a former Desktop.
     raw->bind_desktop_zoom_target([this] { return content_area(); }, window_relationship_);
+    // A window on the move churns the pictures of everything it passes
+    // over: each position re-slices what it occludes, and every slice is a
+    // replacement the host pays to decode. So one window's gesture rests
+    // every window's pictures, and the drop brings them all back at once.
+    raw->bind_gesture_observer([this](bool active) { window_gesture_changed(active); },
+                               window_relationship_);
     // A drag may not carry the title bar out of the content area: under the
     // menu bar or past the footer there is nothing left to grab it by.
     raw->set_move_bounds(content_area());
@@ -239,6 +248,7 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     // application/user code.  The Window may outlive the Desktop in the
     // unique_ptr returned below, but it can no longer reach this Desktop.
     window->clear_desktop_zoom_target();
+    window->clear_gesture_observer();
     if (active_ == window) {
         active_ = nullptr;
         window->set_active(false);
@@ -337,6 +347,16 @@ void Desktop::on_descendant_mouse_down(ui::View& target) {
             return;
         }
     }
+}
+
+void Desktop::window_gesture_changed(bool active) {
+    if (active) {
+        if (++active_gestures_ == 1)
+            for (Window* window : windows_) window->suspend_rasters();
+        return;
+    }
+    if (active_gestures_ > 0 && --active_gestures_ == 0)
+        for (Window* window : windows_) window->resume_rasters();
 }
 
 void Desktop::activate(Window* window) {

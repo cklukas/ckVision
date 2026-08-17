@@ -30,11 +30,21 @@ void Window::on_attached() {
 }
 
 void Window::on_detaching() {
+    // A window removed mid-gesture still closes its gesture bracket, so a
+    // Desktop that rested every picture for the move is told the move is
+    // over rather than left waiting for an end that cannot come.
+    end_gesture();
     if (on_detached) on_detached();
 }
 
 void Window::set_title(std::string title) {
     title_ = std::move(title);
+    invalidate();
+}
+
+void Window::set_footer(std::string footer) {
+    if (footer_ == footer) return;
+    footer_ = std::move(footer);
     invalidate();
 }
 
@@ -57,7 +67,60 @@ void Window::end_drag() {
     if (drag_kind_ == DragKind::None) return;
     const bool was_resizing = drag_kind_ == DragKind::Resize;
     drag_kind_ = DragKind::None;
+    end_gesture();
     if (was_resizing) invalidate();  // the three temporary grips go away
+}
+
+void Window::begin_gesture() {
+    if (gesture_active_) return;
+    gesture_active_ = true;
+    suspend_rasters();
+    // Told even when this window itself had nothing to suspend: the window
+    // being moved is often a plain one, and it is everything underneath it
+    // whose pictures the move is about to churn.
+    if (gesture_observer_ && !gesture_observer_lifetime_.expired()) gesture_observer_(true);
+}
+
+void Window::end_gesture() {
+    if (!gesture_active_) return;
+    gesture_active_ = false;
+    resume_rasters();
+    if (gesture_observer_ && !gesture_observer_lifetime_.expired()) gesture_observer_(false);
+}
+
+void Window::bind_gesture_observer(std::function<void(bool)> observer, std::weak_ptr<void> lifetime) {
+    gesture_observer_ = std::move(observer);
+    gesture_observer_lifetime_ = std::move(lifetime);
+}
+
+void Window::clear_gesture_observer() noexcept {
+    gesture_observer_ = nullptr;
+    gesture_observer_lifetime_.reset();
+}
+
+void Window::suspend_rasters() {
+    // Nothing to suspend, nothing to pay: a window of text is already as
+    // cheap to move as composition can make it, and the repaint below
+    // would be spent on a saving that does not exist here.
+    if (!backing_surface_ || backing_surface_->raster_regions().empty()) return;
+    // Repainting once here is what actually drops the pictures: a window
+    // being moved keeps its backing store untouched by design, so a flag
+    // alone would leave the last painted raster in place for the whole
+    // gesture.
+    if (rasters_suppressed_) return;
+    rasters_suppressed_ = true;
+    backing_dirty_ = true;
+    invalidate();
+}
+
+void Window::resume_rasters() {
+    // And once more here, which is where the picture comes back — at the
+    // position the gesture finished on, sent exactly once rather than once
+    // per position it passed through.
+    if (!rasters_suppressed_) return;
+    rasters_suppressed_ = false;
+    backing_dirty_ = true;
+    invalidate();
 }
 
 void Window::set_active(bool active) {
@@ -254,11 +317,13 @@ void Window::reposition_within(Rect available) noexcept {
 
 void Window::enter_move_mode() {
     keyboard_mode_ = KeyboardMode::Move;
+    begin_gesture();
     keyboard_mode_start_bounds_ = bounds();
 }
 
 void Window::enter_resize_mode() {
     keyboard_mode_ = KeyboardMode::Resize;
+    begin_gesture();
     keyboard_mode_start_bounds_ = bounds();
 }
 
@@ -332,14 +397,16 @@ Rect Window::clamp_size(Rect b) const noexcept {
 }
 
 void Window::on_resized() {
-    if (backing_surface_ && backing_surface_->size() == Size{bounds().width, bounds().height}) {
-        // A pure translation invalidates the window's old and new desktop
-        // rectangles through View::set_bounds(), but its local backing cells
-        // remain valid. Composition handles that structural movement.
-        backing_dirty_ = false;
-    } else {
+    // A pure translation invalidates the window's old and new desktop
+    // rectangles through View::set_bounds(), but its local backing cells
+    // remain valid: composition handles that structural movement, and
+    // nothing here marks them dirty. Note what is NOT done — clearing the
+    // flag. A move does not make a repaint somebody else asked for
+    // unnecessary, and clearing it here swallowed exactly that: the repaint
+    // that drops a window's pictures for the duration of a drag never ran,
+    // because the first movement of the drag cancelled it.
+    if (!backing_surface_ || backing_surface_->size() != Size{bounds().width, bounds().height})
         backing_dirty_ = true;
-    }
     if (content_ != nullptr) content_->set_bounds(content_rect());
     relayout_frame_overlays();
 }
@@ -359,6 +426,7 @@ bool Window::repaint_backing_if_needed() {
     if (!backing_dirty_) return false;
 
     backing_surface_->clear_raster_regions();
+    backing_surface_->set_rasters_suppressed(rasters_suppressed_);
     scene::Painter painter(*backing_surface_, Rect{0, 0, local_size.width, local_size.height});
     draw(painter);
     ui::View::paint_children(painter);
@@ -421,6 +489,34 @@ std::optional<Window::Corner> Window::resize_corner_at(Point local) const noexce
     if (top && right) return Corner::TopRight;
     if (bottom && left) return Corner::BottomLeft;
     if (bottom && right) return Corner::BottomRight;
+    return std::nullopt;
+}
+
+PointerShape Window::corner_pointer_shape(Corner corner) noexcept {
+    switch (corner) {
+        case Corner::TopLeft:
+        case Corner::BottomRight: return PointerShape::ResizeNorthWestSouthEast;
+        case Corner::TopRight:
+        case Corner::BottomLeft: return PointerShape::ResizeNorthEastSouthWest;
+    }
+    return PointerShape::Move;  // exhaustive enum fallback for defensive builds
+}
+
+std::optional<PointerShape> Window::pointer_shape_at(Point local) const {
+    // A gesture owns the pointer wherever it has got to. A resize drag
+    // spends nearly all of its life away from the corner it started on —
+    // that is what resizing IS — and a shape that reverted the moment the
+    // pointer left the grip would be showing the corner's affordance only
+    // while it was not being used.
+    if (drag_kind_ == DragKind::Resize) return corner_pointer_shape(resize_corner_);
+    if (drag_kind_ == DragKind::Move) return PointerShape::Move;
+    // Controls before corners before the title row, matching the press
+    // order in on_mouse(): the shape has to promise whatever the press
+    // would actually do, and the top corners sit on the title row.
+    if (point_in_close_control(local) || point_in_zoom_control(local)) return PointerShape::Pointer;
+    if (const std::optional<Corner> corner = resize_corner_at(local))
+        return corner_pointer_shape(*corner);
+    if (movable_ && local.y == 0) return PointerShape::Move;
     return std::nullopt;
 }
 
@@ -537,6 +633,18 @@ void Window::draw(scene::Painter& painter) {
                           armed ? pressed_style : control_style);
         painter.draw_text(Point{control_x + 2, 0}, "]", face);
     }
+    if (!footer_.empty() && b.height > 1 && b.width > 6) {
+        // Left-aligned and kept clear of the corner grips, which is the
+        // side a reader's eye lands on and the side that stays put as the
+        // window is resized.
+        const int reserved = resizable_ ? 8 : 4;
+        const std::string shown = text::elide_to_width(footer_, std::max(0, b.width - reserved));
+        if (!shown.empty()) {
+            painter.draw_text(Point{2, b.height - 1}, " ", frame_style);
+            painter.draw_text(Point{3, b.height - 1}, shown, title_style);
+            painter.draw_text(Point{3 + text::text_width(shown), b.height - 1}, " ", frame_style);
+        }
+    }
     if (b.width > 8) {
         // Centered, with a one-cell padding space on each side. The
         // title budget is bounded by the active frame controls, then
@@ -606,10 +714,12 @@ bool Window::on_key(const KeyEvent& event) {
             return true;
         case Key::Enter:
             keyboard_mode_ = KeyboardMode::None;
+            end_gesture();
             return true;
         case Key::Escape:
             set_bounds(keyboard_mode_start_bounds_);
             keyboard_mode_ = KeyboardMode::None;
+            end_gesture();
             return true;
         default:
             return false;
@@ -642,6 +752,7 @@ bool Window::on_mouse(const MouseEvent& event) {
         // reader who aimed at a corner meant the corner.
         if (const std::optional<Corner> corner = resize_corner_at(local)) {
             drag_kind_ = DragKind::Resize;
+            begin_gesture();
             resize_corner_ = *corner;
             drag_start_mouse_ = event.cell;
             drag_start_bounds_ = bounds();
@@ -650,6 +761,7 @@ bool Window::on_mouse(const MouseEvent& event) {
         }
         if (movable_ && local.y == 0) {
             drag_kind_ = DragKind::Move;
+            begin_gesture();
             drag_start_mouse_ = event.cell;
             drag_start_bounds_ = bounds();
             return true;

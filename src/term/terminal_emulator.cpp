@@ -165,6 +165,16 @@ void TerminalEmulator::handle_osc(bool bel_terminated) {
             return;
         case 1:
             return;  // icon name: understood, and deliberately without effect
+        // OSC 22 asks for a mouse pointer shape. Understood, and
+        // deliberately without effect: the pointer belongs to the window
+        // this emulator is a view inside, and it is a single, shared thing.
+        // A child that could set it could change the pointer while the
+        // reader is nowhere near the child — including a child in a
+        // background window, or one that is scrolled out of sight. The
+        // shape over an embedded terminal is the outer application's to
+        // choose, the same way the title bar around it is.
+        case 22:
+            return;
         case 4:
             handle_palette_query(body, bel_terminated);
             return;

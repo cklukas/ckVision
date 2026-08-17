@@ -57,6 +57,10 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Every row is chosen by clicking it.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Pointer;
+    }
     void on_resized() override;
     void on_attached() override;
 

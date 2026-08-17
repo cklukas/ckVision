@@ -32,6 +32,12 @@ struct StandardRoles {
     RoleId help_text;
     RoleId button_normal;
     RoleId button_focused;
+    // A button under the pointer, but not focused and not pressed. Its own
+    // role rather than a lightened normal: hover is the weakest of the
+    // three states a button can be in at once, and a scheme has to be able
+    // to say how weak — a monochrome one may want it to be nothing at all,
+    // and setting it equal to normal is how it says so.
+    RoleId button_hovered;
     RoleId button_default;
     RoleId button_shadow;  // the composited drop shadow's glyph color; bg matches the dialog surface
     RoleId button_pressed;  // a flat button held down, which has no shadow to lose

@@ -62,6 +62,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.help_text = registry.intern("ckv.help.text", Style{kYellow, kBlue, Attr{}});
     r.button_normal = registry.intern("ckv.button.normal", Style{kBlack, kGreen, Attr{}});
     r.button_focused = registry.intern("ckv.button.focused", Style{kWhite, kGreen, Attr{}});
+    r.button_hovered = registry.intern("ckv.button.hovered", Style{kWhite, kGreen, Attr{}});
     r.button_default = registry.intern("ckv.button.default", Style{kLightCyan, kGreen, Attr{}});
     r.button_shadow = registry.intern("ckv.button.shadow", Style{kBlack, kLightGray, Attr{}});
     // A flat button has no shadow to lose when it goes down, so the press is
@@ -155,6 +156,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.help_text, Style{kYellow, kBlue, Attr{}});
     theme.set(roles.button_normal, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.button_focused, Style{kWhite, kGreen, Attr{}});
+    theme.set(roles.button_hovered, Style{kWhite, kGreen, Attr{}});
     theme.set(roles.button_default, Style{kLightCyan, kGreen, Attr{}});
     theme.set(roles.button_shadow, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.button_pressed, Style{kBlack, kLightGray, Attr{}});
@@ -246,6 +248,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.help_text, Style{kDarkYellow, kDarkBg, Attr{}});
     theme.set(roles.button_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.button_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
+    theme.set(roles.button_hovered, Style{kMonoFg, kDarkAccent, Attr{}});
     // Every button keeps the same raised face; the default one is marked by
     // an accent foreground and weight, not by becoming a different -- and in
     // a dark scheme, near-black -- surface. A control the reader is meant to
@@ -321,6 +324,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.help_text, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.button_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.button_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
+    theme.set(roles.button_hovered, Style{kLightFg, kLightAccent, Attr{}});
     // Same rule as the dark scheme, and no borrowing of a monochrome constant
     // for a hued one: the face stays the button face.
     theme.set(roles.button_default, Style{kLightFg, kLightFocus, Attr::Bold});
@@ -390,6 +394,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.help_text, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.button_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.button_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.button_hovered, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.button_default, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.button_shadow, Style{kMonoGray, kMonoBg, Attr{}});
     theme.set(roles.button_pressed, Style{kMonoBg, kMonoFg, Attr::Bold});
@@ -451,6 +456,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.label_text,            roles.label_mnemonic,           roles.hotkey,
         roles.static_text,           roles.help_text,                roles.button_normal,
         roles.button_focused,
+        roles.button_hovered,
         roles.button_default,        roles.button_shadow,            roles.button_pressed,
         roles.input_normal,
         roles.input_focused,         roles.input_invalid,            roles.message_info_text,
@@ -481,6 +487,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.label_mnemonic, Style{white, black, Attr::Underline | Attr::Bold});
     theme.set(roles.hotkey, Style{white, black, Attr::Bold});
     theme.set(roles.button_focused, selected);
+    theme.set(roles.button_hovered, selected);
     theme.set(roles.button_default, Style{white, black, Attr::Bold});
     theme.set(roles.button_pressed, Style{black, white, Attr::Bold});
     theme.set(roles.input_focused, Style{white, black, Attr::Underline});

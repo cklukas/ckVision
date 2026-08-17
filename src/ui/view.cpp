@@ -128,6 +128,12 @@ void View::set_enabled(bool enabled) {
     invalidate();
 }
 
+void View::set_hovered(bool hovered) {
+    if (hovered == hovered_) return;
+    hovered_ = hovered;
+    on_hover_changed(hovered_);
+}
+
 void View::set_theme_override(Theme theme) {
     theme_override_ = std::make_unique<Theme>(std::move(theme));
     if (context_.valid()) {

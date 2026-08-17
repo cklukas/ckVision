@@ -171,6 +171,10 @@ void Painter::draw_image(Rect anchor, int id, std::shared_ptr<const Image> image
     // Without the second rect an image simply overhangs the view that drew
     // it: a Sixel keeps painting past a window's frame and out onto the
     // desktop, because nothing downstream knows where that view ended.
+    // Suppressed: the fallback above is the whole of this picture for now.
+    // Recording no region is what keeps the raster off the wire — and out
+    // of the compositor's occlusion work — rather than merely unpainted.
+    if (surface_.rasters_suppressed()) return;
     const Rect absolute = to_absolute(anchor);
     const Rect visible = absolute.intersected(clip_);
     // Nothing of it falls inside this painter, so there is nothing to

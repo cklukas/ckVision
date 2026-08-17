@@ -388,6 +388,10 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    if (event.chord.key == Key::Enter && event.chord.modifiers == Modifier::None && on_accept) {
+        on_accept();
+        return true;
+    }
     // A disabled field is not merely greyed: it accepts nothing, the same
     // contract TextEditor keeps.
     if (!enabled()) return false;

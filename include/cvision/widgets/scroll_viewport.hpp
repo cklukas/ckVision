@@ -45,6 +45,14 @@ public:
     int scroll_y() const noexcept { return scroll_y_; }
     void set_scroll(int x, int y);  // clamped to [0, content extent - viewport extent]
 
+    // Puts the bottom of the content in view.
+    //
+    // What a growing document wants: a transcript, a log, a build's
+    // output. Such a view that does not follow its own tail has stopped
+    // reporting, and every caller computing the offset itself has to
+    // know the content's extent — which is the viewport's own business.
+    void scroll_to_bottom();
+
     // Conventional document views may retain both scrollbar tracks even
     // while their initial content happens to fit. This makes the available
     // navigation affordances stable as content changes.

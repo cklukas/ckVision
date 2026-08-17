@@ -5,8 +5,8 @@
 // installed as the standard menu command's default handler when
 // unclaimed — M9/WP-13, D-029 — routing through the command keymap
 // like every other accelerator in this framework), mnemonic letters,
-// Left/Right/Up/Down navigation with wrapping, Enter/mnemonic to
-// activate, disabled items skipped by navigation but still visible,
+// Left/Right/Up/Down navigation with wrapping, Home/End to the ends,
+// Enter/mnemonic to activate, unavailable items reachable but inert,
 // checkable items, nested submenus the keyboard enters and leaves the way the
 // pointer does — Right or Enter on an item that has one opens it and the keys
 // go to it, Left or Esc steps back out to that item, and Right on an item
@@ -43,40 +43,127 @@ namespace ckv::widgets {
 using ui::SizeHint;
 using ui::View;
 
-enum class MenuItemCheck {
+// The mark in a menu's left column. Checked/Unchecked is an independent
+// switch — a setting that is on or off. RadioOn/RadioOff is one choice
+// out of a set, and reads differently on purpose: a reader scanning a
+// column of round marks knows that turning one on turns another off,
+// which a column of boxes would not tell them. None leaves the column
+// out entirely for menus that need no marks at all.
+enum class MenuMark {
     None,
     Unchecked,
     Checked,
+    RadioOff,
+    RadioOn,
 };
 
-struct MenuItem {
-    MenuItem() = default;
-    MenuItem(std::string item_label, ui::CommandId command_id = ui::kInvalidCommand,
-             std::function<void()> activation = {}, bool is_separator = false,
-             MenuItemCheck check_state = MenuItemCheck::None,
-             std::vector<MenuItem> child_items = {},
-             CommandPresentation command_presentation = {})
-        : label(std::move(item_label)),
-          command(command_id),
-          on_activate(std::move(activation)),
-          separator(is_separator),
-          check(check_state),
-          submenu(std::move(child_items)),
-          presentation(std::move(command_presentation)) {}
-    explicit MenuItem(CommandPresentation command_presentation,
-                      MenuItemCheck check_state = MenuItemCheck::None,
-                      std::vector<MenuItem> child_items = {})
-        : check(check_state),
-          submenu(std::move(child_items)),
-          presentation(std::move(command_presentation)) {}
+// What a menu row IS.
+//
+// A row is exactly one of these, and which one is decided by the named
+// constructor that made it — see MenuItem. The kind is explicit because
+// the alternative, inferring it from which of several optional fields
+// happen to be filled in, makes states like "a separator that also has a
+// submenu and a command" representable, unreviewable, and eventually
+// real.
+enum class MenuItemKind {
+    Command,   // runs a registry command; wording and chord come from it
+    Action,    // runs a callback this item carries
+    Submenu,   // opens child items
+    Separator, // a divider: never highlighted, navigated to, or activated
+};
 
-    std::string label;                     // may carry a '&' mnemonic; ignored if separator
-    ui::CommandId command = ui::kInvalidCommand;  // if set, activation calls app.execute_command(command)
-    std::function<void()> on_activate;     // used when command == kInvalidCommand
-    bool separator = false;                // a divider: never highlighted, navigated to, or activated
-    MenuItemCheck check = MenuItemCheck::None;
-    std::vector<MenuItem> submenu;
-    CommandPresentation presentation;
+// One row of a menu.
+//
+// Built through the named constructors below rather than by filling in
+// fields, so an item's kind is a fact about how it was made rather than
+// a rule a reader has to reconstruct. The refinements every kind can
+// carry — a mark, a help topic, a reason it is unavailable — chain onto
+// that:
+//
+//     MenuItem::command(save_id),
+//     MenuItem::separator(),
+//     MenuItem::submenu("&Recent", std::move(recent)),
+//     MenuItem::action("&Word wrap", [this] { toggle_wrap(); })
+//         .with_mark(wrapping ? MenuMark::Checked : MenuMark::Unchecked)
+//         .with_help("editor.wrap"),
+//
+// Enablement has one source per kind, deliberately: a Command item is
+// available exactly when its command is (the registry's predicate and
+// context decide, and no menu may disagree with the palette or the
+// status line about it), while an Action or Submenu item carries its own
+// flag because there is nothing else that could know.
+class MenuItem {
+public:
+    // --- the four kinds ------------------------------------------------
+    static MenuItem command(ui::CommandId id);
+    static MenuItem command(CommandPresentation presentation);
+    static MenuItem action(std::string label, std::function<void()> run);
+    static MenuItem submenu(std::string label, std::vector<MenuItem> children);
+    static MenuItem separator();
+
+    // --- refinements, chainable ----------------------------------------
+    [[nodiscard]] MenuItem with_mark(MenuMark mark) const;
+    // The help topic F1 resolves while this row is highlighted. Menus are
+    // where a reader looks for a verb they do not know yet, so this is
+    // where explaining one belongs.
+    [[nodiscard]] MenuItem with_help(std::string help_context) const;
+    // Why this row cannot be used right now, in the application's own
+    // words ("no document is open"). A surface that greys a verb without
+    // saying why leaves the reader to guess; the menu reports the reason
+    // and the status line says it.
+    [[nodiscard]] MenuItem with_disabled_reason(std::string reason) const;
+    // Action and Submenu rows only — a Command row's availability is its
+    // command's, and overriding it here would let a menu lie about it.
+    [[nodiscard]] MenuItem with_enabled(bool enabled) const;
+
+    // --- what a menu asks ----------------------------------------------
+    MenuItemKind kind() const noexcept { return kind_; }
+    bool is_separator() const noexcept { return kind_ == MenuItemKind::Separator; }
+    bool has_children() const noexcept { return kind_ == MenuItemKind::Submenu; }
+
+    // The command this row runs, or kInvalidCommand for the other kinds.
+    ui::CommandId command() const noexcept { return presentation_.command; }
+    const CommandPresentation& presentation() const noexcept { return presentation_; }
+    // The row's own text, for Action and Submenu rows. A Command row's
+    // text comes from its presentation or its registration, never from
+    // here — see item_source_text().
+    const std::string& label() const noexcept { return label_; }
+    const std::function<void()>& action() const noexcept { return action_; }
+    const std::vector<MenuItem>& children() const noexcept { return children_; }
+    MenuMark mark() const noexcept { return mark_; }
+    const std::string& help_context() const noexcept { return help_context_; }
+    const std::string& disabled_reason() const noexcept { return disabled_reason_; }
+    // Only meaningful for Action/Submenu; a Command row asks the registry.
+    bool enabled_flag() const noexcept { return enabled_; }
+
+private:
+    MenuItem() = default;
+
+    MenuItemKind kind_ = MenuItemKind::Separator;
+    std::string label_;
+    CommandPresentation presentation_;
+    std::function<void()> action_;
+    std::vector<MenuItem> children_;
+    MenuMark mark_ = MenuMark::None;
+    std::string help_context_;
+    std::string disabled_reason_;
+    bool enabled_ = true;
+};
+
+// What a menu reports about the row under the highlight, for the
+// surfaces that explain it: a status line showing the command's hint or
+// the reason it is grey, and F1 resolving the row's help topic.
+//
+// A struct rather than a bare CommandId because "which row is the reader
+// looking at" and "what can be said about it" are one question, and a
+// listener that had to look the rest up again could look it up wrong.
+struct MenuHighlight {
+    ui::CommandId command = ui::kInvalidCommand;
+    std::string help_context;
+    std::string disabled_reason;
+    bool enabled = true;
+    // No row is highlighted (the menu closed, or the pointer left it).
+    bool none = false;
 };
 
 // Resolves its own theme roles from context() once attached (M9
@@ -147,12 +234,17 @@ public:
     // whole chain: the highlight a chain of menus shows is the innermost
     // menu's, and it is reported both on opening a submenu and again for the
     // parent item once that submenu closes.
-    std::function<void(ui::CommandId)> on_highlight_changed;
+    std::function<void(const MenuHighlight&)> on_highlight_changed;
 
     const std::vector<MenuItem>& items() const noexcept { return items_; }
     int highlighted() const noexcept { return highlighted_; }
     // The command behind the highlighted item, or kInvalidCommand.
     ui::CommandId highlighted_command() const noexcept;
+    // Everything about the row the reader is standing on, following any
+    // open submenu chain to its innermost menu: that is where the reader
+    // is, and that is the row a status line should explain and F1 should
+    // answer about.
+    MenuHighlight highlight() const;
 
     // Preferred size: width fits the longest item label plus its chord
     // hint column (+ padding), height is exactly one row per item
@@ -164,6 +256,10 @@ public:
     bool casts_shadow() const noexcept override { return true; }
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Every title on the bar opens something.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Pointer;
+    }
     void on_attached() override;
 
 private:
@@ -185,6 +281,12 @@ private:
     // changes what renders here without touching the item itself).
     std::optional<std::string> item_chord_hint(const MenuItem& item) const;
     bool item_enabled(std::size_t index) const;
+    // Whether the highlight may rest here at all — separators alone
+    // cannot be stood on. A row that is merely unavailable can be.
+    bool item_reachable(std::size_t index) const;
+    // Brings the open submenu into agreement with the highlighted row,
+    // however the highlight got there. Idempotent on purpose.
+    void follow_highlight_with_submenu();
     int step_selection(int from, int direction) const;  // -1 if no selectable item exists at all
     void activate(int index);
     void dismiss(MenuDismissReason reason = MenuDismissReason::Cancelled);
@@ -195,6 +297,19 @@ private:
     // highlight, and it is the innermost menu's. MenuBar routes with this
     // because focus never leaves the bar — see MenuBar::on_key.
     DropdownMenu* innermost_menu() noexcept;
+    // The menu this chain hangs from: the one a MenuBar opened, or a context
+    // menu itself. It holds what belongs to the chain rather than to any one
+    // popup in it, and it is where a pointer event over none of them goes.
+    DropdownMenu* root_menu() noexcept;
+    // Which menu of this chain the pointer is over, innermost first — a
+    // submenu overlaps its parent's border, and the submenu wins there — or
+    // nullptr when it is over none of them.
+    DropdownMenu* menu_under_pointer(Point cell) noexcept;
+    // One press, one chain. The button goes down on whichever menu is under
+    // the pointer and may come back up over a different one — most often a
+    // submenu that opened under the pointer in between — so whether a press
+    // is outstanding is the chain's state, not any one popup's.
+    bool& chain_pointer_pressed() noexcept;
     void dismiss_chain(MenuDismissReason reason = MenuDismissReason::Cancelled);
     void begin_pointer_press() noexcept { pointer_pressed_ = true; }
     // The press that opened this menu has ended. If it ended without the
@@ -213,10 +328,23 @@ private:
 
     std::vector<MenuItem> items_;
     int highlighted_ = -1;
+    // Cached at attach for the things a menu does TO an application —
+    // capturing input, opening a popup. Never for asking what a command's
+    // state is: this pointer outlives the application it names (nothing
+    // clears it on detach), while context().app follows attachment. A menu
+    // is interrogated during teardown too, and the difference between the
+    // two is a use-after-free.
     ui::Application* app_ = nullptr;
     Desktop* desktop_ = nullptr;
     DropdownMenu* parent_menu_ = nullptr;
     DropdownMenu* child_menu_ = nullptr;
+    // Which row child_menu_ belongs to, so asking for the submenu that is
+    // already showing costs nothing and asking for a different one replaces
+    // it. Without the row, "a submenu is open" and "the RIGHT submenu is
+    // open" are the same question, and the second one is the one that
+    // matters when the highlight moves between two rows that both have
+    // children.
+    int child_index_ = -1;
     bool dismissing_ = false;
     bool pointer_pressed_ = false;
     MenuOpenReason open_reason_ = MenuOpenReason::Keyboard;
@@ -305,7 +433,13 @@ public:
     // open, and kInvalidCommand once it closes. Wired once, it reports
     // every move for as long as the bar lives — see
     // DropdownMenu::on_highlight_changed for what a listener does with it.
-    std::function<void(ui::CommandId)> on_highlight_changed;
+    std::function<void(const MenuHighlight&)> on_highlight_changed;
+
+    // The help topic of the row the reader is standing on, or empty. An
+    // application's F1 handler consults this while a menu is open, so
+    // that asking about a verb answers about that verb rather than about
+    // whatever held focus before the menu opened.
+    std::string highlighted_help_context() const;
 
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
@@ -313,6 +447,10 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Every row in the drop-down invokes or opens something.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Pointer;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 

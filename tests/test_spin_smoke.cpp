@@ -588,3 +588,120 @@ CK_TEST(spin_asks_for_nothing_while_the_terminal_has_not_finished_the_last_frame
     f.settle();
     CK_CHECK(f.spin.frames().frames_rendered() > rendered);
 }
+
+CK_TEST(spin_keeps_its_pixel_budget_even_when_the_terminal_reports_completion) {
+    Fixture f;
+    f.settle();
+    SpinView* const view = f.spin.view_at(0);
+    const Size pixels = view->frame_pixels();
+    CK_CHECK(pixels.width > 0);
+    const std::int64_t budgeted = f.spin.raster_paced_interval_nanos();
+    CK_CHECK(budgeted > 0);
+    const double budgeted_pixels =
+        static_cast<double>(pixels.width) * pixels.height /
+        (static_cast<double>(budgeted) * 1e-9);
+    CK_CHECK(std::abs(budgeted_pixels - f.spin.raster_pixel_rate()) < f.spin.raster_pixel_rate() * 0.05);
+
+    // The completion reply proves the frame was decoded, not drawn. Pacing
+    // on it alone runs the animation at the host's decode-saturation rate,
+    // which is measurably the rate its renderer starts losing pictures to
+    // replacement races — so the budget stays in charge, and the reply
+    // only ever slows things further.
+    f.term.inject_bytes("\x1B[0n", f.clock.now_nanos());
+    f.app.step(f.clock.now_nanos());
+    CK_CHECK(f.app.last_terminal_round_trip_nanos() >= 0);
+    CK_CHECK(f.spin.raster_paced_interval_nanos() == budgeted);
+}
+
+CK_TEST(spin_sends_no_picture_while_a_window_is_being_dragged_and_one_when_it_lands) {
+    Fixture f;
+    f.settle();
+    ckv::widgets::Window* const window = f.spin.desktop().windows().front();
+    window->set_bounds(Rect{2, 2, 40, 18});
+    f.settle();
+
+    const auto pictures_since = [&](std::size_t from) {
+        const std::string written(f.term.written_bytes().substr(from));
+        std::size_t count = 0, pos = 0;
+        while ((pos = written.find("\x1B" "P", pos)) != std::string::npos) {
+            ++count;
+            pos += 2;
+        }
+        return count;
+    };
+    const auto pointer = [&](ckv::MouseAction action, int x) {
+        f.app.dispatch(ckv::MouseEvent{action, ckv::MouseButton::Left, ckv::Point{x, 2}, std::nullopt,
+                                       ckv::Modifier::None});
+    };
+
+    pointer(ckv::MouseAction::Down, 10);  // the title bar
+    CK_CHECK(window->rasters_suppressed());
+    const std::size_t before_drag = f.term.written_bytes().size();
+    for (int step = 1; step <= 12; ++step) {
+        pointer(ckv::MouseAction::Move, 10 + step);
+        f.clock.advance(8'000'000);
+        f.app.step(f.clock.now_nanos());
+    }
+    // Twelve positions, no pictures. A host pays for a picture by the pixel
+    // and decodes it before it can draw anything behind it; a gesture that
+    // sent one per position would spend all of that on pixels that are
+    // wrong before they are drawn.
+    CK_CHECK(pictures_since(before_drag) == 0U);
+    CK_CHECK(window->bounds().x == 14);
+
+    const std::size_t before_drop = f.term.written_bytes().size();
+    pointer(ckv::MouseAction::Up, 22);
+    f.clock.advance(8'000'000);
+    f.app.step(f.clock.now_nanos());
+    // And exactly one when it lands, at the position it landed on.
+    CK_CHECK(!window->rasters_suppressed());
+    CK_CHECK(pictures_since(before_drop) == 1U);
+}
+
+CK_TEST(spin_dragging_one_window_rests_every_windows_pictures_until_the_drop) {
+    Fixture f;
+    (void)f.spin.open_window(ShapeId::Torus);
+    ckv::widgets::Window* const lower = f.spin.desktop().windows()[0];
+    ckv::widgets::Window* const upper = f.spin.desktop().windows()[1];
+    lower->set_bounds(Rect{2, 2, 40, 18});
+    upper->set_bounds(Rect{50, 2, 40, 18});
+    f.settle();
+
+    const auto pictures_since = [&](std::size_t from) {
+        const std::string written(f.term.written_bytes().substr(from));
+        std::size_t count = 0, pos = 0;
+        while ((pos = written.find("\x1B" "P", pos)) != std::string::npos) {
+            ++count;
+            pos += 2;
+        }
+        return count;
+    };
+    const auto pointer = [&](ckv::MouseAction action, int x) {
+        f.app.dispatch(ckv::MouseEvent{action, ckv::MouseButton::Left, ckv::Point{x, 2}, std::nullopt,
+                                       ckv::Modifier::None});
+    };
+
+    // Grab the UPPER window and drag it across the lower one. Every step
+    // re-slices the lower window's picture — and every slice is a
+    // replacement its host pays to decode — so the gesture rests both.
+    pointer(ckv::MouseAction::Down, 60);
+    CK_CHECK(upper->rasters_suppressed());
+    CK_CHECK(lower->rasters_suppressed());
+    const std::size_t during_mark = f.term.written_bytes().size();
+    for (int step = 1; step <= 14; ++step) {
+        pointer(ckv::MouseAction::Move, 60 - step * 3);
+        f.clock.advance(8'000'000);
+        f.app.step(f.clock.now_nanos());
+    }
+    CK_CHECK(pictures_since(during_mark) == 0U);
+
+    const std::size_t drop_mark = f.term.written_bytes().size();
+    pointer(ckv::MouseAction::Up, 60 - 14 * 3);
+    f.clock.advance(8'000'000);
+    f.app.step(f.clock.now_nanos());
+    CK_CHECK(!upper->rasters_suppressed());
+    CK_CHECK(!lower->rasters_suppressed());
+    // Both pictures return at the drop — the upper whole, the lower as the
+    // slices its new occluder leaves visible.
+    CK_CHECK(pictures_since(drop_mark) >= 2U);
+}

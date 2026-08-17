@@ -9,6 +9,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,10 @@ public:
     SizeHint vertical_size_hint() const override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Each row toggles when clicked.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
@@ -120,6 +125,10 @@ public:
     SizeHint vertical_size_hint() const override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Each row selects when clicked.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 

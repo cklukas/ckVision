@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "cvision/core/utf8.hpp"
+#include "cvision/term/pointer_shape_names.hpp"
 
 namespace ckv::term {
 namespace {
@@ -170,6 +171,37 @@ std::optional<double> parse_rgb_luminance(std::string_view pt) {
     const double b = hex_to_frac(b_hex);
     if (r < 0 || g < 0 || b < 0) return std::nullopt;
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+// "1,0,1,1,…" -> a bit per PointerShape in enum order, or nullopt when the
+// payload is not an answer to the support query.
+//
+// The strictness is the point. OSC 22 is one code for a question and its
+// answer, and a host may also send back a shape NAME (that is what the
+// `?__current__` form asks for, which ckVision does not use). Insisting on
+// a payload made only of single flags and commas is what keeps a name from
+// being read as a support map — `0` alone, the reply meaning "no shape is
+// set", is correctly refused here rather than taken as a one-shape answer.
+std::optional<std::uint32_t> parse_pointer_shape_support(std::string_view payload) {
+    if (payload.empty()) return std::nullopt;
+    std::uint32_t supported = 0;
+    int index = 0;
+    std::size_t pos = 0;
+    while (true) {
+        const std::size_t comma = payload.find(',', pos);
+        const std::string_view field =
+            comma == std::string_view::npos ? payload.substr(pos) : payload.substr(pos, comma - pos);
+        if (field.size() != 1 || (field[0] != '0' && field[0] != '1')) return std::nullopt;
+        if (index >= kPointerShapeCount) return std::nullopt;
+        if (field[0] == '1') supported |= std::uint32_t{1} << index;
+        ++index;
+        if (comma == std::string_view::npos) break;
+        pos = comma + 1;
+    }
+    // A single flag is a name reply ("0" for an empty stack), not a support
+    // map: the query named every shape, so a real answer enumerates them.
+    if (index < 2) return std::nullopt;
+    return supported;
 }
 
 }  // namespace
@@ -785,6 +817,18 @@ InputDecoder::ParseResult InputDecoder::parse_osc(std::string_view buf) {
             break;
         }
         ps = ps * 10 + (c - '0');
+    }
+    // A host answering the pointer-shape support query has told us two
+    // things at once: which shapes it has, and — by answering at all — that
+    // it implements the specification the CSS names come from. Only a host
+    // that got the question can answer it, so nothing here needs to guess.
+    if (ps == 22 && caps_.pointer_shapes) {
+        if (const auto supported = parse_pointer_shape_support(pt_str)) {
+            Capabilities updated = caps_;
+            updated.pointer_shape_vocabulary = PointerShapeVocabulary::Standard;
+            updated.pointer_shapes_supported = *supported;
+            return {Status::Complete, consumed, std::nullopt, updated};
+        }
     }
     // Once DEC mode 2031 is established, its explicit dark/light preference
     // is authoritative. Do not let delayed OSC 10/11 replies replace it.

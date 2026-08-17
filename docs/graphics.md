@@ -261,7 +261,7 @@ animation but a slow application.
 
 Spin answers that with two rules and no polling at all:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="431-462" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="457-492" -->
 ```cpp
 void SpinApp::arm_next_tick() {
     // Self-clocking, and the reason this is a one-shot rather than a
@@ -290,6 +290,10 @@ void SpinApp::pace(std::int64_t now_nanos) {
         // load straight back.
         interval_nanos_ = std::max(target_interval_nanos_, interval_nanos_ * 7 / 8);
     }
+    // And never faster than the terminal can paint what is already on it.
+    // A loop that is keeping up perfectly says nothing about a decoder that
+    // is not, because nothing in the protocol reports a picture drawn.
+    interval_nanos_ = std::max(interval_nanos_, raster_paced_interval_nanos());
     // Anything much EARLIER than asked for is not a measurement of the
     // loop's health at all — it is a clock that jumped, or a host that
     // stepped this application several times in a row — so it neither
@@ -321,6 +325,45 @@ input in order, so its `CSI 0 n` reply says that frame has been taken in.
 Nothing blocks — `frames_awaiting_terminal()` is a fact to consult, like the
 cost counters beside it, and `last_terminal_round_trip_nanos()` says how long
 the answer took.
+
+**What that reply is worth.** More than the protocol promises, and less than
+it looks. On a host examined for this (iTerm2), Sixel is decoded by a
+*blocking* call inline on the same path that answers the status report, so the
+reply is ordered after the picture in front of it has been decoded and applied
+to the screen model — real back-pressure against the decoder, which is the
+expensive part. It still says nothing about presentation: drawing happens
+afterwards, on the host's own schedule. An application that paces on the reply
+ALONE therefore runs at the host's decode-saturation rate — which is, on the
+host measured, also the rate at which its renderer visibly starts losing
+pictures to replacement races. Use the reply as a brake, never as permission:
+Spin keeps its raster pixel-rate budget in charge and lets the reply only slow
+things further.
+
+**Waiting is the point.** A host that has answered once must be waited for
+however slowly it answers afterwards — a decoder taking half a second over a
+full-screen picture is not a host without the facility, and writing its answer
+off removes the very back-pressure that was keeping the picture whole. That is
+why the deadline stretches to a multiple of the slowest answer a host has
+shown (`kFrameCompletionPatienceFactor`), and why only a terminal that has
+*never* answered is concluded not to implement the query.
+
+**While a window is being dragged or resized**, every window's pictures are
+left out — not only the moved window's. A moving occluder re-slices whatever
+it passes over, and each slice is a replacement the host pays to decode, so
+one gesture rests the whole desktop's pictures and the drop brings them back
+at once. `Window` suspends them for the duration of the gesture
+(`scene::Surface::set_rasters_suppressed`) and brings them back where the
+gesture ended — a picture per pointer report is a decode per position for
+pixels that are wrong before they are drawn, and a window whose content is
+text pays nothing for this because there is nothing to suspend. The reader
+sees the widget's own fallback while the window moves, and the picture once
+it lands.
+
+**Where no reply comes**, an application has to guess, and the only useful
+currency is raster pixels per second — the cost is in decoding pixels, not in
+transmitting bytes, so a compact run-length-encoded picture is not a cheap
+one. Spin carries such a budget, and keeps it in charge even where the reply
+arrives — see above for why the reply must not become permission.
 
 An application then gives the terminal the same one-deep rule it gives its
 renderer, which in Spin is one line in the tick:

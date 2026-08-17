@@ -809,6 +809,63 @@ anchored to a cell it no longer starts at); and re-emitting every frame as
 insurance against a host that might have lost it (the cost is certain, the
 loss is not, and `invalidate()` already exists for the cases that are).
 
+**D-049 — The pointer's shape is asked for without asking permission, and the
+pointer's position is always reported.** Two decisions that only make sense
+together, because neither is worth anything alone.
+
+A session enters DEC mode 1003 rather than 1002, so motion is reported whether
+or not a button is held. Mode 1002 reports motion only during a drag, which
+means the position of the pointer between clicks — the one fact a pointer
+shape or a hover highlight is a function of — is never known. The cost is one
+report per cell the pointer crosses; the ui layer resolves the view under it
+and drops the report when nothing changed, so a motion that hovers the same
+view as the last one reaches no widget and writes no bytes. Profiles with no
+mouse at all are untouched, and keep their documented keyboard completeness.
+
+Pointer shapes (OSC 22) are then written to every host, without waiting for
+one to say it can draw them. This is the only capability here that is not
+gated on evidence, and the reason is that the protocol affords no evidence to
+gate on. Its support query is an optional extension: hosts implementing the
+original xterm proposal — which draw the shapes perfectly well — never reply
+to anything, so silence cannot distinguish "cannot" from "did not answer". A
+capability that waited for proof would switch the feature off on exactly the
+hosts that have it. Writing it unproven is safe in a way no other unproven
+capability here would be, because an unrecognized OSC is discarded: the
+failure mode is that nothing happens. Contrast D-045's underline shapes,
+gated precisely because a host that misreads one draws the wrong thing.
+
+The query is still sent, as refinement rather than permission. A host that
+answers has identified itself as implementing the kitty specification and has
+listed which shapes it has, so the session switches to the CSS vocabulary and
+degrades per shape against that list. A host that says nothing gets the X11
+cursorfont names of the original proposal — the vocabulary both host families
+accept — with two documented degradations: the diagonal corner resizes are
+written as the move pointer, and progress borrows the wait pointer. The query
+is itself an unknown shape name to a host that does not implement it, and an
+unknown name resets the pointer, so a probe is followed by a re-present that
+states the shape again. The shape is reset when the session ends, from the
+same ledger a fatal signal replays, so a crash mid-hover cannot leave a
+resize arrow over somebody's shell.
+
+A shape is a request about appearance and never about behaviour. Nothing may
+depend on hover for correctness — a terminal that reports no motion has no
+hover at all, and every pointer affordance keeps its keyboard equivalent.
+Widgets say what they mean (`View::pointer_shape_at` returning nullopt to let
+the container answer) and are held to what they can do: `Splitter` is
+keyboard-adjustable in v1, so it does not offer a resize pointer it would not
+honour. An embedded child's OSC 22 is understood and deliberately dropped:
+the pointer belongs to the window the child is a view inside, and a child in
+a background window could otherwise change it.
+
+*Rejected:* emitting only after a host answers (kitty yes, iTerm2 never —
+switching the feature off where it works); probing the host's name and
+version through XTVERSION to recognise set-only implementations (a
+name-to-feature table that ages, for a question whose answer changes nothing,
+since the unproven path has to exist regardless); entering 1003 only once
+shapes are established (couples hover highlighting to a capability users
+experience separately); and treating hover as an application opt-in (a
+default that leaves the feature invisible is a feature nobody has).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

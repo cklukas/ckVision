@@ -105,6 +105,10 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Editable text.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Text;
+    }
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
     void on_resized() override;

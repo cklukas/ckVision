@@ -9,6 +9,8 @@
 #include <thread>
 
 #include "cvision/testing/cktest.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/image_view.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/record_replay_terminal.hpp"
 
@@ -1990,4 +1992,99 @@ CK_TEST(adopting_a_session_from_inside_a_notification_does_not_invalidate_the_wa
     // Adopted mid-step and drained in the same step, because it joined the
     // vector the loop was still walking.
     if (second != nullptr) CK_CHECK(second->drains > 0);
+}
+
+CK_TEST(a_terminal_that_answers_slowly_is_waited_for_rather_than_written_off) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+
+    // One prompt answer establishes that this host does answer at all.
+    app.invalidate_all();
+    app.step(clock.now_nanos());
+    clock.advance(200'000'000);
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+    CK_CHECK(app.last_terminal_round_trip_nanos() == 200'000'000);
+
+    // Now a slow one: past the plain timeout, but well inside what this
+    // host has already shown it can need. A decoder busy with a large
+    // picture must not be mistaken for one that cannot answer — writing it
+    // off removes the back-pressure that was keeping the picture whole.
+    app.invalidate_all();
+    app.step(clock.now_nanos());
+    clock.advance(ckv::ui::kFrameCompletionTimeoutNanos + 100'000'000);
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+    CK_CHECK(app.frame_completion_tracking());
+
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+}
+
+CK_TEST(a_host_that_has_answered_once_is_never_given_up_on) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    app.invalidate_all();
+    app.step(clock.now_nanos());
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+
+    for (int attempt = 0; attempt < ckv::ui::kFrameCompletionGiveUpCount * 3; ++attempt) {
+        app.invalidate_all();
+        app.step(clock.now_nanos());
+        clock.advance(ckv::ui::kFrameCompletionTimeoutNanos * 10);
+        app.step(clock.now_nanos());
+    }
+    // Still tracking: silence from a host that has answered is a lost
+    // reply, never proof that the facility is absent.
+    CK_CHECK(app.frame_completion_tracking());
+}
+
+CK_TEST(a_frame_carrying_a_picture_is_not_followed_by_another_until_the_host_is_ready) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 6}, ckv::term::headless_sixel_profile()};
+    ManualClock clock;
+    Application app(term, clock);
+    // ImageView resolves its own fallback role, so the standard set has to
+    // exist before one is attached.
+    (void)ckv::ui::intern_standard_roles(app.roles());
+    app.set_frame_completion_tracking(true);
+
+    auto image = std::make_shared<ckv::Image>(18, 18);
+    for (int y = 0; y < 18; ++y)
+        for (int x = 0; x < 18; ++x) image->set_pixel(x, y, ckv::Image::Rgba{200, 120, 40, 255});
+    auto* view = app.root().make<ckv::widgets::ImageView>();
+    view->set_bounds(ckv::Rect{0, 0, 6, 3});
+    view->set_image(image);
+    app.step(clock.now_nanos());
+    // One answer first: coalescing follows a host that reports completion,
+    // never one whose silence could equally mean it has no such report.
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    view->set_bounds(ckv::Rect{1, 0, 6, 3});
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+
+    // A drag's worth of position changes, at the pointer's rate rather than
+    // at one the terminal agreed to. None of them may put another picture
+    // on the wire while the last one is still being taken in.
+    const std::size_t after_first = term.written_bytes().size();
+    for (int step = 2; step <= 7; ++step) {
+        view->set_bounds(ckv::Rect{step, 0, 6, 3});
+        clock.advance(4'000'000);
+        app.step(clock.now_nanos());
+    }
+    CK_CHECK(term.written_bytes().size() == after_first);
+
+    // The host catches up, and what goes out is where the view is NOW —
+    // not the six positions it passed through.
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    CK_CHECK(term.written_bytes().size() > after_first);
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
 }

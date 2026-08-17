@@ -19,9 +19,9 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     const ui::CommandId quit_command = app_.commands().declare({.key = "hello.quit", .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
     widgets::ApplicationShell shell(app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
                                            .menus = {{"&File",
-                                                      {widgets::MenuItem{widgets::CommandPresentation{greeting_command}},
-                                                       widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                                       widgets::MenuItem{widgets::CommandPresentation{quit_command, "E&xit"}}}}},
+                                                      {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
+                                                       widgets::MenuItem::separator(),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
                                            .status_items = {
                                                widgets::StatusLineItem{widgets::CommandPresentation{quit_command, "&Quit"}},
                                                widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}}}});

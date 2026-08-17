@@ -65,7 +65,7 @@ void GalleryApp::build_menu_bar() {
     std::vector<widgets::MenuBarItem> menus;
 
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{"&About...", ui::kInvalidCommand,
+    file_menu.items.push_back(widgets::MenuItem::action("&About...",
                                                   [this] {
                                                       widgets::MessageBoxDescriptor descriptor{
                                                           widgets::MessageBoxKind::Info, "About Gallery",
@@ -74,18 +74,17 @@ void GalleryApp::build_menu_bar() {
                                                       auto presentation =
                                                           widgets::present_message_box(app_, *desktop_, roles_, descriptor);
                                                       presentation.set_completion_handler([](widgets::MessageBoxResult) {});
-                                                  },
-                                                  false, {}, {}});
-    file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true, {}, {}});
+                                                  }));
+    file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(
-        widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
+        widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
     menus.push_back(std::move(file_menu));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
     window_menu.items.push_back(
-        widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().tile}});
+        widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().tile}));
     window_menu.items.push_back(
-        widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().cascade}});
+        widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().cascade}));
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

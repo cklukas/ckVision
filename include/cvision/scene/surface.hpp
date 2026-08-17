@@ -105,6 +105,21 @@ public:
     void remove_raster_region(int id) noexcept;
     void clear_raster_regions() noexcept;
     void set_raster_fallback_active(int id, bool active) noexcept;
+
+    // Paint this surface's pictures as their fallbacks instead of as
+    // rasters, and record no raster regions at all.
+    //
+    // A picture is the one thing on a surface that a terminal pays for by
+    // the pixel — a host decodes it, often in another process, before it
+    // can draw anything behind it in the stream. While a window is being
+    // dragged or resized there is a new position every pointer report, and
+    // sending a picture to each of them costs a decode per position for
+    // pixels that are wrong before they are drawn. Suppressing them makes
+    // the gesture cost cells alone, which is what a terminal is fast at;
+    // clearing the flag and repainting brings the picture back where the
+    // gesture left it.
+    void set_rasters_suppressed(bool suppressed) noexcept { rasters_suppressed_ = suppressed; }
+    bool rasters_suppressed() const noexcept { return rasters_suppressed_; }
     const std::vector<RasterRegion>& raster_regions() const noexcept { return raster_regions_; }
 
 private:
@@ -134,6 +149,7 @@ private:
     std::vector<DamageSpan> row_damage_;
     std::vector<RasterRegion> raster_regions_;
     int next_raster_id_ = 1;
+    bool rasters_suppressed_ = false;
 };
 
 }  // namespace ckv::scene

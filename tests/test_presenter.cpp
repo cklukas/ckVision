@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/term/presenter.hpp"
 
+#include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
@@ -678,4 +679,62 @@ CK_TEST(a_hidden_cursor_is_hidden_once_and_not_chased_around) {
     const std::string out{term.written_bytes()};
     CK_CHECK(out.find("Y") != std::string::npos);
     CK_CHECK(out.find("\x1B[?25l") == std::string::npos);  // already hidden; said once
+}
+
+// --- Animated pictures and what a host renders between our bytes ---------
+
+CK_TEST(replacing_a_picture_in_place_does_not_reclear_the_cells_beneath_it) {
+    HeadlessTerminal term(Size{40, 12}, headless_sixel_profile());
+    Presenter presenter(term);
+    Surface surface(Size{40, 12}, Cell::from_grapheme(" ", Style{}));
+
+    const auto frame_with = [&](std::uint8_t shade) {
+        auto image = std::make_shared<Image>(90, 36);
+        for (int y = 0; y < 36; ++y)
+            for (int x = 0; x < 90; ++x)
+                image->set_pixel(x, y, Image::Rgba{shade, 100, 50, 255});
+        return std::vector<RasterSlice>{
+            RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}};
+    };
+    presenter.present(surface.view(), CursorState{}, frame_with(10));
+    const std::size_t first = presenter.last_bytes_emitted();
+
+    // The same footprint, new pixels: the picture is re-sent — it must be —
+    // and the cells beneath it are not, because the new picture paints over
+    // every pixel of the old one. Re-clearing them is what a host renders
+    // as a flash of bare surface under an animation, once per frame.
+    const std::size_t before = term.written_bytes().size();
+    presenter.present(surface.view(), CursorState{}, frame_with(200));
+    const std::string second(term.written_bytes().substr(before));
+    CK_CHECK(second.find("\x1B" "P") != std::string::npos);
+    CK_CHECK(presenter.last_bytes_emitted() < first / 2);
+    // No cursor move into the picture's interior rows other than the one
+    // that places the picture itself.
+    std::size_t moves = 0, pos = 0;
+    while ((pos = second.find("\x1B[", pos)) != std::string::npos) {
+        const std::size_t h = second.find('H', pos);
+        if (h != std::string::npos && h - pos < 10) ++moves;
+        pos += 2;
+    }
+    CK_CHECK(moves <= 2);  // the picture's own placement, and the cursor park
+}
+
+CK_TEST(every_presented_frame_keeps_the_synchronized_update_bracket) {
+    Capabilities caps = headless_sixel_profile();
+    caps.synchronized_output = true;
+    HeadlessTerminal term(Size{40, 12}, caps);
+    Presenter presenter(term);
+    Surface surface(Size{40, 12}, Cell::from_grapheme(" ", Style{}));
+
+    auto image = std::make_shared<Image>(90, 36);
+    for (int y = 0; y < 36; ++y)
+        for (int x = 0; x < 90; ++x) image->set_pixel(x, y, Image::Rgba{80, 120, 200, 255});
+    // Raster frames are bracketed like any other. The bracket was removed
+    // for them once, on a theory about one host's snapshotting; the field
+    // evidence did not bear the theory out, and an unverified reason to
+    // deviate from a protocol is no reason at all.
+    presenter.present(surface.view(), CursorState{},
+                      {RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}});
+    CK_CHECK(term.written_bytes().find("\x1B[?2026h") != std::string::npos);
+    CK_CHECK(term.written_bytes().find("\x1B" "P") != std::string::npos);
 }

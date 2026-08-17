@@ -487,3 +487,57 @@ CK_TEST(a_scrolling_list_still_shows_its_bar_in_the_last_column) {
     const ckv::FrameView frame = app.current_frame();
     CK_CHECK(frame.at(ckv::Point{11, 0}).style().bg != frame.at(ckv::Point{0, 0}).style().bg);
 }
+
+// --- Browsing versus choosing -----------------------------------------
+
+CK_TEST(the_cursor_reports_every_move_including_the_one_a_caller_makes) {
+    Fixture f;
+    ListView list;
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_bounds(Rect{0, 0, 20, 5});
+    list.set_items({"one", "two", "three"});
+    std::vector<std::size_t> moved;
+    list.on_cursor_changed = [&](std::size_t at) { moved.push_back(at); };
+
+    list.on_key(key(ckv::Key::Down));
+    list.set_cursor(2);
+    CK_CHECK(moved.size() == 2);
+    CK_CHECK(moved[0] == 1);
+    CK_CHECK(moved[1] == 2);
+}
+
+CK_TEST(a_cursor_that_did_not_move_reports_nothing) {
+    // A listener may do real work — render a page, run a query — so it is
+    // told about moves, not about keystrokes.
+    Fixture f;
+    ListView list;
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_bounds(Rect{0, 0, 20, 5});
+    list.set_items({"one", "two"});
+    int moves = 0;
+    list.on_cursor_changed = [&](std::size_t) { ++moves; };
+    list.on_key(key(ckv::Key::Up));  // at the top
+    CK_CHECK(moves == 0);
+    list.set_cursor(0);  // already there
+    CK_CHECK(moves == 0);
+}
+
+CK_TEST(browsing_and_choosing_are_reported_separately) {
+    Fixture f;
+    ListView list;
+    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_bounds(Rect{0, 0, 20, 5});
+    list.set_items({"one", "two", "three"});
+    int moves = 0;
+    int activations = 0;
+    list.on_cursor_changed = [&](std::size_t) { ++moves; };
+    list.on_activate = [&](std::size_t) { ++activations; };
+
+    list.on_key(key(ckv::Key::Down));
+    CK_CHECK(moves == 1);
+    CK_CHECK(activations == 0);  // moving is not choosing
+
+    list.on_key(key(ckv::Key::Enter));
+    CK_CHECK(activations == 1);
+    CK_CHECK(moves == 1);  // and choosing is not moving
+}

@@ -337,10 +337,15 @@ private:
     static bool is_descendant_of(const ui::View& view, const ui::View* ancestor) noexcept;
     void request_layer_recompose();
     void raise_layer_to_front(ui::View* child);
+    // One window's move or resize rests every window's pictures — see the
+    // binding in add_window. Counted rather than boolean out of caution;
+    // a single pointer means it is 0 or 1 in practice.
+    void window_gesture_changed(bool active);
 
     ui::RoleId background_role_ = ui::kInvalidRole;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     Window* active_ = nullptr;
+    int active_gestures_ = 0;
     std::vector<ui::View*> popups_;
     struct PopupBacking {
         std::optional<scene::Surface> surface;

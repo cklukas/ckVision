@@ -63,12 +63,24 @@ inline constexpr std::int64_t kDefaultFrameIntervalNanos = 200'000'000;
 // honest refusal to render. Recovery is automatic and needs nothing
 // undone on either side: the very next frame root() is at least
 // kHardFloorSize again, painting resumes normally.
-// How long an unanswered frame is waited for before it is written off.
-// Generous next to any terminal's own frame time, and short enough that a
-// host which never answers costs an application a fraction of a second
-// once rather than a stall it has to be restarted out of.
+// How long an unanswered frame is waited for before it is written off, on a
+// host that has never answered one. Short enough that a terminal without the
+// facility costs an application a fraction of a second once, rather than a
+// stall it has to be restarted out of.
+//
+// A host that HAS answered is waited for far longer than this — see
+// kFrameCompletionPatienceFactor. The two cases look identical for the first
+// 250 ms and could not be more different afterwards: one has no answer to
+// give, the other is busy drawing the very frame being asked about.
 inline constexpr std::int64_t kFrameCompletionTimeoutNanos = 250'000'000;
-// Consecutive write-offs after which a host is taken at its word.
+// How many times the longest answer yet seen a host is given before its
+// silence is treated as a lost reply. A terminal whose decoder takes a
+// quarter of a second for a large picture must not be mistaken for one that
+// does not implement the query — writing off a slow answer removes the very
+// back-pressure that would have kept the picture whole.
+inline constexpr int kFrameCompletionPatienceFactor = 4;
+// Consecutive write-offs after which a host that has NEVER answered is taken
+// at its word.
 inline constexpr int kFrameCompletionGiveUpCount = 3;
 
 inline constexpr Size kMinFullChromeSize{80, 24};
@@ -192,6 +204,18 @@ public:
     std::size_t mouse_events_dispatched() const noexcept { return mouse_events_dispatched_; }
     const std::optional<MouseEvent>& last_mouse_event() const noexcept { return last_mouse_event_; }
     Size terminal_cell_grid() const noexcept { return terminal_.size(); }
+
+    // The single deepest view the pointer is over, or nullptr when it is
+    // over nothing — outside the root, or on a terminal that never reports
+    // where it is. Exposed for the same reason as last_mouse_event():
+    // "the pointer is over the wrong view" and "the view under the pointer
+    // does not react" are different faults with the same symptom.
+    View* hovered_view() const noexcept { return hovered_; }
+
+    // The shape the host's pointer is being asked to take, after this
+    // terminal's own degradations have been applied. The value handed to
+    // the Presenter on the next frame.
+    PointerShape pointer_shape() const noexcept;
 
     // Whether this terminal can actually show a raster image right now.
     // A caller that would otherwise reserve cells for a picture asks first,
@@ -550,6 +574,12 @@ private:
 
     View* topmost_view_at(Point absolute_point) noexcept;
     static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
+    // Re-resolves which view the pointer is over and notifies both sides of
+    // the transition. `holder` is the view holding mouse capture, if any:
+    // during a drag the pointer belongs to whatever it took hold of, so a
+    // window being resized keeps its resize pointer even as the pointer
+    // travels across everything else on the desktop.
+    void update_hover(Point absolute_point, View* holder);
     static void collect_focusable(View& view, std::vector<View*>& out);
     const std::vector<View*>& focusable_views();
     const std::vector<std::string>& focused_command_contexts();
@@ -620,12 +650,15 @@ private:
     // is measured from the wrong instant.
     std::optional<std::int64_t> oldest_unanswered_frame_nanos_;
     std::int64_t last_terminal_round_trip_nanos_ = -1;
+    std::int64_t longest_terminal_round_trip_nanos_ = 0;
+    bool terminal_ever_acknowledged_ = false;
     int frame_completion_timeouts_ = 0;
     std::atomic<bool> quit_requested_{false};
     HistoryRegistry history_;
     std::string clipboard_text_;
     View* focused_ = nullptr;
     View* mouse_capture_ = nullptr;
+    View* hovered_ = nullptr;
     View* input_capture_ = nullptr;
     std::vector<ModalScope> modal_stack_;
     // Reused only on the owning thread. These preserve Application's

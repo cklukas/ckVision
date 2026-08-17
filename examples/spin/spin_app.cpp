@@ -215,37 +215,36 @@ SpinApp::SpinApp(ui::Application& app)
             .handler = [this, shape = entry.id] { (void)open_window(shape); },
         });
         commands_[static_cast<std::size_t>(entry.id)] = command;
-        new_window_items.push_back(widgets::MenuItem{widgets::CommandPresentation{command}});
+        new_window_items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{command}));
     }
 
     widgets::MenuBarItem file_menu{
         "&File",
         {
-            widgets::MenuItem{"&New", ui::kInvalidCommand, {}, false, widgets::MenuItemCheck::None,
-                              std::move(new_window_items)},
-            widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().close}},
-            widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}},
+            widgets::MenuItem::submenu("&New", std::move(new_window_items)),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().close}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}),
         },
     };
     widgets::MenuBarItem window_menu{
         "&Window",
         {
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().previous_window}},
-            widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().zoom}},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().tile}},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().cascade}},
-            widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().window_list}},
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().next_window}),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().previous_window}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().zoom}),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().tile}),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().cascade}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().window_list}),
         },
     };
     widgets::MenuBarItem help_menu{
         "&Help",
-        {widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().help,
-                                                        "&About..."}}},
+        {widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help,
+                                                        "&About..."})},
     };
 
     widgets::ApplicationShell shell(
@@ -341,6 +340,33 @@ void SpinApp::set_target_frame_interval(std::int64_t nanos) {
     target_interval_nanos_ = std::max<std::int64_t>(1'000'000, nanos);
     interval_nanos_ = std::max(interval_nanos_, target_interval_nanos_);
     if (interval_nanos_ > target_interval_nanos_ && !last_tick_nanos_) interval_nanos_ = target_interval_nanos_;
+}
+
+void SpinApp::set_raster_pixel_rate(double pixels_per_second) noexcept {
+    raster_pixel_rate_ = pixels_per_second > 0.0 ? pixels_per_second : kRasterPixelsPerSecond;
+}
+
+std::int64_t SpinApp::raster_paced_interval_nanos() const {
+    // This budget holds even when the terminal answers the completion
+    // query. That reply proves the frame was DECODED — it is ordered after
+    // the picture it follows — and pacing on it alone runs the animation
+    // at exactly the host's decode-saturation rate. Measured on iTerm2,
+    // that is also the rate at which its renderer visibly loses the race
+    // against each replacement (flat placeholder flashes where a picture
+    // was an instant ago): drawing happens after the reply, on the host's
+    // own schedule, and nothing in the protocol reports it. A slow, whole
+    // picture beats a fast, torn one, so the rate stays in charge and the
+    // completion reply only ever slows things further.
+    //
+    // Every window's picture crosses the same wire into the same decoder,
+    // so what matters is their total area, not the largest one.
+    double pixels = 0.0;
+    for (const Panel& panel : panels_) {
+        const Size frame = panel.view->frame_pixels();
+        pixels += static_cast<double>(frame.width) * frame.height;
+    }
+    if (pixels <= 0.0 || raster_pixel_rate_ <= 0.0) return 0;
+    return static_cast<std::int64_t>(pixels / raster_pixel_rate_ * 1e9);
 }
 
 ui::CommandId SpinApp::new_window_command(ShapeId shape) const noexcept {
@@ -455,6 +481,10 @@ void SpinApp::pace(std::int64_t now_nanos) {
         // load straight back.
         interval_nanos_ = std::max(target_interval_nanos_, interval_nanos_ * 7 / 8);
     }
+    // And never faster than the terminal can paint what is already on it.
+    // A loop that is keeping up perfectly says nothing about a decoder that
+    // is not, because nothing in the protocol reports a picture drawn.
+    interval_nanos_ = std::max(interval_nanos_, raster_paced_interval_nanos());
     // Anything much EARLIER than asked for is not a measurement of the
     // loop's health at all — it is a clock that jumped, or a host that
     // stepped this application several times in a row — so it neither

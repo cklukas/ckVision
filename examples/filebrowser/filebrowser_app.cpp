@@ -79,8 +79,8 @@ void FileBrowserApp::build_menu_bar() {
     // all render live from the registration above.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{
-        widgets::CommandPresentation{app_.commands().standard().quit}});
+    file_menu.items.push_back(
+        widgets::MenuItem::command(app_.commands().standard().quit));
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

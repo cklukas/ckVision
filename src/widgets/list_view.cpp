@@ -154,11 +154,17 @@ std::vector<std::size_t> ListView::selected_indices() const {
 void ListView::move_cursor(int new_cursor, bool select_on_move) {
     const std::size_t count = item_count();
     if (count == 0) return;
+    const int previous = cursor_;
     cursor_ = std::clamp(new_cursor, 0, static_cast<int>(count) - 1);
     cursor_id_ = id_at(static_cast<std::size_t>(cursor_));
     ensure_cursor_visible();
     if (select_on_move) select_only(static_cast<std::size_t>(cursor_));
     invalidate();
+    // After the move is complete, so a listener that reads the list back
+    // sees where it now is; and only on a real move, so a listener may
+    // do real work without checking whether anything changed.
+    if (cursor_ != previous && on_cursor_changed)
+        on_cursor_changed(static_cast<std::size_t>(cursor_));
 }
 
 void ListView::ensure_cursor_visible() {

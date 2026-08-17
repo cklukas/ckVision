@@ -17,6 +17,7 @@
 #include "cvision/core/event.hpp"
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/geometry.hpp"
+#include "cvision/core/pointer_shape.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/ui/context.hpp"
@@ -353,6 +354,51 @@ public:
     virtual bool on_mouse(const MouseEvent&) { return false; }
     virtual void on_focus(const FocusEvent&) {}
 
+    // --- Pointer shape and hover ---------------------------------------
+
+    // The shape the host's mouse pointer should take while the pointer is
+    // at `local` (this view's own coordinates). Returning nullopt means
+    // "no opinion", and the question passes to the parent — which is why
+    // it is an optional rather than a Default: a Button inside a Window
+    // has an opinion about its whole area, while the Window's content pane
+    // has none and must not overrule the border its parent draws.
+    //
+    // Position-dependent because a single view legitimately wants several:
+    // a Window is one view whose borders resize, whose corners resize
+    // diagonally, and whose title moves the whole thing.
+    //
+    // Called during pointer routing, potentially on every reported motion.
+    // It must be cheap, and it must not mutate: it is a question about
+    // appearance, asked of a tree that is not being modified.
+    virtual std::optional<PointerShape> pointer_shape_at(Point local) const {
+        (void)local;
+        return std::nullopt;
+    }
+
+    // Whether the pointer is currently over this view — true for the
+    // single deepest view under it, not for its ancestors. A container
+    // that wants to know the pointer is somewhere inside it asks its
+    // children; making every ancestor "hovered" would light up a whole
+    // window because the pointer is over one of its buttons.
+    //
+    // Always false on a terminal that does not report motion: hover is a
+    // fact the host supplies, and a session without it simply never has
+    // one. Nothing may depend on hover for correctness, only for
+    // appearance (ARCHITECTURE.md §5 — every pointer affordance has a
+    // keyboard equivalent).
+    bool hovered() const noexcept { return hovered_; }
+
+    // Fired when hovered() changes. The default does nothing, and a widget
+    // that draws itself differently under the pointer overrides it to
+    // invalidate.
+    //
+    // That way round because most views have no hover appearance at all,
+    // and the pointer crosses them constantly. An invalidate-by-default
+    // would put a dirty rect under the pointer on every cell it travels
+    // over — including across a window being dragged, whose whole point is
+    // that its retained content is recomposed and not repainted.
+    virtual void on_hover_changed(bool now_hovered) { (void)now_hovered; }
+
     // Capture-phase notification (M8 WP-3): fired on every ancestor of
     // `target` — NOT on target itself — when target is about to
     // receive a MouseAction::Down, before that delivery happens.
@@ -441,6 +487,12 @@ private:
     // framework behavior instead of a callback convention.
     using BoundsChangedSink = std::function<void(Rect)>;
     using ChildAttachedSink = std::function<void(View&)>;
+    // Application owns hover: it is the only participant that knows where
+    // the pointer is, and a view that could declare itself hovered could
+    // contradict the one place that knows. A no-op when unchanged, so the
+    // notification fires on transitions only.
+    void set_hovered(bool hovered);
+
     void set_bounds_changed_sink(BoundsChangedSink sink) { bounds_changed_sink_ = std::move(sink); }
     void set_child_attached_sink(ChildAttachedSink sink) { child_attached_sink_ = std::move(sink); }
 
@@ -456,6 +508,7 @@ private:
     Size preferred_size_;
     bool visible_ = true;
     bool enabled_ = true;
+    bool hovered_ = false;
     FocusPolicy focus_policy_ = FocusPolicy::None;
     bool fills_root_ = true;
     std::unique_ptr<Theme> theme_override_;

@@ -32,6 +32,7 @@ void Button::on_attached() {
     if (default_role_ == ui::kInvalidRole) default_role_ = context().roles->find("ckv.button.default");
     if (shadow_role_ == ui::kInvalidRole) shadow_role_ = context().roles->find("ckv.button.shadow");
     if (pressed_role_ == ui::kInvalidRole) pressed_role_ = context().roles->find("ckv.button.pressed");
+    if (hovered_role_ == ui::kInvalidRole) hovered_role_ = context().roles->find("ckv.button.hovered");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
 }
 
@@ -92,10 +93,7 @@ void Button::draw(scene::Painter& painter) {
     if (w < 1 || h < 1) return;
     if (flat_) {
         const ui::Theme& theme = *context().theme;
-        const ui::RoleId role = pressed_ ? pressed_role_
-                                : has_focus_ ? focused_role_
-                                : is_default_ ? default_role_
-                                              : normal_role_;
+        const ui::RoleId role = face_role();
         const Style face = theme.resolve(role);
         painter.fill(Rect{0, 0, w, h}, Cell::from_grapheme(" ", face));
         const auto parsed = parse_mnemonic(raw_text_);
@@ -107,9 +105,14 @@ void Button::draw(scene::Painter& painter) {
     if (w < 3) return;
     const int s = w - 1;  // the shadow column (right edge)
 
-    const ui::RoleId face_role = has_focus_ ? focused_role_ : (is_default_ ? default_role_ : normal_role_);
     const ui::Theme& theme = *context().theme;
-    const Style face = theme.resolve(face_role);
+    // A shadowed button shows a press in its geometry rather than its
+    // colour, so its face role skips the pressed state the flat one uses.
+    const Style face =
+        theme.resolve(has_focus_    ? focused_role_
+                      : hovered()   ? hovered_role_
+                      : is_default_ ? default_role_
+                                    : normal_role_);
     const Style shadow = theme.resolve(shadow_role_);
 
     const int face_rows = std::max(1, h - 1);

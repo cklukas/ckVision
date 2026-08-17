@@ -85,6 +85,12 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // Read-only, but still text: it is selected and scrolled by pointer,
+    // and the shape says what the pointer will do rather than whether the
+    // content can be changed.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Text;
+    }
     void on_attached() override;
 
 private:

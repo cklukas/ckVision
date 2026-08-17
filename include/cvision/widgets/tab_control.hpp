@@ -36,6 +36,10 @@ public:
     ui::SizeHint vertical_size_hint() const override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    // The strip of tabs switches pages when clicked.
+    std::optional<PointerShape> pointer_shape_at(Point) const override {
+        return PointerShape::Pointer;
+    }
     void on_focus(const FocusEvent& event) override;
 
 private:

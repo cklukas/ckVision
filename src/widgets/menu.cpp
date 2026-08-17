@@ -12,6 +12,70 @@
 
 namespace ckv::widgets {
 
+// --- MenuItem ---------------------------------------------------------
+
+MenuItem MenuItem::command(ui::CommandId id) {
+    return command(CommandPresentation{id});
+}
+
+MenuItem MenuItem::command(CommandPresentation presentation) {
+    MenuItem item;
+    item.kind_ = MenuItemKind::Command;
+    item.presentation_ = std::move(presentation);
+    return item;
+}
+
+MenuItem MenuItem::action(std::string label, std::function<void()> run) {
+    MenuItem item;
+    item.kind_ = MenuItemKind::Action;
+    item.label_ = std::move(label);
+    item.action_ = std::move(run);
+    return item;
+}
+
+MenuItem MenuItem::submenu(std::string label, std::vector<MenuItem> children) {
+    MenuItem item;
+    item.kind_ = MenuItemKind::Submenu;
+    item.label_ = std::move(label);
+    item.children_ = std::move(children);
+    return item;
+}
+
+MenuItem MenuItem::separator() {
+    MenuItem item;
+    item.kind_ = MenuItemKind::Separator;
+    return item;
+}
+
+MenuItem MenuItem::with_mark(MenuMark mark) const {
+    MenuItem copy = *this;
+    copy.mark_ = mark;
+    return copy;
+}
+
+MenuItem MenuItem::with_help(std::string help_context) const {
+    MenuItem copy = *this;
+    copy.help_context_ = std::move(help_context);
+    return copy;
+}
+
+MenuItem MenuItem::with_disabled_reason(std::string reason) const {
+    MenuItem copy = *this;
+    copy.disabled_reason_ = std::move(reason);
+    return copy;
+}
+
+MenuItem MenuItem::with_enabled(bool enabled) const {
+    // A Command row's availability belongs to its command: the registry's
+    // predicate and context decide it, and every surface showing that
+    // command has to agree. Letting a menu override it here is how a menu
+    // comes to offer a verb the palette greys.
+    CKV_ASSERT(kind_ != MenuItemKind::Command);
+    MenuItem copy = *this;
+    copy.enabled_ = enabled;
+    return copy;
+}
+
 namespace {
 
 bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
@@ -52,6 +116,21 @@ constexpr std::string_view kSubmenuMarker = "►";
 // the submenu marker. One item never has both — a submenu parent runs no
 // command — so they share a column, and a menu with some of each reads as
 // one right-hand column rather than two ragged ones.
+// A box for an independent switch, a round mark for one-of-a-set. The
+// shapes differ because the promises do: turning a radio row on turns its
+// neighbour off, and a reader scanning the column should be able to see
+// that without being told.
+std::string_view mark_glyph(MenuMark mark) {
+    switch (mark) {
+        case MenuMark::Checked: return "x";
+        case MenuMark::Unchecked: return " ";
+        case MenuMark::RadioOn: return "\u2022";
+        case MenuMark::RadioOff: return " ";
+        case MenuMark::None: break;
+    }
+    return " ";
+}
+
 int right_column_width(const std::optional<std::string>& chord, bool marks_submenu) {
     if (chord) return text::text_width(*chord);
     return marks_submenu ? text::text_width(kSubmenuMarker) : 0;
@@ -106,23 +185,73 @@ void DropdownMenu::end_pointer_press() {
 void DropdownMenu::set_highlighted(int index) {
     if (highlighted_ == index) return;
     highlighted_ = index;
-    if (on_highlight_changed) on_highlight_changed(highlighted_command());
+    if (on_highlight_changed) on_highlight_changed(highlight());
+}
+
+MenuHighlight DropdownMenu::highlight() const {
+    // Down the open chain first: a reader standing in a submenu is not
+    // standing on the parent row that opened it.
+    if (child_menu_ != nullptr) return child_menu_->highlight();
+    MenuHighlight out;
+    if (highlighted_ < 0 || static_cast<std::size_t>(highlighted_) >= items_.size()) {
+        out.none = true;
+        return out;
+    }
+    const MenuItem& item = items_[static_cast<std::size_t>(highlighted_)];
+    out.command = highlighted_command();
+    out.help_context = item.help_context();
+    out.disabled_reason = item.disabled_reason();
+    out.enabled = item_enabled(static_cast<std::size_t>(highlighted_));
+    return out;
 }
 
 ui::CommandId DropdownMenu::highlighted_command() const noexcept {
     if (highlighted_ < 0 || static_cast<std::size_t>(highlighted_) >= items_.size())
         return ui::kInvalidCommand;
     const MenuItem& item = items_[static_cast<std::size_t>(highlighted_)];
-    if (item.separator || !item.submenu.empty()) return ui::kInvalidCommand;
+    if (item.is_separator() || item.has_children()) return ui::kInvalidCommand;
     return item_command(item);
 }
 
 bool DropdownMenu::item_enabled(std::size_t index) const {
     const MenuItem& item = items_[index];
-    if (item.separator) return false;
-    if (item_command(item) != ui::kInvalidCommand)
-        return context().app->command_available(item_command(item));
-    return true;
+    if (item.is_separator()) return false;
+    // One source per kind: a command row is available exactly when its
+    // command is, so the menu cannot disagree with the palette or the
+    // status line; every other kind carries its own flag, because there
+    // is nothing else that could know.
+    //
+    // Through context(), which follows attachment, and never through the
+    // cached app_: a menu is asked what it shows while it is being torn
+    // down too, and app_ outlives the application it points at. A row
+    // nobody is there to adjudicate reads as available, which is what it
+    // looked like before anyone asked.
+    if (item.kind() == MenuItemKind::Command)
+        return context().app == nullptr || context().app->command_available(item.command());
+    return item.enabled_flag();
+}
+
+void DropdownMenu::follow_highlight_with_submenu() {
+    const bool wanted = highlighted_ >= 0 &&
+                        static_cast<std::size_t>(highlighted_) < items_.size() &&
+                        items_[static_cast<std::size_t>(highlighted_)].has_children();
+    if (!wanted) {
+        close_submenu(true);
+        return;
+    }
+    // Not "open one if none is open" — open THIS one. Moving from one row
+    // with children straight onto another must change which submenu is
+    // showing, and open_submenu already costs nothing when it is the one
+    // already up.
+    open_submenu(highlighted_);
+}
+
+bool DropdownMenu::item_reachable(std::size_t index) const {
+    // A separator is scenery. Everything else can be stood on, including
+    // a row that cannot be used: a reader who cannot reach a grey verb
+    // cannot be told why it is grey, and "why not" is the question a grey
+    // verb provokes. Enter simply does nothing there — see activate().
+    return !items_[index].is_separator();
 }
 
 int DropdownMenu::step_selection(int from, int direction) const {
@@ -131,14 +260,14 @@ int DropdownMenu::step_selection(int from, int direction) const {
     int idx = from;
     for (int i = 0; i < n; ++i) {
         idx = (idx + direction + n) % n;
-        if (item_enabled(static_cast<std::size_t>(idx))) return idx;
+        if (item_reachable(static_cast<std::size_t>(idx))) return idx;
     }
     return -1;
 }
 
 void DropdownMenu::activate(int index) {
     if (index < 0 || !item_enabled(static_cast<std::size_t>(index))) return;
-    if (!items_[static_cast<std::size_t>(index)].submenu.empty()) {
+    if (items_[static_cast<std::size_t>(index)].has_children()) {
         open_submenu(index);
         return;
     }
@@ -147,7 +276,7 @@ void DropdownMenu::activate(int index) {
     // popup from its owning Desktop) — nothing below may read a member
     // (or call context()) on `this` after that point.
     const ui::CommandId command = item_command(items_[static_cast<std::size_t>(index)]);
-    const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].on_activate;
+    const std::function<void()> on_activate = items_[static_cast<std::size_t>(index)].action();
     ui::Application& app = *context().app;
     // Chosen, not merely closed: the bar unwinds and returns focus where it
     // found it BEFORE the command runs, so anything the command opens sees
@@ -181,13 +310,33 @@ DropdownMenu* DropdownMenu::innermost_menu() noexcept {
     return menu;
 }
 
+DropdownMenu* DropdownMenu::root_menu() noexcept {
+    DropdownMenu* menu = this;
+    while (menu->parent_menu_ != nullptr) menu = menu->parent_menu_;
+    return menu;
+}
+
+DropdownMenu* DropdownMenu::menu_under_pointer(Point cell) noexcept {
+    for (DropdownMenu* menu = innermost_menu(); menu != nullptr; menu = menu->parent_menu_)
+        if (menu->absolute_bounds().contains(cell)) return menu;
+    return nullptr;
+}
+
+bool& DropdownMenu::chain_pointer_pressed() noexcept { return root_menu()->pointer_pressed_; }
+
 void DropdownMenu::open_submenu(int index) {
     if (index < 0 || static_cast<std::size_t>(index) >= items_.size()) return;
     const MenuItem& item = items_[static_cast<std::size_t>(index)];
-    if (item.submenu.empty() || desktop_ == nullptr || app_ == nullptr) return;
+    if (!item.has_children() || desktop_ == nullptr || app_ == nullptr) return;
+    // Asking for the submenu that is already showing is not a request to
+    // show it again: tearing it down and rebuilding it would take the input
+    // capture and the reader's place inside it with it, for no visible
+    // change. It is what a release over the row that just opened one asks
+    // for, and what the pointer asks for on every move across that row.
+    if (child_menu_ != nullptr && child_index_ == index) return;
     close_submenu(false);
 
-    auto submenu = std::make_unique<DropdownMenu>(item.submenu, this);
+    auto submenu = std::make_unique<DropdownMenu>(item.children(), this);
     auto* raw = desktop_->add_popup(std::move(submenu));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
@@ -209,9 +358,10 @@ void DropdownMenu::open_submenu(int index) {
     // rather than going dark for as long as the submenu is up.
     raw->on_highlight_changed = on_highlight_changed;
     child_menu_ = raw;
+    child_index_ = index;
     // The submenu settled on its first entry while attaching, before the line
     // above could hear it — report that opening position explicitly.
-    if (on_highlight_changed) on_highlight_changed(raw->highlighted_command());
+    if (on_highlight_changed) on_highlight_changed(raw->highlight());
     app_->set_input_capture(raw);
     invalidate();
 }
@@ -220,18 +370,19 @@ void DropdownMenu::close_submenu(bool restore_capture) {
     DropdownMenu* child = child_menu_;
     if (child == nullptr) return;
     child_menu_ = nullptr;
+    child_index_ = -1;
     if (app_ != nullptr && app_->input_capture() == child) app_->clear_input_capture();
     if (desktop_ != nullptr) desktop_->remove_popup(child);
     if (restore_capture && app_ != nullptr) app_->set_input_capture(this);
     // The innermost highlight is this menu's again, now that the submenu that
     // held it is gone.
-    if (on_highlight_changed) on_highlight_changed(highlighted_command());
+    if (on_highlight_changed) on_highlight_changed(highlight());
     invalidate();
 }
 
 bool DropdownMenu::has_check_column() const noexcept {
     return std::any_of(items_.begin(), items_.end(), [](const MenuItem& item) {
-        return item.check != MenuItemCheck::None;
+        return item.mark() != MenuMark::None;
     });
 }
 
@@ -245,37 +396,37 @@ std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) c
     // A surface-stated chord wins over the registry's (see
     // CommandPresentation::chord): the menu advertises the way this
     // application actually reaches the command.
-    if (!item.presentation.chord.empty()) return item.presentation.chord;
+    if (!item.presentation().chord.empty()) return item.presentation().chord;
     const auto chord = context().app->commands().chord_for_command(command);
     if (!chord) return std::nullopt;
     return context().app->commands().format_chord(*chord);
 }
 
 ui::CommandId DropdownMenu::item_command(const MenuItem& item) const noexcept {
-    return item.presentation.command != ui::kInvalidCommand ? item.presentation.command : item.command;
+    return item.command();
 }
 
 std::string DropdownMenu::item_presentation_label(const MenuItem& item) const {
-    if (!item.presentation.label.empty()) return item.presentation.label;
+    if (!item.presentation().label.empty()) return item.presentation().label;
     const ui::CommandId command = item_command(item);
     if (command != ui::kInvalidCommand) {
         if (const ui::CommandInfo* info = context().app->commands().find(command))
             return info->title;
     }
-    return item.label;
+    return item.label();
 }
 
 SizeHint DropdownMenu::horizontal_size_hint() const {
     int max_width = 0;
     const int check_columns = has_check_column() ? 2 : 0;
     for (const auto& item : items_) {
-        if (item.separator) continue;
+        if (item.is_separator()) continue;
         int width = check_columns + text::text_width(parse_mnemonic(item_source_text(item)).display);
         // Only what this item itself puts in the right-hand column. Charging
         // every item for a submenu marker one of them happens to need is
         // what left a chord hint stranded two columns short of the marker
         // it was supposed to line up with.
-        if (const int right = right_column_width(item_chord_hint(item), !item.submenu.empty()); right > 0)
+        if (const int right = right_column_width(item_chord_hint(item), item.has_children()); right > 0)
             width += 2 + right;
         max_width = std::max(max_width, width);
     }
@@ -311,6 +462,23 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             }
             return true;
         }
+        case Key::Home:
+        case Key::End: {
+            // A menu long enough to need them is exactly the menu where
+            // walking to an end one row at a time is tedious. step_selection
+            // from outside the range lands on the first (or last) row that
+            // can actually be chosen, so a leading separator or a greyed
+            // first entry does not swallow the key.
+            close_submenu(true);
+            const bool to_end = event.chord.key == Key::End;
+            const int from = to_end ? static_cast<int>(items_.size()) : -1;
+            const int next = step_selection(from, to_end ? -1 : +1);
+            if (next >= 0 && next != highlighted_) {
+                set_highlighted(next);
+                invalidate();
+            }
+            return true;
+        }
         case Key::Enter:
             activate(highlighted_);
             return true;
@@ -322,7 +490,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             // on the bar.
             if (highlighted_ < 0 || static_cast<std::size_t>(highlighted_) >= items_.size())
                 return false;
-            if (items_[static_cast<std::size_t>(highlighted_)].submenu.empty()) return false;
+            if (!items_[static_cast<std::size_t>(highlighted_)].has_children()) return false;
             open_submenu(highlighted_);
             return child_menu_ != nullptr;
         }
@@ -337,7 +505,7 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
             return true;
         case Key::Char:
             for (std::size_t i = 0; i < items_.size(); ++i) {
-                if (items_[i].separator) continue;
+                if (items_[i].is_separator()) continue;
                 const auto parsed = parse_mnemonic(item_source_text(items_[i]));
                 if (!parsed.mnemonic.empty() && ascii_ci_equal(parsed.mnemonic, event.chord.text) &&
                     item_enabled(i)) {
@@ -357,6 +525,20 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
     // button release over the top bar back to MenuBar: treating that release
     // as "outside" would immediately dismiss a just-opened menu.
     if (pointer_navigation_ && pointer_navigation_(event)) return true;
+    // The same is true one level down, and for the same reason. Input capture
+    // follows the innermost menu, but a pointer gesture belongs to the whole
+    // chain: the press that opens a submenu lands on the PARENT row, and the
+    // release that ends it arrives after the submenu has taken the capture —
+    // over a point the submenu does not contain. Read by the submenu alone
+    // that release is a click outside it, and the menu the reader just opened
+    // vanishes before they can aim at anything in it. So an event goes to the
+    // menu of this chain the pointer is actually over, and to the root when it
+    // is over none of them — the root being the one that can hand a bar-row
+    // event back to its MenuBar, or close the chain when the reader has
+    // pressed somewhere else entirely.
+    DropdownMenu* const over = menu_under_pointer(event.cell);
+    DropdownMenu* const owner = over != nullptr ? over : root_menu();
+    if (owner != this) return owner->on_mouse(event);
     const Rect abs = absolute_bounds();
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
     const bool inside = local.x >= 0 && local.x < abs.width && local.y >= 0 && local.y < abs.height;
@@ -365,7 +547,8 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
     if (inside && !(framed && (local.x == 0 || local.x == bounds().width - 1 || local.y == 0 ||
                                 local.y == bounds().height - 1))) {
         const int row = local.y - (framed ? 1 : 0);
-        if (row >= 0 && row < static_cast<int>(items_.size()) && item_enabled(static_cast<std::size_t>(row)))
+        if (row >= 0 && row < static_cast<int>(items_.size()) &&
+            item_reachable(static_cast<std::size_t>(row)))
             candidate = row;
     }
     if (event.action == MouseAction::Down) {
@@ -373,11 +556,15 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
             dismiss();  // light dismiss: this event only reaches us via input capture
             return false;
         }
-        pointer_pressed_ = true;
+        chain_pointer_pressed() = true;
         if (highlighted_ != candidate) {
             set_highlighted(candidate);
             invalidate();
         }
+        // A press on a parent row opens its children, so a reader can go
+        // straight down into a submenu with the pointer the same way the
+        // keyboard's Right does.
+        follow_highlight_with_submenu();
         return true;
     }
     if (event.action == MouseAction::Move) {
@@ -385,11 +572,21 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
             set_highlighted(candidate);
             invalidate();
         }
-        return pointer_pressed_ || inside;
+        // The open submenu follows the pointer, whether or not the
+        // highlight just moved: a submenu standing over a row the reader
+        // has already left is a menu that no longer describes where the
+        // pointer is, and one that has not opened yet under a row the
+        // pointer is resting on is a menu that has not caught up.
+        if (inside) follow_highlight_with_submenu();
+        return chain_pointer_pressed() || inside;
     }
     if (event.action == MouseAction::Up) {
-        const bool was_pressed = pointer_pressed_;
-        pointer_pressed_ = false;
+        // The press this release ends may have landed on another menu of the
+        // chain — on the parent row whose children are now under the pointer,
+        // most of all. A release that completed a real gesture chooses what it
+        // is over, wherever that gesture began.
+        const bool was_pressed = chain_pointer_pressed();
+        chain_pointer_pressed() = false;
         if (was_pressed && candidate >= 0) activate(candidate);
         else if (!inside) dismiss();
         return was_pressed || inside;
@@ -418,7 +615,7 @@ void DropdownMenu::draw(scene::Painter& painter) {
                              : (i == highlighted_) ? theme.resolve(highlighted_role_)
                                                     : normal;
         painter.fill(Rect{item_left, item_top + i, item_width, 1}, Cell::from_grapheme(" ", style));
-        if (item.separator) {
+        if (item.is_separator()) {
             // Run the rule into the frame itself rather than stopping one
             // cell short: meeting the side borders is what lets junction
             // merging turn them into tees, so the separator reads as part
@@ -434,7 +631,7 @@ void DropdownMenu::draw(scene::Painter& painter) {
             // stands between it and the frame, matching the one on the left.
             const int content_right = item_left + item_width - 2;
             const std::optional<std::string> hint = item_chord_hint(item);
-            const bool marks_submenu = !item.submenu.empty();
+            const bool marks_submenu = item.has_children();
             const int right_width = right_column_width(hint, marks_submenu);
             const int right_x = content_right - right_width + 1;
             // Whatever the right-hand column holds ends at the same column
@@ -442,9 +639,9 @@ void DropdownMenu::draw(scene::Painter& painter) {
             // another instead of at two different margins.
             int label_columns = std::max(0, content_right - label_x + 1);
             if (right_width > 0) label_columns = std::max(0, right_x - label_x - 1);
-            if (check_column && item.check != MenuItemCheck::None)
-                painter.draw_text(Point{item_left + 1, item_top + i},
-                                  item.check == MenuItemCheck::Checked ? "x" : " ", style);
+            if (check_column && item.mark() != MenuMark::None)
+                painter.draw_text(Point{item_left + 1, item_top + i}, mark_glyph(item.mark()),
+                                  style);
             const int label_end_x =
                 label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
             draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
@@ -629,18 +826,23 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     // A menu opens and closes many times over a session; the application
     // wires the bar once and hears about every highlight through it,
     // rather than re-attaching to each popup as it appears.
-    raw->on_highlight_changed = [this](ui::CommandId command) {
-        if (on_highlight_changed) on_highlight_changed(command);
+    raw->on_highlight_changed = [this](const MenuHighlight& highlight) {
+        if (on_highlight_changed) on_highlight_changed(highlight);
     };
     // The popup settles on its first selectable entry while attaching,
     // which is before the line above could hear it. Report that opening
     // position explicitly so a listener starts out describing the entry
     // the reader is actually looking at.
-    if (on_highlight_changed) on_highlight_changed(raw->highlighted_command());
+    if (on_highlight_changed) on_highlight_changed(raw->highlight());
 
     open_dropdown_ = raw;
     app_->set_input_capture(raw);
     invalidate();
+}
+
+std::string MenuBar::highlighted_help_context() const {
+    if (open_dropdown_ == nullptr) return {};
+    return open_dropdown_->highlight().help_context;
 }
 
 void MenuBar::close_dropdown() {
@@ -654,7 +856,11 @@ void MenuBar::close_dropdown() {
     // Nothing is highlighted once the popup is gone: a surface showing
     // the highlighted command's explanation has to stop showing it, or
     // it would outlive the menu that produced it.
-    if (on_highlight_changed) on_highlight_changed(ui::kInvalidCommand);
+    if (on_highlight_changed) {
+        MenuHighlight cleared;
+        cleared.none = true;
+        on_highlight_changed(cleared);
+    }
     invalidate();
 }
 
@@ -676,6 +882,8 @@ bool MenuBar::on_key(const KeyEvent& event) {
         switch (event.chord.key) {
             case Key::Up:
             case Key::Down:
+            case Key::Home:
+            case Key::End:
             case Key::Enter:
             case Key::Char:
                 return target->on_key(event);
@@ -698,6 +906,17 @@ bool MenuBar::on_key(const KeyEvent& event) {
         }
     }
     switch (event.chord.key) {
+        case Key::Home:
+        case Key::End: {
+            // With no menu open the walk is over the bar itself, so the
+            // ends are its first and last slot — the same promise the keys
+            // make inside a dropdown, one level up.
+            const std::size_t slots = navigable_slots();
+            if (slots == 0) return true;
+            set_bar_highlight(event.chord.key == Key::Home ? 0 : slots - 1);
+            if (menus_follow_walk_ && highlighted_ < menus_.size()) open_dropdown(highlighted_);
+            return true;
+        }
         case Key::Left:
             // The walk runs over one slot per menu plus the trailing title,
             // so a clock at the right end is reached by walking to it rather
