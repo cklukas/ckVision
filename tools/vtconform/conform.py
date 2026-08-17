@@ -55,6 +55,8 @@ DEVIATIONS = {
     "erase_under_underline": "ED below the cursor row",
     "scroll_region_su": "ED below the cursor row",
     "erase_under_reverse": "reverse-video erase",
+    "tab_clear_and_set": "no tab-stop table",
+    "tab_past_last_stop": "tab at the end of a line",
 }
 
 # Why each documented deviation stands, so a reader can check the reasoning
@@ -77,6 +79,27 @@ DEVIATION_REASONS = {
         "Storing background+reverse instead would render identically, so this "
         "is a representation choice with the same appearance, chosen because "
         "an erased cell carries no other attribute either."),
+    "no tab-stop table": (
+        "The reference has no tab stops, only a division by eight. Measured "
+        "rather than assumed: with every stop cleared (CSI 3 g) and one set "
+        "at column 13 (ESC H), `A\\tB\\tC` puts B at 8 and C at 16 in the "
+        "reference -- it neither cleared the defaults nor honoured the new "
+        "stop. ckVision keeps a real table, so B lands on 13. This is the one "
+        "case where the reference is not evidence of anything except its own "
+        "limits: HTS and TBC are how a program lays out columns once instead "
+        "of padding every row with spaces, xterm implements them, and a "
+        "curses program that sets stops and then tabs between them gets every "
+        "field after the first in the wrong place without them."),
+    "tab at the end of a line": (
+        "Past the last stop, ckVision moves the cursor to the last column and "
+        "leaves it there; the reference carries it past the margin, so the "
+        "next character wraps to the following line. A tab does not end a "
+        "line -- the character written after it is what decides that -- and "
+        "the DEC and xterm behaviour ckVision advertises to its children "
+        "(xterm-256color) is to stop at the right margin. The case is here "
+        "because that is a decision, not an accident: it changed with the "
+        "tab-stop table, and a decision nobody wrote down is one the next "
+        "reader has to rediscover."),
 }
 
 CASES = {
@@ -114,6 +137,7 @@ CASES = {
     # --- Tabs.
     "default_tabs": (24, 2, "a\tb\tc"),
     "tab_clear_and_set": (24, 2, "\033[1;5H\033H\033[1;1H\033[3gA\tB"),
+    "tab_past_last_stop": (24, 2, "\033[1;20HA\tB"),
     # --- Scrolling regions.
     "stbm_index_at_bottom": (8, 5, "\033[2;4r\033[4;1Ha\n\033[Hz"),
     "stbm_reverse_index_at_top": (8, 5, "\033[2;4r\033[2;1Ha\033Mz"),
