@@ -53,6 +53,13 @@ public:
     bool drain(std::size_t byte_budget) override;
     void close() noexcept override;
     int file_descriptor() const noexcept { return master_fd_; }
+    // The status the child exited with, once it has. Forwarded because the
+    // emulator is the thing the PTY's read boundary was reported to, and a
+    // host that owns one of these should not have to reach through it to find
+    // out how the program it started ended — a multiplexer's exit banner is
+    // exactly that question ("exited 1" is a different window from "exited
+    // 0"), and without this it could only say "gone".
+    std::optional<int> exit_code() const noexcept { return emulator_.exit_code(); }
 
 private:
     PosixTerminalSubsession(TerminalLaunchSpec spec, TerminalSubsessionOptions options);

@@ -125,6 +125,9 @@ private:
     void index() noexcept;
     void reverse_index() noexcept;
     void reset_active_buffer();
+    // The one place the history is emptied, so the start offset cannot be
+    // left pointing into a vector that no longer has anything before it.
+    void clear_scrollback() noexcept;
     // Every path that puts different cells in a region says so here, so a
     // host learns what changed without keeping the previous screen to compare
     // against.
@@ -229,7 +232,18 @@ private:
     bool saved_cursor_valid_ = false;
     std::vector<Cell> primary_;
     std::vector<Cell> alternate_;
+    // The history, oldest first, with a start offset rather than a vector
+    // whose front is erased.
+    //
+    // Erasing one line from the front when the history is full costs a move of
+    // every cell still in it — O(history) per scrolled line, which at the
+    // default ten thousand lines of eighty columns is eight hundred thousand
+    // cell moves for one line of output. A program printing steadily therefore
+    // spent all of its terminal's time shifting cells that had not changed.
+    // The offset makes dropping a line O(1); the dead prefix is reclaimed once
+    // it is worth reclaiming, so the amortised cost per line is one row.
     std::vector<Cell> scrollback_;
+    std::size_t scrollback_begin_ = 0;
     std::vector<TerminalRaster> rasters_;
     std::vector<RasterCoverage> raster_coverage_;  // one entry per raster, same order
     // Sixel colour registers belong to the terminal, not to one picture: a

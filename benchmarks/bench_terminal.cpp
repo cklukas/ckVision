@@ -119,6 +119,47 @@ bool run_terminal_benchmarks() {
     ckv::term::TerminalEmulator loaded(profile, options);
     loaded.feed_output(flood);
 
+    // What a program printing steadily costs once the history is FULL, which
+    // is the state a long-lived terminal spends all of its life in.
+    //
+    // The history is stored as flat rows, so dropping the oldest line by
+    // erasing the vector's front moves every cell still in it: O(history) per
+    // scrolled line, which at ten thousand lines of a hundred and twenty
+    // columns is over a million cell moves for one line of output. It is
+    // replaced by a start offset, with the dead prefix reclaimed once it is as
+    // large as what is kept — one history copy per history's worth of lines.
+    //
+    // The two cases differ ONLY in how much history is held. A per-line cost
+    // that is flat between them is the property; a cost that grows with the
+    // history is the defect coming back, and no absolute number would show
+    // that on its own.
+    const auto steady_scroll = [&](const char* name, std::size_t history_lines) {
+        ckv::term::TerminalSubsessionOptions deep = options;
+        deep.max_scrollback_lines = history_lines;
+        ckv::term::TerminalEmulator emulator(profile, deep);
+        // Fed in chunks, because a single feed is bounded by
+        // max_parser_work_per_step and the rest of one huge write would be
+        // dropped — the benchmark would then measure an empty history.
+        const std::size_t total = history_lines + static_cast<std::size_t>(profile.cells.height);
+        std::string chunk;
+        for (std::size_t line = 0; line < total; ++line) {
+            chunk += "history line " + std::to_string(line) + " already scrolled away\r\n";
+            if (chunk.size() < 32U << 10U && line + 1 < total) continue;
+            emulator.feed_output(chunk);
+            chunk.clear();
+        }
+        const std::size_t full = history_lines * static_cast<std::size_t>(profile.cells.width);
+        if (emulator.scrollback().size() != full) budgets_hold = false;
+        ckbench::run(name, 2000, [&] {
+            emulator.feed_output("one more line, and the oldest one leaves\r\n");
+            sink += emulator.cells().size();
+        });
+        // Still exactly full: the trim keeps capacity, it does not drift.
+        if (emulator.scrollback().size() != full) budgets_hold = false;
+    };
+    steady_scroll("terminal_steady_scroll_full_history_1k", 1000);
+    steady_scroll("terminal_steady_scroll_full_history_10k", 10000);
+
     ckbench::run("terminal_snapshot_with_history", 2000, [&] {
         loaded.feed_output(tick_mutation);
         const auto snapshot = loaded.snapshot();

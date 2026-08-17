@@ -585,6 +585,68 @@ CK_TEST(terminal_emulator_survives_repeated_resize_and_noisy_scrollback_cycles) 
     }
 }
 
+CK_TEST(terminal_emulator_drops_whole_lines_when_a_full_history_outlives_a_width_change) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{40, 12};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 16;
+    options.max_output_bytes = 64 * 1024;
+    options.max_parser_work_per_step = 64 * 1024;
+    term::TerminalEmulator emulator(profile, options);
+
+    // Reads a history row back as the text the child printed on it.
+    const auto history_line = [](const term::TerminalSnapshot& snapshot, std::size_t row,
+                                 int width) {
+        std::string text;
+        for (int column = 0; column < width; ++column)
+            text += snapshot.scrollback[row * static_cast<std::size_t>(width) +
+                                        static_cast<std::size_t>(column)]
+                        .grapheme();
+        while (!text.empty() && text.back() == ' ') text.pop_back();
+        return text;
+    };
+
+    int printed = 0;
+    for (int cycle = 0; cycle < 8; ++cycle) {
+        std::string output;
+        for (int line = 0; line < 20; ++line) output += "line-" + std::to_string(printed++) + "\r\n";
+        emulator.feed_output(output);
+        const Size cells = cycle % 2 == 0 ? Size{53, 15} : Size{40, 12};
+        emulator.resize(cells, profile.cell_pixels);
+        const term::TerminalSnapshot snapshot = emulator.snapshot();
+
+        // Capacity is counted in LINES while the history is stored as flat rows
+        // of the grid's width, so both statements below only hold if what the
+        // trim dropped were whole lines. Dropping a number of cells instead
+        // leaves the history starting mid-row and shears every line in it one
+        // column further out — which is the same defect a width change without
+        // re-laying causes, arriving by the other door.
+        CK_CHECK(snapshot.scrollback.size() % static_cast<std::size_t>(cells.width) == 0);
+        CK_CHECK(snapshot.scrollback.size() <=
+                 options.max_scrollback_lines * static_cast<std::size_t>(cells.width));
+
+        // Every surviving line still reads as a whole line the child printed,
+        // in the order it printed them. A row that begins mid-text is the
+        // shear; an out-of-order row is a re-lay that read the history at the
+        // wrong offset. (Rows lost to a height shrink are a different
+        // question — resize truncates the screen's bottom, so the numbers may
+        // skip. What may not happen is a number going backwards.)
+        const std::size_t rows = snapshot.scrollback.size() / static_cast<std::size_t>(cells.width);
+        CK_CHECK(rows > 0);
+        int previous = -1;
+        for (std::size_t row = 0; row < rows; ++row) {
+            const std::string text = history_line(snapshot, row, cells.width);
+            CK_CHECK(text.rfind("line-", 0) == 0);
+            if (text.rfind("line-", 0) != 0) continue;
+            const int number = std::stoi(text.substr(5));
+            CK_CHECK(number > previous);
+            CK_CHECK(number < printed);
+            previous = number;
+        }
+    }
+}
+
 CK_TEST(terminal_emulator_keeps_scrolling_regions_private_and_preserves_their_outside_rows) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{4, 4};

@@ -106,7 +106,8 @@ std::span<const Cell> TerminalEmulator::cells() const noexcept {
 }
 
 std::span<const Cell> TerminalEmulator::scrollback() const noexcept {
-    return std::span<const Cell>(scrollback_.data(), scrollback_.size());
+    return std::span<const Cell>(scrollback_.data() + scrollback_begin_,
+                                 scrollback_.size() - scrollback_begin_);
 }
 
 TerminalSnapshot TerminalEmulator::snapshot() const { return snapshot(TerminalSnapshotOptions{}); }
@@ -118,9 +119,16 @@ TerminalSnapshot TerminalEmulator::snapshot(TerminalSnapshotOptions options) con
     // empty rather than copied and cleared, because the copy is the cost.
     static const std::vector<Cell> kNoScrollback;
     static const std::vector<TerminalRaster> kNoRasters;
+    // Copied from the live part, so a caller never sees the dead prefix the
+    // offset is hiding.
+    const std::vector<Cell> history =
+        options.include_scrollback
+            ? std::vector<Cell>(scrollback_.begin() + static_cast<std::ptrdiff_t>(scrollback_begin_),
+                                scrollback_.end())
+            : std::vector<Cell>{};
     return TerminalSnapshot{cells_, active_cells(), cursor_, alternate_buffer_,
                             options.include_rasters ? rasters_ : kNoRasters, diagnostics_, title_, state_,
-                            options.include_scrollback ? scrollback_ : kNoScrollback,
+                            options.include_scrollback ? history : kNoScrollback,
                             bracketed_paste_enabled_, mouse_reporting_enabled_, mouse_encoding,
                             application_cursor_keys_, focus_reporting_enabled_, alternate_scroll_enabled_,
                             clipboard_text_, clipboard_serial_,
@@ -1104,7 +1112,7 @@ void TerminalEmulator::handle_csi(char final_byte) {
             erase_cells(0, 0, cells_.width, cells_.height);
             clear_rasters();
         } else if (mode == 3) {
-            scrollback_.clear();
+            clear_scrollback();
         }
         return;
     }
@@ -1766,7 +1774,26 @@ void TerminalEmulator::scroll_up_region(int top, int bottom, int rows) noexcept 
                                cells.begin() + static_cast<std::ptrdiff_t>((row + 1) * cells_.width));
         }
         const std::size_t maximum = options_.max_scrollback_lines * static_cast<std::size_t>(cells_.width);
-        if (scrollback_.size() > maximum) scrollback_.erase(scrollback_.begin(), scrollback_.begin() + static_cast<std::ptrdiff_t>(scrollback_.size() - maximum));
+        const std::size_t width = static_cast<std::size_t>(std::max(1, cells_.width));
+        const std::size_t live = scrollback_.size() - scrollback_begin_;
+        // Dropping the oldest lines is moving a number, not moving cells — and
+        // it drops whole LINES. Advancing by the raw cell excess would leave
+        // the offset mid-row and shear every line in the history by the
+        // remainder, which is what the resize test caught: a cap measured in
+        // cells against a history stored in rows is only the same number while
+        // the width has never changed.
+        if (live > maximum) {
+            const std::size_t excess_rows = (live - maximum + width - 1) / width;
+            scrollback_begin_ = std::min(scrollback_.size(), scrollback_begin_ + excess_rows * width);
+        }
+        // Reclaim once the dead prefix is as large as what is being kept: the
+        // copy costs one history, and it happens once per history's worth of
+        // lines rather than once per line.
+        if (scrollback_begin_ >= maximum + static_cast<std::size_t>(cells_.width)) {
+            scrollback_.erase(scrollback_.begin(),
+                              scrollback_.begin() + static_cast<std::ptrdiff_t>(scrollback_begin_));
+            scrollback_begin_ = 0;
+        }
         // A host sends the lines that entered the history, not the history.
         damage_.scrollback_pushed += static_cast<std::size_t>(rows);
     }
@@ -1841,6 +1868,11 @@ int TerminalEmulator::previous_tab_stop(int from) const noexcept {
         if (column < static_cast<int>(tab_stops_.size()) && tab_stops_[static_cast<std::size_t>(column)])
             return column;
     return 0;
+}
+
+void TerminalEmulator::clear_scrollback() noexcept {
+    scrollback_.clear();
+    scrollback_begin_ = 0;
 }
 
 void TerminalEmulator::reset_active_buffer() {
@@ -1934,7 +1966,7 @@ void TerminalEmulator::reset_terminal() {
     const Cell blank = Cell::from_grapheme(" ", profile_.default_style);
     std::fill(primary_.begin(), primary_.end(), blank);
     std::fill(alternate_.begin(), alternate_.end(), blank);
-    scrollback_.clear();
+    clear_scrollback();
     clear_rasters();
     // The child's Sixel colour registers are the child's, and a reset is the
     // child saying it no longer knows what it set.
@@ -2025,16 +2057,28 @@ void TerminalEmulator::resize(Size cells, Size cell_pixels) {
     // know which line breaks the child chose and which the terminal imposed,
     // which nothing here records); what this keeps is the invariant that a
     // line is a line, which is the unit capacity is counted in.
-    if (!scrollback_.empty() && new_cells.width != old_cells.width) {
+    //
+    // Only the LIVE region is re-laid. Lines the capacity trim has already
+    // dropped live on in the vector as a dead prefix until it is worth
+    // reclaiming (see push_line_to_scrollback), and re-laying that prefix as
+    // content would resurrect it: the history would come back over capacity by
+    // exactly as much as had been dropped, and the reader would scroll back
+    // into lines the terminal had already promised to forget.
+    if (scrollback_.size() > scrollback_begin_ && new_cells.width != old_cells.width) {
         const std::size_t old_width = static_cast<std::size_t>(old_cells.width);
         const std::size_t new_width = static_cast<std::size_t>(new_cells.width);
-        const std::size_t rows = scrollback_.size() / old_width;
+        const std::size_t rows = (scrollback_.size() - scrollback_begin_) / old_width;
         const std::size_t columns = std::min(old_width, new_width);
         std::vector<Cell> relaid(rows * new_width, Cell::from_grapheme(" ", default_style));
         for (std::size_t row = 0; row < rows; ++row)
-            std::copy_n(scrollback_.begin() + static_cast<std::ptrdiff_t>(row * old_width), columns,
+            std::copy_n(scrollback_.begin() +
+                            static_cast<std::ptrdiff_t>(scrollback_begin_ + row * old_width),
+                        columns,
                         relaid.begin() + static_cast<std::ptrdiff_t>(row * new_width));
         scrollback_ = std::move(relaid);
+        // Re-laying is the one moment the dead prefix cannot survive: what it
+        // held were rows of the old width.
+        scrollback_begin_ = 0;
     }
     // Tab stops belong to columns, so the ones that still exist keep what the
     // child set; columns that did not exist before start at the default. A
