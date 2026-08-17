@@ -43,6 +43,22 @@ std::optional<long long> parse_number(const FieldDescriptor& field, std::string_
     return value;
 }
 
+// Gives every ButtonRole::Dismiss button the rest of what its role promises:
+// its own handler, and then the dialog gone. Called by whoever put the
+// materialized tree into a window, since `dismiss` is that window's cancel
+// path -- a dismissing button and Esc must not be two behaviours.
+void wire_dismiss_buttons(const DialogDescriptor& descriptor, const std::vector<Button*>& buttons,
+                          const std::function<void()>& dismiss) {
+    CKV_ASSERT(buttons.size() == descriptor.buttons.size());
+    for (std::size_t i = 0; i < buttons.size(); ++i) {
+        if (descriptor.buttons[i].role != ButtonRole::Dismiss) continue;
+        buttons[i]->on_press = [handler = descriptor.buttons[i].on_press, dismiss] {
+            if (handler) handler();
+            dismiss();
+        };
+    }
+}
+
 bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescriptor& descriptor,
                       ui::Application& app) {
     CKV_ASSERT(inputs.size() == descriptor.fields.size());
@@ -147,8 +163,13 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
 
     window->set_content(std::move(materialized.root));
     window->set_resizable(retained_descriptor->resizable);
+    // The accept button's own callback, taken BEFORE the button is rewired
+    // below: the accept path must run what the descriptor asked for, and the
+    // button itself must run the accept path.
+    const std::function<void()> accept_press =
+        default_button != nullptr ? default_button->on_press : std::function<void()>{};
     window->accept_request = [window_ptr, completion, retained_descriptor, inputs, checks, radios, combos,
-                              default_button, &app]() {
+                              accept_press, &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
         // callback is allowed to detach and destroy its own Window, which
@@ -161,14 +182,28 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         // acceptance still has one stable typed result after detachment.
         held_completion->selected_result =
             accepted_result(*retained_descriptor, inputs, checks, radios, combos);
-        if (default_button != nullptr && default_button->on_press) default_button->on_press();
+        if (accept_press) accept_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
-    window->cancel_request = [window_ptr, completion]() {
+    // Clicking the accept button IS accepting. Enter reaches the accept path
+    // through the window; a mouse click reaches only the button, and a button
+    // whose descriptor gave it nothing to do did nothing at all — OK buttons
+    // everywhere worked from the keyboard and ignored the mouse. The button's
+    // press is therefore the same request Enter makes, validation included.
+    if (default_button != nullptr)
+        default_button->on_press = [window_ptr]() {
+            if (window_ptr->accept_request) window_ptr->accept_request();
+        };
+    std::function<void()> dismiss = [window_ptr, completion]() {
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         Window* const held_window = window_ptr;
         if (!held_completion->window_liveness.expired()) held_window->close();
     };
+    window->cancel_request = dismiss;
+    // The same closure, so a Cancel button is Esc rather than something that
+    // resembles it. No result is recorded on this path, which is what makes
+    // the completion's `accepted == false` true of both.
+    wire_dismiss_buttons(*retained_descriptor, materialized.buttons, dismiss);
     window->on_closed = [&app, focus_restore, window_ptr, completion]() {
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         const detail::DialogFocusRestore held_focus_restore = focus_restore;
@@ -318,13 +353,17 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         button_row->set_spacing(2);
         for (const ButtonDescriptor& bd : descriptor.buttons) {
             auto button = std::make_unique<Button>(bd.label);
-            button->set_default(bd.is_default);
+            button->set_default(bd.role == ButtonRole::Accept);
+            // What a Dismiss button does beyond its own handler needs a window
+            // to do it to, so it is wired by whoever hosts this tree in one
+            // (wire_dialog_window, present_dialog). Materializing alone leaves
+            // a dialog that has no window to close.
             button->on_press = bd.on_press;
             auto* button_ptr =
                 static_cast<Button*>(button_row->add_item(std::move(button), LayoutSpec{SizePolicy::Fixed, 1}));
             result.buttons.push_back(button_ptr);
-            if (bd.is_default) {
-                CKV_ASSERT(result.default_button == nullptr);  // at most one default button
+            if (bd.role == ButtonRole::Accept) {
+                CKV_ASSERT(result.default_button == nullptr);  // at most one accepting button
                 result.default_button = button_ptr;
             }
         }
@@ -350,6 +389,7 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     // than the whole MaterializedDialog, which holds a unique_ptr and
     // so cannot be captured into a std::function at all.
     std::vector<InputLine*> inputs = dialog.inputs;
+    std::vector<Button*> buttons = dialog.buttons;
     Button* default_button = dialog.default_button;
 
     window.set_content(std::move(dialog.root));
@@ -366,14 +406,26 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     auto close_state = std::make_shared<CloseState>(CloseState{window.lifetime_token(), false});
     const detail::DialogFocusRestore focus_restore{restore_focus_to};
 
-    window.accept_request = [&window, &app, inputs, &descriptor, default_button, close_state]() {
+    const std::function<void()> accept_press =
+        default_button != nullptr ? default_button->on_press : std::function<void()>{};
+    window.accept_request = [&window, &app, inputs, &descriptor, accept_press, close_state]() {
         const std::shared_ptr<CloseState> held_close_state = close_state;
         Window* const held_window = &window;
         if (!validate_inputs(inputs, descriptor, app)) return;  // veto: invalid field already took focus
-        if (default_button != nullptr && default_button->on_press) default_button->on_press();
+        if (accept_press) accept_press();
         if (!held_close_state->closed && !held_close_state->window_liveness.expired()) held_window->close();
     };
-    window.cancel_request = [&window]() { window.close(); };  // Esc bypasses validation by definition
+    // Same rewiring as build_descriptor_dialog, same reason: a click on the
+    // accept button is the accept request, not a press of an unwired button.
+    if (default_button != nullptr) {
+        Window* const window_ptr = &window;
+        default_button->on_press = [window_ptr]() {
+            if (window_ptr->accept_request) window_ptr->accept_request();
+        };
+    }
+    std::function<void()> dismiss = [&window]() { window.close(); };  // bypasses validation by definition
+    window.cancel_request = dismiss;                                  // Esc
+    wire_dismiss_buttons(descriptor, buttons, dismiss);               // and every button that says so
 
     auto previous_on_closed = window.on_closed;
     window.on_closed = [&app, focus_restore, previous_on_closed, close_state]() {

@@ -50,6 +50,7 @@ using ckv::widgets::present_message_box;
 using ckv::widgets::present_window_list_dialog;
 using ckv::widgets::exec_dialog;
 using ckv::widgets::ButtonDescriptor;
+using ckv::widgets::ButtonRole;
 
 namespace {
 
@@ -161,7 +162,7 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     DialogDescriptor descriptor;
     descriptor.title = "Connection";
     descriptor.fields.push_back(FieldDescriptor{"&Host:", "local", nullptr});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] { default_pressed = true; }});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { default_pressed = true; }});
 
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     CK_CHECK(f.app.is_modal());
@@ -176,12 +177,88 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(f.desktop->windows().empty());
 }
 
+CK_TEST(pressing_a_dismissing_button_ends_a_presented_dialog_with_no_values) {
+    // Driven the way a reader drives it: Tab onto Cancel, press Space. What
+    // this pins is the whole of what a Cancel promises — the dialog goes, the
+    // modality goes with it, and nothing the reader typed comes back as an
+    // answer they never gave.
+    Fixture f;
+    bool cancel_ran = false;
+    DialogDescriptor descriptor;
+    descriptor.title = "Connection";
+    descriptor.fields.push_back(FieldDescriptor{"&Host:", "local", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back(
+        ButtonDescriptor{"Cancel", ButtonRole::Dismiss, [&] { cancel_ran = true; }});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("typed", 0);
+    CK_CHECK(f.app.step(0));
+
+    ckv::widgets::Button* cancel = nullptr;
+    for (int step = 0; step < 8 && cancel == nullptr; ++step) {
+        f.app.focus_next();
+        auto* const focused = dynamic_cast<ckv::widgets::Button*>(f.app.focused());
+        if (focused != nullptr && focused->text() == "Cancel") cancel = focused;
+    }
+    CK_CHECK(cancel != nullptr);
+
+    f.terminal.inject_bytes(" ", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(cancel_ran);
+    CK_CHECK(presentation.result() == DialogResult{});
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.desktop->windows().empty());
+}
+
+CK_TEST(pressing_the_accepting_button_accepts_with_the_typed_values) {
+    // The other half of the button row, driven the same way: Tab onto OK,
+    // press Space — or click it, which is the same fire_press. It used to do
+    // nothing at all: the accept path lived only on the window's
+    // accept_request, which Enter reaches and a button press did not, so OK
+    // buttons everywhere answered the keyboard and ignored the mouse.
+    Fixture f;
+    bool ok_ran = false;
+    DialogDescriptor descriptor;
+    descriptor.title = "Connection";
+    descriptor.fields.push_back(FieldDescriptor{"&Host:", "local", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { ok_ran = true; }});
+    descriptor.buttons.push_back(ButtonDescriptor{"Cancel", ButtonRole::Dismiss, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("typed", 0);
+    CK_CHECK(f.app.step(0));
+
+    ckv::widgets::Button* ok = nullptr;
+    for (int step = 0; step < 8 && ok == nullptr; ++step) {
+        f.app.focus_next();
+        auto* const focused = dynamic_cast<ckv::widgets::Button*>(f.app.focused());
+        if (focused != nullptr && focused->text() == "OK") ok = focused;
+    }
+    CK_CHECK(ok != nullptr);
+
+    f.terminal.inject_bytes(" ", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(ok_ran);
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result().has_value());
+    if (presentation.result().has_value()) {
+        CK_CHECK(presentation.result()->accepted);
+        CK_CHECK(!presentation.result()->values.empty());
+        if (!presentation.result()->values.empty())
+            CK_CHECK(presentation.result()->values.front() == "typedlocal" ||
+                     presentation.result()->values.front() == "localtyped");
+    }
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.desktop->windows().empty());
+}
+
 CK_TEST(descriptor_dialog_supports_measured_centered_bottom_actions) {
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.title = "Measured";
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "value", nullptr});
-    descriptor.buttons.push_back(ButtonDescriptor{"&OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"&OK", ButtonRole::Accept, nullptr});
     descriptor.minimum_window_size = Size{40, 12};
     descriptor.button_alignment = ckv::ui::Alignment::Center;
     descriptor.anchor_buttons_to_bottom = true;
@@ -225,7 +302,7 @@ CK_TEST(descriptor_dialog_external_detach_and_host_quit_return_cancellation) {
     Fixture f;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "value", nullptr});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto detached = present_dialog(descriptor, f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
@@ -243,7 +320,7 @@ CK_TEST(descriptor_dialog_acceptance_survives_a_default_callback_that_destroys_i
     Window* dialog = nullptr;
     DialogDescriptor descriptor;
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "value", nullptr});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, [&] {
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] {
         std::unique_ptr<Window> removed = f.desktop->remove_window(dialog);
         CK_CHECK(removed.get() == dialog);
         removed.reset();
@@ -413,7 +490,7 @@ CK_TEST(an_accepted_dialog_reports_each_check_field_beside_its_text_fields) {
     descriptor.fields.push_back(FieldDescriptor{"&Name:", "kept", nullptr});
     descriptor.fields.push_back(FieldDescriptor{
         .label = "&Enabled", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
@@ -432,7 +509,7 @@ CK_TEST(a_cancelled_dialog_reports_no_check_state_either) {
     descriptor.title = "Settings";
     descriptor.fields.push_back(FieldDescriptor{
         .label = "&Enabled", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
@@ -453,7 +530,7 @@ CK_TEST(a_form_asks_for_one_of_several_alternatives_and_reads_the_answer_back) {
                                                  .kind = ckv::widgets::FieldKind::Radio,
                                                  .options = {"Ask", "Capture", "Off"},
                                                  .initial_selection = 1});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
@@ -474,7 +551,7 @@ CK_TEST(a_radio_group_reports_what_the_reader_moved_to_rather_than_what_it_opene
                                                  .kind = ckv::widgets::FieldKind::Radio,
                                                  .options = {"txt", "ansi"},
                                                  .initial_selection = 0});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\x1b[B", 0);  // Down: the second choice
     CK_CHECK(f.app.step(0));
@@ -494,7 +571,7 @@ CK_TEST(a_combo_field_answers_with_its_index_and_its_text) {
                                                  .kind = ckv::widgets::FieldKind::Combo,
                                                  .options = {"dark", "light", "mono"},
                                                  .initial_selection = 2});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
@@ -514,7 +591,7 @@ CK_TEST(a_number_field_refuses_to_accept_what_is_not_a_number) {
                                                  .kind = ckv::widgets::FieldKind::Number,
                                                  .minimum = 1,
                                                  .maximum = 4096});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
@@ -532,7 +609,7 @@ CK_TEST(a_number_field_hands_over_a_number_rather_than_text_to_parse_again) {
                                                  .kind = ckv::widgets::FieldKind::Number,
                                                  .minimum = 1,
                                                  .maximum = 4096});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
@@ -555,7 +632,7 @@ CK_TEST(a_number_outside_its_bounds_is_refused_like_any_other_bad_value) {
                                                  .kind = ckv::widgets::FieldKind::Number,
                                                  .minimum = 1,
                                                  .maximum = 4096});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
@@ -585,7 +662,7 @@ CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_ind
                                                  .minimum = 1});
     descriptor.fields.push_back(FieldDescriptor{
         .label = "Nothing is ever sent to a device.", .kind = ckv::widgets::FieldKind::Note});
-    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
     auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.terminal.inject_bytes("\r", 0);
