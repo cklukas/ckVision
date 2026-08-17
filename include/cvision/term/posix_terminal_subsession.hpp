@@ -25,6 +25,18 @@ public:
     PosixTerminalSubsession& operator=(const PosixTerminalSubsession&) = delete;
 
     TerminalSnapshot snapshot() const override { return emulator_.snapshot(); }
+    // The no-copy path, forwarded rather than reached through the emulator,
+    // so a host that owns one of these never has to know it embeds one. This
+    // is the seam a multiplexer's server actually holds (it links only core
+    // and term), and the whole point of U0-b is that reading a terminal at
+    // tick rate must not copy what that terminal remembers.
+    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const {
+        return emulator_.snapshot(options);
+    }
+    std::span<const Cell> cells() const noexcept { return emulator_.cells(); }
+    std::span<const Cell> scrollback() const noexcept { return emulator_.scrollback(); }
+    const TerminalDamage& damage() const noexcept { return emulator_.damage(); }
+    void clear_damage() noexcept { emulator_.clear_damage(); }
     const TerminalCapabilityProfile& profile() const noexcept override { return emulator_.profile(); }
     void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
     void set_raster_identity(int identity) noexcept override { emulator_.set_raster_identity(identity); }

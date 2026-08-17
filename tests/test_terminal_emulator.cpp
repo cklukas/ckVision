@@ -1974,3 +1974,219 @@ CK_TEST(the_screen_dump_forms_this_terminal_does_not_have_say_so) {
     CK_CHECK(reported);
     CK_CHECK(emulator.take_printer_jobs().empty());
 }
+
+// --- Damage and no-copy reads (ckmux U0-b) --------------------------------
+
+CK_TEST(a_fresh_terminal_owes_a_host_everything) {
+    // Starting clean would mean the first frame after an attach sent nothing,
+    // and a reader would meet an empty window until the child happened to
+    // write.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{10, 3};
+    term::TerminalEmulator emulator(profile);
+    CK_CHECK(emulator.damage().full);
+    CK_CHECK(emulator.damage().any());
+    CK_CHECK(emulator.damage().rows.size() == 3U);
+
+    emulator.clear_damage();
+    CK_CHECK(!emulator.damage().any());
+    CK_CHECK(!emulator.damage().full);
+    for (const term::TerminalDamage::RowSpan& row : emulator.damage().rows) CK_CHECK(row.empty());
+}
+
+CK_TEST(only_the_columns_a_child_wrote_are_reported_as_changed) {
+    // The whole point: a diff engine that has this does not keep last frame's
+    // screen and compare, which is the copy per terminal per frame U0-b exists
+    // to remove.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 4};
+    term::TerminalEmulator emulator(profile);
+    emulator.clear_damage();
+
+    emulator.feed_output("\x1b[2;5Habc");
+    const term::TerminalDamage& damage = emulator.damage();
+    CK_CHECK(!damage.full);
+    CK_CHECK(damage.rows[0].empty());          // untouched
+    CK_CHECK(damage.rows[1].first == 4);       // column 5, 1-based
+    CK_CHECK(damage.rows[1].last == 7);        // three cells, half-open
+    CK_CHECK(damage.rows[2].empty());
+    CK_CHECK(damage.cursor);                   // it moved to get there
+    CK_CHECK(!damage.title);
+    CK_CHECK(damage.scrollback_pushed == 0U);
+}
+
+CK_TEST(a_rows_span_widens_rather_than_splitting) {
+    // Two writes at opposite ends of one row become one span. Cheaper to send
+    // as two would be, a list per row costs an allocation on the path every
+    // single write takes.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[1;1HL\x1b[1;20HR");
+    CK_CHECK(emulator.damage().rows[0].first == 0);
+    CK_CHECK(emulator.damage().rows[0].last == 20);
+}
+
+CK_TEST(the_cursor_is_reported_when_it_ends_up_somewhere_else_and_not_otherwise) {
+    // Compared once per drain rather than marked at each of the three dozen
+    // places that move it — including the ones that move it and put it back.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 4};
+    term::TerminalEmulator emulator(profile);
+
+    emulator.feed_output("\x1b[3;3H");
+    emulator.clear_damage();
+    // Saved, moved, restored: it is where it was, so a host has nothing to do.
+    emulator.feed_output("\x1b" "7\x1b[1;1H\x1b" "8");
+    CK_CHECK(!emulator.damage().cursor);
+    // ...and moving it really does report.
+    emulator.feed_output("\x1b[4;9H");
+    CK_CHECK(emulator.damage().cursor);
+}
+
+CK_TEST(modes_a_title_and_a_bell_are_each_reported_on_their_own) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator emulator(profile);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[?1000h");
+    CK_CHECK(emulator.damage().modes);
+    CK_CHECK(!emulator.damage().title);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b]2;new\a");
+    CK_CHECK(emulator.damage().title);
+    CK_CHECK(!emulator.damage().modes);
+
+    // A bell is a snapshot scalar a host reads beside the modes, so it is
+    // reported rather than left for a separate poll.
+    emulator.clear_damage();
+    emulator.feed_output("\a");
+    CK_CHECK(emulator.damage().any());
+}
+
+CK_TEST(lines_entering_the_history_are_counted_rather_than_the_history_resent) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 2};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 64;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.clear_damage();
+
+    emulator.feed_output("one\r\ntwo\r\nsix\r\nten\r\n");
+    // Four newlines on a two-row screen: three lines left the top.
+    CK_CHECK(emulator.damage().scrollback_pushed == 3U);
+    emulator.clear_damage();
+    CK_CHECK(emulator.damage().scrollback_pushed == 0U);
+}
+
+CK_TEST(a_resize_a_reset_and_a_buffer_switch_each_invalidate_everything) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{10, 3};
+    term::TerminalEmulator emulator(profile);
+
+    emulator.clear_damage();
+    emulator.resize(Size{20, 5}, Size{9, 18});
+    CK_CHECK(emulator.damage().full);
+    // The row list follows the geometry: a host indexes it by row, and a stale
+    // length would be a silent "that row did not change".
+    CK_CHECK(emulator.damage().rows.size() == 5U);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[?1049h");
+    CK_CHECK(emulator.damage().full);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[?1049l");
+    CK_CHECK(emulator.damage().full);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b" "c");
+    CK_CHECK(emulator.damage().full);
+}
+
+CK_TEST(reading_state_does_not_clear_it) {
+    // Three consumers read the same terminal — a diff engine, a title poll, a
+    // bell badge — and a read that cleared would give the news to whichever
+    // looked first.
+    term::TerminalEmulator emulator;
+    emulator.clear_damage();
+    emulator.feed_output("x");
+    CK_CHECK(emulator.damage().any());
+    (void)emulator.snapshot();
+    CK_CHECK(emulator.damage().any());
+    CK_CHECK(emulator.damage().any());
+    emulator.clear_damage();
+    CK_CHECK(!emulator.damage().any());
+}
+
+CK_TEST(a_snapshot_can_decline_the_history_and_the_pictures) {
+    // The other half of U0-b. `snapshot()` copies the whole bounded history
+    // every call; a host diffing at tick rate wants the grid, and paying for
+    // what the terminal remembers on every frame is a cost proportional to how
+    // long it has been alive rather than to what changed.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 2};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 64;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("one\r\ntwo\r\nsix\r\nten");
+
+    const term::TerminalSnapshot full = emulator.snapshot();
+    CK_CHECK(!full.scrollback.empty());
+
+    core::TerminalSnapshotOptions lean;
+    lean.include_scrollback = false;
+    const term::TerminalSnapshot without = emulator.snapshot(lean);
+    CK_CHECK(without.scrollback.empty());
+    // Everything else is the same screen: declining the history must not
+    // change what the grid says.
+    CK_CHECK(without.cell_buffer == full.cell_buffer);
+    CK_CHECK(without.cells == full.cells);
+    CK_CHECK(without.cursor == full.cursor);
+    CK_CHECK(without.title == full.title);
+}
+
+CK_TEST(the_grid_and_the_history_can_be_read_without_copying_them) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{4, 2};
+    term::TerminalSubsessionOptions options;
+    options.max_scrollback_lines = 8;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("ab\r\ncd\r\nef");
+
+    // Borrowed: the span points into the emulator's own storage, so a host
+    // that reads a changed row touches no allocation at all.
+    const std::span<const Cell> cells = emulator.cells();
+    CK_CHECK(cells.size() == 8U);
+    CK_CHECK(cells[0].grapheme() == "c");
+    CK_CHECK(cells.data() == emulator.cells().data());
+
+    const std::span<const Cell> history = emulator.scrollback();
+    CK_CHECK(history.size() == 4U);
+    CK_CHECK(history[0].grapheme() == "a");
+
+    // The alternate screen is a different grid, and the borrow follows it.
+    emulator.feed_output("\x1b[?1049h");
+    CK_CHECK(emulator.cells().size() == 8U);
+    CK_CHECK(emulator.cells()[0].grapheme() == " ");
+}
+
+CK_TEST(damage_names_every_row_a_scroll_moved) {
+    // A scroll changes every row in its region. A Scroll op will usually carry
+    // that far more cheaply than the cells would, but choosing that is the
+    // diff engine's job — the emulator's job is to report honestly rather than
+    // to under-report on the assumption that someone will optimise it.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{6, 4};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("a\r\nb\r\nc\r\nd");
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[2;3r\x1b[3;1H\n");  // scroll a two-row region
+    CK_CHECK(emulator.damage().rows[0].empty());   // outside the region
+    CK_CHECK(!emulator.damage().rows[1].empty());
+    CK_CHECK(!emulator.damage().rows[2].empty());
+    CK_CHECK(emulator.damage().rows[3].empty());
+}

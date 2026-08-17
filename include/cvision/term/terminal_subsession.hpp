@@ -27,7 +27,9 @@ using core::TerminalPrinterJob;
 using core::TerminalPrinterPolicy;
 using core::TerminalQueryPolicy;
 using core::TerminalRaster;
+using core::TerminalDamage;
 using core::TerminalSnapshot;
+using core::TerminalSnapshotOptions;
 using core::TerminalSubsessionOptions;
 using core::TerminalSubsessionState;
 

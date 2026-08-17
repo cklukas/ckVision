@@ -290,6 +290,73 @@ struct TerminalRaster {
     std::string fallback;
 };
 
+// What a host asks a snapshot to contain.
+//
+// It exists because the expensive parts are the ones a caller most often does
+// not want. `snapshot()` copies the grid, the whole bounded scrollback and the
+// raster list every time it is called; a multiplexer diffing N terminals at
+// its flush tick wants the grid and nothing else, and paying for the history
+// on every frame is the difference between a cost proportional to what changed
+// and one proportional to what the terminal remembers.
+//
+// Defaults are everything, so a caller that has not thought about it gets what
+// it always got.
+struct TerminalSnapshotOptions {
+    bool include_scrollback = true;
+    bool include_rasters = true;
+
+    friend bool operator==(const TerminalSnapshotOptions&, const TerminalSnapshotOptions&) = default;
+};
+
+// What has changed since a host last said it had caught up.
+//
+// A diff engine that has this does not have to compare two grids to find out;
+// without it, the only way to know what a child touched is to keep the
+// previous screen and walk both, which costs a full copy per terminal per
+// frame before any comparison begins.
+//
+// Spans rather than a bitset per cell: a child writes runs, and a row's
+// touched columns are almost always one stretch. Rows rather than one
+// rectangle: a program that repaints its status line and its cursor row has
+// damaged two rows, and a bounding box over them claims everything between.
+struct TerminalDamage {
+    // A half-open span of columns. `first >= last` means the row is clean,
+    // which is also what a default-constructed span says.
+    struct RowSpan {
+        int first = 0;
+        int last = 0;
+
+        bool empty() const noexcept { return first >= last; }
+        friend bool operator==(const RowSpan&, const RowSpan&) = default;
+    };
+
+    // Nothing about the previous screen can be relied on: a resize, a reset,
+    // or a switch between the primary and alternate buffers. A host that sees
+    // this resends everything rather than trying to reconcile.
+    bool full = false;
+    // One entry per row of the CURRENT grid, in row order.
+    std::vector<RowSpan> rows;
+    bool cursor = false;
+    bool modes = false;
+    bool title = false;
+    bool rasters = false;
+    // How many lines have entered the scrollback since the last clear. A host
+    // sends exactly those rather than the whole history — which is the other
+    // half of not copying it.
+    std::size_t scrollback_pushed = 0;
+
+    // Whether anything at all needs sending. Asked once per terminal per tick,
+    // so it answers without walking the rows where it can.
+    bool any() const noexcept {
+        if (full || cursor || modes || title || rasters || scrollback_pushed > 0) return true;
+        for (const RowSpan& row : rows)
+            if (!row.empty()) return true;
+        return false;
+    }
+
+    friend bool operator==(const TerminalDamage&, const TerminalDamage&) = default;
+};
+
 struct TerminalSnapshot {
     ::ckv::Size cells;
     std::vector<::ckv::Cell> cell_buffer;

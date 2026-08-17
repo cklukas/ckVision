@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,6 +21,32 @@ public:
                               TerminalSubsessionOptions options = {});
 
     TerminalSnapshot snapshot() const override;
+    // The parts of a snapshot a caller actually wants. The whole reason this
+    // overload exists is that `snapshot()` copies the entire bounded history
+    // every time it is called, and a host diffing at tick rate wants the grid:
+    // paying for what the terminal remembers on every frame is the difference
+    // between a cost proportional to what changed and one proportional to how
+    // long the terminal has been alive.
+    TerminalSnapshot snapshot(TerminalSnapshotOptions options) const;
+
+    // The active grid and the history, borrowed rather than copied. Valid
+    // until the next call that changes this emulator — which for the server is
+    // its own drain, so a diff engine reads these between drains and copies
+    // only the cells it is going to send.
+    std::span<const Cell> cells() const noexcept;
+    std::span<const Cell> scrollback() const noexcept;
+
+    // What has changed since `clear_damage()`. A host that has this does not
+    // have to keep the previous screen and compare: the emulator already knew
+    // what it wrote, and throwing that away only to reconstruct it by
+    // comparison is the copy this exists to remove.
+    const TerminalDamage& damage() const noexcept { return damage_; }
+    // Said by the host when it has sent everything: "I am caught up". Not done
+    // by `snapshot()` or by `damage()`, because reading state must not change
+    // it — a second reader would otherwise find a terminal that had nothing to
+    // report, and there are three of them (a diff engine, a title poll, a bell
+    // badge).
+    void clear_damage() noexcept;
     const TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
     void feed_output(std::string_view bytes) override;
     void resize(Size cells, Size cell_pixels) override;
@@ -98,6 +125,24 @@ private:
     void index() noexcept;
     void reverse_index() noexcept;
     void reset_active_buffer();
+    // Every path that puts different cells in a region says so here, so a
+    // host learns what changed without keeping the previous screen to compare
+    // against.
+    void changed_cells(int left, int top, int right, int bottom) noexcept;
+    // ...and every path that WRITES cells says so here instead, which is the
+    // same thing plus the erasure a write means for a picture underneath.
+    //
+    // The two are separate because scrolling is the case that tells them
+    // apart: it puts different cells in every row of its region, so the host
+    // must hear about it, but it MOVES those cells rather than writing over
+    // them — a picture in the region rides along (scroll_rasters) instead of
+    // being erased. Routing a scroll through the write path destroys the
+    // picture it should have carried.
+    void wrote_cells(int left, int top, int right, int bottom);
+    // Nothing about the previous screen can be relied on — a resize, a reset,
+    // a switch of buffers.
+    void damage_everything() noexcept;
+    void resize_damage() noexcept;
     // The tab stops, as a terminal has always had them: a column is a stop or
     // it is not, and `\t` goes to the next one. Every eight columns is only
     // the default — a program that lays out a table sets its own with HTS and
@@ -245,6 +290,7 @@ private:
     // One entry per column. Rebuilt on a resize, preserving what the child
     // set for the columns that still exist.
     std::vector<bool> tab_stops_;
+    TerminalDamage damage_;
     std::string title_;
     std::vector<std::string> title_stack_;
     TerminalSubsessionState state_ = TerminalSubsessionState::Ready;

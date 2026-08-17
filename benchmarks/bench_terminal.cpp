@@ -4,6 +4,7 @@
 // workloads, while the checked invariants make this a deterministic budget
 // gate instead of a machine-speed threshold.
 #include <cstdio>
+#include <span>
 #include <string>
 
 #include "ckbench.hpp"
@@ -98,6 +99,74 @@ bool run_terminal_benchmarks() {
         if (snapshot.cells != ckv::Size{width, height} ||
             snapshot.cell_buffer.size() != static_cast<std::size_t>(width * height))
             budgets_hold = false;
+    });
+
+    // U0-b, the measurement the item asks for: what a multiplexer's server
+    // pays to read one terminal at its flush tick, with the history the
+    // terminal is holding and without it.
+    //
+    // All three cases apply the SAME mutation first — a status line rewritten
+    // in place, which is what a tick with work in it actually looks like — so
+    // the difference between the numbers is the cost of the read and nothing
+    // else. An earlier version fed a newline here instead, which scrolled the
+    // whole screen and pushed a line into the history: that made the damage
+    // case look four times more expensive than a full snapshot, because it was
+    // measuring the emulator's work rather than the host's.
+    //
+    // The shape to look for: the first grows with how long the terminal has
+    // been alive, and the other two do not.
+    const char* const tick_mutation = "\x1b[5;1H status: a line a program rewrites every frame ";
+    ckv::term::TerminalEmulator loaded(profile, options);
+    loaded.feed_output(flood);
+
+    ckbench::run("terminal_snapshot_with_history", 2000, [&] {
+        loaded.feed_output(tick_mutation);
+        const auto snapshot = loaded.snapshot();
+        sink += snapshot.cell_buffer.size() + snapshot.scrollback.size();
+        if (snapshot.scrollback.empty()) budgets_hold = false;
+    });
+
+    ckv::core::TerminalSnapshotOptions lean;
+    lean.include_scrollback = false;
+    lean.include_rasters = false;
+    ckbench::run("terminal_snapshot_grid_only", 2000, [&] {
+        loaded.feed_output(tick_mutation);
+        const auto snapshot = loaded.snapshot(lean);
+        sink += snapshot.cell_buffer.size();
+        // The grid is still whole; only what the caller declined is absent.
+        if (!snapshot.scrollback.empty() ||
+            snapshot.cell_buffer.size() != static_cast<std::size_t>(profile.cells.width * profile.cells.height))
+            budgets_hold = false;
+    });
+
+    // The host has caught up before the loop starts. Without this the first
+    // iteration still carries construction damage — every row, full width —
+    // which is correct behaviour and the wrong starting point for measuring a
+    // steady-state tick.
+    loaded.clear_damage();
+    ckbench::run("terminal_damage_and_borrowed_cells", 2000, [&] {
+        loaded.feed_output(tick_mutation);
+        // What WP-4b will do: ask what changed, read only those rows out of the
+        // borrowed grid, and say it has caught up. No copy of anything the host
+        // is not about to send.
+        const ckv::term::TerminalDamage& damage = loaded.damage();
+        const std::span<const ckv::Cell> cells = loaded.cells();
+        std::size_t touched = 0;
+        for (std::size_t row = 0; row < damage.rows.size(); ++row) {
+            const auto& span = damage.rows[row];
+            if (span.empty()) continue;
+            for (int column = span.first; column < span.last; ++column) {
+                const std::size_t index = row * static_cast<std::size_t>(profile.cells.width) +
+                                          static_cast<std::size_t>(column);
+                if (index < cells.size() && !cells[index].grapheme().empty()) ++touched;
+            }
+        }
+        sink += touched;
+        loaded.clear_damage();
+        // One row of a 120x40 screen changed, so a host that reads damage
+        // touches about 50 cells where a full snapshot copies 4800 plus the
+        // history.
+        if (touched > static_cast<std::size_t>(profile.cells.width)) budgets_hold = false;
     });
 
     ckbench::run("terminal_large_sixel_payload", 8, [&] {

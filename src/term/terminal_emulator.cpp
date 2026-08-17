@@ -91,15 +91,36 @@ TerminalEmulator::TerminalEmulator(TerminalCapabilityProfile profile, TerminalSu
     alternate_ = primary_;
     scroll_bottom_ = cells_.height;
     reset_tab_stops();
+    // A fresh terminal has told nobody anything, so everything is outstanding.
+    // Starting clean would mean the first frame after attach sent nothing.
+    resize_damage();
+    damage_everything();
 }
 
 std::vector<Cell>& TerminalEmulator::active_cells() noexcept { return alternate_buffer_ ? alternate_ : primary_; }
 const std::vector<Cell>& TerminalEmulator::active_cells() const noexcept { return alternate_buffer_ ? alternate_ : primary_; }
 
-TerminalSnapshot TerminalEmulator::snapshot() const {
+std::span<const Cell> TerminalEmulator::cells() const noexcept {
+    const std::vector<Cell>& cells = active_cells();
+    return std::span<const Cell>(cells.data(), cells.size());
+}
+
+std::span<const Cell> TerminalEmulator::scrollback() const noexcept {
+    return std::span<const Cell>(scrollback_.data(), scrollback_.size());
+}
+
+TerminalSnapshot TerminalEmulator::snapshot() const { return snapshot(TerminalSnapshotOptions{}); }
+
+TerminalSnapshot TerminalEmulator::snapshot(TerminalSnapshotOptions options) const {
     const TerminalMouseEncoding mouse_encoding = !mouse_reporting_enabled_ ? TerminalMouseEncoding::None
         : mouse_sgr_enabled_ ? TerminalMouseEncoding::Sgr : TerminalMouseEncoding::X10;
-    return TerminalSnapshot{cells_, active_cells(), cursor_, alternate_buffer_, rasters_, diagnostics_, title_, state_, scrollback_,
+    // The two expensive members are the ones a caller can decline. Built as
+    // empty rather than copied and cleared, because the copy is the cost.
+    static const std::vector<Cell> kNoScrollback;
+    static const std::vector<TerminalRaster> kNoRasters;
+    return TerminalSnapshot{cells_, active_cells(), cursor_, alternate_buffer_,
+                            options.include_rasters ? rasters_ : kNoRasters, diagnostics_, title_, state_,
+                            options.include_scrollback ? scrollback_ : kNoScrollback,
                             bracketed_paste_enabled_, mouse_reporting_enabled_, mouse_encoding,
                             application_cursor_keys_, focus_reporting_enabled_, alternate_scroll_enabled_,
                             clipboard_text_, clipboard_serial_,
@@ -319,6 +340,7 @@ void TerminalEmulator::set_title(std::string_view text) {
         diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child title exceeded configured limit");
     }
     title_ = text::sanitize_display_text(text);
+    damage_.title = true;
 }
 
 // XTWINOPS 22 and 23. A program that is about to rename the window saves the
@@ -355,6 +377,7 @@ void TerminalEmulator::handle_title_stack(bool push) {
     if (title_stack_.empty()) return;
     title_ = title_stack_.back();
     title_stack_.pop_back();
+    damage_.title = true;
 }
 
 bool TerminalEmulator::printer_available() const noexcept {
@@ -459,6 +482,7 @@ void TerminalEmulator::finish_printer_job(TerminalPrinterJob::Origin origin) {
     printer_spool_.clear();
     printer_overflowed_ = false;
     printer_job_open_ = false;
+    damage_everything();
 }
 
 std::vector<TerminalPrinterJob> TerminalEmulator::take_printer_jobs() {
@@ -519,6 +543,14 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
     if (state_ == TerminalSubsessionState::Closed || state_ == TerminalSubsessionState::Failed ||
         state_ == TerminalSubsessionState::Exited)
         return;
+    // The cursor is compared once here rather than marked at each of the three
+    // dozen places that move it. Those places are cursor addressing, tab stops,
+    // wrapping, scrolling, save/restore and every erase that homes it — a mark
+    // at each would be thirty-odd chances to forget one, and forgetting one
+    // leaves a cursor that stops moving on a reader's screen. What a host
+    // needs to know is whether it ended up somewhere else, and that is one
+    // comparison of four small fields.
+    const CursorState cursor_before = cursor_;
     state_ = TerminalSubsessionState::Running;
     const std::size_t output_limit = std::max<std::size_t>(1, options_.max_output_bytes);
     const std::size_t available = output_limit > pending_output_.size() ? output_limit - pending_output_.size() : 0;
@@ -569,7 +601,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 // that has not finished arriving. What it does is ask for the
                 // reader's attention, which is the host's to give: this counts
                 // the request and says so in the snapshot.
-                else if (byte == '\a') { ++bell_serial_; }
+                else if (byte == '\a') { ++bell_serial_; damage_.modes = true; }
                 else if (byte == '\x0f') { put_text(true); active_charset_ = 0; }  // SI
                 else if (byte == '\x0e') { put_text(true); active_charset_ = 1; }  // SO
                 else if (static_cast<unsigned char>(byte) >= 0x20) {
@@ -750,6 +782,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
     }
     pending_output_.erase(0, budget);
     put_text();
+    if (!(cursor_ == cursor_before)) damage_.cursor = true;
 }
 
 int TerminalEmulator::parameter(std::string_view text, std::size_t index, int default_value) {
@@ -851,6 +884,10 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     if ((final_byte == 'h' || final_byte == 'l') && !control_.empty() && control_.front() == '?') {
+        // One mark for the whole loop: which of the modes changed is the
+        // host's business to read out of the snapshot, and this only has to
+        // say that the set is no longer what it last sent.
+        damage_.modes = true;
         const bool enabled = final_byte == 'h';
         std::string_view modes(control_);
         modes.remove_prefix(1);
@@ -860,6 +897,9 @@ void TerminalEmulator::handle_csi(char final_byte) {
             const std::string_view value = modes.substr(begin, end == std::string_view::npos ? modes.size() - begin : end - begin);
             const int mode = parameter(value, 0, -1);
             if (mode == 1049) {
+                // A different screen entirely: nothing a host knew about the
+                // one it was shown carries over.
+                if (alternate_buffer_ != enabled) damage_everything();
                 if (enabled) {
                     saved_cursor_ = cursor_;
                     saved_cursor_valid_ = true;
@@ -873,6 +913,7 @@ void TerminalEmulator::handle_csi(char final_byte) {
                     if (saved_cursor_valid_) cursor_ = saved_cursor_;
                 }
             } else if (mode == 47 || mode == 1047) {
+                if (alternate_buffer_ != enabled) damage_everything();
                 alternate_buffer_ = enabled;
                 if (enabled) {
                     reset_active_buffer();
@@ -925,6 +966,7 @@ void TerminalEmulator::handle_csi(char final_byte) {
     // The ANSI modes, which carry no '?' and are a separate space from the
     // DEC private ones above: the same number means different things in each.
     if (final_byte == 'h' || final_byte == 'l') {
+        damage_.modes = true;
         const bool enabled = final_byte == 'h';
         std::string_view modes(control_);
         std::size_t begin = 0;
@@ -1441,6 +1483,10 @@ bool TerminalEmulator::extended_color(const std::vector<SgrParameter>& parameter
 // actually reach for, but the whole published range is here: a partial
 // table would render most of a frame and corrupt the rest, which is
 // harder to recognise than rendering none of it.
+// The cursor, the modes and the title are the parts of a frame that are not
+// cells. They are marked rather than compared for the same reason the cells
+// are: the emulator knows when it changed them, and a host that had to notice
+// by comparison would need last frame's copy of each.
 std::string_view TerminalEmulator::dec_graphic_for(char byte) noexcept {
     switch (byte) {
         case '_': return " ";
@@ -1522,7 +1568,7 @@ void TerminalEmulator::put_grapheme(std::string_view grapheme) {
 
     at(x) = cell;
     if (width == 2 && x + 1 < cells_.width) at(x + 1) = Cell::continuation(style_);
-    damage_rasters(x, cursor_.position.y, x + width, cursor_.position.y + 1);
+    wrote_cells(x, cursor_.position.y, x + width, cursor_.position.y + 1);
     cursor_.position.x += width;
 }
 
@@ -1536,6 +1582,7 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
     // had written text there — which is what a picture drawn over a picture
     // means on a terminal.
     damage_rasters(anchor.x, anchor.y, anchor.x + cell_extent.width, anchor.y + cell_extent.height);
+    damage_.rasters = true;
 
     // A screen's worth of pieces is the most a picture can ever be split
     // into by anything sensible; past that the oldest goes, so a program
@@ -1675,7 +1722,7 @@ void TerminalEmulator::erase_cells(int left, int top, int right, int bottom) noe
     for (int y = top; y < bottom; ++y)
         for (int x = left; x < right; ++x)
             cells[static_cast<std::size_t>(y * cells_.width + x)] = blank;
-    damage_rasters(left, top, right, bottom);
+    wrote_cells(left, top, right, bottom);
 }
 
 void TerminalEmulator::insert_cells(int count) noexcept {
@@ -1686,7 +1733,7 @@ void TerminalEmulator::insert_cells(int count) noexcept {
     auto last = cells.begin() + static_cast<std::ptrdiff_t>((cursor_.position.y + 1) * cells_.width);
     std::move_backward(first, last - count, last);
     std::fill(first, first + count, erase_cell());
-    damage_rasters(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
+    wrote_cells(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
 }
 
 void TerminalEmulator::delete_cells(int count) noexcept {
@@ -1697,7 +1744,7 @@ void TerminalEmulator::delete_cells(int count) noexcept {
     auto last = cells.begin() + static_cast<std::ptrdiff_t>((cursor_.position.y + 1) * cells_.width);
     std::move(first + count, last, first);
     std::fill(last - count, last, erase_cell());
-    damage_rasters(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
+    wrote_cells(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
 }
 
 void TerminalEmulator::scroll_up(int rows) noexcept {
@@ -1720,11 +1767,18 @@ void TerminalEmulator::scroll_up_region(int top, int bottom, int rows) noexcept 
         }
         const std::size_t maximum = options_.max_scrollback_lines * static_cast<std::size_t>(cells_.width);
         if (scrollback_.size() > maximum) scrollback_.erase(scrollback_.begin(), scrollback_.begin() + static_cast<std::ptrdiff_t>(scrollback_.size() - maximum));
+        // A host sends the lines that entered the history, not the history.
+        damage_.scrollback_pushed += static_cast<std::size_t>(rows);
     }
     const auto first = cells.begin() + static_cast<std::ptrdiff_t>(top * cells_.width);
     const auto last = cells.begin() + static_cast<std::ptrdiff_t>(bottom * cells_.width);
     std::move(first + static_cast<std::ptrdiff_t>(rows * cells_.width), last, first);
     std::fill(last - static_cast<std::ptrdiff_t>(rows * cells_.width), last, erase_cell());
+    // Every row in the region holds different cells now. A Scroll op will
+    // usually carry this far more cheaply than the cells would, but that is the
+    // diff engine's judgement to make from honest damage, not the emulator's to
+    // pre-empt by under-reporting.
+    changed_cells(0, top, cells_.width, bottom);
     scroll_rasters(top, bottom, rows);
 }
 
@@ -1738,6 +1792,7 @@ void TerminalEmulator::scroll_down_region(int top, int bottom, int rows) noexcep
     const auto last = cells.begin() + static_cast<std::ptrdiff_t>(bottom * cells_.width);
     std::move_backward(first, last - static_cast<std::ptrdiff_t>(rows * cells_.width), last);
     std::fill(first, first + static_cast<std::ptrdiff_t>(rows * cells_.width), erase_cell());
+    changed_cells(0, top, cells_.width, bottom);
     scroll_rasters(top, bottom, -rows);
 }
 
@@ -1790,6 +1845,67 @@ int TerminalEmulator::previous_tab_stop(int from) const noexcept {
 
 void TerminalEmulator::reset_active_buffer() {
     std::fill(active_cells().begin(), active_cells().end(), Cell::from_grapheme(" ", profile_.default_style));
+    damage_everything();
+}
+
+// One row span per row of the current grid, all clean. Sized here rather than
+// lazily, because a host indexes it by row and a short vector would be a
+// silent "that row did not change".
+void TerminalEmulator::resize_damage() noexcept {
+    damage_.rows.assign(static_cast<std::size_t>(std::max(0, cells_.height)), TerminalDamage::RowSpan{});
+}
+
+void TerminalEmulator::damage_everything() noexcept {
+    damage_.full = true;
+    damage_.cursor = true;
+    damage_.modes = true;
+    damage_.title = true;
+    damage_.rasters = true;
+    for (TerminalDamage::RowSpan& row : damage_.rows) {
+        row.first = 0;
+        row.last = cells_.width;
+    }
+}
+
+void TerminalEmulator::wrote_cells(int left, int top, int right, int bottom) {
+    changed_cells(left, top, right, bottom);
+    // A write puts new content over whatever pixels were there. A move does
+    // not — see the header on why these are two functions.
+    damage_rasters(std::clamp(left, 0, cells_.width), std::clamp(top, 0, cells_.height),
+                   std::clamp(right, 0, cells_.width), std::clamp(bottom, 0, cells_.height));
+}
+
+void TerminalEmulator::changed_cells(int left, int top, int right, int bottom) noexcept {
+    left = std::clamp(left, 0, cells_.width);
+    right = std::clamp(right, left, cells_.width);
+    top = std::clamp(top, 0, cells_.height);
+    bottom = std::clamp(bottom, top, cells_.height);
+    for (int row = top; row < bottom; ++row) {
+        if (row >= static_cast<int>(damage_.rows.size())) break;
+        TerminalDamage::RowSpan& span = damage_.rows[static_cast<std::size_t>(row)];
+        // One span per row, widened rather than split. Two stretches with a
+        // clean gap between them would be cheaper to send, but a list per row
+        // costs allocation on the hot path to save bytes on a case — a program
+        // writing at both ends of one row — that is rare next to the case it
+        // would slow down, which is every write.
+        if (span.empty()) {
+            span.first = left;
+            span.last = right;
+            continue;
+        }
+        span.first = std::min(span.first, left);
+        span.last = std::max(span.last, right);
+    }
+}
+
+void TerminalEmulator::clear_damage() noexcept {
+    damage_.full = false;
+    damage_.cursor = false;
+    damage_.modes = false;
+    damage_.title = false;
+    damage_.rasters = false;
+    damage_.scrollback_pushed = 0;
+    for (TerminalDamage::RowSpan& row : damage_.rows) row = TerminalDamage::RowSpan{};
 }
 
 // RIS (ESC c) — the terminal as it was constructed, minus nothing the child
@@ -1858,6 +1974,7 @@ void TerminalEmulator::reset_terminal() {
     printer_terminator_.clear();
     printer_overflowed_ = false;
     printer_job_open_ = false;
+    damage_everything();
 }
 
 // DECALN (ESC # 8). The screen fills with E and the cursor comes home, which
@@ -1872,7 +1989,7 @@ void TerminalEmulator::screen_alignment_pattern() {
     // would otherwise be grading the wrong picture.
     std::fill(active_cells().begin(), active_cells().end(), Cell::from_grapheme("E", profile_.default_style));
     // Every cell was written, so every picture on the screen was written over.
-    damage_rasters(0, 0, cells_.width, cells_.height);
+    wrote_cells(0, 0, cells_.width, cells_.height);
     scroll_top_ = 0;
     scroll_bottom_ = cells_.height;
     origin_mode_ = false;
@@ -1957,6 +2074,11 @@ void TerminalEmulator::resize(Size cells, Size cell_pixels) {
     origin_mode_ = false;
     cursor_.position.x = std::clamp(cursor_.position.x, 0, cells_.width - 1);
     cursor_.position.y = std::clamp(cursor_.position.y, 0, cells_.height - 1);
+    // A resize invalidates everything a host knew: rows moved, columns
+    // appeared or went, and no span from the old geometry means anything in
+    // the new one.
+    resize_damage();
+    damage_everything();
 }
 
 void TerminalEmulator::send_input(std::string_view bytes) {
