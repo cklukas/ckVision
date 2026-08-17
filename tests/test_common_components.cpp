@@ -584,6 +584,8 @@ struct DroppedCalendar {
     void click(ckv::Point cell) {
         app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, cell, std::nullopt,
                                      ckv::Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, cell, std::nullopt,
+                                     ckv::Modifier::None});
         app.step(0);
     }
 
@@ -619,17 +621,20 @@ CK_TEST(tab_walks_the_dropped_calendars_own_controls_and_no_further) {
 CK_TEST(picking_a_month_moves_the_calendar_to_it) {
     DroppedCalendar c;
     c.press(ckv::Key::Tab);   // onto the month picker
+    const int height = c.dropdown->bounds().height;
     c.press(ckv::Key::Down);  // open the list
     CK_CHECK(c.dropdown->month_picker().dropdown_open());
-    // The list is drawn over the rows below it, so those rows step aside.
-    CK_CHECK(!c.dropdown->calendar().visible());
-    CK_CHECK(!c.dropdown->year_field().visible());
-    for (int i = 0; i < 3; ++i) c.press(ckv::Key::Down);  // August -> November
-    c.press(ckv::Key::Enter);
-    CK_CHECK(c.dropdown->calendar().month().month == 11);
-    CK_CHECK(c.dropdown->calendar().month().year == 2026);
+    // The list floats above the popup rather than being drawn inside it, so
+    // nothing under it moves, hides or resizes.
+    CK_CHECK(c.desktop->popups().size() == 2);
+    CK_CHECK(c.dropdown->bounds().height == height);
     CK_CHECK(c.dropdown->calendar().visible());
     CK_CHECK(c.dropdown->year_field().visible());
+    for (int i = 0; i < 3; ++i) c.press(ckv::Key::Down);  // August -> November
+    c.press(ckv::Key::Enter);
+    CK_CHECK(c.desktop->popups().size() == 1);  // the list is gone, the calendar is not
+    CK_CHECK(c.dropdown->calendar().month().month == 11);
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);
 }
 
 CK_TEST(the_year_steppers_move_a_year_at_a_time) {
@@ -688,17 +693,24 @@ CK_TEST(a_year_that_is_not_one_is_refused_and_the_shown_year_comes_back) {
     CK_CHECK(c.dropdown->year_field().text() == "20269");
 }
 
-CK_TEST(the_month_list_opens_at_full_length_rather_than_scrolling_in_place) {
+CK_TEST(the_steppers_are_buttons_that_arm_on_press_and_can_be_taken_back) {
     DroppedCalendar c;
-    const int closed = c.dropdown->bounds().height;
-    c.press(ckv::Key::Tab);   // onto the month picker
-    c.press(ckv::Key::Down);  // open the list
-    // Twelve months shown through eight rows is a list the reader has to
-    // scroll to see; there is room below, so the popup takes it.
-    CK_CHECK(c.dropdown->bounds().height > closed);
-    CK_CHECK(c.dropdown->month_picker().bounds().height >= 13);  // the row and all twelve
-    c.press(ckv::Key::Escape);  // closes the list, not the popup
-    CK_CHECK(c.dropdown->bounds().height == closed);
+    const ckv::Rect abs = c.dropdown->absolute_bounds();
+    const ckv::Rect year = c.dropdown->year_field().bounds();
+    const ckv::Point back{abs.x + year.x - 1, abs.y + year.y};
+    c.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, back, std::nullopt,
+                                   ckv::Modifier::None});
+    c.app.step(0);
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);  // pressed is not fired
+    // Released somewhere else, the press is taken back -- a stepper is a
+    // button, not a hit-tested label.
+    const ckv::Point away{back.x, back.y + 3};
+    c.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, away, std::nullopt,
+                                   ckv::Modifier::None});
+    c.app.step(0);
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);
+    c.click(back);
+    CK_CHECK(c.dropdown->calendar().month().year == 2025);
 }
 
 CK_TEST(the_month_picker_is_as_wide_as_its_longest_month_and_no_wider) {

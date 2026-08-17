@@ -472,6 +472,16 @@ CalendarDropdown::CalendarDropdown() {
         calendar_->set_month(DateValue{calendar_->month().year, static_cast<int>(index) + 1, 1});
     };
     month_ = static_cast<ComboBox*>(add_child(std::move(month)));
+    auto back = std::make_unique<Button>("<<");
+    back->set_flat(true);  // a stepper in a shared row has no room for a shadow
+    back->set_focus_policy(ui::FocusPolicy::None);  // Tab walks month, year, days
+    back->on_press = [this] { step_year(-1); };
+    step_back_ = static_cast<Button*>(add_child(std::move(back)));
+    auto forward = std::make_unique<Button>(">>");
+    forward->set_flat(true);
+    forward->set_focus_policy(ui::FocusPolicy::None);
+    forward->on_press = [this] { step_year(1); };
+    step_forward_ = static_cast<Button*>(add_child(std::move(forward)));
     auto year = std::make_unique<InputLine>();
     // Digits only: anything else is not part of a year, and refusing it as
     // it is typed beats accepting it and complaining afterwards.
@@ -486,8 +496,15 @@ void CalendarDropdown::on_attached() {
     if (frame_role_ == ui::kInvalidRole) frame_role_ = context().roles->find("ckv.menu.dropdown.normal");
     // A calendar inside a dropdown has to look like a dropdown, not like a
     // list that happens to be floating.
-    calendar_->set_role_override(frame_role_, context().roles->find("ckv.menu.dropdown.highlighted"),
-                                 context().roles->find("ckv.menu.dropdown.disabled"));
+    const ui::RoleId highlighted = context().roles->find("ckv.menu.dropdown.highlighted");
+    calendar_->set_role_override(frame_role_, highlighted, context().roles->find("ckv.menu.dropdown.disabled"));
+    // The steppers are part of this popup, not dialog buttons that landed in
+    // it: they wear its colours at rest and its highlight when held, which is
+    // the same statement a menu item or a status-line item makes.
+    for (Button* step : {step_back_, step_forward_}) {
+        step->set_role_override(frame_role_, frame_role_, frame_role_, frame_role_);
+        step->set_pressed_role_override(highlighted);
+    }
     if (month_labels_.empty())
         set_month_labels({"January", "February", "March", "April", "May", "June", "July", "August",
                           "September", "October", "November", "December"});
@@ -506,8 +523,7 @@ void CalendarDropdown::show_month(DateValue month) {
     month_->set_selected_index(static_cast<std::size_t>(std::clamp(month.month, 1, 12) - 1));
     year_->set_text(std::to_string(month.year));
     showing_invalid_ = false;
-    year_->set_enabled(true);
-    sync_month_bounds();
+    set_control_row_visible(true);
     invalidate();
 }
 
@@ -523,58 +539,27 @@ int CalendarDropdown::month_width() const noexcept {
     return std::clamp(wanted, 4, kGridWidth - rest);
 }
 
-Rect CalendarDropdown::step_back_rect() const noexcept {
-    return Rect{kContentLeft + month_width(), kControlRow, kStepWidth, 1};
-}
-
 Rect CalendarDropdown::year_rect() const noexcept {
-    return Rect{step_back_rect().right(), kControlRow, kYearWidth, 1};
+    return Rect{kContentLeft + month_width() + kStepWidth, kControlRow, kYearWidth, 1};
 }
 
-Rect CalendarDropdown::step_forward_rect() const noexcept {
-    return Rect{year_rect().right(), kControlRow, kStepWidth, 1};
+void CalendarDropdown::set_control_row_visible(bool visible) {
+    year_->set_visible(visible);
+    step_back_->set_visible(visible);
+    step_forward_->set_visible(visible);
 }
 
 void CalendarDropdown::sync_month_bounds() {
-    // The list is drawn inside the combo box, so the combo box has to be as
-    // tall as the list is long -- capped at the room inside the frame, where
-    // it scrolls rather than spilling past the popup.
-    const int wanted = month_->vertical_size_hint().preferred;
-    const int rows = std::max(1, std::min(wanted, bounds().height - 1 - kControlRow));
-    month_->set_bounds(Rect{kContentLeft, kControlRow, month_width(), rows});
-    // The list covers the rows below the picker, so what those rows hold
-    // steps aside: left up, the grid would show through wherever the list
-    // falls short of the frame.
-    const bool list_open = month_->dropdown_open();
-    // The field steps aside for both of the things that take its row: the
-    // open list above it, and the answer the row gives to a year that is not
-    // one -- left up, it would print its rejected text through the word.
-    year_->set_visible(!list_open && !showing_invalid_);
-    calendar_->set_visible(!list_open);
-}
-
-void CalendarDropdown::sync_open_height() {
-    // Open, the popup is as tall as its list needs; closed, it is a month
-    // again. Growing beats scrolling twelve months through eight rows.
-    const int closed = vertical_size_hint().preferred;
-    int wanted = closed;
-    if (month_->dropdown_open())
-        wanted = 1 + kControlRow + month_->vertical_size_hint().preferred + 1;
-    if (parent() != nullptr) wanted = std::min(wanted, std::max(1, parent()->bounds().height - bounds().y));
-    if (wanted == bounds().height) return;
-    set_bounds(Rect{bounds().x, bounds().y, bounds().width, wanted});
-}
-
-void CalendarDropdown::on_child_size_hint_changed(ui::View& child) {
-    if (&child != month_) return;
-    sync_open_height();
-    sync_month_bounds();
+    month_->set_bounds(Rect{kContentLeft, kControlRow, month_width(), 1});
 }
 
 void CalendarDropdown::on_resized() {
-    year_->set_bounds(year_rect());
-    calendar_->set_bounds(Rect{kContentLeft, kGridRow, kGridWidth, std::max(0, bounds().height - kGridRow - 1)});
     sync_month_bounds();
+    const Rect year = year_rect();
+    step_back_->set_bounds(Rect{year.x - kStepWidth, kControlRow, kStepWidth, 1});
+    year_->set_bounds(year);
+    step_forward_->set_bounds(Rect{year.right(), kControlRow, kStepWidth, 1});
+    calendar_->set_bounds(Rect{kContentLeft, kGridRow, kGridWidth, std::max(0, bounds().height - kGridRow - 1)});
 }
 
 ui::SizeHint CalendarDropdown::horizontal_size_hint() const {
@@ -594,18 +579,14 @@ void CalendarDropdown::draw(scene::Painter& painter) {
     // Framed like a dropdown menu, in a dropdown menu's colours, because
     // that is what it is.
     painter.draw_box(all, scene::LineStyle::Single, style);
-    if (month_->dropdown_open()) return;  // the open list has this row
-    if (showing_invalid_) {
-        // The complaint takes the whole stepper-and-year span, which is the
-        // one place on this row with room for a word.
-        const Rect span{step_back_rect().x, kControlRow,
-                        step_forward_rect().right() - step_back_rect().x, 1};
-        painter.fill(span, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{span.x + std::max(0, (span.width - 7) / 2), kControlRow}, "invalid", style);
-        return;
-    }
-    painter.draw_text(Point{step_back_rect().x, kControlRow}, "<<", style);
-    painter.draw_text(Point{step_forward_rect().x, kControlRow}, ">>", style);
+    if (!showing_invalid_) return;
+    // The complaint takes the whole stepper-and-year span, which is the one
+    // place on this row with room for a word. The controls it covers are
+    // hidden meanwhile, so nothing prints through it.
+    const Rect span{step_back_->bounds().x, kControlRow,
+                    step_forward_->bounds().right() - step_back_->bounds().x, 1};
+    painter.fill(span, Cell::from_grapheme(" ", style));
+    painter.draw_text(Point{span.x + std::max(0, (span.width - 7) / 2), kControlRow}, "invalid", style);
 }
 
 void CalendarDropdown::dismiss() {
@@ -624,10 +605,10 @@ void CalendarDropdown::step_year(int delta) {
 
 void CalendarDropdown::report_invalid_year() {
     showing_invalid_ = true;
-    // The row says what happened, and while it does the field is not a field:
-    // it takes no edits, so nothing is typed into the middle of the answer.
-    year_->set_enabled(false);
-    sync_month_bounds();
+    // The row says what happened, and while it does the controls it covers
+    // step aside -- left up, the field would print its rejected text through
+    // the word and the steppers would sit on top of it.
+    set_control_row_visible(false);
     invalidate();
     if (context().app == nullptr) return;
     const std::weak_ptr<void> liveness = lifetime_token();
@@ -637,9 +618,8 @@ void CalendarDropdown::report_invalid_year() {
         if (liveness.expired()) return;
         if (!showing_invalid_) return;
         showing_invalid_ = false;
-        year_->set_enabled(true);
+        set_control_row_visible(true);
         year_->set_text(std::to_string(calendar_->month().year));
-        sync_month_bounds();
         invalidate();
     });
 }
@@ -672,7 +652,24 @@ void CalendarDropdown::focus_slot(int slot) {
     invalidate();
 }
 
+ui::View* CalendarDropdown::child_at(Point local) const noexcept {
+    for (ui::View* child : {static_cast<ui::View*>(month_), static_cast<ui::View*>(step_back_),
+                            static_cast<ui::View*>(year_), static_cast<ui::View*>(step_forward_),
+                            static_cast<ui::View*>(calendar_)})
+        if (child->visible() && child->bounds().contains(local)) return child;
+    return nullptr;
+}
+
 bool CalendarDropdown::on_mouse(const MouseEvent& event) {
+    // A press that began on a child stays with it until the button comes up,
+    // wherever the pointer goes meanwhile: that is what lets a button show
+    // itself disarmed when the pointer slides off it, and how the press is
+    // taken back rather than fired.
+    if (mouse_child_ != nullptr) {
+        ui::View* const child = mouse_child_;
+        if (event.action == MouseAction::Up) mouse_child_ = nullptr;
+        return child->on_mouse(event);
+    }
     const Rect abs = absolute_bounds();
     const bool inside = event.cell.x >= abs.x && event.cell.x < abs.right() && event.cell.y >= abs.y &&
                         event.cell.y < abs.bottom();
@@ -680,26 +677,17 @@ bool CalendarDropdown::on_mouse(const MouseEvent& event) {
         if (event.action == MouseAction::Down) dismiss();
         return false;
     }
-    const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
-    if (event.action == MouseAction::Down && year_->visible()) {
-        if (step_back_rect().contains(local)) {
-            step_year(-1);
-            return true;
-        }
-        if (step_forward_rect().contains(local)) {
-            step_year(1);
-            return true;
-        }
-        if (month_->bounds().contains(local)) focus_slot(0);
-        else if (year_->visible() && year_->bounds().contains(local)) focus_slot(1);
-        else if (calendar_->visible() && calendar_->bounds().contains(local)) focus_slot(2);
+    ui::View* const child = child_at(Point{event.cell.x - abs.x, event.cell.y - abs.y});
+    if (child == nullptr) return true;  // the frame, or the row's spare cells
+    if (event.action == MouseAction::Down) {
+        if (child == month_) focus_slot(0);
+        else if (child == year_) focus_slot(1);
+        else if (child == calendar_) focus_slot(2);
+        mouse_child_ = child;
     }
-    // The popup holds the mouse so a click outside can dismiss it, which
-    // means every click inside arrives here and is handed on by hand.
-    if (month_->bounds().contains(local)) return month_->on_mouse(event);
-    if (year_->visible() && year_->bounds().contains(local)) return year_->on_mouse(event);
-    if (calendar_->visible() && calendar_->bounds().contains(local)) return calendar_->on_mouse(event);
-    return true;
+    // The popup holds the mouse so a press beside it can dismiss it, which
+    // means every event inside arrives here and is handed on by hand.
+    return child->on_mouse(event);
 }
 
 bool CalendarDropdown::on_key(const KeyEvent& event) {

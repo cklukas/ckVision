@@ -1067,3 +1067,36 @@ CK_TEST(releasing_the_pointer_away_from_a_button_takes_the_press_back) {
     CK_CHECK(!button.pressed());
     CK_CHECK(presses == 0);  // moving away before releasing cancels it
 }
+
+CK_TEST(a_flat_button_is_one_row_of_label_and_shows_its_press_in_the_colours) {
+    Fixture f;
+    Button button("<<");
+    button.set_flat(true);
+    button.set_context(f.ctx());
+    button.on_attached();
+    // No shadow to stand off from, no ten-cell footprint, and no row below:
+    // a stepper beside a field has room for its label and nothing else.
+    CK_CHECK(button.horizontal_size_hint().preferred == 2);
+    CK_CHECK(button.vertical_size_hint().preferred == 1);
+    CK_CHECK(!button.trailing_row_is_shadow());
+
+    button.set_bounds(ckv::Rect{0, 0, 2, 1});
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+    const auto face_bg = [&] {
+        Surface surface = make_surface(2, 1);
+        Painter painter(surface, ckv::Rect{0, 0, 2, 1});
+        button.draw(painter);
+        return surface.at(ckv::Point{0, 0}).style().bg;
+    };
+    const auto idle = face_bg();
+    button.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, 0},
+                                    std::nullopt, ckv::Modifier::None});
+    CK_CHECK(button.pressed());
+    CK_CHECK(face_bg() != idle);  // the press is visible where the geometry cannot show it
+    CK_CHECK(presses == 0);       // ...and it has not fired yet
+    button.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{0, 0},
+                                    std::nullopt, ckv::Modifier::None});
+    CK_CHECK(presses == 1);
+    CK_CHECK(face_bg() == idle);
+}

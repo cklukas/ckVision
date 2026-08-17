@@ -64,6 +64,10 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.button_focused = registry.intern("ckv.button.focused", Style{kWhite, kGreen, Attr{}});
     r.button_default = registry.intern("ckv.button.default", Style{kLightCyan, kGreen, Attr{}});
     r.button_shadow = registry.intern("ckv.button.shadow", Style{kBlack, kLightGray, Attr{}});
+    // A flat button has no shadow to lose when it goes down, so the press is
+    // in the colours, and they have to differ from the face it wears at rest
+    // or the press says nothing at all.
+    r.button_pressed = registry.intern("ckv.button.pressed", Style{kBlack, kLightGray, Attr{}});
     r.input_normal = registry.intern("ckv.input.normal", Style{kWhite, kBlue, Attr{}});
     r.input_focused = registry.intern("ckv.input.focused", Style{kWhite, kBlue, Attr{}});
     r.input_invalid = registry.intern("ckv.input.invalid", Style{kWhite, kRed, Attr::Bold});
@@ -153,6 +157,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.button_focused, Style{kWhite, kGreen, Attr{}});
     theme.set(roles.button_default, Style{kLightCyan, kGreen, Attr{}});
     theme.set(roles.button_shadow, Style{kBlack, kLightGray, Attr{}});
+    theme.set(roles.button_pressed, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.input_normal, Style{kWhite, kBlue, Attr{}});
     theme.set(roles.input_focused, Style{kWhite, kBlue, Attr{}});
     theme.set(roles.input_invalid, Style{kWhite, kRed, Attr::Bold});
@@ -250,6 +255,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     // shadow the colour of the control reads as part of the control, and the
     // depth it exists to describe disappears.
     theme.set(roles.button_shadow, Style{kDarkShadow, kDarkPanel, Attr{}});
+    theme.set(roles.button_pressed, Style{kDarkFg, kDarkAccent, Attr::Bold});
     theme.set(roles.input_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_focused, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
@@ -321,6 +327,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     // A light scheme's shadow is a soft grey, not near-black: the same rule,
     // read against a pale surface.
     theme.set(roles.button_shadow, Style{kLightShadow, kLightPanel, Attr{}});
+    theme.set(roles.button_pressed, Style{kLightFg, kLightAccent, Attr::Bold});
     theme.set(roles.input_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_focused, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.input_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
@@ -385,6 +392,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.button_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.button_default, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.button_shadow, Style{kMonoGray, kMonoBg, Attr{}});
+    theme.set(roles.button_pressed, Style{kMonoBg, kMonoFg, Attr::Bold});
     theme.set(roles.input_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.input_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.input_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
@@ -443,7 +451,8 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.label_text,            roles.label_mnemonic,           roles.hotkey,
         roles.static_text,           roles.help_text,                roles.button_normal,
         roles.button_focused,
-        roles.button_default,        roles.button_shadow,            roles.input_normal,
+        roles.button_default,        roles.button_shadow,            roles.button_pressed,
+        roles.input_normal,
         roles.input_focused,         roles.input_invalid,            roles.message_info_text,
         roles.message_warning_text,  roles.message_error_text,        roles.message_confirm_text,
         roles.window_frame_active,   roles.window_frame_inactive,    roles.window_title_active,
@@ -473,6 +482,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.hotkey, Style{white, black, Attr::Bold});
     theme.set(roles.button_focused, selected);
     theme.set(roles.button_default, Style{white, black, Attr::Bold});
+    theme.set(roles.button_pressed, Style{black, white, Attr::Bold});
     theme.set(roles.input_focused, Style{white, black, Attr::Underline});
     theme.set(roles.input_invalid, Style{black, white, Attr::Bold});
     theme.set(roles.message_warning_text, Style{white, black, Attr::Bold});

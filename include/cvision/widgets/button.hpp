@@ -53,6 +53,17 @@ public:
     void set_default(bool is_default) noexcept { is_default_ = is_default; }
     bool is_default() const noexcept { return is_default_; }
 
+    // A button drawn as a bare face: no cast shadow, no depressed shift, one
+    // row high, and no wider than its label needs. For a control that lives
+    // inside a dense row -- a stepper beside a field, a strip of small
+    // actions -- where a dialog button's shadow and ten-cell footprint do not
+    // fit. It is still a Button: it takes focus, it arms on press and takes
+    // the press back if the pointer leaves, and it fires on release. Only the
+    // shape differs, so pressing shows in the colours (ckv.button.pressed)
+    // where a shadowed button shows it in the geometry.
+    void set_flat(bool flat);
+    bool flat() const noexcept { return flat_; }
+
     void set_minimum_width(int width);
     int minimum_width() const noexcept { return minimum_width_; }
 
@@ -63,6 +74,7 @@ public:
         default_role_ = default_role;
         shadow_role_ = shadow_role;
     }
+    void set_pressed_role_override(ui::RoleId role) noexcept { pressed_role_ = role; }
     void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
     // Invoked by a containing dialog/window for a matching Alt+mnemonic.
@@ -75,8 +87,9 @@ public:
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
-    // The face sits on row 0 and the cast shadow on row 1.
-    bool trailing_row_is_shadow() const noexcept override { return true; }
+    // The face sits on row 0 and the cast shadow on row 1 -- unless there is
+    // no shadow to stand off from.
+    bool trailing_row_is_shadow() const noexcept override { return !flat_; }
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
@@ -95,7 +108,9 @@ private:
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId default_role_ = ui::kInvalidRole;
     ui::RoleId shadow_role_ = ui::kInvalidRole;
+    ui::RoleId pressed_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
+    bool flat_ = false;
     bool is_default_ = false;
     int minimum_width_ = kClassicMinimumWidth;
     bool has_focus_ = false;

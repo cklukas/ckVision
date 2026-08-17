@@ -10,17 +10,22 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/popup_list.hpp"
 
 namespace ckv::widgets {
 
 enum class ComboBoxMode { PickOnly, Editable };
 
 // Editable or pick-only combo box with deterministic in-application history.
-// The dropdown is drawn inside this widget's own bounds, so opening it changes
-// the height the control needs: it reports that through size_hint_changed(),
-// and a container lays it out taller for as long as the list is open. Given
-// less room than the list is long, the list scrolls to keep the selected item
-// in view rather than hiding the tail of itself.
+// Opening it drops a PopupList: a real floating popup on the desktop, framed
+// and coloured like a dropdown menu, dismissed by Escape or a press outside
+// it. Nothing about the layout it sits in changes while the list is open --
+// the list is over the surface, not inside the control -- so a combo box in a
+// dense row stays one row tall with its neighbours undisturbed.
+//
+// Where there is no desktop to drop a popup onto (a bare unit-test view, an
+// embedded use with no application), opening is a no-op and the arrow keys
+// still move the selection: the control is usable without its list.
 class ComboBox : public ui::View {
 public:
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
@@ -43,7 +48,7 @@ public:
 
     void open_dropdown();
     void close_dropdown();
-    bool dropdown_open() const noexcept { return dropdown_open_; }
+    bool dropdown_open() const noexcept { return popup_ != nullptr; }
 
     std::function<void(std::size_t)> on_select;
     std::function<void(const std::string&)> on_text_changed;
@@ -60,8 +65,6 @@ public:
 
 private:
     void select_index(std::size_t index, bool notify);
-    void ensure_selection_visible();
-    int visible_rows() const noexcept;
     void move_selection(int delta);
     void recall_history(int index);
     void sync_text_from_editor();
@@ -70,8 +73,7 @@ private:
     std::vector<std::string> items_;
     std::string text_;
     std::optional<std::size_t> selected_index_;
-    bool dropdown_open_ = false;
-    int first_visible_ = 0;
+    PopupList* popup_ = nullptr;
     bool has_focus_ = false;
     InputLine editor_;
 
@@ -83,8 +85,7 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
-    ui::RoleId track_role_ = ui::kInvalidRole;
-    ui::RoleId thumb_role_ = ui::kInvalidRole;
+
 };
 
 }  // namespace ckv::widgets

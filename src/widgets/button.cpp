@@ -31,6 +31,7 @@ void Button::on_attached() {
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.button.focused");
     if (default_role_ == ui::kInvalidRole) default_role_ = context().roles->find("ckv.button.default");
     if (shadow_role_ == ui::kInvalidRole) shadow_role_ = context().roles->find("ckv.button.shadow");
+    if (pressed_role_ == ui::kInvalidRole) pressed_role_ = context().roles->find("ckv.button.pressed");
     if (mnemonic_role_ == ui::kInvalidRole) mnemonic_role_ = context().roles->find("ckv.label.mnemonic");
 }
 
@@ -78,10 +79,32 @@ bool Button::activate_mnemonic(std::string_view mnemonic) {
 // background matches the surrounding surface, so they read as empty
 // margin, and the pressed state's one-cell right shift is what makes
 // the button visibly sink into the surface.
+void Button::set_flat(bool flat) {
+    if (flat_ == flat) return;
+    flat_ = flat;
+    size_hint_changed();
+    invalidate();
+}
+
 void Button::draw(scene::Painter& painter) {
     const int w = bounds().width;
     const int h = bounds().height;
-    if (w < 3 || h < 1) return;
+    if (w < 1 || h < 1) return;
+    if (flat_) {
+        const ui::Theme& theme = *context().theme;
+        const ui::RoleId role = pressed_ ? pressed_role_
+                                : has_focus_ ? focused_role_
+                                : is_default_ ? default_role_
+                                              : normal_role_;
+        const Style face = theme.resolve(role);
+        painter.fill(Rect{0, 0, w, h}, Cell::from_grapheme(" ", face));
+        const auto parsed = parse_mnemonic(raw_text_);
+        const int label_x = std::max(0, (w - text::text_width(parsed.display)) / 2);
+        draw_mnemonic(painter, Point{label_x, h / 2}, parsed, w - label_x, face,
+                      accent_style(face, theme.resolve(mnemonic_role_)));
+        return;
+    }
+    if (w < 3) return;
     const int s = w - 1;  // the shadow column (right edge)
 
     const ui::RoleId face_role = has_focus_ ? focused_role_ : (is_default_ ? default_role_ : normal_role_);
@@ -122,11 +145,21 @@ void Button::draw(scene::Painter& painter) {
 }
 
 SizeHint Button::horizontal_size_hint() const {
+    // Flat, the label is the whole button: a stepper beside a field has no
+    // room for the classic footprint, and padding it would push the field out
+    // of the row it shares.
+    if (flat_) {
+        const int width = std::max(1, text::text_width(display_text_));
+        return SizeHint{width, width, ui::kUnboundedExtent};
+    }
     const int width = std::max(minimum_width_, text::text_width(display_text_) + 4);
     return SizeHint{width, width, width};
 }
 
-SizeHint Button::vertical_size_hint() const { return SizeHint{1, 2, 2}; }
+SizeHint Button::vertical_size_hint() const {
+    if (flat_) return SizeHint{1, 1, 1};
+    return SizeHint{1, 2, 2};
+}
 
 bool Button::on_key(const KeyEvent& event) {
     const bool activates =

@@ -190,7 +190,12 @@ behavior in the Application registry and use the options only to present it.
 
 ## Button
 
-Header: `include/cvision/widgets/button.hpp`. Put buttons in a window or
+Header: `include/cvision/widgets/button.hpp`. `set_flat(true)` drops the cast
+shadow and the classic ten-cell footprint: one row, as wide as its label, with
+the press shown in `ckv.button.pressed` since there is no geometry left to
+show it in. For a control inside a dense row — a stepper beside a field — that
+should still arm, disarm when the pointer slides off it, and fire on release
+like any other button. Put buttons in a window or
 dialog content view; Space/Enter activate the focused/default button and a
 mouse click invokes `on_press`. Use it for an immediate action, not a command
 shortcut duplicated elsewhere. Forms shows default and ordinary buttons. The
@@ -206,11 +211,16 @@ use `on_click` for pointer interaction; see [Graphics](graphics.md).
 ## ComboBox
 
 Header: `include/cvision/widgets/combo_box.hpp`. Use `PickOnly` for a closed
-choice set and `Editable` when the user can type a value. Arrow keys navigate
-the popup; when the dropdown is closed, `Editable` uses the standard text
-keymap (word/boundary navigation, Shift selection, Ctrl+C/X/V,
-Ctrl+Insert/Shift+Insert, and word deletion). Forms and Workbench show both
-modes.
+choice set and `Editable` when the user can type a value. Opening it drops a
+[PopupList](#popuplist): a real popup on the desktop, over the surface rather
+than inside the control, so the control stays one row tall and its neighbours
+are undisturbed while the list is up. Arrow keys navigate the list, Enter
+takes a row, Escape and a press outside close it with nothing taken. Where
+there is no desktop to drop a popup onto, the arrows step through the items in
+place, so the control still works. When the dropdown is closed, `Editable`
+uses the standard text keymap (word/boundary navigation, Shift selection,
+Ctrl+C/X/V, Ctrl+Insert/Shift+Insert, and word deletion). Forms and Workbench
+show both modes.
 
 ## CommandPresentation
 
@@ -654,6 +664,23 @@ values as shown in Forms. Its visual contract is square `[ ]`/`[X]` markers.
 `set_group_label()` gives the group an owned caption one row above the choices;
 the caption changes from its normal label colour to the focused-option
 foreground while the group owns keyboard focus.
+
+## PopupList
+
+Header: `include/cvision/widgets/popup_list.hpp`. The list a control drops
+when its choices are data rather than commands. A
+[DropdownMenu](#dropdownmenu) is the right popup for things to *do* — its
+items carry commands, mnemonics, check marks and submenus — while a list of
+months, fonts or files is things to *be*, and there may be more of them than
+fit on the screen. So this is a [ListView](#listview) in a popup: the frame,
+the colours and the dismissal rules are the menu's, the scrolling and
+selection are the list's, and neither reimplements half of the other.
+
+`show_popup_list()` hangs one under an anchor rectangle — below it, or above
+it where there is no room below rather than clamped down over the control that
+opened it — takes the mouse and the keys while it is up, and restores focus
+when it closes. Enter or a single press on a row chooses; Escape or a press
+outside dismisses. One of the two callbacks runs, once.
 
 ## RadioGroup
 

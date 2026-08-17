@@ -11,6 +11,7 @@
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/button.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/menu.hpp"
 
@@ -261,7 +262,6 @@ public:
     bool on_key(const KeyEvent& event) override;
     void on_resized() override;
     void on_attached() override;
-    void on_child_size_hint_changed(ui::View& child) override;
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
 
@@ -272,15 +272,17 @@ private:
     void report_invalid_year();
     void focus_slot(int slot);
     void sync_month_bounds();
-    void sync_open_height();
     int month_width() const noexcept;
-    Rect step_back_rect() const noexcept;
     Rect year_rect() const noexcept;
-    Rect step_forward_rect() const noexcept;
+    ui::View* child_at(Point local) const noexcept;
+    void set_control_row_visible(bool visible);
 
     CalendarView* calendar_ = nullptr;
     ComboBox* month_ = nullptr;
     InputLine* year_ = nullptr;
+    Button* step_back_ = nullptr;
+    Button* step_forward_ = nullptr;
+    ui::View* mouse_child_ = nullptr;
     std::vector<std::string> month_labels_;
     int focus_slot_ = 0;  // 0 month, 1 year, 2 grid
     bool dismissed_ = false;

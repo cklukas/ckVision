@@ -34,6 +34,7 @@ struct StandardRoles {
     RoleId button_focused;
     RoleId button_default;
     RoleId button_shadow;  // the composited drop shadow's glyph color; bg matches the dialog surface
+    RoleId button_pressed;  // a flat button held down, which has no shadow to lose
     RoleId input_normal;
     RoleId input_focused;
     RoleId input_invalid;  // a failed validator (ARCHITECTURE.md §5 dialog-accept veto)

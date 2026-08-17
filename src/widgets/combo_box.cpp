@@ -4,6 +4,8 @@
 #include <algorithm>
 
 #include "cvision/core/text.hpp"
+#include "cvision/ui/application.hpp"
+#include "cvision/widgets/desktop.hpp"
 
 namespace ckv::widgets {
 
@@ -16,8 +18,7 @@ void ComboBox::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
-    if (track_role_ == ui::kInvalidRole) track_role_ = context().roles->find("ckv.scrollbar.track");
-    if (thumb_role_ == ui::kInvalidRole) thumb_role_ = context().roles->find("ckv.scrollbar.thumb");
+
     editor_.set_context(context());
     editor_.set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
     editor_.on_attached();
@@ -79,43 +80,41 @@ void ComboBox::commit_to_history() {
     history_index_ = -1;
 }
 
-int ComboBox::visible_rows() const noexcept { return std::max(0, bounds().height - 1); }
-
-void ComboBox::ensure_selection_visible() {
-    // A list taller than the space it was given still has to show the item
-    // that is selected -- and hand the mouse the same item the eye sees.
-    const int rows = visible_rows();
-    const int count = static_cast<int>(items_.size());
-    if (rows <= 0 || count <= rows) {
-        first_visible_ = 0;
-        return;
-    }
-    const int selected = selected_index_ ? static_cast<int>(*selected_index_) : 0;
-    if (selected < first_visible_) first_visible_ = selected;
-    if (selected >= first_visible_ + rows) first_visible_ = selected - rows + 1;
-    first_visible_ = std::clamp(first_visible_, 0, count - rows);
-}
-
 void ComboBox::open_dropdown() {
-    if (dropdown_open_) return;
-    dropdown_open_ = true;
-    if (!selected_index_ && !items_.empty()) selected_index_ = 0;
-    ensure_selection_visible();
-    size_hint_changed();
+    if (popup_ != nullptr) return;
+    ui::Application* const app = context().app;
+    Desktop* desktop = nullptr;
+    for (ui::View* p = parent(); p != nullptr; p = p->parent())
+        if (auto* d = dynamic_cast<Desktop*>(p)) {
+            desktop = d;
+            break;
+        }
+    // Without a desktop there is nowhere for a popup to float, and drawing
+    // the list inside this control instead would push everything beside it
+    // around. The arrows still move the selection, so the control works.
+    if (app == nullptr || desktop == nullptr || items_.empty()) return;
+    if (!selected_index_) selected_index_ = 0;  // a list opens on something
+    popup_ = show_popup_list(
+        absolute_bounds(), items_, selected_index_, *app, *desktop,
+        [this](std::size_t index) {
+            popup_ = nullptr;
+            select_index(index, true);
+        },
+        [this] { popup_ = nullptr; invalidate(); });
     invalidate();
 }
 
 void ComboBox::close_dropdown() {
-    if (!dropdown_open_) return;
-    dropdown_open_ = false;
-    size_hint_changed();
+    if (popup_ == nullptr) return;
+    PopupList* const popup = popup_;
+    popup_ = nullptr;
+    popup->request_dismiss();  // closing is not choosing
     invalidate();
 }
 
 void ComboBox::select_index(std::size_t index, bool notify) {
     if (index >= items_.size()) return;
     selected_index_ = index;
-    ensure_selection_visible();
     text_ = items_[index];
     editor_.set_text(text_);
     history_index_ = -1;
@@ -126,7 +125,13 @@ void ComboBox::select_index(std::size_t index, bool notify) {
 
 void ComboBox::move_selection(int delta) {
     if (items_.empty()) return;
-    const int current = selected_index_ ? static_cast<int>(*selected_index_) : 0;
+    // From nothing chosen, a step lands on the first item rather than
+    // stepping past it.
+    if (!selected_index_) {
+        select_index(0, false);
+        return;
+    }
+    const int current = static_cast<int>(*selected_index_);
     const int next = std::clamp(current + delta, 0, static_cast<int>(items_.size()) - 1);
     select_index(static_cast<std::size_t>(next), false);
 }
@@ -158,53 +163,41 @@ ui::SizeHint ComboBox::horizontal_size_hint() const {
     return ui::SizeHint{4, width, ui::kUnboundedExtent};
 }
 
-ui::SizeHint ComboBox::vertical_size_hint() const {
-    // Closed, one row. Open, the row plus the list drawn under it -- what the
-    // control needs, not what it currently has.
-    const int preferred = dropdown_open_ ? 1 + static_cast<int>(items_.size()) : 1;
-    return ui::SizeHint{1, preferred, ui::kUnboundedExtent};
-}
+// One row, open or closed: the list is a popup over the surface, not part of
+// this control's own box.
+ui::SizeHint ComboBox::vertical_size_hint() const { return ui::SizeHint{1, 1, ui::kUnboundedExtent}; }
 
 bool ComboBox::on_key(const KeyEvent& event) {
     if (event.action == KeyAction::Release) return false;
     switch (event.chord.key) {
         case Key::Down:
-            if (editable() && !dropdown_open_ && history_registry_ != nullptr) {
+            if (editable() && !dropdown_open() && history_registry_ != nullptr) {
                 const auto& entries = history_registry_->entries(history_key_);
                 if (!entries.empty()) recall_history(std::min(history_index_ + 1, static_cast<int>(entries.size()) - 1));
                 return true;
             }
-            if (!dropdown_open_) {
-                open_dropdown();
-            } else {
-                move_selection(1);
-            }
+            open_dropdown();
+            // Nowhere to drop a list: the arrows step through the items in
+            // place, so the control is still usable.
+            if (!dropdown_open()) move_selection(1);
             return true;
         case Key::Up:
-            if (editable() && !dropdown_open_ && history_registry_ != nullptr) {
+            if (editable() && !dropdown_open() && history_registry_ != nullptr) {
                 if (history_index_ >= 0) recall_history(history_index_ - 1);
                 return true;
             }
-            if (!dropdown_open_) {
-                open_dropdown();
-            } else {
-                move_selection(-1);
-            }
+            open_dropdown();
+            if (!dropdown_open()) move_selection(-1);
             return true;
         case Key::Enter:
-            if (dropdown_open_) {
-                if (selected_index_) select_index(*selected_index_, true);
-                close_dropdown();
-                return true;
-            }
+            // An open list has the keys -- it is focused and holds the mouse
+            // -- so Enter here is always the closed control's.
             commit_to_history();
             return true;
         case Key::Escape:
-            if (!dropdown_open_) return false;
-            close_dropdown();
-            return true;
+            return false;  // an open list closes itself; a closed one has nothing to close
         case Key::Backspace:
-            if (editable() && !dropdown_open_) {
+            if (editable() && !dropdown_open()) {
                 if (editor_.on_key(event)) {
                     sync_text_from_editor();
                     return true;
@@ -222,14 +215,14 @@ bool ComboBox::on_key(const KeyEvent& event) {
             }
             return true;
         case Key::Char:
-            if (!editable() || dropdown_open_) return false;
+            if (!editable() || dropdown_open()) return false;
             if (editor_.on_key(event)) {
                 sync_text_from_editor();
                 return true;
             }
             return false;
         default:
-            if (editable() && !dropdown_open_ && editor_.on_key(event)) {
+            if (editable() && !dropdown_open() && editor_.on_key(event)) {
                 sync_text_from_editor();
                 return true;
             }
@@ -238,7 +231,7 @@ bool ComboBox::on_key(const KeyEvent& event) {
 }
 
 bool ComboBox::on_text(const TextEvent& event) {
-    if (!editable() || dropdown_open_ || !editor_.on_text(event)) return false;
+    if (!editable() || dropdown_open() || !editor_.on_text(event)) return false;
     sync_text_from_editor();
     return true;
 }
@@ -247,19 +240,11 @@ bool ComboBox::on_mouse(const MouseEvent& event) {
     if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
     const Rect abs = absolute_bounds();
     const int row = event.cell.y - abs.y;
-    if (row < 0 || row >= bounds().height) return false;
-    if (row == 0) {
-        if (editable() && event.cell.x - abs.x < bounds().width - 2) {
-            if (editor_.on_mouse(event)) return true;
-        }
-        dropdown_open_ ? close_dropdown() : open_dropdown();
-        return true;
+    if (row != 0) return false;  // one row: the list is a popup, not a part of this
+    if (editable() && event.cell.x - abs.x < bounds().width - 2) {
+        if (editor_.on_mouse(event)) return true;
     }
-    if (!dropdown_open_) return false;
-    const std::size_t index = static_cast<std::size_t>(first_visible_ + row - 1);
-    if (index >= items_.size()) return false;
-    select_index(index, true);
-    close_dropdown();
+    dropdown_open() ? close_dropdown() : open_dropdown();
     return true;
 }
 
@@ -270,14 +255,12 @@ void ComboBox::on_focus(const FocusEvent& event) {
 }
 
 void ComboBox::on_resized() {
-    ensure_selection_visible();
     const Rect absolute = absolute_bounds();
     editor_.set_bounds(Rect{absolute.x, absolute.y, std::max(0, bounds().width - 2), 1});
 }
 
 void ComboBox::draw(scene::Painter& painter) {
     const Style normal = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
-    const Style selected = context().theme->resolve(selected_role_);
     const int w = bounds().width;
     if (w <= 0 || bounds().height <= 0) return;
 
@@ -290,36 +273,7 @@ void ComboBox::draw(scene::Painter& painter) {
     } else {
         painter.draw_text(Point{0, 0}, text::clip_to_width(text_, std::max(0, w - 2)), normal);
     }
-    painter.draw_text(Point{w - 1, 0}, dropdown_open_ ? "▴" : "▾", normal);
-
-    if (!dropdown_open_) return;
-    const int rows = visible_rows();
-    const int count = static_cast<int>(items_.size());
-    // A bar only where there is something to scroll, and the items keep the
-    // column otherwise. A permanent column down the right of the list is read
-    // as a bar that has lost its thumb -- it says the list scrolls when it
-    // does not, and says nothing about where in it the reader is.
-    const bool scrolls = count > rows && rows > 0 && w > 1;
-    const int item_width = std::max(0, w - (scrolls ? 1 : 0));
-    const int max_rows = std::min(count - first_visible_, rows);
-    for (int row = 0; row < max_rows; ++row) {
-        const std::size_t item = static_cast<std::size_t>(first_visible_ + row);
-        const bool active = selected_index_ && *selected_index_ == item;
-        const Style style = active ? selected : normal;
-        painter.fill(Rect{0, row + 1, item_width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{0, row + 1}, text::clip_to_width(items_[item], item_width), style);
-    }
-    if (!scrolls) return;
-    const Style track = context().theme->resolve(track_role_);
-    const Style thumb = context().theme->resolve(thumb_role_);
-    // Length and position in proportion to the list, so the thumb states how
-    // much of it is on screen and which part.
-    const int length = std::max(1, rows * rows / count);
-    const int start = std::min(rows - length, first_visible_ * rows / count);
-    for (int row = 0; row < rows; ++row) {
-        const bool on_thumb = row >= start && row < start + length;
-        painter.draw_text(Point{w - 1, row + 1}, on_thumb ? "█" : " ", on_thumb ? thumb : track);
-    }
+    painter.draw_text(Point{w - 1, 0}, dropdown_open() ? "▴" : "▾", normal);
 }
 
 }  // namespace ckv::widgets

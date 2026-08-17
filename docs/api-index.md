@@ -64,6 +64,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/editor_search.hpp` | literal search and atomic replace-all | [Editor](editor.md) |
 | `include/cvision/widgets/editor_window.hpp` | optional editor/controller/window composition | [Editor](editor.md) |
 | `include/cvision/widgets/terminal_view.hpp` | `TerminalView` | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/widgets/popup_list.hpp` | the floating list a control drops when its choices are data | [Widget gallery](widget-gallery.md#popuplist) |
 | `include/cvision/widgets/text_layout.hpp` | `WrapMode`, `WrapOptions`, `WrapSegment`, `ScrollGeometry` | [Widget gallery](widget-gallery.md#wrapmode) |
 | `include/cvision/widgets/text_view.hpp` | `TextView`, `TextSpan` | [Widget gallery](widget-gallery.md#textview) |
 | `include/cvision/widgets/flow_view.hpp` | `FlowView`, `FlowDocument` | [Flow content](flow-view.md) |
