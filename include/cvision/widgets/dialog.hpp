@@ -23,6 +23,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,7 @@
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
@@ -61,6 +63,22 @@ enum class FieldKind {
     // them. Takes no focus, contributes an empty value, and is skipped by
     // validation.
     Note,
+    // A RadioGroup over `options`, captioned by `label`. One of a few
+    // alternatives, all of them visible at once — which is the difference
+    // from a combo: a reader choosing between three printer modes should be
+    // able to see the three without opening anything.
+    Radio,
+    // A ComboBox over `options`, `editable` deciding whether a value outside
+    // them may be typed. For a list too long to show at once, or one whose
+    // entries are only suggestions.
+    Combo,
+    // An InputLine that must hold a whole number, optionally within
+    // `minimum`..`maximum`. The check runs at accept time like every other
+    // validator — a field mid-edit is expected to be transiently invalid, and
+    // a form that refuses the keystroke instead cannot be corrected from the
+    // middle. A field's own `validate` still runs, after the number itself
+    // has been established, so it never has to parse the text again.
+    Number,
 };
 
 struct FieldDescriptor {
@@ -88,6 +106,24 @@ struct FieldDescriptor {
     FieldKind kind = FieldKind::Text;
     // Check fields only. Ignored, and left false, for a Text field.
     bool initial_checked = false;
+    // Radio and Combo: what there is to choose from, in the order a reader
+    // sees them.
+    //
+    // Every member from here down carries an explicit initializer, empty
+    // though it is. Without one, a call site that brace-initializes the first
+    // three members positionally — which is how nearly every dialog in this
+    // tree is written — trips -Wmissing-field-initializers for a field kind
+    // it is not using.
+    std::vector<std::string> options{};
+    // Radio and Combo: which option starts chosen. -1 is "none", which a
+    // Radio shows as nothing selected and a Combo as an empty box.
+    int initial_selection = -1;
+    // Combo only: whether a value that is not one of `options` may be typed.
+    bool editable = false;
+    // Number only, and only where a bound is real. A field with no minimum
+    // and no maximum still has to be a number; these narrow it further.
+    std::optional<long long> minimum{};
+    std::optional<long long> maximum{};
 };
 
 struct ButtonDescriptor {
@@ -135,6 +171,8 @@ struct MaterializedDialog {
     std::vector<Label*> labels;
     std::vector<InputLine*> inputs;
     std::vector<CheckGroup*> checks;
+    std::vector<RadioGroup*> radios;
+    std::vector<ComboBox*> combos;
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     ui::View* initial_focus = nullptr;
     Button* default_button = nullptr;
@@ -142,8 +180,8 @@ struct MaterializedDialog {
 
 // The typed outcome of a descriptor dialog. An accepted result contains one
 // value for each descriptor field, in descriptor order. Close, Esc, external
-// detach, and a host quit produce the default cancellation result
-// `{false, {}, {}}`; no partial field values escape a cancelled dialog.
+// detach, and a host quit produce a default-constructed result with
+// `accepted == false`; no partial field values escape a cancelled dialog.
 struct DialogResult {
     bool accepted = false;
     // Both are parallel to descriptor.fields, so a field's answer is always
@@ -154,6 +192,14 @@ struct DialogResult {
     // a text form keeps working unchanged.
     std::vector<std::string> values;
     std::vector<bool> checked;
+    // Radio and Combo: the chosen index, or -1 for "none chosen" and for
+    // every field of another kind. A Combo also fills `values` with its text,
+    // so an editable one that was typed into rather than picked from still
+    // answers — its index is -1 and its text is what the reader wrote.
+    std::vector<int> selected{};
+    // Number: the value, already parsed, so no caller has to parse the text a
+    // validator has just proved is a number. Empty for every other kind.
+    std::vector<std::optional<long long>> numbers{};
 
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
 };

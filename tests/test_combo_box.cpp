@@ -121,7 +121,11 @@ CK_TEST(editable_combo_accepts_text_and_uses_history_registry) {
     CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "A")));
     CK_CHECK(combo.on_key(key(Key::Char, Modifier::None, "b")));
     CK_CHECK(combo.text() == "Ab");
-    CK_CHECK(combo.on_key(key(Key::Enter)));
+    // Enter records the value and passes the key ON: a closed combo has
+    // nothing to confirm, and Enter in a form means "accept the form". While
+    // it claimed the key, a dialog's default button was unreachable from the
+    // keyboard for as long as any combo had focus.
+    CK_CHECK(!combo.on_key(key(Key::Enter)));
     CK_CHECK(history.entries("recent")[0] == "Ab");
 
     CK_CHECK(combo.on_key(key(Key::Down)));

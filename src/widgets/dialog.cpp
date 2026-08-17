@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/dialog.hpp"
 
+#include <charconv>
+
 #include <optional>
 
 #include "cvision/core/assert.hpp"
@@ -24,6 +26,23 @@ ui::View* find_first_focusable(ui::View& view) {
     return nullptr;
 }
 
+// A Number field's text as a number, or nothing. The whole field has to be
+// the number: "12 or so" is not 12, and a partial parse is how a typo becomes
+// a setting nobody chose.
+std::optional<long long> parse_number(const FieldDescriptor& field, std::string_view text) {
+    std::size_t begin = 0;
+    std::size_t end = text.size();
+    while (begin < end && (text[begin] == ' ' || text[begin] == '\t')) ++begin;
+    while (end > begin && (text[end - 1] == ' ' || text[end - 1] == '\t')) --end;
+    if (begin == end) return std::nullopt;
+    long long value = 0;
+    const auto result = std::from_chars(text.data() + begin, text.data() + end, value);
+    if (result.ec != std::errc{} || result.ptr != text.data() + end) return std::nullopt;
+    if (field.minimum && value < *field.minimum) return std::nullopt;
+    if (field.maximum && value > *field.maximum) return std::nullopt;
+    return value;
+}
+
 bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescriptor& descriptor,
                       ui::Application& app) {
     CKV_ASSERT(inputs.size() == descriptor.fields.size());
@@ -33,8 +52,14 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescript
         // A checkbox has no text to validate and no invalid state to show;
         // its slot in the parallel array is empty by construction.
         if (inputs[i] == nullptr) continue;
-        const auto& validate = descriptor.fields[i].validate;
-        const bool valid = !validate || validate(inputs[i]->text());
+        const FieldDescriptor& field = descriptor.fields[i];
+        const auto& validate = field.validate;
+        // A Number is a number before it is anything else. Its own validator
+        // still runs, and runs second, so it never has to parse the text
+        // again to answer a question about the value.
+        const bool numeric =
+            field.kind != FieldKind::Number || parse_number(field, inputs[i]->text()).has_value();
+        const bool valid = numeric && (!validate || validate(inputs[i]->text()));
         inputs[i]->set_valid(valid);
         if (!valid) {
             all_valid = false;
@@ -61,16 +86,34 @@ struct BuiltDescriptorDialog {
 
 // Both vectors are filled for every field, whatever its kind, so a caller
 // indexes either by field position without first asking what kind it was.
-DialogResult accepted_result(const std::vector<InputLine*>& inputs,
-                              const std::vector<CheckGroup*>& checks) {
+DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vector<InputLine*>& inputs,
+                              const std::vector<CheckGroup*>& checks,
+                              const std::vector<RadioGroup*>& radios,
+                              const std::vector<ComboBox*>& combos) {
     CKV_ASSERT(inputs.size() == checks.size());
+    CKV_ASSERT(inputs.size() == radios.size());
+    CKV_ASSERT(inputs.size() == combos.size());
     DialogResult result;
     result.accepted = true;
     result.values.reserve(inputs.size());
     result.checked.reserve(checks.size());
+    result.selected.reserve(inputs.size());
+    result.numbers.reserve(inputs.size());
     for (std::size_t i = 0; i < inputs.size(); ++i) {
-        result.values.push_back(inputs[i] != nullptr ? inputs[i]->text() : std::string{});
+        std::string text = inputs[i] != nullptr ? inputs[i]->text() : std::string{};
+        if (combos[i] != nullptr) text = combos[i]->text();
+        int selected = -1;
+        if (radios[i] != nullptr) selected = radios[i]->selected();
+        if (combos[i] != nullptr && combos[i]->selected_index())
+            selected = static_cast<int>(*combos[i]->selected_index());
+        std::optional<long long> number;
+        if (i < descriptor.fields.size() && descriptor.fields[i].kind == FieldKind::Number &&
+            inputs[i] != nullptr)
+            number = parse_number(descriptor.fields[i], inputs[i]->text());
+        result.values.push_back(std::move(text));
         result.checked.push_back(checks[i] != nullptr && checks[i]->checked(0));
+        result.selected.push_back(selected);
+        result.numbers.push_back(number);
     }
     return result;
 }
@@ -81,6 +124,8 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     MaterializedDialog materialized = materialize_dialog(*retained_descriptor);
     std::vector<InputLine*> inputs = materialized.inputs;
     std::vector<CheckGroup*> checks = materialized.checks;
+    std::vector<RadioGroup*> radios = materialized.radios;
+    std::vector<ComboBox*> combos = materialized.combos;
     Button* const default_button = materialized.default_button;
     ui::View* const initial_focus = materialized.initial_focus;
 
@@ -102,8 +147,8 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
 
     window->set_content(std::move(materialized.root));
     window->set_resizable(retained_descriptor->resizable);
-    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, checks, default_button,
-                              &app]() {
+    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, checks, radios, combos,
+                              default_button, &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
         // callback is allowed to detach and destroy its own Window, which
@@ -114,7 +159,8 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         // Record before application code runs: a descriptor button handler
         // may detach or destroy this Window synchronously, but its successful
         // acceptance still has one stable typed result after detachment.
-        held_completion->selected_result = accepted_result(inputs, checks);
+        held_completion->selected_result =
+            accepted_result(*retained_descriptor, inputs, checks, radios, combos);
         if (default_button != nullptr && default_button->on_press) default_button->on_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
@@ -166,6 +212,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                 result.labels.push_back(note_ptr);
                 result.inputs.push_back(nullptr);
                 result.checks.push_back(nullptr);
+                result.radios.push_back(nullptr);
+                result.combos.push_back(nullptr);
                 ++lines;
             }
             --index;  // the loop's own ++ takes us past the last note
@@ -189,7 +237,29 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.labels.push_back(nullptr);
             result.inputs.push_back(nullptr);
             result.checks.push_back(check_ptr);
+            result.radios.push_back(nullptr);
+            result.combos.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+            continue;
+        }
+
+        if (field.kind == FieldKind::Radio) {
+            // The group carries its own caption above its choices, rather
+            // than a Label beside them: a set of alternatives is one thing a
+            // form asks about, and a label in the left column would put the
+            // question level with the first answer.
+            auto radio = std::make_unique<RadioGroup>(field.options);
+            if (!field.label.empty()) radio->set_group_label(field.label);
+            radio->set_selected(field.initial_selection);
+            auto* radio_ptr =
+                static_cast<RadioGroup*>(row->add_item(std::move(radio), LayoutSpec{SizePolicy::Expanding, 1}));
+            result.labels.push_back(nullptr);
+            result.inputs.push_back(nullptr);
+            result.checks.push_back(nullptr);
+            result.radios.push_back(radio_ptr);
+            result.combos.push_back(nullptr);
+            const int rows = static_cast<int>(field.options.size()) + (field.label.empty() ? 0 : 1);
+            column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, std::max(1, rows)});
             continue;
         }
 
@@ -199,6 +269,29 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             label_ptr = static_cast<Label*>(row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
         }
 
+        if (field.kind == FieldKind::Combo) {
+            auto combo = std::make_unique<ComboBox>(field.editable ? ComboBoxMode::Editable
+                                                                   : ComboBoxMode::PickOnly);
+            combo->set_items(field.options);
+            if (field.initial_selection >= 0 &&
+                field.initial_selection < static_cast<int>(field.options.size()))
+                combo->set_selected_index(static_cast<std::size_t>(field.initial_selection));
+            else if (!field.initial_text.empty())
+                combo->set_text(field.initial_text);
+            auto* combo_ptr =
+                static_cast<ComboBox*>(row->add_item(std::move(combo), LayoutSpec{SizePolicy::Expanding, 1}));
+            if (label_ptr != nullptr) label_ptr->set_buddy(combo_ptr);
+            result.labels.push_back(label_ptr);
+            result.inputs.push_back(nullptr);
+            result.checks.push_back(nullptr);
+            result.radios.push_back(nullptr);
+            result.combos.push_back(combo_ptr);
+            column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+            continue;
+        }
+
+        // Text and Number are the same widget; what separates them is the
+        // rule the accept path applies, not what the reader types into.
         auto input = std::make_unique<InputLine>();
         input->set_text(field.initial_text);
         input->set_password_echo(field.password_echo, field.password_echo_char);
@@ -209,6 +302,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         result.labels.push_back(label_ptr);
         result.inputs.push_back(input_ptr);
         result.checks.push_back(nullptr);
+        result.radios.push_back(nullptr);
+        result.combos.push_back(nullptr);
 
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }

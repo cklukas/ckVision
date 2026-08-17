@@ -10,6 +10,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
+#include <optional>
+
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/command.hpp"
@@ -162,7 +164,7 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(default_pressed);
     // The self-detach is deferred until the button callback unwinds, then
     // drained by this same step's ordinary posted-work phase.
-    CK_CHECK((presentation.result() == DialogResult{true, {"localhost"}, {false}}));
+    CK_CHECK((presentation.result() == DialogResult{true, {"localhost"}, {false}, {-1}, {std::nullopt}}));
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(f.desktop->windows().empty());
 }
@@ -244,7 +246,7 @@ CK_TEST(descriptor_dialog_acceptance_survives_a_default_callback_that_destroys_i
     dialog = f.desktop->windows().back();
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
-    CK_CHECK((presentation.result() == DialogResult{true, {"value"}, {false}}));
+    CK_CHECK((presentation.result() == DialogResult{true, {"value"}, {false}, {-1}, {std::nullopt}}));
     CK_CHECK(!f.app.is_modal());
 }
 
@@ -411,7 +413,8 @@ CK_TEST(an_accepted_dialog_reports_each_check_field_beside_its_text_fields) {
     CK_CHECK(f.app.step(0));
 
     CK_CHECK(presentation.completed());
-    CK_CHECK((presentation.result() == DialogResult{true, {"kept", ""}, {false, true}}));
+    CK_CHECK((presentation.result() ==
+              DialogResult{true, {"kept", ""}, {false, true}, {-1, -1}, {std::nullopt, std::nullopt}}));
 }
 
 CK_TEST(a_cancelled_dialog_reports_no_check_state_either) {
@@ -430,4 +433,175 @@ CK_TEST(a_cancelled_dialog_reports_no_check_state_either) {
     // The default result carries an empty `checked`, so equality with it is
     // exactly the claim that no box state escaped.
     CK_CHECK(presentation.result() == DialogResult{});
+}
+
+CK_TEST(a_form_asks_for_one_of_several_alternatives_and_reads_the_answer_back) {
+    // FieldKind::Radio. The three printer modes are the case this exists for:
+    // a reader choosing between them should see all three without opening
+    // anything, and the form should say which one they chose.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Printer";
+    descriptor.fields.push_back(FieldDescriptor{.label = "&When a program prints:",
+                                                 .kind = ckv::widgets::FieldKind::Radio,
+                                                 .options = {"Ask", "Capture", "Off"},
+                                                 .initial_selection = 1});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result()->accepted);
+    CK_CHECK(presentation.result()->selected == std::vector<int>{1});
+    // The other vectors still carry an entry for this field, so a caller
+    // indexes any of them by field position without asking what kind it was.
+    CK_CHECK(presentation.result()->values == std::vector<std::string>{""});
+    CK_CHECK(presentation.result()->checked == std::vector<bool>{false});
+}
+
+CK_TEST(a_radio_group_reports_what_the_reader_moved_to_rather_than_what_it_opened_with) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Mode:",
+                                                 .kind = ckv::widgets::FieldKind::Radio,
+                                                 .options = {"txt", "ansi"},
+                                                 .initial_selection = 0});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\x1b[B", 0);  // Down: the second choice
+    CK_CHECK(f.app.step(0));
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result()->selected == std::vector<int>{1});
+}
+
+CK_TEST(a_combo_field_answers_with_its_index_and_its_text) {
+    // FieldKind::Combo, for a list too long to show at once. Both answers are
+    // filled: an index for what was picked, and the text for a caller that
+    // would rather have the word than the position.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Theme:",
+                                                 .kind = ckv::widgets::FieldKind::Combo,
+                                                 .options = {"dark", "light", "mono"},
+                                                 .initial_selection = 2});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result()->selected == std::vector<int>{2});
+    CK_CHECK(presentation.result()->values == std::vector<std::string>{"mono"});
+}
+
+CK_TEST(a_number_field_refuses_to_accept_what_is_not_a_number) {
+    // FieldKind::Number. The check runs at accept time, like every other
+    // validator: a field mid-edit is expected to be transiently invalid, and
+    // a form that refuses the keystroke cannot be corrected from the middle.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Megapixels:",
+                                                 .initial_text = "sixty",
+                                                 .kind = ckv::widgets::FieldKind::Number,
+                                                 .minimum = 1,
+                                                 .maximum = 4096});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    // Vetoed: the dialog is still open, which is what the reader needs in
+    // order to fix the field.
+    CK_CHECK(!presentation.completed());
+    CK_CHECK(f.app.is_modal());
+}
+
+CK_TEST(a_number_field_hands_over_a_number_rather_than_text_to_parse_again) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Megapixels:",
+                                                 .initial_text = "128",
+                                                 .kind = ckv::widgets::FieldKind::Number,
+                                                 .minimum = 1,
+                                                 .maximum = 4096});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result()->accepted);
+    CK_CHECK(presentation.result()->numbers.size() == 1U);
+    if (presentation.result()->numbers.size() == 1U) {
+        CK_CHECK(presentation.result()->numbers[0].has_value());
+        if (presentation.result()->numbers[0]) CK_CHECK(*presentation.result()->numbers[0] == 128);
+    }
+    // The text is there too, for a caller that wants what was typed.
+    CK_CHECK(presentation.result()->values == std::vector<std::string>{"128"});
+}
+
+CK_TEST(a_number_outside_its_bounds_is_refused_like_any_other_bad_value) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Megapixels:",
+                                                 .initial_text = "99999",
+                                                 .kind = ckv::widgets::FieldKind::Number,
+                                                 .minimum = 1,
+                                                 .maximum = 4096});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(!presentation.completed());
+}
+
+CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_index) {
+    // The shape a real settings dialog has, and the promise the parallel
+    // vectors make: whatever kind a field is, its answer is at its index.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Printer Settings";
+    descriptor.fields.push_back(FieldDescriptor{"&Folder:", "/tmp", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Ask for a filename", .kind = ckv::widgets::FieldKind::Check, .initial_checked = true});
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Mode:",
+                                                 .kind = ckv::widgets::FieldKind::Radio,
+                                                 .options = {"ask", "capture", "off"},
+                                                 .initial_selection = 0});
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Format:",
+                                                 .kind = ckv::widgets::FieldKind::Combo,
+                                                 .options = {"txt", "ansi"},
+                                                 .initial_selection = 1});
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Spool limit (KB):",
+                                                 .initial_text = "1024",
+                                                 .kind = ckv::widgets::FieldKind::Number,
+                                                 .minimum = 1});
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "Nothing is ever sent to a device.", .kind = ckv::widgets::FieldKind::Note});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", true, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    const DialogResult result = *presentation.result();
+    CK_CHECK(result.accepted);
+    CK_CHECK(result.values.size() == 6U);
+    CK_CHECK(result.checked.size() == 6U);
+    CK_CHECK(result.selected.size() == 6U);
+    CK_CHECK(result.numbers.size() == 6U);
+    if (result.values.size() == 6U) {
+        CK_CHECK(result.values[0] == "/tmp");
+        CK_CHECK(result.checked[1]);
+        CK_CHECK(result.selected[2] == 0);
+        CK_CHECK(result.selected[3] == 1);
+        CK_CHECK(result.values[3] == "ansi");
+        CK_CHECK(result.numbers[4].has_value());
+        if (result.numbers[4]) CK_CHECK(*result.numbers[4] == 1024);
+        // The note answered nothing, and said so in every vector.
+        CK_CHECK(result.values[5].empty());
+        CK_CHECK(!result.checked[5]);
+        CK_CHECK(result.selected[5] == -1);
+        CK_CHECK(!result.numbers[5].has_value());
+    }
 }

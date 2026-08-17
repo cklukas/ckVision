@@ -192,8 +192,16 @@ bool ComboBox::on_key(const KeyEvent& event) {
         case Key::Enter:
             // An open list has the keys -- it is focused and holds the mouse
             // -- so Enter here is always the closed control's.
+            //
+            // It records the value and then does NOT claim the key. A closed
+            // combo has nothing to confirm: the value is already chosen, and
+            // Enter in a form means "accept the form". Claiming it left a
+            // dialog's default button unreachable from the keyboard for as
+            // long as any combo had focus -- which, in a settings dialog that
+            // opens on one, is from the moment it appears. CheckGroup and
+            // RadioGroup had the same defect and were fixed the same way.
             commit_to_history();
-            return true;
+            return false;
         case Key::Escape:
             return false;  // an open list closes itself; a closed one has nothing to close
         case Key::Backspace:
