@@ -25,6 +25,21 @@ struct DateValue {
     friend auto operator<=>(const DateValue&, const DateValue&) = default;
 };
 
+// The years a calendar here can honestly draw. Its arithmetic is Gregorian --
+// the 100/400 leap rule and a weekday counted off a fixed epoch -- and that
+// calendar began in October 1582, which is also the one month it cannot draw:
+// the 5th to the 14th were struck out of it and never happened. So the first
+// year it can show in full is 1583. Earlier dates were Julian, with different
+// leap years and a different weekday for the same date, and drawing them on a
+// Gregorian grid states something that was never true. The upper bound is the
+// four digits a year is written in.
+inline constexpr int kFirstCalendarYear = 1583;
+inline constexpr int kLastCalendarYear = 9999;
+
+constexpr bool is_drawable_year(int year) noexcept {
+    return year >= kFirstCalendarYear && year <= kLastCalendarYear;
+}
+
 struct TimeValue {
     int hour = 0;
     int minute = 0;

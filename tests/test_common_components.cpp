@@ -713,6 +713,45 @@ CK_TEST(the_month_picker_is_as_wide_as_its_longest_month_and_no_wider) {
     CK_CHECK(year.right() < c.dropdown->bounds().width - 1);  // and one more, inside the frame
 }
 
+CK_TEST(a_year_before_the_gregorian_calendar_is_refused) {
+    DroppedCalendar c;
+    c.press(ckv::Key::Tab);
+    c.press(ckv::Key::Tab);  // onto the year field
+    for (int i = 0; i < 4; ++i) c.press(ckv::Key::Backspace);
+    c.press(ckv::Key::Char, ckv::Modifier::None, "2");
+    c.press(ckv::Key::Char, ckv::Modifier::None, "6");
+    c.press(ckv::Key::Enter);
+    // Year 26 parses, and this widget's arithmetic would draw a confident
+    // Gregorian grid for it -- for a year that had a different calendar.
+    CK_CHECK(c.row(c.dropdown->absolute_bounds().y + 1).find("invalid") != std::string::npos);
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);
+    c.clock.advance(3'100'000'000);
+    c.app.step(0);
+
+    for (int i = 0; i < 4; ++i) c.press(ckv::Key::Backspace);
+    for (const char* d : {"1", "5", "8", "2"}) c.press(ckv::Key::Char, ckv::Modifier::None, d);
+    c.press(ckv::Key::Enter);
+    // 1582 is refused as well: October of it is missing ten days that never
+    // happened, and this calendar draws whole months.
+    CK_CHECK(c.dropdown->calendar().month().year == 2026);
+    c.clock.advance(3'100'000'000);
+    c.app.step(0);
+
+    for (int i = 0; i < 4; ++i) c.press(ckv::Key::Backspace);
+    for (const char* d : {"1", "5", "8", "3"}) c.press(ckv::Key::Char, ckv::Modifier::None, d);
+    c.press(ckv::Key::Enter);
+    CK_CHECK(c.dropdown->calendar().month().year == 1583);  // the first year it can state
+}
+
+CK_TEST(stepping_back_stops_at_the_first_year_the_calendar_can_draw) {
+    DroppedCalendar c;
+    c.dropdown->show_month(DateValue{ckv::widgets::kFirstCalendarYear, 3, 1});
+    const ckv::Rect abs = c.dropdown->absolute_bounds();
+    const ckv::Rect year = c.dropdown->year_field().bounds();
+    c.click(ckv::Point{abs.x + year.x - 1, abs.y + year.y});  // "<<"
+    CK_CHECK(c.dropdown->calendar().month().year == ckv::widgets::kFirstCalendarYear);
+}
+
 CK_TEST(escape_closes_a_dropped_calendar) {
     DroppedCalendar c;
     c.press(ckv::Key::Escape);

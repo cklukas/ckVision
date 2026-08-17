@@ -130,6 +130,9 @@ CalendarView::CalendarView() {
 }
 
 void CalendarView::set_month(DateValue first_of_month) {
+    // Held inside the years this calendar can state truthfully, rather than
+    // drawing a Gregorian grid over dates that were never Gregorian.
+    first_of_month.year = std::clamp(first_of_month.year, kFirstCalendarYear, kLastCalendarYear);
     first_of_month = clamp_day(first_of_month);
     first_of_month.day = 1;
     month_ = first_of_month;
@@ -616,7 +619,7 @@ void CalendarDropdown::dismiss() {
 
 void CalendarDropdown::step_year(int delta) {
     const DateValue shown = calendar_->month();
-    show_month(DateValue{std::clamp(shown.year + delta, 1, 9999), shown.month, 1});
+    show_month(DateValue{std::clamp(shown.year + delta, kFirstCalendarYear, kLastCalendarYear), shown.month, 1});
 }
 
 void CalendarDropdown::report_invalid_year() {
@@ -645,11 +648,13 @@ void CalendarDropdown::commit_year() {
     if (showing_invalid_) return;
     const std::string text = year_->text();
     int year = 0;
-    // The field only admits digits, so what is left to reject is a year that
-    // is empty, overlong, or zero.
+    // The field only admits digits, so what is left to reject is a year this
+    // calendar cannot draw: nothing typed, or a year outside the Gregorian
+    // range. "26" is the case that matters -- it parses, and it would print a
+    // confident grid for a year that had a different calendar entirely.
     const bool parsed = !text.empty() && text.size() <= 4 &&
                         std::from_chars(text.data(), text.data() + text.size(), year).ec == std::errc{};
-    if (!parsed || year < 1) {
+    if (!parsed || !is_drawable_year(year)) {
         report_invalid_year();
         return;
     }

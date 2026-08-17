@@ -224,7 +224,11 @@ shows the real Hello source.
 Header: `include/cvision/widgets/common_components.hpp`. Use for a visible
 month calendar where the user moves a date selection with arrows/page keys.
 Place it in a dialog or application content view; pair it with DatePicker for
-a compact field. It appears in the navigation capture above.
+a compact field. It appears in the navigation capture above. The month it
+shows is held between `kFirstCalendarYear` and `kLastCalendarYear`: the leap
+rule and weekday it computes with are Gregorian, and that calendar began in
+October 1582 — a month it also cannot draw, since ten days were struck out of
+it — so 1583 is the first year it can state truthfully.
 
 ## ClockView
 
@@ -249,8 +253,11 @@ coloured as a dropdown menu, with the controls for choosing which month on one
 row above it: a ComboBox of month names — as wide as its longest month and no
 wider — then `<<`, a year field, and `>>`. Typing in the year field admits
 digits and nothing else; Enter — or moving on with Tab — commits it, and a
-year that is not one gives the row over to the word `invalid` for three
-seconds, the field stepping aside rather than holding what was rejected.
+year this calendar cannot draw gives the row over to the word `invalid` for
+three seconds, the field stepping aside rather than holding what was rejected.
+That range is `kFirstCalendarYear` (1583) to `kLastCalendarYear`: the
+arithmetic here is Gregorian, so `26` is refused rather than drawn as a grid
+for a year that had a different calendar.
 `show_month()` sets all three at once, so the picker and the field never
 disagree with the grid. Opening the month list grows the popup to the list's
 own length where there is room below, so twelve months are not read through
