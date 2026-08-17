@@ -124,7 +124,8 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // instead; this is for the rest, and for the moment before the real one
 // exists.
 //
-// Installs a handler for std_commands::kHelp, replacing any already there.
+// Installs a handler for the standard help command, replacing any already
+// there.
 void install_about_help(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
                         std::string title, std::string body);
 

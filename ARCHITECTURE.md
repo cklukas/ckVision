@@ -350,13 +350,15 @@ Everything else is single-threaded by contract (§9).
 
 ### Commands and help
 
-A first-class command system: `CommandId` (32-bit; ids below 4096 are
-reserved for the library's standard commands, and extension libraries
-allocate documented ranges through the registry), a per-application
-registry with metadata (title, category, default chord), context-scoped
-enablement (contexts are named scopes declared by the application or a
-widget, activated by focus ancestry or explicit push/pop), and dispatch
-to the focus chain. Menus and status lines reference commands and render
+A first-class command system: a command's identity is a namespaced string
+key it declares itself under, and the registry assigns the `CommandId`
+that stands for it (a scoped enumeration over 32 bits, so id arithmetic
+does not compile and no party — library, widget, extension library or
+application — can pick a number that collides with another's). A
+per-application registry holds the metadata (title, category, default
+chord, palette visibility), context-scoped enablement (contexts are
+named scopes declared by the application or a widget, activated by focus
+ancestry or explicit push/pop), and dispatch to the focus chain. Menus and status lines reference commands and render
 their current enablement and chords automatically. Keymaps bind chords to
 commands per named scheme; schemes are switchable and rebindable at
 runtime. The registry is exportable (for host-application integration and

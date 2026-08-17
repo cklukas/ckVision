@@ -30,6 +30,13 @@ using ckv::widgets::WindowHandle;
 namespace ui = ckv::ui;
 
 namespace {
+
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
 struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
@@ -1017,14 +1024,14 @@ public:
 
 CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_default) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kClose));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kQuit));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kZoom));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kNextWindow));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kTile));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kCascade));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kWindowList));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).close));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).quit));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).zoom));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).next_window));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).previous_window));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).cascade));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).window_list));
 }
 
 CK_TEST(nonblocking_presentation_returns_null_when_focus_loss_removes_its_new_window) {
@@ -1103,14 +1110,14 @@ CK_TEST(a_pre_existing_kclose_handler_is_not_overridden_by_attaching_a_desktop) 
     ManualClock clock;
     Application app{term, clock};
     bool custom_ran = false;
-    app.commands().set_handler(ui::std_commands::kClose, [&] { custom_ran = true; });
+    app.commands().set_handler(standard(app).close, [&] { custom_ran = true; });
 
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     app.root().add_child(std::move(owned));
 
-    app.commands().execute(ui::std_commands::kClose);
+    app.commands().execute(standard(app).close);
     CK_CHECK(custom_ran);
 }
 
@@ -1119,14 +1126,14 @@ CK_TEST(a_pre_existing_kquit_handler_is_not_overridden_by_attaching_a_desktop) {
     ManualClock clock;
     Application app{term, clock};
     bool custom_ran = false;
-    app.commands().set_handler(ui::std_commands::kQuit, [&] { custom_ran = true; });
+    app.commands().set_handler(standard(app).quit, [&] { custom_ran = true; });
 
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     app.root().add_child(std::move(owned));
 
-    app.commands().execute(ui::std_commands::kQuit);
+    app.commands().execute(standard(app).quit);
     CK_CHECK(custom_ran);
     CK_CHECK(!app.quit_requested());  // the default sweep never ran, so it never requested quit
 }
@@ -1139,7 +1146,7 @@ CK_TEST(a_pre_existing_ktile_handler_is_not_overridden_by_attaching_a_desktop) {
     ManualClock clock;
     Application app{term, clock};
     bool custom_ran = false;
-    app.commands().set_handler(ui::std_commands::kTile, [&] { custom_ran = true; });
+    app.commands().set_handler(standard(app).tile, [&] { custom_ran = true; });
 
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
@@ -1147,31 +1154,31 @@ CK_TEST(a_pre_existing_ktile_handler_is_not_overridden_by_attaching_a_desktop) {
         std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     app.root().add_child(std::move(owned));
 
-    app.commands().execute(ui::std_commands::kTile);
+    app.commands().execute(standard(app).tile);
     CK_CHECK(custom_ran);
 }
 
 CK_TEST(destroying_the_desktop_clears_only_the_default_handlers_it_installed) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kClose));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kQuit));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kZoom));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kNextWindow));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kTile));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kCascade));
-    CK_CHECK(af.app.commands().has_handler(ui::std_commands::kWindowList));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).close));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).quit));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).zoom));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).next_window));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).previous_window));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).cascade));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).window_list));
 
     af.app.root().detach_child(af.desktop).reset();  // destroys the Desktop
 
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kClose));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kQuit));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kZoom));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kNextWindow));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kPreviousWindow));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kTile));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kCascade));
-    CK_CHECK(!af.app.commands().has_handler(ui::std_commands::kWindowList));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).close));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).quit));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).zoom));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).next_window));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).previous_window));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).tile));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).cascade));
+    CK_CHECK(!af.app.commands().has_handler(standard(af.app).window_list));
 }
 
 CK_TEST(kclose_default_closes_the_active_window) {
@@ -1180,13 +1187,13 @@ CK_TEST(kclose_default_closes_the_active_window) {
     bool closed = false;
     w->on_closed = [&] { closed = true; };
 
-    af.app.commands().execute(ui::std_commands::kClose);
+    af.app.commands().execute(standard(af.app).close);
     CK_CHECK(closed);
 }
 
 CK_TEST(kclose_default_is_a_no_op_with_no_active_window) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().execute(ui::std_commands::kClose));  // the handler ran, harmlessly
+    CK_CHECK(af.app.commands().execute(standard(af.app).close));  // the handler ran, harmlessly
 }
 
 CK_TEST(kquit_default_sweeps_every_window_and_requests_quit_when_none_veto) {
@@ -1197,7 +1204,7 @@ CK_TEST(kquit_default_sweeps_every_window_and_requests_quit_when_none_veto) {
     a->on_closed = [&] { ++closed_count; };
     b->on_closed = [&] { ++closed_count; };
 
-    af.app.commands().execute(ui::std_commands::kQuit);
+    af.app.commands().execute(standard(af.app).quit);
     CK_CHECK(closed_count == 2);
     CK_CHECK(af.app.quit_requested());
 }
@@ -1214,7 +1221,7 @@ CK_TEST(kquit_default_stops_at_the_first_veto_and_does_not_request_quit) {
     a->on_closed = [&] { ++closed_count; };
     b->on_closed = [&] { ++closed_count; };
 
-    af.app.commands().execute(ui::std_commands::kQuit);
+    af.app.commands().execute(standard(af.app).quit);
     CK_CHECK(closed_count == 0);
     CK_CHECK(!af.app.quit_requested());
 }
@@ -1233,7 +1240,7 @@ CK_TEST(kquit_default_remains_safe_when_each_close_detaches_its_window) {
         CK_CHECK(af.desktop->remove_window(second) != nullptr);
     };
 
-    af.app.commands().execute(ui::std_commands::kQuit);
+    af.app.commands().execute(standard(af.app).quit);
     CK_CHECK(closed_count == 2);
     CK_CHECK(af.desktop->windows().empty());
     CK_CHECK(af.app.quit_requested());
@@ -1287,7 +1294,7 @@ CK_TEST(kquit_default_skips_destroyed_starters_and_never_sweeps_a_reentrant_repl
         CK_CHECK(af.desktop->remove_window(top) != nullptr);
     };
 
-    CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    CK_CHECK(af.app.execute_command(standard(af.app).quit));
     CK_CHECK(top_closed == 1);
     CK_CHECK(first_closed == 1);
     CK_CHECK(replacement_close_requests == 0);
@@ -1310,7 +1317,7 @@ CK_TEST(kquit_default_ignores_a_recursive_quit_from_a_close_callback) {
     // the outer sweep can reach the next window's veto.
     top->on_closed = [&] {
         ++top_close_calls;
-        CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+        CK_CHECK(af.app.execute_command(standard(af.app).quit));
     };
     veto->close_request = [&] {
         ++veto_calls;
@@ -1318,7 +1325,7 @@ CK_TEST(kquit_default_ignores_a_recursive_quit_from_a_close_callback) {
     };
     first->on_closed = [&] { ++first_close_calls; };
 
-    CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    CK_CHECK(af.app.execute_command(standard(af.app).quit));
     CK_CHECK(top_close_calls == 1);
     CK_CHECK(veto_calls == 1);
     CK_CHECK(first_close_calls == 0);
@@ -1334,7 +1341,7 @@ CK_TEST(kquit_default_survives_a_close_callback_that_destroys_its_desktop) {
         detached.reset();
     };
 
-    CK_CHECK(af.app.execute_command(ui::std_commands::kQuit));
+    CK_CHECK(af.app.execute_command(standard(af.app).quit));
     CK_CHECK(!af.app.quit_requested());
 }
 
@@ -1349,16 +1356,16 @@ CK_TEST(kzoom_default_toggles_the_active_windows_zoom) {
     Window* w = af.desktop->add_window(make_window(af.f));
     CK_CHECK(!w->zoomed());
 
-    af.app.commands().execute(ui::std_commands::kZoom);
+    af.app.commands().execute(standard(af.app).zoom);
     CK_CHECK(w->zoomed());
 
-    af.app.commands().execute(ui::std_commands::kZoom);
+    af.app.commands().execute(standard(af.app).zoom);
     CK_CHECK(!w->zoomed());
 }
 
 CK_TEST(kzoom_default_is_a_no_op_with_no_active_window) {
     AttachedFixture af;
-    CK_CHECK(af.app.commands().execute(ui::std_commands::kZoom));  // the handler ran, harmlessly
+    CK_CHECK(af.app.commands().execute(standard(af.app).zoom));  // the handler ran, harmlessly
 }
 
 CK_TEST(knextwindow_default_activates_the_next_window_in_cycling_order) {
@@ -1367,7 +1374,7 @@ CK_TEST(knextwindow_default_activates_the_next_window_in_cycling_order) {
     Window* b = af.desktop->add_window(make_window(af.f));
     CK_CHECK(af.desktop->active_window() == b);  // b, added last, activates on add
 
-    af.app.commands().execute(ui::std_commands::kNextWindow);
+    af.app.commands().execute(standard(af.app).next_window);
 
     CK_CHECK(af.desktop->active_window() == a);  // wraps around from the last window to the first
 }
@@ -1382,7 +1389,7 @@ CK_TEST(kpreviouswindow_default_activates_the_previous_window_in_cycling_order) 
     Window* c = af.desktop->add_window(make_window(af.f));
     CK_CHECK(af.desktop->active_window() == c);
 
-    af.app.commands().execute(ui::std_commands::kPreviousWindow);
+    af.app.commands().execute(standard(af.app).previous_window);
 
     CK_CHECK(af.desktop->active_window() == b);
 }
@@ -1394,7 +1401,7 @@ CK_TEST(ktile_default_arranges_every_window_into_the_content_area) {
     a->set_bounds(Rect{0, 0, 80, 24});  // both windows start fully overlapping
     b->set_bounds(Rect{0, 0, 80, 24});
 
-    af.app.commands().execute(ui::std_commands::kTile);
+    af.app.commands().execute(standard(af.app).tile);
 
     // tile() gave each its own slice — no longer overlapping.
     CK_CHECK(a->bounds().x != b->bounds().x);
@@ -1407,7 +1414,7 @@ CK_TEST(kcascade_default_arranges_every_window_offset_diagonally) {
     a->set_bounds(Rect{0, 0, 30, 15});
     b->set_bounds(Rect{0, 0, 30, 15});
 
-    af.app.commands().execute(ui::std_commands::kCascade);
+    af.app.commands().execute(standard(af.app).cascade);
 
     CK_CHECK(a->bounds().x != b->bounds().x || a->bounds().y != b->bounds().y);
 }
@@ -1425,7 +1432,7 @@ CK_TEST(kwindowlist_default_puts_up_a_list_of_this_desktops_windows) {
     af.desktop->add_window(make_window(af.f));
     const std::size_t before = af.desktop->windows().size();
 
-    CK_CHECK(af.app.commands().execute(ui::std_commands::kWindowList));
+    CK_CHECK(af.app.commands().execute(standard(af.app).window_list));
 
     // The list is itself a Window on this Desktop, and it took focus.
     CK_CHECK(af.desktop->windows().size() == before + 1);
@@ -1435,10 +1442,10 @@ CK_TEST(kwindowlist_default_puts_up_a_list_of_this_desktops_windows) {
 CK_TEST(kwindowlist_default_is_a_no_op_while_one_is_already_open) {
     AttachedFixture af;
     af.desktop->add_window(make_window(af.f));
-    af.app.commands().execute(ui::std_commands::kWindowList);
+    af.app.commands().execute(standard(af.app).window_list);
     const std::size_t with_list = af.desktop->windows().size();
 
-    af.app.commands().execute(ui::std_commands::kWindowList);
+    af.app.commands().execute(standard(af.app).window_list);
 
     CK_CHECK(af.desktop->windows().size() == with_list);  // not a second list
 }
@@ -1446,7 +1453,7 @@ CK_TEST(kwindowlist_default_is_a_no_op_while_one_is_already_open) {
 CK_TEST(kwindowlist_default_can_be_reopened_after_its_list_closes) {
     AttachedFixture af;
     af.desktop->add_window(make_window(af.f));
-    af.app.commands().execute(ui::std_commands::kWindowList);
+    af.app.commands().execute(standard(af.app).window_list);
     Window* const list = af.desktop->windows().back();
     const std::size_t with_list = af.desktop->windows().size();
 
@@ -1455,7 +1462,7 @@ CK_TEST(kwindowlist_default_can_be_reopened_after_its_list_closes) {
     CK_CHECK(af.desktop->windows().size() == with_list - 1);
 
     // The guard cleared with the dialog, rather than latching it shut.
-    af.app.commands().execute(ui::std_commands::kWindowList);
+    af.app.commands().execute(standard(af.app).window_list);
     CK_CHECK(af.desktop->windows().size() == with_list);
 }
 
@@ -1465,7 +1472,7 @@ CK_TEST(destroying_a_desktop_with_its_window_list_open_is_safe) {
     // presentation. It must not reach back into the Desktop to say so.
     AttachedFixture af;
     af.desktop->add_window(make_window(af.f));
-    af.app.commands().execute(ui::std_commands::kWindowList);
+    af.app.commands().execute(standard(af.app).window_list);
 
     af.app.root().detach_child(af.desktop).reset();  // destroys it, list and all
     af.app.step(af.clock.now_nanos());
@@ -1476,14 +1483,14 @@ CK_TEST(a_pre_existing_kwindowlist_handler_is_not_overridden_by_attaching_a_desk
     ManualClock clock;
     Application app{term, clock};
     bool custom_ran = false;
-    app.commands().set_handler(ui::std_commands::kWindowList, [&] { custom_ran = true; });
+    app.commands().set_handler(standard(app).window_list, [&] { custom_ran = true; });
 
     StandardRoles roles = intern_standard_roles(app.roles());
     app.theme() = make_classic_theme(app.roles(), roles);
     auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(owned)));
 
-    app.commands().execute(ui::std_commands::kWindowList);
+    app.commands().execute(standard(app).window_list);
     CK_CHECK(custom_ran);
     CK_CHECK(desktop->windows().empty());  // the default never presented anything
 }

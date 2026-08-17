@@ -36,6 +36,7 @@ headless tests, and screenshot capture tools.
 | Editor | shared document, YAML profile, gutter, editable source view | [`editor_app.cpp`](../examples/editor/editor_app.cpp) | [Editor](editor.md) |
 | Terminal | isolated child sessions, multi-window desktop controls, focus escape, scrollback, Sixel containment | [`terminal_app.cpp`](../examples/terminal/terminal_app.cpp) | [Embedded terminal](embedded-terminal.md) |
 | Graphics | ImageView/Canvas capability fallback | [`graphics_app.cpp`](../examples/graphics/graphics_app.cpp) | [Graphics](graphics.md) |
+| Spin | animated raster content rendered off the owning thread | [`spin_app.cpp`](../examples/spin/spin_app.cpp) | [Graphics](graphics.md) |
 
 ### Layouts
 
@@ -74,6 +75,26 @@ Graphics is the capability-paired reference: it presents the same public view
 tree under a Sixel profile and no-graphics profile.
 
 ![Graphics fallback](generated/screenshots/graphics-no-graphics-canvas.svg)
+
+### Spin
+
+Spin is the moving-picture reference: a window per rotating solid, each frame
+rendered on a worker thread and shown by invalidating one view. Every frame is
+painted on its own window's resolved background color and sized to whole cells
+of the terminal's own metric, so the object sits in the window rather than on a
+rectangle laid over it.
+
+![Spin initial window](generated/screenshots/spin-initial.svg)
+
+`File ▸ New` opens a window on any of six solids, and each window carries its
+own delivered frame rate on its bottom border.
+
+![Spin New submenu](generated/screenshots/spin-menu.svg)
+
+Windows are ordinary desktop windows: move them, resize them, tile them, and
+the next frame is rendered at the new pixel size.
+
+![Spin tiled desktop](generated/screenshots/spin-desktop.svg)
 
 This page is generated documentation in the sense that its screenshots
 are: they come from `tools/docgen/capture_gallery_screenshots`, which
@@ -391,6 +412,80 @@ Run:
 
 ```bash
 ./build/examples/ckvision_graphics
+```
+
+### Spin (`examples/spin`)
+
+`ckvision_spin` is the animation reference: `File ▸ New` opens a window on any
+of six rotating solids — two wireframes and four shaded ones — and each window
+keeps drawing itself while the application stays responsive. It is the example
+to read for three separate questions.
+
+**Where the work happens.** `examples/spin/mesh.cpp` and
+`examples/spin/renderer.cpp` are ordinary library code: no view, no terminal,
+no clock, and no thread. `RenderService` owns the worker threads and is the
+only file that crosses between them, in the one direction ARCHITECTURE.md §9
+sanctions — a request goes out carrying everything the renderer needs, and the
+finished `Image` comes back through `Application::post`. Nothing on a worker
+thread touches a `View`, a `Theme`, or a `Terminal`.
+
+**How the redraw is driven, and why it stays responsive.** One
+`Application::start_timer` serves the whole application, armed when the first
+window opens and gone when the last one closes, so an idle Spin has no timer at
+all and `step()` blocks on input like any other program. It is a *one-shot that
+arms the next one after it has run*: the loop can never owe a backlog of ticks,
+which is exactly what a repeating timer delivers after a stall, all at once. A
+tick that finds a window's previous frame still rendering asks that window for
+nothing, so at most one frame per window is ever outstanding — the posted-work
+queue is bounded by the number of open windows however slow the host is.
+Angles come from the injected `Clock`, so a skipped frame costs smoothness and
+never speed. And the interval itself follows the loop: a tick that arrives much
+later than it asked for widens it, down to a documented floor, and ticks
+landing on time ease it back. The cost of an overloaded moment is a slower
+rotation rather than a sluggish application. Presenting a finished frame is one
+`ImageView::set_image` call — that invalidates one view, the window repaints its
+own backing store, the compositor touches the cells that changed, and Presenter
+re-encodes one raster. Nothing in the example forces a full redraw.
+
+**What a readout on the frame costs.** Each window carries its delivered frame
+rate in the bottom-right of its own border, through
+`Window::add_frame_overlay` — the same mechanism `widgets::EditorWindow` uses
+for its "Ln 1, Col 1" indicator. `FrameReadout` is worth copying for any value
+that changes as often as the content does: it pulls its text in `draw()`
+instead of being pushed a string per frame (a pushed `set_text()` is a
+size-hint change, and the window re-lays-out its overlays for each one), keeps
+a fixed width so that re-layout never happens at all, draws in its window's own
+frame role so the border reads as one line, and is invalidated by the frame it
+describes rather than by a clock of its own — so both land in the same
+presented frame.
+
+**Why it looks like part of the window.** Sixel carries no alpha channel, so
+each frame is painted on the background its own window currently resolves —
+`ckv.window.frame.active` or `.inactive`, through `resolved_color` — and the
+same role is set as the view's fallback override, which is what a terminal
+without graphics then shows instead. The frame is rendered at exactly
+`cells × terminal_cell_pixels()`, so it lands on whole cells and neither
+stretches nor leaves a margin; a resize simply produces the next frame at the
+new size. The renderer also keeps each frame inside the host's reported Sixel
+register budget, because a picture that exceeds it makes the encoder quantize
+the *whole* image — the background included — to its fallback color cube, and
+the seam that was invisible becomes a visible rectangle.
+
+`test_spin_smoke.cpp` pins all of it: the renderer's background fidelity,
+centring, framing, determinism, and color budget with nothing else running; and
+then, on a `HeadlessTerminal`, that a window presents its frame as a raster,
+re-renders at its own pixel size across a resize, paints on the window's own
+background, keeps exactly one outstanding frame per open window, runs its
+animation clock only while a window is open, never leaves the loop owing a
+backlog of ticks however long it stalled, widens and recovers its frame
+interval, shows the delivered rate on its own border in a box that never
+changes width, and drives the identical object graph to the documented cell
+fallback on a terminal without graphics.
+
+Run:
+
+```bash
+./build/examples/ckvision_spin
 ```
 
 ## Adding another example

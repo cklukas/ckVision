@@ -7,68 +7,85 @@
 
 namespace ckv::ui {
 
-void CommandRegistry::register_command(CommandId id, std::string title, std::string category,
-                                        std::optional<KeyChord> default_chord,
-                                        std::string context) {
-    // The reserved range is the library's own, with one deliberate opening:
-    // the menu-accelerator ids a MenuBar claims for its Alt+<mnemonic>
-    // chords. Those are library-owned too — a widget registering them is
-    // the framework populating its own range, not an application reaching
-    // into it — but they are allocated per menu at runtime rather than
-    // fixed at startup, so they cannot go through
-    // register_standard_commands().
-    CKV_ASSERT(id >= kFirstApplicationCommandId ||
-               (id >= std_commands::kFirstMenuAccelerator &&
-                id < std_commands::kMenuAcceleratorLimit));
-    register_command_internal(id, std::move(title), std::move(category), default_chord,
-                              std::move(context));
-}
-
-void CommandRegistry::register_command_internal(CommandId id, std::string title,
-                                                  std::string category,
-                                                  std::optional<KeyChord> default_chord,
-                                                  std::string context) {
-    CKV_ASSERT(id != kInvalidCommand);
-    CommandInfo info{id, std::move(title), std::move(category), default_chord, std::move(context)};
-    commands_[id] = std::move(info);
-    if (default_chord) bind_key(*default_chord, id);
-}
-
-void CommandRegistry::register_standard_commands() {
+CommandRegistry::CommandRegistry() {
     // Titles carry a conventional '&' mnemonic where there's a strong,
-    // low-collision-risk default (avoided for kMenu/kHelp, which are
+    // low-collision-risk default (avoided for menu/help, which are
     // invoked by their chord directly, not usually a menu ITEM
     // themselves — an application places them in a menu of its own
     // choosing and can still parse_mnemonic() over whatever text it
-    // wants there). kCascade uses 'a' rather than 'c', since it can
-    // plausibly share a Window menu with kClose ('c').
-    using namespace std_commands;
-    register_command_internal(kHelp, "Help", "System", KeyChord::parse("F1"), {});
-    register_command_internal(kMenu, "Menu", "Window", KeyChord::parse("F10"), {});
-    register_command_internal(kNextWindow, "&Next", "Window", KeyChord::parse("F6"), {});
-    register_command_internal(kPreviousWindow, "&Previous", "Window", KeyChord::parse("Shift+F6"),
-                              {});
-    register_command_internal(kZoom, "&Zoom", "Window", KeyChord::parse("F5"), {});
-    register_command_internal(kClose, "&Close", "Window", KeyChord::parse("Alt+F3"), {});
-    register_command_internal(kQuit, "&Quit", "System", KeyChord::parse("Alt+X"), {});
-    register_command_internal(kTile, "&Tile", "Window", std::nullopt, {});
-    register_command_internal(kCascade, "C&ascade", "Window", std::nullopt, {});
-    register_command_internal(kWindowList, "&Window List", "Window", std::nullopt, {});
-    register_command_internal(kFocusNext, "Next Field", "Window", KeyChord::parse("Tab"), {});
-    register_command_internal(kFocusPrevious, "Previous Field", "Window",
-                               KeyChord::parse("Shift+Tab"), {});
+    // wants there). cascade uses 'a' rather than 'c', since it can
+    // plausibly share a Window menu with close ('c').
+    //
+    // Declaration order is the order docs/standard-commands.md lists
+    // them in and the order all() reports them in, so it is chosen for
+    // the reader of that table: the two application-wide commands,
+    // then window management, then focus traversal.
+    using namespace std_command_keys;
+    const auto declare_standard = [this](std::string_view key, std::string title,
+                                         std::string category, std::string chord) {
+        return declare(CommandDescriptor{.key = std::string(key),
+                                         .title = std::move(title),
+                                         .category = std::move(category),
+                                         .chord = std::move(chord),
+                                         .visibility = CommandVisibility::Hidden});
+    };
+    standard_.quit = declare_standard(kQuit, "&Quit", "System", "Alt+X");
+    standard_.help = declare_standard(kHelp, "Help", "System", "F1");
+    standard_.menu = declare_standard(kMenu, "Menu", "Window", "F10");
+    standard_.close = declare_standard(kClose, "&Close", "Window", "Alt+F3");
+    standard_.zoom = declare_standard(kZoom, "&Zoom", "Window", "F5");
+    standard_.next_window = declare_standard(kNextWindow, "&Next", "Window", "F6");
+    standard_.previous_window =
+        declare_standard(kPreviousWindow, "&Previous", "Window", "Shift+F6");
+    standard_.tile = declare_standard(kTile, "&Tile", "Window", "");
+    standard_.cascade = declare_standard(kCascade, "C&ascade", "Window", "");
+    standard_.window_list = declare_standard(kWindowList, "&Window List", "Window", "");
+    standard_.focus_next = declare_standard(kFocusNext, "Next Field", "Window", "Tab");
+    standard_.focus_previous =
+        declare_standard(kFocusPrevious, "Previous Field", "Window", "Shift+Tab");
 }
 
-void CommandRegistry::add(CommandDescriptor descriptor) {
+CommandId CommandRegistry::id_for_key(std::string_view key) {
+    const auto existing = ids_.find(std::string(key));
+    if (existing != ids_.end()) return existing->second;
+    const CommandId id{next_command_id_++};
+    ids_.emplace(std::string(key), id);
+    return id;
+}
+
+CommandId CommandRegistry::declare(CommandDescriptor descriptor) {
+    // A command with no key has no identity: it could never be found,
+    // re-declared, withdrawn or persisted, and two of them would be
+    // the same command by the rule above.
+    CKV_ASSERT(!descriptor.key.empty());
     std::optional<KeyChord> chord;
     if (!descriptor.chord.empty()) {
         chord = KeyChord::parse(descriptor.chord);
+        // A malformed chord literal in source is a programmer error to
+        // fix, not a condition to silently degrade from.
         CKV_ASSERT(chord.has_value());
     }
-    const CommandId id = descriptor.id;
-    register_command(id, std::move(descriptor.title), std::move(descriptor.category), chord,
-                     std::move(descriptor.context));
+
+    const CommandId id = id_for_key(descriptor.key);
+    // A re-declaration replaces the definition, so the chord the
+    // PREVIOUS definition asked for stops applying — unless the keymap
+    // has since been rebound and that chord now belongs to something
+    // else, which is a runtime decision this must not undo.
+    const auto previous = commands_.find(id);
+    if (previous != commands_.end() && previous->second.default_chord &&
+        command_for_key(*previous->second.default_chord) == id)
+        unbind_key(*previous->second.default_chord);
+
+    commands_[id] = CommandInfo{id,
+                                std::move(descriptor.key),
+                                std::move(descriptor.title),
+                                std::move(descriptor.category),
+                                chord,
+                                std::move(descriptor.context),
+                                descriptor.visibility};
+    if (chord) bind_key(*chord, id);
     if (descriptor.handler) set_handler(id, std::move(descriptor.handler));
+    return id;
 }
 
 const CommandInfo* CommandRegistry::find(CommandId id) const noexcept {
@@ -76,16 +93,29 @@ const CommandInfo* CommandRegistry::find(CommandId id) const noexcept {
     return it == commands_.end() ? nullptr : &it->second;
 }
 
+std::optional<CommandId> CommandRegistry::id_for(std::string_view key) const {
+    const auto assigned = ids_.find(std::string(key));
+    if (assigned == ids_.end() || !commands_.contains(assigned->second)) return std::nullopt;
+    return assigned->second;
+}
+
+std::string_view CommandRegistry::key_for(CommandId id) const noexcept {
+    const CommandInfo* info = find(id);
+    return info == nullptr ? std::string_view{} : std::string_view{info->key};
+}
+
 std::vector<CommandInfo> CommandRegistry::all() const {
     std::vector<CommandInfo> result;
     result.reserve(commands_.size());
     for (const auto& [id, info] : commands_) result.push_back(info);
+    // Ids are assigned in declaration order, so ordering by id is
+    // ordering by when each command entered the registry.
     std::sort(result.begin(), result.end(),
               [](const CommandInfo& a, const CommandInfo& b) { return a.id < b.id; });
     return result;
 }
 
-void CommandRegistry::retract_command(CommandId id) {
+void CommandRegistry::withdraw(CommandId id) {
     commands_.erase(id);
     enabled_predicates_.erase(id);
     handlers_.erase(id);
@@ -121,6 +151,12 @@ bool CommandRegistry::context_active(std::string_view context) const noexcept {
         if (active == context) return true;
     }
     return false;
+}
+
+void CommandRegistry::set_visibility(CommandId id, CommandVisibility visibility) {
+    auto it = commands_.find(id);
+    CKV_ASSERT(it != commands_.end());
+    it->second.visibility = visibility;
 }
 
 void CommandRegistry::set_enabled_predicate(CommandId id, std::function<bool()> predicate) {

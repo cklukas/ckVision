@@ -30,9 +30,13 @@ namespace ui = ckv::ui;
 namespace widgets = ckv::widgets;
 
 namespace {
-constexpr ui::CommandId kScoped = ui::kFirstApplicationCommandId;
-constexpr ui::CommandId kQuit = ui::kFirstApplicationCommandId + 1;
 
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
 std::string row_text(const Surface& surface) {
     std::string out;
     for (int x = 0; x < surface.size().width; ++x)
@@ -53,15 +57,15 @@ struct AppFixture {
 CK_TEST(command_contexts_activate_through_explicit_scopes_and_focus_ancestry) {
     AppFixture f;
     int ran = 0;
-    f.app.commands().add({.id = kScoped,
-                          .title = "Scoped",
-                          .category = "Test",
-                          .context = "editor",
-                          .handler = [&] { ++ran; }});
+    const ui::CommandId scoped = f.app.commands().declare({.key = "test.scoped",
+                                                           .title = "Scoped",
+                                                           .category = "Test",
+                                                           .context = "editor",
+                                                           .handler = [&] { ++ran; }});
 
-    CK_CHECK(!f.app.execute_command(kScoped));
+    CK_CHECK(!f.app.execute_command(scoped));
     const auto scope = f.app.commands().push_context("editor");
-    CK_CHECK(f.app.execute_command(kScoped));
+    CK_CHECK(f.app.execute_command(scoped));
     CK_CHECK(ran == 1);
     CK_CHECK(f.app.commands().pop_context(scope));
     CK_CHECK(!f.app.commands().pop_context(scope));
@@ -72,7 +76,7 @@ CK_TEST(command_contexts_activate_through_explicit_scopes_and_focus_ancestry) {
     child->set_focus_policy(FocusPolicy::TabStop);
     f.app.set_focus(child);
 
-    CK_CHECK(f.app.execute_command(kScoped));
+    CK_CHECK(f.app.execute_command(scoped));
     CK_CHECK(ran == 2);
 }
 
@@ -80,17 +84,17 @@ CK_TEST(modal_dispatch_allows_modal_focus_context_commands_but_not_unscoped_back
     AppFixture f;
     int scoped = 0;
     int background = 0;
-    f.app.commands().add({.id = kScoped,
-                          .title = "Scoped",
-                          .category = "Test",
-                          .context = "editor",
-                          .chord = "Ctrl+E",
-                          .handler = [&] { ++scoped; }});
-    f.app.commands().add({.id = kQuit,
-                          .title = "Background",
-                          .category = "Test",
-                          .chord = "Ctrl+B",
-                          .handler = [&] { ++background; }});
+    f.app.commands().declare({.key = "test.scoped",
+                              .title = "Scoped",
+                              .category = "Test",
+                              .context = "editor",
+                              .chord = "Ctrl+E",
+                              .handler = [&] { ++scoped; }});
+    f.app.commands().declare({.key = "test.background",
+                              .title = "Background",
+                              .category = "Test",
+                              .chord = "Ctrl+B",
+                              .handler = [&] { ++background; }});
 
     auto* modal = f.app.root().add(std::make_unique<View>(Rect{0, 0, 20, 5}));
     auto* field = modal->add(std::make_unique<View>(Rect{1, 1, 4, 1}));
@@ -105,40 +109,40 @@ CK_TEST(modal_dispatch_allows_modal_focus_context_commands_but_not_unscoped_back
     CK_CHECK(background == 0);
 }
 
-CK_TEST(command_retraction_removes_metadata_handler_enablement_and_key_binding) {
+CK_TEST(command_withdrawal_removes_metadata_handler_enablement_and_key_binding) {
     ui::CommandRegistry registry;
     bool ran = false;
-    registry.add({.id = kQuit,
-                  .title = "Quit",
-                  .category = "Test",
-                  .chord = "Alt+X",
-                  .handler = [&] { ran = true; }});
-    registry.set_enabled_predicate(kQuit, [] { return true; });
+    const ui::CommandId quit = registry.declare({.key = "test.quit",
+                                                 .title = "Quit",
+                                                 .category = "Test",
+                                                 .chord = "Alt+X",
+                                                 .handler = [&] { ran = true; }});
+    registry.set_enabled_predicate(quit, [] { return true; });
 
-    CK_CHECK(registry.find(kQuit) != nullptr);
-    CK_CHECK(registry.command_for_key(*KeyChord::parse("Alt+X")) == kQuit);
-    CK_CHECK(registry.execute(kQuit));
+    CK_CHECK(registry.find(quit) != nullptr);
+    CK_CHECK(registry.command_for_key(*KeyChord::parse("Alt+X")) == quit);
+    CK_CHECK(registry.execute(quit));
     CK_CHECK(ran);
 
-    registry.retract_command(kQuit);
+    registry.withdraw(quit);
     ran = false;
-    CK_CHECK(registry.find(kQuit) == nullptr);
+    CK_CHECK(registry.find(quit) == nullptr);
     CK_CHECK(!registry.command_for_key(*KeyChord::parse("Alt+X")).has_value());
-    CK_CHECK(!registry.execute(kQuit));
+    CK_CHECK(!registry.execute(quit));
     CK_CHECK(!ran);
 }
 
 CK_TEST(menu_and_status_present_one_command_with_surface_specific_labels_and_same_handler) {
     AppFixture f;
     int quit_count = 0;
-    f.app.commands().add({.id = kQuit,
-                          .title = "&Quit",
-                          .category = "Test",
-                          .chord = "Alt+X",
-                          .handler = [&] { ++quit_count; }});
+    const ui::CommandId quit = f.app.commands().declare({.key = "test.quit",
+                                                         .title = "&Quit",
+                                                         .category = "Test",
+                                                         .chord = "Alt+X",
+                                                         .handler = [&] { ++quit_count; }});
 
     widgets::DropdownMenu menu(
-        {widgets::MenuItem{widgets::CommandPresentation{kQuit, "E&xit"}}});
+        {widgets::MenuItem{widgets::CommandPresentation{quit, "E&xit"}}});
     menu.set_context(ui::Context{&f.app.theme(), &f.app.roles(), &f.app});
     menu.set_bounds(Rect{0, 0, menu.horizontal_size_hint().preferred, 1});
     Surface menu_surface(Size{20, 1});
@@ -150,7 +154,7 @@ CK_TEST(menu_and_status_present_one_command_with_surface_specific_labels_and_sam
     widgets::StatusLine status;
     status.set_context(ui::Context{&f.app.theme(), &f.app.roles(), &f.app});
     status.set_bounds(Rect{0, 0, 20, 1});
-    status.set_items({widgets::StatusLineItem{widgets::CommandPresentation{kQuit, "&Quit"}}});
+    status.set_items({widgets::StatusLineItem{widgets::CommandPresentation{quit, "&Quit"}}});
     Surface status_surface(Size{20, 1});
     Painter status_painter(status_surface, Rect{0, 0, 20, 1});
     status.draw(status_painter);
@@ -169,14 +173,14 @@ CK_TEST(menu_bar_replaces_live_structure_and_closes_an_open_dropdown) {
     auto* bar = desktop->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{{"&File",
                                            {widgets::MenuItem{
-                                               widgets::CommandPresentation{ui::std_commands::kQuit}}}}}));
+                                               widgets::CommandPresentation{standard(f.app).quit}}}}}));
     bar->activate();
     CK_CHECK(bar->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
     CK_CHECK(desktop->popups().size() == 1);
 
     bar->set_menus({{"&Tools",
                      {widgets::MenuItem{
-                         widgets::CommandPresentation{ui::std_commands::kMenu}}}}});
+                         widgets::CommandPresentation{standard(f.app).menu}}}}});
     CK_CHECK(desktop->popups().empty());
     CK_CHECK(bar->menus().size() == 1);
     CK_CHECK(bar->menus().front().label == "&Tools");
@@ -184,17 +188,17 @@ CK_TEST(menu_bar_replaces_live_structure_and_closes_an_open_dropdown) {
 
 CK_TEST(status_line_renders_disabled_command_entries_with_disabled_role) {
     AppFixture f;
-    f.app.commands().add({.id = kQuit,
-                          .title = "&Quit",
-                          .category = "Test",
-                          .chord = "Alt+X",
-                          .handler = [] {}});
-    f.app.commands().set_enabled_predicate(kQuit, [] { return false; });
+    const ui::CommandId quit = f.app.commands().declare({.key = "test.quit",
+                                                         .title = "&Quit",
+                                                         .category = "Test",
+                                                         .chord = "Alt+X",
+                                                         .handler = [] {}});
+    f.app.commands().set_enabled_predicate(quit, [] { return false; });
 
     widgets::StatusLine status;
     status.set_context(ui::Context{&f.app.theme(), &f.app.roles(), &f.app});
     status.set_bounds(Rect{0, 0, 20, 1});
-    status.set_items({widgets::StatusLineItem{widgets::CommandPresentation{kQuit, "&Quit"}}});
+    status.set_items({widgets::StatusLineItem{widgets::CommandPresentation{quit, "&Quit"}}});
 
     Surface surface(Size{20, 1});
     Painter painter(surface, Rect{0, 0, 20, 1});
@@ -206,14 +210,14 @@ CK_TEST(status_line_renders_disabled_command_entries_with_disabled_role) {
 
 CK_TEST(application_shell_constructs_chrome_without_owning_loop_or_process_state) {
     AppFixture f;
-    f.app.commands().set_handler(ui::std_commands::kQuit, [] {});
+    f.app.commands().set_handler(standard(f.app).quit, [] {});
     widgets::ApplicationShell shell(
         f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles),
                 .menus = {{"&File",
                            {widgets::MenuItem{
-                               widgets::CommandPresentation{ui::std_commands::kQuit, "E&xit"}}}}},
+                               widgets::CommandPresentation{standard(f.app).quit, "E&xit"}}}}},
                 .status_items = {widgets::StatusLineItem{
-                    widgets::CommandPresentation{ui::std_commands::kQuit, "&Quit"}}}});
+                    widgets::CommandPresentation{standard(f.app).quit, "&Quit"}}}});
 
     CK_CHECK(shell.menu_bar() != nullptr);
     CK_CHECK(shell.status_line() != nullptr);

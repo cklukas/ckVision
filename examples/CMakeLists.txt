@@ -139,3 +139,25 @@ if(UNIX)
     ckvision_strict(ckvision_terminal)
     install(TARGETS ckvision_terminal RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+
+# Spin: animated raster content produced off the owning thread. The model
+# and the software renderer are ordinary library code with no platform
+# dependency at all; the object graph adds worker threads, which is why
+# this is the one example target that links Threads.
+add_library(spin_app STATIC
+    spin/mesh.cpp
+    spin/renderer.cpp
+    spin/render_service.cpp
+    spin/spin_app.cpp)
+target_link_libraries(spin_app PRIVATE ckvision::cvision)
+find_package(Threads REQUIRED)
+target_link_libraries(spin_app PUBLIC Threads::Threads)
+target_include_directories(spin_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/spin)
+ckvision_strict(spin_app)
+
+if(UNIX)
+    add_executable(ckvision_spin spin/main.cpp)
+    target_link_libraries(ckvision_spin PRIVATE spin_app ckvision::cvision)
+    ckvision_strict(ckvision_spin)
+    install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

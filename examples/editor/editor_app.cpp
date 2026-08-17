@@ -13,24 +13,6 @@
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::editor_example {
-namespace {
-
-constexpr ui::CommandId kUndo = ui::kFirstApplicationCommandId + 100;
-constexpr ui::CommandId kRedo = ui::kFirstApplicationCommandId + 101;
-constexpr ui::CommandId kCut = ui::kFirstApplicationCommandId + 102;
-constexpr ui::CommandId kCopy = ui::kFirstApplicationCommandId + 103;
-constexpr ui::CommandId kPaste = ui::kFirstApplicationCommandId + 104;
-constexpr ui::CommandId kToggleWrap = ui::kFirstApplicationCommandId + 105;
-constexpr ui::CommandId kFindSelection = ui::kFirstApplicationCommandId + 106;
-constexpr ui::CommandId kFindNext = ui::kFirstApplicationCommandId + 107;
-constexpr ui::CommandId kSave = ui::kFirstApplicationCommandId + 108;
-constexpr ui::CommandId kOpenYamlSample = ui::kFirstApplicationCommandId + 109;
-constexpr ui::CommandId kOpenJsonSample = ui::kFirstApplicationCommandId + 110;
-constexpr ui::CommandId kOpenBashSample = ui::kFirstApplicationCommandId + 111;
-constexpr ui::CommandId kOpenPlainSample = ui::kFirstApplicationCommandId + 112;
-
-}  // namespace
-
 EditorApp::EditorApp(ui::Application& application)
     : application_(application), roles_(ui::intern_standard_roles(application.roles())),
       document_(std::make_shared<widgets::EditorDocument>()), file_controller_(document_, filesystem_) {
@@ -47,18 +29,22 @@ EditorApp::EditorApp(ui::Application& application)
     desktop_ = desktop.get();
     application_.root().add_child(std::move(desktop));
 
-    application_.commands().add(ui::CommandDescriptor{kSave, "&Save", "File", {}, "Ctrl+S", [this] {
+    // Every command declares the key it is known by; the registry assigns
+    // the id, so this example never writes one and cannot collide with
+    // the framework's own commands or another library's.
+    ui::CommandRegistry& commands = application_.commands();
+    const ui::CommandId save = commands.declare({.key = "editor.save", .title = "&Save", .category = "File", .chord = "Ctrl+S", .handler = [this] {
         (void)file_controller_.save();
     }});
-    application_.commands().add(ui::CommandDescriptor{kUndo, "&Undo", "Edit", {}, "Ctrl+Z", [this] { document_->undo(); }});
-    application_.commands().add(ui::CommandDescriptor{kRedo, "&Redo", "Edit", {}, "Ctrl+Y", [this] { document_->redo(); }});
-    application_.commands().add(ui::CommandDescriptor{kCut, "Cu&t", "Edit", {}, "Ctrl+X", [this] { (void)editor_->cut_selection_to_clipboard(); }});
-    application_.commands().add(ui::CommandDescriptor{kCopy, "&Copy", "Edit", {}, "Ctrl+C", [this] { (void)editor_->copy_selection_to_clipboard(); }});
-    application_.commands().add(ui::CommandDescriptor{kPaste, "&Paste", "Edit", {}, "Ctrl+V", [this] { (void)editor_->paste_from_clipboard(); }});
+    const ui::CommandId undo = commands.declare({.key = "editor.undo", .title = "&Undo", .category = "Edit", .chord = "Ctrl+Z", .handler = [this] { document_->undo(); }});
+    const ui::CommandId redo = commands.declare({.key = "editor.redo", .title = "&Redo", .category = "Edit", .chord = "Ctrl+Y", .handler = [this] { document_->redo(); }});
+    const ui::CommandId cut = commands.declare({.key = "editor.cut", .title = "Cu&t", .category = "Edit", .chord = "Ctrl+X", .handler = [this] { (void)editor_->cut_selection_to_clipboard(); }});
+    const ui::CommandId copy = commands.declare({.key = "editor.copy", .title = "&Copy", .category = "Edit", .chord = "Ctrl+C", .handler = [this] { (void)editor_->copy_selection_to_clipboard(); }});
+    const ui::CommandId paste = commands.declare({.key = "editor.paste", .title = "&Paste", .category = "Edit", .chord = "Ctrl+V", .handler = [this] { (void)editor_->paste_from_clipboard(); }});
     // All three modes, in the order a reader wants them: off for source and
     // logs, word for prose, character for content with no word structure to
     // respect. One key cycles them so the difference is easy to see.
-    application_.commands().add(ui::CommandDescriptor{kToggleWrap, "&Word Wrap", "Edit", {}, "Alt+W", [this] {
+    const ui::CommandId toggle_wrap = commands.declare({.key = "editor.toggle-wrap", .title = "&Word Wrap", .category = "Edit", .chord = "Alt+W", .handler = [this] {
         switch (editor_->wrap_mode()) {
             case widgets::WrapMode::None:
                 editor_->set_wrap_mode(widgets::WrapMode::Word);
@@ -71,59 +57,59 @@ EditorApp::EditorApp(ui::Application& application)
                 break;
         }
     }});
-    application_.commands().add(ui::CommandDescriptor{kFindSelection, "&Find Selection", "Search", {}, "Ctrl+F", [this] {
+    const ui::CommandId find_selection = commands.declare({.key = "editor.find-selection", .title = "&Find Selection", .category = "Search", .chord = "Ctrl+F", .handler = [this] {
         (void)editor_->use_selection_as_search_query();
     }});
-    application_.commands().add(ui::CommandDescriptor{kFindNext, "Find &Next", "Search", {}, "F3", [this] {
+    const ui::CommandId find_next = commands.declare({.key = "editor.find-next", .title = "Find &Next", .category = "Search", .chord = "F3", .handler = [this] {
         (void)editor_->find_next();
     }});
-    application_.commands().add(ui::CommandDescriptor{kOpenYamlSample, "Open &YAML sample", "File", {}, "", [this] {
+    const ui::CommandId open_yaml = commands.declare({.key = "editor.open-yaml-sample", .title = "Open &YAML sample", .category = "File", .handler = [this] {
         (void)open_sample("config.yaml");
     }});
-    application_.commands().add(ui::CommandDescriptor{kOpenJsonSample, "Open &JSON sample", "File", {}, "", [this] {
+    const ui::CommandId open_json = commands.declare({.key = "editor.open-json-sample", .title = "Open &JSON sample", .category = "File", .handler = [this] {
         (void)open_sample("settings.json");
     }});
-    application_.commands().add(ui::CommandDescriptor{kOpenBashSample, "Open &Bash sample", "File", {}, "", [this] {
+    const ui::CommandId open_bash = commands.declare({.key = "editor.open-bash-sample", .title = "Open &Bash sample", .category = "File", .handler = [this] {
         (void)open_sample("sample.sh");
     }});
-    application_.commands().add(ui::CommandDescriptor{kOpenPlainSample, "Open &plain-text sample", "File", {}, "", [this] {
+    const ui::CommandId open_plain = commands.declare({.key = "editor.open-plain-sample", .title = "Open &plain-text sample", .category = "File", .handler = [this] {
         (void)open_sample("notes.txt");
     }});
-    application_.commands().set_enabled_predicate(kSave, [this] { return file_controller_.has_path() && document_->modified(); });
-    application_.commands().set_enabled_predicate(kUndo, [this] { return document_->can_undo(); });
-    application_.commands().set_enabled_predicate(kRedo, [this] { return document_->can_redo(); });
-    application_.commands().set_enabled_predicate(kCut, [this] { return editor_->selection().has_value() && !editor_->read_only(); });
-    application_.commands().set_enabled_predicate(kCopy, [this] { return editor_->selection().has_value(); });
-    application_.commands().set_enabled_predicate(kPaste, [this] { return !editor_->read_only(); });
-    application_.commands().set_enabled_predicate(kFindSelection, [this] { return editor_->selection().has_value(); });
-    application_.commands().set_enabled_predicate(kFindNext, [this] { return editor_->search_match_count() != 0U; });
+    commands.set_enabled_predicate(save, [this] { return file_controller_.has_path() && document_->modified(); });
+    commands.set_enabled_predicate(undo, [this] { return document_->can_undo(); });
+    commands.set_enabled_predicate(redo, [this] { return document_->can_redo(); });
+    commands.set_enabled_predicate(cut, [this] { return editor_->selection().has_value() && !editor_->read_only(); });
+    commands.set_enabled_predicate(copy, [this] { return editor_->selection().has_value(); });
+    commands.set_enabled_predicate(paste, [this] { return !editor_->read_only(); });
+    commands.set_enabled_predicate(find_selection, [this] { return editor_->selection().has_value(); });
+    commands.set_enabled_predicate(find_next, [this] { return editor_->search_match_count() != 0U; });
 
-    widgets::MenuBarItem file{"&File", {widgets::MenuItem{widgets::CommandPresentation{kSave}},
+    widgets::MenuBarItem file{"&File", {widgets::MenuItem{widgets::CommandPresentation{save}},
                                           widgets::MenuItem{"Open &Sample", ui::kInvalidCommand, {}, false,
                                                             widgets::MenuItemCheck::None,
-                                                            {widgets::MenuItem{widgets::CommandPresentation{kOpenYamlSample}},
-                                                             widgets::MenuItem{widgets::CommandPresentation{kOpenJsonSample}},
-                                                             widgets::MenuItem{widgets::CommandPresentation{kOpenBashSample}},
-                                                             widgets::MenuItem{widgets::CommandPresentation{kOpenPlainSample}}}},
+                                                            {widgets::MenuItem{widgets::CommandPresentation{open_yaml}},
+                                                             widgets::MenuItem{widgets::CommandPresentation{open_json}},
+                                                             widgets::MenuItem{widgets::CommandPresentation{open_bash}},
+                                                             widgets::MenuItem{widgets::CommandPresentation{open_plain}}}},
                                           widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                          widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}}}};
-    widgets::MenuBarItem edit{"&Edit", {widgets::MenuItem{widgets::CommandPresentation{kUndo}},
-                                          widgets::MenuItem{widgets::CommandPresentation{kRedo}},
+                                          widgets::MenuItem{widgets::CommandPresentation{commands.standard().quit}}}};
+    widgets::MenuBarItem edit{"&Edit", {widgets::MenuItem{widgets::CommandPresentation{undo}},
+                                          widgets::MenuItem{widgets::CommandPresentation{redo}},
                                           widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                          widgets::MenuItem{widgets::CommandPresentation{kCut}},
-                                          widgets::MenuItem{widgets::CommandPresentation{kCopy}},
-                                          widgets::MenuItem{widgets::CommandPresentation{kPaste}},
+                                          widgets::MenuItem{widgets::CommandPresentation{cut}},
+                                          widgets::MenuItem{widgets::CommandPresentation{copy}},
+                                          widgets::MenuItem{widgets::CommandPresentation{paste}},
                                           widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                          widgets::MenuItem{widgets::CommandPresentation{kToggleWrap}}}};
-    widgets::MenuBarItem search{"&Search", {widgets::MenuItem{widgets::CommandPresentation{kFindSelection}},
-                                              widgets::MenuItem{widgets::CommandPresentation{kFindNext}}}};
+                                          widgets::MenuItem{widgets::CommandPresentation{toggle_wrap}}}};
+    widgets::MenuBarItem search{"&Search", {widgets::MenuItem{widgets::CommandPresentation{find_selection}},
+                                              widgets::MenuItem{widgets::CommandPresentation{find_next}}}};
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{
         std::move(file), std::move(edit), std::move(search)}));
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kFocusNext}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{kSave}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{kFindNext}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kQuit}}});
+    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{commands.standard().focus_next}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{save}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{find_next}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{commands.standard().quit}}});
     desktop_->dock_bottom(std::move(status));
 
     auto window = std::make_unique<widgets::Window>("Editor — config.yaml");
@@ -146,7 +132,7 @@ EditorApp::EditorApp(ui::Application& application)
     window_ = desktop_->add_window(std::move(window));
     refresh_status();
 
-    application_.commands().set_handler(ui::std_commands::kQuit, [this] { application_.request_quit(); });
+    commands.set_handler(commands.standard().quit, [this] { application_.request_quit(); });
     application_.set_focus(editor_);
 
     // F1 answers with something. Silence is the one response a reader

@@ -56,14 +56,15 @@ void Desktop::on_attached() {
         background_role_ = context().roles->find("ckv.desktop.background");
     app_ = context().app;
     if (app_ == nullptr) return;
-    install_default_handler(ui::std_commands::kClose, [this] { close_active_window(); });
-    install_default_handler(ui::std_commands::kQuit, [this] { quit_sweep(); });
-    install_default_handler(ui::std_commands::kZoom, [this] { zoom_active_window(); });
-    install_default_handler(ui::std_commands::kNextWindow, [this] { activate_next(); });
-    install_default_handler(ui::std_commands::kPreviousWindow, [this] { activate_previous(); });
-    install_default_handler(ui::std_commands::kTile, [this] { tile(); });
-    install_default_handler(ui::std_commands::kCascade, [this] { cascade(); });
-    install_default_handler(ui::std_commands::kWindowList, [this] { show_window_list(); });
+    const ui::StandardCommands& standard = app_->commands().standard();
+    install_default_handler(standard.close, [this] { close_active_window(); });
+    install_default_handler(standard.quit, [this] { quit_sweep(); });
+    install_default_handler(standard.zoom, [this] { zoom_active_window(); });
+    install_default_handler(standard.next_window, [this] { activate_next(); });
+    install_default_handler(standard.previous_window, [this] { activate_previous(); });
+    install_default_handler(standard.tile, [this] { tile(); });
+    install_default_handler(standard.cascade, [this] { cascade(); });
+    install_default_handler(standard.window_list, [this] { show_window_list(); });
 }
 
 void Desktop::show_window_list() {

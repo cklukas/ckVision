@@ -83,12 +83,15 @@ private:
 ```
 <!-- /ckvision-snippet -->
 
-The constructor registers two application commands. A `CommandPresentation`
-then lets the menu and status line render the title, chord, enablement and
-mnemonic from that registration. The menu override changes only its visible
-title to `Exit`; it does not create a second quit command.
+The constructor declares two application commands. Each names itself with a
+key — `"hello.greeting"`, `"hello.quit"` — and the registry hands back the id
+the application then references; no source file anywhere chooses a command
+number. A `CommandPresentation` lets the menu and status line render the
+title, chord, enablement and mnemonic from that one declaration. The menu
+override changes only its visible title to `Exit`; it does not create a second
+quit command.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-25" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-28" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "hello_app.hpp"
@@ -100,21 +103,24 @@ title to `Exit`; it does not create a second quit command.
 
 namespace ckv::hello {
 
-constexpr ui::CommandId kCmdGreeting = ui::kFirstApplicationCommandId, kCmdQuit = ui::kFirstApplicationCommandId + 1;
-
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
-    app_.commands().add({.id = kCmdGreeting, .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
-    app_.commands().add({.id = kCmdQuit, .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
+    // Each command names itself; the registry hands back the id this
+    // application then references. Nothing here picks a number.
+    const ui::CommandId greeting_command = app_.commands().declare({.key = "hello.greeting", .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
+    // Its own quit command rather than the framework's, so this example
+    // can present the concept as "Exit" in the reference vocabulary it
+    // follows -- see docs/standard-commands.md on when that is the right
+    // call and when CommandPresentation is.
+    const ui::CommandId quit_command = app_.commands().declare({.key = "hello.quit", .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
     widgets::ApplicationShell shell(app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
                                            .menus = {{"&File",
-                                                      {widgets::MenuItem{widgets::CommandPresentation{kCmdGreeting}},
+                                                      {widgets::MenuItem{widgets::CommandPresentation{greeting_command}},
                                                        widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                                       widgets::MenuItem{widgets::CommandPresentation{kCmdQuit, "E&xit"}}}}},
+                                                       widgets::MenuItem{widgets::CommandPresentation{quit_command, "E&xit"}}}}},
                                            .status_items = {
-                                               widgets::StatusLineItem{widgets::CommandPresentation{kCmdQuit, "&Quit"}},
-                                               widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}}}});
+                                               widgets::StatusLineItem{widgets::CommandPresentation{quit_command, "&Quit"}},
+                                               widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}}}});
     desktop_ = &shell.desktop();
-
 ```
 <!-- /ckvision-snippet -->
 
@@ -122,18 +128,16 @@ The greeting handler returns immediately after presenting the dialog. Its
 typed completion handler observes the result without capturing a raw dialog
 window pointer, so close/removal remains owned by the presentation API.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="27-36" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="37-44" -->
 ```cpp
-    // cannot tell apart from a key that never arrived.
-    widgets::install_about_help(app_, *desktop_, roles_,
-                                "ckVision Hello example",
-                                "The smallest complete ckVision application: a shell, a local command, and a dialog.");
-}
-
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.
 void HelloApp::greeting_box() {
     auto greeting = widgets::present_message_box(app_, *desktop_, roles_,
+                                                  {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
+                                                   widgets::MessageBoxButtons::Ok});
+    greeting.set_completion_handler([](widgets::MessageBoxResult) {});
+}
 ```
 <!-- /ckvision-snippet -->
 

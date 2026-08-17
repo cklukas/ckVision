@@ -23,9 +23,8 @@ bool contains(const Rect& r, Point p) noexcept {
 // focus and Application's modal-aware traversal, so executing them cannot
 // route into a background view. Window/menu/quit commands and every
 // application-defined command remain outside this deliberately small set.
-bool is_modal_scope_command(CommandId id) noexcept {
-    return id == std_commands::kFocusNext || id == std_commands::kFocusPrevious ||
-           id == std_commands::kHelp;
+bool is_modal_scope_command(const StandardCommands& standard, CommandId id) noexcept {
+    return id == standard.focus_next || id == standard.focus_previous || id == standard.help;
 }
 
 // The "terminal too small" state's own fixed style (M10/WP-21) — NOT
@@ -130,16 +129,15 @@ Application::Application(term::Terminal& terminal, Clock& clock,
     // (M9 WP-7, D-028) — installed once, propagates to every current
     // and future descendant exactly like the two sinks above.
     root_.set_context(Context{&theme_, &roles_, this});
-    // The standard command set, with its default chords (M9/WP-12,
-    // D-013/D-029) — an application attaches handlers to whichever of
-    // these it needs; it never re-registers the metadata itself.
-    commands_.register_standard_commands();
-    // std_commands::kHelp's own default behavior (D-027): resolve the
+    // standard().help's own default behavior (D-027): resolve the
     // focused view's nearest help-context key and hand it to whatever
     // set_help_provider() installed. An application that wants
     // completely different F1 behavior replaces this with its own
-    // set_handler(kHelp, ...) — same as any other standard command.
-    commands_.set_handler(std_commands::kHelp, [this] {
+    // set_handler(standard().help, ...) — same as any other standard
+    // command. (The standard set itself, with its default chords, is
+    // declared by CommandRegistry's own constructor — M9/WP-12,
+    // D-013/D-029.)
+    commands_.set_handler(commands_.standard().help, [this] {
         if (help_provider_ == nullptr || focused_ == nullptr)
             return;
         const std::string* key = focused_->resolve_help_context_key();
@@ -149,9 +147,9 @@ Application::Application(term::Terminal& terminal, Clock& clock,
     // Tab/Shift-Tab traversal (M9/WP-13, D-029) — always installed,
     // unconditionally: Application itself outlives everything that
     // could invoke these, so there is no lifetime concern to guard
-    // against the way MenuBar's kMenu default handler has to.
-    commands_.set_handler(std_commands::kFocusNext, [this] { focus_next(); });
-    commands_.set_handler(std_commands::kFocusPrevious, [this] { focus_previous(); });
+    // against the way MenuBar's menu-command default handler has to.
+    commands_.set_handler(commands_.standard().focus_next, [this] { focus_next(); });
+    commands_.set_handler(commands_.standard().focus_previous, [this] { focus_previous(); });
 }
 
 Application::~Application() {
@@ -507,16 +505,17 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             const bool modal_context_command =
                                 info != nullptr && !info->context.empty() &&
                                 commands_.is_available(*id, contexts);
-                            if (is_modal_scope_command(*id) || modal_context_command)
+                            if (is_modal_scope_command(commands_.standard(), *id) ||
+                                modal_context_command)
                                 return commands_.execute(*id, contexts);
                         }
                         return false;
                     }
-                    // F1 context help (D-027) routes through std_commands::
-                    // kHelp like any other standard chord (M9/WP-12) — its
-                    // default handler (installed below, in the constructor)
-                    // is exactly the old F1-specific logic this branch used
-                    // to run inline.
+                    // F1 context help (D-027) routes through the standard
+                    // help command like any other standard chord (M9/
+                    // WP-12) — its default handler (installed by the
+                    // constructor) is exactly the old F1-specific logic
+                    // this branch used to run inline.
                     if (auto id = commands_.command_for_key(e.chord))
                         return commands_.execute(*id, focused_command_contexts());
                     return false;

@@ -27,7 +27,7 @@ GraphicsApp::GraphicsApp(ui::Application& app) : app_(app), roles_(ui::intern_st
     build_chrome();
     build_window();
 
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
 
     // F1 answers with something. Silence is the one response a reader
     // cannot tell apart from a key that never arrived.
@@ -38,12 +38,12 @@ GraphicsApp::GraphicsApp(ui::Application& app) : app_(app), roles_(ui::intern_st
 
 void GraphicsApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}});
+    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{std::move(file_menu)}));
 
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kQuit}}});
+    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
     desktop_->dock_bottom(std::move(status));
 }
 

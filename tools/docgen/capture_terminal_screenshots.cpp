@@ -79,22 +79,23 @@ void capture_menu(const std::filesystem::path& directory) {
     ckv::ManualClock clock;
     ckv::ui::Application app(terminal, clock);
     const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
-    constexpr ckv::ui::CommandId kNewTerminal = ckv::ui::kFirstApplicationCommandId;
-    constexpr ckv::ui::CommandId kNewSixelDemo = ckv::ui::kFirstApplicationCommandId + 1;
-    app.commands().add({.id = kNewTerminal, .title = "&New Terminal", .category = "File", .handler = [] {}});
-    app.commands().add({.id = kNewSixelDemo, .title = "New &Sixel Demo", .category = "File", .handler = [] {}});
+    const ckv::ui::CommandId new_terminal = app.commands().declare(
+        {.key = "docgen.new-terminal", .title = "&New Terminal", .category = "File", .handler = [] {}});
+    const ckv::ui::CommandId new_sixel_demo = app.commands().declare(
+        {.key = "docgen.new-sixel-demo", .title = "New &Sixel Demo", .category = "File", .handler = [] {}});
+    const ckv::ui::StandardCommands& standard = app.commands().standard();
     ckv::widgets::ApplicationShell shell(
         app, {.theme = ckv::ui::make_classic_theme(app.roles(), roles),
               .menus = {
-                  {"&File", {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{kNewTerminal}},
-                              ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{kNewSixelDemo}},
+                  {"&File", {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{new_terminal}},
+                              ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{new_sixel_demo}},
                               ckv::widgets::MenuItem{"", ckv::ui::kInvalidCommand, {}, true},
-                              ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kQuit}}}},
-                  {"&Window", {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kNextWindow}},
-                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kPreviousWindow}},
+                              ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{standard.quit}}}},
+                  {"&Window", {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{standard.next_window}},
+                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{standard.previous_window}},
                                 ckv::widgets::MenuItem{"", ckv::ui::kInvalidCommand, {}, true},
-                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kTile}},
-                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{ckv::ui::std_commands::kCascade}}}},
+                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{standard.tile}},
+                                ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{standard.cascade}}}},
               }});
     ckv::term::TerminalEmulator session(ckv::term::embedded_xterm_sixel_profile());
     session.feed_output("ckvision$ printf 'terminal ready'\r\nterminal ready\r\nckvision$ ");

@@ -205,14 +205,14 @@ public:
 
     // --- Context help (ARCHITECTURE.md §5 "Commands and help", D-027) ---
     //
-    // F1 is std_commands::kHelp's default chord (M9/WP-12); its default
+    // F1 is the standard help command's default chord (M9/WP-12); its
     // handler (installed by this constructor) resolves the focused
     // view's nearest help-context key and hands it to this provider —
     // a no-op if none resolves. No provider installed, or F1 consumed
     // earlier in the focus chain: same as any other command whose
     // handler declines to do anything visible. An application wanting
     // completely different F1 behavior replaces the default with its
-    // own commands().set_handler(std_commands::kHelp, ...).
+    // own commands().set_handler(commands().standard().help, ...).
     void set_help_provider(std::function<void(const std::string&)> provider);
 
     // --- Mouse input capture -------------------------------------------
@@ -250,13 +250,13 @@ public:
 
     // Forwards to commands().set_handler()/execute() (M9/WP-10 moved
     // handler storage into CommandRegistry itself, so
-    // CommandRegistry::add()'s .handler field has somewhere to land
+    // CommandRegistry::declare()'s .handler field has somewhere to land
     // without giving the registry an Application dependency) — kept
     // here because callers already have an Application& in scope
-    // everywhere dispatch happens. `id` need not be pre-registered —
-    // a handler may be attached before or after register_command()/
-    // add() — but execute_command on an id with neither a handler nor
-    // a registration is a no-op.
+    // everywhere dispatch happens. `id` need not be declared yet — a
+    // handler may be attached before or after declare() — but
+    // execute_command on an id with neither a handler nor a declaration
+    // is a no-op.
     void set_command_handler(CommandId id, std::function<void()> handler);
     bool command_available(CommandId id);
     bool execute_command(CommandId id);
@@ -369,7 +369,7 @@ public:
     // never falls through to whatever is underneath; Tab/Shift-Tab
     // traversal only cycles views within it; and the keyboard-
     // accelerator command-keymap fallback permits only the scope-safe
-    // standard commands kFocusNext, kFocusPrevious, and kHelp after
+    // standard commands focus_next, focus_previous, and help after
     // the focus chain declines a key. Those commands operate through
     // the active scope/current focus only. Every other command (menu,
     // window, quit, and application-defined accelerators) is excluded;
@@ -486,7 +486,7 @@ private:
     // AFTER it: every widget in the tree holds a Context pointing at
     // roles_/theme_ (D-028) and can reach commands_ via context().app
     // (M9/WP-9…WP-13, e.g. MenuBar's destructor clearing its own
-    // std_commands::kMenu handler). A widget's destructor firing
+    // standard().menu handler). A widget's destructor firing
     // during root_'s own teardown must find these still alive — with
     // commands_/roles_/theme_ declared AFTER root_, they would already
     // be destroyed by the time root_'s children (transitively) run

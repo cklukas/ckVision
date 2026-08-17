@@ -15,9 +15,9 @@ namespace ckv::filebrowser {
 namespace {
 // Every command this app needs is already in the standard set (M9/
 // WP-12/WP-13) — Quit's wording ("&Quit", Alt+X) already matches the
-// framework default exactly, and Tab-switches-pane is just
-// std_commands::kFocusNext's own default behavior (D-029) — so this
-// app has no application-space command ids of its own.
+// framework default exactly, and Tab-switches-pane is just the standard
+// focus_next command's own default behavior (D-029) — so this app
+// declares no commands of its own at all.
 
 // Lists `node`'s own one level of direct subdirectories (M10/WP-22),
 // sorted, storing each child's full path in TreeNode::user_data — the
@@ -62,7 +62,7 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     // cycles focus through the tree, the Splitter (M10/WP-19 — Left/
     // Right there adjusts the pane split), and the file-list pane out
     // of the box (M9/WP-13, D-029) — nothing to wire for that at all.
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
 
     app_.set_focus(tree_);
 
@@ -80,7 +80,7 @@ void FileBrowserApp::build_menu_bar() {
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
     file_menu.items.push_back(widgets::MenuItem{
-        widgets::CommandPresentation{ui::std_commands::kQuit}});
+        widgets::CommandPresentation{app_.commands().standard().quit}});
     menus.push_back(std::move(file_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));
@@ -88,9 +88,9 @@ void FileBrowserApp::build_menu_bar() {
 
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_items({widgets::StatusLineItem{
-                           widgets::CommandPresentation{ui::std_commands::kFocusNext}},
+                           widgets::CommandPresentation{app_.commands().standard().focus_next}},
                        widgets::StatusLineItem{
-                           widgets::CommandPresentation{ui::std_commands::kQuit}}});
+                           widgets::CommandPresentation{app_.commands().standard().quit}}});
     desktop_->dock_bottom(std::move(status));
 }
 

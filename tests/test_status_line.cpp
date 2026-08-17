@@ -28,6 +28,13 @@ using ckv::widgets::StatusLineItem;
 namespace ui = ckv::ui;
 
 namespace {
+
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
 struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
@@ -124,11 +131,11 @@ CK_TEST(clicking_an_items_label_fires_its_command) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kHelp = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kHelp, "Help");
+    const ui::CommandId help_command = app.commands().declare(
+        {.key = "test.help", .title = "Help"});
     bool ran = false;
-    app.set_command_handler(kHelp, [&] { ran = true; });
-    status.set_items({StatusLineItem{"Help", kHelp, 0}});
+    app.set_command_handler(help_command, [&] { ran = true; });
+    status.set_items({StatusLineItem{"Help", help_command, 0}});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -163,12 +170,12 @@ CK_TEST(a_disabled_commands_item_still_fires_execute_command_which_itself_declin
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kHelp = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kHelp, "Help");
-    app.commands().set_enabled_predicate(kHelp, [] { return false; });
+    const ui::CommandId help_command = app.commands().declare(
+        {.key = "test.help", .title = "Help"});
+    app.commands().set_enabled_predicate(help_command, [] { return false; });
     bool ran = false;
-    app.set_command_handler(kHelp, [&] { ran = true; });
-    status.set_items({StatusLineItem{"Help", kHelp, 0}});
+    app.set_command_handler(help_command, [&] { ran = true; });
+    status.set_items({StatusLineItem{"Help", help_command, 0}});
 
     CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
                                               std::nullopt, Modifier::None}));
@@ -183,17 +190,16 @@ CK_TEST(second_item_is_positioned_after_the_first_across_their_shared_padding) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kFirst = ui::kFirstApplicationCommandId;
-    constexpr CommandId kSecond = ui::kFirstApplicationCommandId + 1;
-    app.commands().register_command(kFirst, "First");
-    app.commands().register_command(kSecond, "Second");
+    const CommandId first_command = app.commands().declare({.key = "test.first", .title = "First"});
+    const CommandId second_command =
+        app.commands().declare({.key = "test.second", .title = "Second"});
     bool second_ran = false;
-    app.set_command_handler(kSecond, [&] { second_ran = true; });
+    app.set_command_handler(second_command, [&] { second_ran = true; });
     // An item referencing a command renders the command's registered
     // title, not its own label (M9/WP-11) — these hand-set labels
     // ("AB", "Second") are therefore never shown; the actual rendered
     // text is "First" / "Second" from the registrations above.
-    status.set_items({StatusLineItem{"AB", kFirst, 0}, StatusLineItem{"Second", kSecond, 0}});
+    status.set_items({StatusLineItem{"AB", first_command, 0}, StatusLineItem{"Second", second_command, 0}});
 
     // One cell of leading padding, so "First" occupies columns 1-5, the
     // two-cell gap 6-7, and "Second" starts at 8.
@@ -238,7 +244,7 @@ CK_TEST(command_chords_automatically_use_the_shared_hotkey_accent) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{ui::std_commands::kHelp}}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{standard(app).help}}});
 
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});
@@ -291,13 +297,11 @@ CK_TEST(narrow_status_line_keeps_higher_priority_items_visible_and_clickable) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 8, 1});
-    constexpr CommandId kLow = ui::kFirstApplicationCommandId;
-    constexpr CommandId kHigh = ui::kFirstApplicationCommandId + 1;
-    app.commands().register_command(kLow, "Verbose");
-    app.commands().register_command(kHigh, "Quit");
+    const CommandId low_command = app.commands().declare({.key = "test.low", .title = "Verbose"});
+    const CommandId high_command = app.commands().declare({.key = "test.high", .title = "Quit"});
     bool high_ran = false;
-    app.set_command_handler(kHigh, [&] { high_ran = true; });
-    status.set_items({StatusLineItem{"", kLow, 0}, StatusLineItem{"", kHigh, 10}});
+    app.set_command_handler(high_command, [&] { high_ran = true; });
+    status.set_items({StatusLineItem{"", low_command, 0}, StatusLineItem{"", high_command, 10}});
 
     Surface s(ckv::Size{8, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 8, 1});
@@ -365,15 +369,15 @@ CK_TEST(a_pressed_item_wears_the_themes_selected_colours_chord_accent_included) 
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kFirst = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kFirst, "Help browser...");
-    app.commands().bind_key(*ckv::KeyChord::parse("F1"), kFirst);
-    app.set_command_handler(kFirst, [] {});
+    const ui::CommandId first_command = app.commands().declare(
+        {.key = "test.first", .title = "Help browser..."});
+    app.commands().bind_key(*ckv::KeyChord::parse("F1"), first_command);
+    app.set_command_handler(first_command, [] {});
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     status.on_attached();
-    status.set_items({StatusLineItem{"", kFirst, 0}});
+    status.set_items({StatusLineItem{"", first_command, 0}});
 
     status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 0},
                                      std::nullopt, Modifier::None});
@@ -415,11 +419,10 @@ CK_TEST(a_status_item_acts_on_release_and_can_be_taken_back) {
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
-    constexpr CommandId kRun = ui::kFirstApplicationCommandId + 7;
-    app.commands().register_command(kRun, "Run");
+    const CommandId run_command = app.commands().declare({.key = "test.run", .title = "Run"});
     int runs = 0;
-    app.set_command_handler(kRun, [&] { ++runs; });
-    status.set_items({StatusLineItem{"Run", kRun, 0}});
+    app.set_command_handler(run_command, [&] { ++runs; });
+    status.set_items({StatusLineItem{"Run", run_command, 0}});
 
     const auto at = [](int x, ckv::MouseAction action) {
         return ckv::MouseEvent{action, ckv::MouseButton::Left, Point{x, 0}, std::nullopt,
@@ -447,16 +450,16 @@ CK_TEST(a_surface_stated_chord_replaces_the_registrys_and_keeps_its_accent) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kOpen = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kOpen, "Window List");
-    app.commands().bind_key(*ckv::KeyChord::parse("F6"), kOpen);
-    app.set_command_handler(kOpen, [] {});
+    const ui::CommandId open_command = app.commands().declare(
+        {.key = "test.open", .title = "Window List"});
+    app.commands().bind_key(*ckv::KeyChord::parse("F6"), open_command);
+    app.set_command_handler(open_command, [] {});
 
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     status.on_attached();
-    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{kOpen, "windows", "^B w"}}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{open_command, "windows", "^B w"}}});
 
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});
@@ -466,7 +469,7 @@ CK_TEST(a_surface_stated_chord_replaces_the_registrys_and_keeps_its_accent) {
     // The registry's own chord is not advertised here...
     CK_CHECK(row.find("F6") == std::string::npos);
     // ...and it still works everywhere else: this is presentation only.
-    CK_CHECK(app.commands().command_for_key(*ckv::KeyChord::parse("F6")) == kOpen);
+    CK_CHECK(app.commands().command_for_key(*ckv::KeyChord::parse("F6")) == open_command);
 
     // The stated chord is what receives the hotkey accent, not the label.
     const ckv::Style hotkey = f.theme.resolve(f.roles.hotkey);
@@ -479,16 +482,16 @@ CK_TEST(an_item_without_a_stated_chord_still_asks_the_registry) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kOpen = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kOpen, "Window List");
-    app.commands().bind_key(*ckv::KeyChord::parse("F6"), kOpen);
-    app.set_command_handler(kOpen, [] {});
+    const ui::CommandId open_command = app.commands().declare(
+        {.key = "test.open", .title = "Window List"});
+    app.commands().bind_key(*ckv::KeyChord::parse("F6"), open_command);
+    app.set_command_handler(open_command, [] {});
 
     StatusLine status;
     status.set_context(ui::Context{&f.theme, &f.registry, &app});
     status.set_bounds(Rect{0, 0, 40, 1});
     status.on_attached();
-    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{kOpen, "windows"}}});
+    status.set_items({StatusLineItem{ckv::widgets::CommandPresentation{open_command, "windows"}}});
 
     Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 40, 1});

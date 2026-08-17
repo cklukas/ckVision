@@ -303,7 +303,7 @@ on the status line, context-sensitive status hints, command retraction — see
 the plan's revised WP-10; the
 Key→display-name table with `KeyChord` parse/format, and menus/status
 lines rendering title, chord, and enablement live from the registry;
-the standard command set below id 4096 registered by `Application`;
+the standard command set declared by every `CommandRegistry`;
 the default keymap (Tab/Shift-Tab traversal, F10 menu, window
 management) over rebindable bindings; `Application::run()` and
 `request_quit()`; the modality stack with event scoping; explicitly named

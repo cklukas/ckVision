@@ -8,19 +8,23 @@
 
 namespace ckv::hello {
 
-constexpr ui::CommandId kCmdGreeting = ui::kFirstApplicationCommandId, kCmdQuit = ui::kFirstApplicationCommandId + 1;
-
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
-    app_.commands().add({.id = kCmdGreeting, .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
-    app_.commands().add({.id = kCmdQuit, .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
+    // Each command names itself; the registry hands back the id this
+    // application then references. Nothing here picks a number.
+    const ui::CommandId greeting_command = app_.commands().declare({.key = "hello.greeting", .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
+    // Its own quit command rather than the framework's, so this example
+    // can present the concept as "Exit" in the reference vocabulary it
+    // follows -- see docs/standard-commands.md on when that is the right
+    // call and when CommandPresentation is.
+    const ui::CommandId quit_command = app_.commands().declare({.key = "hello.quit", .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
     widgets::ApplicationShell shell(app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
                                            .menus = {{"&File",
-                                                      {widgets::MenuItem{widgets::CommandPresentation{kCmdGreeting}},
+                                                      {widgets::MenuItem{widgets::CommandPresentation{greeting_command}},
                                                        widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                                       widgets::MenuItem{widgets::CommandPresentation{kCmdQuit, "E&xit"}}}}},
+                                                       widgets::MenuItem{widgets::CommandPresentation{quit_command, "E&xit"}}}}},
                                            .status_items = {
-                                               widgets::StatusLineItem{widgets::CommandPresentation{kCmdQuit, "&Quit"}},
-                                               widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}}}});
+                                               widgets::StatusLineItem{widgets::CommandPresentation{quit_command, "&Quit"}},
+                                               widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}}}});
     desktop_ = &shell.desktop();
 
     // F1 answers with something. Silence is the one response a reader

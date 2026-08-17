@@ -70,14 +70,14 @@ std::string home_directory() {
 
 TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     const ui::StandardRoles roles = ui::intern_standard_roles(app_.roles());
-    app_.commands().add(ui::CommandDescriptor{
-        .id = kNewTerminalCommand,
+    new_terminal_command_ = app_.commands().declare(ui::CommandDescriptor{
+        .key = std::string(kNewTerminalKey),
         .title = "&New Terminal",
         .category = "File",
         .handler = [this] { (void)new_terminal(); },
     });
-    app_.commands().add(ui::CommandDescriptor{
-        .id = kNewSixelDemoCommand,
+    new_sixel_demo_command_ = app_.commands().declare(ui::CommandDescriptor{
+        .key = std::string(kNewSixelDemoKey),
         .title = "New &Sixel Demo",
         .category = "File",
         .handler = [this] { (void)new_sixel_demo(); },
@@ -86,20 +86,20 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     widgets::MenuBarItem file_menu{
         "&File",
         {
-            widgets::MenuItem{widgets::CommandPresentation{kNewTerminalCommand}},
-            widgets::MenuItem{widgets::CommandPresentation{kNewSixelDemoCommand}},
+            widgets::MenuItem{widgets::CommandPresentation{new_terminal_command_}},
+            widgets::MenuItem{widgets::CommandPresentation{new_sixel_demo_command_}},
             widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}},
+            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}},
         },
     };
     widgets::MenuBarItem window_menu{
         "&Window",
         {
-            widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kNextWindow}},
-            widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kPreviousWindow}},
+            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
+            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().previous_window}},
             widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-            widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kTile}},
-            widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kCascade}},
+            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().tile}},
+            widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().cascade}},
         },
     };
     // A focused terminal forwards its keys to the child, F1 included --
@@ -107,15 +107,16 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     // About where it can always be reached.
     widgets::MenuBarItem help_menu{
         "&Help",
-        {widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kHelp}}},
+        {widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().help,
+                                                        "&About..."}}},
     };
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles),
                .menus = {std::move(file_menu), std::move(window_menu), std::move(help_menu)},
                .status_items = {
-                   widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
-                   widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kNextWindow}},
-                   widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kPreviousWindow}},
+                   widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
+                   widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
+                   widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().previous_window}},
                    widgets::StatusLineItem{"Ctrl+Alt+Space: parent commands"},
                }});
     desktop_ = &shell.desktop();

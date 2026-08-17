@@ -2,7 +2,7 @@
 //
 // MenuBar + DropdownMenu (ARCHITECTURE.md §5 "Menus" / plans/
 // widgets.md M5 baseline): F10-equivalent activation (activate(),
-// installed as ui::std_commands::kMenu's default handler when
+// installed as the standard menu command's default handler when
 // unclaimed — M9/WP-13, D-029 — routing through the command keymap
 // like every other accelerator in this framework), mnemonic letters,
 // Left/Right/Up/Down navigation with wrapping, Enter/mnemonic to
@@ -194,7 +194,6 @@ private:
         pointer_navigation_ = std::move(navigation);
     }
     bool has_check_column() const noexcept;
-    bool has_submenu_column() const noexcept;
     ui::CommandId item_command(const MenuItem& item) const noexcept;
     std::string item_presentation_label(const MenuItem& item) const;
 
@@ -229,10 +228,10 @@ struct MenuBarItem {
 // Desktop::dock_top — see gallery_app.cpp).
 //
 // F10 activation (M9/WP-13, D-029): on_attached() installs itself as
-// ui::std_commands::kMenu's default handler — but ONLY if nothing has
-// claimed kMenu yet (CommandRegistry::has_handler) — so an application
-// that calls set_handler(kMenu, ...) itself before attaching a MenuBar
-// is never silently overridden. The destructor clears the handler
+// the standard menu command's default handler — but ONLY if nothing has
+// claimed it yet (CommandRegistry::has_handler) — so an application
+// that calls set_handler(commands().standard().menu, ...) itself before
+// attaching a MenuBar is never silently overridden. The destructor clears the handler
 // again if this instance was the one that installed it, so a
 // destroyed MenuBar can never be reached through a stale handler.
 // A trailing view that behaves as a title on the bar rather than as

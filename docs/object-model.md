@@ -51,7 +51,7 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     build_chrome();
     build_window();
 
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
     app_.set_focus(splitter_);
 ```
 <!-- /ckvision-snippet -->

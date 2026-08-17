@@ -94,15 +94,39 @@ authority repair; the `provenance_check` and
 `provenance_checker_self_test` CTest gates are mandatory lexical safeguards,
 not proof of provenance.
 
-**D-013 — Commands are first-class.**
-32-bit `CommandId`: ids below 4096 are reserved for the library's
-standard commands; applications own the space above; extension libraries
-allocate documented ranges through the registry at registration time.
-Metadata (title, category, default chord), scheme-based rebindable
+**D-013 — Commands are first-class, and the registry assigns their ids.**
+A command's identity is a namespaced string key it declares itself under
+(`"ckv.window.close"`, `"editor.save"`); `CommandRegistry::declare()`
+returns the `CommandId` standing for that key, taken from a monotonic
+per-registry counter. Nobody picks a number, so no two parties can pick
+the same one; the prefix of the key belongs to the declaring party.
+`CommandId` is an `enum class` over `std::int32_t`, which makes
+`base + index` a compile error rather than a discouraged habit.
+`declare()` is idempotent per key (a re-declaration returns the same id
+and replaces the metadata) and `withdraw()` retracts one, with the key
+keeping its id reserved so a recycled handle can never come to mean
+something else. Ids are per-registry, per-run handles: everything
+durable — configuration, menu definitions, cross-process references —
+keys on the string, via `id_for()`/`key_for()`. Metadata (title,
+category, default chord, palette visibility), scheme-based rebindable
 keymaps, and context-scoped enablement — a context is a named scope
 declared by application or widget, activated by focus ancestry or
-explicit push/pop. Menus and status lines render from the registry. No
-numeric limits that force id-space rationing.
+explicit push/pop. Menus and status lines render from the registry;
+`widgets::CommandPalette` filters on the declared
+`CommandVisibility`, because "should the reader see this?" is metadata
+only the declaring party can state. No numeric limits that force id-space
+rationing.
+*Supersedes* the original partitioned space (ids below 4096 reserved for
+the library, applications above, extension libraries "allocating
+documented ranges through the registry at registration time"). That
+allocation was never implemented, so every party kept picking numbers
+from a base of its own and the partitions duly collided; the boundary
+also became load-bearing for semantics it could not express, with the
+command palette deciding visibility by comparing an id against 4096.
+*Rejected:* adding a fourth partition for widgets and extension
+libraries — it re-runs the same negotiation with the next party, breaks
+existing consumers of the application range, and leaves the palette
+doing arithmetic.
 
 **D-014 — Golden styled-cell dumps are the specification medium.**
 A stable, diff-friendly text format for frames (glyphs + style
@@ -266,8 +290,8 @@ Desktop raise/activate the window containing any clicked descendant),
 a working zoom control (Desktop supplies the zoom area), terminal
 resize propagation to root children (fill-the-root default), a default
 keymap (Tab/Shift-Tab traversal, F10 menu, window-management chords)
-over the standard command set (ids below 4096, D-013 — registered by
-`Application` at construction), and `run()`/`request_quit()` over
+over the standard command set (D-013 — declared by every
+`CommandRegistry` at construction and reached through `standard()`), and `run()`/`request_quit()` over
 `step()`/`wake()`. Every default is an ordinary rebindable binding or
 a documented opt-out — an application can clear or replace any of it;
 a focused view consuming a key already preempts the keymap by routing

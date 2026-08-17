@@ -22,6 +22,13 @@ using ckv::ui::Application;
 
 namespace {
 
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
+
 struct Fixture {
     // Graphics-capable, because the point of this example is graphics: a
     // terminal without them draws every raster's fallback instead, which
@@ -47,13 +54,13 @@ CK_TEST(terminal_example_exposes_new_terminal_and_window_arrangement_commands) {
     auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.example.desktop().top_dock());
     CK_CHECK(menu_bar != nullptr);
     CK_CHECK(menu_bar->menus().size() == 3U);
-    CK_CHECK(menu_has_command(menu_bar->menus()[0], ckv::terminal_example::TerminalApp::kNewTerminalCommand));
-    CK_CHECK(menu_has_command(menu_bar->menus()[0], ckv::terminal_example::TerminalApp::kNewSixelDemoCommand));
-    CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kNextWindow));
-    CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kPreviousWindow));
-    CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kTile));
-    CK_CHECK(menu_has_command(menu_bar->menus()[1], ckv::ui::std_commands::kCascade));
-    CK_CHECK(menu_has_command(menu_bar->menus()[2], ckv::ui::std_commands::kHelp));
+    CK_CHECK(menu_has_command(menu_bar->menus()[0], f.example.new_terminal_command()));
+    CK_CHECK(menu_has_command(menu_bar->menus()[0], f.example.new_sixel_demo_command()));
+    CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).next_window));
+    CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).previous_window));
+    CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).tile));
+    CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).cascade));
+    CK_CHECK(menu_has_command(menu_bar->menus()[2], standard(f.app).help));
 }
 
 CK_TEST(terminal_example_opens_switches_arranges_and_closes_independent_terminal_windows) {
@@ -62,15 +69,15 @@ CK_TEST(terminal_example_opens_switches_arranges_and_closes_independent_terminal
     CK_CHECK(f.example.desktop().windows().size() == 1U);
     CK_CHECK(f.example.desktop().windows()[0]->title() == "Terminal 1");
 
-    CK_CHECK(f.app.commands().execute(ckv::terminal_example::TerminalApp::kNewTerminalCommand));
+    CK_CHECK(f.app.commands().execute(f.example.new_terminal_command()));
     CK_CHECK(f.example.desktop().windows().size() == 2U);
     ckv::widgets::Window* const second = f.example.desktop().active_window();
     CK_CHECK(second != nullptr);
     CK_CHECK(second->title() == "Terminal 2");
 
-    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kPreviousWindow));
+    CK_CHECK(f.app.commands().execute(standard(f.app).previous_window));
     CK_CHECK(f.example.desktop().active_window()->title() == "Terminal 1");
-    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kNextWindow));
+    CK_CHECK(f.app.commands().execute(standard(f.app).next_window));
     CK_CHECK(f.example.desktop().active_window() == second);
 
     CK_CHECK(dynamic_cast<ckv::widgets::TerminalView*>(second->content()) != nullptr);
@@ -78,13 +85,13 @@ CK_TEST(terminal_example_opens_switches_arranges_and_closes_independent_terminal
     CK_CHECK(f.app.focused() == f.example.desktop().top_dock());
     f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::F6, ckv::Modifier::None, ""}});
     CK_CHECK(f.example.desktop().active_window()->title() == "Terminal 1");
-    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kNextWindow));
+    CK_CHECK(f.app.commands().execute(standard(f.app).next_window));
     CK_CHECK(f.example.desktop().active_window() == second);
 
-    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kTile));
+    CK_CHECK(f.app.commands().execute(standard(f.app).tile));
     CK_CHECK(f.example.desktop().windows()[0]->bounds().width == 50);
     CK_CHECK(f.example.desktop().windows()[1]->bounds().width == 50);
-    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kCascade));
+    CK_CHECK(f.app.commands().execute(standard(f.app).cascade));
     CK_CHECK(f.example.desktop().windows()[0]->bounds().x < f.example.desktop().windows()[1]->bounds().x);
 
     auto* const second_view = dynamic_cast<ckv::widgets::TerminalView*>(second->content());
@@ -120,7 +127,7 @@ CK_TEST(terminal_example_public_mouse_menu_path_opens_a_new_terminal) {
 CK_TEST(terminal_example_opens_a_contained_sixel_demo_in_an_independent_window) {
     Fixture f;
     f.app.step(0);
-    CK_CHECK(f.app.commands().execute(ckv::terminal_example::TerminalApp::kNewSixelDemoCommand));
+    CK_CHECK(f.app.commands().execute(f.example.new_sixel_demo_command()));
     CK_CHECK(f.example.desktop().windows().size() == 2U);
     CK_CHECK(f.example.desktop().active_window()->title() == "Sixel Demo 2");
     CK_CHECK(dynamic_cast<ckv::widgets::TerminalView*>(f.example.desktop().active_window()->content()) != nullptr);
@@ -164,7 +171,7 @@ CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
     // under a shell prompt.
     Fixture f;
     f.app.step(0);
-    CK_CHECK(f.app.commands().execute(ckv::terminal_example::TerminalApp::kNewSixelDemoCommand));
+    CK_CHECK(f.app.commands().execute(f.example.new_sixel_demo_command()));
     auto* view = dynamic_cast<ckv::widgets::TerminalView*>(f.example.desktop().active_window()->content());
     CK_CHECK(view != nullptr);
     // Waited out in real time rather than in iterations: a child process
@@ -210,7 +217,7 @@ CK_TEST(the_help_command_answers_with_an_about_box) {
     Fixture f;
     f.app.step(0);
     CK_CHECK(!f.app.is_modal());
-    CK_CHECK(f.app.commands().execute(ckv::ui::std_commands::kHelp));
+    CK_CHECK(f.app.commands().execute(standard(f.app).help));
     f.app.step(0);
     CK_CHECK(f.app.is_modal());
 }

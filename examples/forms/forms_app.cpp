@@ -47,7 +47,7 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     build_chrome();
     build_window();
 
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
     app_.set_focus(name_input_);
 
     // F1 answers with something. Silence is the one response a reader
@@ -59,7 +59,7 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 
 void FormsApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}});
+    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
 
     widgets::MenuBarItem help_menu{"&Help", {}};
     help_menu.items.push_back(widgets::MenuItem{"&Forms help", ui::kInvalidCommand, [this] { present_help(); }});
@@ -68,9 +68,9 @@ void FormsApp::build_chrome() {
         std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(help_menu)}));
 
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kHelp}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kQuit}}});
+    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().help}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
     status->set_hint_provider([](const std::string& key) {
         if (key == "forms") return std::string{"F1 opens the forms help topic"};
         return std::string{};

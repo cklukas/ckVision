@@ -23,12 +23,6 @@
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::workbench {
-namespace {
-
-constexpr ui::CommandId kBuildProject = ui::kFirstApplicationCommandId;
-
-}  // namespace
-
 WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
 
@@ -39,12 +33,17 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
     build_chrome();
     build_window();
 
-    // CommandPalette deliberately presents application commands, rather than
-    // framework navigation commands. Give the workbench's Help tab a genuine
-    // app-level action so the example demonstrates that contract directly.
-    app_.commands().register_command(kBuildProject, "&Build project", "Build", KeyChord{Key::F7, Modifier::None, ""});
-    app_.commands().set_handler(kBuildProject, [] {});
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+    // CommandPalette presents the commands that declare themselves
+    // browsable, which is the application's own vocabulary rather than
+    // the framework's navigation plumbing. Give the workbench's Help tab
+    // a genuine app-level action so the example demonstrates that
+    // contract directly.
+    app_.commands().declare({.key = "workbench.build-project",
+                             .title = "&Build project",
+                             .category = "Build",
+                             .chord = "F7",
+                             .handler = [] {}});
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
     app_.set_focus(memo_);
 
     // F1 answers with something. Silence is the one response a reader
@@ -56,18 +55,18 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
 
 void WorkbenchApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}});
+    file_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kNextWindow}});
-    window_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kPreviousWindow}});
+    window_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().next_window}});
+    window_menu.items.push_back(widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().previous_window}});
 
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(window_menu)}));
 
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kFocusNext}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kQuit}}});
+    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().focus_next}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
     desktop_->dock_bottom(std::move(status));
 }
 
@@ -112,7 +111,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
     toolbar->set_bounds(Rect{1, 14, 34, 1});
-    toolbar->set_commands({ui::std_commands::kMenu, ui::std_commands::kQuit});
+    toolbar->set_commands({app_.commands().standard().menu, app_.commands().standard().quit});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 

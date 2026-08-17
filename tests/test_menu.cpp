@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/menu.hpp"
 
+#include "cvision/core/text.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
@@ -35,6 +36,13 @@ using ckv::widgets::show_context_menu_for_focus;
 namespace ui = ckv::ui;
 
 namespace {
+
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
 struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
@@ -80,10 +88,10 @@ CK_TEST(dropdown_with_the_first_item_disabled_skips_it_at_construction) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kDisabled = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kDisabled, "Disabled");
-    app.commands().set_enabled_predicate(kDisabled, [] { return false; });
-    auto menu = make_dropdown(f, app, {{"One", kDisabled, nullptr, false, {}, {}},
+    const ui::CommandId disabled_command = app.commands().declare(
+        {.key = "test.disabled", .title = "Disabled"});
+    app.commands().set_enabled_predicate(disabled_command, [] { return false; });
+    auto menu = make_dropdown(f, app, {{"One", disabled_command, nullptr, false, {}, {}},
                                         {"Two", ui::kInvalidCommand, nullptr, false, {}, {}}});
     CK_CHECK(menu->highlighted() == 1);
 }
@@ -117,13 +125,13 @@ CK_TEST(navigation_skips_disabled_items_and_separators) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kDisabled = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kDisabled, "Disabled");
-    app.commands().set_enabled_predicate(kDisabled, [] { return false; });
+    const ui::CommandId disabled_command = app.commands().declare(
+        {.key = "test.disabled", .title = "Disabled"});
+    app.commands().set_enabled_predicate(disabled_command, [] { return false; });
     auto menu = make_dropdown(f, app,
                                {{"One", ui::kInvalidCommand, nullptr, false, {}, {}},
                                 {"", ui::kInvalidCommand, nullptr, true, {}, {}},  // separator
-                                {"Disabled", kDisabled, nullptr, false, {}, {}},
+                                {"Disabled", disabled_command, nullptr, false, {}, {}},
                                 {"Four", ui::kInvalidCommand, nullptr, false, {}, {}}});
     CK_CHECK(menu->highlighted() == 0);
     menu->on_key(key(Key::Down));
@@ -149,13 +157,13 @@ CK_TEST(enter_activates_the_highlighted_items_command) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "Save");
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "Save"});
     bool ran = false;
-    app.set_command_handler(kSave, [&] { ran = true; });
+    app.set_command_handler(save_command, [&] { ran = true; });
     bool dismissed = false;
     auto reason = ckv::widgets::MenuDismissReason::Cancelled;
-    auto menu = make_dropdown(f, app, {{"&Save", kSave, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {{"&Save", save_command, nullptr, false, {}, {}}});
     menu->on_dismiss = [&](ckv::widgets::MenuDismissReason r) {
         dismissed = true;
         reason = r;
@@ -213,12 +221,12 @@ CK_TEST(clicking_a_disabled_item_does_not_activate_it) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kDisabled = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kDisabled, "Disabled");
-    app.commands().set_enabled_predicate(kDisabled, [] { return false; });
+    const ui::CommandId disabled_command = app.commands().declare(
+        {.key = "test.disabled", .title = "Disabled"});
+    app.commands().set_enabled_predicate(disabled_command, [] { return false; });
     bool ran = false;
-    app.set_command_handler(kDisabled, [&] { ran = true; });
-    auto menu = make_dropdown(f, app, {{"Disabled", kDisabled, nullptr, false, {}, {}}});
+    app.set_command_handler(disabled_command, [&] { ran = true; });
+    auto menu = make_dropdown(f, app, {{"Disabled", disabled_command, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{5, 5, 20, 1});
     menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{6, 5},
                                     std::nullopt, Modifier::None});
@@ -296,11 +304,11 @@ CK_TEST(an_item_referencing_a_command_renders_the_registered_title_not_its_own_l
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "&Save");
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "&Save"});
     // The label below ("Ignored") must never appear anywhere — an item
     // referencing a command carries no label text of its own.
-    auto menu = make_dropdown(f, app, {{"Ignored", kSave, nullptr, false, {}, {}}});
+    auto menu = make_dropdown(f, app, {{"Ignored", save_command, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -317,9 +325,9 @@ CK_TEST(an_item_referencing_a_command_with_no_chord_bound_shows_no_chord_hint) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "&Save");  // no default_chord
-    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false, {}, {}}});
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "&Save"});  // no default_chord
+    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -336,10 +344,9 @@ CK_TEST(an_item_referencing_a_command_with_a_bound_chord_shows_it_right_aligned)
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "&Save", "File",
-                                      KeyChord{Key::Char, Modifier::Ctrl, "s"});
-    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false, {}, {}}});
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "&Save", .category = "File", .chord = "Ctrl+S"});
+    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -362,14 +369,13 @@ CK_TEST(a_runtime_rebind_changes_the_rendered_chord_hint_without_touching_the_it
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "&Save", "File",
-                                      KeyChord{Key::Char, Modifier::Ctrl, "s"});
-    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false, {}, {}}});
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "&Save", .category = "File", .chord = "Ctrl+S"});
+    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     app.commands().unbind_key(KeyChord{Key::Char, Modifier::Ctrl, "s"});
-    app.commands().bind_key(KeyChord{Key::F5, Modifier::None, ""}, kSave);
+    app.commands().bind_key(KeyChord{Key::F5, Modifier::None, ""}, save_command);
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
     Painter painter(s, Rect{0, 0, 20, 1});
@@ -385,10 +391,9 @@ CK_TEST(a_narrow_dropdown_clips_label_and_chord_columns_without_leaving_garbage)
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "&Very Long Save Command", "File",
-                                      KeyChord{Key::Char, Modifier::Ctrl, "s"});
-    auto menu = make_dropdown(f, app, {{"", kSave, nullptr, false, {}, {}}});
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "&Very Long Save Command", .category = "File", .chord = "Ctrl+S"});
+    auto menu = make_dropdown(f, app, {{"", save_command, nullptr, false, {}, {}}});
     menu->set_bounds(Rect{0, 0, 5, 1});
 
     Surface s(ckv::Size{5, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -407,11 +412,10 @@ CK_TEST(mnemonic_navigation_uses_the_registered_title_not_the_items_own_label) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
     bool ran = false;
-    app.commands().register_command(kSave, "&Save");
-    app.set_command_handler(kSave, [&] { ran = true; });
-    auto menu = make_dropdown(f, app, {{"&Ignored", kSave, nullptr, false, {}, {}}});
+    const CommandId save_command = app.commands().declare({.key = "test.save", .title = "&Save"});
+    app.set_command_handler(save_command, [&] { ran = true; });
+    auto menu = make_dropdown(f, app, {{"&Ignored", save_command, nullptr, false, {}, {}}});
 
     CK_CHECK(!menu->on_key(key(Key::Char, "i")));
     CK_CHECK(!ran);
@@ -484,17 +488,17 @@ CK_TEST(choosing_an_item_hands_focus_back_before_the_command_runs) {
     other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
     mf.app.set_focus(other);
 
-    constexpr ui::CommandId kAbout = ui::kFirstApplicationCommandId;
-    mf.app.commands().register_command(kAbout, "About");
+    const ui::CommandId about_command = mf.app.commands().declare(
+        {.key = "test.about", .title = "About"});
     const ckv::ui::View* focused_when_command_ran = nullptr;
     bool ran = false;
-    mf.app.set_command_handler(kAbout, [&] {
+    mf.app.set_command_handler(about_command, [&] {
         ran = true;
         focused_when_command_ran = mf.app.focused();
     });
 
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{
-        {"&Help", {{"&About", kAbout, nullptr, false, {}, {}}}}});
+        {"&Help", {{"&About", about_command, nullptr, false, {}, {}}}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
 
     bar->activate();
@@ -748,13 +752,12 @@ CK_TEST(escape_closes_an_open_dropdown_first_without_deactivating_the_bar) {
 
 CK_TEST(menu_bar_routes_item_mnemonics_to_its_open_dropdown) {
     MenuBarFixture mf;
-    constexpr CommandId kOpen = ui::kFirstApplicationCommandId;
     bool opened = false;
-    mf.app.commands().register_command(kOpen, "&Open");
-    mf.app.commands().set_handler(kOpen, [&] { opened = true; });
+    const CommandId open_command = mf.app.commands().declare(
+        {.key = "test.open", .title = "&Open", .handler = [&] { opened = true; }});
 
     auto bar_owned = std::make_unique<MenuBar>(
-        std::vector<MenuBarItem>{ {"&File", {{"", kOpen, nullptr, false, {}, {}}}} });
+        std::vector<MenuBarItem>{ {"&File", {{"", open_command, nullptr, false, {}, {}}}} });
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
     CK_CHECK(bar->on_key(key(Key::Enter)));
@@ -880,6 +883,39 @@ CK_TEST(a_popup_dropdown_has_an_opaque_classic_frame_and_padded_item_interior) {
     CK_CHECK(surface.at(ckv::Point{width.preferred - 1, 2}).grapheme() == "┤");
 }
 
+CK_TEST(a_submenu_marker_and_a_chord_hint_end_at_the_same_column) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    MenuItem opens_submenu{"&New", ui::kInvalidCommand, nullptr, false, {}, {}};
+    opens_submenu.submenu = {MenuItem{"&Child", ui::kInvalidCommand, [] {}, false, {}, {}}};
+    auto menu = make_dropdown(
+        f, app, {opens_submenu, MenuItem{ckv::widgets::CommandPresentation{standard(app).quit}}});
+    const int width = menu->horizontal_size_hint().preferred;
+    const int height = menu->vertical_size_hint().preferred;
+    menu->set_bounds(Rect{0, 0, width, height});
+
+    Surface surface(ckv::Size{width, height}, ckv::Cell::from_grapheme("P", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, width, height});
+    menu->draw(painter);
+
+    // One column of padding inside the frame on both sides, so the last
+    // column any item may write to is the same one for every item.
+    const int content_right = width - 3;
+    // The pointer the convention uses, rather than an ASCII '>' that reads
+    // as text somebody typed into the label.
+    CK_CHECK(surface.at(ckv::Point{content_right, 1}).grapheme() == "►");
+    // Alt+X, the standard quit chord, ends in that very column: a menu
+    // carrying both reads as one right-hand column, not two ragged ones.
+    CK_CHECK(surface.at(ckv::Point{content_right, 2}).grapheme() == "X");
+    CK_CHECK(surface.at(ckv::Point{content_right + 1, 1}).grapheme() == " ");
+    CK_CHECK(surface.at(ckv::Point{content_right + 1, 2}).grapheme() == " ");
+    // And no item is charged for a column it does not use: the widest item
+    // is exactly what the menu is wide enough for.
+    CK_CHECK(width == 1 + 1 + ckv::text::text_width("Quit") + 2 + ckv::text::text_width("Alt+X") + 1 + 1);
+}
+
 CK_TEST(a_context_menu_keeps_its_frame_inside_the_desktop_at_the_bottom_right_edge) {
     MenuBarFixture mf;
     DropdownMenu* menu = show_context_menu(
@@ -900,25 +936,25 @@ CK_TEST(a_context_menu_keeps_its_frame_inside_the_desktop_at_the_bottom_right_ed
 
 CK_TEST(attaching_a_menu_bar_installs_itself_as_f10s_default_handler) {
     MenuBarFixture mf;
-    CK_CHECK(!mf.app.commands().has_handler(ui::std_commands::kMenu));
+    CK_CHECK(!mf.app.commands().has_handler(standard(mf.app).menu));
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
-    CK_CHECK(mf.app.commands().has_handler(ui::std_commands::kMenu));
+    CK_CHECK(mf.app.commands().has_handler(standard(mf.app).menu));
     CK_CHECK(!bar->active());
 
-    mf.app.commands().execute(ui::std_commands::kMenu);
+    mf.app.commands().execute(standard(mf.app).menu);
     CK_CHECK(bar->active());
 }
 
 CK_TEST(f10_restarts_top_level_mnemonic_navigation_after_a_previous_menu) {
     MenuBarFixture mf;
-    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {{"Open", 1}}},
-                                                                          {"&Appearance", {{"Colors", 2}}}});
+    auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {{"Open"}}},
+                                                                          {"&Appearance", {{"Colors"}}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
-    mf.app.commands().execute(ui::std_commands::kMenu);
+    mf.app.commands().execute(standard(mf.app).menu);
     CK_CHECK(bar->on_key(key(Key::Right)));
 
-    mf.app.commands().execute(ui::std_commands::kMenu);
+    mf.app.commands().execute(standard(mf.app).menu);
     CK_CHECK(bar->on_key(key(Key::Char, "a")));
     CK_CHECK(mf.desktop.popups().size() == 1);
     if (mf.desktop.popups().size() != 1) return;
@@ -931,12 +967,12 @@ CK_TEST(f10_restarts_top_level_mnemonic_navigation_after_a_previous_menu) {
 CK_TEST(a_pre_existing_kmenu_handler_is_not_overridden_by_attaching_a_menu_bar) {
     MenuBarFixture mf;
     bool custom_ran = false;
-    mf.app.commands().set_handler(ui::std_commands::kMenu, [&] { custom_ran = true; });
+    mf.app.commands().set_handler(standard(mf.app).menu, [&] { custom_ran = true; });
 
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
 
-    mf.app.commands().execute(ui::std_commands::kMenu);
+    mf.app.commands().execute(standard(mf.app).menu);
     CK_CHECK(custom_ran);
     // the bar's own activate() never ran — its handler was never installed
     CK_CHECK(!bar->active());
@@ -946,14 +982,14 @@ CK_TEST(destroying_the_bar_clears_the_default_handler_it_installed) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
-    CK_CHECK(mf.app.commands().has_handler(ui::std_commands::kMenu));
+    CK_CHECK(mf.app.commands().has_handler(standard(mf.app).menu));
 
     mf.desktop.remove_child(bar).reset();  // destroys the MenuBar
 
-    CK_CHECK(!mf.app.commands().has_handler(ui::std_commands::kMenu));
+    CK_CHECK(!mf.app.commands().has_handler(standard(mf.app).menu));
     // A stale handler calling into freed memory would crash (or, under
     // ASan, report use-after-free) here rather than just returning false.
-    CK_CHECK(!mf.app.commands().execute(ui::std_commands::kMenu));
+    CK_CHECK(!mf.app.commands().execute(standard(mf.app).menu));
 }
 
 CK_TEST(a_second_menu_bar_that_finds_kmenu_already_claimed_does_not_clear_it_on_destruction) {
@@ -968,9 +1004,9 @@ CK_TEST(a_second_menu_bar_that_finds_kmenu_already_claimed_does_not_clear_it_on_
     // never installed its own handler — destroying it must not clear
     // the one bar1 is relying on.
     mf.desktop.remove_child(bar2).reset();
-    CK_CHECK(mf.app.commands().has_handler(ui::std_commands::kMenu));
+    CK_CHECK(mf.app.commands().has_handler(standard(mf.app).menu));
 
-    mf.app.commands().execute(ui::std_commands::kMenu);
+    mf.app.commands().execute(standard(mf.app).menu);
     CK_CHECK(bar1->active());  // still routes to bar1, the true owner
 }
 
@@ -1267,11 +1303,11 @@ CK_TEST(a_menu_item_can_state_the_chord_its_application_actually_uses) {
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
-    constexpr CommandId kSave = ui::kFirstApplicationCommandId;
-    app.commands().register_command(kSave, "&Save", "File", KeyChord{Key::Char, Modifier::Ctrl, "s"});
+    const ui::CommandId save_command = app.commands().declare(
+        {.key = "test.save", .title = "&Save", .category = "File", .chord = "Ctrl+S"});
     auto menu = make_dropdown(
         f, app,
-        {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{kSave, "&Save", "^B s"}}});
+        {ckv::widgets::MenuItem{ckv::widgets::CommandPresentation{save_command, "&Save", "^B s"}}});
     menu->set_bounds(Rect{0, 0, 20, 1});
 
     Surface s(ckv::Size{20, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
@@ -1284,5 +1320,5 @@ CK_TEST(a_menu_item_can_state_the_chord_its_application_actually_uses) {
     CK_CHECK(hint_pos + 4 == 19);  // still right-aligned
     CK_CHECK(row.find("Ctrl+S") == std::string::npos);
     // Presentation only: the registry binding is untouched and still fires.
-    CK_CHECK(app.commands().command_for_key(KeyChord{Key::Char, Modifier::Ctrl, "s"}) == kSave);
+    CK_CHECK(app.commands().command_for_key(KeyChord{Key::Char, Modifier::Ctrl, "s"}) == save_command);
 }

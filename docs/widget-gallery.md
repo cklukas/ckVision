@@ -894,7 +894,6 @@ The Workbench source shows the text/data family in the exact compiled app:
 
 <!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="71-170" -->
 ```cpp
-    desktop_->dock_bottom(std::move(status));
 }
 
 void WorkbenchApp::build_window() {
@@ -938,7 +937,7 @@ std::unique_ptr<ui::View> WorkbenchApp::build_text_page() {
 
     auto toolbar = std::make_unique<widgets::ToolBar>();
     toolbar->set_bounds(Rect{1, 14, 34, 1});
-    toolbar->set_commands({ui::std_commands::kMenu, ui::std_commands::kQuit});
+    toolbar->set_commands({app_.commands().standard().menu, app_.commands().standard().quit});
     tool_bar_ = toolbar.get();
     page->add_child(std::move(toolbar));
 
@@ -994,5 +993,6 @@ std::unique_ptr<ui::View> WorkbenchApp::build_data_page() {
     page->add_child(std::move(list));
 
     auto table = std::make_unique<widgets::Table>();
+    table->set_bounds(Rect{45, 1, 24, 8});
 ```
 <!-- /ckvision-snippet -->

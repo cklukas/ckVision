@@ -183,6 +183,23 @@ bool is_width_unsafe(std::string_view grapheme) noexcept {
     return false;
 }
 
+// Why a picture the scene placed did not reach the terminal — in the
+// caller's terms, so a reader looking at a window with a fallback in it
+// learns whether their host cannot show pictures, or will not show one
+// this large. Built only when the graphics log is on.
+std::string raster_refusal_reason(const Capabilities& caps, const RasterSlice& slice) {
+    const auto pixels = [](Size size) {
+        return std::to_string(size.width) + "x" + std::to_string(size.height) + " px";
+    };
+    if (!caps.sixel_graphics) return "picture dropped: this host reports no Sixel graphics";
+    if (slice.image == nullptr || slice.image->empty()) return "picture dropped: the image is empty";
+    if (slice.visible_rect.empty()) return "picture dropped: none of it is visible";
+    if (slice.full_anchor.empty()) return "picture dropped: it was given no cells to occupy";
+    return "picture dropped: " + pixels(Size{slice.image->width(), slice.image->height()}) +
+           " is larger than the host's stated maximum Sixel geometry of " +
+           pixels(caps.sixel_max_geometry) + " — render within it and the terminal will scale it up";
+}
+
 }  // namespace
 
 std::string style_to_sgr(const Style& style, const Capabilities& caps) {
@@ -547,7 +564,17 @@ void Presenter::present(FrameView frame, CursorState cursor,
     active_rasters_.clear();
     if (active_rasters_.capacity() < rasters.size()) active_rasters_.reserve(rasters.size());
     for (const RasterSlice& slice : rasters) {
-        if (!can_emit_raster_slice(slice)) continue;
+        if (!can_emit_raster_slice(slice)) {
+            // A picture the scene placed, absent from the screen, and
+            // otherwise silent about it — the exact question this log
+            // exists to answer. Every other line below reports pictures
+            // that DID reach the terminal, so a refusal has to say so
+            // here or it is indistinguishable from a frame that never
+            // had one.
+            if (graphics_log_enabled())
+                graphics_log("presenter: " + raster_refusal_reason(terminal_.capabilities(), slice));
+            continue;
+        }
         const std::uint64_t fingerprint = image_fingerprint(*slice.image);
         ActiveRaster active{slice, fingerprint, encode_key(slice, fingerprint), nullptr, true};
         // Two separate questions, and answering them as one is what made a

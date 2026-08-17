@@ -432,10 +432,10 @@ CK_TEST(key_release_uses_the_dedicated_route_and_never_activates_a_command) {
     auto* probe = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
     probe->set_focus_policy(FocusPolicy::TabStop);
     app.set_focus(probe);
-    constexpr ckv::ui::CommandId kEscape = ckv::ui::kFirstApplicationCommandId;
-    app.commands().register_command(kEscape, "Escape", "App", KeyChord{Key::Escape, Modifier::None, ""});
+    const ckv::ui::CommandId escape = app.commands().declare(
+        {.key = "test.escape", .title = "Escape", .category = "App", .chord = "Esc"});
     bool command_ran = false;
-    app.set_command_handler(kEscape, [&] { command_ran = true; });
+    app.set_command_handler(escape, [&] { command_ran = true; });
 
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}, ckv::KeyAction::Release}));
     CK_CHECK(probe->key_events == 0);
@@ -482,10 +482,10 @@ CK_TEST(a_key_unconsumed_by_the_focus_chain_falls_through_to_a_bound_command) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kQuit = ckv::ui::kFirstApplicationCommandId;
-    app.commands().register_command(kQuit, "Quit", "App", KeyChord{Key::Escape, Modifier::None, ""});
+    const ckv::ui::CommandId quit = app.commands().declare(
+        {.key = "test.quit", .title = "Quit", .category = "App", .chord = "Esc"});
     bool ran = false;
-    app.set_command_handler(kQuit, [&] { ran = true; });
+    app.set_command_handler(quit, [&] { ran = true; });
 
     CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}));
     CK_CHECK(ran);
@@ -495,11 +495,11 @@ CK_TEST(a_disabled_command_does_not_run_even_when_its_chord_matches) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kQuit = ckv::ui::kFirstApplicationCommandId;
-    app.commands().register_command(kQuit, "Quit", "App", KeyChord{Key::Escape, Modifier::None, ""});
-    app.commands().set_enabled_predicate(kQuit, [] { return false; });
+    const ckv::ui::CommandId quit = app.commands().declare(
+        {.key = "test.quit", .title = "Quit", .category = "App", .chord = "Esc"});
+    app.commands().set_enabled_predicate(quit, [] { return false; });
     bool ran = false;
-    app.set_command_handler(kQuit, [&] { ran = true; });
+    app.set_command_handler(quit, [&] { ran = true; });
 
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}));
     CK_CHECK(!ran);
@@ -509,10 +509,10 @@ CK_TEST(a_view_that_consumes_the_key_shadows_the_bound_command) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kQuit = ckv::ui::kFirstApplicationCommandId;
-    app.commands().register_command(kQuit, "Quit", "App", KeyChord{Key::Escape, Modifier::None, ""});
+    const ckv::ui::CommandId quit = app.commands().declare(
+        {.key = "test.quit", .title = "Quit", .category = "App", .chord = "Esc"});
     bool ran = false;
-    app.set_command_handler(kQuit, [&] { ran = true; });
+    app.set_command_handler(quit, [&] { ran = true; });
 
     auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
     a->consume_keys = true;
@@ -527,7 +527,9 @@ CK_TEST(execute_command_with_no_handler_registered_returns_false) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    CK_CHECK(!app.execute_command(42));
+    const ckv::ui::CommandId command =
+        app.commands().declare({.key = "test.no-handler", .title = "No handler"});
+    CK_CHECK(!app.execute_command(command));
 }
 
 // --- Mouse: hit-testing and drag capture ------------------------------------
@@ -1190,11 +1192,10 @@ CK_TEST(modal_default_keymap_keeps_traversal_and_help_inside_its_scope) {
     CK_CHECK(app.step(4));
     CK_CHECK(help_key == "modal.first");
 
-    constexpr ckv::ui::CommandId kBackgroundCommand = ckv::ui::kFirstApplicationCommandId;
-    app.commands().register_command(kBackgroundCommand, "Background", "App",
-                                    KeyChord{Key::Char, Modifier::Alt, "x"});
+    const ckv::ui::CommandId background_command = app.commands().declare(
+        {.key = "test.background", .title = "Background", .category = "App", .chord = "Alt+X"});
     bool background_command_ran = false;
-    app.set_command_handler(kBackgroundCommand, [&] { background_command_ran = true; });
+    app.set_command_handler(background_command, [&] { background_command_ran = true; });
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}}));
     CK_CHECK(!background_command_ran);
     CK_CHECK(app.focused() == first);
@@ -1210,10 +1211,10 @@ CK_TEST(key_release_is_scoped_to_the_top_modal_and_never_reaches_a_command) {
     modal->set_focus_policy(FocusPolicy::TabStop);
     app.set_focus(background);
     app.push_modal(*modal);
-    constexpr ckv::ui::CommandId kEscape = ckv::ui::kFirstApplicationCommandId;
-    app.commands().register_command(kEscape, "Escape", "App", KeyChord{Key::Escape, Modifier::None, ""});
+    const ckv::ui::CommandId escape = app.commands().declare(
+        {.key = "test.escape", .title = "Escape", .category = "App", .chord = "Esc"});
     bool command_ran = false;
-    app.set_command_handler(kEscape, [&] { command_ran = true; });
+    app.set_command_handler(escape, [&] { command_ran = true; });
 
     CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}, ckv::KeyAction::Release}));
     CK_CHECK(background->key_release_events == 0);
@@ -1356,11 +1357,10 @@ CK_TEST(push_modal_suppresses_the_global_accelerator_fallback) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    constexpr ckv::ui::CommandId kSomeCommand = ckv::ui::kFirstApplicationCommandId;
-    const KeyChord escape{Key::Escape, Modifier::None, ""};
-    app.commands().register_command(kSomeCommand, "Something", "App", escape);
+    const ckv::ui::CommandId some_command = app.commands().declare(
+        {.key = "test.something", .title = "Something", .category = "App", .chord = "Esc"});
     bool ran = false;
-    app.set_command_handler(kSomeCommand, [&] { ran = true; });
+    app.set_command_handler(some_command, [&] { ran = true; });
 
     auto* modal_root = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
     app.push_modal(*modal_root);
@@ -1433,14 +1433,14 @@ CK_TEST(pop_modal_on_an_empty_stack_aborts) {
 
 // --- F1 context help (D-027) -------------------------------------------
 
-// F1 is std_commands::kHelp's default chord (M9/WP-12): it now always
-// routes through the command system, same as any other standard
-// chord, so dispatch() reports "handled" once kHelp's (always-
+// F1 is the standard help command's default chord (M9/WP-12): it now
+// always routes through the command system, same as any other standard
+// chord, so dispatch() reports "handled" once that command's (always-
 // installed) default handler runs — regardless of whether a help
 // provider is set or a key resolves. Those are the DEFAULT HANDLER's
 // own internal decisions, observable via the provider callback
 // itself, not via dispatch()'s return value.
-CK_TEST(f1_with_no_provider_installed_still_dispatches_through_khelps_default_handler) {
+CK_TEST(f1_with_no_provider_installed_still_dispatches_through_the_help_default_handler) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);

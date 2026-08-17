@@ -41,3 +41,7 @@ graphics-sixel-image
 graphics-sixel-canvas
 graphics-no-graphics-image
 graphics-no-graphics-canvas
+spin-initial
+spin-menu
+spin-desktop
+spin-no-graphics

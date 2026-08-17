@@ -209,6 +209,12 @@ if(TARGET editor_app)
     target_link_libraries(cvision_tests PRIVATE editor_app)
 endif()
 
+if(TARGET spin_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_spin_smoke.cpp)
+    target_sources(cvision_tests PRIVATE test_spin_smoke.cpp)
+    target_link_libraries(cvision_tests PRIVATE spin_app)
+endif()
+
 if(TARGET ckvision_editor_profile_sample)
     add_test(NAME editor_profile_extension_sample COMMAND ckvision_editor_profile_sample)
     set_tests_properties(editor_profile_extension_sample PROPERTIES LABELS "portable;example;editor" TIMEOUT 30)
@@ -316,7 +322,7 @@ if(TARGET capture_hello_screenshots)
     set_tests_properties(hello_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
-foreach(example_name IN ITEMS layouts forms workbench graphics)
+foreach(example_name IN ITEMS layouts forms workbench graphics spin)
     if(TARGET capture_${example_name}_screenshots)
         add_test(NAME ${example_name}_visual_capture
             COMMAND capture_${example_name}_screenshots

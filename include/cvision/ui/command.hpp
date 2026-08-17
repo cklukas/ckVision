@@ -1,9 +1,12 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // A first-class command system (ARCHITECTURE.md §5, DECISIONS.md
-// D-013): 32-bit CommandId, ids below 4096 reserved for the library's
-// own standard commands, applications and extension libraries own the
-// space above. The reserved set itself (ckv::ui::std_commands, below)
+// D-013): a command's identity is a namespaced string key it declares
+// itself under, and the registry assigns the CommandId that stands for
+// that key at runtime. Nobody picks a number, so no two parties can
+// pick the same one — the library, a widget, an extension library and
+// the application all declare into one flat space and cannot collide.
+// The library's own standard set (CommandRegistry::standard(), below)
 // is documented in full — the set, its default chords, and the
 // reasoning behind each — in docs/standard-commands.md.
 #pragma once
@@ -20,59 +23,140 @@
 
 namespace ckv::ui {
 
-using CommandId = std::int32_t;
-inline constexpr CommandId kFirstApplicationCommandId = 4096;
-inline constexpr CommandId kInvalidCommand = 0;
+// A handle to a declared command, assigned by CommandRegistry::
+// declare() from a per-registry monotonic counter. It is a scoped
+// enumeration on purpose: `base + index` — the pattern that made every
+// party invent its own numeric range and then collide with the next
+// one — does not compile, so the class of bug is unrepresentable
+// rather than merely discouraged. A CommandId is never written as a
+// literal, never persisted, and never compared for magnitude; it is
+// meaningful only to the registry that assigned it. Everything durable
+// — configuration, menu definitions, cross-process references — keys
+// on the string instead (CommandRegistry::key_for/id_for).
+enum class CommandId : std::int32_t {};
 
-// The library's own standard command set (D-013 materialized, M9/
-// WP-12): reserved ids below kFirstApplicationCommandId, registered
-// by Application's constructor (D-029) with the default chords noted
-// below. An application attaches its own handler — via
+// "No command": a menu separator, a hand-callback item, a chord bound
+// to nothing. Never assigned by declare().
+inline constexpr CommandId kInvalidCommand{0};
+
+// Whether a command is one the reader is meant to discover by browsing
+// for it — what widgets::CommandPalette lists. This is metadata a
+// command states about itself, not a property derived from its id:
+// "should the reader see this?" is a question only the declaring party
+// can answer.
+//
+// Hidden covers the two kinds that a browsable list would only clutter:
+// framework plumbing an application surfaces (or does not) through its
+// own menus — see StandardCommands — and commands that exist purely to
+// carry a chord, such as MenuBar's Alt+<mnemonic> menu accelerators,
+// which duplicate a menu the reader can already see.
+enum class CommandVisibility {
+    Palette,
+    Hidden,
+};
+
+struct CommandInfo {
+    CommandId id = kInvalidCommand;
+    // The identity this command was declared under, e.g.
+    // "ckv.window.close". Stable for the registry's lifetime.
+    std::string key;
+    std::string title;
+    std::string category;
+    std::optional<KeyChord> default_chord;
+    std::string context;
+    CommandVisibility visibility = CommandVisibility::Palette;
+};
+
+// One-call declaration (M9/WP-10): metadata, default chord and handler
+// in a single descriptor, rather than a register + bind + set_handler
+// sequence each caller had to remember to complete.
+//
+// Scope note: this covers the metadata+handler half of WP-10's own
+// illustrative descriptor (ARCHITECTURE.md §5 Menus) — the `.menu`/
+// `.status` fields that auto-populate a MenuBar/StatusLine entry are
+// deliberately NOT here yet. CommandRegistry lives in ui::, below
+// widgets:: in this project's dependency direction (AGENTS.md); it
+// cannot reference MenuBar/StatusLine without inverting that, and
+// building menu/status structure from command metadata also needs
+// registration-ORDER tracking. That's real, separate design work for a
+// widgets::-layer mechanism that reads CommandRegistry, not something
+// to bolt on here as an ignored field a caller could set and have
+// silently do nothing.
+struct CommandDescriptor {
+    // The command's identity: a namespaced key whose prefix belongs to
+    // the declaring party — "ckv." for this library, an application or
+    // extension library using its own. Required; declaring an empty
+    // key is a programmer error (CKV_ASSERT). Within one party a
+    // repeated key is, by definition, the same command.
+    //
+    // Owned rather than a view, like every other field here: a
+    // descriptor may be built in one place and declared in another, and
+    // a computed key must not have to outlive that.
+    std::string key;
+    std::string title;
+    std::string category;
+    std::string context;
+    // Default chord in KeyChord::parse() spelling, e.g. "Alt+G"; empty
+    // means no default chord. A caller holding an already-built
+    // KeyChord (rather than a source literal) declares without one and
+    // calls bind_key() instead.
+    std::string chord;
+    CommandVisibility visibility = CommandVisibility::Palette;
+    std::function<void()> handler;
+};
+
+// The library's own standard commands (D-013 materialized, M9/WP-12),
+// declared by every CommandRegistry's constructor with the default
+// chords noted below and reachable as registry.standard().quit and so
+// on. An application attaches its own handler — via
 // CommandRegistry::set_handler() or Application::set_command_handler()
 // — to whichever of these its widgets actually need, rather than
-// defining an app-specific command for a concept the framework
-// already models (e.g. referencing std_commands::kQuit instead of
-// registering a private "quit" command of its own).
+// declaring an app-specific command for a concept the framework
+// already models (e.g. referencing standard().quit instead of
+// declaring a private "quit" command of its own).
 //
 // Default-chord scheme (this project's own choice, authored for
 // WP-12 — no prior source consulted per this repo's provenance rule):
-// kHelp = F1, kMenu = F10, kNextWindow = F6, kPreviousWindow =
-// Shift+F6, kZoom = F5, kClose = Alt+F3, kQuit = Alt+X (already the
+// help = F1, menu = F10, next_window = F6, previous_window =
+// Shift+F6, zoom = F5, close = Alt+F3, quit = Alt+X (already the
 // convention every example independently used before this landed),
-// kFocusNext = Tab, kFocusPrevious = Shift+Tab (M9/WP-13, D-029).
-// kTile/kCascade/kWindowList get NO default chord — there is no
+// focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029).
+// tile/cascade/window_list get NO default chord — there is no
 // comparably strong, widely-recognized single-key convention for
 // them; an application binds one itself if it wants one.
 //
-// Titles are fixed, not overridable — the reserved range can only be
-// (re-)populated by register_standard_commands() itself, so
-// register_command()/add() reject any attempt to touch these ids (see
-// their own doc comments). An application that needs different
-// wording for the same concept — e.g. matching an external reference
-// example's own vocabulary, as examples/hello does for "Exit" — keeps
-// its own command in the application range instead of referencing the
-// standard one; that is a legitimate reason NOT to reference
-// std_commands, not a gap to work around.
+// The standard set is Hidden: these are the framework's own plumbing,
+// which an application surfaces where it wants them through its own
+// menu and status entries. An application that does want one of them
+// browsable calls set_visibility(standard().quit, Palette).
+//
+// Titles are not fixed — re-declaring a standard key replaces its
+// metadata like any other (an application matching an external
+// reference example's vocabulary, as examples/hello does for "Exit",
+// can either do that or keep a command of its own; declaring its own
+// remains the right move when the concept itself differs, and
+// widgets::CommandPresentation covers per-surface wording without
+// touching the command at all).
 //
 // Default HANDLERS (not just metadata/chords) are installed for the
 // commands where the framework can supply one without any
 // application-specific knowledge (M9/WP-13, D-029):
-//   - kFocusNext/kFocusPrevious call Application::focus_next()/
+//   - focus_next/focus_previous call Application::focus_next()/
 //     previous() directly — always installed, since Application
 //     itself outlives everything that could invoke them.
-//   - kHelp's default handler is installed by Application's own
+//   - help's default handler is installed by Application's own
 //     constructor (see application.cpp) — D-027.
-//   - kMenu's default handler (calling MenuBar::activate()) is
+//   - menu's default handler (calling MenuBar::activate()) is
 //     installed by MenuBar::on_attached() the moment one attaches,
-//     but ONLY if nothing has claimed kMenu yet
+//     but ONLY if nothing has claimed it yet
 //     (CommandRegistry::has_handler) — an application that wants
-//     different F10 behavior and calls set_handler(kMenu, ...) before
-//     attaching its MenuBar is never overridden. MenuBar's destructor
-//     clears the handler again if it was the one that installed it,
-//     so a destroyed MenuBar can never be called through a stale
-//     handler.
-//   - kQuit, kClose, kZoom, kNextWindow, kPreviousWindow, kTile,
-//     kCascade and kWindowList are installed by Desktop::on_attached()
+//     different F10 behavior and calls set_handler(standard().menu,
+//     ...) before attaching its MenuBar is never overridden. MenuBar's
+//     destructor clears the handler again if it was the one that
+//     installed it, so a destroyed MenuBar can never be called through
+//     a stale handler.
+//   - quit, close, zoom, next_window, previous_window, tile,
+//     cascade and window_list are installed by Desktop::on_attached()
 //     under that same has_handler rule — a Desktop is exactly the
 //     thing that owns the windows they act on, and knows the one
 //     cycling order they all share. An application that claims one
@@ -85,64 +169,40 @@ inline constexpr CommandId kInvalidCommand = 0;
 // application rather than a state to design for — bind only commands
 // something handles, or give the command an enablement predicate
 // returning false, so every surface greys it and says so.
-namespace std_commands {
-inline constexpr CommandId kQuit = 1;
-inline constexpr CommandId kClose = 2;
-inline constexpr CommandId kZoom = 3;
-inline constexpr CommandId kNextWindow = 4;
-inline constexpr CommandId kPreviousWindow = 5;
-inline constexpr CommandId kTile = 6;
-inline constexpr CommandId kCascade = 7;
-inline constexpr CommandId kWindowList = 8;
-inline constexpr CommandId kMenu = 9;
-inline constexpr CommandId kHelp = 10;
-inline constexpr CommandId kFocusNext = 11;
-inline constexpr CommandId kFocusPrevious = 12;
-
-// One reserved id per top-level menu, claimed by MenuBar for its
-// Alt+<mnemonic> accelerators. They are ordinary commands so the
-// accelerator works from anywhere the command keymap reaches, rather than
-// only while the bar already holds focus — which is the whole point of a
-// menu accelerator.
-inline constexpr CommandId kFirstMenuAccelerator = 3840;
-inline constexpr CommandId kMenuAcceleratorLimit = 4096;
-}  // namespace std_commands
-
-struct CommandInfo {
-    CommandId id = kInvalidCommand;
-    std::string title;
-    std::string category;
-    std::optional<KeyChord> default_chord;
-    std::string context;
+struct StandardCommands {
+    CommandId quit = kInvalidCommand;
+    CommandId close = kInvalidCommand;
+    CommandId zoom = kInvalidCommand;
+    CommandId next_window = kInvalidCommand;
+    CommandId previous_window = kInvalidCommand;
+    CommandId tile = kInvalidCommand;
+    CommandId cascade = kInvalidCommand;
+    CommandId window_list = kInvalidCommand;
+    CommandId menu = kInvalidCommand;
+    CommandId help = kInvalidCommand;
+    CommandId focus_next = kInvalidCommand;
+    CommandId focus_previous = kInvalidCommand;
 };
 
-// One-call registration (M9/WP-10): the designated-initializer form of
-// register_command() + set_handler(), collapsing what used to be two
-// separate calls (and, for a chord, a third — hand-building a KeyChord)
-// into one descriptor passed to CommandRegistry::add().
-//
-// Scope note: this covers the metadata+handler half of WP-10's own
-// illustrative descriptor (ARCHITECTURE.md §5 Menus) — the `.menu`/
-// `.status` fields that auto-populate a MenuBar/StatusLine entry are
-// deliberately NOT here yet. CommandRegistry lives in ui::, below
-// widgets:: in this project's dependency direction (AGENTS.md); it
-// cannot reference MenuBar/StatusLine without inverting that, and
-// building menu/status structure from command metadata also needs
-// registration-ORDER tracking this registry doesn't keep (commands_
-// is an unordered_map). That's real, separate design work for a
-// widgets::-layer mechanism that reads CommandRegistry, not something
-// to bolt on here as an ignored field a caller could set and have
-// silently do nothing.
-struct CommandDescriptor {
-    CommandId id = kInvalidCommand;
-    std::string title;
-    std::string category;
-    std::string context;
-    // Canonical spelling (KeyChord::parse), e.g. "Alt+G"; empty means
-    // no default chord.
-    std::string chord;
-    std::function<void()> handler;
-};
+// The keys the standard set is declared under. Spelled out so a
+// frontend that drives the framework by key (a configuration file, a
+// scripted test, a cross-process command bridge) can name a standard
+// command without holding a registry, and so the one place that
+// spells them is shared with docs/standard-commands.md's generator.
+namespace std_command_keys {
+inline constexpr std::string_view kQuit = "ckv.app.quit";
+inline constexpr std::string_view kHelp = "ckv.app.help";
+inline constexpr std::string_view kMenu = "ckv.app.menu";
+inline constexpr std::string_view kClose = "ckv.window.close";
+inline constexpr std::string_view kZoom = "ckv.window.zoom";
+inline constexpr std::string_view kNextWindow = "ckv.window.next";
+inline constexpr std::string_view kPreviousWindow = "ckv.window.previous";
+inline constexpr std::string_view kTile = "ckv.window.tile";
+inline constexpr std::string_view kCascade = "ckv.window.cascade";
+inline constexpr std::string_view kWindowList = "ckv.window.list";
+inline constexpr std::string_view kFocusNext = "ckv.focus.next";
+inline constexpr std::string_view kFocusPrevious = "ckv.focus.previous";
+}  // namespace std_command_keys
 
 // Instance-owned (D-008). Enablement is a per-command predicate, and named
 // contexts are explicit per-Application state: pushed scopes plus focused-view
@@ -151,52 +211,75 @@ class CommandRegistry {
 public:
     using ContextScopeId = std::uint64_t;
 
-    // CKV_ASSERT if id falls inside the reserved std_commands range
-    // (M9/WP-12) — that range is populated exactly once, by
-    // Application's constructor calling register_standard_commands()
-    // below; application code always registers at
-    // kFirstApplicationCommandId or above.
-    void register_command(CommandId id, std::string title, std::string category = {},
-                           std::optional<KeyChord> default_chord = {},
-                           std::string context = {});
+    // Declares the standard set (see StandardCommands) so standard()
+    // is answerable from the moment a registry exists, and every
+    // registry — including one a test builds directly — has the same
+    // framework floor under it.
+    CommandRegistry();
 
-    // Equivalent to register_command(descriptor.id, descriptor.title,
-    // descriptor.category, parsed-chord) followed by
-    // set_handler(descriptor.id, descriptor.handler) — see
-    // CommandDescriptor's own doc comment for what this does NOT cover
-    // yet. CKV_ASSERT if descriptor.chord is non-empty but fails to
-    // parse — a malformed chord literal in source is a programmer
-    // error to fix, not a condition to silently degrade from.
-    void add(CommandDescriptor descriptor);
-
-    // Populates every std_commands::* id with its metadata and
-    // default chord (M9/WP-12, D-013/D-029) — called exactly once, by
-    // Application's constructor. Not for application code to call:
-    // there is nothing to configure, and calling it twice would just
-    // re-bind the same chords to the same ids.
-    void register_standard_commands();
+    // Defines `descriptor.key`'s command and returns the id assigned to
+    // that key, binding its default chord if it declared one.
+    //
+    // Idempotent per key: declaring a key that already has an id
+    // returns that same id and re-defines it in place, so a surface
+    // that rebuilds its commands (MenuBar's accelerators, an
+    // application reloading a command table) keeps every id its menu
+    // and status entries already reference. Re-declaring replaces
+    // title, category, context, visibility and default chord — and
+    // drops the previously declared chord's binding, unless something
+    // has since rebound that chord elsewhere — but an EMPTY
+    // descriptor.handler leaves any installed handler alone: handlers
+    // are routinely attached separately (set_handler, the framework's
+    // own default-handler installers), and a re-declaration of the
+    // metadata must not silently unhook behavior it says nothing
+    // about.
+    CommandId declare(CommandDescriptor descriptor);
 
     const CommandInfo* find(CommandId id) const noexcept;
 
-    // Every registered command, sorted by id (M9/WP-12 — a
+    // The id assigned to `key`, or nullopt if no command is currently
+    // declared under it. This is how anything that names commands as
+    // strings — configuration, a menu definition file, a bridge from
+    // another command model — resolves them once at startup.
+    std::optional<CommandId> id_for(std::string_view key) const;
+    // The key `id` was declared under; empty for kInvalidCommand, an
+    // id from another registry, or one that has been withdrawn. The
+    // view is valid until that command is re-declared or withdrawn.
+    std::string_view key_for(CommandId id) const noexcept;
+
+    // Every declared command, in declaration order (M9/WP-12 — a
     // deterministic order for anything that enumerates the registry,
     // e.g. the reference-docs command table generator; commands_
     // itself is an unordered_map and gives no ordering guarantee).
     std::vector<CommandInfo> all() const;
 
+    const StandardCommands& standard() const noexcept { return standard_; }
+
     // Retracts a command definition and every behavior path owned by that
     // command id: metadata, enablement predicate, handler, and key bindings.
     // Existing menu/status entries that still reference the id become inert
-    // until the application registers it again.
-    void retract_command(CommandId id);
+    // until the command is declared again.
+    //
+    // The key keeps its id reserved: declaring it again returns the
+    // same id rather than a fresh one, and no other key can ever be
+    // given that id. A surface that withdraws and re-declares as it
+    // rebuilds — MenuBar's menu accelerators — therefore cannot hand
+    // out an id that later means something else, which is exactly the
+    // failure a recycled handle invites.
+    void withdraw(CommandId id);
 
     void set_command_context(CommandId id, std::string context);
     ContextScopeId push_context(std::string context);
     bool pop_context(ContextScopeId id);
     bool context_active(std::string_view context) const noexcept;
 
+    // Changes whether a declared command is browsable — see
+    // CommandVisibility. The one common use is opting a standard
+    // command into an application's command palette.
+    void set_visibility(CommandId id, CommandVisibility visibility);
+
     void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
-    bool is_enabled(CommandId id) const;  // true if no predicate registered
+    bool is_enabled(CommandId id) const; // true if no predicate registered
     bool is_available(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
 
     // The active keymap: chord -> command. Rebindable at runtime;
@@ -210,7 +293,7 @@ public:
     // hint). A command may have more than one chord bound; this is
     // display's "one representative chord" pick, not an enumeration.
     // nullopt if nothing is bound to `id` right now, regardless of
-    // whatever default_chord it was registered with (a caller that
+    // whatever default chord it was declared with (a caller that
     // unbinds a command's only chord sees that reflected here).
     std::optional<KeyChord> chord_for_command(CommandId id) const;
 
@@ -226,37 +309,38 @@ public:
     std::string format_chord(const KeyChord& chord) const;
 
     // Handler dispatch (M9/WP-10 — moved here from Application, whose
-    // set_command_handler/execute_command now just forward, so add()'s
-    // .handler field has somewhere to land without giving
+    // set_command_handler/execute_command now just forward, so
+    // declare()'s .handler field has somewhere to land without giving
     // CommandRegistry an Application dependency it doesn't otherwise
-    // need). `id` need not be pre-registered — a handler may be
-    // attached before or after register_command()/add().
+    // need). `id` need not be declared — a handler may be attached
+    // before or after declare().
     void set_handler(CommandId id, std::function<void()> handler);
     // Whether `id` currently has a real (non-empty) handler installed
     // (M9/WP-13) — the guard a default-handler installer (MenuBar::
-    // on_attached(), see std_commands' own doc comment) checks before
-    // installing itself, so it never clobbers a handler an application
-    // deliberately set first.
+    // on_attached(), see StandardCommands' own doc comment) checks
+    // before installing itself, so it never clobbers a handler an
+    // application deliberately set first.
     bool has_handler(CommandId id) const;
     // Invokes id's handler if one is registered AND is_enabled(id).
     // Returns true if the handler ran.
     bool execute(CommandId id, const std::vector<std::string>& focus_contexts = {});
 
 private:
-    // The shared core of register_command()/register_standard_commands()
-    // — no reserved-range check, since register_standard_commands()'s
-    // whole job is populating that range.
-    void register_command_internal(CommandId id, std::string title, std::string category,
-                                    std::optional<KeyChord> default_chord,
-                                    std::string context);
+    // Assigns `key` its permanent id, or returns the one it already
+    // has — the whole of the "nobody picks a number" rule, in one
+    // place.
+    CommandId id_for_key(std::string_view key);
 
+    std::unordered_map<std::string, CommandId> ids_;
     std::unordered_map<CommandId, CommandInfo> commands_;
     std::unordered_map<CommandId, std::function<bool()>> enabled_predicates_;
     std::unordered_map<CommandId, std::function<void()>> handlers_;
     std::vector<std::pair<KeyChord, CommandId>> keymap_;
     std::vector<std::pair<ContextScopeId, std::string>> active_contexts_;
     std::function<std::string(const KeyChord&)> chord_formatter_;
+    StandardCommands standard_;
     ContextScopeId next_context_scope_id_ = 1;
+    std::int32_t next_command_id_ = 1;
 };
 
 }  // namespace ckv::ui

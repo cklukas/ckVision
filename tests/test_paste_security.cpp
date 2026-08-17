@@ -32,8 +32,8 @@ CK_TEST(embedded_paste_terminator_and_ctrl_chord_cannot_execute_an_application_c
     app.set_focus(input_ptr);
 
     int command_calls = 0;
-    app.commands().add(ckv::ui::CommandDescriptor{
-        .id = ckv::ui::kFirstApplicationCommandId,
+    app.commands().declare(ckv::ui::CommandDescriptor{
+        .key = "test.dangerous-action",
         .title = "Dangerous action",
         .chord = "Ctrl+Q",
         .handler = [&] { ++command_calls; },

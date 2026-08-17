@@ -19,6 +19,13 @@ using ckv::ui::Application;
 using namespace ckv::widgets;
 
 namespace {
+
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
 ckv::KeyEvent key(Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
 
 struct Standalone {
@@ -112,8 +119,9 @@ CK_TEST(toolbar_and_command_palette_are_command_registry_surfaces) {
     ManualClock clock;
     Application app(term, clock);
     int ran = 0;
-    constexpr ckv::ui::CommandId command = ckv::ui::kFirstApplicationCommandId + 200;
-    app.commands().add(ckv::ui::CommandDescriptor{command, "Build", "test", "", "", [&] { ++ran; }});
+    const ckv::ui::CommandId command = app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.build", .title = "Build", .category = "test",
+                                   .handler = [&] { ++ran; }});
 
     auto toolbar = std::make_unique<ToolBar>();
     toolbar->set_bounds(ckv::Rect{0, 0, 20, 1});
@@ -127,14 +135,17 @@ CK_TEST(toolbar_and_command_palette_are_command_registry_surfaces) {
     auto palette = std::make_unique<CommandPalette>();
     CommandPalette* palette_ptr = palette.get();
     app.root().add(std::move(palette));
+    // The palette lists exactly what declares itself browsable: this test's
+    // own command, and none of the framework's Hidden standard set.
     const auto palette_commands = palette_ptr->filtered_commands();
     CK_CHECK(std::all_of(palette_commands.begin(), palette_commands.end(),
                          [](const ckv::ui::CommandInfo& info) {
-                             return info.id >= ckv::ui::kFirstApplicationCommandId;
+                             return info.visibility == ckv::ui::CommandVisibility::Palette;
                          }));
-    CK_CHECK(std::none_of(palette_commands.begin(), palette_commands.end(), [](const ckv::ui::CommandInfo& info) {
-        return info.id == ckv::ui::std_commands::kQuit;
-    }));
+    CK_CHECK(std::none_of(palette_commands.begin(), palette_commands.end(),
+                          [&app](const ckv::ui::CommandInfo& info) {
+                              return info.id == standard(app).quit;
+                          }));
     palette_ptr->set_query("bui");
     CK_CHECK(palette_ptr->highlighted_command() == command);
     CK_CHECK(palette_ptr->on_key(key(Key::Enter)));

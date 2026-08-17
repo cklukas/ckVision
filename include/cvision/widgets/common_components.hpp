@@ -444,11 +444,22 @@ private:
     ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
+// Browse-by-name access to the registry: the commands whose titles
+// match the current query, in declaration order.
+//
+// What it lists is what each command says about itself —
+// ui::CommandVisibility::Palette — never a property inferred from the
+// id. An application decides what belongs in a browsable list by
+// declaring it (or by set_visibility()), which is the only party that
+// can answer the question; the framework's own standard commands and a
+// MenuBar's menu accelerators declare themselves Hidden.
 class CommandPalette : public ui::View {
 public:
     CommandPalette();
     void set_query(std::string query);
     const std::string& query() const noexcept { return query_; }
+    // Palette-visible, title-matching, currently available — in the
+    // order the commands were declared.
     std::vector<ui::CommandInfo> filtered_commands() const;
     std::optional<ui::CommandId> highlighted_command() const;
 

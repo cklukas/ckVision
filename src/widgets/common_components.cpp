@@ -113,10 +113,17 @@ bool contains_ci(std::string_view haystack, std::string_view needle) {
     return false;
 }
 
+// A ToolBar entry naming a command no registry has declared — or one
+// drawn before the bar is attached to an Application at all — is an
+// application defect. Draw a placeholder the reader can report rather
+// than an empty button that looks deliberate. There is nothing more
+// informative to show: a CommandId is a handle its own registry
+// assigned, so an id that registry does not know has no title, no key,
+// and no meaning anywhere else.
 std::string command_title(ui::Application* app, ui::CommandId id) {
-    if (app == nullptr) return "#" + std::to_string(id);
+    if (app == nullptr) return "(unknown)";
     if (const ui::CommandInfo* info = app->commands().find(id); info != nullptr) return info->title;
-    return "#" + std::to_string(id);
+    return "(unknown)";
 }
 
 }  // namespace
@@ -1139,7 +1146,7 @@ std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
     if (context().app == nullptr) return {};
     std::vector<ui::CommandInfo> out;
     for (const ui::CommandInfo& info : context().app->commands().all())
-        if (info.id >= ui::kFirstApplicationCommandId && contains_ci(info.title, query_) &&
+        if (info.visibility == ui::CommandVisibility::Palette && contains_ci(info.title, query_) &&
             context().app->commands().is_available(info.id))
             out.push_back(info);
     return out;

@@ -41,6 +41,22 @@ Rect clamp_popup_to_desktop(Rect popup, const Rect& desktop) noexcept {
     return popup;
 }
 
+// What a menu item says when choosing it opens another menu rather than
+// running a command. The glyph the convention has always used — the solid
+// right-pointing pointer, which Unicode carries at U+25BA and the widget
+// set already draws on a horizontal scrollbar's end button — rather than
+// an ASCII '>', which reads as text somebody typed into the label.
+constexpr std::string_view kSubmenuMarker = "►";
+
+// The column a menu item's right-hand content occupies: a chord hint, or
+// the submenu marker. One item never has both — a submenu parent runs no
+// command — so they share a column, and a menu with some of each reads as
+// one right-hand column rather than two ragged ones.
+int right_column_width(const std::optional<std::string>& chord, bool marks_submenu) {
+    if (chord) return text::text_width(*chord);
+    return marks_submenu ? text::text_width(kSubmenuMarker) : 0;
+}
+
 bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
     for (const ui::View* p = &view; p != nullptr; p = p->parent())
         if (p == &ancestor) return true;
@@ -202,12 +218,6 @@ bool DropdownMenu::has_check_column() const noexcept {
     });
 }
 
-bool DropdownMenu::has_submenu_column() const noexcept {
-    return std::any_of(items_.begin(), items_.end(), [](const MenuItem& item) {
-        return !item.submenu.empty();
-    });
-}
-
 std::string DropdownMenu::item_source_text(const MenuItem& item) const {
     return item_presentation_label(item);
 }
@@ -241,12 +251,15 @@ std::string DropdownMenu::item_presentation_label(const MenuItem& item) const {
 SizeHint DropdownMenu::horizontal_size_hint() const {
     int max_width = 0;
     const int check_columns = has_check_column() ? 2 : 0;
-    const int submenu_columns = has_submenu_column() ? 2 : 0;
     for (const auto& item : items_) {
         if (item.separator) continue;
-        int width = check_columns + text::text_width(parse_mnemonic(item_source_text(item)).display) +
-                    submenu_columns;
-        if (const auto hint = item_chord_hint(item)) width += 2 + text::text_width(*hint);
+        int width = check_columns + text::text_width(parse_mnemonic(item_source_text(item)).display);
+        // Only what this item itself puts in the right-hand column. Charging
+        // every item for a submenu marker one of them happens to need is
+        // what left a chord hint stranded two columns short of the marker
+        // it was supposed to line up with.
+        if (const int right = right_column_width(item_chord_hint(item), !item.submenu.empty()); right > 0)
+            width += 2 + right;
         max_width = std::max(max_width, width);
     }
     // The popup owns an opaque interior plus a one-cell frame. The frame is
@@ -361,7 +374,6 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
 void DropdownMenu::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const bool check_column = has_check_column();
-    const bool submenu_column = has_submenu_column();
     const Style normal = theme.resolve(normal_role_);
     // Direct unit renderings may deliberately assign a one-row rectangle to
     // inspect a single item. Real popup geometry always comes from the size
@@ -392,25 +404,31 @@ void DropdownMenu::draw(scene::Painter& painter) {
         } else {
             const auto parsed = parse_mnemonic(item_source_text(item));
             const int label_x = item_left + (check_column ? 3 : 1);
-            const int submenu_columns = submenu_column ? 2 : 0;
-            int label_columns = std::max(0, item_left + item_width - label_x - 1 - submenu_columns);
+            // The last column any content may use. One cell of padding
+            // stands between it and the frame, matching the one on the left.
+            const int content_right = item_left + item_width - 2;
+            const std::optional<std::string> hint = item_chord_hint(item);
+            const bool marks_submenu = !item.submenu.empty();
+            const int right_width = right_column_width(hint, marks_submenu);
+            const int right_x = content_right - right_width + 1;
+            // Whatever the right-hand column holds ends at the same column
+            // for every item, so a chord and a submenu marker sit under one
+            // another instead of at two different margins.
+            int label_columns = std::max(0, content_right - label_x + 1);
+            if (right_width > 0) label_columns = std::max(0, right_x - label_x - 1);
             if (check_column && item.check != MenuItemCheck::None)
                 painter.draw_text(Point{item_left + 1, item_top + i},
                                   item.check == MenuItemCheck::Checked ? "x" : " ", style);
-            if (const auto hint = item_chord_hint(item)) {
-                const int hint_x = item_left + item_width - 1 - submenu_columns - text::text_width(*hint);
-                label_columns = std::max(0, hint_x - label_x - 1);
-                const int label_end_x =
-                    label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
-                draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
-                              accent_style(style, theme.resolve(hotkey_role_)));
-                if (hint_x > label_end_x) painter.draw_text(Point{hint_x, item_top + i}, *hint, style);
-            } else {
-                draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
-                              accent_style(style, theme.resolve(hotkey_role_)));
-            }
-            if (submenu_column && !item.submenu.empty() && bounds().width >= 2)
-                painter.draw_text(Point{item_left + item_width - 2, item_top + i}, ">", style);
+            const int label_end_x =
+                label_x + text::text_width(text::clip_to_width(parsed.display, label_columns));
+            draw_mnemonic(painter, Point{label_x, item_top + i}, parsed, label_columns, style,
+                          accent_style(style, theme.resolve(hotkey_role_)));
+            // A clipped label has taken the room the right-hand column
+            // wanted; drawing into it anyway would overprint the label's
+            // last cells rather than say anything.
+            if (right_width > 0 && right_x > label_end_x)
+                painter.draw_text(Point{right_x, item_top + i}, hint ? std::string_view{*hint} : kSubmenuMarker,
+                                  style);
         }
     }
 }
@@ -424,7 +442,7 @@ MenuBar::MenuBar(std::vector<MenuBarItem> menus) : menus_(std::move(menus)) {
 MenuBar::~MenuBar() {
     close_dropdown();
     if (installed_default_menu_handler_ && app_ != nullptr)
-        app_->commands().set_handler(ui::std_commands::kMenu, nullptr);
+        app_->commands().set_handler(app_->commands().standard().menu, nullptr);
 }
 
 void MenuBar::set_menus(std::vector<MenuBarItem> menus) {
@@ -455,10 +473,10 @@ void MenuBar::on_attached() {
         }
     }
     // F10 activation, default and overridable (M9/WP-13, D-029) — see
-    // the class comment for why this only installs itself when kMenu
-    // is still unclaimed.
-    if (app_ != nullptr && !app_->commands().has_handler(ui::std_commands::kMenu)) {
-        app_->commands().set_handler(ui::std_commands::kMenu, [this] { activate(); });
+    // the class comment for why this only installs itself when the
+    // standard menu command is still unclaimed.
+    if (app_ != nullptr && !app_->commands().has_handler(app_->commands().standard().menu)) {
+        app_->commands().set_handler(app_->commands().standard().menu, [this] { activate(); });
         installed_default_menu_handler_ = true;
     }
     // Menus set before the bar was attached have no accelerators yet: the
@@ -466,12 +484,13 @@ void MenuBar::on_attached() {
     install_menu_accelerators();
 }
 
+// Each top-level menu's Alt+<mnemonic> accelerator is an ordinary
+// command, so it works from anywhere the command keymap reaches rather
+// than only while the bar already holds focus — which is the whole point
+// of a menu accelerator.
 void MenuBar::install_menu_accelerators() {
     if (app_ == nullptr || !menu_accelerators_.empty()) return;
     for (std::size_t index = 0; index < menus_.size(); ++index) {
-        const ui::CommandId id =
-            ui::std_commands::kFirstMenuAccelerator + static_cast<ui::CommandId>(index);
-        if (id >= ui::std_commands::kMenuAcceleratorLimit) break;
         const auto parsed = parse_mnemonic(menus_[index].label);
         if (parsed.mnemonic.empty()) continue;
         KeyChord chord;
@@ -481,12 +500,23 @@ void MenuBar::install_menu_accelerators() {
         // lowercase spelling the decoder produces.
         chord.text = parsed.mnemonic;
         if (chord.text.size() == 1)
-            chord.text[0] = static_cast<char>(
-                std::tolower(static_cast<unsigned char>(chord.text[0])));
-        app_->commands().register_command(id, parsed.display, "Menu", chord);
+            chord.text[0] =
+                static_cast<char>(std::tolower(static_cast<unsigned char>(chord.text[0])));
+        // The accelerator's identity is the chord it exists to carry, so
+        // that is what it declares itself under: a bar rebuilding its
+        // menus re-declares the same key for the same Alt+<mnemonic> and
+        // keeps the id every surface already holds, while a menu that
+        // disappears takes its own accelerator with it. Hidden, because
+        // it duplicates a menu the reader can already see.
+        const std::string key = "ckv.menu-bar.accelerator." + chord.text;
+        const ui::CommandId id = app_->commands().declare(
+            ui::CommandDescriptor{.key = key,
+                                  .title = parsed.display,
+                                  .category = "Menu",
+                                  .visibility = ui::CommandVisibility::Hidden});
         app_->commands().set_handler(id, [this, index] {
             activate();
-            open_dropdown(static_cast<int>(index));
+            open_dropdown(index);
         });
         app_->commands().bind_key(chord, id);
         menu_accelerators_.push_back(id);
@@ -498,7 +528,7 @@ void MenuBar::remove_menu_accelerators() {
     for (const ui::CommandId id : menu_accelerators_) {
         if (const auto chord = app_->commands().chord_for_command(id))
             app_->commands().unbind_key(*chord);
-        app_->commands().retract_command(id);
+        app_->commands().withdraw(id);
     }
     menu_accelerators_.clear();
 }

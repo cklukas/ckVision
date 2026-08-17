@@ -71,8 +71,10 @@ CK_TEST(workbench_help_page_contains_command_and_utility_components) {
     f.workbench.tabs()->set_active_index(2);
     f.app.step(0);
 
+    // The palette lists what declares itself browsable, so the workbench's
+    // own command is what it highlights -- named by key, never by number.
     CK_CHECK(f.workbench.command_palette()->highlighted_command() ==
-             std::optional<ckv::ui::CommandId>{ckv::ui::kFirstApplicationCommandId});
+             f.app.commands().id_for("workbench.build-project"));
     CK_CHECK(f.workbench.property_inspector()->items().size() == 2);
     CK_CHECK(f.workbench.notifications()->notifications().size() == 1);
     CK_CHECK(f.workbench.tooltip()->shown());

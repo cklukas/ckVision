@@ -205,7 +205,7 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
     // inline at the call site. Application and Desktop are the two things
     // that outlive any handler by construction.
     app.commands().set_handler(
-        ui::std_commands::kHelp,
+        app.commands().standard().help,
         [&app, &desktop, roles, title = std::move(title), body = std::move(body)] {
             MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", title + "\n\n" + body,
                                             MessageBoxButtons::Ok};

@@ -8,31 +8,37 @@ description: Commands, menu/status presentation, modal dialogs, validation, help
 
 # Dialogs and commands
 
-Register a command once, give it a title/chord/handler, and render it through
-`CommandPresentation` in menus, toolbars, and status lines. Use a standard
-presentation function for modal dialogs. This preserves one execution path,
-one source of enablement, and typed completion rather than scattered callbacks.
+Declare a command once under a namespaced key, give it a title/chord/handler,
+and render it through `CommandPresentation` in menus, toolbars, and status
+lines. Use a standard presentation function for modal dialogs. This preserves
+one execution path, one source of enablement, and typed completion rather than
+scattered callbacks.
 
 ## Command presentation
 
-Hello registers its own application commands, while the larger examples attach
-a handler to the framework's standard Quit command. The menu/status chrome is
-then simple data that references a command id.
+`CommandRegistry::declare()` returns the `CommandId` it assigned to the key —
+identity is the key, the id is a handle, and no application, widget or
+extension library picks a number for itself (`docs/standard-commands.md`).
+Hello declares its own application commands, while the larger examples attach
+a handler to the framework's standard Quit command, `commands().standard().quit`.
+The menu/status chrome is then simple data that references a command id.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="13-24" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="11-24" -->
 ```cpp
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
-    app_.commands().add({.id = kCmdGreeting, .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
-    app_.commands().add({.id = kCmdQuit, .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
+    // Each command names itself; the registry hands back the id this
+    // application then references. Nothing here picks a number.
+    const ui::CommandId greeting_command = app_.commands().declare({.key = "hello.greeting", .title = "&Greeting...", .category = "Hello", .chord = "Alt+G", .handler = [this] { greeting_box(); }});
+    // Its own quit command rather than the framework's, so this example
+    // can present the concept as "Exit" in the reference vocabulary it
+    // follows -- see docs/standard-commands.md on when that is the right
+    // call and when CommandPresentation is.
+    const ui::CommandId quit_command = app_.commands().declare({.key = "hello.quit", .title = "&Quit", .category = "Hello", .chord = "Alt+X", .handler = [this] { app_.request_quit(); }});
     widgets::ApplicationShell shell(app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
                                            .menus = {{"&File",
-                                                      {widgets::MenuItem{widgets::CommandPresentation{kCmdGreeting}},
+                                                      {widgets::MenuItem{widgets::CommandPresentation{greeting_command}},
                                                        widgets::MenuItem{"", ui::kInvalidCommand, {}, true},
-                                                       widgets::MenuItem{widgets::CommandPresentation{kCmdQuit, "E&xit"}}}}},
-                                           .status_items = {
-                                               widgets::StatusLineItem{widgets::CommandPresentation{kCmdQuit, "&Quit"}},
-                                               widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}}}});
-    desktop_ = &shell.desktop();
+                                                       widgets::MenuItem{widgets::CommandPresentation{quit_command, "E&xit"}}}}},
 ```
 <!-- /ckvision-snippet -->
 

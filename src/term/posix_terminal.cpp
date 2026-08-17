@@ -582,11 +582,12 @@ bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
 
     const bool has_pixel_evidence = observed_caps_.cell_pixels.width != 0 ||
                                     observed_caps_.cell_pixels.height != 0 || observed_caps_.pixel_mouse;
-    const bool has_graphics_evidence = observed_caps_.sixel_graphics ||
-                                       observed_caps_.sixel_color_registers != 0 ||
-                                       observed_caps_.sixel_max_geometry.width != 0 ||
+    // Only a terminal that has actually answered the geometry query has an
+    // answer worth re-establishing. One that never answers it has no
+    // resize-dependent graphics state at all.
+    const bool has_reported_geometry = observed_caps_.sixel_max_geometry.width != 0 ||
                                        observed_caps_.sixel_max_geometry.height != 0;
-    if (!has_pixel_evidence && !has_graphics_evidence) return false;
+    if (!has_pixel_evidence && !has_reported_geometry) return false;
 
     // A resize can also mean a font or display-scale change. Retaining the
     // old conversion would turn SGR-pixel coordinates into wrong cells until
@@ -597,14 +598,27 @@ bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
     observed_caps_.pixel_mouse = false;
     // XTSMGRAPHICS maximum geometry is the minimum of its graphics limit and
     // the terminal window (xterm control-sequences reference). Retaining a
-    // runtime result across a resize could therefore emit an image larger
-    // than the newly allowed geometry. Fall back to cells until a fresh
-    // finite geometry reply re-establishes graphics for this window.
-    observed_caps_.sixel_graphics = false;
-    observed_caps_.sixel_color_registers = 0;
+    // runtime result across a resize could therefore permit an image larger
+    // than the newly allowed geometry, so it is dropped and asked for again.
+    //
+    // WHETHER the terminal draws Sixel at all is not resize-dependent: a
+    // terminal does not stop supporting a protocol because its window
+    // changed size, and DA1 — the reply that establishes it — says nothing
+    // about window size either. Clearing it here, and then declining to
+    // accept DA1 again without a geometry reply, silently and permanently
+    // disabled graphics on every terminal that draws Sixel without also
+    // implementing XTSMGRAPHICS: the first resize turned the pictures into
+    // cell fallbacks for the rest of the session, and no reply the terminal
+    // was ever going to send could turn them back on. An absent optional
+    // reply is not evidence of an absent capability.
     observed_caps_.sixel_max_geometry = {};
     decoder_.set_capabilities(observed_caps_);
-    if (has_graphics_evidence) decoder_.require_verified_sixel_geometry(true);
+    // Wait for a fresh bound only where one was reported before. Until it
+    // arrives the picture is bounded by nothing, which is the same state a
+    // terminal that never answers the query leaves it in permanently: a
+    // frame the host refuses costs that frame, where waiting for a reply
+    // that never comes costs every frame after it.
+    if (has_reported_geometry) decoder_.require_verified_sixel_geometry(true);
     return update_effective_capabilities();
 }
 

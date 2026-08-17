@@ -53,6 +53,13 @@ using ckv::widgets::ButtonDescriptor;
 
 namespace {
 
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
+
 struct Fixture {
     HeadlessTerminal terminal{Size{80, 24}};
     ManualClock clock;
@@ -374,7 +381,7 @@ CK_TEST(quit_sweep_completes_every_standard_presentation_after_all_windows_detac
     auto window_list = present_window_list_dialog(*f.desktop, f.app, f.roles);
     auto viewer = present_help_viewer(help, "intro", f.app, *f.desktop, f.roles);
 
-    CK_CHECK(f.app.execute_command(ckv::ui::std_commands::kQuit));
+    CK_CHECK(f.app.execute_command(standard(f.app).quit));
     CK_CHECK(f.app.quit_requested());
     CK_CHECK(!message.completed());
     CK_CHECK(!file.completed());

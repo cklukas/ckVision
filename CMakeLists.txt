@@ -133,6 +133,13 @@ if(UNIX)
     add_executable(ckvision_terminal_probe tools/diag/terminal_probe.cpp)
     target_link_libraries(ckvision_terminal_probe PRIVATE cvision)
     ckvision_strict(ckvision_terminal_probe)
+
+    # The same question narrowed to pictures: can this terminal show one,
+    # and if it can, what would make it refuse a particular one. A window
+    # showing a cell fallback cannot tell those two apart on its own.
+    add_executable(ckvision_graphics_check tools/diag/graphics_check.cpp)
+    target_link_libraries(ckvision_graphics_check PRIVATE cvision)
+    ckvision_strict(ckvision_graphics_check)
 endif()
 
 # Half of the VT conformance harness (tools/vtconform/README.md): it prints

@@ -25,8 +25,8 @@ normal `TabControl`:
 ```cpp
 
     auto status = std::make_unique<widgets::StatusLine>();
-    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kMenu}},
-                       widgets::StatusLineItem{widgets::CommandPresentation{ui::std_commands::kQuit}}});
+    status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
+                       widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
     desktop_->dock_bottom(std::move(status));
 }
 
@@ -92,3 +92,227 @@ protocol directly. Mouse events reach `on_click`; pixel coordinates are
 available only when the injected terminal capability advertises pixel mouse.
 The HeadlessTerminal captures above test both Sixel and no-graphics profiles
 through Presenter bytes and a virtual display, rather than reading image memory.
+
+## Animated raster content
+
+A picture that changes needs four things a still one does not: somewhere to
+render it that is not the owning thread, a way back into the application that
+does not touch the view tree from outside, a redraw that costs one view rather
+than one screen, and a frame rate that yields to the reader when the loop is
+busy. The [Spin example](example-apps.md) is the reference for all four.
+
+### Publishing a frame
+
+`SpinView` is the whole of the application-side contract:
+
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="102-165" -->
+```cpp
+void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
+    // The back-pressure, and the whole of it: while a frame is being
+    // rendered this view asks for nothing. Ticks are opportunities, not
+    // obligations.
+    if (in_flight_) return;
+    const ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    const Size pixels = target_pixels();
+    if (pixels.width <= 0 || pixels.height <= 0) return;
+
+    adopt_surface_role();
+
+    FrameSpec spec;
+    spec.pixels = pixels;
+    spec.background = surface_color();
+    // Angles come from the clock, so a frame that took too long leaves a
+    // gap in the animation rather than slowing the rotation down.
+    const double seconds = static_cast<double>(now_nanos - phase_nanos_) * 1e-9;
+    spec.yaw = seconds * kYawRateRadiansPerSecond;
+    spec.pitch = seconds * kPitchRateRadiansPerSecond;
+    const int registers = app->terminal_capabilities().sixel_color_registers;
+    spec.color_budget = registers > 0 ? registers : 256;
+
+    in_flight_ = true;
+    service.submit(shape_, spec, lifetime_token(),
+                   [this](std::shared_ptr<const Image> frame) { accept_frame(std::move(frame)); });
+}
+
+double SpinView::frames_per_second() const noexcept {
+    return smoothed_interval_seconds_ > 0.0 ? 1.0 / smoothed_interval_seconds_ : 0.0;
+}
+
+void SpinView::accept_frame(std::shared_ptr<const Image> frame) {
+    in_flight_ = false;
+    if (frame == nullptr) return;
+    frame_pixels_ = Size{frame->width(), frame->height()};
+    ++frames_shown_;
+
+    // Measuring the rate is what an unattached view cannot do; showing the
+    // frame is not. Publishing comes first for that reason — a frame is
+    // never withheld because something about the readout was unavailable.
+    if (context().app != nullptr) {
+        const std::int64_t now = context().app->clock().now_nanos();
+        if (last_frame_nanos_ && now > *last_frame_nanos_) {
+            const double interval = static_cast<double>(now - *last_frame_nanos_) * 1e-9;
+            // Smoothed rather than instantaneous: the rate is there to be
+            // read, and a readout flickering between 9 and 21 says less
+            // than a steady 15 does.
+            smoothed_interval_seconds_ = smoothed_interval_seconds_ > 0.0
+                                             ? smoothed_interval_seconds_ * 0.75 + interval * 0.25
+                                             : interval;
+        }
+        last_frame_nanos_ = now;
+    }
+
+    // One call, and the framework does the rest: this view is invalidated,
+    // its window repaints its own backing store, and the Presenter
+    // re-encodes exactly one raster region.
+    set_image(std::move(frame));
+    // Anything showing a number about this animation is repainted with the
+    // frame it describes, in the same batch and therefore in the same
+    // presented frame — never on a clock of its own.
+    if (on_frame_shown) on_frame_shown();
+}
+```
+<!-- /ckvision-snippet -->
+
+*One frame in flight.* The first line is the back-pressure, and the only
+back-pressure there is. A tick that arrives while a frame is still rendering
+asks for nothing, so the render queue is bounded by the number of animated
+views however slow the host is. Angles come from the injected `Clock` rather
+than from a frame counter, so a skipped frame leaves a gap in the animation
+instead of slowing the rotation down.
+
+*The size is the view's own.* `bounds()` in cells multiplied by
+`Application::terminal_cell_pixels()` is a picture that lands on whole cells at
+its true proportions — the same reasoning `Canvas` applies to its own backing
+image, including falling back to `widgets::kAssumedCellPixels` when a terminal
+draws pictures but never measured a cell. A resized window simply produces the
+next frame at the new size.
+
+*The background belongs to the window.* Sixel carries no alpha channel, so a
+frame that does not bring its surroundings with it arrives as a rectangle of
+some other color pasted over the window. Resolving the window's own frame role
+through `resolved_color` — and setting that same role as the view's fallback
+override — is what makes the picture end where the window's cells carry on, in
+every theme, and on a terminal that shows the cell fallback instead.
+
+*The redraw is one call.* `set_image` invalidates this view; the window
+repaints its own backing store, the compositor touches the cells that changed,
+and Presenter re-encodes one raster region. An animated view never needs
+`invalidate_all`.
+
+Two further constraints belong to the host rather than to the view, and an
+application that renders its own rasters has to respect both.
+
+*Colors.* `encode_sixel` reproduces colors exactly while it has a register per
+color, and otherwise quantizes the whole image — background included — to a
+fixed color cube. A frame whose palette exceeds the host's reported
+`sixel_color_registers` therefore loses the very background match the seam
+depends on, which is why Spin's renderer builds each frame from a bounded color
+table instead of shading freely.
+
+*Size.* A terminal may answer XTSMGRAPHICS with a maximum Sixel geometry —
+`Capabilities::sixel_max_geometry`, commonly 1000×1000 px. An image larger than
+that is not clipped and not scaled: Presenter refuses it, and the view shows its
+cell fallback where a picture should be. The limit applies to the image handed
+over, not to the cells it occupies, so the answer is to render within it and let
+the term layer scale the smaller picture back across the whole cell box —
+`SpinView::target_pixels()` does exactly that, and gives up sharpness rather
+than the picture. This is the failure worth knowing about by name: a window that
+was showing a picture stops as soon as it is resized past the host's limit.
+
+*Diagnosing a missing picture.* Set `CKVISION_GRAPHICS_LOG` to `stderr` or a
+file name and Presenter reports every frame's raster traffic — including, on the
+frame it happens, why a picture the scene placed did not reach the terminal
+("this host reports no Sixel graphics", or the image size against the stated
+maximum). `term::capability_report()` prints the same facts as a table an
+application can show or a user can paste into a bug report; Spin's own About box
+states them in a sentence.
+
+### A readout on the frame border
+
+`Window::add_frame_overlay` puts a small view on a border row — the mechanism
+behind `widgets::EditorWindow`'s own "Ln 1, Col 1" indicator. Spin uses it for
+a frame-rate readout in the bottom-right corner, and it is worth copying for
+any value that changes as often as the content does:
+
+- It **pulls** its text in `draw()` instead of being handed a new string
+  whenever the value changes. A pushed `set_text()` per frame is a size-hint
+  change, and every one of those makes the window re-lay-out its overlays — a
+  layout pass to display a number that is about to change again.
+- Its width is **fixed**, so that re-layout never happens and a number gaining
+  a digit cannot shuffle the readout along the border. The text is
+  right-aligned inside that box.
+- It draws in its window's own frame role, active or inactive, so the border
+  reads as one line with a number set into it.
+- It is invalidated **by the frame it describes** — `SpinView::on_frame_shown`
+  fires immediately after `set_image` — so both land in the same batch, and
+  therefore in the same presented frame. A readout on a timer of its own would
+  instead wake the loop on its own schedule to repaint eight cells.
+
+### Pacing, and staying responsive
+
+An animation that always asks for the same frame rate makes the terminal's
+worst case its normal case. Everything an animated raster costs the OWNING
+thread — composing the damaged cells, scaling the image to the cell box,
+encoding the Sixel, writing it — grows with the window, and a maximized window
+full of raster can cost more per frame than the interval it was asked for. The
+loop then never catches up, and what the reader notices is not a slow
+animation but a slow application.
+
+Spin answers that with two rules and no polling at all:
+
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="413-444" -->
+```cpp
+void SpinApp::arm_next_tick() {
+    // Self-clocking, and the reason this is a one-shot rather than a
+    // repeating timer: the next tick is scheduled once the previous one
+    // has run, so the loop cannot accumulate a backlog of ticks it owes
+    // while it was busy. A repeating timer reschedules from its own fire
+    // time and would deliver that backlog all at once afterwards.
+    if (panels_.empty() || timer_) return;
+    timer_ = app_.start_timer(interval_nanos_, /*repeating=*/false, [this] { tick(); });
+}
+
+void SpinApp::pace(std::int64_t now_nanos) {
+    const std::int64_t observed = now_nanos - *last_tick_nanos_;
+    last_tick_nanos_ = now_nanos;
+    if (observed <= 0) return;
+
+    if (observed > interval_nanos_ * 3 / 2) {
+        // The loop is running late, and the only honest response is to ask
+        // for less. Asking at the rate it is actually managing leaves
+        // everything it was busy with — keystrokes, a window drag, a large
+        // raster to encode — the room it was already taking.
+        interval_nanos_ = std::min(kSlowestFrameIntervalNanos, observed);
+    } else if (observed >= interval_nanos_ * 3 / 4) {
+        // On time: ease back towards the target, geometrically rather than
+        // at once, so one quiet tick after a busy stretch does not put the
+        // load straight back.
+        interval_nanos_ = std::max(kFrameIntervalNanos, interval_nanos_ * 7 / 8);
+    }
+    // Anything much EARLIER than asked for is not a measurement of the
+    // loop's health at all — it is a clock that jumped, or a host that
+    // stepped this application several times in a row — so it neither
+    // widens nor narrows the interval.
+}
+```
+<!-- /ckvision-snippet -->
+
+The timer is a **one-shot that arms the next one after it has run**, so the
+loop can never owe a backlog of ticks: a repeating timer reschedules from its
+own fire time, and after a stall it comes due once per missed interval, all at
+once. And the interval **follows the loop**: a tick that arrives much later
+than it asked for is the loop reporting that it had something better to do, so
+the next one is asked for at the rate the loop is actually managing, down to a
+documented floor. Ticks landing on time again ease it back geometrically. The
+cost of an overloaded moment is therefore a slower rotation, never an
+unresponsive window.
+
+The signals available for this today are `Clock` (how late a tick was) plus
+`Application::last_compose_cells_touched()` and
+`Application::last_bytes_emitted()`. Tick lateness is the one Spin uses,
+because it measures what the reader actually feels rather than a proxy for it.
+
+| Sixel Spin | No-graphics Spin |
+|---|---|
+| ![Spin under Sixel](generated/screenshots/spin-initial.svg) | ![Spin fallback](generated/screenshots/spin-no-graphics.svg) |

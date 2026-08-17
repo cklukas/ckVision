@@ -14,8 +14,8 @@ namespace ckv::gallery {
 // Every command this app needs is already in the standard set (M9/
 // WP-12) — activating the menu, quitting, tiling, and cascading are
 // all framework concepts with no gallery-specific wording to pin, so
-// this app has no application-space command ids of its own; it just
-// attaches handlers to ui::std_commands::*.
+// this app declares no commands of its own at all; it just attaches
+// handlers to commands().standard().
 
 GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);
@@ -29,9 +29,9 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // all render live from the registration below.
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_items({widgets::StatusLineItem{
-                           widgets::CommandPresentation{ui::std_commands::kMenu}},
+                           widgets::CommandPresentation{app_.commands().standard().menu}},
                        widgets::StatusLineItem{
-                           widgets::CommandPresentation{ui::std_commands::kQuit}}});
+                           widgets::CommandPresentation{app_.commands().standard().quit}}});
     // dock_bottom (not add_child + a one-time set_bounds) keeps the
     // status line pinned to the last row across every future terminal
     // resize — Desktop::on_resized() re-derives its position from
@@ -50,7 +50,7 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // does the same for kTile/kCascade (M10/WP-13 completion) — both
     // already fired at desktop_'s own attachment above, before this
     // point.
-    app_.commands().set_handler(ui::std_commands::kQuit, [this] { app_.request_quit(); });
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
 
     app_.set_focus(name_input_);
 
@@ -78,14 +78,14 @@ void GalleryApp::build_menu_bar() {
                                                   false, {}, {}});
     file_menu.items.push_back(widgets::MenuItem{"", ui::kInvalidCommand, nullptr, true, {}, {}});
     file_menu.items.push_back(
-        widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kQuit}});
+        widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().quit}});
     menus.push_back(std::move(file_menu));
 
     widgets::MenuBarItem window_menu{"&Window", {}};
     window_menu.items.push_back(
-        widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kTile}});
+        widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().tile}});
     window_menu.items.push_back(
-        widgets::MenuItem{widgets::CommandPresentation{ui::std_commands::kCascade}});
+        widgets::MenuItem{widgets::CommandPresentation{app_.commands().standard().cascade}});
     menus.push_back(std::move(window_menu));
 
     auto menu = std::make_unique<widgets::MenuBar>(std::move(menus));

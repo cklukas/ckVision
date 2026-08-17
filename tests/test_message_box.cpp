@@ -39,6 +39,13 @@ using ckv::widgets::MessageBoxKind;
 using ckv::widgets::MessageBoxResult;
 
 namespace {
+
+// The framework's own commands, by name. A test names the concept and
+// asks the registry that assigned the ids, exactly as application code
+// does — no test knows or states a command's number.
+const ckv::ui::StandardCommands& standard(const ckv::ui::Application& app) {
+    return app.commands().standard();
+}
 struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
@@ -464,12 +471,11 @@ CK_TEST(present_message_box_scopes_input_immediately_and_completes_after_detach)
     Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(desktop_owned)));
 
     bool background_command_ran = false;
-    constexpr ckv::ui::CommandId kBackgroundCommand = ckv::ui::kFirstApplicationCommandId;
-    app.commands().add({.id = kBackgroundCommand,
-                        .title = "&Background",
-                        .category = "Test",
-                        .chord = "Alt+B",
-                        .handler = [&] { background_command_ran = true; }});
+    app.commands().declare({.key = "test.background",
+                            .title = "&Background",
+                            .category = "Test",
+                            .chord = "Alt+B",
+                            .handler = [&] { background_command_ran = true; }});
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
                                            MessageBoxButtons::Ok};
@@ -539,7 +545,7 @@ CK_TEST(present_message_box_quit_sweep_completes_with_its_escape_result_after_de
                                            MessageBoxButtons::OkCancel};
     auto presentation = present_message_box(app, *desktop, roles, descriptor);
 
-    CK_CHECK(app.execute_command(ckv::ui::std_commands::kQuit));
+    CK_CHECK(app.execute_command(standard(app).quit));
     CK_CHECK(app.quit_requested());
     CK_CHECK(!presentation.completed());
     app.step(0);
@@ -601,7 +607,7 @@ CK_TEST(a_vetoed_presented_message_box_also_vetoes_its_quit_sweep) {
     Window* const box = desktop->windows().back();
     box->close_request = [] { return false; };
 
-    CK_CHECK(app.execute_command(ckv::ui::std_commands::kQuit));
+    CK_CHECK(app.execute_command(standard(app).quit));
     CK_CHECK(!app.quit_requested());
     CK_CHECK(!presentation.completed());
     CK_CHECK(app.is_modal());
