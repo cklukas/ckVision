@@ -363,6 +363,18 @@ CK_TEST(arrow_navigation_wraps) {
     CK_CHECK(group.selected() == 1);
 }
 
+CK_TEST(the_cursor_follows_a_programmatic_selection) {
+    // A dialog that opens with row N selected has told the reader where they
+    // are, and their first arrow must move from THERE. It used to move from
+    // row 0 wherever the selection was, so Up in a two-row group re-selected
+    // the very row the reader was arrowing away from.
+    Fixture f;
+    RadioGroup group({"&A", "&B", "&C"});
+    group.set_selected(2);
+    group.on_key(key(Key::Up));
+    CK_CHECK(group.selected() == 1);
+}
+
 CK_TEST(set_selected_to_negative_one_clears_the_selection) {
     Fixture f;
     RadioGroup group({"&A", "&B"});

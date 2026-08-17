@@ -239,6 +239,12 @@ void RadioGroup::on_attached() {
 
 void RadioGroup::set_selected(int index) {
     if (index != -1 && (index < 0 || static_cast<std::size_t>(index) >= labels_.size())) return;  // out of range
+    // The keyboard cursor follows a programmatic selection, exactly as it
+    // follows a mouse click (on_mouse sets cursor_ before toggling). Without
+    // this, a dialog whose radio group opens with row N selected still has its
+    // cursor on row 0 — and the reader's first Up, wrapping from 0 to the last
+    // row, re-selects the very row they were trying to arrow away from.
+    if (index >= 0) cursor_ = static_cast<std::size_t>(index);
     if (index == selected_) return;
     selected_ = index;
     invalidate();
