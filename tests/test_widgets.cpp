@@ -430,6 +430,38 @@ CK_TEST(static_text_end_alignment_offsets_each_wrapped_line) {
     CK_CHECK(row_text(s, 0) == "        hi");
 }
 
+CK_TEST(static_text_asks_for_a_readable_measure_rather_than_its_unwrapped_length) {
+    // The width a paragraph asks for is the width it is read at. Asking for
+    // its unwrapped length instead made every self-sizing container built
+    // around prose as wide as its longest sentence.
+    const std::string sentence =
+        "A paragraph of ordinary prose, long enough that written out on one "
+        "line it would run well past any width a reader is comfortable with.";
+    StaticText text(sentence);
+    CK_CHECK(static_cast<int>(sentence.size()) > ckv::widgets::kProseMeasureCells);
+    CK_CHECK(text.horizontal_size_hint().preferred == ckv::widgets::kProseMeasureCells);
+    // A request, not a ceiling: given more columns, the text still uses them.
+    CK_CHECK(text.horizontal_size_hint().max == ui::kUnboundedExtent);
+    CK_CHECK(text.height_for_width(200) == 1);
+}
+
+CK_TEST(static_text_shorter_than_the_measure_asks_only_for_what_it_occupies) {
+    StaticText text("Saved.");
+    CK_CHECK(text.horizontal_size_hint().preferred == 6);
+}
+
+CK_TEST(preformatted_static_text_asks_for_every_column_it_was_written_with) {
+    // Preformatted text cannot wrap into a narrower view -- it would be
+    // clipped instead -- so it asks for its full width however wide that is.
+    const std::string table =
+        "name                                      value                     units\n"
+        "short                                     1                         cells";
+    StaticText text(table);
+    text.set_preformatted(true);
+    CK_CHECK(text.horizontal_size_hint().preferred == 73);
+    CK_CHECK(text.horizontal_size_hint().preferred > ckv::widgets::kProseMeasureCells);
+}
+
 // --- Size-hint-change propagation (M9/WP-16, E10) ---------------------
 
 CK_TEST(label_set_text_notifies_its_parent_of_the_changed_size_hint) {

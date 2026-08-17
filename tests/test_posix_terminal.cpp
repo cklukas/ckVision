@@ -1877,6 +1877,138 @@ CK_TEST(request_quit_interrupts_an_in_flight_posix_application_run) {
     ::close(child.master_fd);
 }
 
+// A session that asked the terminal a question has to stay for the answer.
+// Restoring a terminal hands its input queue on rather than emptying it, so
+// a reply that arrives after the session stopped reading is delivered to
+// whoever reads next — in an ordinary session the shell, which shows the
+// tail of `CSI 0 n` as a typed `n`.
+CK_TEST(a_session_reads_the_last_frames_answer_before_it_hands_the_terminal_back) {
+    int master_fd = -1;
+    int slave_fd = -1;
+    int status_pipe[2] = {-1, -1};
+    int release_pipe[2] = {-1, -1};
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    CK_CHECK(::fcntl(master_fd, F_SETFL, O_NONBLOCK) == 0);
+    CK_CHECK(::pipe(status_pipe) == 0);
+    CK_CHECK(::pipe(release_pipe) == 0);
+    // The session restores whatever mode it found, and this test measures the
+    // queue that mode leaves behind: a canonical-mode tty reports only
+    // completed lines as available, which would make the measurement say
+    // "empty" about a queue holding an unterminated reply.
+    struct termios raw {};
+    CK_CHECK(::tcgetattr(slave_fd, &raw) == 0);
+    ::cfmakeraw(&raw);
+    CK_CHECK(::tcsetattr(slave_fd, TCSANOW, &raw) == 0);
+
+    const pid_t child = ::fork();
+    CK_CHECK(child >= 0);
+    if (child == 0) {
+        ::close(master_fd);
+        ::close(status_pipe[0]);
+        ::close(release_pipe[1]);
+        ::setsid();
+
+        PosixClock clock;
+        PosixTerminal terminal(clock, slave_fd, slave_fd, TerminalProfile::ModernVt);
+        {
+            ui::Application app(terminal, clock);
+            app.set_frame_completion_tracking(true);
+            app.step(clock.now_nanos());
+            const auto answered_by = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while (app.frames_awaiting_terminal() > 0 &&
+                   std::chrono::steady_clock::now() < answered_by)
+                app.step(clock.now_nanos() + 100'000'000);
+            // The premise: this host answers. A written-off frame instead of a
+            // reply means the parent never played its part, and the rest of
+            // this test would be measuring nothing.
+            if (app.last_terminal_round_trip_nanos() < 0) ::_exit(1);
+
+            const char answered = 'A';
+            if (::write(status_pipe[1], &answered, 1) != 1) ::_exit(2);
+            char release = 0;
+            if (::read(release_pipe[0], &release, 1) != 1 || release != 'G') ::_exit(3);
+
+            // The last frame of the session, and the question that rides out
+            // with it — exactly where a quit leaves things.
+            app.invalidate_all();
+            app.step(clock.now_nanos());
+            if (app.frames_awaiting_terminal() == 0) ::_exit(4);
+            const char asked = 'Q';
+            if (::write(status_pipe[1], &asked, 1) != 1) ::_exit(5);
+        }
+        // The session is over and the terminal is back in the mode it was
+        // found in. Whatever the answer met on arrival, the next reader of
+        // this terminal must find nothing left for it.
+        int pending = -1;
+        if (::ioctl(slave_fd, FIONREAD, &pending) != 0) ::_exit(6);
+        const char verdict = pending == 0 ? 'D' : 'L';
+        (void)::write(status_pipe[1], &verdict, 1);
+        ::_exit(pending == 0 ? 0 : 7);
+    }
+    ::close(slave_fd);
+    ::close(status_pipe[1]);
+    ::close(release_pipe[0]);
+    CK_CHECK(::fcntl(status_pipe[0], F_SETFL, O_NONBLOCK) == 0);
+
+    // Play a terminal that answers, until the child has measured one round
+    // trip against it.
+    std::string seen;
+    std::size_t scanned = 0;
+    const auto answer_new_questions = [&] {
+        for (std::size_t at = seen.find("\x1B[5n", scanned); at != std::string::npos;
+             at = seen.find("\x1B[5n", scanned)) {
+            scanned = at + 4;
+            CK_CHECK(::write(master_fd, "\x1B[0n", 4) == 4);
+        }
+    };
+    char status = 0;
+    const auto answering_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < answering_deadline) {
+        char buf[4096];
+        for (ssize_t n = ::read(master_fd, buf, sizeof(buf)); n > 0;
+             n = ::read(master_fd, buf, sizeof(buf)))
+            seen.append(buf, static_cast<std::size_t>(n));
+        answer_new_questions();
+        if (::read(status_pipe[0], &status, 1) == 1) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CK_CHECK(status == 'A');
+
+    // From here this terminal answers only when told to, so the child's last
+    // question is outstanding for as long as this test wants it to be.
+    const char release = 'G';
+    CK_CHECK(::write(release_pipe[1], &release, 1) == 1);
+    status = 0;
+    const auto asked_by = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < asked_by) {
+        if (::read(status_pipe[0], &status, 1) == 1) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CK_CHECK(status == 'Q');
+
+    // The child is now inside the handover. It must still be there: a session
+    // that walked away from its own question would already have reported.
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    char premature = 0;
+    CK_CHECK(::read(status_pipe[0], &premature, 1) != 1);
+
+    CK_CHECK(::write(master_fd, "\x1B[0n", 4) == 4);
+    char verdict = 0;
+    const auto done_by = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < done_by) {
+        if (::read(status_pipe[0], &verdict, 1) == 1) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CK_CHECK(verdict == 'D');  // 'L': the reply was left for the next reader
+
+    const int child_status = wait_child(child);
+    CK_CHECK(WIFEXITED(child_status));
+    CK_CHECK(WEXITSTATUS(child_status) == 0);
+    ::close(release_pipe[1]);
+    ::close(status_pipe[0]);
+    ::close(master_fd);
+}
+
 CK_TEST(resume_applies_a_resize_that_occurred_while_the_session_was_stopped_before_presenting) {
     int master_fd = -1;
     int slave_fd = -1;

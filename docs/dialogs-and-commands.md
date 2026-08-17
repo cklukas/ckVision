@@ -134,6 +134,16 @@ part of their presentation rather than an accidental by-product of fields.
 
 ![Localized Forms information message](generated/screenshots/forms-info-message.svg)
 
+An alert opens at the width its message asks for: a short sentence gets a box
+the size of the sentence, and a paragraph gets one no wider than the prose
+measure described under
+[StaticText](widget-gallery.md#statictext), however wide the terminal is. The
+box is then as tall as its wrapped text, and widens past the measure only when
+that would not fit the desktop's height — there is nothing to scroll in an
+alert, so it grows rather than cutting its own text off. Use
+`MessageBoxDescriptor::minimum_content_width` for an identity panel that wants
+deliberate whitespace around compact content.
+
 For file/directory selection, help, and window lists use the matching standard
 presentation headers shown in [the API index](api-index.md#dialogs-and-client-services).
 

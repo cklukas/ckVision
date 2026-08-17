@@ -160,6 +160,15 @@ Application::Application(term::Terminal& terminal, Clock& clock,
 }
 
 Application::~Application() {
+    // Before the terminal is handed back, and not after: a reply collected
+    // once the session is restored has already been given to somebody else.
+    try {
+        settle_frame_completion();
+    } catch (...) {
+        // Nothing here can be reported and nothing can be retried — the
+        // session is being handed back either way, and a destructor that
+        // let this out would end the process over a byte.
+    }
     terminal_.restore();
     diagnostics_.flush_after_terminal_restore(terminal_);
 }
@@ -768,6 +777,16 @@ void Application::set_frame_completion_tracking(bool enabled) {
     longest_terminal_round_trip_nanos_ = 0;
 }
 
+std::int64_t Application::frame_completion_patience_nanos() const noexcept {
+    // A host that has answered before is waited for as long as its own
+    // slowest answer suggests it needs. Giving up on it early is worse than
+    // not asking at all: the wait IS the back-pressure, and abandoning it
+    // sends the next frame into a picture the terminal is still drawing.
+    if (!terminal_ever_acknowledged_) return kFrameCompletionTimeoutNanos;
+    return std::max(kFrameCompletionTimeoutNanos,
+                    longest_terminal_round_trip_nanos_ * kFrameCompletionPatienceFactor);
+}
+
 void Application::reconcile_frame_completion(std::int64_t now_nanos) {
     if (!presenter_.frame_completion_tracking()) return;
 
@@ -794,16 +813,7 @@ void Application::reconcile_frame_completion(std::int64_t now_nanos) {
     }
 
     if (frames_settled_ >= marked || !oldest_unanswered_frame_nanos_) return;
-    // A host that has answered before is waited for as long as its own
-    // slowest answer suggests it needs. Giving up on it early is worse than
-    // not asking at all: the wait IS the back-pressure, and abandoning it
-    // sends the next frame into a picture the terminal is still drawing.
-    const std::int64_t deadline =
-        terminal_ever_acknowledged_
-            ? std::max(kFrameCompletionTimeoutNanos,
-                       longest_terminal_round_trip_nanos_ * kFrameCompletionPatienceFactor)
-            : kFrameCompletionTimeoutNanos;
-    if (now_nanos - *oldest_unanswered_frame_nanos_ < deadline) return;
+    if (now_nanos - *oldest_unanswered_frame_nanos_ < frame_completion_patience_nanos()) return;
 
     // Written off. A terminal that does not answer must cost an application
     // the wait once, never its animation.
@@ -819,6 +829,35 @@ void Application::reconcile_frame_completion(std::int64_t now_nanos) {
                           "frame completion: this terminal does not answer DSR, so pacing against it "
                           "is off for this session");
         set_frame_completion_tracking(false);
+    }
+}
+
+void Application::settle_frame_completion() {
+    if (!presenter_.frame_completion_tracking()) return;
+    // An answer already read but not yet accounted for settles the debt
+    // without a wait: the last thing a loop does is poll, so the reply is
+    // often in hand before anyone asks for it.
+    reconcile_frame_completion(clock_.now_nanos());
+    if (frames_awaiting_terminal() == 0) return;
+    // A host that has never answered is owed no wait. Its silence is the
+    // same silence that turns tracking off in the running loop, and there
+    // is no reply in flight from a terminal that does not send one.
+    if (!terminal_ever_acknowledged_) return;
+
+    const std::int64_t deadline = clock_.now_nanos() + frame_completion_patience_nanos();
+    while (frames_awaiting_terminal() > 0) {
+        const std::int64_t before = clock_.now_nanos();
+        if (before >= deadline) return;
+        const std::size_t acknowledged_before = terminal_.frame_acknowledgements();
+        // Discarded deliberately: whatever else the terminal has to say
+        // arrives after the last frame this session will ever paint.
+        terminal_.poll(deadline);
+        const std::int64_t after = clock_.now_nanos();
+        reconcile_frame_completion(after);
+        // A wait that consumed neither time nor an answer came from a
+        // backend that does not wait. Repeating it would spin rather than
+        // settle, and a headless or scripted backend has no reply to give.
+        if (after == before && terminal_.frame_acknowledgements() == acknowledged_before) return;
     }
 }
 

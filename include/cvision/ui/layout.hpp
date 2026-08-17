@@ -104,6 +104,11 @@ public:
     // which a nested container silently collapsed to zero cells.
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
+    // A container that reports intrinsic sizes must answer the
+    // height-for-width query too, or the one sanctioned second pass
+    // (ARCHITECTURE.md §5) stops at it and every wrapped descendant is
+    // measured as though width did not matter.
+    int height_for_width(int width) const override;
 
     void on_resized() override { relayout(); }
     // A child's own hint changing (M9/WP-16) needs the exact same
@@ -136,6 +141,10 @@ public:
     // See Row: main axis (vertical here) sums, cross axis maxes.
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
+    // See Row: the height-for-width query passes through a container that
+    // reports intrinsic sizes. Here it is the main axis, so the children's
+    // answers sum — each asked at the width this Column would give it.
+    int height_for_width(int width) const override;
 
     void on_resized() override { relayout(); }
     // See Row: this Column's own aggregate hint is never cached, so a

@@ -744,3 +744,128 @@ CK_TEST(exec_message_box_host_quit_returns_fallback_and_detaches_the_open_box) {
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 }
+
+// --- How wide, and how tall, an alert opens --------------------------------
+
+namespace {
+
+// The shape of an About: an identity line, a rule about it, and a second
+// paragraph -- prose, with no line breaks of its own inside a paragraph.
+const char* const kAboutText =
+    "ckVision Example\n\nA window per rotating solid. Every frame is drawn on a worker thread, "
+    "handed back through the application, and shown by invalidating one view -- no polling, and "
+    "no forced redraw. Drag a window's corner to resize it: the next frame is rendered at the "
+    "new pixel size, on the window's own background.";
+
+// Presents an Ok box on a desktop of the given size and answers the window
+// it opened. The presentation is deliberately dropped: these tests ask about
+// geometry, and nothing here dismisses the box.
+Window* open_about(Application& app, Desktop& desktop, const StandardRoles& roles,
+                   const char* message) {
+    MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", message, MessageBoxButtons::Ok};
+    descriptor.emphasized_leading_lines = 1;
+    auto presentation = present_message_box(app, desktop, roles, descriptor);
+    presentation.set_completion_handler([](MessageBoxResult) {});
+    return desktop.active_window();
+}
+
+// The message inside a box, for the question "did all of it fit".
+ckv::widgets::StaticText* message_of(Window& box) {
+    auto* column = dynamic_cast<ckv::ui::Column*>(box.content());
+    if (column == nullptr) return nullptr;
+    for (const std::unique_ptr<View>& child : column->children())
+        if (auto* text = dynamic_cast<ckv::widgets::StaticText*>(child.get())) return text;
+    return nullptr;
+}
+
+}  // namespace
+
+CK_TEST(a_prose_alert_opens_at_a_readable_measure_however_wide_the_terminal_is) {
+    // A paragraph asked for its unwrapped length, and an alert built around
+    // it spanned the whole terminal: two lines of text ruled across 200
+    // columns. The measure is what it asks for now, and the terminal getting
+    // wider no longer widens the alert.
+    ckv::term::HeadlessTerminal term(ckv::Size{200, 40});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<Desktop*>(
+        app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 200, 40})));
+
+    Window* box = open_about(app, *desktop, roles, kAboutText);
+    CK_CHECK(box != nullptr);
+    if (box == nullptr) return;
+    // The measure, the alert's one-cell margin either side, and two frame cells.
+    CK_CHECK(box->bounds().width == ckv::widgets::kProseMeasureCells + 4);
+    // And centred on the desktop rather than pinned to its left edge.
+    CK_CHECK(box->bounds().x > 0);
+}
+
+CK_TEST(an_alert_opens_tall_enough_for_the_text_it_wrapped) {
+    // The height came from counting the message's own line breaks, which for
+    // a paragraph is one -- so the box opened short and cut its own prose off
+    // at the frame. It is sized from the wrapped text now.
+    ckv::term::HeadlessTerminal term(ckv::Size{200, 40});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<Desktop*>(
+        app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 200, 40})));
+
+    Window* box = open_about(app, *desktop, roles, kAboutText);
+    CK_CHECK(box != nullptr);
+    if (box == nullptr) return;
+    app.step(0);
+
+    ckv::widgets::StaticText* message = message_of(*box);
+    CK_CHECK(message != nullptr);
+    if (message == nullptr) return;
+    CK_CHECK(message->bounds().height >= message->height_for_width(message->bounds().width));
+    CK_CHECK(box->bounds().height <= 40);
+}
+
+CK_TEST(a_short_alert_is_no_wider_than_the_sentence_it_carries) {
+    // The measure is a ceiling on what prose asks for, not a width every
+    // alert is padded out to.
+    ckv::term::HeadlessTerminal term(ckv::Size{200, 40});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<Desktop*>(
+        app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 200, 40})));
+
+    Window* box = open_about(app, *desktop, roles, "Saved.");
+    CK_CHECK(box != nullptr);
+    if (box == nullptr) return;
+    CK_CHECK(box->bounds().width < ckv::widgets::kProseMeasureCells);
+}
+
+CK_TEST(an_alert_that_would_not_fit_the_desktops_height_widens_until_it_does) {
+    // Widening is what the box has left when the measure leaves it taller
+    // than the room there is: prose given more columns needs fewer rows.
+    // Clipping the text instead would be the one outcome a reader cannot
+    // recover from -- there is nothing to scroll.
+    // Ten rows: at the measure this About needs more than that, so the box
+    // has to find its own way to fit.
+    ckv::term::HeadlessTerminal term(ckv::Size{200, 10});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<Desktop*>(
+        app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 200, 10})));
+
+    Window* box = open_about(app, *desktop, roles, kAboutText);
+    CK_CHECK(box != nullptr);
+    if (box == nullptr) return;
+    CK_CHECK(box->height_for_width(ckv::widgets::kProseMeasureCells + 4) > 10);  // the premise
+    CK_CHECK(box->bounds().width > ckv::widgets::kProseMeasureCells + 4);
+    CK_CHECK(box->bounds().height <= 10);
+    // No wider than it had to be, either: one column narrower and the text
+    // would not have fitted the desktop.
+    CK_CHECK(box->height_for_width(box->bounds().width) <= 10);
+    CK_CHECK(box->height_for_width(box->bounds().width - 1) > 10);
+}

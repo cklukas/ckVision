@@ -471,7 +471,15 @@ placement). Size hints flow up, final rects flow down. The one sanctioned
 exception to the single pass is **height-for-width**: wrapped widgets
 (static text, memo, message boxes) declare a height-for-width query that
 containers invoke once during the down pass — bounded, no measurement
-loops.
+loops. A container that reports intrinsic sizes (`Row`, `Column`) answers
+the query for its own children, so the pass does not stop at it.
+
+Sizing a window that arrives without bounds is placement, not layout, and
+is the one place that asks the query more than once: a window opens at
+the width its content asks for, and when that leaves it taller than the
+desktop it is widened to the narrowest width its content does fit — found
+by bisection, a bounded number of measurements, once, before the window
+is first shown.
 
 A widget whose own preferred size changes after that pass already ran
 (a label growing, text wrapping to a new line count) calls

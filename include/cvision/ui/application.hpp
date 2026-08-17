@@ -176,6 +176,27 @@ public:
         return last_terminal_round_trip_nanos_;
     }
 
+    // Collects the answers to the questions already asked. A session that
+    // stops reading with a marked frame outstanding does not cancel that
+    // reply — restoring a terminal hands its input queue on rather than
+    // discarding it, so `CSI 0 n` is delivered to whatever inherits the
+    // queue, and a shell shows the tail of it as typed input. Asking the
+    // terminal something therefore obliges this session to stay for the
+    // answer.
+    //
+    // The destructor does this before it restores, which covers an
+    // ordinary exit; call it directly when handing the terminal back while
+    // this Application stays alive. Terminal events arriving meanwhile are
+    // dropped: this is the end of the session's reading, and there is
+    // nothing left to deliver them to.
+    //
+    // Only a host that has answered before is waited for, and only as long
+    // as its own slowest answer suggests it needs — the same patience the
+    // running loop extends it. Silence is not evidence that a reply is on
+    // its way, and an exit is the worst place to spend a timeout
+    // rediscovering that.
+    void settle_frame_completion();
+
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
 
@@ -595,6 +616,10 @@ private:
     // Turns this terminal's replies into the outstanding-frame count,
     // and writes off what it never answered.
     void reconcile_frame_completion(std::int64_t now_nanos);
+    // How long this host's silence is given before an unanswered frame is
+    // written off — the same patience whether the wait happens between
+    // frames or at the end of the session.
+    std::int64_t frame_completion_patience_nanos() const noexcept;
     void paint_too_small_state(scene::Painter& painter, Size current_size) const;
 
     Application(term::Terminal& terminal, Clock& clock,

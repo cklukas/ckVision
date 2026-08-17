@@ -1697,6 +1697,44 @@ CK_TEST(destroying_the_input_captured_view_clears_capture_and_a_later_click_uses
 
 // --- Frame completion (D-021's "sent" is not "arrived") ------------------
 
+namespace {
+
+// A terminal that answers every completion question it is asked — but only
+// when it is next read, which is exactly where the answer to a session's
+// last frame lands: in the input queue, after the loop has stopped looking.
+// What is left there when the session is handed back is what the next
+// reader of that queue receives.
+class AnsweringTerminal final : public ckv::term::Terminal {
+public:
+    ckv::term::Capabilities capabilities() const noexcept override {
+        return ckv::term::baseline_capabilities();
+    }
+    ckv::Size size() const noexcept override { return ckv::Size{80, 24}; }
+
+    std::vector<ckv::term::TerminalEvent> poll(std::int64_t) override {
+        answered_ = asked_;
+        return {};
+    }
+    std::size_t frame_acknowledgements() const noexcept override { return answered_; }
+
+    void write(std::string_view bytes) override {
+        for (std::size_t at = bytes.find("\x1B[5n"); at != std::string_view::npos;
+             at = bytes.find("\x1B[5n", at + 1))
+            ++asked_;
+    }
+    void set_title(std::string_view) override {}
+    void bell() override {}
+    void write_clipboard(std::string_view) override {}
+
+    std::size_t replies_left_in_the_queue() const noexcept { return asked_ - answered_; }
+
+private:
+    std::size_t asked_ = 0;
+    std::size_t answered_ = 0;
+};
+
+}  // namespace
+
 CK_TEST(frame_completion_tracking_is_off_until_an_application_asks_for_it) {
     ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
     ManualClock clock;
@@ -1756,6 +1794,87 @@ CK_TEST(a_terminal_that_never_answers_is_taken_at_its_word) {
     // it is a stall dressed as back-pressure.
     CK_CHECK(!app.frame_completion_tracking());
     CK_CHECK(app.frames_awaiting_terminal() == 0U);
+}
+
+CK_TEST(the_session_stays_for_the_answer_to_the_last_frame_it_asked_about) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    app.step(clock.now_nanos());
+    clock.advance(4'000'000);
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());  // this host answers, and is now known to
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+
+    app.invalidate_all();
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+    // The reply to that last frame arrives after the loop has stopped
+    // stepping. Left uncollected it is delivered to whatever inherits the
+    // terminal's input queue, where a shell reads it as typed input.
+    clock.advance(1'000'000);
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.settle_frame_completion();
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+}
+
+CK_TEST(a_session_collects_the_last_answer_before_it_hands_the_terminal_back) {
+    AnsweringTerminal term;
+    ManualClock clock;
+    {
+        Application app(term, clock);
+        app.set_frame_completion_tracking(true);
+        app.step(clock.now_nanos());  // the first frame asks
+        clock.advance(4'000'000);
+        app.step(clock.now_nanos());  // its answer is read: this host answers
+        CK_CHECK(app.frames_awaiting_terminal() == 0U);
+
+        app.invalidate_all();
+        clock.advance(4'000'000);
+        app.step(clock.now_nanos());  // the last frame of the session asks
+        CK_CHECK(app.frames_awaiting_terminal() == 1U);
+        CK_CHECK(term.replies_left_in_the_queue() == 1U);
+    }
+    // Handing a terminal back does not discard what its input queue holds:
+    // a reply left here is delivered to whoever inherits the queue, and a
+    // shell reads the tail of `CSI 0 n` as a typed `n`.
+    CK_CHECK(term.replies_left_in_the_queue() == 0U);
+}
+
+CK_TEST(ending_a_session_does_not_wait_on_a_host_that_has_never_answered) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+
+    // Returns rather than spending the write-off deadline on an exit: a
+    // terminal that has never answered has no reply in flight to collect.
+    app.settle_frame_completion();
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+}
+
+CK_TEST(settling_gives_up_on_a_backend_that_cannot_be_waited_on) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    app.step(clock.now_nanos());
+    clock.advance(4'000'000);
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+
+    app.invalidate_all();
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+    // A host that has answered before earns the wait — but a backend whose
+    // poll neither blocks nor delivers cannot be waited into an answer, and
+    // on a manual clock no deadline will ever pass. One unproductive wait
+    // ends it, so this returns rather than spinning forever.
+    app.settle_frame_completion();
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
 }
 
 // --- Adopting a session the application did not launch (ckmux U0-a) --------

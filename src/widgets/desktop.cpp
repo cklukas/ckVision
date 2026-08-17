@@ -14,12 +14,49 @@ namespace ckv::widgets {
 
 namespace {
 
+// The width an auto-sized window opens at: the one it asks for, widened
+// only as far as widening actually buys it.
+//
+// A window asks for the width its content reads best at, which is not the
+// same as the width its content fits in — wrapping text asks for a
+// paragraph measure however much of it there is. Widening is the answer
+// the window has when that leaves it taller than the desktop, because text
+// given more columns needs fewer rows. What it aims at is the desktop's
+// height, or — when not even the full width reaches that — the shortest
+// the window can be made, since content that overflows whatever happens
+// should at least overflow by as little as possible. Either way the
+// SMALLEST width that reaches the target is the one taken, so a window
+// never takes columns that buy it nothing: content whose height does not
+// depend on its width (a picture, a fixed table) opens exactly as wide as
+// it asked to, overflow or not.
+//
+// The bisection holds because wrapping makes height_for_width
+// non-increasing in width: no view answers a wider question with more
+// rows.
+int fitting_width(const Window& window, int preferred, Rect available) {
+    const int widest = std::max(0, available.width);
+    const int wanted = std::clamp(preferred, 0, widest);
+    const int target = std::max(available.height, window.height_for_width(widest));
+    if (window.height_for_width(wanted) <= target) return wanted;
+
+    int narrow = wanted;
+    int wide = widest;
+    while (narrow + 1 < wide) {
+        const int candidate = narrow + (wide - narrow) / 2;
+        if (window.height_for_width(candidate) <= target)
+            wide = candidate;
+        else
+            narrow = candidate;
+    }
+    return wide;
+}
+
 void place_unpositioned_window(Window& window, Rect available) {
     const Rect current = window.bounds();
     if (current.width > 0 && current.height > 0) return;
 
     const ui::SizeHint horizontal = window.horizontal_size_hint();
-    const int width = std::clamp(horizontal.preferred, 0, std::max(0, available.width));
+    const int width = fitting_width(window, horizontal.preferred, available);
     const int measured_height = window.height_for_width(width);
     const ui::SizeHint vertical = window.vertical_size_hint();
     const int height = std::clamp(std::max(vertical.preferred, measured_height), 0, std::max(0, available.height));

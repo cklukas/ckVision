@@ -146,6 +146,18 @@ LayoutSpec spec_for(View& child, const SelfMap& specs) {
     return (it == specs.end()) ? LayoutSpec{} : it->second;
 }
 
+// How many columns a Column gives one child when the Column itself has
+// `width` — the cross-axis question relayout answers, asked separately so
+// that height_for_width measures against the width a child will actually
+// be wrapped into rather than against the Column's whole width.
+int column_child_width(View& child, const LayoutSpec& spec, int width) {
+    const auto [cross_offset, cross_extent] = align_cross_axis(
+        width, child.horizontal_size_hint().preferred, spec.alignment, spec.margin_before,
+        spec.margin_after);
+    (void)cross_offset;
+    return cross_extent;
+}
+
 }  // namespace
 
 View* Row::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
@@ -189,6 +201,27 @@ void Row::relayout() {
     }
 }
 
+int Row::height_for_width(int width) const {
+    // A Row is as tall as its tallest child — but how tall a child is can
+    // depend on how wide it is, and how wide it is depends on how the row
+    // shares `width` out. So the share is computed first, exactly as
+    // relayout computes it, and each child is then asked at the width it
+    // would actually get.
+    const std::vector<View*> laid_out = detail::visible_children(children());
+    std::vector<LayoutChild> layout_children;
+    layout_children.reserve(laid_out.size());
+    for (View* child : laid_out) layout_children.push_back(child_layout(*child, specs_, true));
+
+    const auto sizes = distribute_main_axis(layout_children, std::max(0, width), spacing_);
+    int tallest = 0;
+    for (std::size_t i = 0; i < laid_out.size(); ++i) {
+        const LayoutSpec spec = spec_for(*laid_out[i], specs_);
+        tallest = std::max(tallest, spec.margin_before + spec.margin_after +
+                                        detail::preferred_height_for_width(*laid_out[i], sizes[i].second));
+    }
+    return tallest;
+}
+
 View* Column::add_item(std::unique_ptr<View> child, LayoutSpec spec) {
     CKV_ASSERT(child != nullptr);
     View* observer = add_child(std::move(child));
@@ -213,16 +246,32 @@ void Column::set_spacing(int spacing) {
     relayout();
 }
 
+int Column::height_for_width(int width) const {
+    // Wrapped children answer a different height at every width, and in a
+    // Column each child's width is settled by the Column's own — so the
+    // Column's height is the sum of what its children answer at the widths
+    // this width gives them, plus the gaps between them. Without this a
+    // Column reported the width-independent default, and a window sized
+    // from it opened too short for its own wrapped text and quietly cut it
+    // off at the frame.
+    const std::vector<View*> laid_out = detail::visible_children(children());
+    int total = 0;
+    for (View* child : laid_out) {
+        const LayoutSpec spec = spec_for(*child, specs_);
+        total += detail::preferred_height_for_width(
+            *child, column_child_width(*child, spec, std::max(0, width)));
+    }
+    if (!laid_out.empty()) total += spacing_ * (static_cast<int>(laid_out.size()) - 1);
+    return total;
+}
+
 void Column::relayout() {
     const std::vector<View*> laid_out = detail::visible_children(children());
     std::vector<LayoutChild> layout_children;
     layout_children.reserve(laid_out.size());
     for (View* child : laid_out) {
         const LayoutSpec spec = spec_for(*child, specs_);
-        const int preferred_width = child->horizontal_size_hint().preferred;
-        const auto [cross_offset, cross_extent] = align_cross_axis(
-            bounds().width, preferred_width, spec.alignment, spec.margin_before, spec.margin_after);
-        (void)cross_offset;
+        const int cross_extent = column_child_width(*child, spec, bounds().width);
         const SizeHint vertical = child->vertical_size_hint();
         layout_children.push_back(
             LayoutChild{vertical.min, detail::preferred_height_for_width(*child, cross_extent),

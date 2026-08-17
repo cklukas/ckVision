@@ -1745,3 +1745,106 @@ CK_TEST(a_window_floats_above_the_desktop_content) {
     }
     CK_CHECK(content_at < window_at);
 }
+
+// --- How wide a window without bounds of its own opens ---------------------
+
+namespace {
+
+// Content that is a fixed block: a picture, a table, anything whose height
+// is what it is whatever width it is given.
+class FixedBlock final : public ui::View {
+public:
+    FixedBlock(int width, int height) : width_(width), height_(height) {}
+    ui::SizeHint horizontal_size_hint() const override {
+        return ui::SizeHint{width_, width_, ui::kUnboundedExtent};
+    }
+    ui::SizeHint vertical_size_hint() const override {
+        return ui::SizeHint{height_, height_, ui::kUnboundedExtent};
+    }
+    int height_for_width(int) const override { return height_; }
+
+private:
+    int width_;
+    int height_;
+};
+
+// Content that trades width for height, the way wrapped text does: 200
+// cells poured into however many columns it is given.
+class Reflowing final : public ui::View {
+public:
+    explicit Reflowing(int cells) : cells_(cells) {}
+    ui::SizeHint horizontal_size_hint() const override {
+        return ui::SizeHint{1, 20, ui::kUnboundedExtent};
+    }
+    ui::SizeHint vertical_size_hint() const override {
+        return ui::SizeHint{1, 1, ui::kUnboundedExtent};
+    }
+    int height_for_width(int width) const override {
+        return width <= 0 ? cells_ : (cells_ + width - 1) / width;
+    }
+
+private:
+    int cells_;
+};
+
+// A desktop of a stated size, with an application under it, since presenting
+// is what places a window that has no bounds of its own.
+struct PresentingFixture {
+    explicit PresentingFixture(ckv::Size size) : term(size) {
+        app.theme() = make_classic_theme(app.roles(), roles);
+        desktop = static_cast<Desktop*>(app.root().add_child(
+            std::make_unique<Desktop>(Rect{0, 0, size.width, size.height})));
+    }
+
+    ckv::term::HeadlessTerminal term;
+    ManualClock clock;
+    Application app{term, clock};
+    Fixture f;
+    StandardRoles roles = intern_standard_roles(app.roles());
+    Desktop* desktop = nullptr;
+
+    Window* present(std::unique_ptr<ui::View> content) {
+        auto window = make_window(f);
+        window->set_content(std::move(content));
+        return desktop->present_modeless(WindowHandle{std::move(window), nullptr}, app);
+    }
+};
+
+}  // namespace
+
+CK_TEST(a_presented_window_opens_at_the_width_its_content_asks_for) {
+    PresentingFixture fixture(ckv::Size{80, 24});
+    Window* placed = fixture.present(std::make_unique<FixedBlock>(30, 5));
+    CK_CHECK(placed != nullptr);
+    if (placed == nullptr) return;
+    CK_CHECK(placed->bounds().width == 30 + 2);  // its content, and the frame
+    CK_CHECK(placed->bounds().x > 0);            // centred in what is left
+}
+
+CK_TEST(a_window_too_tall_for_the_desktop_widens_until_its_content_fits) {
+    // Reflowing content answers a shorter height at a wider width, so there
+    // is a width at which the window fits the desktop; it opens at the
+    // narrowest such width, not at the widest available.
+    PresentingFixture fixture(ckv::Size{80, 10});
+    Window* placed = fixture.present(std::make_unique<Reflowing>(200));
+    CK_CHECK(placed != nullptr);
+    if (placed == nullptr) return;
+    CK_CHECK(placed->bounds().height <= 10);
+    CK_CHECK(placed->bounds().width > 20 + 2);  // wider than the columns it asked for
+    CK_CHECK(placed->bounds().width < 80);      // and not simply the whole desktop
+    CK_CHECK(placed->height_for_width(placed->bounds().width) <= 10);
+    CK_CHECK(placed->height_for_width(placed->bounds().width - 1) > 10);
+}
+
+CK_TEST(a_window_that_widening_cannot_shorten_opens_at_its_own_width_anyway) {
+    // The width a window asks for is not a bid to be talked out of: content
+    // that is as tall at eighty columns as at thirty gains nothing from the
+    // extra fifty, so it does not get them. It overflows at the width it
+    // wanted, and the overflow is the desktop's to clamp.
+    PresentingFixture fixture(ckv::Size{80, 10});
+    Window* placed = fixture.present(std::make_unique<FixedBlock>(30, 20));
+    CK_CHECK(placed != nullptr);
+    if (placed == nullptr) return;
+    CK_CHECK(placed->bounds().width == 30 + 2);
+    CK_CHECK(placed->bounds().height == 10);
+}

@@ -31,7 +31,15 @@ SizeHint StaticText::horizontal_size_hint() const {
         if (end == std::string::npos) break;
         start = end + 1;
     }
-    return SizeHint{1, std::max(1, widest), ui::kUnboundedExtent};
+    const int natural = std::max(1, widest);
+    // What the text would be on one line per paragraph is the width
+    // preformatted text needs, since it cannot be reflowed. Prose can be,
+    // so it asks for the width it is read at instead: a paragraph that
+    // requested its own unwrapped length made every box built around it as
+    // wide as its longest sentence, which on a wide terminal is a ribbon of
+    // text spanning the screen.
+    const int preferred = preformatted_ ? natural : std::min(natural, kProseMeasureCells);
+    return SizeHint{1, preferred, ui::kUnboundedExtent};
 }
 
 SizeHint StaticText::vertical_size_hint() const {

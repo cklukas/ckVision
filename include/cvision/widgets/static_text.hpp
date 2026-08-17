@@ -13,6 +13,20 @@ namespace ckv::widgets {
 using ui::SizeHint;
 using ui::View;
 
+// The widest a paragraph asks to be when nothing else has decided for it.
+//
+// A reader gets from one line to the next by jumping back to the left edge,
+// and that jump starts missing on a long line: the eye lands on the line it
+// just left, or skips one. Typography puts the comfortable range at roughly
+// 45 to 75 characters and this sits inside it, which is also about what a
+// classic alert box was.
+//
+// It is a REQUEST, not a ceiling. Wrapping is measured against the width the
+// view is actually given, so text placed in a wider container still fills it;
+// what the request decides is how wide a container that sizes ITSELF to its
+// text -- a message box, a Column asked for its preferred width -- comes out.
+inline constexpr int kProseMeasureCells = 64;
+
 // Read-only, word-wrapped, styled text (plans/widgets.md baseline:
 // "Styled, wrapped"). Wraps at grapheme boundaries on whitespace,
 // falling back to a hard break mid-word only when a single word is
@@ -48,7 +62,10 @@ public:
     // text says, and runs of spaces survive. Text whose spacing carries
     // meaning — aligned key/value columns, a small table — is destroyed
     // by reflowing it, because wrapping rejoins words with a single
-    // space and the columns collapse.
+    // space and the columns collapse. Such text also asks for every
+    // column it was written with, rather than for kProseMeasureCells:
+    // it cannot wrap into a narrower view, so a narrower view would
+    // clip it instead.
     void set_preformatted(bool preformatted) noexcept {
         preformatted_ = preformatted;
         invalidate();

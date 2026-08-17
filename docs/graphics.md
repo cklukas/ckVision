@@ -380,6 +380,19 @@ is written off after `kFrameCompletionTimeoutNanos`, and a host that misses
 itself off, a diagnostic records it, and pacing falls back to tick lateness. An
 absent optional reply is never evidence of a missing capability.
 
+**Asking obliges you to stay for the answer.** A session that stops reading
+with a question outstanding does not cancel the reply: restoring a terminal
+hands its input queue on rather than emptying it, so `CSI 0 n` is delivered to
+whatever reads next. In an ordinary session that is the shell, which discards
+`ESC [ 0` as an unknown key sequence and shows the trailing `n` as typed input
+— one stray character at the prompt for the last frame nobody waited for.
+`~Application` therefore calls `Application::settle_frame_completion()` before
+it restores; a host that hands the terminal back while the Application lives
+on calls it itself. It waits only on a host that has answered before, only as
+long as that host's own slowest answer suggests it needs, and drops whatever
+else arrives meanwhile — the session's reading is over, and there is nothing
+left to deliver it to.
+
 It is off by default. It adds bytes to the presented stream, and a byte-exact
 golden is entitled to the frame it asked for and nothing else.
 

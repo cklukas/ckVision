@@ -210,7 +210,12 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
             MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", title + "\n\n" + body,
                                             MessageBoxButtons::Ok};
             descriptor.emphasized_leading_lines = 1;
-            descriptor.message_alignment = ui::Alignment::Center;
+            // The body reads down a straight left edge, not centred. A
+            // centred paragraph starts every line at a different column, and
+            // the eye looking for the next one has to find where it begins;
+            // for the one or two sentences an About carries that costs more
+            // than the symmetry is worth. The button keeps its centred
+            // placement, since a lone button is not a line of prose.
             descriptor.button_alignment = ui::Alignment::Center;
             auto presentation = present_message_box(app, desktop, roles, descriptor);
             presentation.set_completion_handler([](MessageBoxResult) {});

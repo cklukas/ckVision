@@ -801,6 +801,14 @@ localization state.
 Header: `include/cvision/widgets/static_text.hpp`. Use passive, wrapping text.
 It is not editable/focusable like Memo or TextView links.
 
+A paragraph asks to be `kProseMeasureCells` wide at most, whatever its
+unwrapped length, and wraps into whatever width it is actually given. That
+request is what decides the width of a container that sizes itself to its text
+— a message box, or a `Column` asked for its preferred width — so prose in one
+opens at a width it can be read at instead of at the width of the terminal.
+Text marked preformatted with `set_preformatted` asks for every column it was
+written with instead: it cannot be reflowed, so a narrower view would clip it.
+
 ## StatusLineItem
 
 Header: `include/cvision/widgets/status_line.hpp`. A command presentation or

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/ui/layout.hpp"
 
+#include <algorithm>
+
 #include "cvision/testing/cktest.hpp"
 
 using ckv::Rect;
@@ -499,4 +501,77 @@ CK_TEST(a_hidden_child_takes_no_room_in_a_row_either) {
     row.set_bounds(Rect{0, 0, 31, 5});
     CK_CHECK(first->bounds().x == 0);
     CK_CHECK(last->bounds().x == 6);  // 4 + 2
+}
+
+// --- Height for width through a container ----------------------------------
+
+namespace {
+// A child whose height depends on its width, the way wrapped text's does:
+// `cells` characters poured into however many columns it is given.
+class Wrapped : public View {
+public:
+    explicit Wrapped(int cells) : cells_(cells) {}
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return ckv::ui::SizeHint{1, std::min(cells_, 10), ckv::ui::kUnboundedExtent};
+    }
+    ckv::ui::SizeHint vertical_size_hint() const override {
+        return ckv::ui::SizeHint{1, 1, ckv::ui::kUnboundedExtent};
+    }
+    int height_for_width(int width) const override {
+        return width <= 0 ? cells_ : (cells_ + width - 1) / width;
+    }
+
+private:
+    int cells_;
+};
+}  // namespace
+
+CK_TEST(a_column_answers_height_for_width_from_the_widths_it_gives_its_children) {
+    // Without this the query stops at the container, and anything sized from
+    // the column -- a window opening around it -- is told a wrapped child
+    // needs one row whatever the width.
+    Column column;
+    column.set_spacing(1);
+    column.add_item(std::make_unique<Wrapped>(40), LayoutSpec{SizePolicy::Fixed, 1});
+    column.add_item(std::make_unique<Wrapped>(30), LayoutSpec{SizePolicy::Fixed, 1});
+
+    CK_CHECK(column.height_for_width(10) == 4 + 3 + 1);  // 40/10 rows, 30/10 rows, one gap
+    CK_CHECK(column.height_for_width(5) == 8 + 6 + 1);   // narrower: the same text, more rows
+}
+
+CK_TEST(a_column_measures_a_start_aligned_child_at_its_own_width_not_the_columns) {
+    // A child that is not Fill-aligned is laid out at its own preferred
+    // width, so that -- not the column's -- is the width it wraps into.
+    Column column;
+    auto* child = column.add_item(std::make_unique<Wrapped>(40),
+                                   LayoutSpec{SizePolicy::Fixed, 1, Alignment::Start});
+    CK_CHECK(child->horizontal_size_hint().preferred == 10);
+    CK_CHECK(column.height_for_width(40) == 4);  // measured at 10, its own width, not at 40
+}
+
+CK_TEST(a_row_is_as_tall_as_its_tallest_child_at_the_width_that_child_gets) {
+    Row row;
+    row.set_spacing(2);
+    row.add_item(std::make_unique<Wrapped>(40), LayoutSpec{SizePolicy::Expanding, 1});
+    row.add_item(std::make_unique<Wrapped>(12), LayoutSpec{SizePolicy::Expanding, 1});
+    // 22 cells less the gap, split evenly: 10 columns each. 40 cells wrap to
+    // four rows, 12 to two, and the row is as tall as the taller.
+    CK_CHECK(row.height_for_width(22) == 4);
+}
+
+CK_TEST(a_hidden_child_is_not_measured_for_height_either) {
+    Column column;
+    column.set_spacing(1);
+    column.add_item(std::make_unique<Wrapped>(40), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* hidden = column.add_item(std::make_unique<Wrapped>(40), LayoutSpec{SizePolicy::Fixed, 1});
+    CK_CHECK(column.height_for_width(10) == 4 + 1 + 4);
+    hidden->set_visible(false);
+    CK_CHECK(column.height_for_width(10) == 4);  // its rows and its gap both go
+}
+
+CK_TEST(an_empty_container_needs_no_height_at_any_width) {
+    Column column;
+    Row row;
+    CK_CHECK(column.height_for_width(40) == 0);
+    CK_CHECK(row.height_for_width(40) == 0);
 }

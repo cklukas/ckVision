@@ -94,6 +94,20 @@ are owned by `Window`, not painted by the content manually.
 ```
 <!-- /ckvision-snippet -->
 
+## Width decides height
+
+Wrapped content answers a different height at every width, and `Row` and
+`Column` pass that question through: each answers `height_for_width` from what
+its children answer at the widths it would give them, so a container holding a
+paragraph reports the rows the paragraph really needs. That is what a window
+sized from its own content is sized by — a message box, or any window added to
+a Desktop without bounds of its own. Such a window opens at the width its
+content asks for, widened only as far as it must be for the content to fit the
+height available, and centred in what is left.
+
+`Grid`, `Dock`, `Overlay` and `AnchorPane` do not report intrinsic sizes at
+all; give a window built from those an explicit size.
+
 ## Resizing is part of the design
 
 The application is tested at normal, wide, narrow, below-hard-floor, and
