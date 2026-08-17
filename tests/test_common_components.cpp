@@ -447,6 +447,32 @@ CK_TEST(a_clock_that_shows_no_seconds_is_sized_for_what_it_shows) {
     CK_CHECK(with == without + 3);  // ":07"
 }
 
+CK_TEST(a_clock_tells_its_container_when_it_becomes_a_different_width) {
+    // Being sized for what it shows is only half of it. A container places its
+    // children once, so a clock that silently grows gets drawn into the space
+    // it used to need -- 09:41:0, with the last digit off the end.
+    struct Container : ckv::ui::View {
+        void on_child_size_hint_changed(ckv::ui::View&) override { ++notifications; }
+        int notifications = 0;
+    };
+    Standalone s;
+    Container container;
+    attach_standalone(container, s);
+    auto* clock = static_cast<ClockView*>(container.add_child(std::make_unique<ClockView>()));
+    clock->set_time_provider([] { return TimeValue{9, 41, 7}; });
+
+    const int before = container.notifications;
+    clock->set_show_seconds(true);  // "09:41" -> "09:41:07": three cells wider
+    CK_CHECK(container.notifications == before + 1);
+
+    // And says nothing when the width is unchanged: a container that relaid
+    // out its children every second for no reason would be the other half of
+    // this same mistake.
+    const int after = container.notifications;
+    clock->set_blinking_separator(true);  // a colon becomes a space, same width
+    CK_CHECK(container.notifications == after);
+}
+
 // --- Calendar: where the week starts ------------------------------------------
 
 CK_TEST(the_week_starts_where_the_reader_expects_it_to) {

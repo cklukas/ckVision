@@ -405,6 +405,10 @@ public:
     }
     ui::View* trailing_view() const noexcept { return trailing_view_; }
     void on_resized() override;
+    // A trailing view whose own width changes is placed again, since where it
+    // sits is the bar's decision -- a clock switched to seconds is two cells
+    // wider than it was, and keeping the old width clips it.
+    void on_child_size_hint_changed(ui::View& child) override;
 
     explicit MenuBar(std::vector<MenuBarItem> menus);
     ~MenuBar() override;

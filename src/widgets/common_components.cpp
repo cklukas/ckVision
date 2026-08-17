@@ -365,7 +365,14 @@ void ClockView::refresh() {
     // or not.
     std::string next = render();
     if (next == rendered_) return;
+    const int previous_width = text::text_width(rendered_);
     rendered_ = std::move(next);
+    // A clock that is now a different WIDTH has to be placed again and not
+    // merely repainted: seconds switched on, a meridiem word arriving, a
+    // twelve-hour clock passing from 9 to 10. Without this its container keeps
+    // the width it measured once, and the digits that no longer fit are
+    // clipped -- which is how a clock showing seconds read 09:41:0.
+    if (text::text_width(rendered_) != previous_width) size_hint_changed();
     invalidate();
 }
 

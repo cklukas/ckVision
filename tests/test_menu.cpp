@@ -666,12 +666,21 @@ public:
     void set_menu_highlighted(bool highlighted) override { highlighted_ = highlighted; }
     void activate_from_menu_bar() override { ++activations; }
     bool highlighted() const noexcept { return highlighted_; }
-    ckv::ui::SizeHint horizontal_size_hint() const override { return ckv::ui::SizeHint{5, 5, 5}; }
+    ckv::ui::SizeHint horizontal_size_hint() const override {
+        return ckv::ui::SizeHint{width_, width_, width_};
+    }
     ckv::ui::SizeHint vertical_size_hint() const override { return ckv::ui::SizeHint{1, 1, 1}; }
+    // What a clock does when it is given seconds: it becomes a wider thing
+    // than it was, and it says so.
+    void set_width(int width) {
+        width_ = width;
+        size_hint_changed();
+    }
     int activations = 0;
 
 private:
     bool highlighted_ = false;
+    int width_ = 5;
 };
 
 MenuBar* bar_with_trailing_probe(MenuBarFixture& mf, TrailingProbe** probe) {
@@ -684,6 +693,59 @@ MenuBar* bar_with_trailing_probe(MenuBarFixture& mf, TrailingProbe** probe) {
     return bar;
 }
 }  // namespace
+
+CK_TEST(a_trailing_view_that_changes_width_is_placed_again_at_the_right_end) {
+    // The bar measures its trailing view when it is put in and when the bar is
+    // resized. Neither happens when the view itself becomes wider — a clock
+    // switched to seconds — so without this the bar kept the old width and the
+    // last digits were clipped off the end of the row.
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    CK_CHECK(probe->bounds().width == 5);
+    CK_CHECK(probe->bounds().right() == bar->bounds().width);
+
+    probe->set_width(8);
+    CK_CHECK(probe->bounds().width == 8);
+    CK_CHECK(probe->bounds().right() == bar->bounds().width);
+
+    probe->set_width(5);  // and back again, without leaving a gap at the edge
+    CK_CHECK(probe->bounds().width == 5);
+    CK_CHECK(probe->bounds().right() == bar->bounds().width);
+}
+
+CK_TEST(taking_the_trailing_title_away_takes_the_walk_off_its_slot) {
+    // A trailing title can be removed while the bar is being walked — an
+    // application whose clock the reader has just switched off. Its slot goes
+    // with it, and a highlight left pointing one past the last menu made the
+    // next Enter ask for a dropdown that does not exist.
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    bar->activate();
+    mf.app.dispatch(key(Key::Left));  // wraps left, onto the trailing title
+    CK_CHECK(probe->highlighted());
+
+    bar->set_trailing_view(std::unique_ptr<TrailingProbe>{});
+    CK_CHECK(bar->trailing_view() == nullptr);
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(mf.desktop.popups().size() == 1);  // the last menu, not an abort
+}
+
+CK_TEST(a_replacement_trailing_title_inherits_the_walk_that_was_on_it) {
+    MenuBarFixture mf;
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+    bar->activate();
+    mf.app.dispatch(key(Key::Left));
+    CK_CHECK(probe->highlighted());
+
+    TrailingProbe* const replacement = bar->set_trailing_view(std::make_unique<TrailingProbe>());
+    CK_CHECK(replacement->highlighted());  // to the reader, the same title is still there
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(replacement->activations == 1);
+    CK_CHECK(mf.desktop.popups().empty());
+}
 
 CK_TEST(walking_onto_the_trailing_title_closes_the_menu_that_was_open) {
     MenuBarFixture mf;

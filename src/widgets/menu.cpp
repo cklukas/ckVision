@@ -983,6 +983,14 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
 
 void MenuBar::on_resized() { layout_trailing_view(); }
 
+void MenuBar::on_child_size_hint_changed(ui::View& child) {
+    // The bar owns where its trailing view sits, so it is the bar that has to
+    // answer when that view's own width changes -- a clock gaining seconds, an
+    // indicator gaining a word. Anything else is a dropdown popup, which is
+    // placed when it opens and is nobody's business here.
+    if (&child == trailing_view_) layout_trailing_view();
+}
+
 void MenuBar::set_bar_highlight(std::size_t slot) {
     highlighted_ = slot;
     // One slot is highlighted, and what is open belongs to it. The bar owns
@@ -1030,13 +1038,27 @@ bool MenuBar::trailing_slot_highlighted() const noexcept {
 }
 
 ui::View* MenuBar::set_trailing_view_impl(std::unique_ptr<ui::View> view) {
+    // Whether the keyboard walk is standing on the title that is about to be
+    // replaced or removed. Its slot exists only while it does.
+    const bool walk_was_on_it = trailing_view_ != nullptr && highlighted_ == menus_.size();
     if (trailing_view_ != nullptr) {
         (void)remove_child(trailing_view_);
         trailing_view_ = nullptr;
     }
-    if (view == nullptr) return nullptr;
+    if (view == nullptr) {
+        // Nothing to walk onto now, so the highlight comes back to the last
+        // menu rather than pointing one past the end -- from where Enter asked
+        // for a dropdown that does not exist, which is an abort rather than a
+        // misdrawn bar.
+        if (walk_was_on_it && !menus_.empty()) highlighted_ = menus_.size() - 1;
+        invalidate();
+        return nullptr;
+    }
     trailing_view_ = add_child(std::move(view));
     layout_trailing_view();
+    // A replacement inherits the walk from the title it replaces: to the
+    // reader the same thing is still at the right end of the bar.
+    if (walk_was_on_it) sync_trailing_highlight();
     return trailing_view_;
 }
 
