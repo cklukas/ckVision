@@ -569,7 +569,7 @@ Rect Presenter::raster_footprint(const RasterSlice& slice) noexcept {
     return Rect{visible.x, visible.y, visible.width + 1, visible.height + 1};
 }
 
-void Presenter::emit_pointer_shape(std::string& out, PointerShape shape) {
+void Presenter::present_pointer_shape(PointerShape shape) {
     const Capabilities caps = terminal_.capabilities();
     if (!caps.pointer_shapes) return;
     // What this host will actually draw, which is what has to be compared
@@ -590,13 +590,14 @@ void Presenter::emit_pointer_shape(std::string& out, PointerShape shape) {
     // reporting is on, and staying quiet leaves that pointer in place over
     // an application that has taken the whole screen.
     previous_pointer_shape_name_ = std::string(name);
-    out += "\x1B]22;";
+    std::string out("\x1B]22;");
     out += name;
     out += "\x1B\\";
+    terminal_.write(out);
 }
 
 void Presenter::present(FrameView frame, CursorState cursor,
-                         const std::vector<RasterSlice>& rasters, PointerShape pointer) {
+                         const std::vector<RasterSlice>& rasters) {
     // Live timing of one frame, end to end. The interesting number is not the
     // work this process does but how long the host takes to swallow it: a
     // terminal decoding a quarter-megabyte Sixel blocks the write, and that
@@ -708,12 +709,6 @@ void Presenter::present(FrameView frame, CursorState cursor,
         out += "\x1B[5n";
         ++frames_marked_;
     }
-    // Last, and deliberately after both the synchronized bracket and the
-    // completion marker. The pointer is host state rather than frame
-    // content: a frame that changed no cell is still an empty frame, and
-    // must neither be bracketed nor asked about merely because the pointer
-    // moved from a button onto a window border.
-    emit_pointer_shape(out, pointer);
     last_bytes_emitted_ = out.size();
     const auto write_started = tracing ? std::chrono::steady_clock::now()
                                        : std::chrono::steady_clock::time_point{};

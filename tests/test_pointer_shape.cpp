@@ -76,19 +76,11 @@ struct PresenterFixture {
     Presenter presenter{term};
     std::vector<Cell> cells{static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{})};
 
-    // The first frame is a full paint. Getting it out of the way in the
-    // constructor is what lets every present() below be an UNCHANGED frame,
-    // so whatever is written afterwards is the pointer's doing and nothing
-    // else's.
-    PresenterFixture() {
-        presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
-    }
-
-    // Presents an unchanged frame, so whatever is written is the pointer's
-    // doing and nothing else's.
+    // The pointer is written on its own, never through a frame, so nothing
+    // here has to paint one first.
     std::string present(PointerShape shape) {
         term.clear_written();
-        presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, {}, shape);
+        presenter.present_pointer_shape(shape);
         return std::string(term.written_bytes());
     }
 };
@@ -297,12 +289,11 @@ CK_TEST(a_session_states_the_ordinary_arrow_rather_than_leaving_it_to_the_host) 
     // quiet leaves it there, so the arrow is stated on the first frame.
     HeadlessTerminal term{Size{20, 4}};
     Presenter presenter{term};
-    std::vector<Cell> cells(static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{}));
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
-    CK_CHECK(std::string(term.written_bytes()).find("\x1B]22;left_ptr\x1B\\") != std::string::npos);
+    presenter.present_pointer_shape(PointerShape::Default);
+    CK_CHECK(std::string(term.written_bytes()) == "\x1B]22;left_ptr\x1B\\");
     // ...and having said it once, it does not keep saying it.
     term.clear_written();
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
+    presenter.present_pointer_shape(PointerShape::Default);
     CK_CHECK(term.written_bytes().empty());
 }
 
@@ -347,11 +338,7 @@ CK_TEST(a_host_that_answered_is_written_to_in_its_own_vocabulary) {
     HeadlessTerminal term{Size{20, 4}};
     term.set_capabilities(host_that_answered(all_shapes_supported()));
     Presenter presenter{term};
-    std::vector<Cell> cells(static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{}));
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
-    term.clear_written();
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, {},
-                      PointerShape::ResizeNorthWestSouthEast);
+    presenter.present_pointer_shape(PointerShape::ResizeNorthWestSouthEast);
     CK_CHECK(std::string(term.written_bytes()) == "\x1B]22;nwse-resize\x1B\\");
 }
 
@@ -361,18 +348,16 @@ CK_TEST(a_silenced_host_is_written_nothing_at_all) {
     caps.pointer_shapes = false;
     term.set_capabilities(caps);
     Presenter presenter{term};
-    std::vector<Cell> cells(static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{}));
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{});
-    term.clear_written();
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, {}, PointerShape::Text);
+    presenter.present_pointer_shape(PointerShape::Text);
     CK_CHECK(term.written_bytes().empty());
 }
 
 CK_TEST(a_pointer_that_merely_moved_does_not_become_a_frame) {
-    // The pointer is host state, not frame content. A shape change must not
-    // wrap an empty frame in a synchronized-output bracket, and must not be
-    // counted as a frame the terminal is then asked to acknowledge —
-    // otherwise moving the mouse pays for frames nobody drew.
+    // The pointer is host state, not frame content, and is written on its
+    // own path for exactly that reason. A shape change must not be wrapped
+    // in a synchronized-output bracket, must not be counted as a frame the
+    // terminal is then asked to acknowledge, and must not cost a frame diff
+    // over every cell to produce eighteen bytes.
     HeadlessTerminal term{Size{20, 4}};
     Capabilities caps = baseline_capabilities();
     caps.synchronized_output = true;
@@ -382,14 +367,17 @@ CK_TEST(a_pointer_that_merely_moved_does_not_become_a_frame) {
     std::vector<Cell> cells(static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{}));
     presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, {});
     const std::size_t marked_before = presenter.frames_marked();
+    const std::size_t frame_bytes = presenter.last_bytes_emitted();
     term.clear_written();
 
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, {}, PointerShape::Text);
+    presenter.present_pointer_shape(PointerShape::Text);
     const std::string written(term.written_bytes());
     CK_CHECK(written == "\x1B]22;xterm\x1B\\");
     CK_CHECK(written.find("\x1B[?2026h") == std::string::npos);
     CK_CHECK(written.find("\x1B[5n") == std::string::npos);
     CK_CHECK(presenter.frames_marked() == marked_before);
+    // It is not a frame, so it does not disturb the frame cost counter.
+    CK_CHECK(presenter.last_bytes_emitted() == frame_bytes);
 }
 
 CK_TEST(the_deterministic_display_reads_back_the_shape_the_host_was_given) {
@@ -517,4 +505,38 @@ CK_TEST(a_view_destroyed_under_the_pointer_leaves_no_dangling_hover) {
     CK_CHECK(f.app.hovered_view() == nullptr);
     CK_CHECK(f.app.pointer_shape() == PointerShape::Default);
     f.app.step(0);
+}
+
+CK_TEST(a_pointer_crossing_a_frame_that_needs_no_repaint_still_reaches_the_host) {
+    // The regression this exists for: presentation used to be skipped
+    // entirely when no cell was damaged, so the shape only reached the
+    // terminal when something else happened to need repainting. It
+    // therefore followed the pointer across the handful of widgets that
+    // redraw on hover -- a button lighting up -- and nowhere else, which
+    // looks exactly like a cursor that gets stuck.
+    AppFixture f;
+    auto* desktop = f.app.root().make<Desktop>();
+    auto owned = std::make_unique<Window>("Static");
+    owned->set_bounds(Rect{4, 2, 30, 12});
+    Window* window = desktop->add_window(std::move(owned));
+    // Content that draws the same thing wherever the pointer is, which is
+    // what almost every dialog body is.
+    window->set_content(std::make_unique<ckv::ui::View>());
+    f.app.step(0);
+
+    const Rect bounds = window->absolute_bounds();
+    f.move_to(Point{bounds.x + 8, bounds.y});  // the title bar: a hand
+    CK_CHECK(f.app.pointer_shape() == PointerShape::Grab);
+    f.term.clear_written();
+
+    // Down into the body. Nothing on screen changes; the pointer must.
+    f.move_to(Point{bounds.x + 8, bounds.y + 4});
+    CK_CHECK(f.app.pointer_shape() == PointerShape::Default);
+    const std::string written(f.term.written_bytes());
+    CK_CHECK(written == "\x1B]22;left_ptr\x1B\\");  // the shape alone, no frame
+
+    // ...and having arrived, it is not restated on every later frame.
+    f.term.clear_written();
+    f.move_to(Point{bounds.x + 9, bounds.y + 4});
+    CK_CHECK(f.term.written_bytes().empty());
 }

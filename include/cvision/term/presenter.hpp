@@ -36,15 +36,26 @@ public:
     // slice is cropped to its occlusion-sliced sub-rect (never the
     // whole image — a higher layer may be occluding the rest) and
     // emitted as Sixel data on top, per D-017/ARCHITECTURE.md §7.
-    // `pointer` is the shape the host's own mouse pointer should take,
-    // resolved by the ui layer from whatever the pointer is currently over.
-    // It is written after the frame and outside its synchronized bracket,
-    // because it is not part of the frame: a shape change with no cell
-    // change must still reach the host, and a frame with no cell change
-    // must still count as empty for frame-completion purposes.
     void present(FrameView frame, CursorState cursor,
-                 const std::vector<RasterSlice>& rasters = {},
-                 PointerShape pointer = PointerShape::Default);
+                 const std::vector<RasterSlice>& rasters = {});
+
+    // Asks the host's own mouse pointer to take `shape`, writing nothing
+    // when it is already the shape this host was last asked for.
+    //
+    // Deliberately not a parameter of present(). The pointer is host state
+    // rather than frame content, and the two change independently: crossing
+    // from a window's title bar onto its content changes the pointer and not
+    // one cell, while a whole animating frame can go by without the pointer
+    // moving at all. Routing it through present() would mean a frame diff
+    // over every cell to emit eighteen bytes, and — worse — would tie the
+    // pointer to whether anything happened to need repainting, so it would
+    // follow the pointer across the few widgets that redraw on hover and
+    // stick everywhere else.
+    //
+    // Call it once per input batch rather than once per motion report: a
+    // burst of reports that crosses three widgets should leave the pointer
+    // in one shape, not write three.
+    void present_pointer_shape(PointerShape shape);
 
     // Forces the next present() to treat the whole frame as changed —
     // callers use this after a resize or a capability change that
@@ -152,7 +163,6 @@ private:
     // different pointer than it is already drawing. Degradation happens
     // here, against this terminal's own capabilities, so callers name the
     // shape they mean and never the shape a particular host can manage.
-    void emit_pointer_shape(std::string& out, PointerShape shape);
     void emit_style(std::string& out, const Style& style) const;
     void emit_raster_slices(std::string& out, FrameView frame, std::vector<ActiveRaster>& rasters) const;
     // Marks every raster whose footprint the run [x, end) on row `y` paints

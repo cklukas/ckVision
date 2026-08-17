@@ -936,6 +936,13 @@ bool Application::step(std::int64_t deadline_nanos) {
         // write-off deadline, which is a stall invented out of silence.
         // Where there is no measurement there is no back-pressure to
         // respect, and an application that needs one guesses a rate instead.
+        // The pointer's shape is an outcome of the input just processed, not
+        // of the frame that may follow, so it is written here: once per
+        // batch, whatever the batch contained, and whether or not anything
+        // needs repainting. It also stays live while frames are being held
+        // back for a busy host below -- a throttled picture is no reason for
+        // the cursor to freeze on the last thing it crossed.
+        presenter_.present_pointer_shape(pointer_shape());
         const bool waiting_on_a_host_that_answers = presenter_.frame_completion_tracking() &&
                                                     last_terminal_round_trip_nanos_ >= 0 &&
                                                     frames_awaiting_terminal() > 0 &&
@@ -1020,7 +1027,7 @@ void Application::paint_and_present() {
     }
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
-                       compositor_.visible_rasters(), pointer_shape());
+                       compositor_.visible_rasters());
     // The clock starts when the question goes out, not when the next step
     // notices it did: an application that paces against the terminal is
     // asking how long the terminal took, not how long we took to look.
