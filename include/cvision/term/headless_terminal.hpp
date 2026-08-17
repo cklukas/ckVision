@@ -56,6 +56,9 @@ public:
         : HeadlessTerminal(size, capabilities_for_profile(profile), /*enable_capability_probes=*/false) {}
 
     Capabilities capabilities() const noexcept override { return caps_; }
+    std::size_t frame_acknowledgements() const noexcept override {
+        return decoder_.frame_acknowledgements();
+    }
     // Mirrors PosixTerminal's live client policy so deterministic tests can
     // exercise the same capability-change contract without a real terminal.
     // Fixed metrics and color-register caps must be positive.

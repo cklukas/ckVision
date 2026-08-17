@@ -56,6 +56,14 @@ public:
     virtual Capabilities capabilities() const noexcept = 0;
     virtual Size size() const noexcept = 0;
 
+    // How many frame-completion replies this backend has decoded (see
+    // InputDecoder::frame_acknowledgements). A backend with no input path
+    // of its own answers zero and the facility simply stays unavailable —
+    // the caller sees markers that are never acknowledged and gives up on
+    // them, which is the same thing it does for a terminal that does not
+    // answer.
+    virtual std::size_t frame_acknowledgements() const noexcept { return 0; }
+
     // Blocks for new input up to `deadline_nanos` (absolute time on the
     // backend's Clock). Returns an empty vector on timeout — never
     // blocks past the deadline. May return more than one event per

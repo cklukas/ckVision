@@ -1031,6 +1031,74 @@ CK_TEST(posix_terminal_withdraws_runtime_sixel_geometry_until_a_resize_reprobe_c
     ::close(slave_fd);
 }
 
+CK_TEST(posix_terminal_keeps_sixel_across_a_resize_when_the_host_reports_no_geometry) {
+    int master_fd = -1;
+    int slave_fd = -1;
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    {
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, slave_fd, slave_fd);
+        // DA1 with parameter 4 and nothing else: this terminal draws Sixel
+        // and does not implement XTSMGRAPHICS, which is the common case
+        // among terminals that draw Sixel at all.
+        constexpr std::string_view kDa1Sixel = "\x1B[?62;1;4;6c";
+        CK_CHECK(::write(master_fd, kDa1Sixel.data(), kDa1Sixel.size()) ==
+                 static_cast<ssize_t>(kDa1Sixel.size()));
+        CK_CHECK(term.poll(clock.now_nanos()).size() == 1);
+        CK_CHECK(term.capabilities().sixel_graphics);
+        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{}));
+
+        struct winsize resized {};
+        resized.ws_col = 100;
+        resized.ws_row = 40;
+        CK_CHECK(::ioctl(master_fd, TIOCSWINSZ, &resized) == 0);
+        const auto resize_events = term.poll(clock.now_nanos());
+        CK_CHECK(!resize_events.empty());
+        CK_CHECK(std::holds_alternative<ResizeEvent>(resize_events[0]));
+        // Nothing about this terminal's graphics depended on its window
+        // size, and no reply is outstanding that could turn them back on.
+        // Withdrawing them here left every picture a cell fallback for the
+        // rest of the session.
+        CK_CHECK(term.capabilities().sixel_graphics);
+    }
+    ::close(master_fd);
+    ::close(slave_fd);
+}
+
+CK_TEST(posix_terminal_restores_withheld_sixel_when_the_resize_reprobe_goes_unanswered) {
+    int master_fd = -1;
+    int slave_fd = -1;
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    {
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, slave_fd, slave_fd);
+        constexpr std::string_view kInitialGeometry = "\x1B[?2;0;640;480S";
+        CK_CHECK(::write(master_fd, kInitialGeometry.data(), kInitialGeometry.size()) ==
+                 static_cast<ssize_t>(kInitialGeometry.size()));
+        CK_CHECK(term.poll(clock.now_nanos()).size() == 1);
+        CK_CHECK(term.capabilities().sixel_graphics);
+
+        struct winsize resized {};
+        resized.ws_col = 100;
+        resized.ws_row = 40;
+        CK_CHECK(::ioctl(master_fd, TIOCSWINSZ, &resized) == 0);
+        (void)term.poll(clock.now_nanos());
+        // Withheld while the fresh bound is in flight — this terminal has
+        // answered that query before, so one is worth waiting for.
+        CK_CHECK(!term.capabilities().sixel_graphics);
+
+        // It never comes. A terminal that answered once and not again lost
+        // a reply; it did not lose its graphics, and the probe window
+        // closing is what ends the wait.
+        clock.advance(400'000'000);
+        (void)term.poll(clock.now_nanos());
+        CK_CHECK(term.capabilities().sixel_graphics);
+        CK_CHECK(term.capabilities().sixel_max_geometry == (Size{}));
+    }
+    ::close(master_fd);
+    ::close(slave_fd);
+}
+
 CK_TEST(posix_terminal_reprobe_rejects_a_metric_reply_that_started_before_resize) {
     int master_fd = -1;
     int slave_fd = -1;

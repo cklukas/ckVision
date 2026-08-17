@@ -699,6 +699,56 @@ bool Application::dispatch(const term::TerminalEvent& event) {
     }
 }
 
+
+void Application::set_frame_completion_tracking(bool enabled) {
+    if (presenter_.frame_completion_tracking() == enabled) return;
+    presenter_.set_frame_completion_tracking(enabled);
+    // Turning it off leaves nothing outstanding to reason about; turning it
+    // on starts from what this terminal has already answered, so a backend
+    // that was answering somebody else's questions does not read as a
+    // backlog of ours.
+    frames_settled_ = presenter_.frames_marked();
+    terminal_acknowledgements_seen_ = terminal_.frame_acknowledgements();
+    oldest_unanswered_frame_nanos_.reset();
+    frame_completion_timeouts_ = 0;
+}
+
+void Application::reconcile_frame_completion(std::int64_t now_nanos) {
+    if (!presenter_.frame_completion_tracking()) return;
+
+    const std::size_t marked = presenter_.frames_marked();
+    const std::size_t acknowledged = terminal_.frame_acknowledgements();
+    if (acknowledged > terminal_acknowledgements_seen_) {
+        // A terminal reads in order, so its replies answer the oldest
+        // questions first. What is worth reporting is the newest round
+        // trip: it describes how far behind the terminal is now.
+        const std::size_t fresh = acknowledged - terminal_acknowledgements_seen_;
+        terminal_acknowledgements_seen_ = acknowledged;
+        frames_settled_ = std::min(marked, frames_settled_ + fresh);
+        if (oldest_unanswered_frame_nanos_)
+            last_terminal_round_trip_nanos_ = now_nanos - *oldest_unanswered_frame_nanos_;
+        frame_completion_timeouts_ = 0;
+        // Whatever is still outstanding has been waiting since at least now.
+        if (frames_settled_ < marked) oldest_unanswered_frame_nanos_ = now_nanos;
+        else oldest_unanswered_frame_nanos_.reset();
+        return;
+    }
+
+    if (frames_settled_ >= marked || !oldest_unanswered_frame_nanos_) return;
+    if (now_nanos - *oldest_unanswered_frame_nanos_ < kFrameCompletionTimeoutNanos) return;
+
+    // Written off. A terminal that does not answer must cost an application
+    // the wait once, never its animation.
+    frames_settled_ = marked;
+    oldest_unanswered_frame_nanos_.reset();
+    if (++frame_completion_timeouts_ >= kFrameCompletionGiveUpCount) {
+        diagnostics().log(LogLevel::Info,
+                          "frame completion: this terminal does not answer DSR, so pacing against it "
+                          "is off for this session");
+        set_frame_completion_tracking(false);
+    }
+}
+
 void Application::post(std::function<void()> fn) {
     // Match timers' callback contract: an empty std::function represents no
     // work, not an asynchronous bad_function_call that would terminate the
@@ -762,6 +812,10 @@ bool Application::step(std::int64_t deadline_nanos) {
         drain_terminal_subsessions();
 
         const std::int64_t now = clock_.now_nanos();
+        // Before any timer runs: a tick that paces itself against the
+        // terminal must see the replies that arrived in this very poll,
+        // not the ones that had arrived by the previous frame.
+        reconcile_frame_completion(now);
         std::vector<std::function<void()>>& due_callbacks = due_callback_scratch_;
         due_callbacks.clear();
         for (auto it = timers_.begin(); it != timers_.end();) {
@@ -876,6 +930,12 @@ void Application::paint_and_present() {
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
                        compositor_.visible_rasters());
+    // The clock starts when the question goes out, not when the next step
+    // notices it did: an application that paces against the terminal is
+    // asking how long the terminal took, not how long we took to look.
+    if (presenter_.frame_completion_tracking() && presenter_.frames_marked() > frames_settled_ &&
+        !oldest_unanswered_frame_nanos_)
+        oldest_unanswered_frame_nanos_ = clock_.now_nanos();
 }
 
 bool Application::terminal_too_small() const noexcept {

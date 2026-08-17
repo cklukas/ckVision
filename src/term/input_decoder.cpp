@@ -689,6 +689,16 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         return {Status::Complete, consumed, std::nullopt, std::nullopt};
     }
 
+    // DSR-OK: the answer to `CSI 5 n`, and the only reply this decoder both
+    // asks for and consumes without telling anybody. It is not input and it
+    // is not a capability — it is the terminal saying "I have read this
+    // far" — so it is counted here rather than turned into an event a view
+    // tree would have to learn to ignore.
+    if (!private_marker && final_byte == 'n' && params.size() == 1 && params[0] == 0) {
+        ++frame_acknowledgements_;
+        return {Status::Complete, consumed, std::nullopt, std::nullopt};
+    }
+
     if (private_marker && marker == '?' && final_byte == 'n' && params.size() == 2 && params[0] == 997 &&
         (params[1] == 1 || params[1] == 2)) {
         // Mode 2031 is the authority for this otherwise unsolicited DSR.

@@ -572,7 +572,22 @@ void PosixTerminal::finish_capability_probes() {
         // protocol after a crash.
         append_session_restore(session_slot_, "\x1B[<u");
     }
+    // A resize withheld graphics while it waited for the fresh maximum
+    // geometry this terminal had answered with before. The window has now
+    // closed without one, so the wait is over either way: restore what DA1
+    // established, with no finite bound, rather than leave a terminal that
+    // draws pictures showing cell fallbacks until it is restarted. A
+    // terminal answering the query once and not again is a reply that went
+    // missing, never evidence that its graphics went away.
+    if (withheld_sixel_graphics_) {
+        withheld_sixel_graphics_ = false;
+        if (!observed_caps_.sixel_graphics) {
+            observed_caps_.sixel_graphics = true;
+            (void)update_effective_capabilities();
+        }
+    }
     configure_decoder_capability_update_policy();
+    decoder_.set_capabilities(observed_caps_);
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
 }
@@ -611,14 +626,23 @@ bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
     // cell fallbacks for the rest of the session, and no reply the terminal
     // was ever going to send could turn them back on. An absent optional
     // reply is not evidence of an absent capability.
-    observed_caps_.sixel_max_geometry = {};
-    decoder_.set_capabilities(observed_caps_);
-    // Wait for a fresh bound only where one was reported before. Until it
-    // arrives the picture is bounded by nothing, which is the same state a
-    // terminal that never answers the query leaves it in permanently: a
-    // frame the host refuses costs that frame, where waiting for a reply
-    // that never comes costs every frame after it.
-    if (has_reported_geometry) decoder_.require_verified_sixel_geometry(true);
+    if (has_reported_geometry) {
+        // This terminal answers the geometry query, so a fresh answer is
+        // milliseconds away: withhold pictures until it arrives rather than
+        // send one bounded by a limit that no longer applies.
+        withheld_sixel_graphics_ = observed_caps_.sixel_graphics;
+        observed_caps_.sixel_graphics = false;
+        observed_caps_.sixel_color_registers = 0;
+        observed_caps_.sixel_max_geometry = {};
+        decoder_.set_capabilities(observed_caps_);
+        decoder_.require_verified_sixel_geometry(true);
+    } else {
+        // This one does not, so there is no answer to wait for and nothing
+        // about its graphics that the resize changed. Withholding here is
+        // what turned every picture into a cell fallback for the rest of
+        // the session.
+        decoder_.set_capabilities(observed_caps_);
+    }
     return update_effective_capabilities();
 }
 
@@ -832,7 +856,22 @@ void PosixTerminal::write_diagnostic_after_restore(std::string_view message) noe
     std::abort();
 }
 
-void PosixTerminal::write(std::string_view bytes) { write_all(output_fd_, bytes); }
+void PosixTerminal::write(std::string_view bytes) {
+    // Every byte this session writes, when CKVISION_OUTPUT_CAPTURE names a
+    // file. A terminal that renders a frame wrongly cannot be argued with
+    // from this side; the bytes it was given can be replayed into ckVision's
+    // own decoder, which settles whether the frame or its reader was at
+    // fault. Opened once, on the first write.
+    if (capture_stream_ == nullptr && !capture_attempted_) {
+        capture_attempted_ = true;
+        if (const char* const path = std::getenv("CKVISION_OUTPUT_CAPTURE"); path != nullptr && *path != '\0')
+            capture_stream_ = std::fopen(path, "wb");
+    }
+    if (capture_stream_ != nullptr) {
+        std::fwrite(bytes.data(), 1, bytes.size(), capture_stream_);
+        std::fflush(capture_stream_);
+    }
+ write_all(output_fd_, bytes); }
 
 void PosixTerminal::set_title(std::string_view title) {
     write_all(output_fd_, "\x1B]0;" + sanitize_osc_text(title) + "\x07");

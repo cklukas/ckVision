@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <stdlib.h>
 #include <string>
 
 #if !defined(_WIN32)
@@ -38,8 +39,23 @@ bool open_log() {
         log.stream = stderr;
         return true;
     }
-    log.stream = std::fopen(target.c_str(), "a");
-    return log.stream != nullptr;
+    // The first ckVision process to open this file starts it empty: a log
+    // that accumulates every run since it was first named makes the reader
+    // hunt for where the run they care about began, and the run they care
+    // about is the one they just made.
+    //
+    // A contained child session inherits this variable, and its lines are
+    // the point of reading a host and a child together in one file, so it
+    // must not begin by erasing its host's. The marker below travels
+    // through the environment for exactly that reason: this process sets
+    // it after truncating, so anything it launches appends instead.
+    constexpr const char* kOwnerMarker = "CKVISION_GRAPHICS_LOG_OWNED";
+    const char* const owned = std::getenv(kOwnerMarker);
+    const bool already_owned = owned != nullptr && *owned != '\0';
+    log.stream = std::fopen(target.c_str(), already_owned ? "a" : "w");
+    if (log.stream == nullptr) return false;
+    if (!already_owned) ::setenv(kOwnerMarker, "1", 1);
+    return true;
 }
 
 }  // namespace

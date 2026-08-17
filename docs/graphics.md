@@ -261,7 +261,7 @@ animation but a slow application.
 
 Spin answers that with two rules and no polling at all:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="413-444" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="431-462" -->
 ```cpp
 void SpinApp::arm_next_tick() {
     // Self-clocking, and the reason this is a one-shot rather than a
@@ -288,7 +288,7 @@ void SpinApp::pace(std::int64_t now_nanos) {
         // On time: ease back towards the target, geometrically rather than
         // at once, so one quiet tick after a busy stretch does not put the
         // load straight back.
-        interval_nanos_ = std::max(kFrameIntervalNanos, interval_nanos_ * 7 / 8);
+        interval_nanos_ = std::max(target_interval_nanos_, interval_nanos_ * 7 / 8);
     }
     // Anything much EARLIER than asked for is not a measurement of the
     // loop's health at all — it is a clock that jumped, or a host that
@@ -308,10 +308,41 @@ documented floor. Ticks landing on time again ease it back geometrically. The
 cost of an overloaded moment is therefore a slower rotation, never an
 unresponsive window.
 
-The signals available for this today are `Clock` (how late a tick was) plus
+### Knowing the terminal took it
+
+Writing a frame proves its bytes left this side, and nothing more. A terminal
+that accepts them faster than it draws them lets an application produce frames
+nobody will ever see — the picture on screen falls further behind every one of
+them, and what the reader notices is an application that has stopped answering.
+
+`Application::set_frame_completion_tracking(true)` closes that loop. Each
+presented frame carries a Device Status Report after it; a terminal reads its
+input in order, so its `CSI 0 n` reply says that frame has been taken in.
+Nothing blocks — `frames_awaiting_terminal()` is a fact to consult, like the
+cost counters beside it, and `last_terminal_round_trip_nanos()` says how long
+the answer took.
+
+An application then gives the terminal the same one-deep rule it gives its
+renderer, which in Spin is one line in the tick:
+
+```cpp
+if (app_.frames_awaiting_terminal() == 0)
+    for (const Panel& panel : panels_) panel.view->request_frame(frames_, now);
+arm_next_tick();
+```
+
+A terminal that never answers must not stall anything, so an unanswered frame
+is written off after `kFrameCompletionTimeoutNanos`, and a host that misses
+`kFrameCompletionGiveUpCount` in a row is taken at its word: tracking turns
+itself off, a diagnostic records it, and pacing falls back to tick lateness. An
+absent optional reply is never evidence of a missing capability.
+
+It is off by default. It adds bytes to the presented stream, and a byte-exact
+golden is entitled to the frame it asked for and nothing else.
+
+The other signals available for pacing are `Clock` (how late a tick was) plus
 `Application::last_compose_cells_touched()` and
-`Application::last_bytes_emitted()`. Tick lateness is the one Spin uses,
-because it measures what the reader actually feels rather than a proxy for it.
+`Application::last_bytes_emitted()`.
 
 | Sixel Spin | No-graphics Spin |
 |---|---|

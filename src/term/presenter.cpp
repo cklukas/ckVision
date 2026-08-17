@@ -454,16 +454,30 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         if (active.encoded == nullptr) {
             const int target_w = active.key.target_width;
             const int target_h = active.key.target_height;
-            Image cropped(target_w, target_h);
-            for (int y = 0; y < target_h; ++y) {
-                const int src_y = px_y0 + (target_h == crop_h ? y : y * crop_h / target_h);
-                for (int x = 0; x < target_w; ++x) {
-                    const int src_x = px_x0 + (target_w == crop_w ? x : x * crop_w / target_w);
-                    cropped.set_pixel(x, y, image.pixel(src_x, src_y));
+            // A producer that sized its image from the cell metric, and whose
+            // picture is wholly visible, hands over exactly the pixels this
+            // would copy. Copying them into a second image of the same size —
+            // a megabyte or two, allocated and thrown away every frame an
+            // animation presents — buys nothing, so the encoder reads the
+            // caller's own image instead.
+            const bool copy_would_be_identity = px_x0 == 0 && px_y0 == 0 && crop_w == image.width() &&
+                                                crop_h == image.height() && target_w == crop_w &&
+                                                target_h == crop_h;
+            if (copy_would_be_identity) {
+                active.encoded = std::make_shared<const std::string>(
+                    encode_sixel(image, active.key.color_registers));
+            } else {
+                Image cropped(target_w, target_h);
+                for (int y = 0; y < target_h; ++y) {
+                    const int src_y = px_y0 + (target_h == crop_h ? y : y * crop_h / target_h);
+                    for (int x = 0; x < target_w; ++x) {
+                        const int src_x = px_x0 + (target_w == crop_w ? x : x * crop_w / target_w);
+                        cropped.set_pixel(x, y, image.pixel(src_x, src_y));
+                    }
                 }
+                active.encoded = std::make_shared<const std::string>(
+                    encode_sixel(cropped, active.key.color_registers));
             }
-            active.encoded = std::make_shared<const std::string>(
-                encode_sixel(cropped, active.key.color_registers));
         }
 
         emit_cursor_move(out, slice.visible_rect.x, slice.visible_rect.y);
@@ -644,6 +658,15 @@ void Presenter::present(FrameView frame, CursorState cursor,
                      std::to_string(sending) + " re-sent, host sixel=" +
                      (terminal_.capabilities().sixel_graphics ? "yes" : "NO") + ", " +
                      std::to_string(out.size() / 1024) + " KiB total");
+    }
+    // The question goes last, after the frame it is asking about, because
+    // a terminal answers it having read everything before it. An empty
+    // frame is not asked about: there is nothing for the terminal to have
+    // finished, and a question with no frame in front of it would only
+    // measure the round trip of the question.
+    if (track_frame_completion_ && !out.empty()) {
+        out += "\x1B[5n";
+        ++frames_marked_;
     }
     last_bytes_emitted_ = out.size();
     const auto write_started = tracing ? std::chrono::steady_clock::now()

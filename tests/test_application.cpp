@@ -1693,6 +1693,69 @@ CK_TEST(destroying_the_input_captured_view_clears_capture_and_a_later_click_uses
     CK_CHECK(target->mouse_events == 1);
 }
 
+// --- Frame completion (D-021's "sent" is not "arrived") ------------------
+
+CK_TEST(frame_completion_tracking_is_off_until_an_application_asks_for_it) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.step(0);
+    // Nothing added to the frame, and nothing to reason about.
+    CK_CHECK(!app.frame_completion_tracking());
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+    CK_CHECK(term.written_bytes().find("\x1B[5n") == std::string::npos);
+    CK_CHECK(app.last_terminal_round_trip_nanos() < 0);
+}
+
+CK_TEST(a_presented_frame_is_outstanding_until_the_terminal_answers_for_it) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    app.step(clock.now_nanos());
+    // The question rides out with the frame it asks about.
+    CK_CHECK(term.written_bytes().find("\x1B[5n") != std::string::npos);
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+
+    clock.advance(4'000'000);
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+    CK_CHECK(app.last_terminal_round_trip_nanos() == 4'000'000);
+}
+
+CK_TEST(an_unanswered_frame_is_written_off_rather_than_waited_on_forever) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+
+    clock.advance(ckv::ui::kFrameCompletionTimeoutNanos);
+    app.step(clock.now_nanos());
+    // Still tracking — one silence is not an answer about the host.
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+    CK_CHECK(app.frame_completion_tracking());
+}
+
+CK_TEST(a_terminal_that_never_answers_is_taken_at_its_word) {
+    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    app.set_frame_completion_tracking(true);
+    for (int attempt = 0; attempt < ckv::ui::kFrameCompletionGiveUpCount; ++attempt) {
+        app.invalidate_all();  // re-emit the frame, so there is something to ask about
+        app.step(clock.now_nanos());
+        clock.advance(ckv::ui::kFrameCompletionTimeoutNanos);
+        app.step(clock.now_nanos());
+    }
+    // Pacing against a host that does not answer is worse than not pacing:
+    // it is a stall dressed as back-pressure.
+    CK_CHECK(!app.frame_completion_tracking());
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+}
+
 // --- Adopting a session the application did not launch (ckmux U0-a) --------
 
 namespace {

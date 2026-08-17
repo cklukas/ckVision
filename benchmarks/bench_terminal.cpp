@@ -7,6 +7,8 @@
 #include <string>
 
 #include "ckbench.hpp"
+#include "cvision/core/image.hpp"
+#include "cvision/term/sixel_encoder.hpp"
 #include "cvision/term/terminal_emulator.hpp"
 
 namespace {
@@ -28,6 +30,27 @@ std::string scrollback_workload() {
         output += "terminal-resilience-line-" + std::to_string(line) +
                   " payload remains private to the child\r\n";
     return output;
+}
+
+// A full-window animation frame as an application produces one: a flat
+// background with a shaded solid on it, sized from a terminal's own cell
+// metric. Its colours fit the register budget, which is the ordinary case
+// for a user interface and the one the encoder is read once for.
+ckv::Image animation_frame(int width, int height) {
+    ckv::Image image(width, height);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const int dx = x - width / 2;
+            const int dy = y - height / 2;
+            const bool inside = dx * dx + dy * dy < (width / 3) * (width / 3);
+            // Sixteen shades over one hue, plus the background: the palette a
+            // shaded solid on a window surface actually produces.
+            const auto shade = static_cast<std::uint8_t>(120 + ((x + y) / 24 % 16) * 8);
+            image.set_pixel(x, y, inside ? ckv::Image::Rgba{shade, shade, 96, 255}
+                                         : ckv::Image::Rgba{0, 0, 205, 255});
+        }
+    }
+    return image;
 }
 
 std::string sixel_workload() {
@@ -86,6 +109,16 @@ bool run_terminal_benchmarks() {
         if (snapshot.rasters.size() != 1U || snapshot.rasters.front().image == nullptr ||
             !snapshot.diagnostics.empty())
             budgets_hold = false;
+    });
+
+    // The other direction: what an application spends turning a frame into
+    // Sixel, which is the owning thread's per-frame cost for animated raster
+    // content and therefore what an animation's frame rate is bounded by.
+    const ckv::Image frame = animation_frame(722, 608);
+    ckbench::run("sixel_encode_animation_frame", 20, [&] {
+        const std::string encoded = ckv::term::encode_sixel(frame, 256);
+        sink += encoded.size();
+        if (encoded.size() < 1024U || encoded.compare(0, 2, "\x1bP") != 0) budgets_hold = false;
     });
 
     std::printf("  (terminal budgets: scrollback <= %zu cells, parser <= %zu bytes/step, "

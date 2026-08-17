@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <array>
-#include <map>
 #include <vector>
 
 namespace ckv::term {
@@ -106,58 +105,68 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
     const int h = image.height();
     const int max_colors = std::clamp(max_color_registers > 0 ? max_color_registers : 256, 1, 256);
 
-    // Decide quantization mode: exact palette if <= 256 unique colors
-    // appear (alpha is ignored — Sixel has no alpha channel), else a
-    // deterministic 6-level-per-channel cube (<= 216 registers,
+    // Quantization mode: an exact palette while the picture's colors fit the
+    // host's registers (alpha is ignored — Sixel has no alpha channel), and
+    // otherwise a deterministic 6-level-per-channel cube (<= 216 registers,
     // content-independent so it never exceeds the register budget).
-    PaletteIndex exact_probe;
-    bool use_cube = false;
-    for (int y = 0; y < h && !use_cube; ++y) {
-        for (int x = 0; x < w; ++x) {
-            const Image::Rgba p = image.pixel(x, y);
-            if (exact_probe.intern(pack(p.r, p.g, p.b), max_colors) < 0) {
-                use_cube = true;
-                break;
-            }
-        }
-    }
-
-    const std::array<int, 3> dimensions = palette_dimensions(max_colors);
-    // Quantization is a per-channel function of a byte, so it is 256 answers
-    // and not a computation to repeat a million times.
+    //
+    // Which of the two applies is decided BY the reading pass rather than by
+    // a separate probing pass before it. The colour that overflows is found
+    // by the same intern, at the same pixel, either way — so a picture that
+    // does not fit costs what the probe cost, and one that does is now read
+    // once instead of twice. A picture whose colours fit is the ordinary
+    // case for a user interface, and it was paying for the answer twice.
     std::array<std::uint8_t, 256> level_r{};
     std::array<std::uint8_t, 256> level_g{};
     std::array<std::uint8_t, 256> level_b{};
-    const bool cube_666 = dimensions == std::array<int, 3>{6, 6, 6};
-    for (int value = 0; value < 256; ++value) {
-        const auto byte = static_cast<std::uint8_t>(value);
-        level_r[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[0]);
-        level_g[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[1]);
-        level_b[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[2]);
-    }
 
     PaletteIndex palette;
     std::vector<std::array<std::uint8_t, 3>> palette_colors;
     palette_colors.reserve(static_cast<std::size_t>(max_colors));
-    std::vector<int> pixel_index(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
-    for (int y = 0; y < h; ++y) {
-        for (int x = 0; x < w; ++x) {
-            Image::Rgba p = image.pixel(x, y);
-            if (use_cube) {
-                p.r = level_r[p.r];
-                p.g = level_g[p.g];
-                p.b = level_b[p.b];
+    // One byte per pixel, not one int: a Sixel palette cannot exceed 256
+    // entries, and the band loop below reads this buffer once per row of
+    // every colour it contains.
+    std::vector<std::uint8_t> pixel_index(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
+    bool use_cube = false;
+    for (;;) {
+        bool overflowed = false;
+        for (int y = 0; y < h && !overflowed; ++y) {
+            for (int x = 0; x < w; ++x) {
+                Image::Rgba p = image.pixel(x, y);
+                if (use_cube) {
+                    p.r = level_r[p.r];
+                    p.g = level_g[p.g];
+                    p.b = level_b[p.b];
+                }
+                const int index = palette.intern(pack(p.r, p.g, p.b), max_colors);
+                if (index < 0) {
+                    // Only reachable before quantizing: every cube cell is
+                    // one of at most max_colors, so the second reading of
+                    // the picture cannot overflow.
+                    overflowed = true;
+                    break;
+                }
+                if (static_cast<std::size_t>(index) == palette_colors.size())
+                    palette_colors.push_back({p.r, p.g, p.b});
+                pixel_index[static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
+                             static_cast<std::size_t>(x)] = static_cast<std::uint8_t>(index);
             }
-            const int index = palette.intern(pack(p.r, p.g, p.b), max_colors);
-            // Every colour reaching here is either one of at most max_colors
-            // exact ones or a cube cell, so the palette cannot overflow; the
-            // clamp is what makes that a fact rather than a belief.
-            const int entry = index < 0 ? 0 : index;
-            if (static_cast<std::size_t>(entry) == palette_colors.size())
-                palette_colors.push_back({p.r, p.g, p.b});
-            pixel_index[static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
-                         static_cast<std::size_t>(x)] = entry;
         }
+        if (!overflowed) break;
+
+        // Quantization is a per-channel function of a byte, so it is 256
+        // answers and not a computation to repeat a million times.
+        const std::array<int, 3> dimensions = palette_dimensions(max_colors);
+        const bool cube_666 = dimensions == std::array<int, 3>{6, 6, 6};
+        for (int value = 0; value < 256; ++value) {
+            const auto byte = static_cast<std::uint8_t>(value);
+            level_r[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[0]);
+            level_g[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[1]);
+            level_b[static_cast<std::size_t>(value)] = cube_666 ? quantize_level_6(byte) : quantize_level(byte, dimensions[2]);
+        }
+        use_cube = true;
+        palette = PaletteIndex{};
+        palette_colors.clear();
     }
 
     // Pa=0 (device pixel aspect), Pb=0 (opaque background), Ph=0.
@@ -190,11 +199,12 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
     // lengths included — this is the same encoding, arrived at once.
     const std::size_t palette_size = palette_colors.size();
     std::vector<unsigned char> column_bits(palette_size * static_cast<std::size_t>(w), 0);
-    std::vector<bool> present(palette_size, false);
+    // A byte per colour rather than a bit: this is read once per pixel of the
+    // picture, and a bit costs a shift and a mask to answer a question a byte
+    // answers with a load.
+    std::vector<unsigned char> present(palette_size, 0);
     std::vector<int> present_order;
     present_order.reserve(palette_size);
-    std::string run;
-    run.reserve(static_cast<std::size_t>(w));
 
     for (int band_y = 0; band_y < h; band_y += 6) {
         const int band_height = std::min(6, h - band_y);
@@ -204,8 +214,8 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
             const auto bit = static_cast<unsigned char>(1u << dy);
             for (int x = 0; x < w; ++x) {
                 const auto color = static_cast<std::size_t>(pixel_index[row + static_cast<std::size_t>(x)]);
-                if (!present[color]) {
-                    present[color] = true;
+                if (present[color] == 0) {
+                    present[color] = 1;
                     present_order.push_back(static_cast<int>(color));
                 }
                 column_bits[color * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)] |= bit;
@@ -223,24 +233,30 @@ std::string encode_sixel(const Image& image, int max_color_registers) {
             out += std::to_string(color_idx);
 
             unsigned char* const bits = &column_bits[static_cast<std::size_t>(color_idx) * static_cast<std::size_t>(w)];
-            run.assign(static_cast<std::size_t>(w), '\0');
-            for (int x = 0; x < w; ++x) {
-                run[static_cast<std::size_t>(x)] = static_cast<char>(63 + bits[x]);
-                bits[x] = 0;  // cleared as it is read, so the next band starts empty
-            }
-            present[static_cast<std::size_t>(color_idx)] = false;
+            present[static_cast<std::size_t>(color_idx)] = 0;
 
-            std::size_t i = 0;
-            while (i < run.size()) {
-                std::size_t j = i;
-                while (j < run.size() && run[j] == run[i]) ++j;
-                const std::size_t count = j - i;
+            // Run-length encoded straight off the column masks. Rendering
+            // them into a row of characters first meant writing the row,
+            // reading it back to find the runs, and clearing the masks in a
+            // third pass over the same width — for every colour of every
+            // band. The bytes are the same: a data character IS 63 plus its
+            // mask, so equal masks and equal characters are the same runs.
+            int i = 0;
+            while (i < w) {
+                const unsigned char value = bits[i];
+                int j = i;
+                while (j < w && bits[j] == value) {
+                    bits[j] = 0;  // cleared as it is read, so the next band starts empty
+                    ++j;
+                }
+                const int count = j - i;
+                const auto character = static_cast<char>(63 + value);
                 if (count >= 4) {
                     out += '!';
                     out += std::to_string(count);
-                    out += run[i];
+                    out += character;
                 } else {
-                    out.append(count, run[i]);
+                    out.append(static_cast<std::size_t>(count), character);
                 }
                 i = j;
             }

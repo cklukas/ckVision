@@ -7,7 +7,11 @@
 // like every other accelerator in this framework), mnemonic letters,
 // Left/Right/Up/Down navigation with wrapping, Enter/mnemonic to
 // activate, disabled items skipped by navigation but still visible,
-// checkable items, nested submenus, Esc closes one level, light-dismiss
+// checkable items, nested submenus the keyboard enters and leaves the way the
+// pointer does — Right or Enter on an item that has one opens it and the keys
+// go to it, Left or Esc steps back out to that item, and Right on an item
+// without one carries the walk on to the next top-level menu —
+// Esc closes one level, light-dismiss
 // on an outside click via Application's mouse input capture, and
 // right-aligned chord hints rendered live from the command registry
 // (M9/WP-11).
@@ -138,6 +142,11 @@ public:
     // explains the highlighted entry needs to hear about the move; the
     // menu reports it rather than assuming what any particular surface
     // wants to do with it.
+    //
+    // A submenu inherits this handler when it opens, so one wiring hears the
+    // whole chain: the highlight a chain of menus shows is the innermost
+    // menu's, and it is reported both on opening a submenu and again for the
+    // parent item once that submenu closes.
     std::function<void(ui::CommandId)> on_highlight_changed;
 
     const std::vector<MenuItem>& items() const noexcept { return items_; }
@@ -181,6 +190,11 @@ private:
     void dismiss(MenuDismissReason reason = MenuDismissReason::Cancelled);
     void open_submenu(int index);
     void close_submenu(bool restore_capture);
+    // The deepest menu currently open below this one, or this one when no
+    // submenu is up. The keyboard belongs to it: a chain of menus shows one
+    // highlight, and it is the innermost menu's. MenuBar routes with this
+    // because focus never leaves the bar — see MenuBar::on_key.
+    DropdownMenu* innermost_menu() noexcept;
     void dismiss_chain(MenuDismissReason reason = MenuDismissReason::Cancelled);
     void begin_pointer_press() noexcept { pointer_pressed_ = true; }
     // The press that opened this menu has ended. If it ended without the

@@ -71,6 +71,19 @@ public:
     // draw() re-invokes the draw callback before presenting.
     void invalidate_content();
 
+    // What this canvas draws where the terminal cannot show its picture,
+    // called with the painter and the canvas's own area.
+    //
+    // The default names the widget — a placeholder, and deliberately a poor
+    // one: a reader on a terminal without raster graphics is exactly the
+    // reader who needs the picture's information most, and only the
+    // application knows what that information is. A canvas showing a
+    // measured value can say the value; one showing a diagram can say what
+    // is in it. The fallback is mandatory in this design (every raster
+    // region has one), so making it worth reading is the application's part
+    // of that bargain.
+    void set_fallback_painter(std::function<void(scene::Painter&, Rect)> fallback);
+
     std::function<void(const MouseEvent&)> on_click;  // see ImageView's own note: forwards the full dual-space event
 
     void draw(scene::Painter& painter) override;
@@ -91,6 +104,7 @@ private:
     bool derive_pixel_size_from_metrics_ = false;
     bool content_dirty_ = true;
     std::function<void(Image&)> draw_callback_;
+    std::function<void(scene::Painter&, Rect)> fallback_painter_;
     int raster_id_;
 
     ui::RoleId fallback_role_ = ui::kInvalidRole;

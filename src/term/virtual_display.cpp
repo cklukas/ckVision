@@ -340,6 +340,15 @@ bool VirtualDisplay::handle_csi(char final_byte) {
         return true;
     }
 
+    // A Device Status Report is a question, not a drawing operation: it
+    // changes nothing on the screen this display models, and a real
+    // terminal answers it on the input path this one does not have. It is
+    // accepted rather than rejected because the Presenter writes it after a
+    // frame to learn that the frame arrived (Presenter::
+    // set_frame_completion_tracking), and a display that refuses to model
+    // what the Presenter can emit cannot be used to test it.
+    if (final_byte == 'n' && control_buffer_.find('?') == std::string::npos) return true;
+
     fail("unsupported CSI final byte in virtual display");
     return false;
 }

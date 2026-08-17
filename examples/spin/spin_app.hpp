@@ -197,9 +197,14 @@ public:
     // Whether a tick is currently armed. It is exactly "some window is
     // open": an idle Spin has no timer at all.
     bool animating() const noexcept { return timer_.has_value(); }
-    // The interval the next tick is asking for — kFrameIntervalNanos while
-    // the loop is keeping up, wider while it is not.
+    // The interval the next tick is asking for — the target while the loop
+    // is keeping up, wider while it is not.
     std::int64_t frame_interval_nanos() const noexcept { return interval_nanos_; }
+    // The rate to aim for when the loop is keeping up. The pacer still
+    // widens from here under load and eases back to it, so this is the
+    // ceiling an application asks for rather than one it imposes.
+    void set_target_frame_interval(std::int64_t nanos);
+    std::int64_t target_frame_interval_nanos() const noexcept { return target_interval_nanos_; }
     SpinView* view_at(std::size_t index) const noexcept;
     FrameReadout* readout_at(std::size_t index) const noexcept;
     // What this terminal said about pictures, in one sentence — the
@@ -235,6 +240,7 @@ private:
     std::vector<Panel> panels_;
     std::array<ui::CommandId, kShapeCount> commands_{};
     std::optional<ui::Application::TimerId> timer_;
+    std::int64_t target_interval_nanos_ = kFrameIntervalNanos;
     std::int64_t interval_nanos_ = kFrameIntervalNanos;
     std::optional<std::int64_t> last_tick_nanos_;
     int opened_ = 0;

@@ -168,6 +168,30 @@ public:
     ui::View* top_dock() const noexcept { return top_dock_; }
     ui::View* bottom_dock() const noexcept { return bottom_dock_; }
 
+    // The third member of that family: one view that fills content_area()
+    // and is kept filling it across every resize, under any windows and
+    // popups.
+    //
+    // Not every application's desktop is a place where windows float. A
+    // viewer, a monitor, a dashboard is a fixed arrangement of panes over
+    // one subject, and its desktop IS that arrangement — usually a
+    // ui::Dock or a ui::Column composing the panes. Without this such an
+    // application has to recompute the arrangement's bounds in its own
+    // resize handler, which is exactly the hand-maintained geometry
+    // dock_top()/dock_bottom() exist to remove for chrome; content is no
+    // different, and gets the same treatment rather than a second
+    // convention.
+    //
+    // Returns ownership of whatever content was there before (nullptr the
+    // first time), so swapping the arrangement at runtime neither leaks
+    // nor detaches something the caller still wanted.
+    template <class T>
+    T* set_content(std::unique_ptr<T> view) {
+        return static_cast<T*>(set_content_impl(std::move(view)));
+    }
+    ui::View* content() const noexcept { return content_; }
+    std::unique_ptr<ui::View> take_content();
+
     // The area available for windows: this Desktop's own bounds minus
     // whatever is currently docked top/bottom. tile()/cascade() and
     // reposition_within() (called on every window from on_resized())
@@ -266,6 +290,7 @@ private:
     struct WindowRelationshipToken {};
     ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
     ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
+    ui::View* set_content_impl(std::unique_ptr<ui::View> view);
     ui::View* add_popup_impl(std::unique_ptr<ui::View> popup);
     void reraise_popups();
     // Installs `handler` as `id`'s default IFF nothing has claimed `id`
@@ -328,6 +353,7 @@ private:
     bool retained_base_dirty_ = true;
     bool structural_invalidation_ = false;
     ui::View* top_dock_ = nullptr;
+    ui::View* content_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
     std::vector<ui::CommandId> installed_default_handlers_;

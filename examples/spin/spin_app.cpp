@@ -265,6 +265,12 @@ SpinApp::SpinApp(ui::Application& app)
     // first frames are already on screen.
     app_.commands().set_handler(app_.commands().standard().help, [this] { show_about(); });
 
+    // Pace against the terminal, not just against the clock. A host that
+    // accepts frames faster than it draws them would otherwise let this
+    // application produce frames nobody ever sees, at the cost of the
+    // responsiveness of every one after them.
+    app_.set_frame_completion_tracking(true);
+
     (void)open_window(ShapeId::SolidCube);
 }
 
@@ -308,6 +314,9 @@ std::string SpinApp::graphics_summary() const {
     summary += ".";
     if (const SpinView* const view = view_at(0); view != nullptr && view->frames_shown() > 0)
         summary += " This window's frames are " + size_text(view->frame_pixels()) + " px.";
+    if (const std::int64_t round_trip = app_.last_terminal_round_trip_nanos(); round_trip >= 0)
+        summary += " It reports finishing one in " + std::to_string(round_trip / 1'000'000) +
+                   " ms, and frames are asked for no faster than that.";
     return summary;
 }
 
@@ -323,6 +332,15 @@ void SpinApp::show_about() {
     descriptor.emphasized_leading_lines = 1;
     auto presentation = widgets::present_message_box(app_, *desktop_, roles_, descriptor);
     presentation.set_completion_handler([](widgets::MessageBoxResult) {});
+}
+
+void SpinApp::set_target_frame_interval(std::int64_t nanos) {
+    // A floor of one millisecond: below it the tick is asking for frames
+    // faster than any host can present them, which is a busy loop wearing a
+    // timer's clothes.
+    target_interval_nanos_ = std::max<std::int64_t>(1'000'000, nanos);
+    interval_nanos_ = std::max(interval_nanos_, target_interval_nanos_);
+    if (interval_nanos_ > target_interval_nanos_ && !last_tick_nanos_) interval_nanos_ = target_interval_nanos_;
 }
 
 ui::CommandId SpinApp::new_window_command(ShapeId shape) const noexcept {
@@ -406,7 +424,7 @@ void SpinApp::stop_animation_clock() {
     }
     // The next window starts from the target rate rather than inheriting
     // whatever the last overloaded moment settled on.
-    interval_nanos_ = kFrameIntervalNanos;
+    interval_nanos_ = target_interval_nanos_;
     last_tick_nanos_.reset();
 }
 
@@ -435,7 +453,7 @@ void SpinApp::pace(std::int64_t now_nanos) {
         // On time: ease back towards the target, geometrically rather than
         // at once, so one quiet tick after a busy stretch does not put the
         // load straight back.
-        interval_nanos_ = std::max(kFrameIntervalNanos, interval_nanos_ * 7 / 8);
+        interval_nanos_ = std::max(target_interval_nanos_, interval_nanos_ * 7 / 8);
     }
     // Anything much EARLIER than asked for is not a measurement of the
     // loop's health at all — it is a clock that jumped, or a host that
@@ -457,7 +475,13 @@ void SpinApp::tick() {
     const std::int64_t now = app_.clock().now_nanos();
     if (last_tick_nanos_) pace(now);
     else last_tick_nanos_ = now;
-    for (const Panel& panel : panels_) panel.view->request_frame(frames_, now);
+    // The terminal is a queue like any other, and it gets the same rule the
+    // renderer gets: nothing new until it has finished the last thing. It
+    // reports that itself (Application::frames_awaiting_terminal), so this
+    // is a fact rather than a guess — and the tick still re-arms below, so
+    // asking for nothing costs a frame rather than the animation.
+    if (app_.frames_awaiting_terminal() == 0)
+        for (const Panel& panel : panels_) panel.view->request_frame(frames_, now);
     arm_next_tick();
 }
 

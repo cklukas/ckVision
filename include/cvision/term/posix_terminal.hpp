@@ -59,6 +59,9 @@ public:
     std::size_t mouse_reports_seen() const noexcept { return decoder_.mouse_reports_seen(); }
 
     Capabilities capabilities() const noexcept override { return caps_; }
+    std::size_t frame_acknowledgements() const noexcept override {
+        return decoder_.frame_acknowledgements();
+    }
     // Replaces the explicit client policy layered over probe evidence. A
     // meaningful effective-capability change is delivered through the next
     // poll() as CapabilityChangedEvent and wakes an application blocked in
@@ -110,6 +113,14 @@ private:
     int session_slot_ = -1;
     bool capability_probes_enabled_ = true;
     std::int64_t probe_deadline_nanos_ = -1;
+    // Sixel support this backend took away while a resize re-probe was in
+    // flight, so that a probe window closing without the fresh maximum
+    // geometry can give it back instead of leaving the terminal dark.
+    bool withheld_sixel_graphics_ = false;
+    // Raw output capture (CKVISION_OUTPUT_CAPTURE), for replaying what a
+    // misbehaving host was actually given.
+    std::FILE* capture_stream_ = nullptr;
+    bool capture_attempted_ = false;
     bool capability_change_pending_ = false;
 
     void begin_capability_probes();

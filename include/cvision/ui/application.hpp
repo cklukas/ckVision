@@ -63,6 +63,14 @@ inline constexpr std::int64_t kDefaultFrameIntervalNanos = 200'000'000;
 // honest refusal to render. Recovery is automatic and needs nothing
 // undone on either side: the very next frame root() is at least
 // kHardFloorSize again, painting resumes normally.
+// How long an unanswered frame is waited for before it is written off.
+// Generous next to any terminal's own frame time, and short enough that a
+// host which never answers costs an application a fraction of a second
+// once rather than a stall it has to be restarted out of.
+inline constexpr std::int64_t kFrameCompletionTimeoutNanos = 250'000'000;
+// Consecutive write-offs after which a host is taken at its word.
+inline constexpr int kFrameCompletionGiveUpCount = 3;
+
 inline constexpr Size kMinFullChromeSize{80, 24};
 inline constexpr Size kHardFloorSize{20, 6};
 
@@ -121,6 +129,40 @@ public:
         return compositor_.last_compose_cells_touched();
     }
     std::size_t last_bytes_emitted() const noexcept { return presenter_.last_bytes_emitted(); }
+
+    // --- Frame completion (ARCHITECTURE.md §4, §8) ----------------------
+    //
+    // Presenting a frame proves that its bytes were written, and nothing
+    // more. A terminal that accepts them faster than it draws them leaves
+    // an application free to produce frames the reader will never see, at
+    // the cost of the responsiveness of every one that follows.
+    //
+    // Enabled, each presented frame carries a Device Status Report after
+    // it; a terminal reads its input in order, so the reply says that
+    // frame has been taken in. Nothing waits: the count below is a fact an
+    // application may consult, exactly like the cost counters above.
+    //
+    // A terminal that never answers must not stall anything, so an
+    // unanswered frame is written off after kFrameCompletionTimeoutNanos,
+    // and a host that fails to answer kFrameCompletionGiveUpCount times in
+    // a row is taken at its word: tracking turns itself off, a diagnostic
+    // records it, and frames_awaiting_terminal() reads zero from then on.
+    void set_frame_completion_tracking(bool enabled);
+    bool frame_completion_tracking() const noexcept { return presenter_.frame_completion_tracking(); }
+
+    // Frames presented that this terminal has not yet reported finishing.
+    // Zero means it has caught up — and means nothing at all when tracking
+    // is off, which is its value then.
+    std::size_t frames_awaiting_terminal() const noexcept {
+        const std::size_t marked = presenter_.frames_marked();
+        return marked > frames_settled_ ? marked - frames_settled_ : 0;
+    }
+
+    // How long the most recently acknowledged frame took to come back,
+    // measured on the injected Clock. Negative until one has.
+    std::int64_t last_terminal_round_trip_nanos() const noexcept {
+        return last_terminal_round_trip_nanos_;
+    }
 
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
@@ -520,6 +562,9 @@ private:
     void layout_root_child(View& child);
     void layout_root_children();
     void paint_and_present();
+    // Turns this terminal's replies into the outstanding-frame count,
+    // and writes off what it never answered.
+    void reconcile_frame_completion(std::int64_t now_nanos);
     void paint_too_small_state(scene::Painter& painter, Size current_size) const;
 
     Application(term::Terminal& terminal, Clock& clock,
@@ -565,6 +610,17 @@ private:
     std::optional<MouseEvent> last_mouse_event_;
     term::Presenter presenter_;
     bool dirty_ = true;  // forces the very first frame to paint+present
+    // Frame-completion bookkeeping. `presented_` mirrors the Presenter's own
+    // marked count; `settled_` is how many of those the terminal has either
+    // answered for or been forgiven.
+    std::size_t frames_settled_ = 0;
+    std::size_t terminal_acknowledgements_seen_ = 0;
+    // Optional rather than a zero sentinel: an injected clock may
+    // legitimately read zero, and a round trip measured from a sentinel
+    // is measured from the wrong instant.
+    std::optional<std::int64_t> oldest_unanswered_frame_nanos_;
+    std::int64_t last_terminal_round_trip_nanos_ = -1;
+    int frame_completion_timeouts_ = 0;
     std::atomic<bool> quit_requested_{false};
     HistoryRegistry history_;
     std::string clipboard_text_;

@@ -305,3 +305,39 @@ CK_TEST(an_empty_image_or_an_empty_allowance_yields_no_box) {
     CK_CHECK(fit_image_cells(Size{0, 0}, Size{11, 24}, Size{64, 12}) == Size{});
     CK_CHECK(fit_image_cells(Size{1528, 1029}, Size{11, 24}, Size{0, 0}) == Size{});
 }
+
+// --- The application's own fallback ----------------------------------
+
+CK_TEST(an_installed_fallback_painter_replaces_the_placeholder_name) {
+    // A reader whose terminal cannot show the picture is the reader who
+    // needs its information most, so the application gets to say what
+    // stands in for it.
+    Fixture f;
+    Canvas canvas;
+    canvas.set_context(f.ctx());
+    canvas.set_bounds(Rect{0, 0, 20, 3});
+    canvas.set_pixel_size(8, 8);
+    canvas.set_draw_callback([](ckv::Image&) {});
+    canvas.set_fallback_painter([](Painter& painter, Rect area) {
+        painter.draw_text(ckv::Point{0, 0}, "t = 10.000", ckv::Style{});
+        CK_CHECK(area.width == 20 && area.height == 3);  // its own area, in cells
+    });
+    Surface s(ckv::Size{20, 3}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 3});
+    canvas.draw(painter);
+    CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "t");
+    CK_CHECK(s.at(ckv::Point{4, 0}).grapheme() == "1");
+}
+
+CK_TEST(without_a_fallback_painter_the_canvas_still_names_itself) {
+    Fixture f;
+    Canvas canvas;
+    canvas.set_context(f.ctx());
+    canvas.set_bounds(Rect{0, 0, 20, 3});
+    canvas.set_pixel_size(8, 8);
+    canvas.set_draw_callback([](ckv::Image&) {});
+    Surface s(ckv::Size{20, 3}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 20, 3});
+    canvas.draw(painter);
+    CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "[");
+}

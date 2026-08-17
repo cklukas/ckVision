@@ -6,9 +6,12 @@
 // erased a picture that should still be there.
 //
 // Off unless `CKVISION_GRAPHICS_LOG` names a destination — `-` or `stderr` for
-// standard error, anything else for a file, appended to. Off, a call costs one
-// relaxed atomic read; the message is not even built, because every call site
-// asks `graphics_log_enabled()` first.
+// standard error, anything else for a file. The first process to open that
+// file starts it empty, so a run is read without hunting for where it began;
+// a contained child session inherits the variable and appends, which is what
+// makes a host and its child readable together. Off, a call costs one relaxed
+// atomic read; the message is not even built, because every call site asks
+// `graphics_log_enabled()` first.
 //
 // It lives in `term` because this is where the platform already is: `core`,
 // `scene`, `ui` and `widgets` read no environment (ARCHITECTURE.md §1).

@@ -175,6 +175,12 @@ void DropdownMenu::dismiss_chain(MenuDismissReason reason) {
     root->dismiss(reason);
 }
 
+DropdownMenu* DropdownMenu::innermost_menu() noexcept {
+    DropdownMenu* menu = this;
+    while (menu->child_menu_ != nullptr) menu = menu->child_menu_;
+    return menu;
+}
+
 void DropdownMenu::open_submenu(int index) {
     if (index < 0 || static_cast<std::size_t>(index) >= items_.size()) return;
     const MenuItem& item = items_[static_cast<std::size_t>(index)];
@@ -197,7 +203,15 @@ void DropdownMenu::open_submenu(int index) {
     raw->on_dismiss = [this, raw](MenuDismissReason) {
         if (child_menu_ == raw) close_submenu(true);
     };
+    // One highlight is current in a chain of menus, and it belongs to the
+    // innermost one: browsing into a submenu is still browsing, so whoever
+    // listens hears about it through the same route as the parent's own moves
+    // rather than going dark for as long as the submenu is up.
+    raw->on_highlight_changed = on_highlight_changed;
     child_menu_ = raw;
+    // The submenu settled on its first entry while attaching, before the line
+    // above could hear it — report that opening position explicitly.
+    if (on_highlight_changed) on_highlight_changed(raw->highlighted_command());
     app_->set_input_capture(raw);
     invalidate();
 }
@@ -209,6 +223,9 @@ void DropdownMenu::close_submenu(bool restore_capture) {
     if (app_ != nullptr && app_->input_capture() == child) app_->clear_input_capture();
     if (desktop_ != nullptr) desktop_->remove_popup(child);
     if (restore_capture && app_ != nullptr) app_->set_input_capture(this);
+    // The innermost highlight is this menu's again, now that the submenu that
+    // held it is gone.
+    if (on_highlight_changed) on_highlight_changed(highlighted_command());
     invalidate();
 }
 
@@ -297,9 +314,18 @@ bool DropdownMenu::on_key(const KeyEvent& event) {
         case Key::Enter:
             activate(highlighted_);
             return true;
-        case Key::Right:
+        case Key::Right: {
+            // A submenu opens where the reader is standing. An item that has
+            // none leaves the key unclaimed rather than swallowing it: a menu
+            // bar above this popup is then free to carry the walk on to the
+            // next top-level menu, which is what Right means everywhere else
+            // on the bar.
+            if (highlighted_ < 0 || static_cast<std::size_t>(highlighted_) >= items_.size())
+                return false;
+            if (items_[static_cast<std::size_t>(highlighted_)].submenu.empty()) return false;
             open_submenu(highlighted_);
-            return true;
+            return child_menu_ != nullptr;
+        }
         case Key::Left:
             if (parent_menu_ != nullptr) {
                 dismiss();
@@ -637,18 +663,36 @@ SizeHint MenuBar::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
 
 bool MenuBar::on_key(const KeyEvent& event) {
     if (!active_ || menus_.empty()) return false;
-    // Keyboard focus remains on the bar while its popup owns mouse capture.
-    // Route popup-local navigation and mnemonics explicitly; otherwise a
-    // character intended for a menu item is examined only as a top-level
-    // mnemonic and cannot activate the item. Left/right deliberately remain
-    // bar-owned so they switch top-level menus in the established manner.
+    // Keyboard focus remains on the bar while its popup owns mouse capture, so
+    // the bar is the only route by which an open menu — or a submenu opened out
+    // of one — can be reached from the keyboard at all. Deliver to the
+    // INNERMOST open menu: that is where the reader's highlight is, and a key
+    // spent on a shallower one would move a selection they are no longer
+    // looking at. Without this a submenu could be opened and then not
+    // operated: the next arrow went to its parent, which closed it.
     if (open_dropdown_ != nullptr) {
+        DropdownMenu* const target = open_dropdown_->innermost_menu();
+        const bool in_submenu = target != open_dropdown_;
         switch (event.chord.key) {
             case Key::Up:
             case Key::Down:
             case Key::Enter:
             case Key::Char:
-                return open_dropdown_->on_key(event);
+                return target->on_key(event);
+            case Key::Right:
+                // Right opens the submenu under the highlight. Only where the
+                // highlighted item has none does the key fall through to the
+                // bar and become "on to the next menu".
+                if (target->on_key(event)) return true;
+                break;
+            case Key::Left:
+            case Key::Escape:
+                // Out of a submenu one level at a time, back to the item that
+                // opened it — where the reader came from. At the top level both
+                // stay bar-owned: Left steps to the previous menu, Esc leaves
+                // the menu system as it always has.
+                if (in_submenu && target->on_key(event)) return true;
+                break;
             default:
                 break;
         }

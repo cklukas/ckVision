@@ -122,6 +122,12 @@ struct CapabilityOverrides {
     // Positive cap for Sixel color registers. A cap refines a reported limit
     // when one exists, otherwise it supplies the client-selected limit.
     std::optional<int> sixel_color_registers;
+    // Whether frames are bracketed as one atomic update (DEC 2026). Forcing
+    // it off is a client's answer to a host that answers the query and then
+    // treats part of a frame differently from the rest — a picture applied
+    // outside the bracket that brackets the cells around it tears, and only
+    // the person watching it can say so.
+    std::optional<bool> synchronized_output;
 
     friend bool operator==(const CapabilityOverrides&, const CapabilityOverrides&) = default;
 };
@@ -134,6 +140,7 @@ constexpr Capabilities apply_capability_overrides(Capabilities observed,
                                                    const CapabilityOverrides& overrides) noexcept {
     if (overrides.sixel_graphics) observed.sixel_graphics = *overrides.sixel_graphics;
     if (overrides.cell_pixels) observed.cell_pixels = *overrides.cell_pixels;
+    if (overrides.synchronized_output) observed.synchronized_output = *overrides.synchronized_output;
     if (overrides.sixel_color_registers) {
         const int cap = *overrides.sixel_color_registers;
         observed.sixel_color_registers = observed.sixel_color_registers > 0

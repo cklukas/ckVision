@@ -96,6 +96,13 @@ public:
     // terminal never sent one" from "something between here and there
     // dropped it" — two failures that look identical from the UI.
     std::size_t mouse_reports_seen() const noexcept { return mouse_reports_seen_; }
+    // How many Device Status Report replies (`CSI 0 n`) this decoder has
+    // recognized. A terminal answers one only after it has consumed every
+    // byte written before the question, so a backend that writes the query
+    // at the end of a frame learns from this counter that the frame has
+    // been taken in — the one thing an application otherwise cannot know,
+    // because writing a frame reports only that the bytes left this side.
+    std::size_t frame_acknowledgements() const noexcept { return frame_acknowledgements_; }
     // A resize invalidates a runtime XTSMGRAPHICS geometry limit. Until a
     // fresh, finite geometry reply arrives, a DA1 advertisement alone must
     // not re-enable raster output: its old limit may have been reduced by
@@ -169,6 +176,7 @@ private:
     bool sixel_geometry_required_ = false;
     Size cell_grid_{0, 0};
     std::size_t mouse_reports_seen_ = 0;
+    std::size_t frame_acknowledgements_ = 0;
     CapabilityUpdatePolicy capability_update_policy_ = CapabilityUpdatePolicy::AcceptProbeRefinements;
 };
 

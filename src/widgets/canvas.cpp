@@ -94,6 +94,11 @@ void Canvas::set_draw_callback(std::function<void(Image&)> draw_callback) {
     invalidate();
 }
 
+void Canvas::set_fallback_painter(std::function<void(scene::Painter&, Rect)> fallback) {
+    fallback_painter_ = std::move(fallback);
+    invalidate();
+}
+
 void Canvas::invalidate_content() {
     content_dirty_ = true;
     invalidate();
@@ -118,10 +123,16 @@ void Canvas::draw(scene::Painter& painter) {
         content_dirty_ = false;
     }
 
-    painter.draw_image(area, raster_id_, image_, [style, area](scene::Painter& fallback_painter) {
-        fallback_painter.fill(area, Cell::from_grapheme(" ", style));
-        if (area.width >= 8 && area.height >= 1) fallback_painter.draw_text(Point{0, 0}, "[canvas]", style);
-    });
+    painter.draw_image(area, raster_id_, image_,
+                       [this, style, area](scene::Painter& fallback_painter) {
+                           fallback_painter.fill(area, Cell::from_grapheme(" ", style));
+                           if (fallback_painter_) {
+                               fallback_painter_(fallback_painter, area);
+                               return;
+                           }
+                           if (area.width >= 8 && area.height >= 1)
+                               fallback_painter.draw_text(Point{0, 0}, "[canvas]", style);
+                       });
 }
 
 bool Canvas::on_mouse(const MouseEvent& event) {

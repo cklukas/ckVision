@@ -16,6 +16,18 @@
 //   CKVISION_FORCE_CELL=WxH  the character cell in pixels, when the
 //                            terminal reports none and the assumed one is
 //                            visibly the wrong shape.
+//   CKVISION_SPIN_FPS=<n>    frames per second to aim for, in place of the
+//                            example's own target. The pacer still widens
+//                            it under load, so this raises the ceiling
+//                            rather than removing the floor.
+//   CKVISION_NO_SYNC=1       stop bracketing frames as one atomic update
+//                            (DEC 2026). For a host that answers the query
+//                            and then applies a picture outside the bracket
+//                            it applies the surrounding cells in.
+//   CKVISION_OUTPUT_CAPTURE=<file>
+//                            every byte written to the terminal, so a frame
+//                            a host renders wrongly can be replayed into
+//                            ckVision's own decoder.
 //
 // `ckvision_graphics_check` reports what this terminal actually said.
 #include <cstdlib>
@@ -40,6 +52,8 @@ ckv::term::CapabilityOverrides overrides_from_environment() {
     ckv::term::CapabilityOverrides overrides;
     const std::string force = environment_value("CKVISION_FORCE_SIXEL");
     if (force == "1" || force == "yes" || force == "on") overrides.sixel_graphics = true;
+    const std::string no_sync = environment_value("CKVISION_NO_SYNC");
+    if (no_sync == "1" || no_sync == "yes" || no_sync == "on") overrides.synchronized_output = false;
 
     const std::string cell = environment_value("CKVISION_FORCE_CELL");
     if (const std::size_t x = cell.find('x'); x != std::string::npos) {
@@ -61,6 +75,8 @@ int main() {
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock);
     ckv::spin::SpinApp spin(app);
+    if (const int fps = std::atoi(environment_value("CKVISION_SPIN_FPS").c_str()); fps > 0)
+        spin.set_target_frame_interval(1'000'000'000LL / fps);
     app.run();
     return 0;
 }

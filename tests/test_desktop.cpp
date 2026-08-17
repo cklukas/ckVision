@@ -1685,3 +1685,63 @@ CK_TEST(a_fixed_size_window_keeps_its_shadow_over_a_full_tiling) {
     CK_CHECK(!desktop.child_casts_shadow(*filler));
     CK_CHECK(desktop.child_casts_shadow(*dialog));
 }
+
+// --- Desktop content: an arrangement rather than floating windows -----
+
+CK_TEST(desktop_content_fills_the_content_area_immediately) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20});
+    desktop.set_context(f.ctx());
+    auto* content = desktop.set_content(std::make_unique<ckv::ui::View>());
+    CK_CHECK(content != nullptr);
+    CK_CHECK(content->bounds() == (Rect{0, 0, 40, 20}));
+    CK_CHECK(desktop.content() == content);
+}
+
+CK_TEST(desktop_content_keeps_filling_across_a_resize_and_under_chrome) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20});
+    desktop.set_context(f.ctx());
+    auto* content = desktop.set_content(std::make_unique<ckv::ui::View>());
+    // Chrome takes its rows off the top and bottom; content gets the rest,
+    // which is the whole point of not making an application compute this.
+    auto chrome = std::make_unique<ckv::ui::View>();
+    chrome->set_preferred_size(ckv::Size{0, 1});
+    desktop.dock_bottom(std::move(chrome));
+    CK_CHECK(content->bounds() == desktop.content_area());
+    desktop.set_bounds(Rect{0, 0, 60, 30});
+    CK_CHECK(content->bounds() == desktop.content_area());
+    CK_CHECK(content->bounds().width == 60);
+}
+
+CK_TEST(setting_content_again_hands_back_the_previous_arrangement) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20});
+    desktop.set_context(f.ctx());
+    ckv::ui::View* const first = desktop.set_content(std::make_unique<ckv::ui::View>());
+    ckv::ui::View* const second = desktop.set_content(std::make_unique<ckv::ui::View>());
+    CK_CHECK(first != second);
+    CK_CHECK(desktop.content() == second);
+    // The old arrangement is gone from the tree, not stacked behind the new
+    // one: exactly one content child remains.
+    int content_like = 0;
+    for (const auto& child : desktop.children())
+        if (child.get() == first || child.get() == second) ++content_like;
+    CK_CHECK(content_like == 1);
+}
+
+CK_TEST(a_window_floats_above_the_desktop_content) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 20});
+    desktop.set_context(f.ctx());
+    ckv::ui::View* const content = desktop.set_content(std::make_unique<ckv::ui::View>());
+    Window* const window = desktop.add_window(make_window(f));
+    // Later children paint on top, so content must sit before the window.
+    std::size_t content_at = 0;
+    std::size_t window_at = 0;
+    for (std::size_t i = 0; i < desktop.children().size(); ++i) {
+        if (desktop.children()[i].get() == content) content_at = i;
+        if (desktop.children()[i].get() == window) window_at = i;
+    }
+    CK_CHECK(content_at < window_at);
+}

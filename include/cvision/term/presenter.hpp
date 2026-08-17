@@ -49,6 +49,26 @@ public:
     // without inspecting a terminal backend's private capture buffer.
     std::size_t last_bytes_emitted() const noexcept { return last_bytes_emitted_; }
 
+    // --- Frame completion (ARCHITECTURE.md §4) --------------------------
+    //
+    // Writing a frame proves only that its bytes left this side. A terminal
+    // reads its input in order, so a Device Status Report written after a
+    // frame is answered only once that frame has been taken in — which
+    // turns "sent" into "arrived" for the cost of eight bytes and one CSI
+    // parse, with nothing blocked in between.
+    //
+    // Off by default, and deliberately: it adds bytes to the presented
+    // stream, and a byte-exact golden is entitled to the frame it asked
+    // for and nothing else. An application that paces itself against its
+    // terminal turns it on; one that does not never pays for it.
+    void set_frame_completion_tracking(bool enabled) noexcept { track_frame_completion_ = enabled; }
+    bool frame_completion_tracking() const noexcept { return track_frame_completion_; }
+
+    // How many frames have been marked with that question since this
+    // Presenter was made. Compared against the backend's acknowledgement
+    // count, the difference is how far ahead of the terminal we are.
+    std::size_t frames_marked() const noexcept { return frames_marked_; }
+
 private:
     // Everything an encoding depends on, and nothing else. Notably not where
     // the picture sits: a Sixel payload carries no position — the cursor move
@@ -136,6 +156,8 @@ private:
     std::chrono::steady_clock::time_point last_present_finished_{};
     bool force_full_ = true;
     std::size_t last_bytes_emitted_ = 0;
+    bool track_frame_completion_ = false;
+    std::size_t frames_marked_ = 0;
 };
 
 // Encodes a style as the SGR sequence a host with these capabilities can

@@ -567,3 +567,24 @@ CK_TEST(spin_example_runs_the_same_object_graph_without_terminal_graphics) {
     CK_CHECK(f.term.written_bytes().find("\x1B" "P") == std::string::npos);
     CK_CHECK(!f.term.display().has_raster_pixels());
 }
+
+CK_TEST(spin_asks_for_nothing_while_the_terminal_has_not_finished_the_last_frame) {
+    Fixture f;
+    f.settle();
+    CK_CHECK(f.app.frame_completion_tracking());
+    // A frame has been presented and this terminal has not answered for it.
+    CK_CHECK(f.app.frames_awaiting_terminal() >= 1U);
+
+    const std::size_t rendered = f.spin.frames().frames_rendered();
+    for (int tick = 0; tick < 5; ++tick) f.run_for(f.spin.frame_interval_nanos());
+    // Five ticks, and not one of them asked for a frame: the terminal is
+    // still behind, and the animation clock is still running.
+    CK_CHECK(f.spin.frames().frames_rendered() == rendered);
+    CK_CHECK(f.spin.animating());
+
+    // It catches up, and the next tick asks again.
+    f.term.inject_bytes("\x1B[0n", f.clock.now_nanos());
+    f.run_for(f.spin.frame_interval_nanos());
+    f.settle();
+    CK_CHECK(f.spin.frames().frames_rendered() > rendered);
+}

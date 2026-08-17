@@ -413,6 +413,28 @@ ui::View* Desktop::dock_bottom_impl(std::unique_ptr<ui::View> view) {
     return raw;
 }
 
+ui::View* Desktop::set_content_impl(std::unique_ptr<ui::View> view) {
+    CKV_ASSERT(view != nullptr);
+    // The previous content leaves first, so the new arrangement is never
+    // briefly stacked on top of the old one.
+    std::unique_ptr<ui::View> previous = take_content();
+    (void)previous;
+    ui::View* raw = ui::View::add_child(std::move(view));
+    content_ = raw;
+    // Content sits under everything else: windows float above the
+    // arrangement, and a popup above them both.
+    lower_to_back(raw);
+    on_resized(); // fill immediately, not just on the next Desktop resize
+    return raw;
+}
+
+std::unique_ptr<ui::View> Desktop::take_content() {
+    if (content_ == nullptr) return nullptr;
+    ui::View* const previous = content_;
+    content_ = nullptr;
+    return ui::View::remove_child(previous);
+}
+
 Rect Desktop::content_area() const noexcept {
     const int top = top_dock_ != nullptr ? std::max(1, top_dock_->vertical_size_hint().preferred) : 0;
     const int bottom = bottom_dock_ != nullptr ? std::max(1, bottom_dock_->vertical_size_hint().preferred) : 0;
@@ -432,6 +454,10 @@ void Desktop::on_resized() {
         if (desktop_liveness.expired()) return;
     }
     const Rect area = content_area();
+    if (content_ != nullptr) {
+        content_->set_bounds(area);
+        if (desktop_liveness.expired()) return;
+    }
     // The docks may have changed height, so the area a window must stay
     // reachable within has moved with them.
     for (Window* window : windows_)
