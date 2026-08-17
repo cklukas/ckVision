@@ -90,6 +90,7 @@ TerminalEmulator::TerminalEmulator(TerminalCapabilityProfile profile, TerminalSu
     primary_.assign(static_cast<std::size_t>(cells_.width * cells_.height), Cell::from_grapheme(" ", style_));
     alternate_ = primary_;
     scroll_bottom_ = cells_.height;
+    reset_tab_stops();
 }
 
 std::vector<Cell>& TerminalEmulator::active_cells() noexcept { return alternate_buffer_ ? alternate_ : primary_; }
@@ -393,7 +394,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 if (byte == '\x1b') { put_text(true); parse_state_ = ParseState::Escape; }
                 else if (byte == '\r') { put_text(true); cursor_.position.x = 0; }
                 else if (byte == '\n') { put_text(true); cursor_.position.x = 0; index(); }
-                else if (byte == '\t') { put_text(true); cursor_.position.x = std::min(cells_.width, ((cursor_.position.x / 8) + 1) * 8); }
+                else if (byte == '\t') { put_text(true); cursor_.position.x = next_tab_stop(cursor_.position.x); }
                 else if (byte == '\b') { put_text(true); cursor_.position.x = std::max(0, cursor_.position.x - 1); }
                 // BEL. It writes nothing and moves nothing, so the printable
                 // run is left alone — flushing here would split a grapheme
@@ -423,6 +424,15 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 else if (byte == 'D') { index(); parse_state_ = ParseState::Ground; }
                 else if (byte == 'E') { cursor_.position.x = 0; index(); parse_state_ = ParseState::Ground; }
                 else if (byte == 'M') { reverse_index(); parse_state_ = ParseState::Ground; }
+                // HTS: a stop where the cursor is. This is how a program that
+                // lays out columns says where they are, once, instead of
+                // padding every row with spaces.
+                else if (byte == 'H') {
+                    put_text(true);
+                    if (cursor_.position.x >= 0 && cursor_.position.x < static_cast<int>(tab_stops_.size()))
+                        tab_stops_[static_cast<std::size_t>(cursor_.position.x)] = true;
+                    parse_state_ = ParseState::Ground;
+                }
                 else if (byte == '(' || byte == ')' || byte == '*' || byte == '+') {
                     pending_charset_slot_ = static_cast<unsigned char>(byte == '(' ? 0 : byte == ')' ? 1 : byte == '*' ? 2 : 3);
                     parse_state_ = ParseState::Scs;
@@ -760,6 +770,53 @@ void TerminalEmulator::handle_csi(char final_byte) {
         cursor_.position.y = std::max(origin_mode_ ? scroll_top_ : 0,
                                       cursor_.position.y - parameter(control_, 0, 1));
         cursor_.position.x = 0;
+        return;
+    }
+    // CHT and CBT: forward and backward by whole tab stops. A program drawing
+    // a table moves between its columns with these rather than by counting
+    // spaces, so an emulator that ignores them lands every field in the wrong
+    // place.
+    if (final_byte == 'I') {
+        const int count = std::clamp(parameter(control_, 0, 1), 0, cells_.width);
+        for (int step = 0; step < count; ++step) cursor_.position.x = next_tab_stop(cursor_.position.x);
+        return;
+    }
+    if (final_byte == 'Z') {
+        const int count = std::clamp(parameter(control_, 0, 1), 0, cells_.width);
+        for (int step = 0; step < count; ++step) cursor_.position.x = previous_tab_stop(cursor_.position.x);
+        return;
+    }
+    // TBC: clear the stop under the cursor (0) or every stop there is (3).
+    // Anything else is a form this terminal does not have — the stops are
+    // per screen, not per line — and is reported rather than guessed at.
+    if (final_byte == 'g') {
+        const int mode = parameter(control_, 0, 0);
+        if (mode == 0) {
+            if (cursor_.position.x >= 0 && cursor_.position.x < static_cast<int>(tab_stops_.size()))
+                tab_stops_[static_cast<std::size_t>(cursor_.position.x)] = false;
+        } else if (mode == 3) {
+            std::fill(tab_stops_.begin(), tab_stops_.end(), false);
+        } else {
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-clear form");
+        }
+        return;
+    }
+    if (final_byte == 'W') {
+        // DECST8C (CSI ? 5 W) puts the default stops back, which is how a
+        // program that found the terminal in an unknown state starts from a
+        // known one. CTC (no private marker) is the same three operations
+        // under their ECMA-48 names.
+        if (!control_.empty() && control_.front() == '?') {
+            if (parameter(control_, 0, 0) == 5) reset_tab_stops();
+            else diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-set form");
+            return;
+        }
+        const int mode = parameter(control_, 0, 0);
+        const std::size_t column = static_cast<std::size_t>(std::max(0, cursor_.position.x));
+        if (mode == 0 && column < tab_stops_.size()) tab_stops_[column] = true;
+        else if (mode == 2 && column < tab_stops_.size()) tab_stops_[column] = false;
+        else if (mode == 5) std::fill(tab_stops_.begin(), tab_stops_.end(), false);
+        else diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-control form");
         return;
     }
     if (final_byte == 'A') { cursor_.position.y = std::max(0, cursor_.position.y - parameter(control_, 0, 1)); return; }
@@ -1482,6 +1539,32 @@ void TerminalEmulator::reverse_index() noexcept {
     }
 }
 
+// Every eighth column, which is what a terminal starts with and what a
+// program that never mentions tab stops is relying on.
+void TerminalEmulator::reset_tab_stops() {
+    tab_stops_.assign(static_cast<std::size_t>(std::max(1, cells_.width)), false);
+    for (std::size_t column = 8; column < tab_stops_.size(); column += 8) tab_stops_[column] = true;
+}
+
+// The next stop to the right, or the last column when there is none. Landing
+// on the last column rather than one past it is what a terminal does: a tab
+// at the right-hand end of a line does not wrap by itself, it stops, and the
+// next character written is what decides whether the line ends.
+int TerminalEmulator::next_tab_stop(int from) const noexcept {
+    const int last = std::max(0, cells_.width - 1);
+    for (int column = from + 1; column <= last; ++column)
+        if (column < static_cast<int>(tab_stops_.size()) && tab_stops_[static_cast<std::size_t>(column)])
+            return column;
+    return last;
+}
+
+int TerminalEmulator::previous_tab_stop(int from) const noexcept {
+    for (int column = std::min(from, cells_.width) - 1; column > 0; --column)
+        if (column < static_cast<int>(tab_stops_.size()) && tab_stops_[static_cast<std::size_t>(column)])
+            return column;
+    return 0;
+}
+
 void TerminalEmulator::reset_active_buffer() {
     std::fill(active_cells().begin(), active_cells().end(), Cell::from_grapheme(" ", profile_.default_style));
 }
@@ -1523,6 +1606,7 @@ void TerminalEmulator::reset_terminal() {
     origin_mode_ = false;
     autowrap_ = true;
     insert_mode_ = false;
+    reset_tab_stops();
 
     for (Charset& charset : charsets_) charset = Charset::Ascii;
     active_charset_ = 0;
@@ -1600,6 +1684,17 @@ void TerminalEmulator::resize(Size cells, Size cell_pixels) {
             std::copy_n(scrollback_.begin() + static_cast<std::ptrdiff_t>(row * old_width), columns,
                         relaid.begin() + static_cast<std::ptrdiff_t>(row * new_width));
         scrollback_ = std::move(relaid);
+    }
+    // Tab stops belong to columns, so the ones that still exist keep what the
+    // child set; columns that did not exist before start at the default. A
+    // program that laid out a table and then had its window widened should
+    // not find its columns rearranged, nor the new space stopless.
+    if (new_cells.width != old_cells.width) {
+        const std::vector<bool> previous = tab_stops_;
+        cells_.width = new_cells.width;
+        reset_tab_stops();
+        const std::size_t shared = std::min(previous.size(), tab_stops_.size());
+        for (std::size_t column = 0; column < shared; ++column) tab_stops_[column] = previous[column];
     }
     cells_ = new_cells;
     profile_.cells = cells_;

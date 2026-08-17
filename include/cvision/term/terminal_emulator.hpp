@@ -92,6 +92,13 @@ private:
     void index() noexcept;
     void reverse_index() noexcept;
     void reset_active_buffer();
+    // The tab stops, as a terminal has always had them: a column is a stop or
+    // it is not, and `\t` goes to the next one. Every eight columns is only
+    // the default — a program that lays out a table sets its own with HTS and
+    // then relies on them.
+    void reset_tab_stops();
+    int next_tab_stop(int from) const noexcept;
+    int previous_tab_stop(int from) const noexcept;
     // RIS (ESC c). Everything a child can change goes back to what this
     // emulator was constructed with — which is what `reset(1)` is for, and
     // what a program that has wedged the terminal is asking for when it sends
@@ -190,6 +197,9 @@ private:
     std::string pending_output_;
     std::string pending_input_;
     std::vector<TerminalDiagnostic> diagnostics_;
+    // One entry per column. Rebuilt on a resize, preserving what the child
+    // set for the columns that still exist.
+    std::vector<bool> tab_stops_;
     std::string title_;
     std::vector<std::string> title_stack_;
     TerminalSubsessionState state_ = TerminalSubsessionState::Ready;

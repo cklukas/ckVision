@@ -1613,3 +1613,91 @@ CK_TEST(a_full_reset_empties_the_title_stack_it_cannot_pop) {
     emulator.feed_output("\x1b[23;0t");
     CK_CHECK(emulator.snapshot().title == "after");  // ...and nothing is left to pop
 }
+
+CK_TEST(tab_goes_to_the_next_stop_and_stops_at_the_last_column) {
+    // Every eight columns is what a terminal starts with, and what a program
+    // that never mentions tab stops is relying on.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 8);
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 16);
+    // Past the last stop a tab goes to the last column and stays there. It
+    // does not wrap by itself: the next character written is what decides
+    // whether the line ends.
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 19);
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 19);
+}
+
+CK_TEST(a_program_sets_its_own_tab_stops_and_clears_them) {
+    // HTS and TBC, which is how a program lays out columns once instead of
+    // padding every row with spaces.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[1;3H\x1b" "H");   // a stop at column 3 (1-based)
+    emulator.feed_output("\x1b[1;11H\x1b" "H");  // and at column 11
+    emulator.feed_output("\x1b[1;1H\x1b[3g");    // clear every stop, including the defaults...
+    emulator.feed_output("\x1b[1;3H\x1b" "H\x1b[1;11H\x1b" "H\x1b[1;1H");
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 2);
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 10);
+
+    // TBC 0 clears the one under the cursor, and the tab that used to stop
+    // there carries on to the next.
+    emulator.feed_output("\x1b[1;3H\x1b[0g\x1b[1;1H\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 10);
+}
+
+CK_TEST(a_program_moves_between_columns_by_whole_tab_stops) {
+    // CHT and CBT. A table's fields are reached with these rather than by
+    // counting spaces, so an emulator without them puts every field in the
+    // wrong place.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{40, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[3I");  // three stops forward
+    CK_CHECK(emulator.snapshot().cursor.position.x == 24);
+    emulator.feed_output("\x1b[2Z");  // two back
+    CK_CHECK(emulator.snapshot().cursor.position.x == 8);
+    emulator.feed_output("\x1b[9Z");  // past the first stop: column 0, not off the end
+    CK_CHECK(emulator.snapshot().cursor.position.x == 0);
+}
+
+CK_TEST(tab_stops_survive_a_resize_and_a_reset_puts_the_defaults_back) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[3g");                 // no stops at all
+    emulator.feed_output("\x1b[1;5H\x1b" "H");       // one, at column 5 (1-based)
+
+    // A window that grows keeps what the child set for the columns that still
+    // exist, and gets the defaults in the space that is new — a program that
+    // laid out a table should not find its columns rearranged.
+    emulator.resize(Size{40, 2}, Size{9, 18});
+    emulator.feed_output("\x1b[1;1H\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 4);
+    emulator.feed_output("\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 24);  // the first default past the old width
+
+    // RIS puts the every-eight defaults back.
+    emulator.feed_output("\x1b" "c\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 8);
+}
+
+CK_TEST(the_default_tab_stops_can_be_asked_for_by_name) {
+    // DECST8C, which is how a program that found the terminal in an unknown
+    // state starts from a known one.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[3g\x1b[1;1H\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 19);  // no stops: the last column
+    emulator.feed_output("\x1b[?5W\x1b[1;1H\t");
+    CK_CHECK(emulator.snapshot().cursor.position.x == 8);
+}
