@@ -724,9 +724,23 @@ bool Application::step(std::int64_t deadline_nanos) {
         for (const Timer& timer : timers_)
             effective_deadline = std::min(effective_deadline, timer.next_fire_nanos);
 
+        // Sessions released since the last step leave empty slots behind —
+        // erasing one inside the loop that was notifying about it would pull
+        // the vector out from under that loop. This is the one place where no
+        // loop is running, so it is the one place that erases.
+        if (terminal_subsessions_need_compaction_) {
+            std::erase(terminal_subsessions_, nullptr);
+            terminal_subsessions_need_compaction_ = false;
+        }
+
         bool did_work = false;
         const auto drain_terminal_subsessions = [this, &did_work] {
-            for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
+            // By index, because a change notification is application code: it
+            // may adopt another session, which can reallocate this vector, and
+            // an iterator into it would not survive that.
+            for (std::size_t index = 0; index < terminal_subsessions_.size(); ++index) {
+                term::TerminalSubsession* const session = terminal_subsessions_[index].get();
+                if (session == nullptr) continue;  // released; compacted next step
                 if (!session->drain(32 * 1024)) continue;
                 did_work = true;
                 root_.notify_terminal_subsession_changed(*session);
@@ -735,6 +749,7 @@ bool Application::step(std::int64_t deadline_nanos) {
         drain_terminal_subsessions();
         terminal_subsession_wait_handles_.clear();
         for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
+            if (session == nullptr) continue;
             const std::span<const term::WaitHandle> handles = session->wait_handles();
             terminal_subsession_wait_handles_.insert(terminal_subsession_wait_handles_.end(), handles.begin(), handles.end());
         }
@@ -791,9 +806,36 @@ term::TerminalSubsession& Application::launch_terminal_subsession(
     term::TerminalLaunchSpec spec, term::TerminalSubsessionOptions options) {
     std::unique_ptr<term::TerminalSubsession> session = term::launch_terminal_subsession(std::move(spec), std::move(options));
     CKV_ASSERT(session != nullptr);
+    return adopt_terminal_subsession(std::move(session));
+}
+
+term::TerminalSubsession& Application::adopt_terminal_subsession(
+    std::unique_ptr<term::TerminalSubsession> session) {
+    CKV_ASSERT(session != nullptr);
+    // The same raster identity a launched session gets, from the same
+    // counter. A session left at the default id has its pictures dropped by
+    // the view that would have drawn them, without a word — so an adopted
+    // session that decodes graphics must be given one, and the host cannot be
+    // the one to remember.
     session->set_raster_identity(next_terminal_raster_identity_++);
     terminal_subsessions_.push_back(std::move(session));
     return *terminal_subsessions_.back();
+}
+
+std::unique_ptr<term::TerminalSubsession> Application::release_terminal_subsession(
+    const core::TerminalSubsession& session) {
+    for (std::unique_ptr<term::TerminalSubsession>& owned : terminal_subsessions_) {
+        // Compared as the base, so that the session a notification named and
+        // the session this application owns are the same question.
+        if (static_cast<const core::TerminalSubsession*>(owned.get()) != &session) continue;
+        std::unique_ptr<term::TerminalSubsession> released = std::move(owned);
+        // The slot stays, empty, until the next step(): this may be running
+        // inside a drain loop that is walking the very vector an erase would
+        // reallocate.
+        terminal_subsessions_need_compaction_ = true;
+        return released;
+    }
+    return nullptr;
 }
 
 void Application::invalidate_all() {

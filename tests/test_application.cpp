@@ -1692,3 +1692,239 @@ CK_TEST(destroying_the_input_captured_view_clears_capture_and_a_later_click_uses
     app.dispatch(down);
     CK_CHECK(target->mouse_events == 1);
 }
+
+// --- Adopting a session the application did not launch (ckmux U0-a) --------
+
+namespace {
+
+// A child session with no process behind it: what a mirror over a protocol,
+// a recording played back, or a test needs to be. It reports one drain's
+// worth of work at a time, so a test can say exactly how often the host
+// looked.
+class FakeSubsession final : public ckv::term::TerminalSubsession {
+public:
+    ckv::core::TerminalSnapshot snapshot() const override {
+        ckv::core::TerminalSnapshot snapshot;
+        snapshot.cells = ckv::Size{4, 1};
+        snapshot.cell_buffer.assign(4, ckv::Cell::from_grapheme(" ", {}));
+        snapshot.state = ckv::core::TerminalSubsessionState::Running;
+        return snapshot;
+    }
+    const ckv::core::TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
+    void feed_output(std::string_view bytes) override { fed += std::string(bytes); }
+    void resize(ckv::Size cells, ckv::Size) override { resized_to = cells; }
+    void send_input(std::string_view bytes) override { sent += std::string(bytes); }
+    std::string take_pending_input() override { return {}; }
+    ckv::core::TerminalSubsessionState state() const noexcept override {
+        return ckv::core::TerminalSubsessionState::Running;
+    }
+    void set_raster_identity(int identity) noexcept override { raster_identity = identity; }
+    void close() noexcept override { ++closes; }
+
+    bool drain(std::size_t byte_budget) override {
+        ++drains;
+        last_byte_budget = byte_budget;
+        if (!has_output) return false;
+        has_output = false;
+        return true;
+    }
+    std::span<const ckv::term::WaitHandle> wait_handles() const noexcept override {
+        return std::span<const ckv::term::WaitHandle>(handles_.data(), handle_count);
+    }
+
+    int drains = 0;
+    int closes = 0;
+    int raster_identity = 0;
+    std::size_t last_byte_budget = 0;
+    bool has_output = false;
+    std::size_t handle_count = 0;
+    std::string fed;
+    std::string sent;
+    ckv::Size resized_to{};
+
+private:
+    ckv::core::TerminalCapabilityProfile profile_{};
+    // A handle a host would wait on. Never read by the fake — it only has to
+    // travel, which is what wait_handles() aggregation means.
+    std::array<ckv::term::WaitHandle, 1> handles_{ckv::term::WaitHandle{}};
+};
+
+// A view that counts change notifications, and can act on one — which is
+// where a host learns that a mirror's far end has gone.
+class SubsessionProbe : public View {
+public:
+    int notifications = 0;
+    const ckv::core::TerminalSubsession* last = nullptr;
+    std::function<void(const ckv::core::TerminalSubsession&)> on_change;
+
+    void on_terminal_subsession_changed(const ckv::core::TerminalSubsession& session) override {
+        ++notifications;
+        last = &session;
+        if (on_change) on_change(session);
+    }
+};
+
+}  // namespace
+
+CK_TEST(an_adopted_session_is_drained_and_notified_exactly_as_a_launched_one_is) {
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+    auto* const probe = app.root().add(std::make_unique<SubsessionProbe>());
+
+    auto owned = std::make_unique<FakeSubsession>();
+    FakeSubsession* const fake = owned.get();
+    ckv::term::TerminalSubsession& adopted = app.adopt_terminal_subsession(std::move(owned));
+    CK_CHECK(&adopted == fake);
+
+    // Drained under the same byte budget a launched session gets, twice per
+    // step: once before the poll and once after, because a child that woke
+    // the combined wait supplies no outer-terminal event of its own.
+    fake->has_output = true;
+    app.step(clock.now_nanos());
+    CK_CHECK(fake->drains >= 2);
+    CK_CHECK(fake->last_byte_budget == 32U * 1024U);
+    // And the view tree was told, about this session.
+    CK_CHECK(probe->notifications == 1);
+    CK_CHECK(probe->last == fake);
+
+    // Nothing to report, nothing reported: a notification per step regardless
+    // would repaint every terminal on every frame.
+    const int before = probe->notifications;
+    app.step(clock.now_nanos());
+    CK_CHECK(probe->notifications == before);
+}
+
+CK_TEST(an_adopted_session_gets_a_raster_identity_of_its_own) {
+    // A session left at the default identity has its pictures dropped by the
+    // view that would have drawn them, without a word. The host cannot be the
+    // one to remember, so adoption assigns one — from the same counter a
+    // launched session draws from, so no two sessions can share.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+
+    auto first = std::make_unique<FakeSubsession>();
+    auto second = std::make_unique<FakeSubsession>();
+    FakeSubsession* const a = first.get();
+    FakeSubsession* const b = second.get();
+    app.adopt_terminal_subsession(std::move(first));
+    app.adopt_terminal_subsession(std::move(second));
+    CK_CHECK(a->raster_identity != 0);
+    CK_CHECK(b->raster_identity != 0);
+    CK_CHECK(a->raster_identity != b->raster_identity);
+}
+
+CK_TEST(an_adopted_sessions_wait_handles_join_the_combined_wait) {
+    // The half a caller cannot reproduce from outside: its readiness sources
+    // have to reach the outer terminal's wait, or the host sleeps through its
+    // own child's output until something else happens to wake it.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+    const std::size_t before = app.wait_handles().size();
+
+    auto owned = std::make_unique<FakeSubsession>();
+    FakeSubsession* const fake = owned.get();
+    fake->handle_count = 1;
+    app.adopt_terminal_subsession(std::move(owned));
+    CK_CHECK(app.wait_handles().size() == before + 1);
+
+    // ...and leave with it.
+    const std::unique_ptr<ckv::term::TerminalSubsession> released =
+        app.release_terminal_subsession(*fake);
+    CK_CHECK(released != nullptr);
+    CK_CHECK(app.wait_handles().size() == before);
+}
+
+CK_TEST(a_released_session_is_handed_back_and_stops_being_drained) {
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+
+    auto owned = std::make_unique<FakeSubsession>();
+    FakeSubsession* const fake = owned.get();
+    app.adopt_terminal_subsession(std::move(owned));
+    app.step(clock.now_nanos());
+    CK_CHECK(fake->drains > 0);
+
+    std::unique_ptr<ckv::term::TerminalSubsession> released = app.release_terminal_subsession(*fake);
+    CK_CHECK(released.get() == fake);
+    // The caller owns it now, so it is still alive to be asked.
+    const int drains_at_release = fake->drains;
+    app.step(clock.now_nanos());
+    app.step(clock.now_nanos());
+    CK_CHECK(fake->drains == drains_at_release);
+
+    // Releasing something this application does not own says so rather than
+    // guessing.
+    CK_CHECK(app.release_terminal_subsession(*fake) == nullptr);
+    FakeSubsession stranger;
+    CK_CHECK(app.release_terminal_subsession(stranger) == nullptr);
+}
+
+CK_TEST(a_session_may_be_released_from_inside_its_own_change_notification) {
+    // Where a host actually learns a mirror is finished: the notification that
+    // carried the last of its output. Erasing from the vector the drain loop
+    // is walking would pull the ground out from under it, so the slot empties
+    // now and the vector compacts at the top of the next step.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+    auto* const probe = app.root().add(std::make_unique<SubsessionProbe>());
+
+    auto first = std::make_unique<FakeSubsession>();
+    auto second = std::make_unique<FakeSubsession>();
+    FakeSubsession* const a = first.get();
+    FakeSubsession* const b = second.get();
+    a->has_output = true;
+    b->has_output = true;
+    app.adopt_terminal_subsession(std::move(first));
+    app.adopt_terminal_subsession(std::move(second));
+
+    std::unique_ptr<ckv::term::TerminalSubsession> released;
+    probe->on_change = [&app, &released, a](const ckv::core::TerminalSubsession& session) {
+        if (&session != a) return;
+        released = app.release_terminal_subsession(session);
+    };
+    app.step(clock.now_nanos());
+    CK_CHECK(released.get() == a);
+    // The session released mid-loop stopped being drained; the one behind it
+    // in the vector was still reached, which is the part a naive erase breaks.
+    CK_CHECK(probe->notifications == 2);
+    CK_CHECK(b->drains >= 2);
+
+    const int a_drains = a->drains;
+    app.step(clock.now_nanos());
+    CK_CHECK(a->drains == a_drains);
+    CK_CHECK(b->drains > 2);
+}
+
+CK_TEST(adopting_a_session_from_inside_a_notification_does_not_invalidate_the_walk) {
+    // The other half of the same hazard: a notification is application code,
+    // and application code may adopt. Growing the vector can reallocate it,
+    // which is why the drain loop indexes rather than iterates.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+    auto* const probe = app.root().add(std::make_unique<SubsessionProbe>());
+
+    auto owned = std::make_unique<FakeSubsession>();
+    FakeSubsession* const first = owned.get();
+    first->has_output = true;
+    app.adopt_terminal_subsession(std::move(owned));
+
+    FakeSubsession* second = nullptr;
+    probe->on_change = [&app, &second, first](const ckv::core::TerminalSubsession& session) {
+        if (&session != first || second != nullptr) return;
+        auto extra = std::make_unique<FakeSubsession>();
+        second = extra.get();
+        second->has_output = true;
+        app.adopt_terminal_subsession(std::move(extra));
+    };
+    app.step(clock.now_nanos());
+    CK_CHECK(second != nullptr);
+    // Adopted mid-step and drained in the same step, because it joined the
+    // vector the loop was still walking.
+    if (second != nullptr) CK_CHECK(second->drains > 0);
+}

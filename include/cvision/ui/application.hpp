@@ -166,6 +166,54 @@ public:
     term::TerminalSubsession& launch_terminal_subsession(
         term::TerminalLaunchSpec spec, term::TerminalSubsessionOptions options = {});
 
+    // Adopts a child session this application did not launch — a mirror of a
+    // session running somewhere else, a recording played back, a fake in a
+    // test. From here it is drained, polled and notified exactly as a
+    // launched one is, because it joins the same vector each of those loops
+    // walks.
+    //
+    // That sameness is the entire point. Everything a private child session
+    // needs from its host is in `step()`: it is drained under a byte budget,
+    // its `wait_handles()` are folded into the outer terminal's combined
+    // wait, and every view is told when it changed. A caller that could only
+    // hand over a launch spec had to reproduce all of that to host a session
+    // it built itself, and the part most easily got wrong — the second drain
+    // after the poll, without which a child that woke the wait supplies no
+    // outer event and its output waits a whole frame — is invisible until it
+    // is missing.
+    //
+    // Ownership transfers, as it does for a launched session, and the return
+    // is the same borrowable reference: `TerminalView` borrows it identically
+    // and the lifetime rule ("the session outlives every view that borrows
+    // it") stays in one place. A caller that kept ownership would be stating
+    // that rule a second time, differently.
+    term::TerminalSubsession& adopt_terminal_subsession(
+        std::unique_ptr<term::TerminalSubsession> session);
+
+    // Hands a session back — launched or adopted — and returns it, or
+    // nullptr if this application does not own it.
+    //
+    // It exists because adoption without it is a one-way door, and the
+    // sessions worth adopting are the ones that come and go: a mirror whose
+    // far end closed is not a session any more, and without a way out it
+    // would be drained on every step and polled on every wait for as long as
+    // the application runs. That was equally true of launched sessions, whose
+    // closed children accumulated for the life of the process.
+    //
+    // Safe to call from inside a `notify_terminal_subsession_changed`
+    // callback, which is exactly where a host learns that a session has
+    // ended: the slot is emptied now and the vector is compacted at the top
+    // of the next `step()`, so no loop ever has the ground moved under it.
+    // The caller owns the returned session afterwards, and must not release
+    // one that a live view still borrows.
+    //
+    // Takes the core seam rather than the term one, because that is what a
+    // change notification carries: `on_terminal_subsession_changed` hands over
+    // a `core::TerminalSubsession&`, and a host acting on it should not have to
+    // downcast to say "this one is finished".
+    std::unique_ptr<term::TerminalSubsession> release_terminal_subsession(
+        const core::TerminalSubsession& session);
+
     // --- Diagnostics (ARCHITECTURE.md §11) -------------------------------
     //
     // Every Application owns an in-memory diagnostic buffer. Applications
@@ -305,6 +353,8 @@ public:
         const std::span<const term::WaitHandle> terminal_handles = terminal_.wait_handles();
         external_wait_handles_.insert(external_wait_handles_.end(), terminal_handles.begin(), terminal_handles.end());
         for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
+            // A released slot is empty until the next step() compacts it.
+            if (session == nullptr) continue;
             const std::span<const term::WaitHandle> session_handles = session->wait_handles();
             external_wait_handles_.insert(external_wait_handles_.end(), session_handles.begin(), session_handles.end());
         }
@@ -495,7 +545,11 @@ private:
     RoleRegistry roles_;
     Theme theme_{roles_};
     CommandRegistry commands_;
+    // Owned child sessions. A slot may be empty: releasing one from inside a
+    // change notification cannot erase from a vector a loop is walking, so it
+    // empties the slot and the next step() compacts.
     std::vector<std::unique_ptr<term::TerminalSubsession>> terminal_subsessions_;
+    bool terminal_subsessions_need_compaction_ = false;
     std::vector<term::WaitHandle> terminal_subsession_wait_handles_;
     mutable std::vector<term::WaitHandle> external_wait_handles_;
     int next_terminal_raster_identity_ = 1'000'000;
