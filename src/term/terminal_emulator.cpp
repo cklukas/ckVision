@@ -112,9 +112,34 @@ std::span<const Cell> TerminalEmulator::scrollback() const noexcept {
 
 TerminalSnapshot TerminalEmulator::snapshot() const { return snapshot(TerminalSnapshotOptions{}); }
 
+TerminalStatus TerminalEmulator::status() const {
+    return TerminalStatus{cells_,
+                          cursor_,
+                          alternate_buffer_,
+                          title_,
+                          state_,
+                          bracketed_paste_enabled_,
+                          mouse_reporting_enabled_,
+                          !mouse_reporting_enabled_ ? TerminalMouseEncoding::None
+                          : mouse_sgr_enabled_      ? TerminalMouseEncoding::Sgr
+                                                    : TerminalMouseEncoding::X10,
+                          application_cursor_keys_,
+                          focus_reporting_enabled_,
+                          alternate_scroll_enabled_,
+                          (alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_).flags,
+                          clipboard_serial_,
+                          bell_serial_,
+                          printer_controller_,
+                          printer_spool_.size(),
+                          printer_jobs_.size(),
+                          exit_code_};
+}
+
 TerminalSnapshot TerminalEmulator::snapshot(TerminalSnapshotOptions options) const {
-    const TerminalMouseEncoding mouse_encoding = !mouse_reporting_enabled_ ? TerminalMouseEncoding::None
-        : mouse_sgr_enabled_ ? TerminalMouseEncoding::Sgr : TerminalMouseEncoding::X10;
+    // Built from status() rather than beside it: every field the two share has
+    // one source, so the cheap read and the whole-terminal read cannot come to
+    // disagree about where the cursor is.
+    const TerminalStatus scalars = status();
     // The two expensive members are the ones a caller can decline. Built as
     // empty rather than copied and cleared, because the copy is the cost.
     static const std::vector<Cell> kNoScrollback;
@@ -126,17 +151,19 @@ TerminalSnapshot TerminalEmulator::snapshot(TerminalSnapshotOptions options) con
             ? std::vector<Cell>(scrollback_.begin() + static_cast<std::ptrdiff_t>(scrollback_begin_),
                                 scrollback_.end())
             : std::vector<Cell>{};
-    return TerminalSnapshot{cells_, active_cells(), cursor_, alternate_buffer_,
-                            options.include_rasters ? rasters_ : kNoRasters, diagnostics_, title_, state_,
+    return TerminalSnapshot{scalars.cells, active_cells(), scalars.cursor, scalars.alternate_buffer,
+                            options.include_rasters ? rasters_ : kNoRasters, diagnostics_,
+                            scalars.title, scalars.state,
                             options.include_scrollback ? history : kNoScrollback,
-                            bracketed_paste_enabled_, mouse_reporting_enabled_, mouse_encoding,
-                            application_cursor_keys_, focus_reporting_enabled_, alternate_scroll_enabled_,
-                            clipboard_text_, clipboard_serial_,
-                            (alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_).flags,
-                            bell_serial_,
-                            printer_controller_,
-                            printer_spool_.size(),
-                            printer_jobs_.size()};
+                            scalars.bracketed_paste_enabled, scalars.mouse_reporting_enabled,
+                            scalars.mouse_encoding, scalars.application_cursor_keys,
+                            scalars.focus_reporting_enabled, scalars.alternate_scroll_enabled,
+                            clipboard_text_, scalars.clipboard_serial,
+                            scalars.keyboard_flags,
+                            scalars.bell_serial,
+                            scalars.printer_controller_active,
+                            scalars.printer_pending_bytes,
+                            scalars.printer_jobs_ready};
 }
 
 void TerminalEmulator::diagnostic(TerminalDiagnostic::Kind kind, std::string message) {

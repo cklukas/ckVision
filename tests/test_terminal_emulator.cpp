@@ -585,6 +585,64 @@ CK_TEST(terminal_emulator_survives_repeated_resize_and_noisy_scrollback_cycles) 
     }
 }
 
+CK_TEST(the_cheap_read_and_the_whole_terminal_agree_about_everything_they_share) {
+    // status() exists so a host at its flush tick does not copy a grid to find
+    // out where the cursor went. That only holds if the two answers are the
+    // same answer, so this drives everything the two share — the cursor, the
+    // caption, the modes, the alternate screen, the bell, the keyboard flags —
+    // and compares them field by field. snapshot() is built from status() for
+    // exactly this reason; the test is what keeps that true if either grows a
+    // field.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    // A caption a child sets is a policy decision, and the default profile
+    // declines it (U0-d). This is the ckmux profile's answer, which is what
+    // makes the title worth reading every tick at all.
+    profile.osc_policy = term::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]0;a caption\x07"     // the window's name
+                        "\x1b[?1000h\x1b[?1006h"     // mouse reporting, SGR encoding
+                        "\x1b[?2004h"                 // bracketed paste
+                        "\x1b[?1h"                    // application cursor keys
+                        "\x1b[?1004h"                 // focus reporting
+                        "\x1b[?1007l"                 // alternate scroll off
+                        "\x1b[?1049h"                 // the alternate screen
+                        "\x1b[3;7Hhere"               // and a cursor somewhere specific
+                        "\a");                        // and a bell
+    const term::TerminalStatus status = emulator.status();
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(status.cells == snapshot.cells);
+    CK_CHECK(status.cursor.position == snapshot.cursor.position);
+    CK_CHECK(status.cursor.visible == snapshot.cursor.visible);
+    CK_CHECK(status.alternate_buffer == snapshot.alternate_buffer);
+    CK_CHECK(status.title == snapshot.title);
+    CK_CHECK(status.state == snapshot.state);
+    CK_CHECK(status.bracketed_paste_enabled == snapshot.bracketed_paste_enabled);
+    CK_CHECK(status.mouse_reporting_enabled == snapshot.mouse_reporting_enabled);
+    CK_CHECK(status.mouse_encoding == snapshot.mouse_encoding);
+    CK_CHECK(status.application_cursor_keys == snapshot.application_cursor_keys);
+    CK_CHECK(status.focus_reporting_enabled == snapshot.focus_reporting_enabled);
+    CK_CHECK(status.alternate_scroll_enabled == snapshot.alternate_scroll_enabled);
+    CK_CHECK(status.keyboard_flags == snapshot.keyboard_flags);
+    CK_CHECK(status.clipboard_serial == snapshot.clipboard_serial);
+    CK_CHECK(status.bell_serial == snapshot.bell_serial);
+    CK_CHECK(status.bell_serial == 1U);
+    CK_CHECK(status.printer_controller_active == snapshot.printer_controller_active);
+    CK_CHECK(status.printer_pending_bytes == snapshot.printer_pending_bytes);
+    CK_CHECK(status.printer_jobs_ready == snapshot.printer_jobs_ready);
+    CK_CHECK(status.title == "a caption");
+    CK_CHECK(status.alternate_buffer);
+    CK_CHECK(status.mouse_encoding == term::TerminalMouseEncoding::Sgr);
+
+    // And reading it changes nothing, for the reason reading damage changes
+    // nothing: several consumers read one terminal, and a read that consumed
+    // would give the news to whichever looked first.
+    const term::TerminalDamage before = emulator.damage();
+    const term::TerminalStatus again = emulator.status();
+    CK_CHECK(again == status);
+    CK_CHECK(emulator.damage().any() == before.any());
+}
+
 CK_TEST(terminal_emulator_drops_whole_lines_when_a_full_history_outlives_a_width_change) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{40, 12};

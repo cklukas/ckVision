@@ -21,6 +21,9 @@ public:
                               TerminalSubsessionOptions options = {});
 
     TerminalSnapshot snapshot() const override;
+    // The scalar half, at a few dozen bytes rather than a grid. What a host
+    // reads every tick while reading cells only where damage says to (U0-b).
+    TerminalStatus status() const override;
     // The parts of a snapshot a caller actually wants. The whole reason this
     // overload exists is that `snapshot()` copies the entire bounded history
     // every time it is called, and a host diffing at tick rate wants the grid:
@@ -33,20 +36,20 @@ public:
     // until the next call that changes this emulator — which for the server is
     // its own drain, so a diff engine reads these between drains and copies
     // only the cells it is going to send.
-    std::span<const Cell> cells() const noexcept;
-    std::span<const Cell> scrollback() const noexcept;
+    std::span<const Cell> cells() const noexcept override;
+    std::span<const Cell> scrollback() const noexcept override;
 
     // What has changed since `clear_damage()`. A host that has this does not
     // have to keep the previous screen and compare: the emulator already knew
     // what it wrote, and throwing that away only to reconstruct it by
     // comparison is the copy this exists to remove.
-    const TerminalDamage& damage() const noexcept { return damage_; }
+    const TerminalDamage& damage() const noexcept override { return damage_; }
     // Said by the host when it has sent everything: "I am caught up". Not done
     // by `snapshot()` or by `damage()`, because reading state must not change
     // it — a second reader would otherwise find a terminal that had nothing to
     // report, and there are three of them (a diff engine, a title poll, a bell
     // badge).
-    void clear_damage() noexcept;
+    void clear_damage() noexcept override;
     const TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
     void feed_output(std::string_view bytes) override;
     void resize(Size cells, Size cell_pixels) override;

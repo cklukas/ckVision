@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -357,6 +358,51 @@ struct TerminalDamage {
     friend bool operator==(const TerminalDamage&, const TerminalDamage&) = default;
 };
 
+// The half of a terminal that is not cells: where the cursor is, what the
+// child has turned on, what it called its window, and how it ended.
+//
+// A host at its flush tick needs all of this EVERY frame — `TerminalDamage`
+// flags the cursor, the modes and the title precisely because they change
+// independently of any cell — and needs cells only for the rows damage names.
+// Before this, the only way to read them was `snapshot()`, so a host that
+// wanted to know the cursor had moved copied the entire grid to find out: the
+// copy U0-b exists to remove, reintroduced by the fields around it. This is
+// the same answers in a few dozen bytes.
+//
+// What is deliberately NOT here is everything that carries a payload — the
+// clipboard text, the rasters, the diagnostics, the print spool. Each has a
+// serial or a count here instead, so a host learns that there is something new
+// to fetch without the fetch happening on every tick whether or not anything
+// changed.
+struct TerminalStatus {
+    ::ckv::Size cells;
+    ::ckv::CursorState cursor;
+    bool alternate_buffer = false;
+    std::string title;
+    TerminalSubsessionState state = TerminalSubsessionState::Ready;
+    bool bracketed_paste_enabled = false;
+    bool mouse_reporting_enabled = false;
+    TerminalMouseEncoding mouse_encoding = TerminalMouseEncoding::None;
+    bool application_cursor_keys = false;
+    bool focus_reporting_enabled = false;
+    bool alternate_scroll_enabled = false;
+    TerminalKeyboardFlags keyboard_flags = TerminalKeyboardFlags::None;
+    // Counts, not flags, and for the reason the snapshot's own are: a value a
+    // host may read as often as it likes cannot carry a flag that reading
+    // clears, and a flag that reading does not clear cannot say a second one
+    // arrived.
+    std::uint64_t clipboard_serial = 0;
+    std::uint64_t bell_serial = 0;
+    bool printer_controller_active = false;
+    std::size_t printer_pending_bytes = 0;
+    std::size_t printer_jobs_ready = 0;
+    // What the child exited with, once it has. Nothing until then: "still
+    // running" and "exited 0" are different answers.
+    std::optional<int> exit_code;
+
+    friend bool operator==(const TerminalStatus&, const TerminalStatus&) = default;
+};
+
 struct TerminalSnapshot {
     ::ckv::Size cells;
     std::vector<::ckv::Cell> cell_buffer;
@@ -424,6 +470,28 @@ public:
     virtual ~TerminalSubsession() = default;
 
     virtual TerminalSnapshot snapshot() const = 0;
+    // Everything a snapshot carries except the cells, the history and the
+    // payloads. Pure rather than defaulted in terms of `snapshot()`, because a
+    // default that copied the grid to answer "where is the cursor" is the
+    // defect this exists to remove, and it would be invisible at every call
+    // site.
+    virtual TerminalStatus status() const = 0;
+    // U0-b at the seam a host actually holds.
+    //
+    // The point of a damage report and borrowed cells is that a host reads a
+    // terminal without copying it. A host that has to know which concrete class
+    // it is holding in order to do that has the copy back — it reaches for
+    // `snapshot()`, which is the only thing the seam offered. So these are part
+    // of the seam: what changed, the cells to read it out of, the history
+    // beside them, and the one call that says "sent".
+    //
+    // `damage()` never clears, and `clear_damage()` is the host's alone: three
+    // consumers read one terminal (a diff engine, a title poll, a bell badge),
+    // and a read that cleared would give the news to whichever looked first.
+    virtual const TerminalDamage& damage() const noexcept = 0;
+    virtual void clear_damage() noexcept = 0;
+    virtual std::span<const ::ckv::Cell> cells() const noexcept = 0;
+    virtual std::span<const ::ckv::Cell> scrollback() const noexcept = 0;
     virtual const TerminalCapabilityProfile& profile() const noexcept = 0;
     virtual void feed_output(std::string_view bytes) = 0;
     virtual void resize(::ckv::Size cells, ::ckv::Size cell_pixels) = 0;

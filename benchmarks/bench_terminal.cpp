@@ -167,6 +167,18 @@ bool run_terminal_benchmarks() {
         if (snapshot.scrollback.empty()) budgets_hold = false;
     });
 
+    // What a host pays to learn where the cursor went, which it must ask on
+    // every tick because damage flags the cursor, the modes and the title
+    // independently of any cell. Before status() the only answer available was
+    // a snapshot — so the copy U0-b removed came straight back through the
+    // fields around it.
+    ckbench::run("terminal_status_scalars_only", 2000, [&] {
+        loaded.feed_output(tick_mutation);
+        const ckv::core::TerminalStatus status = loaded.status();
+        sink += static_cast<std::size_t>(status.cursor.position.x);
+        if (status.cells != profile.cells) budgets_hold = false;
+    });
+
     ckv::core::TerminalSnapshotOptions lean;
     lean.include_scrollback = false;
     lean.include_rasters = false;

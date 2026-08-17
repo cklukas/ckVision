@@ -1894,6 +1894,18 @@ public:
         snapshot.state = ckv::core::TerminalSubsessionState::Running;
         return snapshot;
     }
+    ckv::core::TerminalStatus status() const override {
+        ckv::core::TerminalStatus status;
+        status.cells = ckv::Size{4, 1};
+        status.state = ckv::core::TerminalSubsessionState::Running;
+        return status;
+    }
+    const ckv::core::TerminalDamage& damage() const noexcept override { return damage_; }
+    void clear_damage() noexcept override { damage_ = {}; }
+    std::span<const ckv::Cell> cells() const noexcept override {
+        return std::span<const ckv::Cell>(cells_.data(), cells_.size());
+    }
+    std::span<const ckv::Cell> scrollback() const noexcept override { return {}; }
     const ckv::core::TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
     void feed_output(std::string_view bytes) override { fed += std::string(bytes); }
     void resize(ckv::Size cells, ckv::Size) override { resized_to = cells; }
@@ -1928,6 +1940,9 @@ public:
 
 private:
     ckv::core::TerminalCapabilityProfile profile_{};
+    ckv::core::TerminalDamage damage_{};
+    std::array<ckv::Cell, 4> cells_{ckv::Cell::from_grapheme(" ", {}), ckv::Cell::from_grapheme(" ", {}),
+                                    ckv::Cell::from_grapheme(" ", {}), ckv::Cell::from_grapheme(" ", {})};
     // A handle a host would wait on. Never read by the fake — it only has to
     // travel, which is what wait_handles() aggregation means.
     std::array<ckv::term::WaitHandle, 1> handles_{ckv::term::WaitHandle{}};

@@ -30,6 +30,7 @@ using core::TerminalRaster;
 using core::TerminalDamage;
 using core::TerminalSnapshot;
 using core::TerminalSnapshotOptions;
+using core::TerminalStatus;
 using core::TerminalSubsessionOptions;
 using core::TerminalSubsessionState;
 
