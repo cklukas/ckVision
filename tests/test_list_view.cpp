@@ -541,3 +541,34 @@ CK_TEST(browsing_and_choosing_are_reported_separately) {
     CK_CHECK(activations == 1);
     CK_CHECK(moves == 1);  // and choosing is not moving
 }
+
+CK_TEST(a_list_says_how_much_room_its_contents_want) {
+    // A container asks a view how big it would like to be, and a view that
+    // answers "nothing" gets nothing. That is not academic: the stock
+    // window-list dialog shipped five rows tall with no entry visible, because
+    // the list inside it reported no hints at all.
+    ckv::widgets::ListView list;
+    list.set_items({"one", "two", "three"});
+    CK_CHECK(list.vertical_size_hint().preferred == 3);
+    // Never zero, even empty: a box with no height tells a reader nothing about
+    // whether it is empty or merely squeezed.
+    ckv::widgets::ListView empty;
+    CK_CHECK(empty.vertical_size_hint().preferred >= 1);
+    CK_CHECK(empty.vertical_size_hint().min >= 1);
+
+    // And bounded: ten thousand items is not a request for a window ten
+    // thousand rows tall.
+    std::vector<std::string> many;
+    for (int index = 0; index < 10'000; ++index) many.push_back("item " + std::to_string(index));
+    ckv::widgets::ListView long_list;
+    long_list.set_items(many);
+    CK_CHECK(long_list.vertical_size_hint().preferred ==
+             static_cast<int>(ckv::widgets::ListView::kPreferredVisibleRows));
+
+    // The width follows the longest item worth measuring, so a list of long
+    // names opens wide enough to read them.
+    ckv::widgets::ListView wide;
+    wide.set_items({"a", "a much longer entry than the others"});
+    CK_CHECK(wide.horizontal_size_hint().preferred >= 35);
+    CK_CHECK(wide.horizontal_size_hint().preferred > list.horizontal_size_hint().preferred);
+}

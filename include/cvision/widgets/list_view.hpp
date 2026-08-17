@@ -105,6 +105,29 @@ public:
     void set_scrollbar_policy(ScrollbarPolicy policy);
     ScrollbarPolicy scrollbar_policy() const noexcept;
 
+    // What this list is worth showing, so that a container asking how big to be
+    // gets an answer about the CONTENT rather than about nothing.
+    //
+    // Without these a dialog built around a list is sized as though the list
+    // were empty: the stock window-list dialog came out five rows tall with a
+    // Close button and no room for a single entry, and every other list dialog
+    // was one content change away from the same. The hints are derived from the
+    // model — how many items, and how wide the widest of the ones worth
+    // measuring — never from live bounds, which would feed a container's own
+    // resize back into the next layout pass.
+    SizeHint horizontal_size_hint() const override;
+    SizeHint vertical_size_hint() const override;
+
+    // The most rows a list asks for before it would rather scroll. A list of ten
+    // thousand must not ask for a window ten thousand rows tall, and a reader
+    // deciding between windows wants to see a screenful at most.
+    static constexpr std::size_t kPreferredVisibleRows = 10;
+    // How many items are measured for the width hint. Measuring a virtual
+    // provider's whole model to answer "how wide should this be" would defeat
+    // the point of a provider (D-043); the first screenful is what a reader
+    // sees when the dialog opens.
+    static constexpr std::size_t kMeasuredItemsForWidth = 32;
+
     int cursor() const noexcept { return cursor_; }  // display index, -1 if empty
 
     // Puts the cursor on `index` and scrolls it into view, selecting it too

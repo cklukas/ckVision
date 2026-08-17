@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/window_list_dialog.hpp"
 
+#include "cvision/widgets/list_view.hpp"
+
 #include <optional>
 
 #include "cvision/testing/cktest.hpp"
@@ -50,6 +52,43 @@ CK_TEST(the_dialogs_list_contains_every_windows_current_title_in_order) {
     auto handle = make_window_list_dialog(desktop, f.roles, app, nullptr);
     CK_CHECK(handle.window != nullptr);
     CK_CHECK(handle.initial_focus != nullptr);
+}
+
+CK_TEST(a_presented_window_list_has_room_for_the_windows_it_lists) {
+    // What shipped: a dialog five rows tall with a Close button and not one
+    // entry visible, however many windows were open. Nothing caught it because
+    // the test above asks whether the dialog was CONSTRUCTED, and a dialog with
+    // no room in it is constructed perfectly well.
+    //
+    // The cause was one layer down: a list reported no size hints, so a
+    // container asking "how big should I be" was told "as big as nothing".
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    // A desktop inside the application, as a real one is: presenting a modal
+    // needs the window to end up in the tree the application is driving.
+    auto* desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
+    desktop->add_window(make_window("Alpha"));
+    desktop->add_window(make_window("Beta"));
+    desktop->add_window(make_window("Gamma"));
+    desktop->add_window(make_window("Delta"));
+
+    auto handle = make_window_list_dialog(*desktop, roles, app, nullptr);
+    auto* list = static_cast<ckv::widgets::ListView*>(handle.initial_focus);
+    CK_CHECK(list != nullptr);
+    Window* dialog = desktop->present_modal(std::move(handle), app);
+    CK_CHECK(dialog != nullptr);
+    app.step(0);
+    if (list == nullptr || dialog == nullptr) return;
+
+    // A row apiece for the four windows, and the dialog tall enough to hold
+    // them with its frame and its button.
+    CK_CHECK(list->bounds().height >= 4);
+    CK_CHECK(dialog->bounds().height >= 4 + 3);
+    // And wide enough for the longest title rather than clipped to a corner.
+    CK_CHECK(list->bounds().width >= 5);
 }
 
 CK_TEST(activating_a_row_switches_the_desktops_active_window_and_closes_the_dialog) {

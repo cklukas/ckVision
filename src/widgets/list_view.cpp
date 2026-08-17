@@ -1,6 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/list_view.hpp"
 
+#include "cvision/core/text.hpp"
+
 #include <algorithm>
 #include <cctype>
 
@@ -91,6 +93,31 @@ ListItemId ListView::id_at(std::size_t index) const {
 
 std::optional<ListItemId> ListView::cursor_id() const noexcept {
     return cursor_id_ == kInvalidListItemId ? std::nullopt : std::optional<ListItemId>(cursor_id_);
+}
+
+ui::SizeHint ListView::horizontal_size_hint() const {
+    // The widest of the items worth measuring, plus the room the scrollbar takes
+    // when it is there. A minimum of a few columns so an empty list is still a
+    // list rather than a sliver.
+    const std::size_t count = item_count();
+    const std::size_t measured = std::min(count, kMeasuredItemsForWidth);
+    int widest = 0;
+    for (std::size_t index = 0; index < measured; ++index)
+        widest = std::max(widest, static_cast<int>(text::text_width(item_at(index).text)));
+    const int scrollbar_columns = scrollbar_policy() == ScrollbarPolicy::Hidden ? 0 : 1;
+    // Two columns of padding: a list whose text touches both edges reads as
+    // clipped even when it is not.
+    const int preferred = widest + scrollbar_columns + 2;
+    return ui::SizeHint{std::min(8, preferred), std::max(8, preferred), ui::kUnboundedExtent};
+}
+
+ui::SizeHint ListView::vertical_size_hint() const {
+    const std::size_t count = item_count();
+    const int rows = static_cast<int>(std::clamp<std::size_t>(count, 1, kPreferredVisibleRows));
+    // One row is the floor rather than zero: a container that gave a list no
+    // height at all would be showing a reader an empty box and no way to know
+    // whether it means "nothing here" or "not enough room".
+    return ui::SizeHint{1, rows, ui::kUnboundedExtent};
 }
 
 bool ListView::contains_selected(ListItemId id) const noexcept {

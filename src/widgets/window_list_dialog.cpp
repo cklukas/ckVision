@@ -31,8 +31,15 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
     std::vector<std::string> titles;
     for (Window* w : desktop.windows()) titles.push_back(w->title());
     list->set_items(titles);
-    auto* list_ptr =
-        static_cast<ListView*>(column->add_item(std::move(list), LayoutSpec{SizePolicy::Expanding, 1}));
+    // A bar that cannot scroll is a dead control, and a reader reads its
+    // presence as "there is more" (the same rule the help viewer's link list
+    // follows). With three windows open there is not.
+    list->set_scrollbar_policy(ScrollbarPolicy::Auto);
+    // And a column of air on each side: a list whose text touches the frame
+    // reads as clipped even when every title is whole.
+    auto* list_ptr = static_cast<ListView*>(
+        column->add_item(std::move(list), LayoutSpec{SizePolicy::Expanding, 1,
+                                                     ui::Alignment::Fill, 1, 1}));
 
     auto button_row = std::make_unique<Row>();
     auto close_button = std::make_unique<Button>(strings.close);
