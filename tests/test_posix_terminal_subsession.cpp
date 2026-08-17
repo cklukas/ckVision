@@ -425,6 +425,37 @@ CK_TEST(a_child_still_writing_does_not_wedge_the_close_that_ends_it) {
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Closed);
 }
 
+CK_TEST(a_child_can_be_asked_to_end_without_waiting_for_it) {
+    // The half of the close protocol a host needs when the WAITING is its own
+    // decision: a multiplexer ending a session tells every child to go, keeps
+    // drawing while they do, and escalates on its own schedule. Doing that with
+    // `close()` means blocking the loop once per terminal; doing it without a
+    // primitive means a host reaching for the pid.
+    ckv::term::TerminalLaunchSpec launch =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf ready; sleep 30"});
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "ready"));
+
+    session->request_termination();
+    // It returns at once — the point of it — and the child does go.
+    CK_CHECK(pump_until_exit(*session, 5'000));
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
+    // And the descriptor is still this host's to read until it closes: asking a
+    // child to end is not the same as tearing its terminal down.
+    session->close();
+    CK_CHECK(session->file_descriptor() < 0);
+}
+
+CK_TEST(asking_twice_is_not_an_error_and_neither_is_asking_a_child_that_has_gone) {
+    ckv::term::TerminalLaunchSpec launch =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf ready; exit 0"});
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until_exit(*session, 5'000));
+    session->request_termination();
+    session->request_termination();
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
+}
+
 CK_TEST(posix_terminal_subsession_contains_abnormal_child_termination) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "kill -TERM $$"});

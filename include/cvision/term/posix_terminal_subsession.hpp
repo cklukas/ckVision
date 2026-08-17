@@ -56,6 +56,22 @@ public:
     // Called by the owning application's readiness step.  It consumes at most
     // `byte_budget`, preserving fairness with outer input and painting.
     bool drain(std::size_t byte_budget) override;
+
+    // Asks the child to end, and returns immediately.
+    //
+    // `close()` decides for itself how long to wait and then escalates; this is
+    // the half a host needs when the waiting is ITS decision — a multiplexer
+    // killing a session tells every child to go, keeps drawing while they do,
+    // and escalates on its own schedule. Doing that with `close()` would mean
+    // blocking the loop once per terminal, and doing it without any primitive
+    // at all would mean a host reaching for the pid, which is exactly what this
+    // class exists to own.
+    //
+    // SIGHUP then SIGTERM, to the process group, exactly as `close()` sends
+    // them; the PTY stays open so a child blocked writing can finish and see
+    // them (the wedge of a177a95). Safe to call more than once, and safe to
+    // call before `close()` — which is the ordinary way it is used.
+    void request_termination() noexcept;
     void close() noexcept override;
     int file_descriptor() const noexcept { return master_fd_; }
     // The status the child exited with, once it has. Forwarded because the

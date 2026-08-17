@@ -225,6 +225,15 @@ void PosixTerminalSubsession::observe_exit() {
     wait_handle_count_ = 0;
 }
 
+void PosixTerminalSubsession::request_termination() noexcept {
+    if (child_pid_ < 0) return;
+    const pid_t child = static_cast<pid_t>(child_pid_);
+    // The group, so a shell cannot leave its own foreground child behind — the
+    // same rule `close()` follows, and for the same reason.
+    if (::kill(-child, SIGHUP) != 0) (void)::kill(child, SIGHUP);
+    if (::kill(-child, SIGTERM) != 0) (void)::kill(child, SIGTERM);
+}
+
 void PosixTerminalSubsession::close() noexcept {
     if (closed_) return;
     closed_ = true;
