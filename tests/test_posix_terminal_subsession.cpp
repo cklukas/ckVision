@@ -386,6 +386,45 @@ CK_TEST(posix_terminal_subsession_honours_bounded_termination_after_grace) {
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Closed);
 }
 
+CK_TEST(a_child_still_writing_does_not_wedge_the_close_that_ends_it) {
+    // The hangup is the signal, not the descriptor.
+    //
+    // A child blocked writing to its terminal cannot act on any signal until
+    // that write completes, and the write cannot complete while nothing empties
+    // the PTY. Closing the master first therefore wedges exactly the child this
+    // protocol exists to end: on macOS it enters "exiting" and does not reap
+    // even under SIGKILL, and close() blocks in waitpid with no way out. One
+    // flooding program would take its whole host with it — for a multiplexer's
+    // server, every other terminal on the machine.
+    //
+    // So the close protocol signals first, keeps emptying the PTY while it
+    // waits, and closes the master last. This test states the outcome that
+    // depends on all three: a child that is mid-flood and has nobody reading it
+    // is still gone, promptly, when its terminal is closed.
+    ckv::term::TerminalLaunchSpec launch =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "yes cvision-flood-line"});
+    launch.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "cvision-flood-line"));
+
+    // Then stop reading, and give the child long enough to fill the PTY and
+    // block in write() — which is what a server that has stopped draining one
+    // terminal looks like from the child's side, and the state the wedge needs.
+    for (int wait = 0; wait < 20; ++wait) (void)::poll(nullptr, 0, 10);
+
+    const auto start = std::chrono::steady_clock::now();
+    session->close();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - start)
+                             .count();
+    // Grace is one second and the kill escalation two more; anything near those
+    // means the child had to be forced, and anything above them means it was
+    // wedged. A child killed while writing takes milliseconds.
+    CK_CHECK(elapsed < 3'000);
+    CK_CHECK(session->file_descriptor() < 0);
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Closed);
+}
+
 CK_TEST(posix_terminal_subsession_contains_abnormal_child_termination) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "kill -TERM $$"});

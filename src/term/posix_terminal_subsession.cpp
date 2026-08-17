@@ -237,49 +237,63 @@ void PosixTerminalSubsession::close() noexcept {
             if (::kill(-child, signal) != 0)
                 (void)::kill(child, signal);
         };
-        // Closing the PTY master first delivers the terminal's hangup to an
-        // interactive shell and its foreground process group. The explicit
-        // signals below cover children that have already changed their tty
-        // disposition, while the descriptor is still available for the
-        // caller only until this close protocol begins.
-        if (master_fd_ >= 0) {
-            (void)::close(master_fd_);
-            master_fd_ = -1;
-            wait_handle_count_ = 0;
-        }
+        // The hangup is the signal, not the descriptor. Sending it first and
+        // closing the PTY last is not a preference: a child blocked writing to
+        // its terminal cannot act on ANY signal until that write completes,
+        // and the write cannot complete while nothing empties the PTY. Close
+        // the master first and the queue can never drain again, so the child
+        // this protocol exists to end is exactly the child it wedges — on
+        // macOS it goes to "exiting" and does not reap even under SIGKILL, and
+        // close() blocks in waitpid forever. One flooding program would take
+        // its whole host with it, which for a multiplexer's server means every
+        // other terminal on the machine.
         signal_process_group(SIGHUP);
         signal_process_group(SIGTERM);
         int status = 0;
-        bool exited = false;
+        // Throws away whatever the child has queued. The caller is closing
+        // this terminal, so its output has no reader left; what the reads are
+        // for is making room, so a child stuck in write() can finish, notice
+        // the signal it has already been sent, and exit.
+        const auto make_room = [this]() noexcept {
+            if (master_fd_ < 0) return;
+            char scrap[4096];
+            for (int reads = 0; reads < 64; ++reads) {
+                const ssize_t count = ::read(master_fd_, scrap, sizeof scrap);
+                if (count > 0) continue;
+                if (count < 0 && errno == EINTR) continue;
+                break;  // EAGAIN on an empty master, or the read boundary
+            }
+        };
+        // Returns once there is nothing left to wait for — the child was
+        // reaped, or it was never ours to reap — and false if `attempts`
+        // hundredths of a second went by with the child still running.
+        const auto reap_within = [&](int attempts) noexcept {
+            for (int attempt = 0; attempt < attempts; ++attempt) {
+                const pid_t result = ::waitpid(child, &status, WNOHANG);
+                if (result == child) return true;
+                if (result < 0 && errno != EINTR) return true;
+                make_room();
+                (void)::poll(nullptr, 0, 10);
+            }
+            return false;
+        };
         if (spec_.exit_policy == TerminalExitPolicy::WaitForExit) {
             // This policy deliberately waits for the child to honour the
             // requested graceful termination; it never escalates behind the
-            // caller's back.
-            while (true) {
-                const pid_t result = ::waitpid(child, &status, 0);
-                if (result == child) {
-                    exited = true;
-                    break;
-                }
-                if (result < 0 && errno != EINTR) break;
+            // caller's back. It does keep the PTY moving while it waits,
+            // because a wait that can deadlock on the child it is waiting for
+            // is not a policy, it is a hang.
+            while (!reap_within(100)) {
             }
         } else {
             // TerminateAfterGrace is intentionally bounded: close remains
             // safe for a child that traps or ignores SIGTERM.
-            for (int attempt = 0; attempt < 100; ++attempt) {
-                const pid_t result = ::waitpid(child, &status, WNOHANG);
-                if (result == child) {
-                    exited = true;
-                    break;
-                }
-                if (result < 0 && errno != EINTR) break;
-                (void)::poll(nullptr, 0, 10);
-            }
-            if (!exited) {
+            if (!reap_within(100)) {
                 signal_process_group(SIGKILL);
-                while (::waitpid(child, &status, 0) < 0 && errno == EINTR) {
-                }
-                exited = true;
+                // Draining still matters after SIGKILL. A process wedged in a
+                // tty write is not in a state a kill can complete, so the room
+                // has to come first and the signal takes effect behind it.
+                (void)reap_within(200);
             }
         }
         child_pid_ = -1;
