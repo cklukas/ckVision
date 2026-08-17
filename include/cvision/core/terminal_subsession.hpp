@@ -183,6 +183,18 @@ struct TerminalSubsessionOptions {
     // copy, small enough that a hostile child cannot use the clipboard as
     // storage for a megabyte the reader will never see.
     std::size_t max_clipboard_bytes = 64 * 1024;
+    // How long a title a child may set. A window caption is a line of text on
+    // a frame, so anything past a sentence is already unreadable — but the
+    // real reason for a bound is that a snapshot carries the title by value:
+    // a host reading one per terminal per frame would copy whatever a child
+    // felt like sending, at frame rate, forever. Cut on a character boundary,
+    // never mid-sequence.
+    std::size_t max_title_bytes = 1'024;
+    // How many titles a child may push with XTWINOPS 22. A program that
+    // pushes without ever popping — one that died between the two — must not
+    // grow this without limit, and nothing legitimately nests captions deeper
+    // than an editor inside a shell inside a build script.
+    std::size_t max_title_stack_depth = 8;
     // How many lines that have scrolled off the top of the primary screen are
     // kept. Zero means none at all — a terminal that remembers nothing, which
     // is a real request (a shell reading a password, a host with a memory

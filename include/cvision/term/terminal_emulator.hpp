@@ -106,6 +106,13 @@ private:
     // terminator the child used to ask, which is what a program that accepts
     // only one of the two will be reading for.
     void handle_osc(bool bel_terminated);
+    // OSC 0/2, under the profile's title policy: the child says what it is
+    // working on, and a host that shows a caption follows it.
+    void set_title(std::string_view text);
+    // XTWINOPS 22/23 — the title stack a program pushes its caption onto
+    // before replacing it, and pops on the way out. Without it a shell keeps
+    // the name of the editor that exited an hour ago.
+    void handle_title_stack(bool push);
     void handle_palette_query(std::string_view body, bool bel_terminated);
     void handle_clipboard(std::string_view body);
     void reply_osc(std::string_view body, bool bel_terminated);
@@ -184,6 +191,7 @@ private:
     std::string pending_input_;
     std::vector<TerminalDiagnostic> diagnostics_;
     std::string title_;
+    std::vector<std::string> title_stack_;
     TerminalSubsessionState state_ = TerminalSubsessionState::Ready;
     std::optional<int> exit_code_;
     bool bracketed_paste_enabled_ = false;

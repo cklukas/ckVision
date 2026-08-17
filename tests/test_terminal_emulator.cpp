@@ -1509,3 +1509,107 @@ CK_TEST(an_unknown_dec_line_attribute_is_reported_rather_than_printed) {
         if (diagnostic.kind == term::TerminalDiagnostic::Kind::UnsupportedSequence) reported = true;
     CK_CHECK(reported);
 }
+
+CK_TEST(a_child_may_name_the_window_only_where_the_profile_allows_it) {
+    // The policy flag is the whole of the permission: with metadata storage
+    // off, a title is understood and deliberately without effect, and no
+    // diagnostic — a shell writing its prompt title is not doing anything
+    // wrong, it is doing something this profile does not keep.
+    term::TerminalEmulator denied;
+    denied.feed_output("\x1b]2;secret project\a");
+    CK_CHECK(denied.snapshot().title.empty());
+
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]2;vim: plans/04.md\a");
+    CK_CHECK(emulator.snapshot().title == "vim: plans/04.md");
+    // OSC 0 is icon-and-title and sets it too; OSC 1 is the icon name alone
+    // and deliberately leaves the caption where it was.
+    emulator.feed_output("\x1b]0;make\x1b\\");
+    CK_CHECK(emulator.snapshot().title == "make");
+    emulator.feed_output("\x1b]1;an icon\a");
+    CK_CHECK(emulator.snapshot().title == "make");
+}
+
+CK_TEST(a_title_is_bounded_and_cut_on_a_character_boundary) {
+    // The snapshot carries the title by value and a host reads one per
+    // terminal per frame, so an unbounded title is an unbounded copy at frame
+    // rate. Cutting mid-character would leave a replacement mark the child
+    // never sent.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalSubsessionOptions options;
+    options.max_title_bytes = 9;
+    term::TerminalEmulator emulator(profile, options);
+
+    emulator.feed_output("\x1b]2;0123456789abc\a");
+    CK_CHECK(emulator.snapshot().title == "012345678");
+
+    // "é" is two bytes: the cut at nine bytes falls inside the fifth one, so
+    // the fourth character is dropped whole rather than half-kept.
+    emulator.feed_output("\x1b]2;ééééé\a");
+    CK_CHECK(emulator.snapshot().title == "éééé");
+    bool reported = false;
+    for (const term::TerminalDiagnostic& diagnostic : emulator.snapshot().diagnostics)
+        if (diagnostic.kind == term::TerminalDiagnostic::Kind::LimitExceeded) reported = true;
+    CK_CHECK(reported);
+}
+
+CK_TEST(a_program_gets_the_caption_back_that_it_pushed) {
+    // XTWINOPS 22/23. Without it a shell keeps the name of the editor that
+    // exited, because the editor set a title and nothing put the old one back.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]2;zsh\a");
+    emulator.feed_output("\x1b[22;0t");          // the editor saves it
+    emulator.feed_output("\x1b]2;vim README\a");  // ...and renames the window
+    CK_CHECK(emulator.snapshot().title == "vim README");
+    emulator.feed_output("\x1b[23;0t");          // ...and puts it back on exit
+    CK_CHECK(emulator.snapshot().title == "zsh");
+
+    // Nesting works, and popping more than was pushed leaves the caption
+    // alone rather than blanking it: a program asking for what it started
+    // with should not be answered with nothing.
+    emulator.feed_output("\x1b[22;2t\x1b]2;one\a\x1b[22;2t\x1b]2;two\a");
+    emulator.feed_output("\x1b[23;2t");
+    CK_CHECK(emulator.snapshot().title == "one");
+    emulator.feed_output("\x1b[23;2t\x1b[23;2t\x1b[23;2t");
+    CK_CHECK(emulator.snapshot().title == "zsh");
+}
+
+CK_TEST(the_title_stack_is_bounded_and_refused_where_the_policy_refuses_titles) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalSubsessionOptions options;
+    options.max_title_stack_depth = 2;
+    term::TerminalEmulator emulator(profile, options);
+    emulator.feed_output("\x1b]2;first\a\x1b[22;0t");
+    emulator.feed_output("\x1b]2;second\a\x1b[22;0t");
+    emulator.feed_output("\x1b]2;third\a\x1b[22;0t");  // pushes out "first"
+    emulator.feed_output("\x1b]2;now\a");
+    emulator.feed_output("\x1b[23;0t");
+    CK_CHECK(emulator.snapshot().title == "third");
+    emulator.feed_output("\x1b[23;0t");
+    CK_CHECK(emulator.snapshot().title == "second");
+    emulator.feed_output("\x1b[23;0t");
+    CK_CHECK(emulator.snapshot().title == "second");  // the bottom fell off, and says nothing
+
+    // A profile that does not keep titles does not keep a stack of them
+    // either — the sequence is understood and does nothing.
+    term::TerminalEmulator denied;
+    denied.feed_output("\x1b[22;0t\x1b[23;0t");
+    CK_CHECK(denied.snapshot().title.empty());
+}
+
+CK_TEST(a_full_reset_empties_the_title_stack_it_cannot_pop) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.osc_policy = core::TerminalOscPolicy::StoreMetadata;
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b]2;before\a\x1b[22;0t\x1b]2;after\a");
+    emulator.feed_output("\x1b" "c");
+    CK_CHECK(emulator.snapshot().title == "after");  // the caption survives a reset
+    emulator.feed_output("\x1b[23;0t");
+    CK_CHECK(emulator.snapshot().title == "after");  // ...and nothing is left to pop
+}

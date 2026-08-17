@@ -157,12 +157,7 @@ void TerminalEmulator::handle_osc(bool bel_terminated) {
         case 0:
         case 2:
             if (profile_.osc_policy != TerminalOscPolicy::StoreMetadata) return;
-            // The title is child-supplied text on its way to a window frame.
-            // Control bytes in it would be drawn as frame content, so they
-            // are replaced here rather than trusted to whatever eventually
-            // renders it. Length is already bounded by max_control_bytes when
-            // the string was accumulated.
-            title_ = text::sanitize_display_text(body);
+            set_title(body);
             return;
         case 1:
             return;  // icon name: understood, and deliberately without effect
@@ -285,6 +280,67 @@ void TerminalEmulator::handle_clipboard(std::string_view body) {
     // what to do with it.
     clipboard_text_ = text::sanitize_clipboard_text(decoded);
     ++clipboard_serial_;
+}
+
+// The title, as the child asked for it and as a window frame can survive.
+//
+// Two things happen to it. Control bytes are replaced, because this is
+// child-supplied text on its way onto a frame and a control byte there is
+// drawn as frame content rather than obeyed. And it is cut to
+// `max_title_bytes`: a caption is one line, `max_control_bytes` is sixteen
+// kilobytes, and the snapshot that carries this is copied per terminal per
+// frame — a child that sends a novel for a title would otherwise have every
+// host copying that novel forever.
+//
+// The cut lands on a character boundary. Cutting mid-sequence would leave a
+// trailing byte that sanitisation then renders as a replacement character,
+// so a title too long by one byte would end in a visible mark the child never
+// sent.
+void TerminalEmulator::set_title(std::string_view text) {
+    const std::size_t limit = std::max<std::size_t>(1, options_.max_title_bytes);
+    if (text.size() > limit) {
+        std::size_t cut = limit;
+        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0U) == 0x80U) --cut;
+        text = text.substr(0, cut);
+        diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child title exceeded configured limit");
+    }
+    title_ = text::sanitize_display_text(text);
+}
+
+// XTWINOPS 22 and 23. A program that is about to rename the window saves the
+// caption first and puts it back on the way out, which is how a shell gets
+// its own name back when an editor exits — and, without this, does not: the
+// caption keeps whatever the last program to set one called itself.
+//
+// Ps selects which of the two names a terminal keeps: 0 both, 1 the icon name,
+// 2 the window title. ckVision keeps a title and no icon name (OSC 1 is
+// deliberately without effect), so 0 and 2 act and 1 is understood and does
+// nothing — including on the way back, so a program that pushed only its icon
+// name does not pop somebody else's title.
+void TerminalEmulator::handle_title_stack(bool push) {
+    if (profile_.osc_policy != TerminalOscPolicy::StoreMetadata) return;
+    const int which = parameter(control_, 1, 0);
+    if (which == 1) return;
+    if (which != 0 && which != 2) {
+        diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                   "unsupported child window-title stack operation");
+        return;
+    }
+    if (push) {
+        // A stack has to have a bottom. Dropping the oldest entry bounds a
+        // program that pushes without ever popping; it can only lose a caption
+        // it had already stopped tracking.
+        const std::size_t depth = std::max<std::size_t>(1, options_.max_title_stack_depth);
+        if (title_stack_.size() >= depth) title_stack_.erase(title_stack_.begin());
+        title_stack_.push_back(title_);
+        return;
+    }
+    // Popping what was never pushed is not an error to report: a program that
+    // pops one too many is asking for the caption it started with, and the
+    // honest answer is to leave the current one alone rather than to blank it.
+    if (title_stack_.empty()) return;
+    title_ = title_stack_.back();
+    title_stack_.pop_back();
 }
 
 bool TerminalEmulator::append_control(char byte) {
@@ -559,6 +615,13 @@ void TerminalEmulator::handle_csi(char final_byte) {
         if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile)
             send_input("\x1b[6;" + std::to_string(std::max(1, profile_.cell_pixels.height)) + ";" +
                        std::to_string(std::max(1, profile_.cell_pixels.width)) + "t");
+        return;
+    }
+    // XTWINOPS 22/23: push and pop the window title. They share their final
+    // byte with the geometry reports above and are told apart by their first
+    // parameter, which is what `CSI 22 ; 0 t` means.
+    if (final_byte == 't' && (parameter(control_, 0, 0) == 22 || parameter(control_, 0, 0) == 23)) {
+        handle_title_stack(parameter(control_, 0, 0) == 22);
         return;
     }
     if (final_byte == 't' && control_ == "14") {
@@ -1473,6 +1536,10 @@ void TerminalEmulator::reset_terminal() {
     alternate_scroll_enabled_ = profile_.alternate_scroll;
     primary_keyboard_ = KeyboardState{};
     alternate_keyboard_ = KeyboardState{};
+    // The saved captions go with everything else the child pushed. The title
+    // itself stays — see above — but a stack of titles from before a reset is
+    // a stack nothing will ever legitimately pop.
+    title_stack_.clear();
 }
 
 // DECALN (ESC # 8). The screen fills with E and the cursor comes home, which
