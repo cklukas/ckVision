@@ -16,7 +16,8 @@ void ComboBox::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.list.selected");
-    if (shadow_role_ == ui::kInvalidRole) shadow_role_ = context().roles->find("ckv.button.shadow");
+    if (track_role_ == ui::kInvalidRole) track_role_ = context().roles->find("ckv.scrollbar.track");
+    if (thumb_role_ == ui::kInvalidRole) thumb_role_ = context().roles->find("ckv.scrollbar.thumb");
     editor_.set_context(context());
     editor_.set_role_override(normal_role_, focused_role_, ui::kInvalidRole);
     editor_.on_attached();
@@ -277,7 +278,6 @@ void ComboBox::on_resized() {
 void ComboBox::draw(scene::Painter& painter) {
     const Style normal = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
     const Style selected = context().theme->resolve(selected_role_);
-    const Style shadow = context().theme->resolve(shadow_role_);
     const int w = bounds().width;
     if (w <= 0 || bounds().height <= 0) return;
 
@@ -293,15 +293,32 @@ void ComboBox::draw(scene::Painter& painter) {
     painter.draw_text(Point{w - 1, 0}, dropdown_open_ ? "▴" : "▾", normal);
 
     if (!dropdown_open_) return;
-    const int item_width = std::max(0, w - 1);
-    const int max_rows = std::min(static_cast<int>(items_.size()) - first_visible_, visible_rows());
+    const int rows = visible_rows();
+    const int count = static_cast<int>(items_.size());
+    // A bar only where there is something to scroll, and the items keep the
+    // column otherwise. A permanent column down the right of the list is read
+    // as a bar that has lost its thumb -- it says the list scrolls when it
+    // does not, and says nothing about where in it the reader is.
+    const bool scrolls = count > rows && rows > 0 && w > 1;
+    const int item_width = std::max(0, w - (scrolls ? 1 : 0));
+    const int max_rows = std::min(count - first_visible_, rows);
     for (int row = 0; row < max_rows; ++row) {
         const std::size_t item = static_cast<std::size_t>(first_visible_ + row);
         const bool active = selected_index_ && *selected_index_ == item;
         const Style style = active ? selected : normal;
         painter.fill(Rect{0, row + 1, item_width, 1}, Cell::from_grapheme(" ", style));
         painter.draw_text(Point{0, row + 1}, text::clip_to_width(items_[item], item_width), style);
-        if (w > 1) painter.draw_text(Point{w - 1, row + 1}, "█", shadow);
+    }
+    if (!scrolls) return;
+    const Style track = context().theme->resolve(track_role_);
+    const Style thumb = context().theme->resolve(thumb_role_);
+    // Length and position in proportion to the list, so the thumb states how
+    // much of it is on screen and which part.
+    const int length = std::max(1, rows * rows / count);
+    const int start = std::min(rows - length, first_visible_ * rows / count);
+    for (int row = 0; row < rows; ++row) {
+        const bool on_thumb = row >= start && row < start + length;
+        painter.draw_text(Point{w - 1, row + 1}, on_thumb ? "█" : " ", on_thumb ? thumb : track);
     }
 }
 

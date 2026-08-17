@@ -229,11 +229,15 @@ void CalendarView::draw(scene::Painter& painter) {
         painter.draw_text(Point{0, 0}, text::clip_to_width(title, bounds().width), normal);
     }
     const int x_offset = show_iso_week_numbers_ ? 3 : 0;
-    if (show_iso_week_numbers_) painter.draw_text(Point{0, header_row()}, "Wk", normal);
+    // The weekday row names the columns rather than being one of them, so it
+    // is set apart from the days it heads.
+    Style header = normal;
+    header.attrs = header.attrs | Attr::Bold;
+    if (show_iso_week_numbers_) painter.draw_text(Point{0, header_row()}, "Wk", header);
     // The weekday names start at whichever day the week starts on.
     const int first_offset = static_cast<int>(first_weekday_);
     for (int i = 0; i < 7; ++i)
-        painter.draw_text(Point{x_offset + i * 3, header_row()}, weekday_labels_[(first_offset + i) % 7], normal);
+        painter.draw_text(Point{x_offset + i * 3, header_row()}, weekday_labels_[(first_offset + i) % 7], header);
     for (int day = 1; day <= days_in_month(month_.year, month_.month); ++day) {
         const DateValue date{month_.year, month_.month, day};
         const int index = weekday_index(month_, first_weekday_) + day - 1;
@@ -444,14 +448,15 @@ constexpr int kGridWidth = 7 * 3 - 1;
 // One column of padding to the left of the content, inside the frame.
 constexpr int kContentPad = 1;
 constexpr int kContentLeft = 1 + kContentPad;  // frame, then the padding
-constexpr int kMonthRow = 1;
-constexpr int kYearRow = 2;
-constexpr int kGridRow = 3;
+// Month, year and its steppers share one row: the whole point of a dropdown
+// under a clock is that it is small, and three of the ten rows would
+// otherwise be spent on chrome.
+constexpr int kControlRow = 1;
+constexpr int kGridRow = 2;
 constexpr int kStepWidth = 2;  // "<<" and ">>"
-// Wide enough for the word the field shows when what was typed is not a year,
-// plus the cell the cursor sits in past the last character -- a field as wide
-// as its text scrolls the first character out of sight to make room.
-constexpr int kYearWidth = 8;
+// Four digits and the cell the cursor sits in past them: a field exactly as
+// wide as its text scrolls the first character out of sight to make room.
+constexpr int kYearWidth = 5;
 constexpr std::int64_t kInvalidHoldNanos = 3'000'000'000;
 }  // namespace
 
@@ -498,13 +503,33 @@ void CalendarDropdown::show_month(DateValue month) {
     month_->set_selected_index(static_cast<std::size_t>(std::clamp(month.month, 1, 12) - 1));
     year_->set_text(std::to_string(month.year));
     showing_invalid_ = false;
+    year_->set_enabled(true);
+    sync_month_bounds();
     invalidate();
 }
 
-Rect CalendarDropdown::step_back_rect() const noexcept { return Rect{kContentLeft, kYearRow, kStepWidth, 1}; }
+int CalendarDropdown::month_width() const noexcept {
+    // As wide as the longest month it offers and no wider: the picker is
+    // read, not filled in, so space past the longest name is space the year
+    // beside it could have had.
+    int widest = 0;
+    for (const std::string& label : month_labels_) widest = std::max(widest, text::text_width(label));
+    // One cell for the arrow, one to keep the name off it.
+    const int wanted = widest + 2;
+    const int rest = kStepWidth + kYearWidth + kStepWidth;
+    return std::clamp(wanted, 4, kGridWidth - rest);
+}
+
+Rect CalendarDropdown::step_back_rect() const noexcept {
+    return Rect{kContentLeft + month_width(), kControlRow, kStepWidth, 1};
+}
+
+Rect CalendarDropdown::year_rect() const noexcept {
+    return Rect{step_back_rect().right(), kControlRow, kYearWidth, 1};
+}
 
 Rect CalendarDropdown::step_forward_rect() const noexcept {
-    return Rect{kContentLeft + kGridWidth - kStepWidth, kYearRow, kStepWidth, 1};
+    return Rect{year_rect().right(), kControlRow, kStepWidth, 1};
 }
 
 void CalendarDropdown::sync_month_bounds() {
@@ -512,22 +537,39 @@ void CalendarDropdown::sync_month_bounds() {
     // tall as the list is long -- capped at the room inside the frame, where
     // it scrolls rather than spilling past the popup.
     const int wanted = month_->vertical_size_hint().preferred;
-    const int rows = std::max(1, std::min(wanted, bounds().height - 1 - kMonthRow));
-    month_->set_bounds(Rect{kContentLeft, kMonthRow, kGridWidth, rows});
+    const int rows = std::max(1, std::min(wanted, bounds().height - 1 - kControlRow));
+    month_->set_bounds(Rect{kContentLeft, kControlRow, month_width(), rows});
     // The list covers the rows below the picker, so what those rows hold
-    // steps aside: left up, the year would print across the month names and
-    // the grid would show through wherever the list falls short.
+    // steps aside: left up, the grid would show through wherever the list
+    // falls short of the frame.
     const bool list_open = month_->dropdown_open();
-    year_->set_visible(!list_open);
+    // The field steps aside for both of the things that take its row: the
+    // open list above it, and the answer the row gives to a year that is not
+    // one -- left up, it would print its rejected text through the word.
+    year_->set_visible(!list_open && !showing_invalid_);
     calendar_->set_visible(!list_open);
 }
 
+void CalendarDropdown::sync_open_height() {
+    // Open, the popup is as tall as its list needs; closed, it is a month
+    // again. Growing beats scrolling twelve months through eight rows.
+    const int closed = vertical_size_hint().preferred;
+    int wanted = closed;
+    if (month_->dropdown_open())
+        wanted = 1 + kControlRow + month_->vertical_size_hint().preferred + 1;
+    if (parent() != nullptr) wanted = std::min(wanted, std::max(1, parent()->bounds().height - bounds().y));
+    if (wanted == bounds().height) return;
+    set_bounds(Rect{bounds().x, bounds().y, bounds().width, wanted});
+}
+
 void CalendarDropdown::on_child_size_hint_changed(ui::View& child) {
-    if (&child == month_) sync_month_bounds();
+    if (&child != month_) return;
+    sync_open_height();
+    sync_month_bounds();
 }
 
 void CalendarDropdown::on_resized() {
-    year_->set_bounds(Rect{kContentLeft + (kGridWidth - kYearWidth) / 2, kYearRow, kYearWidth, 1});
+    year_->set_bounds(year_rect());
     calendar_->set_bounds(Rect{kContentLeft, kGridRow, kGridWidth, std::max(0, bounds().height - kGridRow - 1)});
     sync_month_bounds();
 }
@@ -549,10 +591,18 @@ void CalendarDropdown::draw(scene::Painter& painter) {
     // Framed like a dropdown menu, in a dropdown menu's colours, because
     // that is what it is.
     painter.draw_box(all, scene::LineStyle::Single, style);
-    if (year_->visible()) {
-        painter.draw_text(Point{step_back_rect().x, kYearRow}, "<<", style);
-        painter.draw_text(Point{step_forward_rect().x, kYearRow}, ">>", style);
+    if (month_->dropdown_open()) return;  // the open list has this row
+    if (showing_invalid_) {
+        // The complaint takes the whole stepper-and-year span, which is the
+        // one place on this row with room for a word.
+        const Rect span{step_back_rect().x, kControlRow,
+                        step_forward_rect().right() - step_back_rect().x, 1};
+        painter.fill(span, Cell::from_grapheme(" ", style));
+        painter.draw_text(Point{span.x + std::max(0, (span.width - 7) / 2), kControlRow}, "invalid", style);
+        return;
     }
+    painter.draw_text(Point{step_back_rect().x, kControlRow}, "<<", style);
+    painter.draw_text(Point{step_forward_rect().x, kControlRow}, ">>", style);
 }
 
 void CalendarDropdown::dismiss() {
@@ -571,10 +621,10 @@ void CalendarDropdown::step_year(int delta) {
 
 void CalendarDropdown::report_invalid_year() {
     showing_invalid_ = true;
-    year_->set_text("invalid");
-    // The field says what happened, and while it does it is not a field: it
-    // takes no edits, so nothing is typed into the middle of the word.
+    // The row says what happened, and while it does the field is not a field:
+    // it takes no edits, so nothing is typed into the middle of the answer.
     year_->set_enabled(false);
+    sync_month_bounds();
     invalidate();
     if (context().app == nullptr) return;
     const std::weak_ptr<void> liveness = lifetime_token();
@@ -586,6 +636,7 @@ void CalendarDropdown::report_invalid_year() {
         showing_invalid_ = false;
         year_->set_enabled(true);
         year_->set_text(std::to_string(calendar_->month().year));
+        sync_month_bounds();
         invalidate();
     });
 }

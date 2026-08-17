@@ -586,6 +586,13 @@ struct DroppedCalendar {
                                      ckv::Modifier::None});
         app.step(0);
     }
+
+    std::string row(int y) const {
+        const ckv::Rect abs = dropdown->absolute_bounds();
+        std::string out;
+        for (int x = abs.x; x < abs.right(); ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    }
 };
 }  // namespace
 
@@ -628,10 +635,12 @@ CK_TEST(picking_a_month_moves_the_calendar_to_it) {
 CK_TEST(the_year_steppers_move_a_year_at_a_time) {
     DroppedCalendar c;
     const ckv::Rect abs = c.dropdown->absolute_bounds();
-    c.click(ckv::Point{abs.x + 2, abs.y + 2});  // "<<"
+    // Month, steppers and year share the one control row.
+    const ckv::Rect year = c.dropdown->year_field().bounds();
+    c.click(ckv::Point{abs.x + year.x - 1, abs.y + year.y});  // "<<", left of the field
     CK_CHECK(c.dropdown->calendar().month().year == 2025);
     CK_CHECK(c.dropdown->year_field().text() == "2025");
-    c.click(ckv::Point{abs.right() - 3, abs.y + 2});  // ">>"
+    c.click(ckv::Point{abs.x + year.right() + 1, abs.y + year.y});  // ">>", right of it
     CK_CHECK(c.dropdown->calendar().month().year == 2026);
 }
 
@@ -663,17 +672,45 @@ CK_TEST(a_year_that_is_not_one_is_refused_and_the_shown_year_comes_back) {
     c.press(ckv::Key::Tab);
     for (int i = 0; i < 4; ++i) c.press(ckv::Key::Backspace);
     c.press(ckv::Key::Enter);  // nothing typed is not a year
-    CK_CHECK(c.dropdown->year_field().text() == "invalid");
+    // The row says so, in the one place on it with room for a word.
+    CK_CHECK(c.row(c.dropdown->absolute_bounds().y + 1).find("invalid") != std::string::npos);
     CK_CHECK(c.dropdown->calendar().month().year == 2026);  // unmoved
-    // While it says so it is not a field: typing into the complaint would
-    // leave a word with digits in it.
+    // While it says that, the field is not a field: it steps aside, and it
+    // takes nothing, so no digit is typed into the middle of the answer.
+    CK_CHECK(!c.dropdown->year_field().visible());
     c.press(ckv::Key::Char, ckv::Modifier::None, "9");
-    CK_CHECK(c.dropdown->year_field().text() == "invalid");
+    CK_CHECK(c.row(c.dropdown->absolute_bounds().y + 1).find("invalid") != std::string::npos);
     c.clock.advance(3'100'000'000);
     c.app.step(0);
+    CK_CHECK(c.dropdown->year_field().visible());
     CK_CHECK(c.dropdown->year_field().text() == "2026");
     c.press(ckv::Key::Char, ckv::Modifier::None, "9");  // a field again
     CK_CHECK(c.dropdown->year_field().text() == "20269");
+}
+
+CK_TEST(the_month_list_opens_at_full_length_rather_than_scrolling_in_place) {
+    DroppedCalendar c;
+    const int closed = c.dropdown->bounds().height;
+    c.press(ckv::Key::Tab);   // onto the month picker
+    c.press(ckv::Key::Down);  // open the list
+    // Twelve months shown through eight rows is a list the reader has to
+    // scroll to see; there is room below, so the popup takes it.
+    CK_CHECK(c.dropdown->bounds().height > closed);
+    CK_CHECK(c.dropdown->month_picker().bounds().height >= 13);  // the row and all twelve
+    c.press(ckv::Key::Escape);  // closes the list, not the popup
+    CK_CHECK(c.dropdown->bounds().height == closed);
+}
+
+CK_TEST(the_month_picker_is_as_wide_as_its_longest_month_and_no_wider) {
+    DroppedCalendar c;
+    // Space past the longest name is space the year beside it could have had,
+    // and the year is on the same row.
+    CK_CHECK(c.dropdown->month_picker().bounds().width == 11);  // "September" plus its arrow
+    const ckv::Rect month = c.dropdown->month_picker().bounds();
+    const ckv::Rect year = c.dropdown->year_field().bounds();
+    CK_CHECK(year.y == month.y);
+    CK_CHECK(year.x > month.right());  // the steppers sit between them
+    CK_CHECK(year.right() < c.dropdown->bounds().width - 1);  // and one more, inside the frame
 }
 
 CK_TEST(escape_closes_a_dropped_calendar) {

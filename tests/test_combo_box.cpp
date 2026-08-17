@@ -150,6 +150,10 @@ CK_TEST(a_list_given_less_room_than_it_needs_scrolls_to_the_selection) {
     paint(scrolled);
     // The tail of the list is reachable: what the eye sees is the selection.
     CK_CHECK(row_text(scrolled, 2).find("five") == 0);
+    // A bar appears only because the list does not fit, and its thumb says
+    // where in the list the reader is.
+    CK_CHECK(scrolled.at(ckv::Point{11, 1}).grapheme() == " ");  // above the thumb: track
+    CK_CHECK(scrolled.at(ckv::Point{11, 2}).grapheme() == "█");
     // ...and the mouse agrees with the eye, rather than with index 0.
     combo.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{1, 2},
                                    std::nullopt, Modifier::None});

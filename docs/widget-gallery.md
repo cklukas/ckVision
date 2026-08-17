@@ -245,12 +245,16 @@ showing, so it reads as a menu title rather than as a second kind of control.
 ## CalendarDropdown
 
 Header: `include/cvision/widgets/common_components.hpp`. A month, framed and
-coloured as a dropdown menu, with the controls for choosing which month: a
-ComboBox of month names above a year field flanked by `<<` and `>>`. Typing in
-the year field admits digits and nothing else; Enter — or moving on with Tab —
-commits it, and a year that is not one leaves the word `invalid` in the field
-for three seconds before the shown year comes back. `show_month()` sets all
-three at once, so the picker and the field never disagree with the grid.
+coloured as a dropdown menu, with the controls for choosing which month on one
+row above it: a ComboBox of month names — as wide as its longest month and no
+wider — then `<<`, a year field, and `>>`. Typing in the year field admits
+digits and nothing else; Enter — or moving on with Tab — commits it, and a
+year that is not one gives the row over to the word `invalid` for three
+seconds, the field stepping aside rather than holding what was rejected.
+`show_month()` sets all three at once, so the picker and the field never
+disagree with the grid. Opening the month list grows the popup to the list's
+own length where there is room below, so twelve months are not read through
+eight rows.
 
 It is a transient popup: it closes on Escape and on a press anywhere but
 itself. That behaviour is what separates a dropdown from a small window, and

@@ -83,7 +83,8 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
-    ui::RoleId shadow_role_ = ui::kInvalidRole;
+    ui::RoleId track_role_ = ui::kInvalidRole;
+    ui::RoleId thumb_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets

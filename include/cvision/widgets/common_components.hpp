@@ -257,7 +257,10 @@ private:
     void report_invalid_year();
     void focus_slot(int slot);
     void sync_month_bounds();
+    void sync_open_height();
+    int month_width() const noexcept;
     Rect step_back_rect() const noexcept;
+    Rect year_rect() const noexcept;
     Rect step_forward_rect() const noexcept;
 
     CalendarView* calendar_ = nullptr;
