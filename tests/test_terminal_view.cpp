@@ -24,7 +24,92 @@ struct Fixture {
     ckv::ui::Context context() { return ckv::ui::Context{&theme, &registry, nullptr}; }
 };
 
+// A session that counts the reads a view makes of it, forwarding everything to
+// a real emulator.
+//
+// `snapshot()` copies the grid AND the history; the borrowed reads copy nothing.
+// Which one a view reaches for is therefore not a style question: at ten
+// thousand lines of history a snapshot is tens of megabytes, and a view that
+// takes one per repaint — or worse, several per keystroke — makes a terminal
+// slower the longer it has been alive.
+class CountingSubsession final : public ckv::term::TerminalSubsession {
+public:
+    explicit CountingSubsession(const ckv::term::TerminalCapabilityProfile& profile)
+        : emulator_(profile) {}
+
+    ckv::core::TerminalSnapshot snapshot() const override {
+        ++snapshots;
+        return emulator_.snapshot();
+    }
+    ckv::core::TerminalStatus status() const override {
+        ++statuses;
+        return emulator_.status();
+    }
+    const ckv::core::TerminalDamage& damage() const noexcept override { return emulator_.damage(); }
+    void clear_damage() noexcept override { emulator_.clear_damage(); }
+    std::span<const ckv::Cell> cells() const noexcept override { return emulator_.cells(); }
+    std::span<const ckv::Cell> scrollback() const noexcept override { return emulator_.scrollback(); }
+    std::span<const ckv::core::TerminalRaster> rasters() const noexcept override {
+        return emulator_.rasters();
+    }
+    std::span<const ckv::core::TerminalDiagnostic> diagnostics() const noexcept override {
+        return emulator_.diagnostics();
+    }
+    const ckv::core::TerminalCapabilityProfile& profile() const noexcept override {
+        return emulator_.profile();
+    }
+    void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
+    void resize(ckv::Size cells, ckv::Size cell_pixels) override {
+        emulator_.resize(cells, cell_pixels);
+    }
+    void send_input(std::string_view bytes) override { emulator_.send_input(bytes); }
+    std::string take_pending_input() override { return emulator_.take_pending_input(); }
+    ckv::core::TerminalSubsessionState state() const noexcept override { return emulator_.state(); }
+    void set_raster_identity(int identity) noexcept override {
+        emulator_.set_raster_identity(identity);
+    }
+
+    mutable int snapshots = 0;
+    mutable int statuses = 0;
+
+private:
+    ckv::term::TerminalEmulator emulator_;
+};
+
 }  // namespace
+
+CK_TEST(a_view_reads_a_terminal_without_copying_it) {
+    // The claim is exact: repainting and typing take no snapshot at all. The
+    // one snapshot a view may still take is for the clipboard TEXT, and only
+    // after the serial says it changed — which is what the serial is for.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{40, 6};
+    CountingSubsession session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 40, 6});
+    session.feed_output("a line the child printed\r\n");
+
+    ckv::scene::Surface surface(ckv::Size{40, 6}, ckv::Cell{});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 40, 6});
+    for (int frame = 0; frame < 10; ++frame) view.draw(painter);
+    CK_CHECK(view.on_text(ckv::TextEvent{"typed"}));
+    ckv::KeyEvent up;
+    up.chord.key = ckv::Key::Up;
+    CK_CHECK(view.on_key(up));
+    ckv::KeyEvent page_up;
+    page_up.chord.key = ckv::Key::PageUp;
+    CK_CHECK(view.on_key(page_up));
+
+    CK_CHECK(session.snapshots == 0);
+    // And it did read the cheap one, so this is not passing because the view
+    // stopped looking at the terminal altogether.
+    CK_CHECK(session.statuses > 0);
+    // The content still arrived on screen and the input still reached the child.
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "a");
+    CK_CHECK(session.take_pending_input().find("typed") != std::string::npos);
+}
 
 CK_TEST(terminal_view_paints_private_snapshot_cells_and_routes_input) {
     ckv::term::TerminalEmulator session;

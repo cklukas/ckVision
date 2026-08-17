@@ -1906,6 +1906,10 @@ public:
         return std::span<const ckv::Cell>(cells_.data(), cells_.size());
     }
     std::span<const ckv::Cell> scrollback() const noexcept override { return {}; }
+    std::span<const ckv::core::TerminalRaster> rasters() const noexcept override { return {}; }
+    std::span<const ckv::core::TerminalDiagnostic> diagnostics() const noexcept override {
+        return {};
+    }
     const ckv::core::TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
     void feed_output(std::string_view bytes) override { fed += std::string(bytes); }
     void resize(ckv::Size cells, ckv::Size) override { resized_to = cells; }

@@ -38,6 +38,8 @@ public:
     // only the cells it is going to send.
     std::span<const Cell> cells() const noexcept override;
     std::span<const Cell> scrollback() const noexcept override;
+    std::span<const TerminalRaster> rasters() const noexcept override;
+    std::span<const TerminalDiagnostic> diagnostics() const noexcept override;
 
     // What has changed since `clear_damage()`. A host that has this does not
     // have to keep the previous screen and compare: the emulator already knew

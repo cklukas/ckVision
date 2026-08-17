@@ -173,17 +173,20 @@ void TerminalView::on_attached() {
 
 void TerminalView::on_focus(const FocusEvent& event) {
     focused_ = event.gained;
-    if (session_ != nullptr && session_->snapshot().focus_reporting_enabled)
+    if (session_ != nullptr && session_->status().focus_reporting_enabled)
         session_->send_input(event.gained ? "\x1b[I" : "\x1b[O");
     invalidate();
 }
 
 void TerminalView::on_terminal_subsession_changed(const core::TerminalSubsession& session) {
     if (&session != session_) return;
-    const core::TerminalSnapshot snapshot = session_->snapshot();
-    if (snapshot.clipboard_serial != forwarded_clipboard_serial_) {
-        forwarded_clipboard_serial_ = snapshot.clipboard_serial;
-        if (on_clipboard_write) on_clipboard_write(snapshot.clipboard_text);
+    // The serial first, and the text only if it has moved. That is what the
+    // serial is for: the clipboard text is the one payload a snapshot carries
+    // that a host wants rarely, and this is called on every change.
+    const std::uint64_t serial = session_->status().clipboard_serial;
+    if (serial != forwarded_clipboard_serial_) {
+        forwarded_clipboard_serial_ = serial;
+        if (on_clipboard_write) on_clipboard_write(session_->snapshot().clipboard_text);
     }
     invalidate();
 }
@@ -191,7 +194,7 @@ void TerminalView::on_terminal_subsession_changed(const core::TerminalSubsession
 std::optional<CursorState> TerminalView::cursor_state() const {
     if (!focused_ || scrollback_offset_ != 0 || session_ == nullptr || bounds().width <= 0 || bounds().height <= 0)
         return std::nullopt;
-    const core::TerminalSnapshot snapshot = session_->snapshot();
+    const core::TerminalStatus snapshot = session_->status();
     if (!snapshot.cursor.visible || snapshot.cursor.position.x < 0 || snapshot.cursor.position.y < 0)
         return std::nullopt;
     // A cursor past the edge is held at the edge rather than withdrawn.
@@ -240,10 +243,18 @@ void TerminalView::draw(scene::Painter& painter) {
     const Rect area{0, 0, bounds().width, bounds().height};
     painter.fill(area, Cell::from_grapheme(" ", fallback));
     if (session_ == nullptr) return;
-    const core::TerminalSnapshot snapshot = session_->snapshot();
+    // Borrowed, not copied. This runs on every repaint of every terminal, and a
+    // snapshot carries the whole history: at ten thousand lines that is tens of
+    // megabytes per frame per window, and for a ckmux mirror it would be that
+    // much again for every keystroke. Reading what changed and where it lives is
+    // exactly what U0-b is for.
+    const core::TerminalStatus snapshot = session_->status();
+    const std::span<const Cell> grid = session_->cells();
+    const std::span<const Cell> history = session_->scrollback();
     const int rows = std::min(bounds().height, snapshot.cells.height);
     const int columns = std::min(bounds().width, snapshot.cells.width);
-    const int history_rows = static_cast<int>(snapshot.scrollback.size() / static_cast<std::size_t>(snapshot.cells.width));
+    const int history_rows =
+        static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, snapshot.cells.width)));
     const int total_rows = history_rows + snapshot.cells.height;
     scrollback_offset_ = std::clamp(scrollback_offset_, 0, std::max(0, total_rows - rows));
     const int first_row = std::max(0, total_rows - rows - scrollback_offset_);
@@ -259,7 +270,7 @@ void TerminalView::draw(scene::Painter& painter) {
     }
     for (int y = 0; y < rows; ++y) {
         const int source_row = first_row + y;
-        const std::vector<Cell>& source = source_row < history_rows ? snapshot.scrollback : snapshot.cell_buffer;
+        const std::span<const Cell>& source = source_row < history_rows ? history : grid;
         const int source_y = source_row < history_rows ? source_row : source_row - history_rows;
         for (int x = 0; x < columns; ++x) {
             const Cell& cell = source[static_cast<std::size_t>(source_y * snapshot.cells.width + x)];
@@ -274,7 +285,7 @@ void TerminalView::draw(scene::Painter& painter) {
             painter.draw_text(Point{x, y}, cell.grapheme(), style);
         }
     }
-    for (const core::TerminalRaster& raster : snapshot.rasters) {
+    for (const core::TerminalRaster& raster : session_->rasters()) {
         if (raster.id == 0 || raster.image == nullptr) continue;
         const Rect anchor{raster.anchor.x, raster.anchor.y, raster.cell_extent.width, raster.cell_extent.height};
         painter.draw_image(anchor, raster.id, raster.image, [&raster, fallback, anchor](scene::Painter& fallback_painter) {
@@ -287,11 +298,12 @@ void TerminalView::draw(scene::Painter& painter) {
     else if (snapshot.state == core::TerminalSubsessionState::Failed && bounds().height > 0)
         painter.draw_text(Point{0, bounds().height - 1}, "[terminal failed]", fallback);
     else if (bounds().height > 0) {
-        const auto diagnostic = std::find_if(snapshot.diagnostics.rbegin(), snapshot.diagnostics.rend(),
+        const std::span<const core::TerminalDiagnostic> diagnostics = session_->diagnostics();
+        const auto diagnostic = std::find_if(diagnostics.rbegin(), diagnostics.rend(),
                                              [](const core::TerminalDiagnostic& entry) {
                                                  return entry.kind != core::TerminalDiagnostic::Kind::UnsupportedSequence;
                                              });
-        if (diagnostic != snapshot.diagnostics.rend())
+        if (diagnostic != diagnostics.rend())
             painter.draw_text(Point{0, bounds().height - 1}, "[terminal: " + diagnostic->message + "]", fallback);
     }
 }
@@ -409,7 +421,8 @@ bool TerminalView::on_key(const KeyEvent& event) {
         if (event.action == KeyAction::Press && on_parent_escape) on_parent_escape();
         return true;
     }
-    const core::TerminalKeyboardFlags keyboard_flags = session_->snapshot().keyboard_flags;
+    const core::TerminalStatus status = session_->status();
+    const core::TerminalKeyboardFlags keyboard_flags = status.keyboard_flags;
     if (keyboard_flags != core::TerminalKeyboardFlags::None) {
         const std::string kitty = encode_kitty_key(event, keyboard_flags);
         if (!kitty.empty()) {
@@ -418,16 +431,17 @@ bool TerminalView::on_key(const KeyEvent& event) {
         }
     }
     if (event.action == KeyAction::Release) return false;
-    if ((event.chord.key == Key::PageUp || event.chord.key == Key::PageDown) && !session_->snapshot().alternate_buffer) {
-        const core::TerminalSnapshot snapshot = session_->snapshot();
-        const int history_rows = static_cast<int>(snapshot.scrollback.size() / static_cast<std::size_t>(snapshot.cells.width));
+    if ((event.chord.key == Key::PageUp || event.chord.key == Key::PageDown) && !status.alternate_buffer) {
+        const int width = std::max(1, status.cells.width);
+        const int history_rows =
+            static_cast<int>(session_->scrollback().size() / static_cast<std::size_t>(width));
         const int maximum = std::max(0, history_rows);
         const int page = std::max(1, bounds().height - 1);
         scrollback_offset_ = std::clamp(scrollback_offset_ + (event.chord.key == Key::PageUp ? page : -page), 0, maximum);
         invalidate();
         return true;
     }
-    const std::string encoded = encode_key(event, session_->snapshot().application_cursor_keys);
+    const std::string encoded = encode_key(event, status.application_cursor_keys);
     if (encoded.empty()) return false;
     session_->send_input(encoded);
     return true;
@@ -435,7 +449,7 @@ bool TerminalView::on_key(const KeyEvent& event) {
 
 bool TerminalView::on_text(const TextEvent& event) {
     if (event.text.empty()) return false;
-    if (event.from_paste && session_->snapshot().bracketed_paste_enabled)
+    if (event.from_paste && session_->status().bracketed_paste_enabled)
         session_->send_input("\x1b[200~" + event.text + "\x1b[201~");
     else
         session_->send_input(event.text);
@@ -484,18 +498,21 @@ std::optional<Point> TerminalView::local_cell(Point absolute) const {
 
 std::string TerminalView::selected_text() const {
     if (!selection_start_ || !selection_end_ || session_ == nullptr) return {};
-    const core::TerminalSnapshot snapshot = session_->snapshot();
+    const core::TerminalStatus snapshot = session_->status();
+    const std::span<const Cell> grid = session_->cells();
+    const std::span<const Cell> history = session_->scrollback();
     Point first = *selection_start_;
     Point last = *selection_end_;
     if (last.y < first.y || (last.y == first.y && last.x < first.x)) std::swap(first, last);
-    const int history_rows = static_cast<int>(snapshot.scrollback.size() / static_cast<std::size_t>(snapshot.cells.width));
+    const int history_rows =
+        static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, snapshot.cells.width)));
     const int total_rows = history_rows + snapshot.cells.height;
     const int visible_rows = std::min(bounds().height, snapshot.cells.height);
     const int first_visible_row = std::max(0, total_rows - visible_rows - scrollback_offset_);
     std::string text;
     for (int y = std::max(0, first.y); y <= std::min(last.y, visible_rows - 1); ++y) {
         const int source_row = first_visible_row + y;
-        const std::vector<Cell>& source = source_row < history_rows ? snapshot.scrollback : snapshot.cell_buffer;
+        const std::span<const Cell>& source = source_row < history_rows ? history : grid;
         const int source_y = source_row < history_rows ? source_row : source_row - history_rows;
         const int begin = y == first.y ? std::max(0, first.x) : 0;
         const int end = y == last.y ? std::min(last.x, snapshot.cells.width - 1) : snapshot.cells.width - 1;
@@ -521,7 +538,7 @@ bool TerminalView::on_mouse(const MouseEvent& event) {
         invalidate();
         return true;
     }
-    const core::TerminalSnapshot snapshot = session_->snapshot();
+    const core::TerminalStatus snapshot = session_->status();
     if (!snapshot.mouse_reporting_enabled) return forward_alternate_scroll(event, snapshot);
     const std::string encoded = encode_mouse(event, snapshot.mouse_encoding);
     if (encoded.empty()) return false;
@@ -530,7 +547,7 @@ bool TerminalView::on_mouse(const MouseEvent& event) {
 }
 
 bool TerminalView::forward_alternate_scroll(const MouseEvent& event,
-                                            const core::TerminalSnapshot& snapshot) {
+                                            const core::TerminalStatus& snapshot) {
     // Only on the alternate screen. A full-screen program owns the whole
     // window and has somewhere to scroll to; on the primary buffer the wheel
     // belongs to the terminal's own history, and sending arrow keys there

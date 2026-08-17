@@ -110,6 +110,14 @@ std::span<const Cell> TerminalEmulator::scrollback() const noexcept {
                                  scrollback_.size() - scrollback_begin_);
 }
 
+std::span<const TerminalRaster> TerminalEmulator::rasters() const noexcept {
+    return std::span<const TerminalRaster>(rasters_.data(), rasters_.size());
+}
+
+std::span<const TerminalDiagnostic> TerminalEmulator::diagnostics() const noexcept {
+    return std::span<const TerminalDiagnostic>(diagnostics_.data(), diagnostics_.size());
+}
+
 TerminalSnapshot TerminalEmulator::snapshot() const { return snapshot(TerminalSnapshotOptions{}); }
 
 TerminalStatus TerminalEmulator::status() const {

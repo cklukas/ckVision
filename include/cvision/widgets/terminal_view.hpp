@@ -55,7 +55,7 @@ private:
     std::string encode_mouse(const MouseEvent& event, core::TerminalMouseEncoding encoding) const;
     // Alternate scroll (DEC mode 1007): a wheel notch over a full-screen
     // program that is not tracking the mouse becomes cursor keys.
-    bool forward_alternate_scroll(const MouseEvent& event, const core::TerminalSnapshot& snapshot);
+    bool forward_alternate_scroll(const MouseEvent& event, const core::TerminalStatus& snapshot);
     std::optional<Point> local_cell(Point absolute) const;
     std::string selected_text() const;
 

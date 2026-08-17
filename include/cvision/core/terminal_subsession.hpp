@@ -492,6 +492,13 @@ public:
     virtual void clear_damage() noexcept = 0;
     virtual std::span<const ::ckv::Cell> cells() const noexcept = 0;
     virtual std::span<const ::ckv::Cell> scrollback() const noexcept = 0;
+    // The pictures a child has drawn, and what the terminal has had to
+    // complain about. Borrows for the same reason the cells are: a view repaints
+    // at frame rate and reads both every time, so the alternative is a snapshot
+    // per frame — and a snapshot carries the history, which is the copy U0-b
+    // exists to remove.
+    virtual std::span<const TerminalRaster> rasters() const noexcept = 0;
+    virtual std::span<const TerminalDiagnostic> diagnostics() const noexcept = 0;
     virtual const TerminalCapabilityProfile& profile() const noexcept = 0;
     virtual void feed_output(std::string_view bytes) = 0;
     virtual void resize(::ckv::Size cells, ::ckv::Size cell_pixels) = 0;

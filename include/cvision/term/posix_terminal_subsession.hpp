@@ -36,6 +36,10 @@ public:
     }
     std::span<const Cell> cells() const noexcept override { return emulator_.cells(); }
     std::span<const Cell> scrollback() const noexcept override { return emulator_.scrollback(); }
+    std::span<const TerminalRaster> rasters() const noexcept override { return emulator_.rasters(); }
+    std::span<const TerminalDiagnostic> diagnostics() const noexcept override {
+        return emulator_.diagnostics();
+    }
     const TerminalDamage& damage() const noexcept override { return emulator_.damage(); }
     void clear_damage() noexcept override { emulator_.clear_damage(); }
     const TerminalCapabilityProfile& profile() const noexcept override { return emulator_.profile(); }
