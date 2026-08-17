@@ -314,9 +314,7 @@ void Presenter::build_presentation(FrameView frame, const std::vector<ActiveRast
 
 void Presenter::mark_rasters_repainted(std::vector<ActiveRaster>& rasters, int y, int x, int end) noexcept {
     for (ActiveRaster& raster : rasters) {
-        // A picture deliberately held back mid-drag is not woken by the very
-        // repaint that is dragging it.
-        if (raster.needs_emit || raster.awaiting_send) continue;
+        if (raster.needs_emit) continue;
         const Rect footprint = raster_footprint(raster.slice);
         if (y < footprint.y || y >= footprint.y + footprint.height) continue;
         if (end <= footprint.x || x >= footprint.x + footprint.width) continue;
@@ -587,19 +585,17 @@ void Presenter::present(FrameView frame, CursorState cursor,
             for (const ActiveRaster& previous : previous_active_rasters_) {
                 if (!(previous.key == active.key)) continue;
                 active.encoded = previous.encoded;
-                const bool moved = !(previous.slice.visible_rect == slice.visible_rect) ||
-                                   !(previous.slice.full_anchor == slice.full_anchor);
-                active.moving = moved;
-                active.needs_emit = previous.slice.id != slice.id || moved || previous.awaiting_send;
-                // Two frames of movement is a drag, not a jump. Sending the
-                // picture to every position it passes through costs the host
-                // a full decode per frame for pixels that are about to be
-                // wrong again; it goes down on the first frame that holds
-                // still, which is the position anybody was looking for.
-                if (moved && previous.moving) {
-                    active.needs_emit = false;
-                    active.awaiting_send = true;
-                }
+                // A picture that moved is sent again, every time, at every
+                // position it passes through. Holding it back until the
+                // movement stopped was measurably cheaper and visibly wrong:
+                // the picture vanished for the whole of a drag and came back
+                // only when some unrelated repaint happened to ask for it.
+                // Cheap is not a reason to leave the screen lying, and the
+                // encode is cached, so what a moved picture costs now is the
+                // send and nothing else.
+                active.needs_emit = previous.slice.id != slice.id ||
+                                    !(previous.slice.visible_rect == slice.visible_rect) ||
+                                    !(previous.slice.full_anchor == slice.full_anchor);
                 break;
             }
         }

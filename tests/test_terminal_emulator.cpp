@@ -379,6 +379,40 @@ CK_TEST(text_written_over_a_child_picture_erases_it_the_way_a_terminal_does) {
     CK_CHECK(emulator.snapshot().rasters.empty());
 }
 
+CK_TEST(a_child_re_sending_the_same_picture_gets_a_whole_one_back) {
+    // The same bytes are decoded once and the picture reused — but a picture
+    // on screen is erased cell by cell as a program writes over it, and those
+    // erasures must not reach the copy kept for the next send. Otherwise a
+    // program redrawing itself (a dialog being dragged sends its picture
+    // again on every frame) gets back what is left of the last one.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    const std::string picture = "\x1bPq#0;2;100;0;0!24~-!24~\x1b\\";
+
+    emulator.feed_output("\x1b[1;1H" + picture);
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    const auto count_opaque = [](const term::TerminalSnapshot& snapshot) {
+        int opaque = 0;
+        const Image& image = *snapshot.rasters.front().image;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x)
+                if (image.pixel(x, y).a != 0) ++opaque;
+        return opaque;
+    };
+    const int whole = count_opaque(emulator.snapshot());
+    CK_CHECK(whole > 0);
+
+    // Write over part of it, then have the child send the very same bytes.
+    emulator.feed_output("\x1b[1;1Hx");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(count_opaque(emulator.snapshot()) < whole);
+    emulator.feed_output("\x1b[1;1H" + picture);
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(count_opaque(emulator.snapshot()) == whole);
+}
+
 CK_TEST(erasing_the_cells_under_a_child_picture_removes_it) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{20, 6};

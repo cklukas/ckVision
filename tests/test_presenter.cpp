@@ -401,11 +401,13 @@ CK_TEST(an_unchanged_picture_on_untouched_cells_is_not_sent_again) {
     CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") != std::string_view::npos);
 }
 
-CK_TEST(a_picture_being_dragged_goes_down_where_the_drag_stops) {
-    // A terminal cannot move a picture, only draw it again — a quarter of a
-    // megabyte of Sixel for a dialog-sized one — and a drag is dozens of
-    // positions the reader never asked to see it at. It is therefore sent
-    // once the movement stops, not at every position on the way.
+CK_TEST(a_picture_that_moves_is_sent_again_at_every_position) {
+    // It once waited for the drag to stop, on the reasoning that the
+    // intermediate positions were about to be wrong anyway. What that looked
+    // like on a screen: the picture vanished the moment a drag began and came
+    // back only if some unrelated repaint happened to ask for it. A terminal
+    // that decides not to paint something it was told to paint is broken
+    // however much time it saves, so every move is drawn.
     HeadlessTerminal term(Size{20, 6}, headless_sixel_profile());
     Presenter presenter(term);
     Surface s = make_surface(20, 6, ".");
@@ -415,29 +417,18 @@ CK_TEST(a_picture_being_dragged_goes_down_where_the_drag_stops) {
         const Rect r{x, 1, 7, 1};
         return std::vector<RasterSlice>{{1, r, r, image, true}};
     };
-    const auto sent_since = [&](std::size_t mark) {
-        return term.written_bytes().substr(mark).find("\x1BP0;0;0q") != std::string_view::npos;
-    };
 
     presenter.present(s.view(), CursorState{}, at(0));
-    std::size_t mark = term.written_bytes().size();
-
-    // One step is a move, not yet a drag: it still goes down.
-    presenter.present(s.view(), CursorState{}, at(1));
-    CK_CHECK(sent_since(mark));
-
-    // Two in a row is a drag: the picture waits.
-    mark = term.written_bytes().size();
-    presenter.present(s.view(), CursorState{}, at(2));
-    CK_CHECK(!sent_since(mark));
-    mark = term.written_bytes().size();
-    presenter.present(s.view(), CursorState{}, at(3));
-    CK_CHECK(!sent_since(mark));
-
-    // ...and lands as soon as it holds still.
-    mark = term.written_bytes().size();
-    presenter.present(s.view(), CursorState{}, at(3));
-    CK_CHECK(sent_since(mark));
+    for (int step = 1; step <= 4; ++step) {
+        const std::size_t mark = term.written_bytes().size();
+        presenter.present(s.view(), CursorState{}, at(step));
+        CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") != std::string_view::npos);
+    }
+    // Standing still is the one case that needs nothing: the pixels are
+    // already there and no cell was repainted over them.
+    const std::size_t mark = term.written_bytes().size();
+    presenter.present(s.view(), CursorState{}, at(4));
+    CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") == std::string_view::npos);
 }
 
 CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {

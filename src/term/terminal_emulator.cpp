@@ -1537,6 +1537,14 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
     }
 
     RasterCoverage coverage;
+    // Whether these pixels are somebody else's too. They are when the picture
+    // came from the decode cache — the same object is handed back every time
+    // a child re-sends identical bytes — and erasing into it there would put
+    // holes in the copy the next reuse hands out, so a picture that was
+    // partly written over would come back partly missing. Treating a shared
+    // image as already handed out makes the first erase copy it, exactly as
+    // it does for pixels a snapshot is still holding.
+    coverage.handed_out = image.use_count() > 1;
     coverage.live_cells.assign(
         static_cast<std::size_t>(std::max(1, cell_extent.width)) * static_cast<std::size_t>(std::max(1, cell_extent.height)),
         true);

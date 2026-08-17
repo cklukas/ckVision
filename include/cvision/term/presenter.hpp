@@ -89,16 +89,6 @@ private:
         // frame. A Sixel only ever paints, so repainting its cells is exactly
         // what erases it, and what was erased has to go back down.
         bool needs_emit = false;
-        // Whether it is in motion: it was somewhere else last frame. A
-        // picture cannot be moved on a terminal, only drawn again — a quarter
-        // of a megabyte of Sixel for a dialog — so one that is still being
-        // dragged is left until it settles rather than redrawn at every
-        // position it passes through on the way.
-        bool moving = false;
-        // Set while a send is owed: the host does not have this picture where
-        // it now is, because the drag it is part of has not finished. It goes
-        // down on the first frame that holds still.
-        bool awaiting_send = false;
     };
 
     Cell presentation_cell(FrameView frame, Point p,
