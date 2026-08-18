@@ -419,6 +419,10 @@ void Application::set_help_provider(std::function<void(const std::string&)> prov
     help_provider_ = std::move(provider);
 }
 
+void Application::set_capability_changed_handler(std::function<void()> handler) {
+    capability_changed_handler_ = std::move(handler);
+}
+
 void Application::set_command_handler(CommandId id, std::function<void()> handler) {
     commands_.set_handler(id, std::move(handler));
 }
@@ -748,6 +752,11 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // presenter reset so the old capability's terminal pixels
                     // cannot survive the transition.
                     invalidate_all();
+                    // After the repaint, not before: a handler reading
+                    // `terminal.capabilities()` here sees the value this
+                    // dispatch just repainted for, not a stale one from
+                    // before the redraw decided anything.
+                    if (capability_changed_handler_) capability_changed_handler_();
                     return true;
                 } else {
                     static_assert(!sizeof(T*), "unhandled TerminalEvent alternative");

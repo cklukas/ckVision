@@ -362,6 +362,19 @@ public:
     // own commands().set_handler(commands().standard().help, ...).
     void set_help_provider(std::function<void(const std::string&)> provider);
 
+    // --- Host capability changes -----------------------------------------
+    //
+    // A `CapabilityChangedEvent` from the terminal already forces a full
+    // repaint on its own (dispatch()); this is for a host that needs to know
+    // too, not just redraw. The evidence that resolves a probe (DA1, an
+    // XTSMGRAPHICS reply, a DECRQM answer) arrives asynchronously and after
+    // this application, and the terminal it wraps, already exist — so a host
+    // that reads `terminal.capabilities()` once at construction reads
+    // whatever was true before any reply had a chance to land, permanently.
+    // Fired after the same `invalidate_all()`, so `terminal.capabilities()`
+    // inside the handler reads the value dispatch just repainted for.
+    void set_capability_changed_handler(std::function<void()> handler);
+
     // --- Mouse input capture -------------------------------------------
     //
     // While set, EVERY MouseEvent routes directly to `view`, bypassing
@@ -714,6 +727,7 @@ private:
     bool run_active_ = false;
 
     std::function<void(const std::string&)> help_provider_;
+    std::function<void()> capability_changed_handler_;
 
     struct Timer {
         TimerId id;
