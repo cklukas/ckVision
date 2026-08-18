@@ -522,16 +522,203 @@ CK_TEST(alternate_scroll_speaks_the_cursor_key_dialect_the_child_selected) {
     CK_CHECK(session.take_pending_input() == "\x1bOB\x1bOB\x1bOB");
 }
 
-CK_TEST(a_wheel_stays_out_of_the_prompt_on_the_primary_buffer) {
-    // On the primary buffer the wheel belongs to the terminal's own history;
-    // arrow keys sent there would walk the shell's command history instead.
-    ckv::term::TerminalEmulator session;
+CK_TEST(a_wheel_on_the_primary_buffer_walks_the_terminals_own_history) {
+    // On the primary buffer the wheel belongs to the terminal's own history:
+    // nothing goes to the child — arrow keys sent there would walk the
+    // shell's command history instead — and the view itself moves.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
     ckv::widgets::TerminalView view(session);
     Fixture fixture;
     view.set_context(fixture.context());
-    view.set_bounds(ckv::Rect{0, 0, 10, 3});
-    CK_CHECK(!view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
-                                            ckv::Point{2, 1}, {}, ckv::Modifier::None}));
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+
+    const ckv::MouseEvent wheel_up{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp,
+                                   ckv::Point{1, 0}, {}, ckv::Modifier::None};
+    CK_CHECK(view.on_mouse(wheel_up));
+    CK_CHECK(session.take_pending_input().empty());
+    // A notch asks for three rows; one is all the history there is.
+    CK_CHECK(view.scroll_state().offset == 1);
+
+    ckv::scene::Surface surface(ckv::Size{4, 2}, ckv::Cell{});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 4, 2});
+    view.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "o");  // "one", from history
+
+    const ckv::MouseEvent wheel_down{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                     ckv::Point{1, 0}, {}, ckv::Modifier::None};
+    CK_CHECK(view.on_mouse(wheel_down));
+    CK_CHECK(view.scroll_state().offset == 0);
+    CK_CHECK(session.take_pending_input().empty());
+}
+
+CK_TEST(typing_returns_a_scrolled_view_to_the_live_edge) {
+    // "Any key exits to live": the keystroke lands at the prompt, and the
+    // reader who sent it wants to watch it land.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+    view.set_scrollback_offset(1);
+    CK_CHECK(view.scroll_state().offset == 1);
+
+    CK_CHECK(view.on_text(ckv::TextEvent{"x"}));
+    CK_CHECK(view.scroll_state().offset == 0);
+    CK_CHECK(session.take_pending_input() == "x");
+
+    view.set_scrollback_offset(1);
+    ckv::KeyEvent enter;
+    enter.chord.key = ckv::Key::Enter;
+    CK_CHECK(view.on_key(enter));
+    CK_CHECK(view.scroll_state().offset == 0);
+    CK_CHECK(session.take_pending_input() == "\r");
+}
+
+CK_TEST(history_growth_does_not_move_a_reading_view) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+    view.notify_terminal_subsession_changed(session);
+
+    // The reader walks up to the oldest line...
+    view.set_scrollback_offset(1);
+    ckv::scene::Surface surface(ckv::Size{4, 2}, ckv::Cell{});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 4, 2});
+    view.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "o");
+
+    // ...the child prints on; the rows under the reader's eyes stay put.
+    session.feed_output("\r\nfor");
+    view.notify_terminal_subsession_changed(session);
+    view.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "o");
+    CK_CHECK(view.scroll_state().offset == 2);
+
+    // The live edge, by contrast, follows the child.
+    view.set_scrollback_offset(0);
+    session.feed_output("\r\nfiv");
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(view.scroll_state().offset == 0);
+    view.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 1}).grapheme() == "f");  // "fiv" on the bottom row
+}
+
+CK_TEST(a_shift_wheel_is_the_hosts_even_over_a_mouse_tracking_child) {
+    // A Shift-marked gesture is the host's, here as everywhere: with mouse
+    // reporting on, Shift+wheel still walks the terminal's own history and
+    // sends the child nothing.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+    session.feed_output("\x1b[?1000h\x1b[?1006h");
+    session.take_pending_input();
+
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp,
+                                           ckv::Point{1, 0}, {}, ckv::Modifier::Shift}));
+    CK_CHECK(session.take_pending_input().empty());
+    CK_CHECK(view.scroll_state().offset == 1);
+
+    // The unshifted wheel stays the child's own mouse report.
+    CK_CHECK(view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp,
+                                           ckv::Point{1, 0}, {}, ckv::Modifier::None}));
+    CK_CHECK(session.take_pending_input() == "\x1b[<64;2;1M");
+}
+
+CK_TEST(the_alternate_buffer_stands_on_no_history) {
+    // A stale offset from the prompt must not paint the prompt's history
+    // above a full-screen program's screen.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+    view.set_scrollback_offset(1);
+
+    session.feed_output("\x1b[?1049h");
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(view.scroll_state().offset == 0);
+    CK_CHECK(!view.scroll_state().primary_screen);
+
+    ckv::scene::Surface surface(ckv::Size{4, 2}, ckv::Cell{});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 4, 2});
+    view.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == " ");  // the fresh alternate screen
+}
+
+CK_TEST(the_scroll_seam_reports_moves_growth_and_buffer_flips_once_each) {
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+    view.notify_terminal_subsession_changed(session);
+
+    int changes = 0;
+    view.on_scroll_state_changed = [&changes] { ++changes; };
+
+    view.set_scrollback_offset(1);
+    CK_CHECK(changes == 1);
+    view.set_scrollback_offset(1);  // the same place is not a change
+    CK_CHECK(changes == 1);
+
+    session.feed_output("\r\nfor");  // history grows: total_rows moved
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(changes == 2);
+    view.notify_terminal_subsession_changed(session);  // nothing new to say
+    CK_CHECK(changes == 2);
+
+    session.feed_output("\x1b[?1049h");  // the buffer flips
+    view.notify_terminal_subsession_changed(session);
+    CK_CHECK(changes == 3);
+}
+
+CK_TEST(the_primary_screens_plain_paging_keys_stay_local_under_the_kitty_protocol) {
+    // Consistency across keyboard protocols: plain PageUp pages the history
+    // whether or not the child asked for kitty encodings — and its release is
+    // claimed with it, so an event-reporting child never sees a release whose
+    // press never arrived.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{4, 2};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 4, 2});
+    session.feed_output("one\r\ntwo\r\ntri");
+    session.feed_output("\x1b[>3u");  // disambiguate + report event types
+    session.take_pending_input();
+
+    ckv::KeyEvent page_up;
+    page_up.chord.key = ckv::Key::PageUp;
+    CK_CHECK(view.on_key(page_up));
+    CK_CHECK(view.scroll_state().offset == 1);
+    CK_CHECK(session.take_pending_input().empty());
+
+    ckv::KeyEvent released = page_up;
+    released.action = ckv::KeyAction::Release;
+    CK_CHECK(view.on_key(released));
     CK_CHECK(session.take_pending_input().empty());
 }
 

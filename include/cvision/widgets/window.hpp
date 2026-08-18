@@ -31,19 +31,24 @@
 
 namespace ckv::widgets {
 
-// Which border row a frame overlay lives on (M10/WP-20). Deliberately
-// just these two, not Dock's full Top/Bottom/Left/Right/Center set: a
-// window's side borders are one cell wide, with no room to host
-// meaningful content — every real frame-overlay use (a path indicator,
-// a "line:col" readout) is a short text run along the top or bottom.
-enum class Edge { Top, Bottom };
+// Which border a frame overlay lives on (M10/WP-20). Top and Bottom
+// carry the short text runs (a path indicator, a "line:col" readout)
+// that a one-row border has room for. Left and Right are one cell wide
+// — no room for words, exactly room for the one overlay a side border
+// has always carried on the classic desktop: a scrollbar standing in
+// the frame between the corner cells, costing the content nothing. A
+// side slot spans rows, so its `alignment` works down the border the
+// way a top slot's works across it, and `Fill` — the shape a scrollbar
+// wants — takes the whole run between the corners. Still not Dock's
+// Center: a border has no middle ground to give.
+enum class Edge { Top, Bottom, Left, Right };
 
 // `alignment` is `ui::Alignment` (Start/Center/End/Fill) — the SAME
 // enum Row/Column/Grid already use, positioning the overlay within its
-// edge's own row exactly the way align_cross_axis positions a child
-// within its container. `offset` nudges the result right (positive) or
-// left (negative) from where `alignment` alone would place it, still
-// clamped to the row's own available span.
+// edge's own row or column exactly the way align_cross_axis positions
+// a child within its container. `offset` nudges the result along the
+// edge — right or down for positive — from where `alignment` alone
+// would place it, still clamped to the edge's own available span.
 //
 // Edge::Top only accepts Start/End: the title already owns Center, and
 // Window::add_frame_overlay CKV_ASSERTs against Top+Center or Top+Fill

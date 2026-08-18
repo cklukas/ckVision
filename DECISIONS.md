@@ -912,6 +912,32 @@ non-default button close the dialog (silently turns an Apply into a close); and
 closing from `materialize_dialog` (it has no window — the wiring belongs where
 the window is).
 
+**D-051 — A terminal's scrollbar stands on the window frame, and side borders
+can carry an overlay.**
+`Window`'s frame overlays (M10/WP-20) accept `Edge::Left`/`Edge::Right`: a
+one-cell-wide slot spanning the border rows between the corner cells, aligned
+down the edge the way a top slot aligns across it. The reason is the one
+overlay a side border has always carried on the classic desktop — a
+scrollbar — and the reason THAT belongs on the frame rather than inside the
+content is specific to terminals: a bar inside the view either covers the
+content's last column or costs it one, and a column that comes and goes is a
+PTY resize the child reflows for. The border cell was always there, so the
+bar's appearing and disappearing is free. `attach_terminal_scrollbar(window,
+view)` packages the binding: `ScrollbarPolicy::Auto` while the terminal is on
+its primary screen (shown exactly while there is somewhere to go), `Hidden` on
+the alternate buffer, positions mapped end-for-end (the bar counts from the
+top of history, the view counts back from the live edge), with
+`TerminalView::scroll_state()`/`on_scroll_state_changed` as the one seam the
+binding observes.
+
+*Rejected:* a Scrollbar child inside `TerminalView` (covers or costs a
+content column, and hosts that treat the window's content view as the
+terminal — a legitimate reading `Window::content()` invites — would find a
+wrapper where they expected the view); `Edge` growing a `Center` (a border
+has no middle ground to give); wheel entry into a separate copy-mode surface
+as the default gesture (reading history is lighter than selecting from it,
+and the transient scroll state costs the reader nothing to leave).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

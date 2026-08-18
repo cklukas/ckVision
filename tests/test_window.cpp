@@ -877,6 +877,26 @@ CK_TEST(frame_overlay_width_is_clamped_to_fit_a_narrow_window) {
     CK_CHECK(overlay->bounds().x >= 0);
 }
 
+CK_TEST(a_side_frame_overlay_stands_on_the_border_between_the_corners) {
+    // The classic desktop's place for a scrollbar: the window's own border,
+    // one cell wide, spanning the rows between the title's corner cell and
+    // the resize grip's — so it costs the content nothing.
+    Fixture f;
+    auto w = make_window(f);
+    w->set_bounds(Rect{0, 0, 30, 10});
+    auto* right = w->add_frame_overlay(std::make_unique<View>(),
+                                       FrameSlot{Edge::Right, ckv::ui::Alignment::Fill});
+    CK_CHECK(right->bounds() == (Rect{29, 1, 1, 8}));
+    auto* left = w->add_frame_overlay(std::make_unique<View>(),
+                                      FrameSlot{Edge::Left, ckv::ui::Alignment::Fill});
+    CK_CHECK(left->bounds() == (Rect{0, 1, 1, 8}));
+
+    // And it keeps standing there as the window resizes.
+    w->set_bounds(Rect{0, 0, 50, 20});
+    CK_CHECK(right->bounds() == (Rect{49, 1, 1, 18}));
+    CK_CHECK(left->bounds() == (Rect{0, 1, 1, 18}));
+}
+
 CK_TEST(remove_frame_overlay_returns_ownership_and_stops_tracking_it) {
     Fixture f;
     auto w = make_window(f);

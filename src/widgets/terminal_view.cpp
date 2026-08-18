@@ -164,6 +164,72 @@ TerminalView::TerminalView(core::TerminalSubsession& session) : session_(&sessio
     set_focus_policy(ui::FocusPolicy::TabStop);
 }
 
+namespace {
+
+// Three lines to a wheel notch, the convention every terminal that offers
+// wheel scrolling uses; a wheel that moved one line would need three times
+// the turning for the same page.
+constexpr int kWheelLinesPerNotch = 3;
+
+int history_row_count(std::span<const Cell> history, int width) {
+    return static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, width)));
+}
+
+}  // namespace
+
+TerminalView::ScrollState TerminalView::scroll_state_from(const core::TerminalStatus& status) const {
+    ScrollState state;
+    state.primary_screen = !status.alternate_buffer;
+    const int history_rows =
+        state.primary_screen ? history_row_count(session_->scrollback(), status.cells.width) : 0;
+    state.total_rows = history_rows + std::max(0, status.cells.height);
+    state.viewport_rows = std::max(0, std::min(bounds().height, status.cells.height));
+    state.offset = state.primary_screen
+                       ? std::clamp(scrollback_offset_, 0,
+                                    std::max(0, state.total_rows - state.viewport_rows))
+                       : 0;
+    return state;
+}
+
+TerminalView::ScrollState TerminalView::scroll_state() const {
+    if (session_ == nullptr) return {};
+    return scroll_state_from(session_->status());
+}
+
+void TerminalView::set_scrollback_offset(int rows) {
+    if (session_ == nullptr) return;
+    apply_scrollback_offset(rows, session_->status());
+}
+
+void TerminalView::apply_scrollback_offset(int rows, const core::TerminalStatus& status) {
+    const ScrollState state = scroll_state_from(status);
+    const int maximum =
+        state.primary_screen ? std::max(0, state.total_rows - state.viewport_rows) : 0;
+    const int clamped = std::clamp(rows, 0, maximum);
+    if (clamped != scrollback_offset_) {
+        scrollback_offset_ = clamped;
+        invalidate();
+    }
+    publish_scroll_state(status);
+}
+
+void TerminalView::return_to_live(const core::TerminalStatus& status) {
+    if (scrollback_offset_ == 0) return;
+    scrollback_offset_ = 0;
+    invalidate();
+    publish_scroll_state(status);
+}
+
+void TerminalView::publish_scroll_state(const core::TerminalStatus& status) {
+    const ScrollState state = scroll_state_from(status);
+    // The stored offset follows the published clamp, so a later relative step
+    // ("three more rows up") starts from where the reader actually is.
+    scrollback_offset_ = state.offset;
+    if (state == published_scroll_state_) return;
+    published_scroll_state_ = state;
+    if (on_scroll_state_changed) on_scroll_state_changed();
+}
+
 void TerminalView::on_attached() {
     if (text_role_ == ui::kInvalidRole) text_role_ = context().roles->intern("ckv.terminal.text", Style{});
     if (!has_explicit_cell_metrics_ && context().app != nullptr)
@@ -180,14 +246,23 @@ void TerminalView::on_focus(const FocusEvent& event) {
 
 void TerminalView::on_terminal_subsession_changed(const core::TerminalSubsession& session) {
     if (&session != session_) return;
+    const core::TerminalStatus status = session_->status();
     // The serial first, and the text only if it has moved. That is what the
     // serial is for: the clipboard text is the one payload a snapshot carries
     // that a host wants rarely, and this is called on every change.
-    const std::uint64_t serial = session_->status().clipboard_serial;
+    const std::uint64_t serial = status.clipboard_serial;
     if (serial != forwarded_clipboard_serial_) {
         forwarded_clipboard_serial_ = serial;
         if (on_clipboard_write) on_clipboard_write(session_->snapshot().clipboard_text);
     }
+    // A reader scrolled back is reading; a child that keeps printing must not
+    // slide the text out from under them. Growth is added to the offset so
+    // the same rows stay on screen, and the live edge keeps following.
+    const int history_rows = history_row_count(session_->scrollback(), status.cells.width);
+    if (scrollback_offset_ > 0 && history_rows > last_history_rows_)
+        scrollback_offset_ += history_rows - last_history_rows_;
+    last_history_rows_ = history_rows;
+    publish_scroll_state(status);
     invalidate();
 }
 
@@ -219,8 +294,11 @@ void TerminalView::set_cell_metrics(Size cell_pixels) {
 void TerminalView::on_resized() {
     if (!has_explicit_cell_metrics_ && context().app != nullptr)
         cell_pixels_ = context().app->terminal_cell_pixels();
-    if (session_ != nullptr)
+    if (session_ != nullptr) {
         session_->resize(Size{bounds().width, bounds().height}, cell_pixels_);
+        // The viewport is part of the scroll state, and it just changed.
+        publish_scroll_state(session_->status());
+    }
 }
 
 void TerminalView::draw(scene::Painter& painter) {
@@ -256,6 +334,10 @@ void TerminalView::draw(scene::Painter& painter) {
     const int history_rows =
         static_cast<int>(history.size() / static_cast<std::size_t>(std::max(1, snapshot.cells.width)));
     const int total_rows = history_rows + snapshot.cells.height;
+    // The alternate buffer has no history to stand in: a full-screen program
+    // owns the whole window, and a stale offset from before it started would
+    // paint the prompt's history above its screen.
+    if (snapshot.alternate_buffer) scrollback_offset_ = 0;
     scrollback_offset_ = std::clamp(scrollback_offset_, 0, std::max(0, total_rows - rows));
     const int first_row = std::max(0, total_rows - rows - scrollback_offset_);
     Point selection_first{};
@@ -422,34 +504,43 @@ bool TerminalView::on_key(const KeyEvent& event) {
         return true;
     }
     const core::TerminalStatus status = session_->status();
+    if ((event.chord.key == Key::PageUp || event.chord.key == Key::PageDown) &&
+        event.chord.modifiers == Modifier::None && !status.alternate_buffer) {
+        // The primary screen's plain paging keys are the terminal's own,
+        // under every keyboard protocol alike — and the release is claimed
+        // with the press, so a child that asked for event types never sees a
+        // release whose press never arrived. A modified press stays the
+        // child's: Shift+PageDown is a different key, and one the reader
+        // pressed at something.
+        if (event.action != KeyAction::Release) {
+            const int page = std::max(1, bounds().height - 1);
+            apply_scrollback_offset(
+                scrollback_offset_ + (event.chord.key == Key::PageUp ? page : -page), status);
+        }
+        return true;
+    }
     const core::TerminalKeyboardFlags keyboard_flags = status.keyboard_flags;
     if (keyboard_flags != core::TerminalKeyboardFlags::None) {
         const std::string kitty = encode_kitty_key(event, keyboard_flags);
         if (!kitty.empty()) {
+            return_to_live(status);
             session_->send_input(kitty);
             return true;
         }
     }
     if (event.action == KeyAction::Release) return false;
-    if ((event.chord.key == Key::PageUp || event.chord.key == Key::PageDown) && !status.alternate_buffer) {
-        const int width = std::max(1, status.cells.width);
-        const int history_rows =
-            static_cast<int>(session_->scrollback().size() / static_cast<std::size_t>(width));
-        const int maximum = std::max(0, history_rows);
-        const int page = std::max(1, bounds().height - 1);
-        scrollback_offset_ = std::clamp(scrollback_offset_ + (event.chord.key == Key::PageUp ? page : -page), 0, maximum);
-        invalidate();
-        return true;
-    }
     const std::string encoded = encode_key(event, status.application_cursor_keys);
     if (encoded.empty()) return false;
+    return_to_live(status);
     session_->send_input(encoded);
     return true;
 }
 
 bool TerminalView::on_text(const TextEvent& event) {
     if (event.text.empty()) return false;
-    if (event.from_paste && session_->status().bracketed_paste_enabled)
+    const core::TerminalStatus status = session_->status();
+    return_to_live(status);
+    if (event.from_paste && status.bracketed_paste_enabled)
         session_->send_input("\x1b[200~" + event.text + "\x1b[201~");
     else
         session_->send_input(event.text);
@@ -539,10 +630,25 @@ bool TerminalView::on_mouse(const MouseEvent& event) {
         return true;
     }
     const core::TerminalStatus snapshot = session_->status();
+    if (scroll_history(event, snapshot)) return true;
     if (!snapshot.mouse_reporting_enabled) return forward_alternate_scroll(event, snapshot);
     const std::string encoded = encode_mouse(event, snapshot.mouse_encoding);
     if (encoded.empty()) return false;
     session_->send_input(encoded);
+    return true;
+}
+
+bool TerminalView::scroll_history(const MouseEvent& event, const core::TerminalStatus& snapshot) {
+    // The wheel over the primary screen walks this terminal's own history —
+    // whenever the child is not watching the mouse, and under Shift even when
+    // it is: a Shift-marked gesture is the host's, here as everywhere.
+    if (snapshot.alternate_buffer) return false;
+    if (event.button != MouseButton::WheelUp && event.button != MouseButton::WheelDown) return false;
+    if (snapshot.mouse_reporting_enabled && !has_modifier(event.modifiers, Modifier::Shift))
+        return false;
+    if (!local_cell(event.cell)) return false;
+    const int direction = event.button == MouseButton::WheelUp ? 1 : -1;
+    apply_scrollback_offset(scrollback_offset_ + direction * kWheelLinesPerNotch, snapshot);
     return true;
 }
 
@@ -555,16 +661,12 @@ bool TerminalView::forward_alternate_scroll(const MouseEvent& event,
     if (!snapshot.alternate_buffer || !snapshot.alternate_scroll_enabled) return false;
     if (event.button != MouseButton::WheelUp && event.button != MouseButton::WheelDown) return false;
     if (!local_cell(event.cell)) return false;
-    // Three lines to a notch, the convention every terminal that offers this
-    // uses; a wheel that moved one line would need three times the turning
-    // for the same page.
-    constexpr int kLinesPerNotch = 3;
     const std::string key =
         encode_cursor_key(event.button == MouseButton::WheelUp ? 'A' : 'B', Modifier::None,
                           snapshot.application_cursor_keys);
     std::string bytes;
-    bytes.reserve(key.size() * kLinesPerNotch);
-    for (int line = 0; line < kLinesPerNotch; ++line) bytes += key;
+    bytes.reserve(key.size() * kWheelLinesPerNotch);
+    for (int line = 0; line < kWheelLinesPerNotch; ++line) bytes += key;
     session_->send_input(bytes);
     return true;
 }

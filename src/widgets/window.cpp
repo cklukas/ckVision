@@ -361,6 +361,18 @@ void Window::set_content_margins(int left, int top, int right, int bottom) {
 
 Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
     const Rect b = bounds();
+    if (slot.edge == Edge::Left || slot.edge == Edge::Right) {
+        // A side border's corner cells belong to the frame — the title row
+        // above, the resize grip's row below — so an overlay gets the run
+        // between them, one cell wide, extended per its own vertical hint
+        // and alignment the way a top overlay extends per its horizontal one.
+        const int x = slot.edge == Edge::Left ? 0 : std::max(0, b.width - 1);
+        const auto [aligned_y, height] = ui::align_cross_axis(
+            b.height, view.vertical_size_hint().preferred, slot.alignment, 1, 1);
+        const int max_y = std::max(1, b.height - 1 - height);
+        const int y = std::clamp(aligned_y + slot.offset, 1, max_y);
+        return Rect{x, y, 1, height};
+    }
     // Bottom keeps the original single-overlay margin on BOTH sides (2
     // cells in from each corner — leaving the resize grip's own corner
     // cell untouched, and mirroring the close/zoom controls' own inset

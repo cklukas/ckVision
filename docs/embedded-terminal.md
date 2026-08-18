@@ -106,12 +106,21 @@ opinion about — the 256-color and truecolor markers — and opens in the user'
 home directory, leaving the prompt, `PATH` and the rest to the environment the
 user already has.
 
-PageUp and PageDown navigate the bounded local scrollback. Shift-drag selects
-the rows currently visible (including scrollback) and invokes the view's copy
-callback; ordinary pointer events are forwarded only while the child has
-enabled mouse tracking. The view emits legacy X10 or modern SGR mouse bytes
-according to the child-selected encoding—it never guesses one protocol for
-another.
+Plain PageUp and PageDown navigate the bounded local scrollback, and so does
+the mouse wheel whenever the child is not tracking the mouse (three rows to a
+notch); under Shift the wheel walks the history even over a mouse-tracking
+child, because a Shift-marked gesture is the host's. Modified paging keys
+(Shift+PageUp and friends) stay the child's. A view scrolled back is pinned:
+new output does not slide the rows under the reader's eyes, while the live
+edge keeps following the child — and any key sent to the child returns the
+view to the live edge first, so the keystroke lands where the reader can see
+it. `scroll_state()` reports where the reader stands and
+`on_scroll_state_changed` fires when that answer moves, which is the seam a
+scrollbar binds to. Shift-drag selects the rows currently visible (including
+scrollback) and invokes the view's copy callback; ordinary pointer events are
+forwarded only while the child has enabled mouse tracking. The view emits
+legacy X10 or modern SGR mouse bytes according to the child-selected
+encoding—it never guesses one protocol for another.
 
 The shipped profile supports the terminal modes needed by ordinary full-screen
 applications: alternate buffer, DEC scrolling margins and origin mode,
@@ -127,8 +136,24 @@ do nothing at all — which reads as a broken wheel rather than as a mode nobody
 enabled. With DEC mode 1007 (`alternate_scroll`, on by default and
 child-controllable) a wheel notch over the alternate screen is delivered as
 three cursor keys, in the dialect the child selected. On the primary buffer
-the wheel is left alone: there it belongs to the terminal's own history, and
+the wheel belongs to the terminal's own history and scrolls the view itself —
 arrow keys sent to a shell prompt would walk its command history instead.
+
+## The scrollbar on the window frame
+
+A terminal window can carry the classic desktop's scrollbar in the classic
+place: standing on the window's own right border, between the title's corner
+cell and the resize grip's row. `attach_terminal_scrollbar(window, view)`
+installs a vertical `Scrollbar` there as a frame overlay (`Edge::Right`,
+`Alignment::Fill`) and wires it both ways — dragging, paging or
+arrow-clicking the bar moves the view's scrollback, and the view's own
+movements (the wheel, PageUp, history growth, the buffer flipping) move the
+bar. It is on screen exactly while the terminal is on its primary screen with
+more rows than the view can show, and stands down otherwise — on the
+alternate screen a full-screen program owns the whole window, so the bar has
+nothing to say. Because the bar lives on the border, its coming and going
+costs the terminal nothing: not a column of content, and not a resize the
+child would have to reflow for.
 
 ## Colours a child asks about, and colours it sets
 

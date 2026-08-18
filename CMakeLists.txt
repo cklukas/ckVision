@@ -85,6 +85,7 @@ add_library(cvision
     src/widgets/syntax_profile.cpp
     src/widgets/table.cpp
     src/widgets/tab_control.cpp
+    src/widgets/terminal_scrollbar.cpp
     src/widgets/terminal_view.cpp
     src/widgets/text_editor.cpp
     src/widgets/text_layout.cpp
