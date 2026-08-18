@@ -43,6 +43,10 @@ CommandRegistry::CommandRegistry() {
     standard_.focus_next = declare_standard(kFocusNext, "Next Field", "Window", "Tab");
     standard_.focus_previous =
         declare_standard(kFocusPrevious, "Previous Field", "Window", "Shift+Tab");
+    // Declared after the original set so those commands keep the ids they
+    // have always been assigned in declaration order.
+    standard_.terminal_report =
+        declare_standard(kTerminalReport, "&Terminal Report", "System", "");
 }
 
 CommandId CommandRegistry::id_for_key(std::string_view key) {

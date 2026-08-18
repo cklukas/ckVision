@@ -263,6 +263,9 @@ Spin answers that with two rules and no polling at all:
 
 <!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="457-492" -->
 ```cpp
+    last_tick_nanos_.reset();
+}
+
 void SpinApp::arm_next_tick() {
     // Self-clocking, and the reason this is a one-shot rather than a
     // repeating timer: the next tick is scheduled once the previous one
@@ -296,9 +299,6 @@ void SpinApp::pace(std::int64_t now_nanos) {
     interval_nanos_ = std::max(interval_nanos_, raster_paced_interval_nanos());
     // Anything much EARLIER than asked for is not a measurement of the
     // loop's health at all — it is a clock that jumped, or a host that
-    // stepped this application several times in a row — so it neither
-    // widens nor narrows the interval.
-}
 ```
 <!-- /ckvision-snippet -->
 

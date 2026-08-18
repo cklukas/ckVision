@@ -327,6 +327,16 @@ private:
     // no-op while one is already open, and while this Desktop has no
     // Application (nothing to present into).
     void show_window_list();
+    // kTerminalReport's default handler: presents make_terminal_report_dialog
+    // over this Desktop. What the report reads lives on the Application —
+    // capabilities, cell grid, mouse-dispatch counters — but presenting it
+    // needs a surface, and this Desktop is the surface every dialog handler
+    // here presents into. An application whose terminal can count decoded SGR
+    // reports (a POSIX host) presents the dialog itself and passes the probe;
+    // this handler shows the report without that one line. Presenting is a
+    // no-op while one is already open, and while this Desktop has no
+    // Application.
+    void show_terminal_report();
     // kZoom's default handler: toggles the ACTIVE window's own zoom,
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
@@ -362,13 +372,17 @@ private:
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
     std::vector<ui::CommandId> installed_default_handlers_;
-    // Whether this Desktop's own kWindowList handler already has a list up.
-    // Shared, like the quit sweep below, so the dialog's completion can clear
-    // it even when what completed the dialog was this Desktop's destruction.
-    struct WindowListState {
+    // Whether a Desktop-installed dialog handler (kWindowList,
+    // kTerminalReport) already has its dialog up. Shared, like the quit sweep
+    // below, so the dialog's completion can clear it even when what completed
+    // the dialog was this Desktop's destruction.
+    struct StandardDialogState {
         bool open = false;
     };
-    std::shared_ptr<WindowListState> window_list_state_ = std::make_shared<WindowListState>();
+    std::shared_ptr<StandardDialogState> window_list_state_ =
+        std::make_shared<StandardDialogState>();
+    std::shared_ptr<StandardDialogState> terminal_report_state_ =
+        std::make_shared<StandardDialogState>();
     struct QuitSweepState {
         bool in_progress = false;
     };

@@ -101,11 +101,13 @@ also the order `CommandRegistry::all()` reports them in:
 | `ckv.window.list` | `&Window List` | Window | — |
 | `ckv.focus.next` | `Next Field` | Window | Tab |
 | `ckv.focus.previous` | `Previous Field` | Window | Shift+Tab |
+| `ckv.app.terminal_report` | `&Terminal Report` | System | — |
 
 Application code references these through
 `CommandRegistry::standard()` — `.quit`, `.close`, `.zoom`,
 `.next_window`, `.previous_window`, `.tile`, `.cascade`,
-`.window_list`, `.menu`, `.help`, `.focus_next`, `.focus_previous` —
+`.window_list`, `.menu`, `.help`, `.terminal_report`, `.focus_next`,
+`.focus_previous` —
 rather than by key; the keys are spelled out in
 `ckv::ui::std_command_keys` for anything that has to name a command as a
 string, and this table exists to make the wording, grouping, and chord
@@ -121,7 +123,8 @@ choices reviewable in one place.
   "declare your own command" escape hatch above). `cascade` uses
   `C&ascade` (mnemonic on 'a') rather than 'c', since `close` and
   `cascade` can plausibly coexist in the same Window menu.
-- **`tile`/`cascade`/`window_list` have no default chord.** There is
+- **`tile`/`cascade`/`window_list`/`terminal_report` have no default
+  chord.** There is
   no comparably strong, widely-recognized single-key convention for
   them the way there is for Quit/Close/Zoom/Help/Menu/window-cycling —
   an application binds one itself (`CommandRegistry::bind_key`) if it

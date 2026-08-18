@@ -8,6 +8,7 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/terminal_report_dialog.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
 namespace ckv::widgets {
@@ -105,6 +106,7 @@ void Desktop::on_attached() {
     install_default_handler(standard.tile, [this] { tile(); });
     install_default_handler(standard.cascade, [this] { cascade(); });
     install_default_handler(standard.window_list, [this] { show_window_list(); });
+    install_default_handler(standard.terminal_report, [this] { show_terminal_report(); });
 }
 
 void Desktop::show_window_list() {
@@ -112,7 +114,7 @@ void Desktop::show_window_list() {
     // One at a time. The command stays reachable by its key while the list is
     // up, and a second modal list over the first would hide the very thing it
     // was asked to show.
-    const std::shared_ptr<WindowListState> state = window_list_state_;
+    const std::shared_ptr<StandardDialogState> state = window_list_state_;
     if (state->open) return;
     state->open = true;
     // Held by the completion handler rather than by this Desktop: the dialog
@@ -122,6 +124,21 @@ void Desktop::show_window_list() {
         present_window_list_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
     presentation->set_completion_handler(
         [state, presentation](WindowListDialogResult) { state->open = false; });
+}
+
+void Desktop::show_terminal_report() {
+    if (app_ == nullptr) return;
+    // One at a time, for the same reason as the window list: a second modal
+    // report over the first would hide the evidence it was asked to show.
+    const std::shared_ptr<StandardDialogState> state = terminal_report_state_;
+    if (state->open) return;
+    state->open = true;
+    // Held by the completion handler rather than by this Desktop — see
+    // show_window_list above.
+    auto presentation = std::make_shared<TerminalReportDialogPresentation>(
+        present_terminal_report_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
+    presentation->set_completion_handler(
+        [state, presentation](TerminalReportDialogResult) { state->open = false; });
 }
 
 void Desktop::on_child_size_hint_changed(ui::View& child) {

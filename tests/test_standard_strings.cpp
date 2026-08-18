@@ -11,6 +11,7 @@
 #include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/help_viewer.hpp"
 #include "cvision/widgets/message_box.hpp"
+#include "cvision/widgets/terminal_report_dialog.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
 using ckv::ManualClock;
@@ -84,6 +85,8 @@ CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     strings.save_file_title = "Datei speichern";
     strings.select_directory_title = "Ordner waehlen";
     strings.window_list_title = "Fensterliste";
+    strings.terminal_report_title = "Terminalbericht";
+    strings.copy_to_clipboard = "&Kopieren";
     strings.help_title = "Hilfe";
 
     auto message = ckv::widgets::make_message_box(
@@ -109,6 +112,12 @@ CK_TEST(standard_dialog_factories_use_the_supplied_localized_string_table) {
     auto window_list = ckv::widgets::make_window_list_dialog(f.desktop, f.roles, f.app, nullptr, strings);
     CK_CHECK(window_list.window->title() == "Fensterliste");
     CK_CHECK(has_button_text(*window_list.window, "Schliessen"));
+
+    auto terminal_report =
+        ckv::widgets::make_terminal_report_dialog(f.desktop, f.roles, f.app, nullptr, {}, strings);
+    CK_CHECK(terminal_report.window->title() == "Terminalbericht");
+    CK_CHECK(has_button_text(*terminal_report.window, "&Kopieren"));
+    CK_CHECK(has_button_text(*terminal_report.window, "Schliessen"));
 
     auto provider = sample_help();
     auto help = ckv::widgets::make_help_viewer(provider, "intro", f.roles, f.app, nullptr, strings);

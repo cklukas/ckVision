@@ -121,9 +121,10 @@ struct CommandDescriptor {
 // Shift+F6, zoom = F5, close = Alt+F3, quit = Alt+X (already the
 // convention every example independently used before this landed),
 // focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029).
-// tile/cascade/window_list get NO default chord — there is no
-// comparably strong, widely-recognized single-key convention for
-// them; an application binds one itself if it wants one.
+// tile/cascade/window_list/terminal_report get NO default chord —
+// there is no comparably strong, widely-recognized single-key
+// convention for them; an application binds one itself if it wants
+// one.
 //
 // The standard set is Hidden: these are the framework's own plumbing,
 // which an application surfaces where it wants them through its own
@@ -156,7 +157,8 @@ struct CommandDescriptor {
 //     installed it, so a destroyed MenuBar can never be called through
 //     a stale handler.
 //   - quit, close, zoom, next_window, previous_window, tile,
-//     cascade and window_list are installed by Desktop::on_attached()
+//     cascade, window_list and terminal_report are installed by
+//     Desktop::on_attached()
 //     under that same has_handler rule — a Desktop is exactly the
 //     thing that owns the windows they act on, and knows the one
 //     cycling order they all share. An application that claims one
@@ -180,6 +182,7 @@ struct StandardCommands {
     CommandId window_list = kInvalidCommand;
     CommandId menu = kInvalidCommand;
     CommandId help = kInvalidCommand;
+    CommandId terminal_report = kInvalidCommand;
     CommandId focus_next = kInvalidCommand;
     CommandId focus_previous = kInvalidCommand;
 };
@@ -192,6 +195,7 @@ struct StandardCommands {
 namespace std_command_keys {
 inline constexpr std::string_view kQuit = "ckv.app.quit";
 inline constexpr std::string_view kHelp = "ckv.app.help";
+inline constexpr std::string_view kTerminalReport = "ckv.app.terminal_report";
 inline constexpr std::string_view kMenu = "ckv.app.menu";
 inline constexpr std::string_view kClose = "ckv.window.close";
 inline constexpr std::string_view kZoom = "ckv.window.zoom";

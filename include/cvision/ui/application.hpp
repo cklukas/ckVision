@@ -36,6 +36,7 @@
 #include "cvision/scene/compositor.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/capability_report.hpp"
 #include "cvision/term/presenter.hpp"
 #include "cvision/term/terminal.hpp"
 #include "cvision/term/terminal_subsession.hpp"
@@ -217,6 +218,17 @@ public:
     // application shows or exports this so a misbehaving host can be
     // diagnosed from facts instead of from symptoms.
     term::Capabilities terminal_capabilities() const noexcept { return terminal_.capabilities(); }
+    // The same evidence as a built table and as its plain-text export.
+    // Fronted here — the ui layer legitimately faces cvision/term — so the
+    // widgets layer's terminal report dialog can show terminal evidence
+    // without reaching into cvision/term itself (the include-direction rule
+    // ARCHITECTURE.md §1 enforces).
+    std::vector<term::CapabilityReportEntry> terminal_capability_report() const {
+        return term::capability_report(terminal_.capabilities(), terminal_.size());
+    }
+    std::string terminal_capability_report_text() const {
+        return term::capability_report_text(terminal_.capabilities(), terminal_.size());
+    }
     // How many mouse events have reached dispatch, and the last one. The
     // difference between "the terminal never sent it", "it was decoded to
     // the wrong cell", and "it arrived and nothing wanted it" is otherwise

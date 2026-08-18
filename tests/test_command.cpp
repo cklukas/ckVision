@@ -443,6 +443,7 @@ CK_TEST(the_standard_set_leaves_tile_cascade_and_window_list_with_no_default_cho
     CK_CHECK(!reg.find(reg.standard().tile)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().cascade)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().window_list)->default_chord.has_value());
+    CK_CHECK(!reg.find(reg.standard().terminal_report)->default_chord.has_value());
 }
 
 CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
@@ -460,8 +461,9 @@ CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
 CK_TEST(all_holds_exactly_the_standard_set_for_a_freshly_constructed_registry) {
     CommandRegistry reg;
     const auto all = reg.all();
-    CK_CHECK(all.size() == 12);
+    CK_CHECK(all.size() == 13);
     CK_CHECK(all.front().id == reg.standard().quit);
+    CK_CHECK(all.back().id == reg.standard().terminal_report);
 }
 
 CK_TEST(all_returns_every_declared_command_in_declaration_order) {

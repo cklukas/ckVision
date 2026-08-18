@@ -243,7 +243,10 @@ SpinApp::SpinApp(ui::Application& app)
     };
     widgets::MenuBarItem help_menu{
         "&Help",
-        {widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help,
+        {widgets::MenuItem::command(
+             widgets::CommandPresentation{app_.commands().standard().terminal_report}),
+         widgets::MenuItem::separator(),
+         widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help,
                                                         "&About..."})},
     };
 

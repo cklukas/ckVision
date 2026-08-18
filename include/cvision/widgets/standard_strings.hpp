@@ -22,11 +22,15 @@ struct StandardStrings {
     std::string filter = "Filter";
     std::string show_hidden = "Show Hidden";
     std::string hide_hidden = "Hide Hidden";
+    // Mnemonic included: the terminal report's focus starts in its text
+    // viewport, so without Alt+C the copy action is reachable only by Tab.
+    std::string copy_to_clipboard = "&Copy to clipboard";
 
     std::string open_file_title = "Open File";
     std::string save_file_title = "Save File";
     std::string select_directory_title = "Select Directory";
     std::string window_list_title = "Window List";
+    std::string terminal_report_title = "Terminal report";
     std::string help_title = "Help";
     // Introduces a topic's curated cross-references at the foot of its page.
     // They are prose, not a second list: every topic they name is already

@@ -870,6 +870,28 @@ launched `TerminalSubsession` in a normal view tree. It renders the private
 child snapshot, forwards the child input modes it requests, and keeps parent
 focus under the application's control; see [Embedded terminal](embedded-terminal.md).
 
+## Terminal report dialog
+
+Header: `include/cvision/widgets/terminal_report_dialog.hpp`. The standard
+typed dialog showing `ckv::term::capability_report()` — what the terminal
+reported and what ckVision concluded from it — together with the
+application's mouse-dispatch diagnostics; its Copy button exports the
+plain-text form for a bug report. Desktop installs it behind the standard
+`terminal_report` command, so an application need only place that command in
+a menu; an application whose terminal can count decoded SGR mouse reports (a
+POSIX host) presents the dialog itself through
+`present_terminal_report_dialog` and passes
+`TerminalReportDialogOptions::mouse_reports_decoded`.
+
+## TerminalReportDialogOptions
+
+Header: `include/cvision/widgets/terminal_report_dialog.hpp`. What the
+report cannot observe through the Application: `mouse_reports_decoded`
+supplies the count of SGR mouse reports the terminal layer recognized in
+the byte stream, shown beside the events dispatch actually delivered.
+Left empty, the report omits that line — a headless or mirrored terminal
+has no byte stream of its own to count.
+
 ## TextSpan
 
 Header: `include/cvision/widgets/text_view.hpp`. Styled/link-capable fragment
