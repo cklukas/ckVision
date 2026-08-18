@@ -288,6 +288,15 @@ void PosixTerminalSubsession::request_termination() noexcept {
     if (::kill(-child, SIGTERM) != 0) (void)::kill(child, SIGTERM);
 }
 
+void PosixTerminalSubsession::request_kill() noexcept {
+    if (child_pid_ < 0) return;
+    const pid_t child = static_cast<pid_t>(child_pid_);
+    // The group again, for the reason the asking half gives: a shell killed on
+    // its own leaves its foreground child running with nobody's terminal to
+    // write to.
+    if (::kill(-child, SIGKILL) != 0) (void)::kill(child, SIGKILL);
+}
+
 void PosixTerminalSubsession::close() noexcept {
     if (closed_) return;
     closed_ = true;

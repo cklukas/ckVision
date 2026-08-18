@@ -72,6 +72,23 @@ public:
     // them (the wedge of a177a95). Safe to call more than once, and safe to
     // call before `close()` — which is the ordinary way it is used.
     void request_termination() noexcept;
+
+    // Ends the child now, and returns immediately.
+    //
+    // The other end of the same decision `request_termination()` hands a host:
+    // once the grace a host timed itself has run out, something has to escalate,
+    // and `close()` escalates by WAITING — up to three seconds per terminal
+    // while it reaps, which is exactly what a host with its own loop and its own
+    // clock must not spend. A host ending ten terminals that ignore SIGTERM pays
+    // that ten times over, with everything else it owns frozen behind it.
+    //
+    // SIGKILL, to the process group, exactly as `close()` sends it; the PTY
+    // stays open, because a child wedged writing to its terminal cannot be
+    // reaped until somebody empties it, and the emptying is the host's `drain()`
+    // as it always was. The exit is observed the same way any other is. Safe to
+    // call more than once, safe before `close()`, and safe for a child that has
+    // already gone.
+    void request_kill() noexcept;
     void close() noexcept override;
     int file_descriptor() const noexcept { return master_fd_; }
     // The status the child exited with, once it has. Forwarded because the

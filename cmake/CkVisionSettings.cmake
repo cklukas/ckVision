@@ -11,12 +11,26 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CKVISION_SANITIZE "" CACHE STRING
     "Comma-separated sanitizer list applied to all ckVision targets, e.g. address,undefined")
 
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-Wmissing-designated-field-initializers
+                        CKVISION_HAS_WMISSING_DESIGNATED)
+
 function(ckvision_strict target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /permissive- /utf-8 /EHsc)
     else()
         target_compile_options(${target} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Werror)
+        if(CKVISION_HAS_WMISSING_DESIGNATED)
+            # Newer LLVM Clang puts this under -Wextra; AppleClang does not
+            # have it at all. Switched off on purpose: descriptor structs
+            # (CommandDescriptor, FieldDescriptor, …) default every field so a
+            # call site names only what differs — that is the API's design, and
+            # a warning that forces every caller to enumerate every field would
+            # dismantle it one -Werror build at a time.
+            target_compile_options(${target} PRIVATE
+                -Wno-missing-designated-field-initializers)
+        endif()
     endif()
     if(CKVISION_SANITIZE)
         if(MSVC)

@@ -497,6 +497,49 @@ CK_TEST(asking_twice_is_not_an_error_and_neither_is_asking_a_child_that_has_gone
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
 }
 
+CK_TEST(a_child_that_declines_to_end_can_be_ended_without_waiting_for_it) {
+    // The other end of the host's own escalation. `request_termination()` lets a
+    // host ask on its own schedule; this is what it must be able to do when the
+    // grace it timed itself runs out and the program is still there. `close()`
+    // would do it too — by waiting, seconds per terminal, inside a loop that has
+    // other terminals to serve — so a host that owns its clock needs the signal
+    // on its own.
+    ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
+        "/bin/sh", {"-c", "trap '' TERM HUP; printf ready; while :; do sleep 1; done"});
+    launch.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "ready"));
+
+    // Asked, and it declines — which is the state this exists for. Bounded, and
+    // long enough that a child which was going to honour the signal would have.
+    session->request_termination();
+    for (int attempt = 0; attempt < 30; ++attempt) {
+        pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
+        (void)::poll(&ready, 1, 10);
+        (void)session->drain(16 * 1024);
+    }
+    CK_CHECK(session->state() != ckv::term::TerminalSubsessionState::Exited);
+
+    const auto start = std::chrono::steady_clock::now();
+    session->request_kill();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - start)
+                             .count();
+    // It returns at once — a signal, not a wait. `close()` on this same child
+    // spends its grace and then two more seconds reaping.
+    CK_CHECK(elapsed < 100);
+    // And the child does go, observed by the same drain any other exit is.
+    CK_CHECK(pump_until_exit(*session, 5'000));
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
+
+    // Asking twice, and asking a child that has already gone, are both nothing.
+    session->request_kill();
+    session->request_kill();
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Exited);
+    session->close();
+    CK_CHECK(session->file_descriptor() < 0);
+}
+
 CK_TEST(posix_terminal_subsession_contains_abnormal_child_termination) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "kill -TERM $$"});
