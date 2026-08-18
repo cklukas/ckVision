@@ -789,6 +789,75 @@ CK_TEST(posix_terminal_refines_the_baseline_only_from_a_timely_capability_probe_
     ::close(child.master_fd);
 }
 
+CK_TEST(posix_terminal_an_event_bearing_poll_still_reads_buffered_probe_replies) {
+    // A capability override set between construction and the first poll
+    // queues a change event for that poll. Returning the event WITHOUT
+    // reading is how a session used to lose its graphics: the caller's
+    // next poll can be a whole frame away, a first frame can be expensive,
+    // and the probe replies — buffered well inside the window — were then
+    // read only after it had closed and rejected as stale. The batch must
+    // harvest what is already readable alongside the event it delivers.
+    int master_fd = -1;
+    int slave_fd = -1;
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    {
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, slave_fd, slave_fd);
+        CapabilityOverrides overrides;
+        overrides.sixel_color_registers = 64;
+        term.set_capability_overrides(overrides);
+        // The terminal answered DA1 promptly; the reply is buffered before
+        // the caller ever polls, 40 ms into a 250 ms window.
+        constexpr std::string_view kDa1 = "\x1B[?62;1;4;6c";
+        CK_CHECK(::write(master_fd, kDa1.data(), kDa1.size()) ==
+                 static_cast<ssize_t>(kDa1.size()));
+        clock.advance(40'000'000);
+        const auto batch = term.poll(clock.now_nanos());
+        bool saw_override = false;
+        bool saw_sixel = false;
+        for (const TerminalEvent& event : batch) {
+            const auto* changed = std::get_if<CapabilityChangedEvent>(&event);
+            if (changed == nullptr) continue;
+            saw_override = saw_override || changed->capabilities.sixel_color_registers == 64;
+            saw_sixel = saw_sixel || changed->capabilities.sixel_graphics;
+        }
+        CK_CHECK(saw_override);
+        CK_CHECK(saw_sixel);
+        CK_CHECK(term.capabilities().sixel_graphics);
+    }
+    ::close(master_fd);
+    ::close(slave_fd);
+}
+
+CK_TEST(posix_terminal_a_resize_batch_still_reads_buffered_probe_replies) {
+    // The resize branch had the same shape: a batch carrying the resize
+    // (and the re-probe it begins) returned before reading, so replies
+    // already in the buffer aged past the very window the re-probe opened.
+    int master_fd = -1;
+    int slave_fd = -1;
+    CK_CHECK(::openpty(&master_fd, &slave_fd, nullptr, nullptr, nullptr) == 0);
+    {
+        ManualClock clock(1'000);
+        PosixTerminal term(clock, slave_fd, slave_fd);
+        constexpr std::string_view kDa1 = "\x1B[?62;1;4;6c";
+        CK_CHECK(::write(master_fd, kDa1.data(), kDa1.size()) ==
+                 static_cast<ssize_t>(kDa1.size()));
+        struct winsize ws{};
+        ws.ws_row = 30;
+        ws.ws_col = 100;
+        CK_CHECK(::ioctl(master_fd, TIOCSWINSZ, &ws) == 0);
+        clock.advance(40'000'000);
+        const auto batch = term.poll(clock.now_nanos());
+        bool saw_resize = false;
+        for (const TerminalEvent& event : batch)
+            saw_resize = saw_resize || std::holds_alternative<ResizeEvent>(event);
+        CK_CHECK(saw_resize);
+        CK_CHECK(term.capabilities().sixel_graphics);
+    }
+    ::close(master_fd);
+    ::close(slave_fd);
+}
+
 CK_TEST(posix_terminal_capability_probe_expiry_uses_the_injected_clock) {
     int master_fd = -1;
     int slave_fd = -1;

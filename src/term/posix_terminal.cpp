@@ -748,10 +748,11 @@ std::vector<TerminalEvent> PosixTerminal::poll(
     if (capability_change_pending_) {
         capability_change_pending_ = false;
         events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
-        return events;
     }
+    bool resumed_this_poll = false;
     if (session_slot_ >= 0 &&
         g_sessions[session_slot_].resumed.exchange(false, std::memory_order_acq_rel)) {
+        resumed_this_poll = true;
         invalidate_resize_dependent_capabilities();
         begin_capability_probes();
         // A terminal can be resized while this process is stopped. Observe
@@ -767,7 +768,6 @@ std::vector<TerminalEvent> PosixTerminal::poll(
             events.push_back(TerminalEvent{ResizeEvent{observed}});
         }
         events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
-        return events;
     }
     const auto expire_capability_probes = [this](std::int64_t now_nanos) {
         if (probe_deadline_nanos_ >= 0 && now_nanos >= probe_deadline_nanos_)
@@ -802,9 +802,20 @@ std::vector<TerminalEvent> PosixTerminal::poll(
     };
     // This deliberately compares on every poll rather than consuming a
     // process-global SIGWINCH flag.  Signals carry no PTY identity; a
-    // per-session comparison is the only correct routing authority.
-    collect_resize();
-    if (!events.empty()) return events;
+    // per-session comparison is the only correct routing authority. A
+    // resumed session already observed its own geometry above.
+    if (!resumed_this_poll) collect_resize();
+
+    // An event-bearing batch is delivered promptly — but never INSTEAD of
+    // the read. Returning before the read is how a pending override (or a
+    // resize, or a resume) used to cost a session its graphics: the
+    // caller's next poll can be a whole frame away, a first frame can be
+    // expensive, and probe replies that were buffered well inside the
+    // window were then read only after it had closed — rejected as stale,
+    // on a terminal that had answered within milliseconds. The batch
+    // instead harvests whatever is ALREADY readable, with a zero wait, so
+    // replies ride the same batch as the event that would otherwise have
+    // displaced them.
 
     std::vector<struct pollfd> fds;
     fds.reserve(2 + additional_wait_handles.size());
@@ -820,6 +831,7 @@ std::vector<TerminalEvent> PosixTerminal::poll(
     // Waking early merely to notice a missing reply would delay run()'s first
     // baseline frame — exactly what baseline-first presentation forbids.
     std::int64_t effective_deadline = deadline_nanos;
+    if (!events.empty()) effective_deadline = now;
     if (const auto decoder_deadline = decoder_.next_timeout_nanos())
         effective_deadline = std::min(effective_deadline, *decoder_deadline);
     const std::int64_t remaining_ns = effective_deadline - now;
