@@ -204,6 +204,39 @@ CK_TEST(terminal_emulator_decodes_bounded_child_sixel_to_private_raster_state) {
     CK_CHECK(pixel.a == 255);
 }
 
+CK_TEST(a_picture_sent_to_a_terminal_without_graphics_is_refused_by_name) {
+    // A child that draws into a terminal with no graphics gets told which
+    // sequence was dropped and why. This answer existed but could never be
+    // given: it sat behind a condition that had already excluded it, so the
+    // only thing such a child ever heard was that "a DCS sequence" — some
+    // sequence, unnamed — had been ignored.
+    term::TerminalCapabilityProfile text_only = term::embedded_xterm_sixel_profile();
+    text_only.sixel = false;
+    text_only.cells = Size{4, 2};
+    term::TerminalEmulator emulator(text_only);
+    emulator.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+
+    CK_CHECK(emulator.snapshot().rasters.empty());
+    const std::span<const term::TerminalDiagnostic> diagnostics = emulator.diagnostics();
+    CK_CHECK(diagnostics.size() == 1U);
+    if (diagnostics.size() == 1U) {
+        CK_CHECK(diagnostics[0].kind == term::TerminalDiagnostic::Kind::UnsupportedSequence);
+        CK_CHECK(diagnostics[0].message ==
+                 "child Sixel ignored: this terminal declares no graphics");
+    }
+
+    // A DCS that is not a picture keeps the general answer: naming Sixel there
+    // would be a guess about what the child was doing.
+    emulator.feed_output("\x1bP+q544e\x1b\\");  // XTGETTCAP, which this terminal has no answer for
+    CK_CHECK(emulator.diagnostics().size() == 2U);
+    CK_CHECK(emulator.diagnostics()[1].message == "child DCS sequence ignored");
+
+    // And the parser came back cleanly both times: the text after a refused
+    // picture is text.
+    emulator.feed_output("ok");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "o");
+}
+
 CK_TEST(terminal_emulator_accepts_parameterized_sixel_dcs_commands) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{2, 2};
@@ -2309,4 +2342,212 @@ CK_TEST(damage_names_every_row_a_scroll_moved) {
     CK_CHECK(!emulator.damage().rows[1].empty());
     CK_CHECK(!emulator.damage().rows[2].empty());
     CK_CHECK(emulator.damage().rows[3].empty());
+}
+
+// A host that sends what damage names sends nothing when damage names nothing.
+// Everything below is a change a host has to hear about and no cell records —
+// so the test for each is the same test: it fires when it should, it does not
+// fire when it should not, and it lands on the flag that says what happened.
+
+CK_TEST(the_keyboard_enhancements_a_child_sets_are_reported_as_the_modes_they_are) {
+    // A host forwarding this terminal has to send the new flags before it sends
+    // the next key: with them missing, a child that asked for the kitty
+    // encoding is answered in the legacy one it has stopped expecting.
+    term::TerminalEmulator emulator;
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[>1u");  // push
+    CK_CHECK(emulator.damage().modes);
+    CK_CHECK(emulator.status().keyboard_flags != core::TerminalKeyboardFlags::None);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[=3;1u");  // set
+    CK_CHECK(emulator.damage().modes);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[<1u");  // pop
+    CK_CHECK(emulator.damage().modes);
+
+    // Asking what they are moves nothing, so there is nothing to report.
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[?u");
+    CK_CHECK(!emulator.damage().modes);
+    CK_CHECK(!emulator.take_pending_input().empty());  // it did answer
+
+    // And a set that lands on the flags already in force is not news either.
+    emulator.feed_output("\x1b[=1u");
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[=1u");
+    CK_CHECK(!emulator.damage().modes);
+}
+
+CK_TEST(a_clipboard_write_is_reported_so_a_host_gated_on_damage_looks_at_all) {
+    // The serial says WHAT to send; the flag says WHEN to look. Without the
+    // flag a delta transport never looks, and text a child put on somebody's
+    // clipboard waits for the next keystroke that happens to move a cell.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.clipboard_policy = term::TerminalClipboardPolicy::AllowWrite;
+    term::TerminalEmulator emulator(profile);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b]52;c;aGVsbG8=\x07");
+    CK_CHECK(emulator.damage().clipboard);
+    CK_CHECK(emulator.damage().any());
+    CK_CHECK(emulator.status().clipboard_serial == 1U);
+    // It is a clipboard write and not a mode change or a repaint.
+    CK_CHECK(!emulator.damage().modes);
+    CK_CHECK(!emulator.damage().full);
+
+    emulator.clear_damage();
+    CK_CHECK(!emulator.damage().clipboard);
+    // A refused write changes no clipboard, so it reports none — it reports a
+    // complaint instead.
+    emulator.feed_output("\x1b]52;c;?\x07");
+    CK_CHECK(!emulator.damage().clipboard);
+    CK_CHECK(emulator.damage().diagnostics);
+}
+
+CK_TEST(a_bell_is_reported_as_a_bell_rather_than_as_a_mode_change) {
+    // It used to borrow the mode flag, which told a host to re-read a set of
+    // switches none of which had moved.
+    term::TerminalEmulator emulator;
+    emulator.clear_damage();
+    emulator.feed_output("\a");
+    CK_CHECK(emulator.damage().bell);
+    CK_CHECK(!emulator.damage().modes);
+    CK_CHECK(emulator.status().bell_serial == 1U);
+    emulator.clear_damage();
+    CK_CHECK(!emulator.damage().bell);
+}
+
+CK_TEST(a_child_that_starts_stops_or_dies_says_so_in_damage) {
+    // The one change a terminal makes after it has stopped making any other.
+    // A host gated on damage looks exactly when this says to, so without it a
+    // dead child's window goes on looking alive — and nothing else is coming.
+    term::TerminalEmulator running;
+    running.clear_damage();
+    running.feed_output("x");  // Ready becomes Running with the first byte
+    CK_CHECK(running.damage().lifecycle);
+    running.clear_damage();
+    running.feed_output("y");  // ...and stays Running, which is not news
+    CK_CHECK(!running.damage().lifecycle);
+
+    running.clear_damage();
+    running.mark_exited(3);
+    CK_CHECK(running.damage().lifecycle);
+    CK_CHECK(running.damage().any());
+    CK_CHECK(running.status().exit_code == 3);
+
+    term::TerminalEmulator failed;
+    failed.clear_damage();
+    failed.mark_failed("no pty");
+    CK_CHECK(failed.damage().lifecycle);
+    CK_CHECK(failed.status().state == core::TerminalSubsessionState::Failed);
+
+    term::TerminalEmulator closed;
+    closed.clear_damage();
+    closed.close();
+    CK_CHECK(closed.damage().lifecycle);
+    closed.clear_damage();
+    closed.close();  // closing twice is not a second piece of news
+    CK_CHECK(!closed.damage().lifecycle);
+}
+
+CK_TEST(the_printer_reports_itself_without_claiming_the_screen_changed) {
+    // While the controller is on, the child's output is going to the printer
+    // and not to the screen — which is the one printer fact a host must show,
+    // and it is not a repaint. Reporting a finished job as a full repaint (as
+    // this did) cost the whole grid to a host that sends what damage names.
+    term::TerminalEmulator emulator(printing_profile());
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[5i");
+    CK_CHECK(emulator.damage().printer);
+    CK_CHECK(!emulator.damage().full);
+    CK_CHECK(emulator.status().printer_controller_active);
+
+    emulator.clear_damage();
+    emulator.feed_output("a document");
+    CK_CHECK(emulator.damage().printer);  // the pending byte count moved
+    CK_CHECK(emulator.status().printer_pending_bytes == 10U);
+
+    emulator.clear_damage();
+    emulator.feed_output("\x1b[4i");
+    CK_CHECK(emulator.damage().printer);
+    CK_CHECK(!emulator.damage().full);
+    CK_CHECK(emulator.status().printer_jobs_ready == 1U);
+    CK_CHECK(emulator.take_printer_jobs().size() == 1U);
+}
+
+CK_TEST(a_complaint_is_counted_and_reported_rather_than_left_in_the_ring) {
+    // The ring is bounded and drops its oldest entry, so its size is not a
+    // number a host can watch; the serial counts what was made, and the flag
+    // says a host that fetches the ring should fetch it now.
+    term::TerminalEmulator emulator;
+    emulator.clear_damage();
+    emulator.feed_output("\x1b]99;x\x07");  // an OSC this terminal has no answer for
+    CK_CHECK(emulator.status().diagnostics_serial > 0U);
+    CK_CHECK(emulator.damage().diagnostics);
+    const std::uint64_t seen = emulator.status().diagnostics_serial;
+
+    emulator.clear_damage();
+    CK_CHECK(!emulator.damage().diagnostics);
+    emulator.feed_output("plain text");
+    CK_CHECK(!emulator.damage().diagnostics);
+    CK_CHECK(emulator.status().diagnostics_serial == seen);
+    // The snapshot agrees with the status, as it does for every other scalar.
+    CK_CHECK(emulator.snapshot().diagnostics_serial == seen);
+}
+
+CK_TEST(the_keypad_mode_every_curses_program_sets_is_known_and_silent) {
+    // `ESC =` and `ESC >` are terminfo's smkx/rmkx: every curses program sends
+    // one on the way in and the other on the way out. ckVision has no keypad
+    // key to send differently (D-053), so they do nothing — but reporting them
+    // as unsupported would fill a bounded ring with the one thing every child
+    // does, crowding out the complaints a reader needs to see.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{10, 2};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("a\x1b=b\x1b>c");
+    CK_CHECK(emulator.diagnostics().empty());
+    // Consumed as well-formed input: the text around them lands unbroken, and
+    // no stray '=' or '>' is printed.
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "a");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "b");
+    CK_CHECK(snapshot.cell_buffer[2].grapheme() == "c");
+}
+
+CK_TEST(the_three_mouse_tracking_modes_are_told_apart_rather_than_collapsed) {
+    // 1000 is presses and releases, 1002 adds the drags, 1003 adds motion with
+    // nothing held. A terminal that remembers only "reporting is on" sends a
+    // program written for 1000 a stream of motion it never asked for.
+    term::TerminalEmulator emulator;
+    CK_CHECK(emulator.status().mouse_tracking == core::TerminalMouseTracking::None);
+    CK_CHECK(!emulator.status().mouse_reporting_enabled);
+
+    emulator.feed_output("\x1b[?1000h");
+    CK_CHECK(emulator.status().mouse_tracking == core::TerminalMouseTracking::Buttons);
+    CK_CHECK(emulator.status().mouse_reporting_enabled);
+
+    emulator.feed_output("\x1b[?1002h");
+    CK_CHECK(emulator.status().mouse_tracking == core::TerminalMouseTracking::ButtonMotion);
+
+    emulator.feed_output("\x1b[?1003h");
+    CK_CHECK(emulator.status().mouse_tracking == core::TerminalMouseTracking::AnyMotion);
+    CK_CHECK(emulator.snapshot().mouse_tracking == core::TerminalMouseTracking::AnyMotion);
+
+    // Resetting any of the three ends tracking: they are levels of one facility
+    // and a program putting them back sends several of these on its way out.
+    emulator.feed_output("\x1b[?1000l");
+    CK_CHECK(emulator.status().mouse_tracking == core::TerminalMouseTracking::None);
+    CK_CHECK(!emulator.status().mouse_reporting_enabled);
+    CK_CHECK(emulator.status().mouse_encoding == term::TerminalMouseEncoding::None);
+
+    // A profile with no mouse at all keeps none of it.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.mouse_reporting = false;
+    term::TerminalEmulator without(profile);
+    without.feed_output("\x1b[?1003h");
+    CK_CHECK(without.status().mouse_tracking == core::TerminalMouseTracking::None);
 }

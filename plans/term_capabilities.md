@@ -74,11 +74,12 @@ against a reference terminal rather than decided — see
 | `CSI ? 25 h/l` | DECTCEM cursor visibility | E | |
 | `CSI 4 h/l` | IRM insert mode | E | the only ANSI (non-`?`) mode we implement |
 | `CSI ? 47/1047/1048/1049 h/l` | alternate screen | E | 1049 saves and restores the cursor |
-| `CSI ? 1000/1002/1003 h/l` | mouse reporting | E+H | we track it; the *host* must actually report mouse events |
+| `CSI ? 1000/1002/1003 h/l` | mouse reporting | E+H | three levels of one setting, told apart (`TerminalMouseTracking`, D-054): presses/releases, plus drags, plus free motion. The *host* must actually report mouse events |
 | `CSI ? 1006 h/l` | SGR mouse encoding | E+H | as above |
 | `CSI ? 1004 h/l` | focus reporting | E+H | host must report focus |
 | `CSI ? 2004 h/l` | bracketed paste | E | |
 | `CSI ? 1007 h/l` | alternate scroll | E+H | on unless the child says otherwise; the wheel is the *host's* to report |
+| `ESC =` / `ESC >`, `CSI ? 66 h/l` | DECPAM/DECPNM/DECNKM application keypad | **N** | consumed, no effect, **no diagnostic** — the key model has no keypad identity to switch, and every curses program sends these (D-053) |
 | `CSI ? 2026` | synchronized output | **N** (inner) / H (outer) | we *use* it against the host; a child asking for it is ignored |
 | `CSI ? 1016` | pixel mouse | H | outer-terminal capability, negotiated by the host layer |
 

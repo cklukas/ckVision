@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <csignal>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -101,6 +102,46 @@ CK_TEST(posix_terminal_subsession_presents_a_real_alternate_screen_transition) {
     CK_CHECK(session->snapshot().alternate_buffer);
     CK_CHECK(session->snapshot().cursor.visible);
     session->close();
+}
+
+CK_TEST(a_child_starts_from_default_signal_dispositions_whatever_its_host_ignored) {
+    // exec restores the signals a process HANDLED and leaves the ones it
+    // IGNORED ignored. That asymmetry is the bug: an application that ignores
+    // SIGPIPE process-wide — which anything writing to sockets or pipes of its
+    // own does — otherwise hands the same SIG_IGN to every shell it opens, and
+    // to everything that shell runs.
+    //
+    // The observation is an ordinary pipeline whose reader leaves after one
+    // byte. With the disposition reset, the kernel ends `cat` and the pipeline
+    // is silent, which is how pipelines have always worked. With it inherited,
+    // `cat` survives the write, collects EPIPE, and complains onto the
+    // reader's screen.
+    struct sigaction ignored = {};
+    ignored.sa_handler = SIG_IGN;
+    sigemptyset(&ignored.sa_mask);
+    struct sigaction previous = {};
+    CK_CHECK(sigaction(SIGPIPE, &ignored, &previous) == 0);
+
+    ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
+        "/bin/sh", {"-c", "cat /dev/zero | dd bs=1 count=1 of=/dev/null 2>/dev/null; "
+                          "printf PIPELINE-DONE"});
+    launch.profile.cells = ckv::Size{80, 24};
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    const bool finished = pump_until(*session, "PIPELINE-DONE");
+    // Put the test process back before asserting, so a failure here cannot
+    // leave the rest of the suite running under a disposition it did not ask
+    // for.
+    (void)sigaction(SIGPIPE, &previous, nullptr);
+
+    // The pipeline really ran, so silence below is silence and not absence.
+    CK_CHECK(finished);
+    // What is looked for is `cat` still being ALIVE to complain — its own
+    // message, which it can only reach after a write that returned instead of
+    // ending it. A bare "Broken pipe" would be the wrong thing to look for: a
+    // shell is entitled to report a job the kernel killed that way, and that
+    // report means the fix worked.
+    const std::string screen = screen_text(session->snapshot());
+    CK_CHECK(screen.find("cat:") == std::string::npos);
 }
 
 CK_TEST(posix_terminal_subsession_bounds_a_noisy_child_without_losing_later_output) {

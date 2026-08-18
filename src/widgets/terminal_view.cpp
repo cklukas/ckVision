@@ -519,6 +519,15 @@ bool TerminalView::on_key(const KeyEvent& event) {
         }
         return true;
     }
+    return deliver_key(event, status);
+}
+
+bool TerminalView::send_key(const KeyEvent& event) {
+    if (session_ == nullptr) return false;
+    return deliver_key(event, session_->status());
+}
+
+bool TerminalView::deliver_key(const KeyEvent& event, const core::TerminalStatus& status) {
     const core::TerminalKeyboardFlags keyboard_flags = status.keyboard_flags;
     if (keyboard_flags != core::TerminalKeyboardFlags::None) {
         const std::string kitty = encode_kitty_key(event, keyboard_flags);
@@ -545,6 +554,37 @@ bool TerminalView::on_text(const TextEvent& event) {
     else
         session_->send_input(event.text);
     return true;
+}
+
+// Which pointer events a child hears about, which is the whole difference
+// between the three tracking modes. A program that asked for 1000 wants presses
+// and releases; one that asked for 1002 wants those and the drags; only 1003
+// asked to be told where the pointer is when nothing is held. Sending every
+// program the 1003 stream is not generosity — a program reading only what it
+// asked for gets a report it did not expect between the ones it did.
+//
+// A drag is told from a hover by the button the report carries: the input model
+// keeps the held button on a motion event and leaves it None when nothing is
+// down, which is the same distinction the wire makes.
+bool TerminalView::tracking_reports(const MouseEvent& event, const core::TerminalStatus& status) {
+    using core::TerminalMouseTracking;
+    // `TerminalSubsession` is a seam other projects implement — a mirror over a
+    // protocol, a recording — and one that fills in only the older, coarser
+    // `mouse_reporting_enabled` is saying "the child is tracking" without
+    // saying at what level. That is not the same statement as "not tracking",
+    // and reading it as one would silence every pointer event such a host
+    // delivers. It is read as the level this view behaved as before there was
+    // one to name, so a host that has not adopted the field is unchanged.
+    const TerminalMouseTracking tracking =
+        status.mouse_tracking == TerminalMouseTracking::None && status.mouse_reporting_enabled
+            ? TerminalMouseTracking::AnyMotion
+            : status.mouse_tracking;
+    if (tracking == TerminalMouseTracking::None) return false;
+    if (event.action != MouseAction::Move) return true;
+    if (tracking == TerminalMouseTracking::AnyMotion) return true;
+    if (tracking == TerminalMouseTracking::ButtonMotion)
+        return event.button != MouseButton::None;
+    return false;
 }
 
 std::string TerminalView::encode_mouse(const MouseEvent& event, core::TerminalMouseEncoding encoding) const {
@@ -632,6 +672,10 @@ bool TerminalView::on_mouse(const MouseEvent& event) {
     const core::TerminalStatus snapshot = session_->status();
     if (scroll_history(event, snapshot)) return true;
     if (!snapshot.mouse_reporting_enabled) return forward_alternate_scroll(event, snapshot);
+    // Not claimed: a motion the child did not ask for is one this view has no
+    // business consuming either, and leaving it unhandled lets whatever else
+    // wants it — a hover shape, a container — have it.
+    if (!tracking_reports(event, snapshot)) return false;
     const std::string encoded = encode_mouse(event, snapshot.mouse_encoding);
     if (encoded.empty()) return false;
     session_->send_input(encoded);

@@ -22,6 +22,7 @@ using core::TerminalKeyboardFlags;
 using core::TerminalEnvironmentPolicy;
 using core::TerminalLaunchSpec;
 using core::TerminalMouseEncoding;
+using core::TerminalMouseTracking;
 using core::TerminalOscPolicy;
 using core::TerminalPrinterJob;
 using core::TerminalPrinterPolicy;

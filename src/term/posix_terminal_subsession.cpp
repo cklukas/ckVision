@@ -36,6 +36,56 @@ char** parent_environment() noexcept {
     return environ;
 #endif
 }
+
+// How many signal numbers there are to put back. Every system this builds on
+// names it; the last constant is only so that one hiding it behind a
+// feature-test macro gets the POSIX signals plus room for the real-time range
+// rather than nothing at all — a loop that stops short leaves everything it did
+// not reach exactly as the parent had it, which is the defect this is fixing.
+#if defined(NSIG)
+constexpr int kSignalCount = NSIG;
+#elif defined(_NSIG)
+constexpr int kSignalCount = _NSIG;
+#else
+constexpr int kSignalCount = 65;
+#endif
+
+// A child about to become somebody else's program starts from the dispositions
+// a program is entitled to.
+//
+// exec does only half of this on its own: it restores the signals this process
+// HANDLED, and leaves the ones it IGNORED ignored. That asymmetry is the whole
+// bug. An application that ignores SIGPIPE process-wide — which every program
+// writing to sockets or pipes of its own does, because the alternative is dying
+// when a peer goes away — otherwise hands the same SIG_IGN to every shell it
+// opens, and to everything that shell runs. An ordinary pipeline then stops
+// working the way pipelines work: `yes | head` no longer ends when the reader
+// leaves, it writes into a pipe nobody is reading, collects EPIPE, and prints a
+// broken-pipe complaint onto the reader's screen. Nothing about that is
+// visible from the embedding application, and nothing about it is the child's
+// fault. The blocked-signal mask is reset with it, for the same reason and
+// worse: exec does not touch the mask at all, so a child could start life
+// unable to be interrupted.
+//
+// This runs between fork and exec, where nothing may allocate or take a lock —
+// only async-signal-safe calls, which is what these two are.
+void reset_signals_for_child() noexcept {
+    struct sigaction restore_default = {};
+    restore_default.sa_handler = SIG_DFL;
+    // Unqualified on purpose: sigemptyset is a macro on some platforms, and a
+    // macro has no namespace to qualify it with.
+    sigemptyset(&restore_default.sa_mask);
+    restore_default.sa_flags = 0;
+    // Every number, rather than the ones this library is known to touch: what
+    // reaches the child is what the EMBEDDING application ignored, and that is
+    // not a list a fork site can keep. SIGKILL and SIGSTOP refuse, which is an
+    // answer that costs nothing — they cannot be ignored or caught either.
+    for (int number = 1; number < kSignalCount; ++number)
+        (void)sigaction(number, &restore_default, nullptr);
+    sigset_t nothing_blocked;
+    sigemptyset(&nothing_blocked);
+    (void)sigprocmask(SIG_SETMASK, &nothing_blocked, nullptr);
+}
 }  // namespace
 
 namespace ckv::term {
@@ -116,6 +166,10 @@ bool PosixTerminalSubsession::spawn() {
             (void)::write(exec_status[1], &failure, sizeof(failure));
             _exit(127);
         };
+        // Before anything the child could be interrupted during, and before the
+        // program it is about to become inherits what this process happened to
+        // be ignoring.
+        reset_signals_for_child();
         if (::chdir(spec_.working_directory.c_str()) != 0) report_exec_failure();
         ::execve(spec_.executable.c_str(), argv.data(), environment.data());
         report_exec_failure();

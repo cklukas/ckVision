@@ -43,7 +43,11 @@ public:
     }
     ckv::core::TerminalStatus status() const override {
         ++statuses;
-        return emulator_.status();
+        ckv::core::TerminalStatus status = emulator_.status();
+        // A session over a protocol may fill in only the older, coarser
+        // `mouse_reporting_enabled` — see `names_tracking_level`.
+        if (!names_tracking_level) status.mouse_tracking = ckv::core::TerminalMouseTracking::None;
+        return status;
     }
     const ckv::core::TerminalDamage& damage() const noexcept override { return emulator_.damage(); }
     void clear_damage() noexcept override { emulator_.clear_damage(); }
@@ -71,6 +75,11 @@ public:
 
     mutable int snapshots = 0;
     mutable int statuses = 0;
+    // Whether this session answers the mouse-tracking level at all. A host that
+    // implements the seam itself — a mirror over a protocol whose wire carries
+    // one bit for the mouse — may not, and must still get its pointer events
+    // through.
+    bool names_tracking_level = true;
 
 private:
     ckv::term::TerminalEmulator emulator_;
@@ -891,6 +900,129 @@ CK_TEST(the_legacy_encoding_is_what_a_child_that_asked_for_nothing_gets) {
     CK_CHECK(session.take_pending_input() == "\t");
     CK_CHECK(view.on_key(key_press(ckv::Key::Up)));
     CK_CHECK(session.take_pending_input() == "\x1b[A");
+}
+
+CK_TEST(a_key_sent_by_an_application_arrives_exactly_as_a_pressed_one_does) {
+    // An application with a reserved chord has to be able to offer to send it
+    // through — otherwise that chord is unreachable to the child forever — and
+    // anything replaying keys (a macro, a recorded session) needs the same
+    // door. The encoding must be the reader's own, not a second one that drifts.
+    ckv::term::TerminalEmulator pressed_session;
+    ckv::term::TerminalEmulator sent_session;
+    ckv::widgets::TerminalView pressed(pressed_session);
+    ckv::widgets::TerminalView sent(sent_session);
+    Fixture fixture;
+    pressed.set_context(fixture.context());
+    sent.set_context(fixture.context());
+    pressed.set_bounds(ckv::Rect{0, 0, 10, 3});
+    sent.set_bounds(ckv::Rect{0, 0, 10, 3});
+
+    const auto both = [&](const ckv::KeyEvent& event) {
+        CK_CHECK(pressed.on_key(event));
+        CK_CHECK(sent.send_key(event));
+        const std::string from_press = pressed_session.take_pending_input();
+        const std::string from_send = sent_session.take_pending_input();
+        CK_CHECK(!from_press.empty());
+        CK_CHECK(from_send == from_press);
+    };
+
+    both(key_press(ckv::Key::Char, ckv::Modifier::Ctrl, "b"));  // the legacy control byte
+    both(key_press(ckv::Key::F5));                              // a functional key
+    both(key_press(ckv::Key::Up));                              // a cursor key
+
+    // ...and under the kitty protocol, which is the encoding a caller reaching
+    // for `encode_key` alone would have silently skipped.
+    pressed_session.feed_output("\x1b[>1u");
+    sent_session.feed_output("\x1b[>1u");
+    both(key_press(ckv::Key::Char, ckv::Modifier::Ctrl, "i"));
+    both(key_press(ckv::Key::Escape));
+
+    // The one difference, and the reason this exists: the reserved chord is
+    // swallowed by a press and delivered by a send.
+    const ckv::KeyEvent escape_chord =
+        key_press(ckv::Key::Char, ckv::Modifier::Ctrl | ckv::Modifier::Alt, " ");
+    bool intercepted = false;
+    pressed.on_parent_escape = [&intercepted] { intercepted = true; };
+    CK_CHECK(pressed.on_key(escape_chord));
+    CK_CHECK(intercepted);
+    CK_CHECK(pressed_session.take_pending_input().empty());
+    CK_CHECK(sent.send_key(escape_chord));
+    CK_CHECK(!sent_session.take_pending_input().empty());
+
+    // A key with nothing to say says nothing, and says so.
+    ckv::KeyEvent release = key_press(ckv::Key::Up);
+    release.action = ckv::KeyAction::Release;
+    CK_CHECK(!sent.send_key(release));
+    CK_CHECK(sent_session.take_pending_input().empty());
+}
+
+CK_TEST(a_child_hears_only_the_pointer_motion_the_mode_it_chose_asks_for) {
+    // 1000 is presses and releases, 1002 adds motion while a button is held,
+    // and only 1003 asked where the pointer is when nothing is held. A view
+    // that reports motion to all three sends a program written for 1000 reports
+    // between the ones it is parsing for.
+    ckv::term::TerminalEmulator session;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+
+    const ckv::MouseEvent hover{ckv::MouseAction::Move, ckv::MouseButton::None, ckv::Point{4, 1},
+                                {}, ckv::Modifier::None};
+    const ckv::MouseEvent drag{ckv::MouseAction::Move, ckv::MouseButton::Left, ckv::Point{4, 1},
+                               {}, ckv::Modifier::None};
+    const ckv::MouseEvent press{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{4, 1},
+                                {}, ckv::Modifier::None};
+
+    // Button events only: a press is the child's, both motions are not — and an
+    // event this view does not claim is left for whatever else wants it.
+    session.feed_output("\x1b[?1000h\x1b[?1006h");
+    CK_CHECK(view.on_mouse(press));
+    CK_CHECK(session.take_pending_input() == "\x1b[<0;5;2M");
+    CK_CHECK(!view.on_mouse(hover));
+    CK_CHECK(!view.on_mouse(drag));
+    CK_CHECK(session.take_pending_input().empty());
+
+    // Cell motion: the drag arrives, the hover still does not.
+    session.feed_output("\x1b[?1002h");
+    CK_CHECK(!view.on_mouse(hover));
+    CK_CHECK(session.take_pending_input().empty());
+    CK_CHECK(view.on_mouse(drag));
+    CK_CHECK(session.take_pending_input() == "\x1b[<32;5;2M");
+
+    // All motion: both, which is what a program that asked for 1003 wants.
+    session.feed_output("\x1b[?1003h");
+    CK_CHECK(view.on_mouse(hover));
+    CK_CHECK(session.take_pending_input() == "\x1b[<35;5;2M");
+    CK_CHECK(view.on_mouse(drag));
+    CK_CHECK(session.take_pending_input() == "\x1b[<32;5;2M");
+
+    // And a child that stopped tracking hears nothing at all.
+    session.feed_output("\x1b[?1003l");
+    CK_CHECK(!view.on_mouse(press));
+    CK_CHECK(session.take_pending_input().empty());
+}
+
+CK_TEST(a_session_that_names_no_tracking_level_still_gets_its_pointer_events) {
+    // `TerminalSubsession` is a seam other projects implement. One that fills
+    // in only the older, coarser `mouse_reporting_enabled` is saying "the child
+    // is tracking" without saying at what level — which is not the same
+    // statement as "not tracking", and reading it as one would silence every
+    // pointer event such a host delivers.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{10, 3};
+    CountingSubsession session(profile);
+    session.names_tracking_level = false;
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 10, 3});
+    session.feed_output("\x1b[?1000h\x1b[?1006h");
+
+    const ckv::MouseEvent hover{ckv::MouseAction::Move, ckv::MouseButton::None, ckv::Point{4, 1},
+                                {}, ckv::Modifier::None};
+    CK_CHECK(view.on_mouse(hover));
+    CK_CHECK(session.take_pending_input() == "\x1b[<35;5;2M");
 }
 
 CK_TEST(functional_keys_keep_the_encoding_they_already_had) {

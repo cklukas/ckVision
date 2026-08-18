@@ -938,6 +938,122 @@ has no middle ground to give); wheel entry into a separate copy-mode surface
 as the default gesture (reading history is lighter than selecting from it,
 and the transient scroll state costs the reader nothing to leave).
 
+**D-052 — Everything a terminal changes about itself sets a damage flag, and
+the flags name what happened rather than where it happened.**
+`TerminalDamage` is not a repaint hint. It is the answer to "what do I have to
+send", asked once per terminal per tick by a host that reads nothing else when
+the answer is nothing — which is what a delta transport is, and what
+`damage().any()` was built for. Three state changes did not answer it: the
+kitty keyboard flags, the clipboard serial, and the child's own death. Each was
+therefore invisible to exactly the host the flags exist for, and each failed in
+its own way — a child answered in an encoding it had stopped expecting, text a
+child put on somebody's clipboard sitting until the next keystroke moved a
+cell, and a dead child's window still looking alive because a terminal that has
+stopped makes no further changes to be noticed by.
+
+The flags now cover them, and the choice of flag is the decision. The keyboard
+enhancements are `modes`: they are a set of switches a program turns on for as
+long as it needs them and puts back on the way out, which is what every other
+mode in that flag is, and a host re-reads the mode scalars for all of them
+together. The others are not modes, and each gets its own: `clipboard`, `bell`,
+`printer`, `diagnostics`, `lifecycle`. Three of those gate a read that is not
+free — the clipboard text, the print spool and the diagnostic ring are
+deliberately outside `TerminalStatus`, so the flag is the only thing that says
+fetching one is worth doing now — and the other two are things a host acts on
+differently from anything else (ring or badge; close a window and stop asking).
+The bell moved off `modes`, where it had been borrowing a flag that told a host
+to re-read a set of switches none of which had moved. `TerminalStatus` gains
+`diagnostics_serial` so the ring has the count every other payload has: the
+ring is bounded and drops its oldest entry, so its size goes back down and
+cannot be watched. A finished print job stopped claiming a full repaint —
+`damage_everything()` on a print screen cost a host the entire grid to say a
+document was ready.
+
+*Rejected:* one `meta` flag for everything that is not cells (it is the
+cheapest thing to write and the most expensive to consume — a host learns that
+something happened and has to fetch the clipboard, the spool and the ring to
+find out which); leaving the bell on `modes` once its siblings had flags of
+their own (three notices, one of them hiding); and letting hosts poll
+`status()` every tick regardless of damage (that is the copy-per-frame U0-b
+exists to remove, one level up).
+
+**D-053 — The keypad stays numeric, and the terminal says so by staying
+quiet.**
+`ESC =` and `ESC >` (DECPAM/DECPNM, terminfo's `smkx`/`rmkx`) are consumed as
+well-formed input and have no effect, and DEC mode 66 with them. What they
+change is which bytes the *keypad* keys send, and ckVision's input model has no
+keypad key: `Key` names `Enter`, the arrows, the function keys and `Char`, and
+the numeric keypad reaches an application as the digits and operators it
+produced, indistinguishable from the top row. A tracked flag would therefore be
+a setting nothing could read and nothing could act on, and a `TerminalStatus`
+field for it would tell a host something it cannot use.
+
+Real support is a larger change than this one, and it belongs to the input
+model rather than to the emulator: `Key` grows the keypad identities, the
+decoder learns `SS3 p`…`SS3 y`, ckVision itself enters application keypad mode
+on its *host* terminal (nothing else makes the host report those keys
+distinctly), the mode joins the ledger a fatal signal replays, key names for
+configuration and documentation grow with the enum, and `TerminalView` gains
+the second encoding. Until that is worth doing, the honest state is none.
+
+The diagnostic is deliberately not raised. Every curses program sends one of
+these on the way in and the other on the way out, so reporting them as
+unsupported filled a bounded ring — 64 entries, oldest dropped — with the one
+thing every child does, crowding out the complaints a reader needs to see. This
+is the same treatment as OSC 1 and OSC 22: known, deliberately without effect,
+and consumed rather than complained about. A diagnostic in ckVision means "a
+child asked for something and did not get it, and could not tell"; the keypad
+mode is a request whose whole effect is on keys this terminal will never send
+differently, so there is nothing the child was denied that it could observe.
+
+*Rejected:* tracking the mode in the emulator and exposing it in
+`TerminalStatus` (dead state, and a field a host would carry across a wire to
+nowhere); mapping the keypad onto the existing `Char` keys with a flag on the
+side (a keypad `5` and a top-row `5` would still be the same event, so the flag
+would decide by guessing); and leaving the diagnostic in place as an
+"unimplemented" marker (the ring is a bounded channel to a reader, not a to-do
+list).
+
+**D-054 — Mouse tracking is one setting with three levels, and a child hears
+only the level it asked for.**
+DEC 1000, 1002 and 1003 are alternatives, not switches to be held at once: 1000
+reports presses and releases, 1002 adds motion while a button is held, 1003
+adds motion with nothing held. The emulator kept one boolean for all three and
+`TerminalView` reported motion to every child that had any of them on — that
+is, it behaved as 1003 always. A program that asked for 1000 was reading its
+input for presses and releases and got a motion report between them, which it
+reads as something else entirely; a program that asked for 1002 got the
+pointer's whole path across the screen while nothing was held.
+
+`TerminalMouseTracking` (`None`, `Buttons`, `ButtonMotion`, `AnyMotion`) is now
+the emulator's state and a `TerminalStatus`/`TerminalSnapshot` field beside the
+encoding. Setting any of the three selects that level — a program sending 1002
+means "instead of", not "as well as" — and resetting any of them ends tracking,
+because a program putting the terminal back sends several of these on its way
+out and half-tracking after the first would be nobody's intent.
+`mouse_reporting_enabled` stays, deriving from `mouse_tracking != None`: it is
+the question most hosts have, and a host that only forwards bytes is unchanged
+by this. `TerminalSubsession` is a seam other projects implement, so a status
+that reports tracking on while naming no level is read as the coarsest one —
+"on, unspecified" is not "off", and reading it as "off" would silence every
+pointer event a mirror over a protocol delivers. The view drops a motion the
+level does not cover and does not claim the event, so it stays available to
+whatever else wants it. A drag is told from
+a hover by the button the event carries, which is what the input model already
+records.
+
+Note that this is the *inner* terminal, the one a child runs inside. Which mode
+ckVision enters on its own *host* is D-049, and the answer there is 1003 for a
+reason that does not apply here: ckVision needs the pointer's position to
+resolve hover, and a child needs only what it asked for.
+
+*Rejected:* two more booleans beside the first (three flags, eight states, and
+five of them meaningless); reporting motion to everyone and letting the child
+ignore what it did not ask for (it cannot — an unexpected report is
+indistinguishable from a shorter one it was parsing for); and dropping
+`mouse_reporting_enabled` in favour of the level alone (a public seam other
+projects implement, and the derived answer costs nothing).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

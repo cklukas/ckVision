@@ -59,7 +59,11 @@ public:
     std::string take_pending_input() override;
     TerminalSubsessionState state() const noexcept override { return state_; }
     void set_raster_identity(int identity) noexcept override { raster_identity_ = identity; }
-    void close() noexcept override { state_ = TerminalSubsessionState::Closed; }
+    void close() noexcept override {
+        if (state_ == TerminalSubsessionState::Closed) return;
+        state_ = TerminalSubsessionState::Closed;
+        damage_.lifecycle = true;
+    }
 
     // The print jobs the child has completed, handed over exactly once. A
     // snapshot carries only how many are waiting, because a snapshot is a
@@ -67,6 +71,9 @@ public:
     // that must be delivered once.
     std::vector<TerminalPrinterJob> take_printer_jobs();
 
+    // The child's life, as the host observing the process reports it. Both set
+    // the lifecycle damage flag: a terminal that has stopped is news, and a
+    // host gated on damage would otherwise never hear that its child had died.
     void mark_exited(int exit_code);
     void mark_failed(std::string message);
     std::optional<int> exit_code() const noexcept { return exit_code_; }
@@ -306,6 +313,9 @@ private:
     std::string pending_output_;
     std::string pending_input_;
     std::vector<TerminalDiagnostic> diagnostics_;
+    // Complaints made, ever. The ring above drops its oldest entry, so its size
+    // is not a number a host can watch — see TerminalStatus::diagnostics_serial.
+    std::uint64_t diagnostics_serial_ = 0;
     // One entry per column. Rebuilt on a resize, preserving what the child
     // set for the columns that still exist.
     std::vector<bool> tab_stops_;
@@ -315,7 +325,10 @@ private:
     TerminalSubsessionState state_ = TerminalSubsessionState::Ready;
     std::optional<int> exit_code_;
     bool bracketed_paste_enabled_ = false;
-    bool mouse_reporting_enabled_ = false;
+    // Which of DEC 1000, 1002 and 1003 is in force. One level rather than three
+    // booleans: they are alternatives, and a terminal holding three of them at
+    // once would have to invent an order of precedence the modes do not have.
+    TerminalMouseTracking mouse_tracking_ = TerminalMouseTracking::None;
     bool mouse_sgr_enabled_ = false;
     bool application_cursor_keys_ = false;
     bool focus_reporting_enabled_ = false;

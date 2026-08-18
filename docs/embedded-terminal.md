@@ -79,6 +79,16 @@ Set `environment_policy` to `TerminalEnvironmentPolicy::ExplicitOnly` for the
 sandboxed case, where the child sees exactly what it was handed and nothing
 else. The working directory is never inferred: it is whatever the spec says.
 
+The child's signal dispositions are put back to their defaults and its signal
+mask emptied, between the fork and the exec. `exec` does only half of that on
+its own — it restores the signals the host process *handled* and leaves the
+ones it *ignored* ignored — so a host that ignores `SIGPIPE` for its own
+sockets, as servers do, would otherwise hand the same `SIG_IGN` to every shell
+it opens and to everything that shell runs. An ordinary pipeline whose reader
+leaves early then stops ending the way pipelines end, and starts printing
+broken-pipe complaints on the reader's screen. Nothing a host does to its own
+signals reaches a child through this library.
+
 `WaitForExit` requests a terminal hangup and waits for a graceful
 process-group exit during teardown; `TerminateAfterGrace` adds a bounded grace
 interval before escalating to process-group termination. Both policies close
@@ -121,6 +131,16 @@ scrollback) and invokes the view's copy callback; ordinary pointer events are
 forwarded only while the child has enabled mouse tracking. The view emits
 legacy X10 or modern SGR mouse bytes according to the child-selected
 encoding—it never guesses one protocol for another.
+
+Tracking has three levels and the child gets the one it asked for
+(`TerminalStatus::mouse_tracking`, D-054): DEC 1000 is presses and releases,
+1002 adds motion while a button is held, and 1003 adds motion with nothing
+held. A motion the level does not cover is neither sent nor claimed. Sending
+every child the 1003 stream is not generosity — a program parsing for the
+reports it asked for reads an unexpected one as something else. A session that
+implements the seam itself and reports tracking on without naming a level (a
+mirror whose wire carries one bit for the mouse) is read as the coarsest level,
+so nothing it delivers is lost.
 
 The shipped profile supports the terminal modes needed by ordinary full-screen
 applications: alternate buffer, DEC scrolling margins and origin mode,
@@ -196,7 +216,27 @@ settings never follow it out onto the shell's screen. A requested flag is
 masked to what this terminal can really deliver before it takes effect, so
 what a program reads back with `CSI ? u` is what it will really receive. With
 no flags set — the default — keys arrive in the legacy encoding, which remains
-correct.
+correct. A change to the flags is reported as a mode change in
+`TerminalDamage`, so a host that forwards this terminal sends the new set
+before it sends the next key.
+
+`TerminalView::send_key(event)` delivers a key to the child exactly as a real
+press does — the kitty encoding where the child asked for one, the legacy
+encoding otherwise, and the same return to the live edge — without `on_key`'s
+parent-escape interception or its local paging keys. That is what an
+application needs to offer "send the reserved chord through anyway" (otherwise
+that chord is unreachable to the child forever), and what anything replaying
+keys — a macro, a recorded session, a paste delivered as keystrokes — needs so
+that its keys are encoded by the same path as the reader's. It answers whether
+the chord produced any bytes; not every one does.
+
+The keypad is the one keyboard mode this terminal declines. `ESC =` and `ESC >`
+(DECPAM/DECPNM, terminfo's `smkx`/`rmkx`) are consumed and have no effect,
+without a diagnostic: ckVision's input model has no keypad key to send
+differently, so there is nothing to record and nothing a child was denied that
+it could observe — and every curses program sends both, which would fill a
+bounded diagnostic ring with the one thing every child does. D-053 records what
+real support would take.
 
 For a full-screen smoke test, launch a child that uses the alternate buffer,
 for example `printf '\033[?1049h\033[2J\033[Hfull-screen\033[?1049l'`, and
@@ -204,6 +244,19 @@ observe that the child returns to its primary buffer without changing the
 parent menu or window chrome. The POSIX test suite runs this sequence through
 a real PTY. A nested `ckvision_terminal` child and the Sixel demo are covered
 by the separate PTY and pixel-containment tests described below.
+
+## What a host is told changed
+
+`TerminalDamage` answers "what do I have to send" for a host that reads nothing
+else when the answer is nothing. Beside the rows, the cursor, the modes, the
+title, the rasters and the scrollback count, it flags the things a terminal
+does that no cell records: `clipboard`, `bell`, `printer`, `diagnostics` and
+`lifecycle` (the child starting, exiting, failing or being closed). The three
+payloads a host fetches out of band — the clipboard text, the print jobs, the
+diagnostic ring — are deliberately not carried in `TerminalStatus`; each has a
+serial or a count there and a flag here, so a host learns there is something
+new without fetching on every tick. `clear_damage()` remains the host's alone:
+reading never clears (D-052).
 
 ## Nested ckVision applications
 

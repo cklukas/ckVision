@@ -120,27 +120,34 @@ std::span<const TerminalDiagnostic> TerminalEmulator::diagnostics() const noexce
 
 TerminalSnapshot TerminalEmulator::snapshot() const { return snapshot(TerminalSnapshotOptions{}); }
 
+// Written with the field names rather than by position: this is the one place
+// every scalar a host reads is assembled, and in a positional list a new field
+// in the middle of the struct silently re-aims every value after it.
 TerminalStatus TerminalEmulator::status() const {
-    return TerminalStatus{cells_,
-                          cursor_,
-                          alternate_buffer_,
-                          title_,
-                          state_,
-                          bracketed_paste_enabled_,
-                          mouse_reporting_enabled_,
-                          !mouse_reporting_enabled_ ? TerminalMouseEncoding::None
-                          : mouse_sgr_enabled_      ? TerminalMouseEncoding::Sgr
-                                                    : TerminalMouseEncoding::X10,
-                          application_cursor_keys_,
-                          focus_reporting_enabled_,
-                          alternate_scroll_enabled_,
-                          (alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_).flags,
-                          clipboard_serial_,
-                          bell_serial_,
-                          printer_controller_,
-                          printer_spool_.size(),
-                          printer_jobs_.size(),
-                          exit_code_};
+    const bool tracking = mouse_tracking_ != TerminalMouseTracking::None;
+    return TerminalStatus{
+        .cells = cells_,
+        .cursor = cursor_,
+        .alternate_buffer = alternate_buffer_,
+        .title = title_,
+        .state = state_,
+        .bracketed_paste_enabled = bracketed_paste_enabled_,
+        .mouse_reporting_enabled = tracking,
+        .mouse_encoding = !tracking             ? TerminalMouseEncoding::None
+                          : mouse_sgr_enabled_  ? TerminalMouseEncoding::Sgr
+                                                : TerminalMouseEncoding::X10,
+        .mouse_tracking = mouse_tracking_,
+        .application_cursor_keys = application_cursor_keys_,
+        .focus_reporting_enabled = focus_reporting_enabled_,
+        .alternate_scroll_enabled = alternate_scroll_enabled_,
+        .keyboard_flags = (alternate_buffer_ ? alternate_keyboard_ : primary_keyboard_).flags,
+        .clipboard_serial = clipboard_serial_,
+        .bell_serial = bell_serial_,
+        .diagnostics_serial = diagnostics_serial_,
+        .printer_controller_active = printer_controller_,
+        .printer_pending_bytes = printer_spool_.size(),
+        .printer_jobs_ready = printer_jobs_.size(),
+        .exit_code = exit_code_};
 }
 
 TerminalSnapshot TerminalEmulator::snapshot(TerminalSnapshotOptions options) const {
@@ -159,24 +166,40 @@ TerminalSnapshot TerminalEmulator::snapshot(TerminalSnapshotOptions options) con
             ? std::vector<Cell>(scrollback_.begin() + static_cast<std::ptrdiff_t>(scrollback_begin_),
                                 scrollback_.end())
             : std::vector<Cell>{};
-    return TerminalSnapshot{scalars.cells, active_cells(), scalars.cursor, scalars.alternate_buffer,
-                            options.include_rasters ? rasters_ : kNoRasters, diagnostics_,
-                            scalars.title, scalars.state,
-                            options.include_scrollback ? history : kNoScrollback,
-                            scalars.bracketed_paste_enabled, scalars.mouse_reporting_enabled,
-                            scalars.mouse_encoding, scalars.application_cursor_keys,
-                            scalars.focus_reporting_enabled, scalars.alternate_scroll_enabled,
-                            clipboard_text_, scalars.clipboard_serial,
-                            scalars.keyboard_flags,
-                            scalars.bell_serial,
-                            scalars.printer_controller_active,
-                            scalars.printer_pending_bytes,
-                            scalars.printer_jobs_ready};
+    return TerminalSnapshot{.cells = scalars.cells,
+                            .cell_buffer = active_cells(),
+                            .cursor = scalars.cursor,
+                            .alternate_buffer = scalars.alternate_buffer,
+                            .rasters = options.include_rasters ? rasters_ : kNoRasters,
+                            .diagnostics = diagnostics_,
+                            .title = scalars.title,
+                            .state = scalars.state,
+                            .scrollback = options.include_scrollback ? history : kNoScrollback,
+                            .bracketed_paste_enabled = scalars.bracketed_paste_enabled,
+                            .mouse_reporting_enabled = scalars.mouse_reporting_enabled,
+                            .mouse_encoding = scalars.mouse_encoding,
+                            .mouse_tracking = scalars.mouse_tracking,
+                            .application_cursor_keys = scalars.application_cursor_keys,
+                            .focus_reporting_enabled = scalars.focus_reporting_enabled,
+                            .alternate_scroll_enabled = scalars.alternate_scroll_enabled,
+                            .clipboard_text = clipboard_text_,
+                            .clipboard_serial = scalars.clipboard_serial,
+                            .keyboard_flags = scalars.keyboard_flags,
+                            .bell_serial = scalars.bell_serial,
+                            .diagnostics_serial = scalars.diagnostics_serial,
+                            .printer_controller_active = scalars.printer_controller_active,
+                            .printer_pending_bytes = scalars.printer_pending_bytes,
+                            .printer_jobs_ready = scalars.printer_jobs_ready};
 }
 
 void TerminalEmulator::diagnostic(TerminalDiagnostic::Kind kind, std::string message) {
     diagnostics_.push_back(TerminalDiagnostic{kind, std::move(message)});
     if (diagnostics_.size() > 64) diagnostics_.erase(diagnostics_.begin());
+    // Counted before it is bounded, so the count says how many were made rather
+    // than how many survived — and flagged, because the ring is a payload a
+    // host fetches rather than something `status()` carries.
+    ++diagnostics_serial_;
+    damage_.diagnostics = true;
 }
 
 // A colour as a terminal reports one: `rgb:` and four hex digits per channel,
@@ -358,6 +381,12 @@ void TerminalEmulator::handle_clipboard(std::string_view body) {
     // what to do with it.
     clipboard_text_ = text::sanitize_clipboard_text(decoded);
     ++clipboard_serial_;
+    // The serial says WHAT to send and the flag says WHEN to look. A host that
+    // reads this terminal every tick would find the serial on its own; one that
+    // reads it only when there is damage — which is what a delta transport is —
+    // would never look, and the text a child asked to put on somebody's
+    // clipboard would sit here until the next keystroke happened to move a cell.
+    damage_.clipboard = true;
 }
 
 // The title, as the child asked for it and as a window frame can survive.
@@ -481,6 +510,11 @@ void TerminalEmulator::handle_media_copy() {
             return;
         case 5:
             printer_controller_ = true;
+            // While this is on the child's output goes to the printer and NOT
+            // to the screen, which is the one printer fact a host must show its
+            // reader — otherwise they are watching a terminal that has
+            // apparently stopped responding.
+            damage_.printer = true;
             printer_terminator_.clear();
             return;
         default:
@@ -506,11 +540,15 @@ void TerminalEmulator::print_bytes(std::string_view bytes) {
         printer_spool_.clear();
         printer_spool_.shrink_to_fit();
         printer_overflowed_ = true;
+        damage_.printer = true;
         diagnostic(TerminalDiagnostic::Kind::LimitExceeded,
                    "child print job exceeded configured limit");
         return;
     }
     printer_spool_.append(bytes);
+    // `printer_pending_bytes` is what a host puts on the badge it shows while a
+    // document is collecting, so the number moving is news.
+    damage_.printer = true;
 }
 
 void TerminalEmulator::finish_printer_job(TerminalPrinterJob::Origin origin) {
@@ -525,12 +563,19 @@ void TerminalEmulator::finish_printer_job(TerminalPrinterJob::Origin origin) {
     printer_spool_.clear();
     printer_overflowed_ = false;
     printer_job_open_ = false;
-    damage_everything();
+    // A job is a payload waiting to be taken, so what a host has to hear is
+    // that the count moved — not that the screen is worthless. Reporting this
+    // as a full repaint (which it was) made every print screen cost the whole
+    // grid to a host that sends what damage names.
+    damage_.printer = true;
 }
 
 std::vector<TerminalPrinterJob> TerminalEmulator::take_printer_jobs() {
     std::vector<TerminalPrinterJob> jobs = std::move(printer_jobs_);
     printer_jobs_.clear();
+    // The count a host reads has gone to zero, and the host that drained is not
+    // necessarily the only one reading this terminal (see `clear_damage`).
+    if (!jobs.empty()) damage_.printer = true;
     return jobs;
 }
 
@@ -594,7 +639,12 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
     // needs to know is whether it ended up somewhere else, and that is one
     // comparison of four small fields.
     const CursorState cursor_before = cursor_;
-    state_ = TerminalSubsessionState::Running;
+    // The first byte a child sends is also the moment it stops being Ready, and
+    // that is a change a host reports rather than discovers.
+    if (state_ != TerminalSubsessionState::Running) {
+        state_ = TerminalSubsessionState::Running;
+        damage_.lifecycle = true;
+    }
     const std::size_t output_limit = std::max<std::size_t>(1, options_.max_output_bytes);
     const std::size_t available = output_limit > pending_output_.size() ? output_limit - pending_output_.size() : 0;
     const std::size_t accepted = std::min(bytes.size(), available);
@@ -622,6 +672,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
             if (could_be_terminator) continue;
             if (candidate == "\x1b[4i" || candidate == "\x1b[?4i") {
                 printer_controller_ = false;
+                damage_.printer = true;  // the screen is the child's again
                 printer_terminator_.clear();
                 finish_printer_job(TerminalPrinterJob::Origin::Controller);
                 continue;
@@ -644,7 +695,7 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 // that has not finished arriving. What it does is ask for the
                 // reader's attention, which is the host's to give: this counts
                 // the request and says so in the snapshot.
-                else if (byte == '\a') { ++bell_serial_; damage_.modes = true; }
+                else if (byte == '\a') { ++bell_serial_; damage_.bell = true; }
                 else if (byte == '\x0f') { put_text(true); active_charset_ = 0; }  // SI
                 else if (byte == '\x0e') { put_text(true); active_charset_ = 1; }  // SO
                 else if (static_cast<unsigned char>(byte) >= 0x20) {
@@ -689,6 +740,15 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 // wedged screen they were trying to escape.
                 else if (byte == 'c') { put_text(true); reset_terminal(); parse_state_ = ParseState::Ground; }
                 else if (byte == '#') { put_text(true); parse_state_ = ParseState::Hash; }
+                // DECPAM and DECPNM, the application and numeric keypad. Known,
+                // consumed, and deliberately without effect — D-053. Every
+                // curses program sends `ESC =` on the way in and `ESC >` on the
+                // way out (terminfo's `smkx`/`rmkx`), so reporting them as
+                // unsupported would fill a bounded diagnostic ring with the one
+                // thing every child does, crowding out the complaints a reader
+                // needs; and there is nothing to record, because ckVision's key
+                // model has no keypad key to send differently.
+                else if (byte == '=' || byte == '>') { parse_state_ = ParseState::Ground; }
                 else { diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child escape sequence"); parse_state_ = ParseState::Ground; }
                 break;
             case ParseState::Scs:
@@ -734,7 +794,15 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                 break;
             case ParseState::DcsEscape:
                 if (byte == '\\') {
-                    if (profile_.sixel && is_sixel_control(control_)) {
+                    // A picture is recognised first and refused second. Asking
+                    // whether this terminal has graphics before asking whether
+                    // the child sent a picture put the specific answer behind a
+                    // condition that had already excluded it — the refusal
+                    // below could never fire, and a child drawing into a
+                    // terminal with no graphics was told only that some DCS
+                    // sequence had been ignored. Which sequence, and why, is
+                    // exactly what the reader of a diagnostic needs.
+                    if (is_sixel_control(control_)) {
                         if (!graphics_available()) {
                             diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
                                        "child Sixel ignored: this terminal declares no graphics");
@@ -982,8 +1050,19 @@ void TerminalEmulator::handle_csi(char final_byte) {
             } else if (mode == 1) {
                 application_cursor_keys_ = enabled;
             } else if (mode == 1000 || mode == 1002 || mode == 1003) {
-                mouse_reporting_enabled_ = enabled && profile_.mouse_reporting;
-                if (!mouse_reporting_enabled_) mouse_sgr_enabled_ = false;
+                // Three levels of one facility, not three switches. Setting one
+                // selects that level — a program that wants drag motion sends
+                // 1002 and means "instead of", not "as well as" — and resetting
+                // any of them ends tracking, which is how a program that turned
+                // on 1002 and puts back 1000 and 1002 on its way out leaves the
+                // pointer to the terminal rather than half-tracked.
+                const TerminalMouseTracking level = mode == 1000 ? TerminalMouseTracking::Buttons
+                                                    : mode == 1002
+                                                        ? TerminalMouseTracking::ButtonMotion
+                                                        : TerminalMouseTracking::AnyMotion;
+                mouse_tracking_ = enabled && profile_.mouse_reporting ? level
+                                                                      : TerminalMouseTracking::None;
+                if (mouse_tracking_ == TerminalMouseTracking::None) mouse_sgr_enabled_ = false;
             } else if (mode == 1006) {
                 mouse_sgr_enabled_ = enabled && profile_.mouse_reporting;
             } else if (mode == 1004) {
@@ -1276,6 +1355,17 @@ void TerminalEmulator::handle_keyboard_protocol() {
         return flags & supported_terminal_keyboard_flags();
     };
 
+    // Every path below that moves the flags says so, and the query does not:
+    // these are modes in all but their spelling — a set of switches a program
+    // turns on for as long as it needs them — and a host that forwards this
+    // terminal has to send the new set before it sends the next key, or the
+    // child is answered in an encoding it has stopped expecting. Asking what
+    // they are moves nothing.
+    const TerminalKeyboardFlags before = state.flags;
+    const auto moved = [this, &state, before] {
+        if (state.flags != before) damage_.modes = true;
+    };
+
     switch (introducer) {
         case '?':
             if (profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) return;
@@ -1290,6 +1380,7 @@ void TerminalEmulator::handle_keyboard_protocol() {
             if (state.stack.size() >= kMaxDepth) state.stack.erase(state.stack.begin());
             state.stack.push_back(state.flags);
             state.flags = honoured(requested(0));
+            moved();
             return;
         }
         case '<': {
@@ -1306,6 +1397,7 @@ void TerminalEmulator::handle_keyboard_protocol() {
                 state.flags = state.stack.back();
                 state.stack.pop_back();
             }
+            moved();
             return;
         }
         case '=': {
@@ -1316,6 +1408,7 @@ void TerminalEmulator::handle_keyboard_protocol() {
                 state.flags = static_cast<TerminalKeyboardFlags>(
                     static_cast<std::uint8_t>(state.flags) & ~static_cast<std::uint8_t>(flags));
             else state.flags = flags;
+            moved();
             return;
         }
         default:
@@ -1971,7 +2064,15 @@ void TerminalEmulator::clear_damage() noexcept {
     damage_.modes = false;
     damage_.title = false;
     damage_.rasters = false;
+    damage_.clipboard = false;
+    damage_.bell = false;
+    damage_.printer = false;
+    damage_.diagnostics = false;
+    damage_.lifecycle = false;
     damage_.scrollback_pushed = 0;
+    // Field by field rather than `damage_ = {}`: the row list is sized to the
+    // grid and assigning a fresh struct would empty it, which reads as "this
+    // terminal has no rows" until the next resize.
     for (TerminalDamage::RowSpan& row : damage_.rows) row = TerminalDamage::RowSpan{};
 }
 
@@ -2019,7 +2120,7 @@ void TerminalEmulator::reset_terminal() {
     pending_charset_slot_ = 0;
 
     bracketed_paste_enabled_ = false;
-    mouse_reporting_enabled_ = false;
+    mouse_tracking_ = TerminalMouseTracking::None;
     mouse_sgr_enabled_ = false;
     application_cursor_keys_ = false;
     focus_reporting_enabled_ = false;
@@ -2041,6 +2142,9 @@ void TerminalEmulator::reset_terminal() {
     printer_terminator_.clear();
     printer_overflowed_ = false;
     printer_job_open_ = false;
+    // The screen invalidation below says nothing about the printer, which is
+    // not part of the screen and has just been put back to idle.
+    damage_.printer = true;
     damage_everything();
 }
 
@@ -2183,10 +2287,17 @@ void TerminalEmulator::mark_exited(int exit_code) {
     control_.clear();
     state_ = TerminalSubsessionState::Exited;
     exit_code_ = exit_code;
+    // The one change a terminal makes after it has stopped making any other. A
+    // host gated on damage — a delta transport, a repaint scheduler — looks
+    // exactly when this says to, so without it a dead child's window goes on
+    // looking alive until something else happens to the terminal, and nothing
+    // else is ever going to.
+    damage_.lifecycle = true;
 }
 
 void TerminalEmulator::mark_failed(std::string message) {
     state_ = TerminalSubsessionState::Failed;
+    damage_.lifecycle = true;
     diagnostic(TerminalDiagnostic::Kind::ChildExited, std::move(message));
 }
 

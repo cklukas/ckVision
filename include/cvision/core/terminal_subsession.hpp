@@ -109,6 +109,14 @@ constexpr TerminalKeyboardFlags supported_terminal_keyboard_flags() noexcept {
 enum class TerminalExitPolicy : std::uint8_t { WaitForExit, TerminateAfterGrace };
 enum class TerminalSubsessionState : std::uint8_t { Ready, Running, Exited, Failed, Closed };
 enum class TerminalMouseEncoding : std::uint8_t { None, X10, Sgr };
+// How much of what the pointer does a child asked to hear about. The three DEC
+// modes are three levels of one facility rather than three independent
+// switches: 1000 reports presses and releases, 1002 adds motion while a button
+// is held, and 1003 adds motion with no button held at all. A host that
+// collapses them into "reporting is on" sends a program written for 1000 a
+// stream of motion reports it never asked for — and a program that parses only
+// what it asked for reads the surplus as something else entirely.
+enum class TerminalMouseTracking : std::uint8_t { None, Buttons, ButtonMotion, AnyMotion };
 
 struct TerminalCapabilityProfile {
     ::ckv::Size cells{80, 24};
@@ -338,9 +346,30 @@ struct TerminalDamage {
     // One entry per row of the CURRENT grid, in row order.
     std::vector<RowSpan> rows;
     bool cursor = false;
+    // Everything the child has switched on and can switch off again: the DEC
+    // private modes, the one ANSI mode, the mouse tracking level and encoding,
+    // and the kitty keyboard enhancements — which are modes in all but their
+    // spelling, being switches a program turns on for as long as it needs them
+    // and puts back on the way out.
     bool modes = false;
     bool title = false;
     bool rasters = false;
+    // The four below are things that HAPPENED rather than things that are set,
+    // and a host does something different with each: put text on the system
+    // clipboard, ring or badge, offer a print job, show a complaint. They are
+    // separate flags for the same reason `title` is not folded into `modes` —
+    // and because three of them gate a read that is not free. The clipboard
+    // text, the print spool and the diagnostic ring are deliberately not in
+    // `TerminalStatus` (only a serial or a count is), so the flag is what tells
+    // a host that fetching one is worth doing now.
+    bool clipboard = false;
+    bool bell = false;
+    bool printer = false;
+    bool diagnostics = false;
+    // The child's own life: Ready → Running → Exited, Failed or Closed, and the
+    // code it left behind. Not a mode, because the child did not ask for it,
+    // and the last damage a terminal ever reports.
+    bool lifecycle = false;
     // How many lines have entered the scrollback since the last clear. A host
     // sends exactly those rather than the whole history — which is the other
     // half of not copying it.
@@ -349,7 +378,9 @@ struct TerminalDamage {
     // Whether anything at all needs sending. Asked once per terminal per tick,
     // so it answers without walking the rows where it can.
     bool any() const noexcept {
-        if (full || cursor || modes || title || rasters || scrollback_pushed > 0) return true;
+        if (full || cursor || modes || title || rasters || clipboard || bell || printer ||
+            diagnostics || lifecycle || scrollback_pushed > 0)
+            return true;
         for (const RowSpan& row : rows)
             if (!row.empty()) return true;
         return false;
@@ -371,9 +402,9 @@ struct TerminalDamage {
 //
 // What is deliberately NOT here is everything that carries a payload — the
 // clipboard text, the rasters, the diagnostics, the print spool. Each has a
-// serial or a count here instead, so a host learns that there is something new
-// to fetch without the fetch happening on every tick whether or not anything
-// changed.
+// serial or a count here (and a flag in `TerminalDamage`) instead, so a host
+// learns that there is something new to fetch without the fetch happening on
+// every tick whether or not anything changed.
 struct TerminalStatus {
     ::ckv::Size cells;
     ::ckv::CursorState cursor;
@@ -381,8 +412,17 @@ struct TerminalStatus {
     std::string title;
     TerminalSubsessionState state = TerminalSubsessionState::Ready;
     bool bracketed_paste_enabled = false;
+    // Whether the child is tracking the pointer at all — `mouse_tracking !=
+    // None`, kept because that is the question most hosts have, and answered
+    // beside the level rather than instead of it. A session implementing this
+    // seam that fills in only this one is read as the coarsest level, which is
+    // what such a host was always sent.
     bool mouse_reporting_enabled = false;
     TerminalMouseEncoding mouse_encoding = TerminalMouseEncoding::None;
+    // How much of the pointer's behaviour the child asked for. A host that
+    // delivers pointer events decides from this whether a motion is reported at
+    // all, and one that only forwards bytes carries it so that the far end can.
+    TerminalMouseTracking mouse_tracking = TerminalMouseTracking::None;
     bool application_cursor_keys = false;
     bool focus_reporting_enabled = false;
     bool alternate_scroll_enabled = false;
@@ -393,6 +433,11 @@ struct TerminalStatus {
     // arrived.
     std::uint64_t clipboard_serial = 0;
     std::uint64_t bell_serial = 0;
+    // How many complaints this terminal has made, ever — not how many the ring
+    // is holding. The ring is bounded and drops its oldest entry, so a count of
+    // what it contains would go back down and a host would read that as "there
+    // is nothing new" while entries it has never seen were arriving.
+    std::uint64_t diagnostics_serial = 0;
     bool printer_controller_active = false;
     std::size_t printer_pending_bytes = 0;
     std::size_t printer_jobs_ready = 0;
@@ -416,6 +461,8 @@ struct TerminalSnapshot {
     bool bracketed_paste_enabled = false;
     bool mouse_reporting_enabled = false;
     TerminalMouseEncoding mouse_encoding = TerminalMouseEncoding::None;
+    // Which of DEC 1000, 1002 and 1003 the child is in — see TerminalStatus.
+    TerminalMouseTracking mouse_tracking = TerminalMouseTracking::None;
     bool application_cursor_keys = false;
     bool focus_reporting_enabled = false;
     // DEC mode 1007: with the alternate screen up and the child not tracking
@@ -445,6 +492,10 @@ struct TerminalSnapshot {
     // last acted on, and a host that does nothing with it costs the child
     // nothing.
     std::uint64_t bell_serial = 0;
+    // How many complaints this terminal has made, ever — see TerminalStatus.
+    // The `diagnostics` above are the bounded ring; this is what says how much
+    // of it a host has already seen.
+    std::uint64_t diagnostics_serial = 0;
     // The printer, in three scalars — everything a host needs to show a badge
     // and a button without the snapshot carrying the spool itself. The jobs
     // are drained out of band with `take_printer_jobs()`, because a snapshot

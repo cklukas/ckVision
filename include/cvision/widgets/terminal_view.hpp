@@ -57,6 +57,25 @@ public:
     // path that can move the view.
     std::function<void()> on_scroll_state_changed;
 
+    // Send a key to the child as though the reader had pressed it: the kitty
+    // encoding where the child asked for one, the legacy encoding otherwise,
+    // and the return to the live edge that any real keystroke makes.
+    //
+    // What it deliberately does NOT do is what `on_key` does before that — the
+    // parent escape chord is not intercepted and the terminal's own paging keys
+    // are not consumed locally. This is a caller saying "the child receives
+    // this key", which is the whole point for the two things that need it: an
+    // application with a reserved chord that offers to send it through anyway
+    // (otherwise that chord is unreachable to the child forever), and anything
+    // that replays keys — a macro, a recorded session, a paste delivered as
+    // keystrokes rather than as text.
+    //
+    // Returns whether the key produced any bytes. Not every chord does: a
+    // release with no event reporting in force, or a key this encoding has no
+    // spelling for, is silence rather than a wrong byte — and a caller
+    // replaying a script is entitled to know which.
+    bool send_key(const KeyEvent& event);
+
     void set_cell_metrics(Size cell_pixels);
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
@@ -71,12 +90,21 @@ protected:
     void on_terminal_subsession_changed(const core::TerminalSubsession& session) override;
 
 private:
+    // The one path a key takes to the child, shared by the reader's own press
+    // and by `send_key`, so the two cannot come to encode a chord differently.
+    bool deliver_key(const KeyEvent& event, const core::TerminalStatus& status);
     static std::string encode_key(const KeyEvent& event, bool application_cursor_keys);
     // The kitty keyboard protocol's encoding, for a child that asked for it.
     // Empty when the enhancements in force do not cover this key, which
     // leaves the legacy encoding to say it instead.
     static std::string encode_kitty_key(const KeyEvent& event, core::TerminalKeyboardFlags flags);
     std::string encode_mouse(const MouseEvent& event, core::TerminalMouseEncoding encoding) const;
+    // Whether this event is one the tracking level the child selected asks to
+    // hear about. Presses, releases and the wheel are reported at every level;
+    // motion is the axis the three levels differ on. Takes the whole status
+    // because a session that names no level while reporting is on is a
+    // statement about the seam, not about the child — see the definition.
+    static bool tracking_reports(const MouseEvent& event, const core::TerminalStatus& status);
     // Alternate scroll (DEC mode 1007): a wheel notch over a full-screen
     // program that is not tracking the mouse becomes cursor keys.
     bool forward_alternate_scroll(const MouseEvent& event, const core::TerminalStatus& snapshot);
