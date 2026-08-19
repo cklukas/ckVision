@@ -2,15 +2,77 @@
 #include "cvision/widgets/desktop.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <memory>
+#include <utility>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/scene/box_drawing.hpp"
 #include "cvision/scene/compositor.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/terminal_report_dialog.hpp"
 #include "cvision/widgets/window_list_dialog.hpp"
 
 namespace ckv::widgets {
+namespace {
+
+// The ghost of a window frame, in flight between the window and the row it
+// lives in. A view exactly the size of the rectangle it is describing, so it
+// needs no transparency: every cell it owns is one it draws.
+//
+// It answers no input and takes no focus. That is not a detail — the desktop
+// underneath it is ALREADY in its end state, so a decoration that swallowed a
+// click would be stealing it from the window the reader can see, on the way
+// to a state that had already arrived.
+class MinimizeFlight final : public ui::View {
+public:
+    MinimizeFlight() = default;
+
+    void draw(scene::Painter& painter) override {
+        if (bounds().width <= 0 || bounds().height <= 0) return;
+        const Style style = context().theme->resolve(role_);
+        const Rect local{0, 0, bounds().width, bounds().height};
+        // Under three cells in either direction there is no box to draw —
+        // two borders and nothing between them — so the last frames of a
+        // shrinking flight are a filled block rather than a smaller and
+        // smaller mis-drawn frame.
+        if (local.width < 3 || local.height < 3) {
+            painter.fill(local, Cell::from_grapheme("░", style));
+            return;
+        }
+        painter.draw_box(local, scene::LineStyle::Single, style);
+    }
+
+    void on_attached() override {
+        // The window frame's own role: this is a window's ghost, so a theme
+        // that retinted frames retints the flight with them rather than
+        // leaving one of the two behind.
+        if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.window.frame.active");
+    }
+
+    bool on_mouse(const MouseEvent&) override { return false; }
+    std::optional<PointerShape> pointer_shape_at(Point) const override { return std::nullopt; }
+
+private:
+    ui::RoleId role_ = ui::kInvalidRole;
+};
+
+// One edge of the flight, at `progress`. Rounded rather than truncated so
+// that the last frame before the end sits ON the destination rather than one
+// cell short of it, and so the first frame has already left the source.
+int flight_edge(int from, int to, double progress) {
+    return from + static_cast<int>(std::llround(static_cast<double>(to - from) * progress));
+}
+
+Rect flight_rect(const Rect& from, const Rect& to, double progress) {
+    return Rect{flight_edge(from.x, to.x, progress), flight_edge(from.y, to.y, progress),
+                std::max(1, flight_edge(from.width, to.width, progress)),
+                std::max(1, flight_edge(from.height, to.height, progress))};
+}
+
+}  // namespace
+
 
 namespace {
 
@@ -630,9 +692,73 @@ void Desktop::window_minimize_changed(Window& window) {
         window.set_active(false);
         activate_topmost_shown();
     }
+    // The effect, before the notification rather than after it: an observer
+    // is allowed to minimize something else, and a flight that started after
+    // that would be the second one describing the first one's window.
+    //
+    // Nothing downstream depends on it. `Window::set_minimized` has already
+    // applied the whole end state — hidden, invisible, its bounds untouched —
+    // and this only draws where it went.
+    begin_minimize_flight(window);
     // Last, with activation already settled — see WindowChange::Minimized.
     notify_window_change(window.minimized() ? WindowChange::Minimized : WindowChange::Restored,
                          window);
+}
+
+void Desktop::set_minimize_target_provider(std::function<std::optional<Rect>(Window&)> provider) {
+    minimize_target_provider_ = std::move(provider);
+    // Whatever is in the air was flying to an answer this Desktop no longer
+    // gives. Ended rather than redirected: a decoration mid-flight between two
+    // superseded places is not worth the arithmetic to rescue.
+    finish_minimize_animation();
+}
+
+void Desktop::set_minimize_animation_duration(std::int64_t nanos) noexcept {
+    minimize_animation_nanos_ = std::max<std::int64_t>(0, nanos);
+}
+
+void Desktop::finish_minimize_animation() { minimize_animation_.finish(); }
+
+void Desktop::begin_minimize_flight(Window& window) {
+    // No provider is the ordinary case and the quiet one: an application that
+    // has not said where its hidden windows go gets no effect, not a guess.
+    if (!minimize_target_provider_ || minimize_animation_nanos_ <= 0) return;
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;  // measured before attachment; nothing to animate on
+    const std::optional<Rect> target = minimize_target_provider_(window);
+    if (!target || target->width <= 0 || target->height <= 0) return;
+    const Rect frame = window.bounds();
+    if (frame.width <= 0 || frame.height <= 0) return;
+
+    // Out to the row on the way in, back out of it on the way out. Read from
+    // the window rather than remembered, because this runs after the state
+    // changed and the state is the only thing that knows which way it went.
+    const Rect from = window.minimized() ? frame : *target;
+    const Rect to = window.minimized() ? *target : frame;
+
+    // One decoration at a time. Starting a run ends the previous one, whose
+    // `on_finished` removes its popup — so this is the whole of "a second
+    // minimize during the flight".
+    minimize_animation_.finish();
+    auto flight = std::make_unique<MinimizeFlight>();
+    flight->set_bounds(from);
+    minimize_flight_ = add_popup(std::move(flight));
+
+    const std::weak_ptr<void> alive = lifetime_token();
+    minimize_animation_.start(
+        *app, minimize_animation_nanos_,
+        [this, alive, from, to](double progress) {
+            if (alive.expired() || minimize_flight_ == nullptr) return;
+            minimize_flight_->set_bounds(flight_rect(from, to, progress));
+            minimize_flight_->invalidate();
+        },
+        [this, alive] {
+            // The one place the decoration goes, for every ending there is —
+            // finished, cut short, or a duration of zero that drew nothing.
+            if (alive.expired() || minimize_flight_ == nullptr) return;
+            remove_popup(minimize_flight_).reset();
+            minimize_flight_ = nullptr;
+        });
 }
 
 void Desktop::activate(Window* window) {

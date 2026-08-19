@@ -19,6 +19,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 |---|---|---|
 | `include/cvision/ui/application.hpp` | `Application` | [Getting started](getting-started.md) |
 | `include/cvision/ui/view.hpp` | `View` | [Object model](object-model.md) |
+| `include/cvision/ui/animation.hpp` | `Animation` | [Widget gallery](widget-gallery.md#animation) |
 | `include/cvision/ui/layout.hpp` | `Row`, `Column`, layout specifications | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/grid.hpp` | `Grid` | [Layout guide](layout-guide.md) |
 | `include/cvision/ui/dock.hpp` | `Dock` | [Layout guide](layout-guide.md) |

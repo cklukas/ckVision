@@ -1101,6 +1101,60 @@ throughout); and inferring the release promise from an event's own
 subparameters (presses omit the event type by design, so the inference could
 never arm on a real press).
 
+**D-060 — An animation describes a change that has already happened.** ckVision
+had no animation machinery at all, so U4-k decided what animation IS here
+before it drew anything. `ui::Animation` is a duration, a progress callback and
+a terminal callback, driven by the injected `Clock` — and, deliberately, it
+never owns the end state. The caller applies the end state FIRST and then
+optionally animates; the frames are a decoration over a state that has already
+arrived. That is the opposite of how a retained-mode toolkit usually animates,
+where the animation drives the property and the end state comes with the last
+frame, and it is chosen because of which failure each design makes possible. A
+text user interface is not a game loop: frames are delivered by a terminal that
+may be slow, over a link that may be a network, to a reader who may press a key
+at any moment — so an effect here must be skippable, interruptible, and
+survivable by a host that never gets a timer tick at all. Under the usual
+design each of those is a path along which the end state can be missed, and
+every effect has to get all three right. Under this one there is no half-
+applied state for an interruption to resolve: the desktop is already correct
+before the first frame could be drawn, and the whole of "interrupt" is "stop
+drawing". `Window::set_minimized` already had the right shape for this — it
+applies `minimized_` and `set_visible` and notifies afterwards — so the flight
+starts from an observer that runs on a window whose state is settled.
+Three rules make the mechanism safe to build on. **Progress is read from the
+clock, never counted per tick**: a host delivering half the frames sees the
+same run in the same wall time covering more ground per frame, where a fixed
+step per tick would turn a slow terminal into slow motion and leave the effect
+outliving the thing it described. **`on_finished` runs exactly once for every
+ending** — completed, cut short, or a duration of zero — so an effect has one
+place to tear its decoration down and cannot leak one along a path its author
+forgot; destruction is the sole exception and is silent, because an owner being
+destroyed is already tearing down. **A zero duration is a run that is already
+over**, which is the whole of "animations off": no call site carries a branch
+for it. The minimize flight is the first consumer. Its destination is a host
+provider (`Desktop::set_minimize_target_provider`) because a `Desktop` does not
+know what lists its windows — a taskbar, a window-list dialog and an
+application with no listing at all answer differently, and one of the answers
+is `nullopt`. **No provider, no flight**, so every application written before
+this package is unchanged by it; and with the effect off the provider is not
+even called, so "off" costs not even the question. The decoration is a popup
+like any other — topmost, its own compositor layer, added when a flight starts
+and removed when it ends — that answers no input and takes no focus, since the
+desktop beneath it is already in its end state and a click it swallowed would
+be one stolen from a window the reader can see. *Rejected:* animating
+`Window::bounds()` itself (the window would pass through sizes no layout asked
+for, every arrangement query would see them, and an interrupted flight would
+leave a real window at an invented size); a general animated-property system
+over View (a scene graph of tweens is the game-loop design this file's first
+paragraph rejects, and nothing in the toolkit has asked for more than one
+effect); driving frames from a frame counter (see the clock rule above);
+`on_finished` NOT running when a run is cut short (it is the teardown, and the
+one ending most likely to be forgotten is the one that then leaks a
+decoration); making the flight animate the switcher-bar row rather than fly to
+it (`PagedStrip` resolves clicks by index, so relaying the row 30 times a
+second under a reader's pointer is the press-in-flight hazard of D-057 at frame
+rate).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**

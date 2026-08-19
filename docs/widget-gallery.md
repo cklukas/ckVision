@@ -1140,6 +1140,86 @@ that must not be hidden; `Desktop`'s modal presentation does exactly that,
 since hiding the one window accepting input would leave an application
 answering nothing.
 
+### Showing where a window went — the minimize flight
+
+Minimizing can be *shown* rather than merely done: the frame shrinks and flies
+to the row the window will live in, and back out of it on restore. It is off
+until a host says where a hidden window goes, so nothing changes for an
+application that does not ask.
+
+```cpp
+desktop.set_minimize_target_provider([&bar](widgets::Window& window) {
+    return entry_rect_for(bar, window);           // std::optional<Rect>, desktop-local
+});
+desktop.set_minimize_animation_duration(180'000'000);   // the default; 0 disables
+```
+
+A provider rather than a fixed destination, because a `Desktop` does not know
+what lists its windows — a taskbar, a window-list dialog and an application
+with no listing at all each answer differently, and one of the answers is
+`nullopt` ("nowhere to fly to", which is also what a window on another page of
+a [PagedStrip](#pagedstrip) says). The rect is in the same coordinate frame as
+`Window::bounds()`, and is asked for when the flight starts rather than
+remembered: a taskbar row moves as its neighbours come and go, and a
+remembered rectangle is how an effect flies to where a button used to be.
+
+**The end state never comes from the frames.** `Window::set_minimized` applies
+the whole of it — hidden, invisible, bounds untouched — and notifies
+afterwards, so the flight starts from a window whose state is already settled
+and only draws where it went. Everything the constraint list asks for follows
+from that: a host that never gets a timer tick still ends with the window
+hidden, `set_minimize_animation_duration(0)` is a complete disable that does
+not even call the provider, and `finish_minimize_animation()` — which an
+application calls from wherever it sees a keystroke — stops a decoration
+rather than resolving a half-applied change. See
+[Animation](#animation) for the mechanism and DECISIONS.md D-060 for why it is
+built this way round.
+
+The decoration is a popup like any other: topmost, its own compositor layer,
+added when a flight starts and removed when it ends. It answers no input and
+takes no focus, because the desktop beneath it is already in its end state and
+a click it swallowed would be one stolen from a window the reader can see.
+
+### Animation
+
+Header: `include/cvision/ui/animation.hpp`. One bounded, interruptible run of
+frames over the injected `Clock` — and the whole of what animation means in
+this toolkit. There is no scene graph of animated properties, no timeline and
+no implicit transitions on setters: a duration, a callback that receives
+progress in `[0, 1]`, and a callback that says the run is over.
+
+```cpp
+ui::Animation animation;                     // usually a member, not a local
+animation.start(app, 180'000'000,
+                [&](double progress) { move_the_decoration(progress); },
+                [&] { take_the_decoration_down(); });
+animation.finish();                          // ends it now; the teardown still runs
+```
+
+Three rules make it safe to build on:
+
+- **Progress comes from the clock, never from a frame count.** A host that
+  delivers half the frames sees the same run in the same wall time, covering
+  more ground per frame; a host that delivers none sees it end at its deadline
+  having drawn nothing. Advancing a fixed step per tick instead would turn a
+  slow terminal into slow motion and leave the effect outliving the thing it
+  described.
+- **`on_finished` runs exactly once, for every ending** — completed, cut
+  short, or a duration of zero. An effect therefore has one place to tear its
+  decoration down and cannot leak one by ending along a path its author
+  forgot. Destruction is the sole exception and is silent: an owner being
+  destroyed is already tearing down.
+- **It never owns the end state.** The caller applies the end state first and
+  then, optionally, animates. Nothing downstream can depend on a frame ever
+  being drawn — which is what makes "interruptible" cheap rather than
+  delicate, since there is no half-applied state for an interruption to
+  resolve.
+
+A duration of zero is a run that is already over: `on_finished` and no frames
+at all. That is the whole of "animations off", answered once here rather than
+by a branch at every call site.
+
+
 ## WindowHandle
 
 Header: `include/cvision/widgets/window.hpp`. Stable window identity used for

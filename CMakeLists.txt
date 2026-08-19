@@ -39,6 +39,7 @@ add_library(cvision
     src/term/terminal_subsession.cpp
     src/term/virtual_display.cpp
     src/ui/anchor_pane.cpp
+    src/ui/animation.cpp
     src/ui/application.cpp
     src/ui/command.cpp
     src/ui/dock.cpp

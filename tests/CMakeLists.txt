@@ -1,6 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 set(CKVISION_PORTABLE_TEST_SOURCES
     test_anchor_pane.cpp
+    test_animation.cpp
     test_application.cpp
     test_application_render.cpp
     test_base64.cpp

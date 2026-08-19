@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cvision/ui/animation.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
@@ -38,6 +39,11 @@ namespace ckv::widgets {
 // already claimed.
 class Desktop : public ui::View {
 public:
+    // Long enough to read as a movement between two places, short enough
+    // that a reader who minimizes a window and immediately reaches for the
+    // next one is never waiting on it. Six frames at the default interval.
+    static constexpr std::int64_t kDefaultMinimizeAnimationNanos = 180'000'000;
+
     struct WindowSnapshot {
         Window* window = nullptr;
         std::weak_ptr<void> liveness;
@@ -264,6 +270,46 @@ public:
     }
     ui::View* top_dock() const noexcept { return top_dock_; }
     ui::View* bottom_dock() const noexcept { return bottom_dock_; }
+
+    // --- The minimize flight (U4-k) ---------------------------------
+    //
+    // Where a minimized window goes, so that hiding one can be SHOWN rather
+    // than merely done: the frame shrinks and flies to the row it will live
+    // in, and back out of it on restore.
+    //
+    // A provider rather than a fixed destination, because this Desktop does
+    // not know what lists its windows. A taskbar knows where a window's
+    // entry is; a window-list dialog, a session picker or an application with
+    // no listing at all each answer differently, and one of the answers is
+    // `nullopt` — "nowhere to fly to", which is also what every application
+    // that never installs a provider says. **No provider, no flight**, so
+    // nothing changes for a host that has not asked for one.
+    //
+    // The rect is in this Desktop's own coordinates (the same frame
+    // `Window::bounds()` is in), and is asked for at the moment the flight
+    // starts rather than remembered — a taskbar row moves as its neighbours
+    // come and go, and a remembered rectangle is how an effect flies to
+    // where a button used to be.
+    void set_minimize_target_provider(std::function<std::optional<Rect>(Window&)> provider);
+
+    // How long the flight lasts. **Zero disables it** — which is the whole
+    // of "animations off" for this effect, and is why no call site carries a
+    // branch for it (ui::Animation ends a zero-duration run immediately,
+    // having drawn nothing).
+    void set_minimize_animation_duration(std::int64_t nanos) noexcept;
+    std::int64_t minimize_animation_duration() const noexcept {
+        return minimize_animation_nanos_;
+    }
+
+    // Ends any flight now. The desktop is already in its end state — that is
+    // the invariant the whole effect is built on (ui::Animation, D-060) — so
+    // this only stops a decoration being drawn; there is nothing to resolve.
+    //
+    // Exposed because "interruptible" is the host's judgement, not this
+    // widget's: an application that wants a keystroke to cut the flight short
+    // calls this from wherever it sees keystrokes. A Desktop cannot do it for
+    // them, since a key pressed into a focused window never reaches here.
+    void finish_minimize_animation();
 
     // The third member of that family: one view that fills content_area()
     // and is kept filling it across every resize, under any windows and
@@ -568,6 +614,11 @@ private:
     // just went away was the active one, then reports the change to whoever
     // lists windows.
     void window_minimize_changed(Window& window);
+    // Starts the flight for a window that has JUST changed its minimized
+    // state — the state is already applied when this runs, which is what
+    // makes the effect skippable at no risk (Window::set_minimized notifies
+    // after set_visible, deliberately).
+    void begin_minimize_flight(Window& window);
     // Reports `change` to every live observer — see subscribe_window_change.
     // Iterates a copy of the list, so an observer may unsubscribe itself (or
     // another) from inside the call without invalidating the walk.
@@ -773,6 +824,17 @@ private:
     Window* active_ = nullptr;
     int active_gestures_ = 0;
     std::vector<ui::View*> popups_;
+    // The minimize flight: where a host says hidden windows go, how long the
+    // effect lasts, the run itself, and the decoration it draws.
+    //
+    // The decoration is a popup like any other — topmost, its own compositor
+    // layer — because that is already this Desktop's word for "above every
+    // window". It is added when a flight starts and removed when it ends, so
+    // a desktop with nothing in flight carries no extra layer at all.
+    std::function<std::optional<Rect>(Window&)> minimize_target_provider_;
+    std::int64_t minimize_animation_nanos_ = kDefaultMinimizeAnimationNanos;
+    ui::Animation minimize_animation_;
+    ui::View* minimize_flight_ = nullptr;
     struct PopupBacking {
         std::optional<scene::Surface> surface;
         int compositor_layer_id = 0;
