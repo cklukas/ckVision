@@ -1145,3 +1145,58 @@ Glyphs: `▼` U+25BC, `▲` U+25B2, `◁` U+25C1, `▷` U+25B7 — all East Asia
 Ambiguous, one column under D-019, and none `Extended_Pictographic`. The black
 triangles U+25C0/U+25B6 *are* `Extended_Pictographic` and are deliberately not
 used: a variation selector would make them two cells and shear the row.
+
+**D-058 — A resize re-lays the arrangement a reader stated, from the original.**
+A tiling is a statement about proportions, so a `Desktop` whose content area
+changes size re-divides the arrangement by those proportions instead of clamping
+each window on its own. Clamping independently cannot preserve a partition even
+on the way down — it pulls a band up without shortening it, so two neighbours end
+up sharing a row — and because it only ever shrinks, growing back never repairs
+it: one row off the terminal used to cost a filled tiling its
+`filled_tile_fractions()` verdict, its shadow suppression and every host's
+proportional-restore tag, permanently. So `Desktop` remembers the cells as stated
+and the content area they were stated in, and maps from that ORIGINAL on every
+pass, never from the previous pass's output. That is not an optimization:
+rounding to nearest is not an involution, so re-deriving the reference at each
+intermediate size walks a seam a row at a time and never walks it back, whereas
+returning to the original area is the identity by construction. Edges are mapped
+rather than rectangles, so a seam shared by two neighbours is one coordinate and
+the partition stays exact. The arrangement is captured at the end of every
+command that lays windows out — `tile`, `tile_horizontally`, `tile_vertically`,
+`tile_grid`, `cascade`, `restore` — and when a reader's own move/resize gesture
+ends having left a tiling, the gesture bracket being the one signal that a bounds
+change came from the reader rather than from a host's layout code. It is
+validated against the cells the LAST mapping wrote and not against the cells
+originally stated, so a reader's own drag is never snapped back. It is forgotten
+when one of its own windows leaves the desktop (which is also what stops a cell
+naming a window that no longer exists), and when a mapped cell would be empty —
+the floor is a content extent below the number of bands across it, not twice that
+— at which point the ordinary clamp resumes and the arrangement is honestly lost.
+Membership is settled at capture and frozen: a window that is later minimized
+keeps its cell, because it left the screen and not the tiling, and it comes back
+into the cell it left at whatever size that cell is by then. A window merely
+opening over the arrangement is not one of its cells and does not disturb it; the
+verdict, which is a question about what is on the desktop now rather than about
+what was arranged, does go while such a window covers part of the grid. Cells are
+written with raw `set_bounds`, exactly as the tile commands write bands, and a
+reflowed window skips `reposition_within` for that pass: a band is the
+arrangement's answer, and letting one window's own minimum push it back over its
+neighbour would reopen the overlap this exists to prevent. A window that is
+zoomed, or that carries a `DesktopGrowPolicy` other than `None`, vetoes the
+capture outright — it is already sized by `refresh_zoom_area`/`fill` on every
+resize, and this is not a corner case, because a single window covering the area
+is a one-cell partition and an ordinary maximized window would otherwise be
+captured here. The partition test itself lives in one `Rect`-parameterised helper
+that `filled_tile_fractions()` is expressed in terms of, so the verdict and the
+replay cannot become two opinions about one desktop.
+*Rejected:* re-capturing the reference on every pass (24 → 23 → 24 then hands two
+neighbours each other's heights and keeps them); validating against the stated
+cells rather than the last mapped ones (it snaps a reader's own drag back into
+the grid); forgetting the arrangement whenever any window is added (a reader
+would lose their tiling to opening a message box, including the two dialogs a
+`Desktop` presents itself); a flag set by the tile commands (it would still
+report "tiled" after a drag and would never report a reader who tiled by hand —
+the same reason `filled_tile_fractions()` measures rather than records); routing
+cells through `Window::clamp_size` (one window's minimum reopens the overlap);
+re-normalising the surviving cells when a member leaves (a hole no proportion
+describes, and an arrangement nobody stated).
