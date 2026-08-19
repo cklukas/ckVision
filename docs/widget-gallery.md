@@ -1163,6 +1163,14 @@ a [PagedStrip](#pagedstrip) says). The rect is in the same coordinate frame as
 remembered: a taskbar row moves as its neighbours come and go, and a
 remembered rectangle is how an effect flies to where a button used to be.
 
+It is asked **once** per flight, though, and flying to that one answer is only
+safe while a window changing state does not move its own row. That is the
+host's property rather than the `Desktop`'s: `WindowSwitcherBar` holds it
+deliberately — its three status glyphs are one cell each, so a minimize cannot
+re-flow the row the flight is aimed at. A listing that does re-flow on a state
+change would leave the decoration ending where the window is not, which reads
+as a rendering glitch rather than as the layout change it actually is.
+
 **The end state never comes from the frames.** `Window::set_minimized` applies
 the whole of it — hidden, invisible, bounds untouched — and notifies
 afterwards, so the flight starts from a window whose state is already settled

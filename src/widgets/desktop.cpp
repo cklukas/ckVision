@@ -733,6 +733,18 @@ void Desktop::begin_minimize_flight(Window& window) {
     // Out to the row on the way in, back out of it on the way out. Read from
     // the window rather than remembered, because this runs after the state
     // changed and the state is the only thing that knows which way it went.
+    //
+    // This asks ONCE and flies to the answer, which is only safe because a
+    // window changing state does not move its own row. That is not this
+    // widget's property to guarantee — it belongs to whatever lists the
+    // windows — and in this library `WindowSwitcherBar` holds it deliberately:
+    // its three status glyphs are each one cell (D-059), so a minimize does
+    // not re-flow the row the flight is aimed at. A host whose listing DOES
+    // re-flow on a state change would see the decoration end somewhere the
+    // window is not, which reads as a rendering glitch rather than as the
+    // layout change it is. `every_status_glyph_is_one_cell_so_a_state_change_
+    // never_re_flows_the_row` in test_window_switcher_bar.cpp is what keeps
+    // the bar honest about it.
     const Rect from = window.minimized() ? frame : *target;
     const Rect to = window.minimized() ? *target : frame;
 
