@@ -369,13 +369,33 @@ predicate accepts; see [Dialogs](dialogs-and-commands.md#wizard-state-dependent-
 ## Notification
 
 Header: `include/cvision/widgets/common_components.hpp`. A severity/message/
-dismissibility record owned by NotificationCenter.
+dismissibility record owned by NotificationCenter. `persistent` decides
+whether time may take it away: a persistent notification waits for the reader
+however long that takes, everything else expires on the interval its centre
+was given.
 
 ## NotificationCenter
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for non-modal
 application feedback. It does not replace a modal message box when a decision
 or acknowledgement is required.
+
+`set_auto_dismiss(nanos)` is what turns it into a toast surface: a
+non-persistent notification leaves by itself that long after it was posted,
+measured on the injected Clock. Zero — the default — is no expiry at all, so a
+consumer written before this behaves exactly as it did. Each notification is
+timed from when it was posted, and everything due at one moment leaves in one
+sweep; changing the interval re-times what is already on screen.
+
+The reader can dismiss any line, persistent included, by clicking it; Escape
+takes the most recent. `on_changed` fires whenever the set moves for any
+reason — a post, a dismissal, or an expiry — which a host needs because expiry
+happens on a timer it never sees, and a centre that emptied itself would
+otherwise leave the host holding a rectangle for rows that are gone.
+
+An empty centre paints nothing, and a centre with two lines paints two rows.
+So a host may leave one lying over its content at a generous size instead of
+resizing it on every post: the cells it does not write show what is beneath.
 
 ## Tooltip
 

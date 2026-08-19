@@ -863,3 +863,248 @@ CK_TEST(an_open_clock_wears_the_menu_bars_own_active_role) {
     clock.set_open(false);
     CK_CHECK(background_at(1) == normal.bg);
 }
+
+// --- Toasts that leave by themselves (WP-14) ------------------------------
+//
+// Two things a notification centre has to be able to do before an application
+// can use it for the feedback that is NOT a question: take itself away when
+// the reader has had time to read it, and, for the one message they must not
+// miss, refuse to. Before this, `Notification::persistent` was a field nobody
+// read — the workbench example sets it to true in good faith — and nothing
+// expired at all.
+
+namespace {
+
+// `Standalone` above attaches with a null Application, which is right for the
+// widgets that never ask the time. Expiry is measured on the injected Clock,
+// so these cases need a real Application and a clock a test can move.
+struct Timed {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 10}};
+    ManualClock clock;
+    Application app{term, clock};
+    ckv::ui::RoleRegistry registry;
+    ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
+    ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
+
+    void attach(ckv::ui::View& view) {
+        view.set_context(ckv::ui::Context{&theme, &registry, &app});
+        view.on_attached();
+        view.set_bounds(ckv::Rect{0, 0, 40, 4});
+    }
+    // Moves time AND lets the application deliver what is now due: a clock
+    // that advances with nobody stepping the loop is a clock nothing reads.
+    void advance(std::int64_t nanos) {
+        clock.advance(nanos);
+        app.step(clock.now_nanos());
+    }
+};
+
+constexpr std::int64_t kSecond = 1'000'000'000;
+
+Notification info(std::string text, bool persistent = false) {
+    return Notification{NotificationSeverity::Info, std::move(text), persistent};
+}
+
+ckv::MouseEvent click_row(int y) {
+    return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, y},
+                           std::nullopt, Modifier::None};
+}
+
+}  // namespace
+
+CK_TEST(with_no_interval_set_a_notification_stays_for_ever) {
+    // The default, and the promise to every consumer written before this
+    // widget could tell the time: nothing expires unless a host asks for it.
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.add(info("Indexed commands are searchable"));
+
+    t.advance(kSecond * 600);
+    CK_CHECK(centre.notifications().size() == 1U);
+}
+
+CK_TEST(a_toast_leaves_by_itself_once_its_time_is_up) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    int changes = 0;
+    centre.on_changed = [&] { ++changes; };
+    centre.set_auto_dismiss(kSecond * 3);
+    centre.add(info("Detached"));
+    CK_CHECK(changes == 1);
+
+    t.advance(kSecond * 2);
+    CK_CHECK(centre.notifications().size() == 1U);  // not yet
+
+    t.advance(kSecond * 2);
+    CK_CHECK(centre.notifications().empty());
+    // The host hears about it, which is the whole reason the callback exists:
+    // expiry happens on a timer nobody outside this view can see, so a host
+    // sizing itself from notifications().size() would otherwise be holding a
+    // rectangle for rows that are gone.
+    CK_CHECK(changes == 2);
+}
+
+CK_TEST(a_notification_the_reader_must_not_miss_outlives_every_interval) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.set_auto_dismiss(kSecond);
+    centre.add(info("'build' was taken over by ttys011", /*persistent=*/true));
+    centre.add(info("Config reloaded"));
+
+    t.advance(kSecond * 30);
+    CK_CHECK(centre.notifications().size() == 1U);
+    if (centre.notifications().empty()) return;
+    CK_CHECK(centre.notifications()[0].text == "'build' was taken over by ttys011");
+    CK_CHECK(centre.notifications()[0].persistent);
+}
+
+CK_TEST(each_toast_is_measured_from_when_it_was_posted) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.set_auto_dismiss(kSecond * 3);
+    centre.add(info("first"));
+    t.advance(kSecond * 2);
+    centre.add(info("second"));
+
+    // Two seconds later the first is four seconds old and the second two.
+    t.advance(kSecond * 2);
+    CK_CHECK(centre.notifications().size() == 1U);
+    if (centre.notifications().empty()) return;
+    CK_CHECK(centre.notifications()[0].text == "second");
+
+    t.advance(kSecond * 2);
+    CK_CHECK(centre.notifications().empty());
+}
+
+CK_TEST(two_toasts_that_come_due_together_go_together) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    int changes = 0;
+    centre.set_auto_dismiss(kSecond);
+    centre.add(info("one"));
+    centre.add(info("two"));
+    centre.on_changed = [&] { ++changes; };
+
+    t.advance(kSecond * 2);
+    CK_CHECK(centre.notifications().empty());
+    // One sweep, not two: what an expiry costs is a repaint, so waking once
+    // and clearing everything due is both cheaper and the only order in which
+    // two toasts that expired together leave together.
+    CK_CHECK(changes == 1);
+}
+
+CK_TEST(shortening_the_interval_re_times_what_is_already_on_screen) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.set_auto_dismiss(kSecond * 60);
+    centre.add(info("Config reloaded"));
+    t.advance(kSecond * 5);
+    CK_CHECK(centre.notifications().size() == 1U);
+
+    // A host that shortens its toasts means the one in front of the reader
+    // too; leaving it on the old interval would make the setting take effect
+    // at a moment nobody chose.
+    centre.set_auto_dismiss(kSecond);
+    t.advance(kSecond * 2);
+    CK_CHECK(centre.notifications().empty());
+}
+
+CK_TEST(a_notification_posted_before_there_was_a_clock_starts_its_life_at_attach) {
+    // "Post first, attach later" is an ordinary shape for an application that
+    // builds its chrome after it has something to say. Those entries had no
+    // clock to take a deadline from, so attaching is where they get one —
+    // otherwise they would be accidentally immortal.
+    Timed t;
+    NotificationCenter centre;
+    centre.set_auto_dismiss(kSecond * 2);
+    centre.add(info("Started"));
+    CK_CHECK(centre.notifications().size() == 1U);
+
+    t.attach(centre);
+    t.advance(kSecond * 3);
+    CK_CHECK(centre.notifications().empty());
+}
+
+CK_TEST(a_click_takes_away_the_line_it_landed_on_and_leaves_the_rest) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.add(info("first"));
+    centre.add(info("second"));
+    centre.add(info("third"));
+
+    CK_CHECK(centre.on_mouse(click_row(1)));
+    CK_CHECK(centre.notifications().size() == 2U);
+    if (centre.notifications().size() != 2U) return;
+    CK_CHECK(centre.notifications()[0].text == "first");
+    CK_CHECK(centre.notifications()[1].text == "third");
+
+    // Past the last line the centre draws nothing, so it takes nothing: a
+    // press there belongs to whatever is underneath, and consuming it would
+    // swallow a click aimed at the desktop.
+    CK_CHECK(!centre.on_mouse(click_row(3)));
+    CK_CHECK(centre.notifications().size() == 2U);
+}
+
+CK_TEST(a_click_dismisses_a_persistent_notification_too) {
+    // Dismissal is the reader saying they have read it — which is exactly
+    // what `persistent` was waiting for.
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.set_auto_dismiss(kSecond);
+    centre.add(info("'build' was taken over by ttys011", /*persistent=*/true));
+
+    t.advance(kSecond * 10);
+    CK_CHECK(centre.notifications().size() == 1U);
+    CK_CHECK(centre.on_mouse(click_row(0)));
+    CK_CHECK(centre.notifications().empty());
+}
+
+CK_TEST(escape_still_dismisses_the_most_recent_notification) {
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.add(info("first"));
+    centre.add(info("second"));
+
+    CK_CHECK(centre.on_key(key(Key::Escape)));
+    CK_CHECK(centre.notifications().size() == 1U);
+    if (centre.notifications().empty()) return;
+    CK_CHECK(centre.notifications()[0].text == "first");
+}
+
+CK_TEST(an_empty_centre_paints_nothing_at_all) {
+    // What lets a host leave one lying over its desktop at a generous size
+    // rather than resizing it on every post: the cells it does not write show
+    // whatever is underneath, so an empty centre is invisible instead of
+    // being a filled block in the middle of the reader's work.
+    Timed t;
+    NotificationCenter centre;
+    t.attach(centre);
+    centre.set_bounds(ckv::Rect{0, 0, 8, 3});
+
+    ckv::scene::Surface surface(ckv::Size{8, 3}, ckv::Cell::from_grapheme("#", ckv::Style{}));
+    {
+        ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 8, 3});
+        centre.draw(painter);
+    }
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 8; ++x) CK_CHECK(surface.at(ckv::Point{x, y}).grapheme() == "#");
+
+    // And one notification paints its own row and only its own row.
+    centre.add(info("hi"));
+    {
+        ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 8, 3});
+        centre.draw(painter);
+    }
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "i");   // the Info marker
+    CK_CHECK(surface.at(ckv::Point{0, 1}).grapheme() == "#");   // untouched
+    CK_CHECK(surface.at(ckv::Point{0, 2}).grapheme() == "#");
+}

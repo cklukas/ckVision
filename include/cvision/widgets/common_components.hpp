@@ -2,11 +2,13 @@
 #pragma once
 
 #include <compare>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/command.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/combo_box.hpp"
@@ -563,21 +565,88 @@ enum class NotificationSeverity { Info, Warning, Error };
 struct Notification {
     NotificationSeverity severity = NotificationSeverity::Info;
     std::string text;
+    // Whether this one waits for the reader. A persistent notification is
+    // never taken away by time — it stays until it is dismissed, by a click,
+    // by Escape, or by the host. Everything else expires on its own once the
+    // host has said how long a toast lives (set_auto_dismiss).
+    //
+    // The distinction is about whether the reader has to have SEEN it. "Config
+    // reloaded" missed is nothing lost; "this session was taken over by
+    // ttys011" missed leaves a reader wondering where their work went, so that
+    // one waits however long it has to.
     bool persistent = false;
 };
 
+// Non-modal feedback: a short stack of lines the application posts and the
+// reader does not have to answer. It is not a message box — anything needing
+// a decision, or needing to be acknowledged before the application goes on,
+// is a modal dialog and belongs in one.
+//
+// Toasts arrive and leave by themselves once a host calls set_auto_dismiss;
+// without it nothing expires, which is what every consumer written before
+// that got and still gets. A notification the reader must not miss says so
+// with `Notification::persistent` and outlives any timer.
 class NotificationCenter : public ui::View {
 public:
     std::size_t add(Notification notification);
     void dismiss(std::size_t index);
     const std::vector<Notification>& notifications() const noexcept { return notifications_; }
 
+    // --- How long a toast lives ---------------------------------------
+    //
+    // The lifetime of a NON-persistent notification, measured on the injected
+    // Clock from the moment it was added. Zero — the default — is no expiry
+    // at all: nothing is taken away, which is the behaviour this widget had
+    // before it could tell the time, and a host that never calls this sees no
+    // change whatsoever.
+    //
+    // Time is read from the Application this view is attached to, so a
+    // detached centre simply holds what it was given until it is attached;
+    // there is nowhere to read a clock from and refusing to accept a
+    // notification would be worse than showing it a moment late.
+    //
+    // Changing the interval re-times what is already on screen, deliberately:
+    // a host that shortens its toasts means the ones in front of the reader
+    // too, and leaving them on the old interval would make the setting take
+    // effect at a moment nobody chose.
+    void set_auto_dismiss(std::int64_t nanos);
+    std::int64_t auto_dismiss_nanos() const noexcept { return auto_dismiss_nanos_; }
+
+    // Fires whenever the set of notifications changes for any reason — one
+    // posted, one dismissed by the reader, or one that expired on its own.
+    // A host that sizes or places this view from `notifications().size()`
+    // needs it, because expiry happens on a timer that the host never sees:
+    // without it, a centre that emptied itself would leave the host holding
+    // a rectangle for rows that are no longer there.
+    std::function<void()> on_changed;
+
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
 
 private:
+    // Applies every expiry that is due, and arms one wake-up for the earliest
+    // that is not. One timer for the whole stack rather than one per line:
+    // what an expiry costs is a repaint of the view, so waking once and
+    // sweeping is both cheaper and the only order in which two toasts that
+    // come due together go together.
+    void expire_due();
+    void arm_expiry(std::int64_t deadline_nanos);
+    void changed();
+
     std::vector<Notification> notifications_;
+    // When each notification is due to leave, parallel to `notifications_`
+    // and maintained with it. kNever for a persistent one, and for every one
+    // added while no expiry interval was set. Kept beside the notification
+    // rather than inside it so that `Notification` stays what it is — a
+    // record a host writes — rather than gaining a field only this view may
+    // fill in.
+    static constexpr std::int64_t kNever = 0;
+    std::vector<std::int64_t> deadlines_;
+    std::int64_t auto_dismiss_nanos_ = 0;
+    ui::Application::TimerId expiry_timer_ = 0;
+    std::int64_t expiry_wake_nanos_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
 };
 

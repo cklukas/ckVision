@@ -1374,31 +1374,139 @@ void Wizard::on_attached() {
 }
 
 std::size_t NotificationCenter::add(Notification notification) {
+    // A persistent one is never due; nor is anything added while no interval
+    // has been set, or while there is no clock to read. The deadline is fixed
+    // HERE rather than derived at each sweep, so a notification's life is
+    // measured from when the host posted it and not from when the widget
+    // happened to look.
+    std::int64_t deadline = kNever;
+    ui::Application* const app = context().app;
+    if (!notification.persistent && auto_dismiss_nanos_ > 0 && app != nullptr)
+        deadline = app->clock().now_nanos() + auto_dismiss_nanos_;
     notifications_.push_back(std::move(notification));
-    invalidate();
+    deadlines_.push_back(deadline);
+    if (deadline != kNever) arm_expiry(deadline);
+    changed();
     return notifications_.size() - 1;
 }
+
 void NotificationCenter::dismiss(std::size_t index) {
     if (index >= notifications_.size()) return;
     notifications_.erase(notifications_.begin() + static_cast<std::ptrdiff_t>(index));
-    invalidate();
+    deadlines_.erase(deadlines_.begin() + static_cast<std::ptrdiff_t>(index));
+    changed();
 }
+
+void NotificationCenter::set_auto_dismiss(std::int64_t nanos) {
+    // Negative is read as off rather than asserted on: this is a duration a
+    // host computes from a setting, and the answer to a nonsensical one is a
+    // centre that keeps its notifications, not a dead application.
+    auto_dismiss_nanos_ = std::max<std::int64_t>(0, nanos);
+    // Re-time what is already on screen — see the header. Persistent entries
+    // keep kNever whatever the interval says.
+    ui::Application* const app = context().app;
+    const std::int64_t now = app != nullptr ? app->clock().now_nanos() : 0;
+    std::int64_t soonest = kNever;
+    for (std::size_t i = 0; i < notifications_.size(); ++i) {
+        if (notifications_[i].persistent || auto_dismiss_nanos_ == 0 || app == nullptr) {
+            deadlines_[i] = kNever;
+            continue;
+        }
+        deadlines_[i] = now + auto_dismiss_nanos_;
+        if (soonest == kNever || deadlines_[i] < soonest) soonest = deadlines_[i];
+    }
+    if (soonest != kNever) arm_expiry(soonest);
+}
+
+void NotificationCenter::expire_due() {
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    const std::int64_t now = app->clock().now_nanos();
+    bool removed = false;
+    for (std::size_t i = notifications_.size(); i-- > 0;) {
+        if (deadlines_[i] == kNever || deadlines_[i] > now) continue;
+        notifications_.erase(notifications_.begin() + static_cast<std::ptrdiff_t>(i));
+        deadlines_.erase(deadlines_.begin() + static_cast<std::ptrdiff_t>(i));
+        removed = true;
+    }
+    // Whatever is still waiting gets the next wake-up. Recomputed from what
+    // remains rather than remembered, because a dismissal by the reader may
+    // have taken the entry this timer was armed for.
+    std::int64_t soonest = kNever;
+    for (const std::int64_t deadline : deadlines_)
+        if (deadline != kNever && (soonest == kNever || deadline < soonest)) soonest = deadline;
+    if (soonest != kNever) arm_expiry(soonest);
+    if (removed) changed();
+}
+
+void NotificationCenter::arm_expiry(std::int64_t deadline_nanos) {
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    // An armed wake-up that comes sooner already covers this one; one that
+    // comes later is replaced, so a toast posted now does not wait behind a
+    // persistent-looking interval that was armed before it.
+    if (expiry_timer_ != 0 && expiry_wake_nanos_ <= deadline_nanos) return;
+    if (expiry_timer_ != 0) app->cancel_timer(expiry_timer_);
+    const std::int64_t delay = std::max<std::int64_t>(0, deadline_nanos - app->clock().now_nanos());
+    const std::weak_ptr<void> liveness = lifetime_token();
+    expiry_wake_nanos_ = deadline_nanos;
+    expiry_timer_ = app->start_timer(delay, /*repeating=*/false, [this, liveness] {
+        // One-shot, so nothing has to be cancelled on the way out — but this
+        // view can be destroyed between arming and firing, and a callback
+        // reading `this` then would be reading freed storage.
+        if (liveness.expired()) return;
+        expiry_timer_ = 0;
+        expiry_wake_nanos_ = 0;
+        expire_due();
+    });
+}
+
+void NotificationCenter::changed() {
+    invalidate();
+    if (on_changed) on_changed();
+}
+
 void NotificationCenter::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(role_);
-    painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", style));
+    // Only the rows that have something on them. An empty centre paints
+    // nothing at all, which is what lets a host leave one lying over its
+    // desktop at a generous size instead of resizing it on every post: the
+    // cells it does not write show whatever is underneath.
     for (std::size_t i = 0; i < notifications_.size() && static_cast<int>(i) < bounds().height; ++i) {
-        std::string prefix = notifications_[i].severity == NotificationSeverity::Info ? "i " :
-                             notifications_[i].severity == NotificationSeverity::Warning ? "! " : "x ";
-        painter.draw_text(Point{0, static_cast<int>(i)}, text::clip_to_width(prefix + notifications_[i].text, bounds().width), style);
+        const std::string prefix = notifications_[i].severity == NotificationSeverity::Info ? "i " :
+                                   notifications_[i].severity == NotificationSeverity::Warning ? "! " : "x ";
+        const int row = static_cast<int>(i);
+        painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
+        painter.draw_text(Point{0, row},
+                          text::clip_to_width(prefix + notifications_[i].text, bounds().width), style);
     }
 }
+
 bool NotificationCenter::on_key(const KeyEvent& event) {
     if (is_press(event) && event.chord.key == Key::Escape && !notifications_.empty()) { dismiss(notifications_.size() - 1); return true; }
     return false;
 }
+
+bool NotificationCenter::on_mouse(const MouseEvent& event) {
+    // A click takes away the line it landed on — including a persistent one,
+    // which is the reader saying they have read it. Clicks past the last
+    // notification are not ours: an empty centre draws nothing there, and
+    // consuming a press over what looks like bare desktop would swallow the
+    // click a reader aimed at whatever is beneath.
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
+    const Point local{event.cell.x - absolute_bounds().x, event.cell.y - absolute_bounds().y};
+    if (local.y < 0 || static_cast<std::size_t>(local.y) >= notifications_.size()) return false;
+    dismiss(static_cast<std::size_t>(local.y));
+    return true;
+}
+
 void NotificationCenter::on_attached() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
+    // Anything posted before there was a clock to read has no deadline yet.
+    // Re-timing here is what makes "post first, attach later" behave the same
+    // as the ordinary way round, rather than leaving those entries immortal.
+    if (auto_dismiss_nanos_ > 0) set_auto_dismiss(auto_dismiss_nanos_);
 }
 
 Tooltip::Tooltip(std::string text) : text_(std::move(text)) {
