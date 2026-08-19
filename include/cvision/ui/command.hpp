@@ -195,6 +195,11 @@ struct StandardCommands {
     CommandId terminal_report = kInvalidCommand;
     CommandId focus_next = kInvalidCommand;
     CommandId focus_previous = kInvalidCommand;
+    // Putting the active window away (U4-i). A window's own `_` control
+    // does this for the window it is drawn on; this is the same verb
+    // reached from a menu or a key, which is the route a reader has when
+    // the window they mean is the one they are working in.
+    CommandId minimize = kInvalidCommand;
 };
 
 // The keys the standard set is declared under. Spelled out so a
@@ -219,6 +224,7 @@ inline constexpr std::string_view kCascade = "ckv.window.cascade";
 inline constexpr std::string_view kWindowList = "ckv.window.list";
 inline constexpr std::string_view kFocusNext = "ckv.focus.next";
 inline constexpr std::string_view kFocusPrevious = "ckv.focus.previous";
+inline constexpr std::string_view kMinimize = "ckv.window.minimize";
 }  // namespace std_command_keys
 
 // Instance-owned (D-008). Enablement is a per-command predicate, and named

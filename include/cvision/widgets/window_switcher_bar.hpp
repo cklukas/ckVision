@@ -1,8 +1,10 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
-// WindowSwitcherBar (U4-a): one row listing every open window by title,
-// left-click to activate and raise it, right-click for a host-supplied
-// context menu — the arrangement a desktop taskbar uses.
+// WindowSwitcherBar (U4-a): one row listing every open window by title and
+// by state, left-click to bring it forward or put it away, right-click for
+// a host-supplied context menu — the arrangement a desktop taskbar uses,
+// including what a taskbar's buttons do (U4-j: see Status and the click
+// semantics beside set_minimize_action).
 //
 // Nothing about WHICH windows are listed, what they are CALLED, what a
 // click DOES, or what the menu OFFERS is fixed here. Each is a provider the
@@ -114,11 +116,47 @@ private:
 // and Tab would land the reader in the chrome rather than in their work.
 class WindowSwitcherBar : public PagedStrip {
 public:
+    // What one row says about its window, in the taskbar's three states
+    // (U4-j). Each is drawn as a glyph one space left of the title — see
+    // status_glyph, which is the single table that maps the three.
+    //
+    // The state is also what a left-click MEANS, which is why the two live
+    // together: a taskbar entry does not do one thing, it does the thing its
+    // icon says is available. See the click semantics below.
+    enum class Status {
+        Active,     // the window the reader is working in
+        Visible,    // on the desktop, behind something else
+        Minimized,  // put away, and reachable only from this row
+    };
+
+    // The glyph one row draws for each state — the ONE place the three are
+    // spelled, so a menu legend, a help page or a host's own listing names
+    // the same shapes this bar draws rather than copying literals that then
+    // drift apart.
+    //
+    // All three were checked against ckv::text — this library's own width
+    // authority — before being chosen, the check PagedStrip's own steering
+    // glyphs record: U+25AE, U+25AF and U+2584 are neither East Asian Wide
+    // nor Extended_Pictographic, so no host widens them and no variation
+    // selector can turn one into a two-cell emoji. That is why they are
+    // these and not the BLACK/WHITE SQUARE U+25A0/U+25A1 the request was
+    // first written with: those two are East Asian **Ambiguous**, which
+    // D-019 resolves to one column here while a host rendering a CJK font
+    // gives them two — and a taskbar whose every entry is one cell wider
+    // than the layout believes shears the whole row.
+    static std::string_view status_glyph(Status status) noexcept;
+
     // One row, as the bar currently understands it.
     struct Entry {
         Window* window = nullptr;
         std::string label;
         bool active = false;
+        // Whether this window is put away. Kept beside `active` rather than
+        // folded into one state member because the two are separately
+        // sourced — activity from the active provider, hiddenness from the
+        // minimized provider — and status() is where they are resolved into
+        // the one answer everything else reads.
+        bool minimized = false;
         // The content cells this row's box is CURRENTLY given — which is
         // `natural_width(entry)` unless damping is holding it at an older
         // measurement (see set_width_damping). It is part of the row's
@@ -126,6 +164,19 @@ public:
         // width is a row that has to be laid out again even when every label
         // on the bar reads exactly as it did.
         int width = 0;
+
+        // The two flags as one answer. Minimized wins over active, and the
+        // precedence is stated rather than left to a host's providers to get
+        // right: a Desktop never leaves a hidden window active (it moves
+        // activation on as the window goes), but a host driving this bar
+        // from a model of its own can answer both questions "yes", and a row
+        // that drew itself as the reader's current window while the window
+        // was nowhere on screen would be the one lie a taskbar must not
+        // tell.
+        Status status() const noexcept {
+            if (minimized) return Status::Minimized;
+            return active ? Status::Active : Status::Visible;
+        }
 
         friend bool operator==(const Entry&, const Entry&) = default;
     };
@@ -181,6 +232,42 @@ public:
     // MenuItem::command would act on the wrong window.
     void set_context_menu_provider(
         std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> provider);
+    // Whether a listed window is put away — the second half of what a row's
+    // status icon says, and of what a click on it does. Defaults to
+    // Window::minimized(), which is the answer for anything the framework
+    // itself hides; a host whose windows are put away by some model of its
+    // own (a session that is detached, a document that is closed but
+    // listed) says so here, exactly as it says what a window is CALLED
+    // through the label provider.
+    void set_minimized_provider(std::function<bool(Window&)> provider);
+
+    // --- What a click does, which is what the icon promises -----------
+    //
+    // The three transitions of a taskbar (U4-j), decided here from the row's
+    // own Status so that no host has to re-derive them:
+    //
+    //   * an ACTIVE row minimizes its window — the reader is pointing at
+    //     what they are already in, and the only thing left to ask for is
+    //     to put it away;
+    //   * a VISIBLE row activates and raises — the plain "bring me that
+    //     one";
+    //   * a MINIMIZED row comes back, which is the same activate: naming a
+    //     hidden window is asking for it, and Desktop::activate restores it
+    //     on the way to the front.
+    //
+    // Hence two verbs rather than one action with a state test inside it.
+    // The activate action is the one that was always here and is unchanged;
+    // the minimize action is new, and a host that installs neither gets both
+    // defaults. A host that installs only its own activate action — to move
+    // the keyboard with it, say — keeps the taskbar's semantics for free
+    // rather than re-deriving which of the three it is looking at.
+    //
+    // A window whose minimizable() is false is never minimized by a click on
+    // its row: it draws no `_` control on its own frame, and a taskbar that
+    // put it away anyway would be a second, hidden route past the gate the
+    // window set. Clicking the active row of such a window does nothing,
+    // which is what its own frame does too.
+    void set_minimize_action(std::function<void(Window&)> action);
 
     // --- Damped widths ------------------------------------------------
     //
@@ -291,6 +378,8 @@ private:
     std::function<std::string(Window&)> label_provider_;
     std::function<Window*()> active_provider_;
     std::function<void(Window&)> activate_action_;
+    std::function<void(Window&)> minimize_action_;
+    std::function<bool(Window&)> minimized_provider_;
     std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> context_menu_provider_;
 
     std::vector<Entry> entries_;

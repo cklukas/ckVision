@@ -32,13 +32,28 @@ is deliberately deferred, and why — the same discipline as
   the classic `SS3 P/Q/R/S` encoding for F1-F4 and the `CSI n~` encoding
   for F1-F12), Shift+Tab (`CSI Z`), each with the standard
   `;modifier` parameter when present.
-- **Kitty keyboard protocol**: the `CSI code[;modifiers]u` form —
-  named keys (Enter/Tab/Escape/Backspace) plus arbitrary Unicode
-  codepoints as `Key::Char`, accepted only when
-  `Capabilities::keyboard_protocol == KeyboardProtocol::Kitty`. The selected
-  POSIX kitty session requests event types; press and repeat use `View::on_key`,
-  while release is delivered only through `View::on_key_release` and can never
-  execute a command binding.
+- **Kitty keyboard protocol**: the full
+  `CSI code[:alternates];modifiers[:event];text u` form, accepted only when
+  `Capabilities::keyboard_protocol == KeyboardProtocol::Kitty`. Named keys
+  (Enter/Tab/Escape/Backspace), arbitrary Unicode codepoints as `Key::Char`,
+  and the functional private-use block 57344–63743: the keypad's navigation
+  keys map to their named keys, the keypad's character keys type their
+  canonical character, and every other functional code — modifier and lock
+  keys, media keys, F13 and beyond — is consumed deliberately rather than
+  delivered as private-use text. The alternate-key subparameters are parsed
+  and ignored (D-047: the model carries a key and the text it produced, not
+  the layout behind them); the associated-text field is authoritative for
+  `Key::Char` text, because under the all-keys-as-escape-codes enhancement
+  it is the only correct source for a shifted or composed character. The
+  event type also rides on the legacy-form functional keys
+  (`CSI 1;1:3 A` is Up going back up, not a second Up). Press and repeat
+  use `View::on_key`, while release is delivered only through
+  `View::on_key_release` and can never execute a command binding.
+  `KeyEvent::reports_release` is true exactly when the event arrived
+  escape-coded on a session whose verified enhancement set includes event
+  types — the POSIX backend pushes the full requested set once the
+  protocol is proven, reads back what the host honoured (`CSI ? u`), and
+  records that answer in `Capabilities::kitty_keyboard_flags` (D-055).
 - **xterm modifyOtherKeys**: the `CSI 27;modifier;keycode~` form,
   sharing the same codepoint-to-KeyChord conversion as kitty and accepted only
   when the selected keyboard protocol is `ModifyOtherKeys`.
@@ -114,12 +129,13 @@ single-byte resync.
   fallback when an image would exceed that limit, and its color-register limit
   bounds the encoder's palette.
 - **XTGETTCAP is not implemented.**
-- **Kitty extended fields beyond event type are not modeled.** The decoder
-  recognizes the modifiers' `:press` / `:repeat` / `:release` subparameter
-  requested by ckVision's kitty session. It does not yet retain alternate-key
-  codes or embedded text-as-codepoints fields, because the v1 `KeyEvent`
-  contract has no representation for them. Other CSI subparameters remain
-  folded for the narrow supported parser subset.
+- **Kitty alternate-key codes are parsed and deliberately not retained.**
+  The decoder reads the full subparameter grammar (event types, embedded
+  text-as-codepoints), but the shifted/base-layout key codes have no
+  representation in the `KeyEvent` contract by decision, not omission:
+  ckVision never requests that enhancement (D-047), and a host volunteering
+  the codes anyway changes nothing. Caps-lock and num-lock modifier bits in
+  the modifiers field are likewise ignored rather than misread.
 ## Bracketed-paste trust boundary and recovery
 
 `CSI 201~` is an in-band delimiter. A pasted byte sequence can literally

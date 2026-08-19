@@ -79,6 +79,13 @@ public:
     void set_cell_metrics(Size cell_pixels);
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
+    // Releases arrive on their own route (they must never look like a
+    // second press to an ordinary control), but a hosted child that asked
+    // for kitty event types is owed them; on_key's body already reads the
+    // action, claims a matching parent-escape or paging release with its
+    // press, and encodes or drops the rest per the child's negotiated
+    // flags.
+    bool on_key_release(const KeyEvent& event) override { return on_key(event); }
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_resized() override;

@@ -212,6 +212,29 @@ CK_TEST(button_with_no_on_press_handler_does_not_crash_when_pressed) {
     CK_CHECK(button.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
 }
 
+CK_TEST(button_escape_cancels_a_key_press_in_flight_and_is_consumed) {
+    Fixture f;
+    Button button("OK");
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+    button.on_focus(ckv::FocusEvent{true});
+
+    const KeyChord space{Key::Char, Modifier::None, " "};
+    const KeyChord escape{Key::Escape, Modifier::None, ""};
+    CK_CHECK(button.on_key(ckv::KeyEvent{space, ckv::KeyAction::Press, true}));
+    CK_CHECK(button.pressed());
+
+    // Escape takes the press back — and is consumed by that cancellation,
+    // so it cannot also close the dialog underneath.
+    CK_CHECK(button.on_key(ckv::KeyEvent{escape, ckv::KeyAction::Press, true}));
+    CK_CHECK(!button.pressed());
+    CK_CHECK(!button.on_key_release(ckv::KeyEvent{space, ckv::KeyAction::Release, true}));
+    CK_CHECK(presses == 0);
+
+    // With no press in flight, Escape is not the button's to consume.
+    CK_CHECK(!button.on_key(ckv::KeyEvent{escape, ckv::KeyAction::Press, true}));
+}
+
 CK_TEST(button_is_a_tab_stop_by_construction) {
     Fixture f;
     Button button("OK");
@@ -996,9 +1019,14 @@ CK_TEST(a_held_enter_keeps_the_button_down_and_acts_only_on_release) {
     CK_CHECK(button->on_key(
         ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Repeat, true}));
     CK_CHECK(presses == 0);  // one press held, not many
-    CK_CHECK(button->on_key(
+    // The release arrives on its dedicated route, as Application routes it.
+    CK_CHECK(button->on_key_release(
         ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Release, true}));
     CK_CHECK(!button->pressed());
+    CK_CHECK(presses == 1);
+    // A stray release with no press in flight is not this button's.
+    CK_CHECK(!button->on_key_release(
+        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Release, true}));
     CK_CHECK(presses == 1);
 }
 
@@ -1016,7 +1044,7 @@ CK_TEST(a_held_space_behaves_exactly_as_a_held_enter) {
         ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, " "}, ckv::KeyAction::Press, true}));
     CK_CHECK(button->pressed());
     CK_CHECK(presses == 0);
-    CK_CHECK(button->on_key(
+    CK_CHECK(button->on_key_release(
         ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, " "}, ckv::KeyAction::Release, true}));
     CK_CHECK(presses == 1);
 }
@@ -1039,8 +1067,8 @@ CK_TEST(focus_leaving_during_a_held_key_takes_the_press_back) {
     app.set_focus(other);  // Tab away mid-press
     CK_CHECK(!button->pressed());
     // The key finally comes up, but it is no longer this button's press.
-    button->on_key(
-        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Release, true});
+    CK_CHECK(!button->on_key_release(
+        ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}, ckv::KeyAction::Release, true}));
     CK_CHECK(presses == 0);
 }
 

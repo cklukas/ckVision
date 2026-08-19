@@ -1054,6 +1054,53 @@ indistinguishable from a shorter one it was parsing for); and dropping
 `mouse_reporting_enabled` in favour of the level alone (a public seam other
 projects implement, and the derived answer costs nothing).
 
+**D-055 — A key's release is requested in full, verified by readback, and only
+then promised — and a button follows its key the way it follows the pointer.**
+The kitty keyboard protocol's event types alone do not report what a button
+needs: Enter, Space and every text-producing key keep their legacy encodings —
+bytes with no identity a release could be paired with — until the
+all-keys-as-escape-codes enhancement is also in force, and once it is, the
+associated-text enhancement is what keeps typing correct, because a shifted or
+composed character then arrives only in the text field (hosts confirm this:
+one was observed suppressing the plain Enter release without the full set and
+carrying dead-key compositions in the text field with it). So the POSIX
+session, once `CSI ? u` has proven the protocol, pushes the whole set ckVision
+can carry — disambiguate, event types, all keys as escape codes, associated
+text, never alternate keys (D-047) — and then asks again: the push is a
+request, only the readback is an answer, and what the readback says is what
+`Capabilities::kitty_keyboard_flags` records and what every promise derives
+from. A readback may land after its probe window; a session whose protocol was
+verified inside one accepts later flag readbacks for its lifetime (the query
+is only ever solicited by this side, and decode never trusts the record — it
+follows the shape of what arrives; the flags only set what a key *promises*).
+A host honouring all-keys-as-escape-codes without associated text would force
+layout reconstruction, so the session steps its own stack entry — never a
+pre-existing one — back to the baseline and re-reads. An embedder that stated
+an explicit flag contract keeps exactly that contract.
+
+`KeyEvent::reports_release` is the per-event form of the verified promise:
+true exactly for events that arrived escape-coded on a session whose verified
+set includes event types. On that promise the button becomes symmetric with
+the pointer: press arms and depresses, repeat is the same press being held,
+release is what commits — and Tab away, Escape, or the terminal losing focus
+takes the press back, exactly as dragging off the button does. Escape's
+cancel consumes the Escape: taking back a press must not also close the
+dialog. Without the promise the press fires immediately behind a brief
+depressed flash, and auto-repeat re-fires, because a legacy repeat *is* a
+fresh keystroke. Release events keep their dedicated `on_key_release` route
+and can never execute a command binding; the button and the terminal view opt
+into that route explicitly.
+
+*Rejected:* trusting the push without the readback (reports a promise the
+terminal does not keep — the reason D-047 exists); a per-terminal flag
+instead of the per-event one (one session mixes encodings, and the earlier
+per-terminal reading held a button down forever waiting on a release its
+legacy-coded key could never send); synthesizing shifted text from key
+numbers when a host omits the text field (layout modelling, refused
+throughout); and inferring the release promise from an event's own
+subparameters (presses omit the event type by design, so the inference could
+never arm on a real press).
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**
@@ -1200,3 +1247,53 @@ the same reason `filled_tile_fractions()` measures rather than records); routing
 cells through `Window::clamp_size` (one window's minimum reopens the overlap);
 re-normalising the surviving cells when a member leaves (a hole no proportion
 describes, and an arrangement nobody stated).
+
+**D-059 — A switcher-bar row says which of three states its window is in, and
+the click does what the icon promises.** A taskbar entry is not a label with an
+action bolted on: the icon and the click are one statement, so both are decided
+in `WindowSwitcherBar` rather than left to each host. A row draws one of three
+glyphs a space left of the title — active, visible-but-behind, minimized — and a
+left click on it minimizes the active window, activates and raises one that is
+merely behind, and brings back one that was put away. The third and second are
+the same call: `Desktop::activate` restores a hidden window on its way to the
+front (D-056), so naming a window is asking for it however it left. The host
+supplies the two VERBS and keeps its own side effects — ckmux moves the keyboard
+with the window and re-reads its footer — while the library keeps the policy;
+that is why `set_minimize_action` joins `set_activate_action` instead of the bar
+testing a state inside one action. A window whose `minimizable()` is false is
+never minimized from its row, because its own frame draws no `_` control and a
+taskbar that hid it anyway would be a second route past a gate the window set.
+Status is derived from two separately sourced answers — activity from the active
+provider, hiddenness from a new minimized provider defaulting to
+`Window::minimized()` — and minimized WINS where a host's model answers both: a
+`Desktop` never produces that pair, but a host driving the bar from a model of
+its own can, and a row drawn as the reader's current window while that window is
+nowhere on screen is the one lie a taskbar must not tell. The glyphs are
+`▮`/`▯`/`▄` (U+25AE, U+25AF, U+2584), each checked against `ckv::text` before
+being chosen: none is East Asian Wide or Extended_Pictographic, so no host
+widens them. `■`/`□` (U+25A0/U+25A1), which the request was first written with,
+are East Asian **Ambiguous** — one column here by D-019 and two on a host
+rendering a CJK font, which would shear every entry on the row. All three are
+one cell, so a window changing state does not change its button's length and
+minimize/restore cannot re-flow the row the damped widths exist to hold still.
+The icon is part of the item's TEXT and paid for in `natural_width`, the one
+place an entry's content is measured, so the paging and the damping follow it
+without being told; it sits at the FRONT, so the lone-item elision takes the
+tail of the name and leaves the state legible. The verb also exists as a
+standard command, `ckv.window.minimize`, with a `Desktop` default handler
+beside `kZoom`'s: a menu and a key are how a reader reaches the window they are
+already IN, whose own `_` control is the one they would have to aim at.
+*Rejected:* one `bool minimized` beside `bool active` with no resolution (two
+flags spell a fourth state that means nothing, and every reader of the pair
+would have to settle the precedence again); a single click action with a state
+test inside it (every host that wanted its own focus handling would re-derive
+the three transitions, and one of them would get it wrong); teaching
+`PagedStrip` about icons (it pages words of a given width — what those words
+say is its consumer's business, and D-057 put the strip below the bar precisely
+so the bar could keep what is window-specific); reading `Window::minimized()`
+directly with no provider (the label and the active window are both host-
+replaceable, and a host whose windows are put away by its own model — a
+detached session, a document closed but listed — would have had no seam);
+drawing the icon only for minimized entries (it would say "put away" and
+nothing else, and the active/behind distinction would rest on colour alone,
+which a monochrome theme does not have).

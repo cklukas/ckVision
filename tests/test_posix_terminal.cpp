@@ -651,6 +651,104 @@ CK_TEST(posix_terminal_pushes_and_pops_an_explicit_kitty_keyboard_session) {
     ::close(slave_fd);
 }
 
+CK_TEST(posix_terminal_negotiates_full_kitty_enhancements_after_the_protocol_is_proven) {
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        PosixClock clock;
+        PosixTerminal term(clock, slave_fd, slave_fd);
+        bool flags_verified = false;
+        bool release_tagged = false;
+        const std::int64_t give_up = clock.now_nanos() + 3'000'000'000LL;
+        while (clock.now_nanos() < give_up && !(flags_verified && release_tagged)) {
+            const auto events = term.poll(clock.now_nanos() + 100'000'000LL);
+            for (const TerminalEvent& event : events) {
+                if (const auto* key = std::get_if<KeyEvent>(&event)) {
+                    if (key->chord.key == Key::Enter && key->action == KeyAction::Release &&
+                        key->reports_release)
+                        release_tagged = true;
+                }
+            }
+            flags_verified = flags_verified ||
+                             (term.capabilities().kitty_keyboard_flags == kKittyRequestedFlags &&
+                              keyboard_reports_all_releases(term.capabilities()));
+        }
+        if (flags_verified) term.write("KITTY-FLAGS-VERIFIED");
+        if (release_tagged) term.write("ENTER-RELEASE-TAGGED");
+        char acknowledgement = 0;
+        if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+        ::close(acknowledge_fd);
+    });
+    ::usleep(50'000);  // let construction issue its non-blocking queries
+    // The protocol's proof: it exists, nothing is in force yet.
+    constexpr std::string_view kProofReply = "\x1B[?0u";
+    CK_CHECK(::write(child.master_fd, kProofReply.data(), kProofReply.size()) ==
+             static_cast<ssize_t>(kProofReply.size()));
+    // The probe window closes ~250 ms after construction; the session then
+    // pushes the full requested set and immediately asks what is in force.
+    const std::string negotiated = read_available(child.master_fd, 1500);
+    const std::size_t push_at = negotiated.find("\x1B[>27u");
+    CK_CHECK(push_at != std::string::npos);
+    CK_CHECK(negotiated.find("\x1B[?u", push_at) != std::string::npos);
+    // Answer the readback, then hold Enter down and let it up.
+    constexpr std::string_view kReadbackAndKeys = "\x1B[?27u\x1B[13u\x1B[13;1:3u";
+    CK_CHECK(::write(child.master_fd, kReadbackAndKeys.data(), kReadbackAndKeys.size()) ==
+             static_cast<ssize_t>(kReadbackAndKeys.size()));
+    const std::string output = read_available(child.master_fd, 2000);
+    CK_CHECK(output.find("KITTY-FLAGS-VERIFIED") != std::string::npos);
+    CK_CHECK(output.find("ENTER-RELEASE-TAGGED") != std::string::npos);
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    ::close(child.master_fd);
+}
+
+CK_TEST(posix_terminal_demotes_a_kitty_host_that_honours_escape_codes_without_text) {
+    PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
+        PosixClock clock;
+        PosixTerminal term(clock, slave_fd, slave_fd);
+        bool demoted = false;
+        const std::int64_t give_up = clock.now_nanos() + 3'000'000'000LL;
+        while (clock.now_nanos() < give_up && !demoted) {
+            (void)term.poll(clock.now_nanos() + 100'000'000LL);
+            demoted = term.capabilities().keyboard_protocol == KeyboardProtocol::Kitty &&
+                      term.capabilities().kitty_keyboard_flags == kKittyBaselineFlags;
+        }
+        if (demoted) term.write("KITTY-DEMOTED-TO-BASELINE");
+        char acknowledgement = 0;
+        if (::read(acknowledge_fd, &acknowledgement, 1) != 1 || acknowledgement != 'A') ::_exit(1);
+        ::close(acknowledge_fd);
+    });
+    ::usleep(50'000);
+    constexpr std::string_view kProofReply = "\x1B[?0u";
+    CK_CHECK(::write(child.master_fd, kProofReply.data(), kProofReply.size()) ==
+             static_cast<ssize_t>(kProofReply.size()));
+    const std::string negotiated = read_available(child.master_fd, 1500);
+    const std::size_t push_at = negotiated.find("\x1B[>27u");
+    CK_CHECK(push_at != std::string::npos);
+    // All-keys-as-escape-codes without associated text: the session must
+    // not stay on a set that would force layout guessing (D-055). It steps
+    // its own entry back to the baseline and asks again.
+    constexpr std::string_view kHalfHonoured = "\x1B[?11u";
+    CK_CHECK(::write(child.master_fd, kHalfHonoured.data(), kHalfHonoured.size()) ==
+             static_cast<ssize_t>(kHalfHonoured.size()));
+    const std::string demotion = read_available(child.master_fd, 1000);
+    const std::size_t pop_at = demotion.find("\x1B[<u");
+    CK_CHECK(pop_at != std::string::npos);
+    const std::size_t repush_at = demotion.find("\x1B[>3u", pop_at);
+    CK_CHECK(repush_at != std::string::npos);
+    CK_CHECK(demotion.find("\x1B[?u", repush_at) != std::string::npos);
+    constexpr std::string_view kBaselineReadback = "\x1B[?3u";
+    CK_CHECK(::write(child.master_fd, kBaselineReadback.data(), kBaselineReadback.size()) ==
+             static_cast<ssize_t>(kBaselineReadback.size()));
+    const std::string output = read_available(child.master_fd, 2000);
+    CK_CHECK(output.find("KITTY-DEMOTED-TO-BASELINE") != std::string::npos);
+    acknowledge_output(child);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    ::close(child.master_fd);
+}
+
 CK_TEST(posix_terminal_enters_restores_and_decodes_an_explicit_x10_mouse_session) {
     int master_fd = -1;
     int slave_fd = -1;

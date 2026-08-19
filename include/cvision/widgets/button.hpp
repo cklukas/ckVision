@@ -15,11 +15,16 @@ using ui::SizeHint;
 using ui::View;
 
 // Baseline per plans/widgets.md: default/normal styling, mnemonic
-// (visual only — see widgets/mnemonic.hpp), pressed feedback. Fires
-// `on_press` on Enter/Space press and repeat while focused, never on
-// key release, or a full mouse Down-then-Up cycle inside its own bounds
-// (a drag-out-then-release cancels the press, matching every classic
-// button's own behavior).
+// (visual only — see widgets/mnemonic.hpp), pressed feedback. Activation
+// follows the mouse model on both input paths: a full Down-then-Up cycle
+// commits, and what happens in between can take the press back. With the
+// mouse that is a drag off the button; with the keyboard — on a session
+// whose verified kitty enhancements report every key's release (D-055) —
+// Enter/Space hold the button visibly down until the key comes back up,
+// and Tab away, Escape, or the terminal losing focus cancels the press
+// without firing. On a session without that promise the keystroke fires
+// immediately with a brief depressed flash, and auto-repeat re-fires,
+// exactly as a legacy terminal reports it.
 //
 // Rendering follows ckVision's documented classic-desktop button contract:
 // a solid face with the label centered, a drop shadow composited from
@@ -92,6 +97,10 @@ public:
     // no shadow to stand off from.
     bool trailing_row_is_shadow() const noexcept override { return !flat_; }
     bool on_key(const KeyEvent& event) override;
+    // The release that commits (or finds already taken back) a key-held
+    // press. Routed separately from on_key by design: a release must never
+    // reach a handler that would read it as a second activation.
+    bool on_key_release(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // A button is the plain case of something that acts when clicked;
     // a disabled one is still there, still hit-tested, and still refusing.

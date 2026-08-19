@@ -1883,6 +1883,38 @@ CK_TEST(kzoom_default_is_a_no_op_with_no_active_window) {
     CK_CHECK(af.app.commands().execute(standard(af.app).zoom));  // the handler ran, harmlessly
 }
 
+CK_TEST(kminimize_default_puts_the_active_window_away) {
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f));
+    Window* b = af.desktop->add_window(make_window(af.f));
+    CK_CHECK(af.desktop->active_window() == b);
+
+    af.app.commands().execute(standard(af.app).minimize);
+    CK_CHECK(b->minimized());
+    CK_CHECK(!b->visible());
+    // Still listed, and the reader is handed the window that is still shown.
+    CK_CHECK(af.desktop->windows().size() == 2);
+    CK_CHECK(af.desktop->active_window() == a);
+}
+
+CK_TEST(kminimize_default_leaves_a_window_that_cannot_be_minimized_alone) {
+    AttachedFixture af;
+    Window* w = af.desktop->add_window(make_window(af.f));
+    w->set_minimizable(false);
+    // The command is the menu's and the keyboard's route to the `_` control;
+    // where the control is not drawn, neither route may hide the window —
+    // an alert or a modal that could be parked leaves an application
+    // answering nothing.
+    CK_CHECK(af.app.commands().execute(standard(af.app).minimize));
+    CK_CHECK(!w->minimized());
+    CK_CHECK(af.desktop->active_window() == w);
+}
+
+CK_TEST(kminimize_default_is_a_no_op_with_no_active_window) {
+    AttachedFixture af;
+    CK_CHECK(af.app.commands().execute(standard(af.app).minimize));  // ran, harmlessly
+}
+
 CK_TEST(knextwindow_default_activates_the_next_window_in_cycling_order) {
     AttachedFixture af;
     Window* a = af.desktop->add_window(make_window(af.f));

@@ -19,6 +19,13 @@ namespace {
 bool contains(const Rect& r, Point p) noexcept {
     return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
 }
+
+// Enter or Space, the two keys that press a button. Modifiers are not
+// consulted: they can change while the key is held, and the release must
+// still find the press it belongs to.
+bool activation_chord(const KeyChord& chord) noexcept {
+    return chord.key == Key::Enter || (chord.key == Key::Char && chord.text == " ");
+}
 }  // namespace
 
 Button::Button(std::string text) {
@@ -165,29 +172,33 @@ SizeHint Button::vertical_size_hint() const {
 }
 
 bool Button::on_key(const KeyEvent& event) {
-    const bool activates =
-        event.chord.key == Key::Enter || (event.chord.key == Key::Char && event.chord.text == " ");
-    if (!activates) return false;
+    if (!activation_chord(event.chord)) {
+        // Escape takes back a keyboard press in flight without firing —
+        // and without also closing the dialog, which is not what a reader
+        // half-way into a press they regret is asking for. The Escape is
+        // consumed here exactly when it cancelled something.
+        if (key_armed_ && event.chord.key == Key::Escape && event.action == KeyAction::Press) {
+            key_armed_ = false;
+            armed_ = false;
+            pressed_ = false;
+            invalidate();
+            return true;
+        }
+        return false;
+    }
 
-    // Whether THIS key will report a release. Asking the terminal's protocol
-    // instead was wrong: a kitty session reports events only for the keys it
-    // encodes as escape sequences, while Enter and Space keep arriving as
-    // legacy bytes that never report a release — so the button held itself
-    // down forever waiting for one, and never acted.
+    // Releases have their own route (on_key_release); one handed to this
+    // handler directly is not a press and must not act like one.
+    if (event.action == KeyAction::Release) return false;
+
+    // Whether THIS key will report a release. It is per-event because one
+    // session can mix encodings: only when the negotiated kitty
+    // enhancements cover every key (D-055) does an Enter or Space press
+    // promise the release that would commit it — under lesser sessions
+    // those keys arrive as legacy bytes that never report one, and a
+    // button that waited would hold itself down forever and never act.
     const bool reports_release = event.reports_release;
 
-    if (event.action == KeyAction::Release) {
-        if (!key_armed_) return false;
-        const bool fire = armed_ && has_focus_;
-        key_armed_ = false;
-        armed_ = false;
-        pressed_ = false;
-        invalidate();
-        // Releasing is what commits the press — and only if it was never
-        // taken back in between (Tab away, or the pointer leaving).
-        if (fire) fire_press();
-        return true;
-    }
     // A held key under a release-reporting protocol repeats while it stays
     // down: that is one press being held, not many, so it must not re-fire.
     // A legacy terminal has no such state — its auto-repeat is literally a
@@ -199,7 +210,8 @@ bool Button::on_key(const KeyEvent& event) {
     armed_ = true;
     invalidate();
     if (reports_release) {
-        // Stay depressed until the key comes back up.
+        // Stay depressed until the key comes back up; on_key_release is
+        // what commits the press or finds it already taken back.
         key_armed_ = true;
         return true;
     }
@@ -217,6 +229,19 @@ bool Button::on_key(const KeyEvent& event) {
     }
     armed_ = false;
     fire_press();
+    return true;
+}
+
+bool Button::on_key_release(const KeyEvent& event) {
+    if (!activation_chord(event.chord) || !key_armed_) return false;
+    const bool fire = armed_ && has_focus_;
+    key_armed_ = false;
+    armed_ = false;
+    pressed_ = false;
+    invalidate();
+    // Releasing is what commits the press — and only if it was never taken
+    // back in between (Tab away, Escape, or the terminal losing focus).
+    if (fire) fire_press();
     return true;
 }
 

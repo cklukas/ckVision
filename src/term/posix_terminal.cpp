@@ -61,16 +61,27 @@ static_assert(std::atomic<const char*>::is_always_lock_free,
 static_assert(std::atomic<std::size_t>::is_always_lock_free,
               "D-024 assertion-diagnostic sizes require lock-free atomic<size_t>");
 
+// A kitty enhancement push, masked to what ckVision ever requests: the
+// alternate-key enhancement is deliberately absent from the mask (D-047).
+std::string kitty_push_sequence(int flags) {
+    return "\x1B[>" + std::to_string(flags & kKittyRequestedFlags) + "u";
+}
+
 std::string make_session_enter_sequence(const Capabilities& caps, bool enable_capability_probes) {
     std::string sequence{"\x1B[?1049h"};
-    // Kitty's keyboard protocol has a real session stack: push the current
-    // enhancement flags, then select disambiguation plus event-type reports.
-    // Its matching pop in the restore sequence below returns precisely to the
-    // host's prior keyboard state. Do not similarly force xterm
-    // modifyOtherKeys here: its public setting has no corresponding
-    // save/restore stack, so a library cannot restore an arbitrary host level
-    // exactly. A ModifyOtherKeys capability remains an explicit host promise.
-    if (caps.keyboard_protocol == KeyboardProtocol::Kitty) sequence += "\x1B[>3u";
+    // Kitty's keyboard protocol has a real session stack: push the stated
+    // profile contract when the embedder gave one, else the baseline
+    // (disambiguation plus event-type reports); a probing session raises
+    // its request to the full set once the protocol is proven and reads
+    // back what the host honoured (D-055). The matching pop in the restore
+    // sequence below returns precisely to the host's prior keyboard state.
+    // Do not similarly force xterm modifyOtherKeys here: its public setting
+    // has no corresponding save/restore stack, so a library cannot restore
+    // an arbitrary host level exactly. A ModifyOtherKeys capability remains
+    // an explicit host promise.
+    if (caps.keyboard_protocol == KeyboardProtocol::Kitty)
+        sequence += kitty_push_sequence(caps.kitty_keyboard_flags != 0 ? caps.kitty_keyboard_flags
+                                                                       : kKittyBaselineFlags);
     switch (caps.mouse_protocol) {
         case MouseProtocol::None: break;
         case MouseProtocol::X10: sequence += "\x1B[?9h"; break;
@@ -439,6 +450,10 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
       decoder_(initial_caps),
       last_size_(size()),
       capability_probes_enabled_(enable_capability_probes) {
+    profile_kitty_flags_ = initial_caps.kitty_keyboard_flags & kKittyRequestedFlags;
+    // True exactly when the enter sequence below pushes an entry onto the
+    // host's kitty stack; every later stack step is guarded by it.
+    kitty_push_active_ = initial_caps.keyboard_protocol == KeyboardProtocol::Kitty;
     // The decoder needs the current grid from the first byte on: it is what
     // separates cell from pixel mouse coordinates and what an XTWINOPS 14
     // reply is divided by. Kept current at every observed resize below.
@@ -532,8 +547,13 @@ void PosixTerminal::begin_capability_probes() {
 void PosixTerminal::configure_decoder_capability_update_policy() noexcept {
     if (probe_deadline_nanos_ >= 0) {
         decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptProbeRefinements);
-    } else if (observed_caps_.color_scheme_notifications) {
-        decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptLiveColorSchemeNotifications);
+    } else if (capability_probes_enabled_) {
+        // Between windows a probing session still accepts the refinements
+        // whose authority a window established: the policy itself gates
+        // color-scheme changes on verified 2031 and kitty flag readbacks
+        // on the verified protocol, so an unverified session admits
+        // nothing more than geometry measurements here.
+        decoder_.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
     } else {
         decoder_.set_capability_update_policy(CapabilityUpdatePolicy::Reject);
     }
@@ -584,14 +604,7 @@ void PosixTerminal::finish_capability_probes() {
     // macOS Option chord arrive as Alt instead of as a composed character —
     // and reports key releases, which is what lets a button stay down while
     // its key is held.
-    if (observed_caps_.keyboard_protocol == KeyboardProtocol::Kitty &&
-        caps_.keyboard_protocol != KeyboardProtocol::Kitty) {
-        write_all(output_fd_, "\x1B[>3u");
-        // The matching pop belongs in the ledger the signal handler replays;
-        // pushing without recording it would strand a terminal in the
-        // protocol after a crash.
-        append_session_restore(session_slot_, "\x1B[<u");
-    }
+    negotiate_kitty_enhancements();
     // A resize withheld graphics while it waited for the fresh maximum
     // geometry this terminal had answered with before. The window has now
     // closed without one, so the wait is over either way: restore what DA1
@@ -619,10 +632,16 @@ void PosixTerminal::finish_capability_probes() {
         const auto size_text = [](Size size) {
             return std::to_string(size.width) + "x" + std::to_string(size.height);
         };
+        const std::string keyboard =
+            caps_.keyboard_protocol == KeyboardProtocol::Kitty
+                ? "kitty(flags " + std::to_string(caps_.kitty_keyboard_flags) + ")"
+                : (caps_.keyboard_protocol == KeyboardProtocol::ModifyOtherKeys ? "modifyOtherKeys"
+                                                                                : "legacy");
         graphics_log("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
                      " cell=" + size_text(caps_.cell_pixels) + "px grid=" + size_text(last_size_) +
                      " registers=" + std::to_string(caps_.sixel_color_registers) +
                      " max-geometry=" + size_text(caps_.sixel_max_geometry) +
+                     " keyboard=" + keyboard +
                      " synchronized-output=" + (caps_.synchronized_output ? "yes" : "no") +
                      " overrides{sixel=" +
                      (overrides_.sixel_graphics ? (*overrides_.sixel_graphics ? "on" : "off") : "-") +
@@ -630,6 +649,58 @@ void PosixTerminal::finish_capability_probes() {
                      (overrides_.synchronized_output ? (*overrides_.synchronized_output ? "on" : "off") : "-") +
                      " cell=" + (overrides_.cell_pixels ? size_text(*overrides_.cell_pixels) : "-") + "}");
     }
+}
+
+void PosixTerminal::negotiate_kitty_enhancements() {
+    // Runs when a probe window closes (and again from the absorb path if
+    // the protocol's proof straggles into the closing batch). What is
+    // pushed is a request; only the readback that follows is an answer,
+    // and it may land after the window — the decoder accepts a verified
+    // session's flag readback for the session's lifetime.
+    if (kitty_flags_negotiated_) return;
+    if (observed_caps_.keyboard_protocol != KeyboardProtocol::Kitty) return;
+    kitty_flags_negotiated_ = true;
+    if (kitty_push_active_) {
+        // The enter sequence already pushed. An embedder that stated an
+        // explicit flag contract keeps exactly that; an unstated profile
+        // entered on the baseline, and this replaces our own stack entry —
+        // never a second push, so the restore ledger's single pop stays
+        // exact.
+        if (profile_kitty_flags_ != 0) return;
+        write_all(output_fd_, "\x1B[<u");
+        write_all(output_fd_, kitty_push_sequence(kKittyRequestedFlags));
+        write_all(output_fd_, "\x1B[?u");
+        return;
+    }
+    // Runtime adoption: nothing of ours is on the host's stack yet. The
+    // matching pop belongs in the ledger the signal handler replays;
+    // pushing without recording it would strand a terminal in the protocol
+    // after a crash.
+    kitty_push_active_ = true;
+    write_all(output_fd_, kitty_push_sequence(kKittyRequestedFlags));
+    write_all(output_fd_, "\x1B[?u");
+    append_session_restore(session_slot_, "\x1B[<u");
+}
+
+void PosixTerminal::maybe_demote_kitty_keyboard() {
+    // All-keys-as-escape-codes without associated text would leave this
+    // side reconstructing what a key typed from a keyboard layout it
+    // refuses to model (D-047): a shifted or composed character would
+    // arrive as a key number and nothing else. No host is known to honour
+    // the one without the other; a session on one that does steps its own
+    // stack entry back to the baseline and re-reads what is then in force.
+    // Only our own entry is ever popped: a pre-existing host state with
+    // this shape belongs to whoever set it.
+    if (kitty_demoted_ || !kitty_push_active_) return;
+    if (observed_caps_.keyboard_protocol != KeyboardProtocol::Kitty) return;
+    const int flags = observed_caps_.kitty_keyboard_flags;
+    if ((flags & kKittyReportAllKeysAsEscapeCodes) == 0 ||
+        (flags & kKittyReportAssociatedText) != 0)
+        return;
+    kitty_demoted_ = true;
+    write_all(output_fd_, "\x1B[<u");
+    write_all(output_fd_, kitty_push_sequence(kKittyBaselineFlags));
+    write_all(output_fd_, "\x1B[?u");
 }
 
 bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
@@ -782,6 +853,13 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 // changes, so this state update cannot retroactively make a
                 // stale reply influence later bytes from the same read.
                 observed_caps_ = changed->capabilities;
+                // The kitty flag readback normally lands after its probe
+                // window closed; a protocol proof can also straggle into
+                // the batch that closed one. Raise the enhancement request
+                // (once) and step back from a half-honoured set (once) as
+                // that evidence arrives.
+                if (probe_deadline_nanos_ < 0) negotiate_kitty_enhancements();
+                maybe_demote_kitty_keyboard();
                 if (!update_effective_capabilities()) continue;
                 synchronize_sgr_mouse_input_policy();
                 events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});

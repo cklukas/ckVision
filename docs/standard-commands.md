@@ -105,13 +105,14 @@ also the order `CommandRegistry::all()` reports them in:
 | `ckv.window.tile_horizontal` | `Tile &Horizontally` | Window | — |
 | `ckv.window.tile_vertical` | `Tile &Vertically` | Window | — |
 | `ckv.window.tile_grid` | `Tile &Grid` | Window | — |
+| `ckv.window.minimize` | `Mi&nimize` | Window | — |
 
 Application code references these through
 `CommandRegistry::standard()` — `.quit`, `.close`, `.zoom`,
 `.next_window`, `.previous_window`, `.tile`, `.tile_horizontally`,
 `.tile_vertically`, `.tile_grid`, `.cascade`,
 `.window_list`, `.menu`, `.help`, `.terminal_report`, `.focus_next`,
-`.focus_previous` —
+`.focus_previous`, `.minimize` —
 rather than by key; the keys are spelled out in
 `ckv::ui::std_command_keys` for anything that has to name a command as a
 string, and this table exists to make the wording, grouping, and chord

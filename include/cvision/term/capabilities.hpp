@@ -30,6 +30,23 @@ enum class KeyboardProtocol {
     Kitty,
 };
 
+// The kitty keyboard protocol's progressive enhancements, by their protocol
+// numbers. ckVision requests every enhancement whose payload its input model
+// can carry; ReportAlternateKeys (0x4) is deliberately never requested — the
+// model carries a key and the text it produced, not the keyboard layout
+// behind them (D-047, D-055).
+inline constexpr int kKittyDisambiguateEscapeCodes = 1 << 0;
+inline constexpr int kKittyReportEventTypes = 1 << 1;
+inline constexpr int kKittyReportAllKeysAsEscapeCodes = 1 << 3;
+inline constexpr int kKittyReportAssociatedText = 1 << 4;
+inline constexpr int kKittyRequestedFlags = kKittyDisambiguateEscapeCodes | kKittyReportEventTypes |
+                                            kKittyReportAllKeysAsEscapeCodes |
+                                            kKittyReportAssociatedText;
+// What a kitty session that never verified its enhancement set is entitled
+// to assume: disambiguation and event types were the protocol's original
+// baseline promise, and every earlier ckVision session ran on exactly them.
+inline constexpr int kKittyBaselineFlags = kKittyDisambiguateEscapeCodes | kKittyReportEventTypes;
+
 enum class MouseProtocol {
     None,
     X10,  // legacy, no release events, coordinates capped at 223
@@ -64,6 +81,16 @@ enum class TerminalProfile {
 struct Capabilities {
     ColorDepth color_depth = ColorDepth::TrueColor;
     KeyboardProtocol keyboard_protocol = KeyboardProtocol::Legacy;
+    // The kitty enhancement flags verified to be in effect for this session:
+    // the value the host reported back (CSI ? u) masked to what ckVision
+    // requests — never the value that was merely asked for (D-047's rule,
+    // applied from the client side). Zero outside a kitty session and zero
+    // inside one whose flag set was never verified; both read as "no promise
+    // beyond the legacy encodings". An embedder that selects Kitty
+    // explicitly may also state the flag contract here; leaving it zero
+    // makes the POSIX backend request kKittyBaselineFlags and lets a probing
+    // session negotiate upward from there.
+    int kitty_keyboard_flags = 0;
     MouseProtocol mouse_protocol = MouseProtocol::SGR;
     bool pixel_mouse = false;        // SGR-Pixels (mode 1016): mouse events carry pixel coords
     Size cell_pixels;                // reported cell pixel size (XTWINOPS 16); {0,0} = unknown
@@ -144,6 +171,17 @@ struct Capabilities {
 
     friend bool operator==(const Capabilities&, const Capabilities&) = default;
 };
+
+// Whether every key on this session reports its release: kitty event types
+// together with all-keys-as-escape-codes, both verified. This is the promise
+// a control that stays visibly pressed while its key is held must have —
+// event types alone leave Enter, Space and every other text-producing key on
+// legacy encodings that never report one.
+constexpr bool keyboard_reports_all_releases(const Capabilities& caps) noexcept {
+    return caps.keyboard_protocol == KeyboardProtocol::Kitty &&
+           (caps.kitty_keyboard_flags & kKittyReportEventTypes) != 0 &&
+           (caps.kitty_keyboard_flags & kKittyReportAllKeysAsEscapeCodes) != 0;
+}
 
 // Application-selected capability policy layered over terminal probe evidence.
 // A missing field preserves the observed value; an explicit value remains in

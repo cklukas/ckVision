@@ -27,8 +27,8 @@ namespace ckv::widgets {
 
 // Window-management default handlers (M9/WP-13, M10/WP-13 completion,
 // D-029): on_attached() installs itself as kClose/kQuit/kZoom/
-// kNextWindow/kPreviousWindow/kTile/kTileHorizontally/kTileVertically/
-// kTileGrid/kCascade's default handler — but
+// kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
+// kTileVertically/kTileGrid/kCascade's default handler — but
 // ONLY for whichever of those nothing has claimed yet
 // (CommandRegistry::has_handler), the same guarded-install/guarded-
 // cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
@@ -666,6 +666,14 @@ private:
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
     void zoom_active_window();
+    // kMinimize's default handler: puts the ACTIVE window away, the same
+    // call its own `_` control makes — a no-op with no active window, and
+    // a no-op for one whose minimizable() says it is not a window a reader
+    // parks. That gate is the whole point of routing through this rather
+    // than calling set_minimized(true) at the command site: a modal, an
+    // alert or a fixed-size About box draws no `_` control, and a menu item
+    // that hid one anyway would leave an application answering nothing.
+    void minimize_active_window();
     // Maximize-follows-on-open, applied to a window that has just been
     // added — see set_maximize_follows_active(). Whether the PREVIOUSLY
     // active window was maximized is decided by add_window before

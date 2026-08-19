@@ -468,13 +468,15 @@ CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
 CK_TEST(all_holds_exactly_the_standard_set_for_a_freshly_constructed_registry) {
     CommandRegistry reg;
     const auto all = reg.all();
-    CK_CHECK(all.size() == 16);
+    CK_CHECK(all.size() == 17);
     CK_CHECK(all.front().id == reg.standard().quit);
     // A new standard command is declared at the END of the constructor, so
     // every command declared before it keeps the id it has always been
     // assigned — which is what lets two registries built the same way still
     // agree, and what keeps a persisted key resolving to the same command.
-    CK_CHECK(all.back().id == reg.standard().tile_grid);
+    // kMinimize (U4-j) is the most recent one to arrive that way.
+    CK_CHECK(all.back().id == reg.standard().minimize);
+    CK_CHECK(all[all.size() - 2U].id == reg.standard().tile_grid);
 }
 
 CK_TEST(all_returns_every_declared_command_in_declaration_order) {

@@ -176,6 +176,7 @@ void Desktop::on_attached() {
     install_default_handler(standard.close, [this] { close_active_window(); });
     install_default_handler(standard.quit, [this] { quit_sweep(); });
     install_default_handler(standard.zoom, [this] { zoom_active_window(); });
+    install_default_handler(standard.minimize, [this] { minimize_active_window(); });
     install_default_handler(standard.next_window, [this] { activate_next(); });
     install_default_handler(standard.previous_window, [this] { activate_previous(); });
     install_default_handler(standard.tile, [this] { tile(); });
@@ -276,6 +277,15 @@ void Desktop::quit_sweep() {
 
 void Desktop::zoom_active_window() {
     if (active_ != nullptr) active_->toggle_zoom(content_area());
+}
+
+void Desktop::minimize_active_window() {
+    if (active_ == nullptr || !active_->minimizable()) return;
+    // Straight to the window, exactly as the `_` control does. Everything
+    // that follows — activation moving to whatever is still shown, the
+    // Minimized notification a switcher bar redraws on — is
+    // window_minimize_changed's, which the window reports into itself.
+    active_->set_minimized(true);
 }
 
 Window* Desktop::attach_window(std::unique_ptr<Window> window) {

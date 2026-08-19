@@ -32,8 +32,16 @@ inline constexpr std::int64_t kPasteTerminationQuietNanos = 50'000'000;  // 50 m
 // a rejected reply from changing decode state for later bytes in the same OS
 // read (for example, a late pixel-mode reply followed by an SGR report).
 enum class CapabilityUpdatePolicy {
+    // A bounded probe window is open: solicited replies refine freely.
     AcceptProbeRefinements,
-    AcceptLiveColorSchemeNotifications,
+    // A probing session between windows: geometry measurements, color-
+    // scheme changes on a session that verified mode 2031, and kitty
+    // enhancement-flag readbacks on a session that verified the protocol —
+    // each an update whose authority was established inside a window and
+    // whose late arrival is part of its own protocol.
+    AcceptVerifiedLiveRefinements,
+    // An explicit capability contract (probes disabled): nothing but
+    // geometry measurements moves.
     Reject,
 };
 

@@ -33,34 +33,59 @@ Modifier decode_modifier_param(int m) noexcept {
     return mod;
 }
 
-std::vector<int> parse_params(std::string_view s) {
-    std::vector<int> params;
-    if (s.empty()) return params;
-    std::size_t start = 0;
-    while (start <= s.size()) {
-        const std::size_t semi = s.find(';', start);
-        const std::string_view field =
-            s.substr(start, semi == std::string_view::npos ? std::string_view::npos : semi - start);
+// A CSI parameter list, with each parameter's colon-separated subparameters
+// kept in place. kitty's key grammar gives every position a default and an
+// empty position selects it, so "missing" must stay distinguishable from a
+// real zero: an absent or empty position is kCsiParamMissing.
+constexpr int kCsiParamMissing = -1;
+
+std::vector<std::vector<int>> parse_csi_parameters(std::string_view s) {
+    std::vector<std::vector<int>> fields;
+    if (s.empty()) return fields;
+    std::vector<int> current;
+    int value = 0;
+    bool any_digit = false;
+    const auto flush_sub = [&] {
+        current.push_back(any_digit ? value : kCsiParamMissing);
+        value = 0;
+        any_digit = false;
+    };
+    for (const char c : s) {
+        if (c == ';') {
+            flush_sub();
+            fields.push_back(std::move(current));
+            current.clear();
+            continue;
+        }
+        if (c == ':') {
+            flush_sub();
+            continue;
+        }
+        if (c < '0' || c > '9') continue;
+        any_digit = true;
         // Saturating accumulation: a hostile or malformed sequence can
         // supply an arbitrarily long digit run (CSI/OSC parameters are
         // conventionally a few digits at most), and naive
         // value*10+digit overflow on signed int is undefined behavior,
         // not just wraparound — confirmed reachable and UBSan-flagged
         // for a real overlong parameter before this fix.
-        int value = 0;
-        for (const char c : field) {
-            if (c < '0' || c > '9') continue;
-            if (value > (INT_MAX - (c - '0')) / 10) {
-                value = INT_MAX;
-                continue;
-            }
-            value = value * 10 + (c - '0');
+        if (value > (INT_MAX - (c - '0')) / 10) {
+            value = INT_MAX;
+            continue;
         }
-        params.push_back(value);
-        if (semi == std::string_view::npos) break;
-        start = semi + 1;
+        value = value * 10 + (c - '0');
     }
-    return params;
+    flush_sub();
+    fields.push_back(std::move(current));
+    return fields;
+}
+
+// One position of the structured parameter list, with its grammar default.
+int csi_field(const std::vector<std::vector<int>>& fields, std::size_t field, std::size_t sub,
+              int fallback) noexcept {
+    if (field >= fields.size() || sub >= fields[field].size()) return fallback;
+    const int value = fields[field][sub];
+    return value == kCsiParamMissing ? fallback : value;
 }
 
 KeyChord control_key_chord(unsigned char b) {
@@ -91,6 +116,96 @@ KeyChord key_from_codepoint(int codepoint, Modifier mod) {
     std::string text;
     utf8::encode(static_cast<char32_t>(codepoint), text);
     return KeyChord{Key::Char, mod, text};
+}
+
+// kitty's event-type subparameter, riding second in the modifiers field of
+// every escape-coded key — the legacy-form functional keys included:
+// `CSI 1;1:3 A` is Up going back up, not a second Up. Press is the omitted
+// default; an unknown transition is rejected rather than degraded into an
+// activation.
+std::optional<KeyAction> key_action_from_event_type(int event_type) noexcept {
+    switch (event_type) {
+        case 1: return KeyAction::Press;
+        case 2: return KeyAction::Repeat;
+        case 3: return KeyAction::Release;
+        default: return std::nullopt;
+    }
+}
+
+// Whether this session's escape-coded keys will report their release: the
+// kitty protocol with its verified event-type enhancement. Keys still on
+// legacy encodings under the same session (possible whenever the
+// all-keys-as-escape-codes enhancement is not in force) never arrive here,
+// so the per-event flag stays honest for them by construction.
+bool session_reports_escape_coded_releases(const Capabilities& caps) noexcept {
+    return caps.keyboard_protocol == KeyboardProtocol::Kitty &&
+           (caps.kitty_keyboard_flags & kKittyReportEventTypes) != 0;
+}
+
+// kitty's functional keys occupy the Unicode private-use block 57344-63743.
+// The ones ckVision's key model names are mapped here; the keypad's
+// character keys carry a canonical character so a numeric keypad still
+// types under the all-keys-as-escape-codes enhancement; every other code in
+// the block — the modifier and lock keys, the media keys, F13 and beyond —
+// is a real key this model does not name, consumed deliberately rather than
+// delivered to text controls as private-use garbage.
+constexpr int kKittyFunctionalFirst = 57344;
+constexpr int kKittyFunctionalLast = 63743;
+
+std::optional<Key> kitty_functional_key(int code) noexcept {
+    switch (code) {
+        case 57414: return Key::Enter;  // KP_ENTER: an Enter wherever it sits
+        case 57417: return Key::Left;
+        case 57418: return Key::Right;
+        case 57419: return Key::Up;
+        case 57420: return Key::Down;
+        case 57421: return Key::PageUp;
+        case 57422: return Key::PageDown;
+        case 57423: return Key::Home;
+        case 57424: return Key::End;
+        case 57425: return Key::Insert;
+        case 57426: return Key::Delete;
+        default: return std::nullopt;
+    }
+}
+
+std::string_view kitty_keypad_text(int code) noexcept {
+    switch (code) {
+        case 57399: return "0";
+        case 57400: return "1";
+        case 57401: return "2";
+        case 57402: return "3";
+        case 57403: return "4";
+        case 57404: return "5";
+        case 57405: return "6";
+        case 57406: return "7";
+        case 57407: return "8";
+        case 57408: return "9";
+        case 57409: return ".";
+        case 57410: return "/";
+        case 57411: return "*";
+        case 57412: return "-";
+        case 57413: return "+";
+        case 57415: return "=";
+        case 57416: return ",";
+        default: return {};
+    }
+}
+
+// The associated-text field (kitty's text-as-codepoints): what the key
+// actually produced, which is the only correct source for a shifted or
+// composed character once keys stop arriving as text. Sanitized the way
+// chord text must be — control, C1 and non-scalar values never become key
+// text, whatever a host or a hostile stream embeds in the field.
+std::string decode_kitty_text(const std::vector<std::vector<int>>& fields, std::size_t index) {
+    std::string text;
+    if (index >= fields.size()) return text;
+    for (const int cp : fields[index]) {
+        if (cp < 0x20 || cp == 0x7F || (cp >= 0x80 && cp <= 0x9F)) continue;
+        if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) continue;
+        utf8::encode(static_cast<char32_t>(cp), text);
+    }
+    return text;
 }
 
 std::optional<Key> tilde_key_from_number(int n) noexcept {
@@ -300,7 +415,30 @@ bool InputDecoder::accepts_capability_update(const Capabilities& candidate) cons
             geometry_only.text_area_pixels = caps_.text_area_pixels;
             return geometry_only == caps_;
         }
-        case CapabilityUpdatePolicy::AcceptLiveColorSchemeNotifications: {
+        case CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements: {
+            // A cell metric is a measurement, admissible here for the same
+            // reason the Reject policy admits it below.
+            {
+                Capabilities geometry_only = candidate;
+                geometry_only.cell_pixels = caps_.cell_pixels;
+                geometry_only.text_area_pixels = caps_.text_area_pixels;
+                if (geometry_only == caps_) return true;
+            }
+            // A kitty flag readback can land after the probe window closed:
+            // the backend queries again whenever it pushes or demotes the
+            // enhancement set. Once the protocol itself was verified inside
+            // a window, a reply that changes nothing but the flag record is
+            // accepted for the session's lifetime — the same standing the
+            // verified 2031 notifications have below. The query is only
+            // ever solicited by this side, and the record enables no
+            // decoding a spoofed value could exploit: decode follows the
+            // shape of what arrives, the flags only set what a key promises.
+            if (caps_.keyboard_protocol == KeyboardProtocol::Kitty &&
+                candidate.kitty_keyboard_flags != caps_.kitty_keyboard_flags) {
+                Capabilities flags_only = candidate;
+                flags_only.kitty_keyboard_flags = caps_.kitty_keyboard_flags;
+                if (flags_only == caps_) return true;
+            }
             if (!caps_.color_scheme_notifications || !candidate.color_scheme_notifications ||
                 candidate.color_scheme == caps_.color_scheme)
                 return false;
@@ -456,11 +594,9 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         ++pos;
     }
     std::string param_str;
-    bool has_subparameter = false;
     while (pos < buf.size() && ((buf[pos] >= '0' && buf[pos] <= '9') || buf[pos] == ';' ||
                                  buf[pos] == ':')) {
-        has_subparameter = has_subparameter || buf[pos] == ':';
-        param_str += (buf[pos] == ':' ? ';' : buf[pos]);
+        param_str += buf[pos];
         ++pos;
     }
     while (pos < buf.size() && static_cast<unsigned char>(buf[pos]) >= 0x20 &&
@@ -472,7 +608,14 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         return {Status::Invalid, 0, std::nullopt, std::nullopt};
     ++pos;
     const std::size_t consumed = pos;
-    const std::vector<int> params = parse_params(param_str);
+    const std::vector<std::vector<int>> fields = parse_csi_parameters(param_str);
+    // The flat view every subparameter-free consumer reads: one value per
+    // top-level parameter, an empty position reading as the conventional 0.
+    // The key paths that negotiated kitty's grammar read `fields` instead.
+    std::vector<int> params;
+    params.reserve(fields.size());
+    for (const std::vector<int>& field : fields)
+        params.push_back(field.empty() || field.front() == kCsiParamMissing ? 0 : field.front());
 
     if (final_byte == '~') {
         if (params.size() >= 1 && params[0] == 200) {
@@ -501,49 +644,67 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
                     std::nullopt};
         }
         if (!params.empty()) {
-            const Modifier mod = params.size() >= 2 ? decode_modifier_param(params[1]) : Modifier::None;
+            const Modifier mod = decode_modifier_param(csi_field(fields, 1, 0, 1));
+            const int event_type = caps_.keyboard_protocol == KeyboardProtocol::Kitty
+                                       ? csi_field(fields, 1, 1, 1)
+                                       : 1;
+            const auto action = key_action_from_event_type(event_type);
+            if (!action) return {Status::Complete, consumed, std::nullopt, std::nullopt};
             if (const auto key = tilde_key_from_number(params[0]))
                 return {Status::Complete, consumed,
-                        TerminalEvent{KeyEvent{KeyChord{*key, mod, {}}}}, std::nullopt};
+                        TerminalEvent{KeyEvent{KeyChord{*key, mod, {}}, *action,
+                                               session_reports_escape_coded_releases(caps_)}},
+                        std::nullopt};
         }
         return {Status::Complete, consumed, std::nullopt, std::nullopt};
     }
 
-    if (final_byte == 'u' && caps_.keyboard_protocol == KeyboardProtocol::Kitty) {
-        if (!params.empty()) {
-            const Modifier mod = params.size() >= 2 ? decode_modifier_param(params[1]) : Modifier::None;
-            KeyAction action = KeyAction::Press;
-            if (has_subparameter) {
-                // Kitty encodes the event type as the second subparameter of
-                // its modifiers field. The selected session mode requests
-                // that field; reject an unknown value instead of turning it
-                // into an activation by accident.
-                if (params.size() < 3) return {Status::Complete, consumed, std::nullopt, std::nullopt};
-                switch (params[2]) {
-                    case 1: action = KeyAction::Press; break;
-                    case 2: action = KeyAction::Repeat; break;
-                    case 3: action = KeyAction::Release; break;
-                    default: return {Status::Complete, consumed, std::nullopt, std::nullopt};
-                }
-            } else if (params.size() > 2) {
-                // The selected mode never emits a third top-level field.
-                // That shape belongs to an unsupported kitty extension, so
-                // do not silently reinterpret it as a press.
+    if (final_byte == 'u' && !private_marker && caps_.keyboard_protocol == KeyboardProtocol::Kitty) {
+        // The protocol's one escape code for key events:
+        //   CSI key[:alternates] ; modifiers[:event] ; text u
+        // The alternate-key codes are recognized and deliberately not read —
+        // the input model carries a key and the text it produced, never the
+        // keyboard layout behind them (D-047). The text field IS read:
+        // once keys stop arriving as text, it is the only correct source
+        // for a shifted or composed character, and guessing it from the key
+        // number would be exactly the layout modelling this library refuses.
+        if (params.empty()) return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        const int key_code = csi_field(fields, 0, 0, 0);
+        if (key_code <= 0) return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        const Modifier mod = decode_modifier_param(csi_field(fields, 1, 0, 1));
+        const auto action = key_action_from_event_type(csi_field(fields, 1, 1, 1));
+        if (!action) return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        const bool releases = session_reports_escape_coded_releases(caps_);
+        if (key_code >= kKittyFunctionalFirst && key_code <= kKittyFunctionalLast) {
+            if (const auto key = kitty_functional_key(key_code))
+                return {Status::Complete, consumed,
+                        TerminalEvent{KeyEvent{KeyChord{*key, mod, {}}, *action, releases}},
+                        std::nullopt};
+            std::string text = decode_kitty_text(fields, 2);
+            if (text.empty()) text = std::string(kitty_keypad_text(key_code));
+            // A functional key the model does not name is consumed, never
+            // leaked as private-use text. If it produced real text — the
+            // keypad's character keys always do — the text is the event;
+            // its release pairs with nothing this model names, so such an
+            // event never promises one.
+            if (text.empty() || *action == KeyAction::Release)
                 return {Status::Complete, consumed, std::nullopt, std::nullopt};
-            }
-            // Only a key that carried an explicit event type will report a
-            // release; the same session leaves other keys on their legacy
-            // encoding, which never does.
             return {Status::Complete, consumed,
-                    TerminalEvent{KeyEvent{key_from_codepoint(params[0], mod), action,
-                                           has_subparameter}},
+                    TerminalEvent{KeyEvent{KeyChord{Key::Char, mod, std::move(text)}, *action,
+                                           false}},
                     std::nullopt};
         }
-        return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        KeyChord chord = key_from_codepoint(key_code, mod);
+        if (chord.key == Key::Char) {
+            std::string text = decode_kitty_text(fields, 2);
+            if (!text.empty()) chord.text = std::move(text);
+        }
+        return {Status::Complete, consumed,
+                TerminalEvent{KeyEvent{std::move(chord), *action, releases}}, std::nullopt};
     }
 
     if (!private_marker) {
-        const Modifier mod = params.size() >= 2 ? decode_modifier_param(params[1]) : Modifier::None;
+        const Modifier mod = decode_modifier_param(csi_field(fields, 1, 0, 1));
         std::optional<Key> key;
         switch (final_byte) {
             case 'A': key = Key::Up; break;
@@ -554,9 +715,17 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
             case 'F': key = Key::End; break;
             default: break;
         }
-        if (key)
-            return {Status::Complete, consumed, TerminalEvent{KeyEvent{KeyChord{*key, mod, {}}}},
+        if (key) {
+            const int event_type = caps_.keyboard_protocol == KeyboardProtocol::Kitty
+                                       ? csi_field(fields, 1, 1, 1)
+                                       : 1;
+            const auto action = key_action_from_event_type(event_type);
+            if (!action) return {Status::Complete, consumed, std::nullopt, std::nullopt};
+            return {Status::Complete, consumed,
+                    TerminalEvent{KeyEvent{KeyChord{*key, mod, {}}, *action,
+                                           session_reports_escape_coded_releases(caps_)}},
                     std::nullopt};
+        }
         if (final_byte == 'Z')
             return {Status::Complete, consumed,
                     TerminalEvent{KeyEvent{KeyChord{Key::Tab, Modifier::Shift, {}}}}, std::nullopt};
@@ -648,13 +817,17 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
 
     if (private_marker && marker == '?' && final_byte == 'u') {
         // The kitty keyboard protocol answers CSI ? <flags> u to CSI ? u.
-        // Any answer at all is the evidence that matters: a terminal without
-        // the protocol stays silent, and the flags only report what is
-        // currently enabled, not what is supported.
-        if (caps_.keyboard_protocol == KeyboardProtocol::Kitty)
-            return {Status::Complete, consumed, std::nullopt, std::nullopt};
+        // Any answer at all proves the protocol exists — a terminal without
+        // it stays silent. The value is the enhancement set actually in
+        // force: read back after the backend pushes what it wants, it is
+        // the record of what was honoured rather than of what was asked
+        // (D-047 from the client side). Masked to the requestable set so a
+        // host volunteering alternate-key codes cannot make this session
+        // claim an enhancement it never requests.
         Capabilities updated = caps_;
         updated.keyboard_protocol = KeyboardProtocol::Kitty;
+        updated.kitty_keyboard_flags = (params.empty() ? 0 : params[0]) & kKittyRequestedFlags;
+        if (updated == caps_) return {Status::Complete, consumed, std::nullopt, std::nullopt};
         return {Status::Complete, consumed, std::nullopt, updated};
     }
 

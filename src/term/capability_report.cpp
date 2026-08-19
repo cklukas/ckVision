@@ -42,6 +42,17 @@ std::string keyboard_text(KeyboardProtocol protocol) {
     return "unknown";
 }
 
+// Whether every key reports its release — the promise that lets a button
+// stay down while its key is held (D-055). The verified enhancement set is
+// shown either way: "no (kitty flags 3)" is a host that honoured event
+// types without all-keys-as-escape-codes, which reports releases only for
+// the keys it escape-codes.
+std::string key_release_text(const Capabilities& caps) {
+    if (caps.keyboard_protocol != KeyboardProtocol::Kitty) return "no";
+    const std::string flags = " (kitty flags " + std::to_string(caps.kitty_keyboard_flags) + ")";
+    return (keyboard_reports_all_releases(caps) ? "yes" : "no") + flags;
+}
+
 std::string scheme_text(ColorScheme scheme) {
     switch (scheme) {
         case ColorScheme::Dark: return "dark";
@@ -101,6 +112,7 @@ std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, S
         {"Mouse protocol", mouse_text(caps.mouse_protocol), "host profile"},
         {"Pixel mouse", yes_no(caps.pixel_mouse), "DEC 1016 (DECRQM) + XTWINOPS 16"},
         {"Keyboard protocol", keyboard_text(caps.keyboard_protocol), "host profile"},
+        {"Key release events", key_release_text(caps), "CSI > u push, CSI ? u readback"},
         {"SIXEL graphics", yes_no(caps.sixel_graphics), "DA1 (CSI c), parameter 4"},
         {"SIXEL color registers",
          caps.sixel_color_registers > 0 ? std::to_string(caps.sixel_color_registers)

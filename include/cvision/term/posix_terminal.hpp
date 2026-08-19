@@ -113,6 +113,15 @@ private:
     int session_slot_ = -1;
     bool capability_probes_enabled_ = true;
     std::int64_t probe_deadline_nanos_ = -1;
+    // Kitty keyboard enhancement negotiation (D-055). The set in force is
+    // always what the host's CSI ? u readback said; these record only what
+    // this side did — the stated profile contract, whether one of our own
+    // pushes sits on the host's stack (the only entry a later step may
+    // pop), and whether the one-time request and one-time demotion ran.
+    int profile_kitty_flags_ = 0;
+    bool kitty_push_active_ = false;
+    bool kitty_flags_negotiated_ = false;
+    bool kitty_demoted_ = false;
     // Sixel support this backend took away while a resize re-probe was in
     // flight, so that a probe window closing without the fresh maximum
     // geometry can give it back instead of leaving the terminal dark.
@@ -135,6 +144,11 @@ private:
     void configure_decoder_capability_update_policy() noexcept;
     void finish_capability_probes();
     void synchronize_sgr_mouse_input_policy() noexcept;
+    // One-time full-enhancement request once the kitty protocol is proven,
+    // and the one-time step back to the baseline for a host that honours
+    // all-keys-as-escape-codes without associated text (D-055).
+    void negotiate_kitty_enhancements();
+    void maybe_demote_kitty_keyboard();
 };
 
 }  // namespace ckv::term

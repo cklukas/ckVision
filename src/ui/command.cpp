@@ -56,6 +56,11 @@ CommandRegistry::CommandRegistry() {
     standard_.tile_vertically =
         declare_standard(kTileVertically, "Tile &Vertically", "Window", "");
     standard_.tile_grid = declare_standard(kTileGrid, "Tile &Grid", "Window", "");
+    // Also after the original set, and for the same reason. The mnemonic is
+    // 'n' rather than 'M': a Window menu carrying this one carries "&Next"
+    // too, and two items competing for a letter is a menu where one of them
+    // cannot be typed.
+    standard_.minimize = declare_standard(kMinimize, "Mi&nimize", "Window", "");
 }
 
 CommandId CommandRegistry::id_for_key(std::string_view key) {

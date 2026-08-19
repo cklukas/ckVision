@@ -2,6 +2,8 @@
 #include "cvision/widgets/window_switcher_bar.hpp"
 
 #include <algorithm>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "cvision/core/text.hpp"
@@ -17,6 +19,22 @@ namespace {
 // enough that a change comes due within a frame or two of the release, long
 // enough that holding a taskbar button down is not a wake-up per tick.
 constexpr std::int64_t kPressRetryNanos = 100'000'000;
+
+// The status icons (U4-j), and the blank between an icon and the name it
+// belongs to. Rectangles, as asked for, and each checked against ckv::text
+// before being chosen — see WindowSwitcherBar::status_glyph for why these
+// three and not the squares the request was first written with.
+//
+// They are chosen to be read as a group rather than one at a time: a filled
+// upright box is the window standing in front of the reader, the same box
+// hollow is one standing behind, and a bar along the floor is one that has
+// been put down. A theme that colours the active entry says the same thing
+// twice, which is the point — the icon is what survives a monochrome
+// terminal, and the colour is what survives a glance.
+constexpr std::string_view kActiveGlyph = "▮";     // U+25AE
+constexpr std::string_view kVisibleGlyph = "▯";    // U+25AF
+constexpr std::string_view kMinimizedGlyph = "▄";  // U+2584
+constexpr int kStatusGap = 1;
 
 }  // namespace
 
@@ -48,16 +66,51 @@ std::function<void()> WindowSwitcherTarget::bind(std::function<void(Window&)> ru
 
 // --- WindowSwitcherBar ----------------------------------------------------
 
+std::string_view WindowSwitcherBar::status_glyph(Status status) noexcept {
+    switch (status) {
+        case Status::Active:
+            return kActiveGlyph;
+        case Status::Minimized:
+            return kMinimizedGlyph;
+        case Status::Visible:
+            break;
+    }
+    return kVisibleGlyph;
+}
+
 WindowSwitcherBar::WindowSwitcherBar() {
     // The three seams between "a strip of items" and "a strip of WINDOWS".
     // Everything else the bar used to do itself — measuring the row, laying
     // it out, drawing it, tracking a press across a drag — is PagedStrip's,
     // and paging came with it.
     set_item_source([this] { return strip_items(); });
+    // Every window is put away the same way unless a host says otherwise,
+    // because minimizing is the window's own verb and needs no desktop —
+    // unlike activating, which is a question about a set of windows and is
+    // therefore left null until a constructor or a host answers it.
+    minimize_action_ = [](Window& window) { window.set_minimized(true); };
+    minimized_provider_ = [](Window& window) { return window.minimized(); };
     on_item_activated = [this](std::size_t index) {
         if (index >= entries_.size()) return;
-        Window* const window = entries_[index].window;
-        if (window != nullptr && activate_action_) activate_action_(*window);
+        // Read out BEFORE either action runs. Both of them end in a desktop
+        // notification, which comes straight back through refresh() and
+        // rebuilds entries_ — so anything still pointing into that vector
+        // afterwards would be pointing into freed storage.
+        const Entry& entry = entries_[index];
+        Window* const window = entry.window;
+        const Status status = entry.status();
+        if (window == nullptr) return;
+        // The taskbar's three transitions, in the one place they are
+        // decided — see set_minimize_action for why this is not left to
+        // each host to work out from a click.
+        if (status == Status::Active) {
+            if (window->minimizable() && minimize_action_) minimize_action_(*window);
+            return;
+        }
+        // Visible-but-behind and minimized are the same request: bring me
+        // that one. Desktop::activate restores a hidden window on its way to
+        // the front, so no second verb is needed for the difference.
+        if (activate_action_) activate_action_(*window);
     };
     on_item_context_press = [this](std::size_t index, Point at) {
         return open_context_menu(index, at);
@@ -123,6 +176,15 @@ void WindowSwitcherBar::set_activate_action(std::function<void(Window&)> action)
     activate_action_ = std::move(action);
 }
 
+void WindowSwitcherBar::set_minimized_provider(std::function<bool(Window&)> provider) {
+    minimized_provider_ = std::move(provider);
+    refresh();
+}
+
+void WindowSwitcherBar::set_minimize_action(std::function<void(Window&)> action) {
+    minimize_action_ = std::move(action);
+}
+
 void WindowSwitcherBar::set_context_menu_provider(
     std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> provider) {
     context_menu_provider_ = std::move(provider);
@@ -161,7 +223,8 @@ void WindowSwitcherBar::refresh() {
             if (window == nullptr) continue;
             rebuilt.push_back(Entry{window,
                                     label_provider_ ? label_provider_(*window) : window->title(),
-                                    window == active});
+                                    window == active,
+                                    minimized_provider_ && minimized_provider_(*window)});
         }
     }
     // What each box is given, which is its natural width unless a delay is
@@ -183,7 +246,11 @@ void WindowSwitcherBar::refresh() {
 }
 
 int WindowSwitcherBar::natural_width(const Entry& entry) const {
-    return text::text_width(entry.label);
+    // Icon, blank, name. Measured rather than assumed to be two cells, so a
+    // later table of wider glyphs is paid for here and both the damping and
+    // the paging follow without being told.
+    return text::text_width(status_glyph(entry.status())) + kStatusGap +
+           text::text_width(entry.label);
 }
 
 void WindowSwitcherBar::damp_widths(std::vector<Entry>& rebuilt) {
@@ -297,8 +364,25 @@ void WindowSwitcherBar::arm_damping_wake(std::int64_t deadline_nanos) {
 std::vector<PagedStrip::Item> WindowSwitcherBar::strip_items() const {
     std::vector<Item> items;
     items.reserve(entries_.size());
-    for (const Entry& entry : entries_)
-        items.push_back(Item{entry.width, entry.label, entry.active});
+    for (const Entry& entry : entries_) {
+        const Status status = entry.status();
+        // The icon is part of the item's TEXT rather than something the
+        // strip knows about: PagedStrip pages words of a given width, and
+        // what those words say is the consumer's business. It also puts the
+        // glyph on the left, where an elision that had to cut a lone
+        // over-wide entry takes the tail of the name and leaves the state
+        // legible.
+        std::string text;
+        text.reserve(status_glyph(status).size() + 1U + entry.label.size());
+        text.append(status_glyph(status));
+        text.append(kStatusGap, ' ');
+        text.append(entry.label);
+        // Selected is the ACTIVE row alone. A minimized window is not the
+        // one the reader is in, whatever a host's active provider says —
+        // status() has already settled that, and the highlight follows it
+        // rather than asking again.
+        items.push_back(Item{entry.width, std::move(text), status == Status::Active});
+    }
     return items;
 }
 

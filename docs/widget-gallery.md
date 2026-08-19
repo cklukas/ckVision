@@ -1226,17 +1226,35 @@ a `Close` chosen from a background row would close the wrong window.
 ## WindowSwitcherBar
 
 Header: `include/cvision/widgets/window_switcher_bar.hpp`. One row listing
-every open window by title — click to activate and raise, right-click for a
-host-supplied context menu, the arrangement a desktop taskbar uses. The
-active window's entry is drawn in the theme's `ckv.statusline.selected`; the
-rest, and the bar itself, in `ckv.statusline.normal`.
+every open window by title and by state, right-click for a host-supplied
+context menu, the arrangement a desktop taskbar uses. The active window's
+entry is drawn in the theme's `ckv.statusline.selected`; the rest, and the
+bar itself, in `ckv.statusline.normal`.
+
+Each row carries a status glyph one space left of its title, and a left
+click does what that glyph promises (D-059):
+
+| Glyph | `Status` | What a left click does |
+|---|---|---|
+| `▮` | `Active` | minimizes the window the reader is in |
+| `▯` | `Visible` | activates and raises a window that is behind |
+| `▄` | `Minimized` | brings a window that was put away back, in front |
+
+`status_glyph(Status)` is the one place the three shapes are spelled, so a
+legend or a host's own listing names the same ones the bar draws. A window
+whose `minimizable()` is false is never minimized from its row — its frame
+draws no `_` control, and the bar is not a second route past that gate.
 
 `WindowSwitcherBar(desktop)` wires the common case: that desktop's
-`windows()`, their `title()`, its `active_window()`, and `activate()` as the
-click action. Each is replaceable — `set_window_source`,
-`set_label_provider`, `set_active_provider`, `set_activate_action`,
+`windows()`, their `title()`, its `active_window()`, `Window::minimized()`,
+and `activate()` as the click action. Each is replaceable —
+`set_window_source`, `set_label_provider`, `set_active_provider`,
+`set_minimized_provider`, `set_activate_action`, `set_minimize_action`,
 `set_context_menu_provider` — so an application whose notion of a window is
-its own keeps the row, the layout, the elision and the input handling.
+its own keeps the row, the layout, the elision and the input handling. The
+two actions are separate on purpose: a host that installs its own activate
+action to move the keyboard with the window keeps the three transitions
+above without re-deriving which one it is looking at.
 `set_context_menu_provider` is the only one with no default: what belongs on
 that menu is the application's vocabulary, not the library's.
 

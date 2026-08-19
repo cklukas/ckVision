@@ -217,7 +217,175 @@ CK_TEST(kitty_keyboard_protocol) {
     // An unsupported transition must not degrade into a press and activate a
     // command merely because this decoder does not understand it.
     CK_CHECK(decode_all("\x1B[97;1:9u", caps).empty());
-    CK_CHECK(decode_all("\x1B[97;1;3u", caps).empty());
+
+    // A third top-level field is the associated-text field. Control
+    // codepoints in it sanitize to nothing and the key itself stands:
+    // hostile text never reaches a chord, and neither does a fake "empty".
+    auto control_text = decode_all("\x1B[97;1;3u", caps);
+    CK_CHECK(control_text.size() == 1);
+    CK_CHECK(as_key(control_text[0]).chord.key == Key::Char);
+    CK_CHECK(as_key(control_text[0]).chord.text == "a");
+
+    // This session never verified its enhancement set (flags stayed 0), so
+    // no event promises a release, whatever shape it arrived in.
+    CK_CHECK(!as_key(decode_all("\x1B[97u", caps)[0]).reports_release);
+}
+
+CK_TEST(kitty_full_enhancement_forms) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;  // the verified full set
+
+    // Enter under all-keys-as-escape-codes: a named key that promises its
+    // release — the promise a button needs to stay down while it is held.
+    auto enter = decode_all("\x1B[13u", caps);
+    CK_CHECK(enter.size() == 1);
+    CK_CHECK(as_key(enter[0]).chord.key == Key::Enter);
+    CK_CHECK(as_key(enter[0]).action == KeyAction::Press);
+    CK_CHECK(as_key(enter[0]).reports_release);
+    auto enter_release = decode_all("\x1B[13;1:3u", caps);
+    CK_CHECK(as_key(enter_release[0]).chord.key == Key::Enter);
+    CK_CHECK(as_key(enter_release[0]).action == KeyAction::Release);
+
+    // Space carries its text in the associated-text field; the empty
+    // modifiers position reads as its grammar default, not as zero.
+    auto space = decode_all("\x1B[32;;32u", caps);
+    CK_CHECK(as_key(space[0]).chord.key == Key::Char);
+    CK_CHECK(as_key(space[0]).chord.text == " ");
+    CK_CHECK(as_key(space[0]).chord.modifiers == Modifier::None);
+    CK_CHECK(as_key(space[0]).reports_release);
+    auto space_release = decode_all("\x1B[32;1:3u", caps);
+    CK_CHECK(as_key(space_release[0]).action == KeyAction::Release);
+    CK_CHECK(as_key(space_release[0]).chord.text == " ");
+
+    // Shift+A: the key number stays the unshifted codepoint and the text
+    // field is authoritative for what was actually typed.
+    auto shifted = decode_all("\x1B[97;2;65u", caps);
+    CK_CHECK(as_key(shifted[0]).chord.key == Key::Char);
+    CK_CHECK(as_key(shifted[0]).chord.text == "A");
+    CK_CHECK(has_modifier(as_key(shifted[0]).chord.modifiers, Modifier::Shift));
+
+    // A dead-key composition arrives as its physical key with the composed
+    // character riding in the text field; multi-codepoint text survives.
+    auto composed = decode_all("\x1B[101;;233u", caps);  // e -> é
+    CK_CHECK(as_key(composed[0]).chord.text == "\xC3\xA9");
+    auto combining = decode_all("\x1B[97;;97:769u", caps);  // a + U+0301
+    CK_CHECK(as_key(combining[0]).chord.text == "a\xCC\x81");
+
+    // Repeats keep producing their text — a held letter keeps typing.
+    auto repeat = decode_all("\x1B[97;1:2;97u", caps);
+    CK_CHECK(as_key(repeat[0]).action == KeyAction::Repeat);
+    CK_CHECK(as_key(repeat[0]).chord.text == "a");
+
+    // Alternate-key codes ride as subparameters of the key field; parsed
+    // and ignored (D-047), never misread as modifiers or text.
+    auto alternates = decode_all("\x1B[97:65;2;65u", caps);
+    CK_CHECK(as_key(alternates[0]).chord.key == Key::Char);
+    CK_CHECK(as_key(alternates[0]).chord.text == "A");
+    CK_CHECK(has_modifier(as_key(alternates[0]).chord.modifiers, Modifier::Shift));
+
+    // Caps-lock (64) and num-lock (128) modifier bits are ignored rather
+    // than misread as some other modifier.
+    auto capslocked = decode_all("\x1B[97;65u", caps);
+    CK_CHECK(as_key(capslocked[0]).chord.modifiers == Modifier::None);
+    CK_CHECK(as_key(capslocked[0]).chord.text == "a");
+}
+
+CK_TEST(kitty_functional_private_use_block_policy) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+
+    // A lone modifier key is a real key this model does not name:
+    // consumed, press and release alike, never private-use text.
+    CK_CHECK(decode_all("\x1B[57441u", caps).empty());
+    CK_CHECK(decode_all("\x1B[57441;1:3u", caps).empty());
+
+    // Keypad Enter is an Enter wherever it sits; keypad navigation maps to
+    // the named keys, releases included.
+    auto kp_enter = decode_all("\x1B[57414u", caps);
+    CK_CHECK(as_key(kp_enter[0]).chord.key == Key::Enter);
+    CK_CHECK(as_key(kp_enter[0]).reports_release);
+    auto kp_left_release = decode_all("\x1B[57417;1:3u", caps);
+    CK_CHECK(as_key(kp_left_release[0]).chord.key == Key::Left);
+    CK_CHECK(as_key(kp_left_release[0]).action == KeyAction::Release);
+
+    // Keypad character keys type their character — from the text field
+    // when the session carries one, from the canonical table when it does
+    // not — and never promise a release this model could not pair.
+    auto kp_five = decode_all("\x1B[57404;;53u", caps);
+    CK_CHECK(as_key(kp_five[0]).chord.key == Key::Char);
+    CK_CHECK(as_key(kp_five[0]).chord.text == "5");
+    CK_CHECK(!as_key(kp_five[0]).reports_release);
+    Capabilities bare = baseline_capabilities();
+    bare.keyboard_protocol = KeyboardProtocol::Kitty;
+    bare.kitty_keyboard_flags = kKittyBaselineFlags;
+    auto kp_five_bare = decode_all("\x1B[57404u", bare);
+    CK_CHECK(as_key(kp_five_bare[0]).chord.text == "5");
+    CK_CHECK(decode_all("\x1B[57404;1:3u", caps).empty());
+}
+
+CK_TEST(kitty_event_types_on_legacy_form_functional_keys) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyBaselineFlags;
+
+    // The release of an arrow key is a Release event, not a second press.
+    // Hosts send these under the event-types enhancement alone, and the
+    // earlier parameter flattening decoded every one as a phantom Up.
+    auto released = decode_all("\x1B[1;1:3A", caps);
+    CK_CHECK(released.size() == 1);
+    CK_CHECK(as_key(released[0]).chord.key == Key::Up);
+    CK_CHECK(as_key(released[0]).action == KeyAction::Release);
+    CK_CHECK(as_key(released[0]).reports_release);
+
+    auto repeated = decode_all("\x1B[1;1:2B", caps);
+    CK_CHECK(as_key(repeated[0]).chord.key == Key::Down);
+    CK_CHECK(as_key(repeated[0]).action == KeyAction::Repeat);
+
+    // Same on the tilde-form keys.
+    auto delete_release = decode_all("\x1B[3;1:3~", caps);
+    CK_CHECK(as_key(delete_release[0]).chord.key == Key::Delete);
+    CK_CHECK(as_key(delete_release[0]).action == KeyAction::Release);
+
+    // Plain and modified presses stay exactly what they were.
+    auto up = decode_all("\x1B[A", caps);
+    CK_CHECK(as_key(up[0]).action == KeyAction::Press);
+    auto shift_up = decode_all("\x1B[1;2A", caps);
+    CK_CHECK(has_modifier(as_key(shift_up[0]).chord.modifiers, Modifier::Shift));
+
+    // An unknown transition is rejected, not degraded into a press.
+    CK_CHECK(decode_all("\x1B[1;1:9A", caps).empty());
+
+    // A legacy session reads no event grammar into these fields at all.
+    auto legacy = decode_all("\x1B[1;1:3A");
+    CK_CHECK(legacy.size() == 1);
+    CK_CHECK(as_key(legacy[0]).action == KeyAction::Press);
+    CK_CHECK(!as_key(legacy[0]).reports_release);
+}
+
+CK_TEST(kitty_flag_readback_records_negotiated_enhancements) {
+    InputDecoder decoder(baseline_capabilities());
+    // The readback both proves the protocol and records the set in force.
+    auto adopted = decoder.feed("\x1B[?27u", 0);
+    CK_CHECK(adopted.size() == 1);
+    const auto* changed = std::get_if<CapabilityChangedEvent>(&adopted[0]);
+    CK_CHECK(changed != nullptr);
+    CK_CHECK(changed->capabilities.keyboard_protocol == KeyboardProtocol::Kitty);
+    CK_CHECK(changed->capabilities.kitty_keyboard_flags == kKittyRequestedFlags);
+    CK_CHECK(keyboard_reports_all_releases(changed->capabilities));
+
+    // A volunteered alternate-keys bit is masked out of the record: 31
+    // reads as the same 27 already in force, so nothing changes.
+    CK_CHECK(decoder.feed("\x1B[?31u", 0).empty());
+
+    // A lowered set is recorded as lowered — the record follows the host.
+    auto lowered = decoder.feed("\x1B[?3u", 0);
+    CK_CHECK(lowered.size() == 1);
+    const auto* relowered = std::get_if<CapabilityChangedEvent>(&lowered[0]);
+    CK_CHECK(relowered != nullptr);
+    CK_CHECK(relowered->capabilities.kitty_keyboard_flags == kKittyBaselineFlags);
+    CK_CHECK(!keyboard_reports_all_releases(relowered->capabilities));
 }
 
 CK_TEST(overlong_numeric_parameter_saturates_instead_of_overflowing) {
