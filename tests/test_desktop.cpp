@@ -3029,3 +3029,508 @@ CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_it
     CK_CHECK(opted_out[37] == "]");
     CK_CHECK(opted_out[18] == "B");
 }
+
+// --- A stated arrangement across a resize (U4-n) --------------------------
+//
+// Every number below is a cell count on a stated desktop size, because the
+// whole claim is arithmetic: the proportions of an arrangement are preserved
+// exactly, a round trip returns the very rectangles it started from, and the
+// one case that cannot be honoured is declined rather than approximated.
+
+namespace {
+
+// A reader's own move or resize, driven the way a reader drives one. The
+// keyboard move/resize modes bracket themselves with the same gesture a mouse
+// drag does, and that bracket is what tells a Desktop the bounds change came
+// from the reader and not from a host's own layout code. Tests that want the
+// host's kind of change call set_bounds directly, as everything above does.
+void reader_moves(Window& window, ckv::Key direction, int times) {
+    window.enter_move_mode();
+    for (int i = 0; i < times; ++i)
+        window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, ckv::Modifier::None, ""}});
+    window.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
+}
+
+void reader_resizes(Window& window, ckv::Key direction, int times) {
+    window.enter_resize_mode();
+    for (int i = 0; i < times; ++i)
+        window.on_key(ckv::KeyEvent{ckv::KeyChord{direction, ckv::Modifier::None, ""}});
+    window.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}});
+}
+
+}  // namespace
+
+CK_TEST(a_stacked_tiling_survives_a_one_row_resize_round_trip) {
+    // The defect this mechanism exists for, in its smallest form. One row off
+    // the terminal used to pull B up WITHOUT shortening it — leaving A and B
+    // both claiming row 11 — and growing back never repaired that, because an
+    // independent per-window clamp can only ever shrink.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+
+    desktop.set_bounds(Rect{0, 0, 80, 23});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));   // the seam stays where it is
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 11}));  // and the row comes off B
+    CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+
+    desktop.set_bounds(Rect{0, 0, 80, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));  // exactly the rectangles it began with
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+}
+
+CK_TEST(a_side_by_side_tiling_survives_a_width_round_trip) {
+    // 80 / 3 = 26 with the last band absorbing the remainder, so the seams sit
+    // at 26 and 52. At 60 columns those map to 20 and 39 — the middle band is
+    // a column narrower than its neighbours, which is what rounding to nearest
+    // costs and what returning to 80 gives straight back.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    desktop.tile_horizontally();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 26, 24}));
+    CK_CHECK(b->bounds() == (Rect{26, 0, 26, 24}));
+    CK_CHECK(c->bounds() == (Rect{52, 0, 28, 24}));
+
+    desktop.set_bounds(Rect{0, 0, 60, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 20, 24}));
+    CK_CHECK(b->bounds() == (Rect{20, 0, 19, 24}));
+    CK_CHECK(c->bounds() == (Rect{39, 0, 21, 24}));
+    CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+
+    desktop.set_bounds(Rect{0, 0, 80, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 26, 24}));
+    CK_CHECK(b->bounds() == (Rect{26, 0, 26, 24}));
+    CK_CHECK(c->bounds() == (Rect{52, 0, 28, 24}));
+}
+
+CK_TEST(a_grid_survives_a_resize_round_trip_on_both_axes) {
+    // The ragged last row is the interesting cell: it spans the whole width,
+    // so the mapping has to give it back the whole width and not two thirds of
+    // it plus a rounding error.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    desktop.tile_grid();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 12}));
+    CK_CHECK(c->bounds() == (Rect{0, 12, 80, 12}));
+
+    desktop.set_bounds(Rect{0, 0, 60, 18});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 30, 9}));
+    CK_CHECK(b->bounds() == (Rect{30, 0, 30, 9}));
+    CK_CHECK(c->bounds() == (Rect{0, 9, 60, 9}));
+    CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+
+    desktop.set_bounds(Rect{0, 0, 80, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 12}));
+    CK_CHECK(c->bounds() == (Rect{0, 12, 80, 12}));
+}
+
+CK_TEST(a_tiling_is_re_divided_by_its_proportions_when_the_desktop_grows) {
+    // The positive partner of every "is not snapped back" test below: with no
+    // remembered arrangement a None-policy window is never grown at all, so
+    // these two windows would still be 12 rows tall in a 48-row desktop with
+    // 24 rows of bare desktop under them. 24 and 24 is a number only the
+    // arrangement can produce.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+}
+
+CK_TEST(repeated_resize_round_trips_do_not_walk_a_seam) {
+    // Rounding to nearest is not an involution: re-deriving the arrangement
+    // from each intermediate size would move a seam a row per trip and never
+    // move it back. Mapping from the ORIGINAL every time is what makes three
+    // round trips indistinguishable from none.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    desktop.tile_vertically();
+    CK_CHECK(b->bounds() == (Rect{0, 8, 80, 8}));
+
+    for (int trip = 0; trip < 3; ++trip) {
+        desktop.set_bounds(Rect{0, 0, 80, 23});
+        desktop.set_bounds(Rect{0, 0, 80, 24});
+    }
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
+    CK_CHECK(b->bounds() == (Rect{0, 8, 80, 8}));
+    CK_CHECK(c->bounds() == (Rect{0, 16, 80, 8}));
+
+    // And the shrunk shape is the same one every trip produced, not a drifted
+    // neighbour of it: 24 -> 23 takes the row off the middle band.
+    desktop.set_bounds(Rect{0, 0, 80, 23});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
+    CK_CHECK(b->bounds() == (Rect{0, 8, 80, 7}));
+    CK_CHECK(c->bounds() == (Rect{0, 15, 80, 8}));
+}
+
+CK_TEST(a_readers_own_move_is_never_snapped_back_into_the_arrangement) {
+    // Validation is against where this Desktop last PUT each window, not
+    // against the cell a tile command once stated: a reader who moves a window
+    // has said it is not in the arrangement any more, and a resize that put it
+    // back would be overruling them.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+
+    reader_moves(*a, ckv::Key::Down, 1);
+    CK_CHECK(a->bounds() == (Rect{0, 1, 80, 12}));
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 1, 80, 12}));   // left exactly where the reader left it
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));  // and its neighbour is not re-divided either
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(a_hand_made_tiling_is_remembered_when_the_readers_gesture_ends) {
+    // Detection is geometric everywhere else in this class, and so is this: a
+    // reader who builds the arrangement by hand gets exactly what a reader who
+    // pressed Tile gets. Three gestures — grow A, move B down, shorten B — of
+    // which only the last leaves a partition.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+
+    reader_resizes(*a, ckv::Key::Down, 2);
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 14}));  // now overlapping B
+    reader_moves(*b, ckv::Key::Down, 2);
+    CK_CHECK(b->bounds() == (Rect{0, 14, 80, 12}));  // now off the bottom
+    reader_resizes(*b, ckv::Key::Up, 2);
+    CK_CHECK(b->bounds() == (Rect{0, 14, 80, 10}));  // a 14/10 split, by hand
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 28}));   // 14/24 of 48
+    CK_CHECK(b->bounds() == (Rect{0, 28, 80, 20}));  // 10/24 of 48
+    desktop.set_bounds(Rect{0, 0, 80, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 14}));
+    CK_CHECK(b->bounds() == (Rect{0, 14, 80, 10}));
+}
+
+CK_TEST(the_same_tiling_assembled_by_a_host_is_not_remembered) {
+    // The partner of the test above, and the reason it is not vacuous: the
+    // identical geometry, arrived at by a host's own set_bounds rather than by
+    // a reader's gesture, is left to the ordinary clamp. A host that wants its
+    // layout maintained says so — with a grow policy, or by laying it out
+    // again — and one that merely placed two windows is not signed up to have
+    // them resized underneath it.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    a->set_bounds(Rect{0, 0, 80, 14});
+    b->set_bounds(Rect{0, 14, 80, 10});
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);  // it IS a tiling, and is reported as one
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 14}));
+    CK_CHECK(b->bounds() == (Rect{0, 14, 80, 10}));
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(a_dialog_opening_over_a_tiling_does_not_take_the_arrangement_with_it) {
+    // A newcomer holds none of the arrangement's cells, and the windows that
+    // do still hold exactly what they were given. Forgetting the arrangement
+    // on every addition would cost a reader their tiling for opening a
+    // message box — including the two dialogs a Desktop presents itself.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    Window* dialog = desktop.add_window(make_window(f, "About"));
+    dialog->set_resizable(false);
+    dialog->set_bounds(Rect{20, 6, 30, 8});
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);  // a fixed-size window is above it
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));
+    const std::unique_ptr<Window> closed = desktop.remove_window(dialog);
+    CK_CHECK(closed.get() == dialog);
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+}
+
+CK_TEST(a_resizable_window_over_a_tiling_suspends_the_verdict_but_not_the_arrangement) {
+    // The verdict is about what is on the desktop now; the arrangement is
+    // about what was arranged. A window covering part of the grid answers the
+    // first and not the second — so the shadows come back while it is open,
+    // the bands underneath are still re-divided by a resize, and the verdict
+    // returns the moment it closes.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    Window* c = desktop.add_window(make_window(f, "C"));
+    c->set_bounds(Rect{10, 4, 20, 6});
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));
+    CK_CHECK(c->bounds() == (Rect{10, 4, 20, 6}));  // itself only clamped, never re-divided
+    const std::unique_ptr<Window> closed = desktop.remove_window(c);
+    CK_CHECK(closed.get() == c);
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+}
+
+CK_TEST(a_window_leaving_the_desktop_forgets_the_arrangement) {
+    // Which is also what keeps a remembered cell from ever naming a window
+    // that no longer exists.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
+    const std::unique_ptr<Window> departed = desktop.remove_window(c);
+    CK_CHECK(departed.get() == c);
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));  // not re-divided between the two survivors
+    CK_CHECK(b->bounds() == (Rect{0, 8, 80, 8}));
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(an_arrangement_holds_down_to_one_row_a_band_and_is_lost_below_it) {
+    // The floor, stated as a fixture: two stacked bands need two rows, not
+    // four. Window's default minimum is 10x4, and the arrangement deliberately
+    // writes cells straight through that — a band is the arrangement's answer,
+    // and letting one window's minimum push it back over its neighbour would
+    // reopen the very overlap this exists to prevent.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+
+    desktop.set_bounds(Rect{0, 0, 80, 2});  // exactly n rows for n bands
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 1}));
+    CK_CHECK(b->bounds() == (Rect{0, 1, 80, 1}));
+    CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+    desktop.set_bounds(Rect{0, 0, 80, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));  // and it comes all the way back
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+
+    // One row further and the second band would be nothing at all. Nothing is
+    // re-laid, the arrangement is forgotten, and the ordinary clamp — which
+    // does honour the minimum, and does overlap — takes over for good.
+    desktop.set_bounds(Rect{0, 0, 80, 1});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 4}));
+    CK_CHECK(b->bounds() == (Rect{0, 0, 80, 4}));
+    desktop.set_bounds(Rect{0, 0, 80, 24});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 4}));  // honestly lost, not silently restored
+    CK_CHECK(b->bounds() == (Rect{0, 0, 80, 4}));
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(a_minimized_window_comes_back_into_the_cell_the_arrangement_grew_for_it) {
+    // Membership is the arrangement's question, not the desktop's: a window
+    // that is merely hidden left the screen, not the tiling, and it is coming
+    // back into the cell it left — at whatever size that cell is by then.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    b->set_minimized(true);
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));  // reflowed while parked
+    CK_CHECK(desktop.filled_tile_fractions().empty());  // it is not on the desktop to be counted
+
+    b->set_minimized(false);
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);  // and the tiling is whole again
+}
+
+CK_TEST(a_keep_filling_window_keeps_its_own_authority_over_a_band) {
+    // A window with a grow policy is already sized by something on every
+    // resize. Two authorities writing one window's bounds is a bug waiting for
+    // a resize, so the policy keeps it and the arrangement is not remembered
+    // at all — not even for the windows around it.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    b->set_grow_policy(ckv::widgets::DesktopGrowPolicy::KeepFilling);
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(b->bounds() == (Rect{0, 0, 80, 48}));  // its policy, unchanged
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));  // and no band was re-divided
+}
+
+CK_TEST(a_zoomed_window_in_a_tiling_still_tracks_the_content_area) {
+    // The same veto, for the same reason, through zoom instead of a policy:
+    // refresh_zoom_area must keep running for a zoomed window, and it does.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    b->toggle_zoom(desktop.content_area());
+    desktop.tile_vertically();
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(b->zoomed());
+    CK_CHECK(b->bounds() == desktop.content_area());
+    CK_CHECK(b->bounds() == (Rect{0, 0, 80, 48}));
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+}
+
+CK_TEST(one_window_told_to_tile_fills_the_desktop_but_one_merely_placed_does_not) {
+    // A single window covering the area is a one-cell partition, so the two
+    // halves of this test are geometrically identical and differ only in
+    // whether an arrangement was ever stated. That difference is the whole
+    // policy: DesktopGrowPolicy::None still means "never grown" for a floating
+    // window, and stops meaning it only for a window in a stated arrangement.
+    Fixture f;
+    Desktop placed_only(Rect{0, 0, 80, 24});
+    Window* floating = placed_only.add_window(make_window(f, "A"));
+    floating->set_bounds(placed_only.content_area());
+    placed_only.set_bounds(Rect{0, 0, 120, 40});
+    CK_CHECK(floating->bounds() == (Rect{0, 0, 80, 24}));
+
+    Fixture g;
+    Desktop tiled(Rect{0, 0, 80, 24});
+    Window* stated = tiled.add_window(make_window(g, "A"));
+    tiled.tile();
+    CK_CHECK(stated->bounds() == (Rect{0, 0, 80, 24}));
+    tiled.set_bounds(Rect{0, 0, 120, 40});
+    CK_CHECK(stated->bounds() == (Rect{0, 0, 120, 40}));
+}
+
+CK_TEST(a_cascade_supersedes_the_tiling_it_replaced) {
+    // Every command that lays windows out ends by stating what it made, this
+    // one included — so the tiling before it is gone at once rather than
+    // lingering until the next resize notices.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    desktop.cascade();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 53, 16}));
+    CK_CHECK(b->bounds() == (Rect{2, 1, 53, 16}));
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 53, 16}));  // no band re-appears under them
+    CK_CHECK(b->bounds() == (Rect{2, 1, 53, 16}));
+}
+
+CK_TEST(an_arrangement_under_docked_chrome_is_re_divided_within_the_content_area) {
+    // The rows a menu bar holds are not the arrangement's to divide, in either
+    // direction: the cells are mapped from the content area they were stated
+    // in, into the content area there is now.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 25});
+    desktop.dock_top(std::make_unique<ckv::ui::View>());
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 80, 24}));
+    CK_CHECK(a->bounds() == (Rect{0, 1, 80, 12}));
+    CK_CHECK(b->bounds() == (Rect{0, 13, 80, 12}));
+
+    desktop.set_bounds(Rect{0, 0, 80, 49});
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 80, 48}));
+    CK_CHECK(a->bounds() == (Rect{0, 1, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 25, 80, 24}));
+    CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+}
+
+CK_TEST(a_restored_snapshot_states_an_arrangement_the_next_resize_re_divides) {
+    // A snapshot replays absolute rectangles; what is remembered is the
+    // arrangement those rectangles turn out to make on THIS desktop.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    const Desktop::Snapshot snapshot = desktop.snapshot();
+    desktop.cascade();
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+
+    desktop.restore(snapshot);
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(b->bounds() == (Rect{0, 24, 80, 24}));
+}
+
+CK_TEST(the_arrangement_reflow_survives_a_window_that_destroys_itself_from_on_resized) {
+    // Writing a cell enters the window's own on_resized, which is
+    // application-extensible and may detach and destroy any window — including
+    // one this pass has not reached yet.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* survivor = desktop.add_window(make_window(f, "Survivor"));
+    auto self_removing = std::make_unique<ResizeSelfRemovingWindow>(desktop, "Self removing");
+    ResizeSelfRemovingWindow* self_removing_ptr = self_removing.get();
+    desktop.add_window(std::move(self_removing));
+    desktop.tile_vertically();
+    self_removing_ptr->arm();
+
+    desktop.set_bounds(Rect{0, 0, 80, 48});
+    CK_CHECK(desktop.windows().size() == 1);
+    CK_CHECK(desktop.windows().front() == survivor);
+    CK_CHECK(survivor->bounds() == (Rect{0, 0, 80, 24}));  // its own cell, written before the removal
+
+    // And the removal took the arrangement with it, so the next resize is an
+    // ordinary clamp.
+    desktop.set_bounds(Rect{0, 0, 80, 20});
+    CK_CHECK(survivor->bounds() == (Rect{0, 0, 80, 20}));
+}
+
+CK_TEST(shadows_stay_off_across_a_resize_that_keeps_the_tiling) {
+    // The reason this matters beyond geometry: the shadow rule reads the same
+    // filled-tiling verdict, so an arrangement lost to a resize used to put
+    // every shadow back — a dark smudge along every seam of a grid the reader
+    // never touched.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_context(f.ctx());
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    desktop.tile_vertically();
+    CK_CHECK(!desktop.child_casts_shadow(*a));
+    CK_CHECK(!desktop.child_casts_shadow(*b));
+
+    desktop.set_bounds(Rect{0, 0, 80, 23});
+    CK_CHECK(desktop.filled_tile_fractions().size() == 2);
+    CK_CHECK(!desktop.child_casts_shadow(*a));
+    CK_CHECK(!desktop.child_casts_shadow(*b));
+}

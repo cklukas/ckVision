@@ -65,6 +65,32 @@ void place_unpositioned_window(Window& window, Rect available) {
     window.set_bounds(Rect{x, y, width, height});
 }
 
+// One coordinate of a remembered arrangement, re-expressed in a content area
+// of a different size: `edge` lies in [origin, origin + extent] and comes
+// back somewhere in [new_origin, new_origin + new_extent], proportionally and
+// rounded to nearest.
+//
+// Two properties are load-bearing, and both are exact rather than
+// approximate. Either end of the span maps to the corresponding end of the
+// new one, so an arrangement that filled its area still fills the new one.
+// And the two spans being identical makes this the identity — which is what
+// makes a resize round trip give a reader back the arrangement they had,
+// instead of a rounded neighbour of it. (Rounding to nearest is not an
+// involution: re-deriving the reference from each intermediate size would
+// walk a seam a row at a time and never walk it back. That is why callers map
+// from the ORIGINAL cells every time rather than from the last result.)
+//
+// int64 arithmetic because a coordinate times an extent is a product of two
+// terminal dimensions; nothing in a cell grid comes near overflowing it, but
+// the multiplication should not be the place that decides.
+int map_edge(int edge, int origin, int extent, int new_origin, int new_extent) noexcept {
+    CKV_ASSERT(extent > 0);
+    const std::int64_t offset = edge - origin;
+    const std::int64_t scaled =
+        (offset * new_extent + extent / 2) / extent;  // + extent/2: round to nearest
+    return new_origin + static_cast<int>(scaled);
+}
+
 }  // namespace
 
 Desktop::Desktop(Rect bounds) : View(bounds) {
@@ -254,6 +280,16 @@ void Desktop::zoom_active_window() {
 
 Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
+    // Nothing happens to the remembered arrangement here, deliberately. A
+    // window arriving is not one of its cells: the windows in the arrangement
+    // still hold exactly the cells they were given, and the newcomer floats
+    // over them like any other window that is not part of it. Forgetting the
+    // arrangement on every addition would mean a reader lost their tiling to
+    // opening a message box — including the two dialogs this Desktop presents
+    // itself — which is a high price for a rule that buys nothing. (The
+    // filled-tiling VERDICT does go while a resizable newcomer covers part of
+    // the grid, and comes back when it closes; that is a different question,
+    // about what is on the desktop now rather than what was arranged.)
     auto* raw = static_cast<Window*>(ui::View::add_child(std::move(window)));
     raw->compositor_layer_id_ = next_compositor_layer_id_++;
     windows_.push_back(raw);  // stable insertion order — cycling order, not z-order
@@ -397,6 +433,21 @@ void Desktop::exec_modal(ui::Application& app, WindowHandle handle) {
 std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     auto it = std::find(windows_.begin(), windows_.end(), window);
     if (it == windows_.end()) return nullptr;
+    // A window that HELD a cell takes it with it and leaves a hole no
+    // proportion describes, so the arrangement goes with it — which is also
+    // what guarantees a remembered cell can never outlive the window it
+    // names, since a cell's window is only ever removed through here. One
+    // that held no cell was never in the arrangement and leaves it untouched:
+    // a dialog closing gives the reader their tiling back rather than
+    // finishing it off. Forgotten before anything below runs application
+    // code, so that a successor's activation or an observer re-arranging what
+    // is left has the last word.
+    if (tiling_reference_) {
+        const auto& cells = tiling_reference_->cells;
+        if (std::any_of(cells.begin(), cells.end(),
+                        [window](const TilingCell& cell) { return cell.window == window; }))
+            tiling_reference_.reset();
+    }
     windows_.erase(it);
 
     // The relationship must disappear before View's detach sink can call
@@ -482,6 +533,14 @@ void Desktop::restore(const Snapshot& snapshot) {
 
     if (active_ != nullptr) active_->set_active(true);
     request_layer_recompose();
+    // A snapshot laid back down is a stated arrangement like any tiling
+    // command's: if what it restored is a tiling, a later resize re-divides it
+    // by these proportions rather than clamping the bands apart. Recorded
+    // against the area the windows have just been placed in, which is this
+    // desktop's own, not whatever size the desktop had when the snapshot was
+    // taken — the snapshot replays absolute rectangles, and this remembers
+    // the arrangement those rectangles turned out to make here.
+    capture_tiling_reference(content_area());
     // A restore moves activation without going through activate(), and a view
     // listing windows has no other way to hear that the window in front is a
     // different one than it was before the snapshot was laid back down.
@@ -518,8 +577,18 @@ void Desktop::window_gesture_changed(bool active) {
             for (Window* window : windows_) window->suspend_rasters();
         return;
     }
-    if (active_gestures_ > 0 && --active_gestures_ == 0)
+    if (active_gestures_ > 0 && --active_gestures_ == 0) {
         for (Window* window : windows_) window->resume_rasters();
+        // The drop, and the only moment this Desktop is told that a bounds
+        // change came from the READER — a drag, a corner resize, or the
+        // keyboard move/resize modes, all of which bracket themselves with
+        // this gesture. A reader who has just built a tiling by hand has
+        // stated an arrangement exactly as a tile command would have, and
+        // gets the same proportional treatment across a resize; one who has
+        // just dragged a window out of its cell has stated that it is no
+        // longer part of one, and is never snapped back.
+        note_reader_arrangement();
+    }
 }
 
 bool Desktop::shown(const Window& window) noexcept { return window.visible(); }
@@ -720,6 +789,18 @@ void Desktop::on_resized() {
         }
     }
 
+    // The arrangement a reader stated, re-divided by the same proportions in
+    // the new area (see capture_tiling_reference). After the grow policies
+    // above, because AnchorEdges reads each window's bounds against the
+    // PREVIOUS area to recover its margins and must not be shown a window
+    // this pass has already moved. Before the clamp below, because for the
+    // windows it places it IS the clamp: every cell it writes lies inside
+    // `area` by construction, and re-clamping them afterwards would let one
+    // window's own minimum size push it back over its neighbour — the exact
+    // overlap the arrangement is being replayed to prevent.
+    const std::vector<Window*> reflowed = reflow_tiling_reference(area);
+    if (desktop_liveness.expired()) return;
+
     // ARCHITECTURE.md §5 "Sizing policy": on shrink, windows are
     // deterministically clamped and repositioned to remain reachable —
     // every Desktop resize (which includes docking new chrome, since
@@ -732,10 +813,12 @@ void Desktop::on_resized() {
     // geometry was frozen would come back off the edge of a desktop that
     // shrank while it was away, which is the very unreachability this pass
     // exists to prevent. Hiding withholds a window's presentation, not its
-    // owner's sizing policy.
+    // owner's sizing policy. A window the arrangement reflow just placed is
+    // the one exception, and is already inside the area by construction.
     for (const LiveWindow& handle : windows) {
         if (desktop_liveness.expired()) return;
         if (!still_owned(handle)) continue;
+        if (std::find(reflowed.begin(), reflowed.end(), handle.window) != reflowed.end()) continue;
         handle.window->reposition_within(area);
     }
     if (desktop_liveness.expired()) return;
@@ -800,6 +883,12 @@ void Desktop::tile_in_bands(BandAxis axis) {
                                           : Rect{at, area.y, extent, area.height});
         at += extent;
     }
+    if (desktop_liveness.expired()) return;
+    // A reader has just stated an arrangement. Remembered here, as laid down
+    // and in the area it was laid down in, so that a later resize can
+    // re-divide it by these proportions instead of clamping each band on its
+    // own and leaving two of them sharing a row.
+    capture_tiling_reference(area);
 }
 
 void Desktop::tile() { tile_in_bands(BandAxis::Columns); }
@@ -858,6 +947,8 @@ void Desktop::tile_grid() {
         }
         y += height;
     }
+    if (desktop_liveness.expired()) return;
+    capture_tiling_reference(area);  // a stated arrangement — see tile_in_bands
 }
 
 void Desktop::cascade() {
@@ -885,6 +976,13 @@ void Desktop::cascade() {
         if (desktop_liveness.expired()) return;
         if (still_owned(handle)) raise_to_front(handle.window);
     }
+    if (desktop_liveness.expired()) return;
+    // Every command that lays windows out ends by stating what it made, this
+    // one included — even though a cascade is an overlapping arrangement and
+    // almost never a partition. Saying so is the point: a cascade supersedes
+    // whatever tiling preceded it, and leaving the old one remembered would
+    // have the next resize re-lay an arrangement the reader has replaced.
+    capture_tiling_reference(area);
 }
 
 bool Desktop::tiling_participant(const Window& window) const {
@@ -903,8 +1001,7 @@ bool Desktop::tiling_participant(const Window& window) const {
     return true;
 }
 
-std::vector<Desktop::TileFraction> Desktop::filled_tile_fractions() const {
-    const Rect area = content_area();
+std::vector<Window*> Desktop::partition_of(Rect area) const {
     if (area.empty()) return {};
 
     std::vector<Window*> tiles;
@@ -913,13 +1010,13 @@ std::vector<Desktop::TileFraction> Desktop::filled_tile_fractions() const {
         if (tiling_participant(*window)) tiles.push_back(window);
     if (tiles.empty()) return {};
 
-    // Three conditions, and no fourth: every window lies inside the content
-    // area, no two of them overlap, and their areas sum to the content
-    // area's. Together those are an exact partition — which is why this can
-    // answer for an arrangement no tile command produced, and why it stops
-    // answering the moment a reader drags one window a single cell off the
-    // grid (the drag both uncovers a strip and overlaps a neighbour, and
-    // either one alone is already disqualifying).
+    // Three conditions, and no fourth: every window lies inside `area`, no
+    // two of them overlap, and their areas sum to its own. Together those are
+    // an exact partition — which is why this can answer for an arrangement no
+    // tile command produced, and why it stops answering the moment a reader
+    // drags one window a single cell off the grid (the drag both uncovers a
+    // strip and overlaps a neighbour, and either one alone is already
+    // disqualifying).
     std::int64_t covered = 0;
     for (std::size_t i = 0; i < tiles.size(); ++i) {
         const Rect bounds = tiles[i]->bounds();
@@ -930,6 +1027,16 @@ std::vector<Desktop::TileFraction> Desktop::filled_tile_fractions() const {
         covered += static_cast<std::int64_t>(bounds.width) * bounds.height;
     }
     if (covered != static_cast<std::int64_t>(area.width) * area.height) return {};
+    return tiles;
+}
+
+std::vector<Desktop::TileFraction> Desktop::filled_tile_fractions() const {
+    const Rect area = content_area();
+    // The partition test itself lives in one place, so what a resize replays
+    // and what this reports can never be two different opinions about the
+    // same desktop.
+    const std::vector<Window*> tiles = partition_of(area);
+    if (tiles.empty()) return {};
 
     std::vector<TileFraction> fractions;
     fractions.reserve(tiles.size());
@@ -943,6 +1050,120 @@ std::vector<Desktop::TileFraction> Desktop::filled_tile_fractions() const {
                                          bounds.height / area_height});
     }
     return fractions;
+}
+
+void Desktop::capture_tiling_reference(Rect area) {
+    // Unconditionally, first: a command that laid windows out and did not
+    // leave a tiling has superseded whatever was remembered just as surely as
+    // one that did. A cascade is the ordinary case of that.
+    tiling_reference_.reset();
+
+    const std::vector<Window*> tiles = partition_of(area);
+    if (tiles.empty()) return;
+    // Another authority already sizes such a window on every resize — see
+    // this function's declaration in desktop.hpp for why that authority keeps
+    // it rather than sharing it.
+    for (Window* window : tiles)
+        if (window->zoomed() || window->grow_policy() != DesktopGrowPolicy::None) return;
+
+    TilingReference reference;
+    reference.area = area;
+    reference.cells.reserve(tiles.size());
+    // Membership is settled HERE and then frozen. A window that is later
+    // minimized keeps its cell: it left the screen, not the arrangement, and
+    // it is coming back into the cell it left — which is why nothing below
+    // re-asks shown(), even though the question that chose these windows did.
+    for (Window* window : tiles)
+        reference.cells.push_back(TilingCell{window, window->bounds(), window->bounds()});
+    tiling_reference_ = std::move(reference);
+}
+
+bool Desktop::tiling_reference_is_intact() const {
+    if (!tiling_reference_) return false;
+    // Every cell's window is still owned: adding or removing one forgets the
+    // reference outright, which is what makes these pointers safe to read.
+    for (const TilingCell& entry : tiling_reference_->cells)
+        if (entry.window->bounds() != entry.placed) return false;
+    return true;
+}
+
+void Desktop::note_reader_arrangement() {
+    // An intact reference is left exactly as it is. Re-capturing here would
+    // replace the original cells and the original area with the reflowed ones
+    // — which is the one thing this design exists not to do, since mapping
+    // from a reflow rather than from the original is what makes a resize
+    // round trip lose a row rather than give it back.
+    if (tiling_reference_is_intact()) return;
+    capture_tiling_reference(content_area());
+}
+
+std::vector<Window*> Desktop::reflow_tiling_reference(Rect area) {
+    if (!tiling_reference_is_intact()) {
+        tiling_reference_.reset();
+        return {};
+    }
+    const Rect from = tiling_reference_->area;
+    if (from.empty()) {  // nothing to map proportions out of
+        tiling_reference_.reset();
+        return {};
+    }
+
+    // Planned in full before a single window is touched, for two reasons: the
+    // degenerate floor below has to be able to decline the whole reflow, and
+    // set_bounds re-enters application code that may detach or destroy any
+    // window in the middle of the walk.
+    struct Placement {
+        LiveWindow handle;
+        Rect cell;
+    };
+    std::vector<Placement> plan;
+    plan.reserve(tiling_reference_->cells.size());
+    for (const TilingCell& entry : tiling_reference_->cells) {
+        const Rect cell = entry.cell;
+        // Edges, not rectangles. Two neighbours share a seam, the seam is one
+        // coordinate, and one coordinate maps to one number — so the mapped
+        // cells still meet exactly, with no rounding to reconcile.
+        const int left = map_edge(cell.x, from.x, from.width, area.x, area.width);
+        const int right = map_edge(cell.x + cell.width, from.x, from.width, area.x, area.width);
+        const int top = map_edge(cell.y, from.y, from.height, area.y, area.height);
+        const int bottom = map_edge(cell.y + cell.height, from.y, from.height, area.y, area.height);
+        const Rect mapped{left, top, right - left, bottom - top};
+        // The floor: a content area too small to give every band a row (or
+        // every column a cell) cannot hold this arrangement at all. Declining
+        // is the honest answer — the ordinary clamp takes over and the
+        // arrangement is gone, rather than the reader being handed windows
+        // with nothing in them.
+        if (mapped.empty()) {
+            tiling_reference_.reset();
+            return {};
+        }
+        plan.push_back(Placement{LiveWindow{entry.window, entry.window->lifetime_token()}, mapped});
+    }
+
+    // Recorded before the writing, not after: a window's own on_resized may
+    // destroy this Desktop, and what a surviving reference must hold is where
+    // this pass MEANT to put each window. If application code moves one
+    // afterwards, the next pass sees the difference and forgets the
+    // arrangement — which is exactly the intended reading of "somebody else
+    // moved it".
+    for (std::size_t i = 0; i < plan.size(); ++i) tiling_reference_->cells[i].placed = plan[i].cell;
+
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    std::vector<Window*> placed;
+    placed.reserve(plan.size());
+    for (const Placement& step : plan) {
+        if (desktop_liveness.expired()) return placed;
+        // Raw set_bounds, exactly as tile_in_bands writes its own bands: a
+        // cell is the arrangement's answer, and routing it through the
+        // window's own size clamp would let one window's minimum silently
+        // reopen the overlap this whole mechanism exists to prevent. Same
+        // liveness guard, and for the same reason — set_bounds is
+        // application-extensible.
+        if (!still_owned(step.handle)) continue;
+        placed.push_back(step.handle.window);
+        step.handle.window->set_bounds(step.cell);
+    }
+    return placed;
 }
 
 void Desktop::draw(scene::Painter& painter) {

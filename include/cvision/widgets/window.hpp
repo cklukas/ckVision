@@ -62,11 +62,17 @@ struct FrameSlot {
     int offset = 0;
 };
 
-// How a window's bounds respond to its owning Desktop growing (M8
-// WP-4) — orthogonal to reposition_within()'s shrink-side clamping,
-// which every window gets regardless of policy.
+// How a FLOATING window's bounds respond to its owning Desktop growing (M8
+// WP-4) — orthogonal to reposition_within()'s shrink-side clamping, which
+// every floating window gets regardless of policy. A window that is part of
+// an arrangement its Desktop remembers — a tiling command, a cascade, a
+// restored snapshot, or a tiling a reader built by hand — is sized by that
+// arrangement on every resize instead, in both directions and whatever this
+// enum says. The two never overlap: a Desktop refuses to remember any
+// arrangement containing a window whose policy is not None, or that is
+// zoomed, precisely so that no window is ever sized twice.
 enum class DesktopGrowPolicy {
-    None,         // never resized by desktop growth (only ever clamped on shrink) — the default
+    None,         // a floating window is never grown by the desktop, only clamped on shrink — the default
     KeepFilling,  // stays sized to exactly fill Desktop::content_area(), like a permanently zoomed window
     AnchorEdges,  // keeps its current distance to the right/bottom edges as the desktop grows or shrinks
 };

@@ -425,6 +425,22 @@ public:
     // never report a reader who arranged the same tiling by hand. Both
     // cases are answered correctly by measuring what is actually there.
     //
+    // A filled tiling SURVIVES a resize of the desktop, in both directions:
+    // the arrangement a reader stated is remembered and re-divided
+    // proportionally whenever the content area changes, so the answer here
+    // after a terminal grows or shrinks is the same arrangement at the new
+    // size rather than an empty vector. It is the proportions that survive,
+    // not the cell sizes — a band of a 23-row desktop is one row shorter
+    // than the same band of a 24-row one — and returning to an area the
+    // arrangement was already laid out in returns exactly the cells it had
+    // there. The arrangement is lost, and this goes empty for good, in
+    // exactly three cases: one of its OWN windows leaves the desktop, a
+    // reader moves or resizes one of them out of its cell, or the content
+    // area becomes too small to give every cell at least one row and column.
+    // A window merely opening over the arrangement — a dialog, a new document
+    // — empties this for as long as it covers part of the grid, and the
+    // arrangement is reported again once it closes.
+    //
     // Two kinds of window are deliberately not participants, because
     // neither is part of the arrangement: one that is not on the desktop
     // — hidden by its application, or minimized to a switcher bar — and a
@@ -584,6 +600,19 @@ private:
     // Whether `window` is part of the arrangement filled_tile_fractions()
     // measures — see that function for why a dialog is not.
     bool tiling_participant(const Window& window) const;
+    // The participants that exactly partition `area` right now — every one
+    // of them inside it, no two overlapping, their areas summing to its own
+    // — in windows()' insertion order; empty when what is on the desktop is
+    // not a partition of that rect.
+    //
+    // Parameterised on the rect because two callers need the same answer
+    // about two different rects: filled_tile_fractions() asks about
+    // content_area() as it is now, and the arrangement reference below asks
+    // whether what a reader just made is a partition of the area they made
+    // it in. One test rather than two, so a resize can never re-lay an
+    // arrangement the filled-tiling verdict would deny, nor deny one it
+    // re-laid.
+    std::vector<Window*> partition_of(Rect area) const;
     ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
     ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
     ui::View* set_content_impl(std::unique_ptr<ui::View> view);
@@ -654,6 +683,81 @@ private:
     // a single pointer means it is 0 or 1 in practice.
     void window_gesture_changed(bool active);
 
+    // --- The arrangement a reader stated, replayed across a resize -----
+    //
+    // A tiling is a statement about PROPORTIONS, and a content area that
+    // changes size has to be re-divided by them. Clamping each window
+    // independently — which is all a resize used to do — cannot: it pulls a
+    // band up without shortening it, so two neighbours that shared a seam
+    // start overlapping on it, and because clamping only ever shrinks,
+    // growing back never repairs the damage. One row off the terminal and
+    // the arrangement was gone for good, taking filled_tile_fractions()'
+    // verdict with it, and with that the shadow suppression and every host's
+    // proportional-restore tag.
+    //
+    // So the arrangement is REMEMBERED: the cells as stated, and the content
+    // area they were stated in. Every reflow maps from that ORIGINAL, never
+    // from the previous reflow's output. That is the whole design and it is
+    // not an optimization: the rounding map is not an involution, so a
+    // 24 -> 23 -> 24 round trip re-derived at each step hands two neighbours
+    // each other's heights and keeps them. Mapped from the original,
+    // returning to the original area is the identity by construction rather
+    // than by luck.
+    struct TilingCell {
+        Window* window = nullptr;
+        // The cell as stated, in the stated area's own coordinates.
+        Rect cell;
+        // What the last mapping actually wrote. A window is validated
+        // against THIS and never against `cell`: a reader who drags or
+        // resizes a window is not asking to be snapped back to where a tile
+        // command once put it, and comparing against where this Desktop last
+        // put the window is the only way to notice that they moved it.
+        Rect placed;
+    };
+    struct TilingReference {
+        Rect area;
+        std::vector<TilingCell> cells;  // insertion order, as partition_of reports
+    };
+    // Records whatever is on the desktop right now as the arrangement to
+    // replay, or forgets the recorded one when there is no arrangement to
+    // record. Called at the end of every command that lays windows out, and
+    // when a reader's own move/resize gesture ends.
+    //
+    // A participant that is zoomed, or that carries a grow policy of its
+    // own, vetoes the whole capture: such a window already has an authority
+    // that sizes it on every resize (refresh_zoom_area, fill), and a second
+    // one writing raw cells over the top would take Window::clamp_size — and
+    // with it min_size()/max_size() — out of the loop for exactly the window
+    // whose whole policy is about how it is sized. Note that this is not a
+    // corner case: a single window covering the area IS a one-cell
+    // partition, so an ordinary maximized window would be captured here
+    // without the veto.
+    void capture_tiling_reference(Rect area);
+    // Whether every remembered window is still exactly where the last
+    // mapping put it. Anything else means somebody other than this reflow
+    // moved it, and a remembered arrangement that no longer describes the
+    // desktop is not one to replay.
+    bool tiling_reference_is_intact() const;
+    // Re-lays the remembered arrangement into `area`, returning the windows
+    // it placed — empty when there was nothing to replay, in which case the
+    // ordinary per-window clamp applies to everything exactly as before.
+    //
+    // Edges are mapped, not rectangles: a seam shared by two neighbours is
+    // ONE coordinate, so it maps to one number and the partition stays exact
+    // by construction, rather than by two independently rounded rectangles
+    // happening to agree along it. If any cell would map to nothing — the
+    // floor is a content extent below the number of bands across it, not
+    // twice that — nothing is re-laid and the reference is forgotten: the
+    // arrangement is honestly lost, and the ordinary clamp resumes, rather
+    // than the reader being handed a row of empty windows.
+    std::vector<Window*> reflow_tiling_reference(Rect area);
+    // A reader's own move/resize gesture has ended. If it left a tiling this
+    // Desktop is not already remembering, that is a stated arrangement and
+    // is remembered from here — the hand-made half of what the tile commands
+    // get for free, and the one moment at which a bounds change is known to
+    // have come from the reader rather than from a host's own layout code.
+    void note_reader_arrangement();
+
     ui::RoleId background_role_ = ui::kInvalidRole;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
     std::vector<WindowObserverEntry> window_observers_;
@@ -699,6 +803,12 @@ private:
     // depends on top_dock_/bottom_dock_, set after this member in
     // declaration order).
     Rect last_content_area_{};
+    // The arrangement to replay across a resize — see
+    // capture_tiling_reference(). Empty whenever there is nothing to replay.
+    // A cell's Window* cannot dangle: the only way a window leaves this
+    // Desktop is remove_window(), which forgets the arrangement whenever what
+    // is leaving is one of these.
+    std::optional<TilingReference> tiling_reference_;
     // Capability held weakly by every attached Window's private zoom
     // target.  It makes destruction and detachment safe even if a
     // callback is accidentally invoked after the Window leaves us.

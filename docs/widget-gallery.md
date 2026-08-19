@@ -461,6 +461,24 @@ split 50/50. The same detection suppresses window shadows while the desktop
 is filled: a shadow says "this floats above that", and a full tiling leaves
 no desktop between the windows for one to fall on.
 
+An arrangement survives a resize. A `Desktop` remembers the cells of the last
+arrangement that was stated — by `tile()`, `tile_horizontally()`,
+`tile_vertically()`, `tile_grid()`, `restore()`, or by a reader's own drag or
+resize ending in a tiling — together with the content area they were stated in,
+and re-divides them by the same proportions whenever the content area changes.
+It is the proportions that survive, not the cell sizes: a band of a 23-row
+desktop is one row shorter than the same band of a 24-row one, and returning to
+a size the arrangement was already laid out in returns exactly the cells it had
+there. The arrangement is forgotten when one of its own windows leaves the
+desktop, when a reader moves or resizes one of them out of its cell, or when the
+content area becomes too small to give every cell a row and a column — two
+stacked bands need two rows, not eight. A window merely opening over the tiling
+suspends the `filled_tile_fractions()` verdict for as long as it covers part of
+the grid, without disturbing the arrangement underneath. A window that is zoomed
+or carries a `DesktopGrowPolicy` other than `None` is already sized on every
+resize by that policy, and an arrangement containing one is not remembered at
+all: no window is sized by two authorities.
+
 `set_maximize_follows_active(true)` opts in to a new window opening
 maximized when the window active at the moment of creation was maximized.
 Off by default, and it reuses `Window`'s own zoom, so the frame's zoom
@@ -1248,6 +1266,62 @@ controls, and the first entry at column zero.
 
 The collapse toggle is off until a host calls `set_collapsible(true)`, so a
 bar that never collapses pays no column for the possibility.
+
+### Damped widths
+
+A window's title is not a stable string: a shell rewrites its caption at every
+prompt, a build tool writes its progress into one, an editor appends and
+removes a dirty marker. Each rewrite is a new measurement, so an undamped bar
+re-sizes that button and re-flows every button beside it several times a
+second — the row becomes unreadable long before the titles do, and a reader
+aiming at a button hits the one that took its place.
+
+`set_width_damping(grow_delay_nanos, shrink_delay_nanos)` puts a floor under
+how often one entry's box may change width. Both delays are measured on the
+injected `Clock`, from that entry's last width change in either direction, so
+the promise is the plain one: at most one widening per grow delay, at most one
+narrowing per shrink delay. Zero for both — the default — is no damping, and
+every row follows its label in the same frame.
+
+```cpp
+bar->set_width_damping(1'000'000'000, 30'000'000'000);  // 1 s wider, 30 s narrower
+```
+
+The two directions get different delays because they are not equally urgent. A
+box that is too narrow is showing an elided name and should widen soon; one
+that is too wide is showing the whole name with slack around it, which costs
+the reader nothing and is very often about to be needed again.
+
+What is damped is the **layout** width. That is deliberate: the complaint is
+that the button jitters, and a button's length is the width the strip lays it
+out at, so damping a merely drawn width would leave the boxes shuffling
+underneath at exactly the rate the damping was meant to stop. Page composition
+therefore depends on time as well as on the labels — as it already does, since
+a title change re-pages. Damping does not make a pure function
+history-dependent; it lengthens the interval over which that function holds
+still, and within such an interval paging forward and back returns the reader
+to exactly the set they came from.
+
+Three rules complete it:
+
+- A window the bar has not measured before takes its natural width at once. A
+  row that has just appeared has no previous width to flicker between.
+- The label is never held back — only the box is. A name too long for the box
+  it has is elided into it (the strip's own elision) and comes out whole when
+  the box catches up.
+- `settle_width(window)` forgets one window's memory, so its next measurement
+  is taken at once. It is for the change a *reader* made: damping absorbs what
+  a program does to a caption, and a rename that visibly took effect half a
+  minute later reads as a command that did not work.
+
+A deferred change is applied by a wake-up the bar arms on the `Application`
+timer, because nothing else re-reads the widths: a program that renames its
+window once and then says nothing more would otherwise leave that name elided
+into its old box for the rest of the session. The wake-up holds still while a
+press is in flight (`PagedStrip::press_in_flight()`) and re-asks shortly
+after — the strip resolves a click by index, so a box that changed width
+between press and release would either move the item out from under the
+pointer or spend the click on a window the reader never pointed at.
 
 No keyboard handling, deliberately: windows are already cycled by the
 standard next/previous-window commands and selected by number.
