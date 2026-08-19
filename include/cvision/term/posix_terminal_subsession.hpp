@@ -94,6 +94,20 @@ public:
     void request_kill() noexcept;
     void close() noexcept override;
     int file_descriptor() const noexcept { return master_fd_; }
+    // The spawned child's pid, for OBSERVATION — and -1 once the child's exit
+    // has been observed, or when the launch failed. A host measuring what the
+    // process tree under a terminal costs (CPU time, resident memory) needs to
+    // know where that tree is rooted, and enumeration and sampling are
+    // platform work no wrapper here could own.
+    //
+    // It is NOT a handle for control. Hosts end a child through
+    // `request_termination()`/`request_kill()`/`close()`, which own the
+    // process-group semantics and the PTY's part in the sequence; a host that
+    // signalled this pid itself would race the reaping this class does.
+    // Nothing about that rule is changed by the pid being readable — and a
+    // reader sampling it should remember a pid outlives its process only as a
+    // number, so a stale copy may name somebody else's process.
+    int process_id() const noexcept { return child_pid_; }
     // The status the child exited with, once it has. Forwarded because the
     // emulator is the thing the PTY's read boundary was reported to, and a
     // host that owns one of these should not have to reach through it to find

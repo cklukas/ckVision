@@ -673,3 +673,29 @@ CK_TEST(an_explicit_only_child_sees_nothing_it_was_not_handed) {
     CK_CHECK(pump_until(*session, "[]"));
     ::unsetenv("CKV_ENV_PROBE");
 }
+
+CK_TEST(process_id_names_the_running_child_and_nobody_once_it_has_gone) {
+    // The child prints its own $$, so the accessor is checked against the
+    // child's account of itself rather than against another read of the same
+    // member. `read` keeps it alive until the test decides otherwise.
+    ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
+        "/bin/sh", {"-c", "echo CKV-PID:$$:DONE; read ignored"});
+    launch.profile.cells = ckv::Size{48, 6};
+    launch.environment = {{"TERM", "xterm"}};
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, ":DONE"));
+
+    const int reported = session->process_id();
+    CK_CHECK(reported > 0);
+    const std::string screen = screen_text(session->snapshot());
+    const auto at = screen.find("CKV-PID:");
+    CK_CHECK(at != std::string::npos);
+    int printed = 0;
+    for (std::size_t i = at + 8; i < screen.size() && screen[i] >= '0' && screen[i] <= '9'; ++i)
+        printed = printed * 10 + (screen[i] - '0');
+    CK_CHECK(printed == reported);
+
+    session->request_kill();
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(session->process_id() == -1);
+}
