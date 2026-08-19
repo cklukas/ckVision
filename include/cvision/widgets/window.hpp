@@ -459,6 +459,15 @@ private:
     // closure capturing a Desktop must not outlive it.
     void bind_gesture_observer(std::function<void(bool)> observer, std::weak_ptr<void> lifetime);
     void clear_gesture_observer() noexcept;
+    // A rename, reported to the owner. A title is not only this window's own
+    // chrome: it is what a switcher bar, a window list or a navigator draws
+    // for it, and set_title()'s invalidate repaints this frame while saying
+    // nothing at all to a view that merely mentions the window. Desktop owns
+    // this relationship on the same weak-lifetime terms as the two above.
+    void bind_title_observer(std::function<void()> observer, std::weak_ptr<void> lifetime);
+    void clear_title_observer() noexcept;
+    std::function<void()> title_observer_;
+    std::weak_ptr<void> title_observer_lifetime_;
     // Clamps `moved` so enough of the title bar stays inside move_bounds_ to
     // grab again. A window dragged entirely under the menu bar or past the
     // footer cannot be brought back with the mouse at all.

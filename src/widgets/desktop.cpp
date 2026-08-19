@@ -78,11 +78,60 @@ Desktop::~Desktop() {
     for (Window* window : windows_) {
         window->clear_desktop_zoom_target();
         window->clear_gesture_observer();
+        window->clear_title_observer();
     }
     window_relationship_.reset();
+    // Nothing may be reported from here on. A docked observer is one of the
+    // children View's own destructor is about to destroy, and a notification
+    // reaching it would be a call into a Desktop whose members no longer
+    // exist.
+    window_observers_.clear();
 
     if (app_ != nullptr)
         for (ui::CommandId id : installed_default_handlers_) app_->commands().set_handler(id, nullptr);
+}
+
+Desktop::WindowObserverId Desktop::subscribe_window_change(WindowObserver observer) {
+    const WindowObserverId identifier = next_window_observer_id_++;
+    window_observers_.push_back(WindowObserverEntry{identifier, std::move(observer), {}, false});
+    return identifier;
+}
+
+Desktop::WindowObserverId Desktop::subscribe_window_change(WindowObserver observer,
+                                                           std::weak_ptr<void> owner_lifetime) {
+    const WindowObserverId identifier = next_window_observer_id_++;
+    window_observers_.push_back(
+        WindowObserverEntry{identifier, std::move(observer), std::move(owner_lifetime), true});
+    return identifier;
+}
+
+void Desktop::unsubscribe_window_change(WindowObserverId observer) noexcept {
+    window_observers_.erase(std::remove_if(window_observers_.begin(), window_observers_.end(),
+                                            [observer](const WindowObserverEntry& candidate) {
+                                                return candidate.id == observer;
+                                            }),
+                            window_observers_.end());
+}
+
+void Desktop::notify_window_change(WindowChange change, Window& window) {
+    if (window_observers_.empty()) return;
+    // An expired owner is dropped rather than called, which is the whole
+    // reason the lifetime-bound form needs no cancelling.
+    window_observers_.erase(std::remove_if(window_observers_.begin(), window_observers_.end(),
+                                            [](const WindowObserverEntry& candidate) {
+                                                return candidate.lifetime_bound &&
+                                                       candidate.owner_lifetime.expired();
+                                            }),
+                            window_observers_.end());
+    // A copy, so an observer may unsubscribe from inside its own call without
+    // invalidating the walk. The observers themselves must not change the
+    // window set — see subscribe_window_change — so this Desktop's own state
+    // is stable across the loop.
+    const std::vector<WindowObserverEntry> observers = window_observers_;
+    for (const WindowObserverEntry& entry : observers) {
+        if (entry.lifetime_bound && entry.owner_lifetime.expired()) continue;
+        if (entry.observer) entry.observer(change, window);
+    }
 }
 
 void Desktop::install_default_handler(ui::CommandId id, std::function<void()> handler) {
@@ -217,10 +266,18 @@ Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     // every window's pictures, and the drop brings them all back at once.
     raw->bind_gesture_observer([this](bool active) { window_gesture_changed(active); },
                                window_relationship_);
+    // A rename is news for whoever LISTS windows; this window's own
+    // invalidate reaches only its own frame.
+    raw->bind_title_observer(
+        [this, raw] { notify_window_change(WindowChange::TitleChanged, *raw); },
+        window_relationship_);
     // A drag may not carry the title bar out of the content area: under the
     // menu bar or past the footer there is nothing left to grab it by.
     raw->set_move_bounds(content_area());
     activate(raw);
+    // Last, so an observer is handed a window that is completely attached —
+    // see WindowChange::Added for why the Activated above precedes it.
+    notify_window_change(WindowChange::Added, *raw);
     return raw;
 }
 
@@ -332,6 +389,7 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     // unique_ptr returned below, but it can no longer reach this Desktop.
     window->clear_desktop_zoom_target();
     window->clear_gesture_observer();
+    window->clear_title_observer();
     if (active_ == window) {
         active_ = nullptr;
         window->set_active(false);
@@ -353,6 +411,10 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
             }
         }
     }
+    // After the successor is active, so an observer reading active_window()
+    // from here never sees the gap between the two. `window` is still alive:
+    // `detached` owns it until this function hands that ownership on.
+    notify_window_change(WindowChange::Removed, *window);
     return std::unique_ptr<Window>(static_cast<Window*>(detached.release()));
 }
 
@@ -406,6 +468,10 @@ void Desktop::restore(const Snapshot& snapshot) {
 
     if (active_ != nullptr) active_->set_active(true);
     request_layer_recompose();
+    // A restore moves activation without going through activate(), and a view
+    // listing windows has no other way to hear that the window in front is a
+    // different one than it was before the snapshot was laid back down.
+    if (active_ != nullptr) notify_window_change(WindowChange::Activated, *active_);
 }
 
 std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
@@ -450,6 +516,9 @@ void Desktop::activate(Window* window) {
     reraise_popups();  // keep every open popup above the window that just moved to front
     active_ = window;
     active_->set_active(true);
+    // Last, with this Desktop's own activation state already settled, so an
+    // observer that reads active_window() reads the answer this call made.
+    notify_window_change(WindowChange::Activated, *window);
 }
 
 ui::View* Desktop::add_popup_impl(std::unique_ptr<ui::View> popup) {

@@ -93,6 +93,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/file_editor_controller.hpp` | injected editor file lifecycle | [Editor](editor.md) |
 | `include/cvision/widgets/help_viewer.hpp` | help viewer/provider | [Dialogs and commands](dialogs-and-commands.md) |
 | `include/cvision/widgets/window_list_dialog.hpp` | window chooser | [Widget gallery](widget-gallery.md#window-list-dialog) |
+| `include/cvision/widgets/window_switcher_bar.hpp` | `WindowSwitcherBar`, `WindowSwitcherTarget` | [Widget gallery](widget-gallery.md#windowswitcherbar) |
 | `include/cvision/widgets/standard_strings.hpp` | `StandardStrings` | [Dialogs and commands](dialogs-and-commands.md) |
 
 ## Graphics and common components

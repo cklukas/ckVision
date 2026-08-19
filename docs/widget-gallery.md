@@ -458,6 +458,17 @@ control restores such a window normally. Standard-dialog presentation
 (`present_modeless`/`present_modal`/`exec_modal`) is outside the policy: a
 dialog opens at the size it was built for.
 
+`subscribe_window_change(observer)` reports a window being added, removed,
+activated or renamed. It exists for views that *list* windows rather than
+contain them — a switcher bar, a navigator pane — because nothing else
+invalidates such a view when a window it does not contain opens or is
+renamed, and its list would silently stop matching the desktop. The overload
+taking a `std::weak_ptr<void>` drops the observer once that token expires,
+which is what a view docked on the same desktop needs: it is destroyed as
+part of that desktop, and a destructor cancelling by hand would reach into a
+`Desktop` whose members are already gone. An observer is a notification, not
+a place to add, remove or activate windows — post that work instead.
+
 ## FieldDescriptor
 
 Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator
@@ -1017,6 +1028,61 @@ activation/listing operations without exposing ownership.
 Header: `include/cvision/widgets/window_list_dialog.hpp`. The standard typed
 dialog for choosing/activating Desktop windows; use its presentation alias and
 result enum rather than building a one-off window list.
+
+## WindowSwitcherTarget
+
+Header: `include/cvision/widgets/window_switcher_bar.hpp`. The window one
+switcher-bar row stands for, and the way to run something against *that*
+window from a menu built elsewhere. `bind(f)` returns the callback
+`MenuItem::action` carries, checked against the window's own liveness token
+and against its still being listed before `f` runs. Reach for it — not
+`MenuItem::command` — whenever a menu item concerns a window other than the
+one in front: command dispatch has no target, and every standard
+window-management handler a `Desktop` installs acts on `active_window()`, so
+a `Close` chosen from a background row would close the wrong window.
+
+## WindowSwitcherBar
+
+Header: `include/cvision/widgets/window_switcher_bar.hpp`. One row listing
+every open window by title — click to activate and raise, right-click for a
+host-supplied context menu, the arrangement a desktop taskbar uses. The
+active window's entry is drawn in the theme's `ckv.statusline.selected`; the
+rest, and the bar itself, in `ckv.statusline.normal`.
+
+`WindowSwitcherBar(desktop)` wires the common case: that desktop's
+`windows()`, their `title()`, its `active_window()`, and `activate()` as the
+click action. Each is replaceable — `set_window_source`,
+`set_label_provider`, `set_active_provider`, `set_activate_action`,
+`set_context_menu_provider` — so an application whose notion of a window is
+its own keeps the row, the layout, the elision and the input handling.
+`set_context_menu_provider` is the only one with no default: what belongs on
+that menu is the application's vocabulary, not the library's.
+
+Dock it by composing, not by docking twice — `Desktop::dock_bottom` holds
+exactly one view per edge:
+
+```cpp
+auto stack = std::make_unique<ui::Column>();
+stack->add_item(std::make_unique<widgets::WindowSwitcherBar>(desktop));
+stack->add_item(std::make_unique<widgets::StatusLine>());
+desktop.dock_bottom(std::move(stack));
+```
+
+`ui::Column`'s vertical hint sums its children, so `Desktop::content_area()`
+— and with it the rectangle a maximized window is zoomed into — already
+excludes both rows.
+
+Too narrow for every title, the bar squeezes rather than drops: equal shares
+with the remainder handed to the leftmost entries, each title elided to its
+share. Dropping an entry would make that window unreachable from the very
+bar that exists to reach it. It stops only when a share would be too narrow
+to carry an elision marker.
+
+No keyboard handling, deliberately: windows are already cycled by the
+standard next/previous-window commands and selected by number.
+
+The row stays correct through `Desktop::subscribe_window_change` rather than
+by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 

@@ -40,6 +40,10 @@ void Window::on_detaching() {
 void Window::set_title(std::string title) {
     title_ = std::move(title);
     invalidate();
+    // Told, not discovered: nothing else in the tree carries a rename to a
+    // view that lists windows rather than containing them — see
+    // bind_title_observer.
+    if (title_observer_ && !title_observer_lifetime_.expired()) title_observer_();
 }
 
 void Window::set_footer(std::string footer) {
@@ -96,6 +100,16 @@ void Window::bind_gesture_observer(std::function<void(bool)> observer, std::weak
 void Window::clear_gesture_observer() noexcept {
     gesture_observer_ = nullptr;
     gesture_observer_lifetime_.reset();
+}
+
+void Window::bind_title_observer(std::function<void()> observer, std::weak_ptr<void> lifetime) {
+    title_observer_ = std::move(observer);
+    title_observer_lifetime_ = std::move(lifetime);
+}
+
+void Window::clear_title_observer() noexcept {
+    title_observer_ = nullptr;
+    title_observer_lifetime_.reset();
 }
 
 void Window::suspend_rasters() {

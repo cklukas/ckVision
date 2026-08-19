@@ -93,7 +93,8 @@ add_library(cvision
     src/widgets/text_view.cpp
     src/widgets/tree_view.cpp
     src/widgets/window.cpp
-    src/widgets/window_list_dialog.cpp)
+    src/widgets/window_list_dialog.cpp
+    src/widgets/window_switcher_bar.cpp)
 add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

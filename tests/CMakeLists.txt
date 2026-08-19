@@ -94,7 +94,8 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_wp36.cpp
     test_widgets.cpp
     test_window.cpp
-    test_window_list_dialog.cpp)
+    test_window_list_dialog.cpp
+    test_window_switcher_bar.cpp)
 
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 # Keep the test translation units' compile interface explicit even when the

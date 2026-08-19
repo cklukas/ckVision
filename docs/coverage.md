@@ -63,3 +63,4 @@ and executable test family. Screenshots are generated, not committed artwork.
 | `include/cvision/widgets/tree_view.hpp` | [Gallery](widget-gallery.md#treeview) | filebrowser | filebrowser-initial | test_tree_view |
 | `include/cvision/widgets/window.hpp` | [Object model](object-model.md) | gallery | gallery-initial | test_window |
 | `include/cvision/widgets/window_list_dialog.hpp` | [Gallery](widget-gallery.md#window-list-dialog) | gallery | gallery-initial | test_window_list_dialog |
+| `include/cvision/widgets/window_switcher_bar.hpp` | [Gallery](widget-gallery.md#windowswitcherbar) | none yet | none yet | test_window_switcher_bar |

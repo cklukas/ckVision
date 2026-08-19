@@ -1,0 +1,455 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+#include "cvision/widgets/window_switcher_bar.hpp"
+
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "cvision/testing/cktest.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/context.hpp"
+#include "cvision/ui/layout.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/status_line.hpp"
+
+using ckv::ManualClock;
+using ckv::Modifier;
+using ckv::Point;
+using ckv::Rect;
+using ckv::ui::Application;
+using ckv::ui::intern_standard_roles;
+using ckv::ui::make_classic_theme;
+using ckv::ui::RoleRegistry;
+using ckv::ui::StandardRoles;
+using ckv::ui::Theme;
+using ckv::widgets::Desktop;
+using ckv::widgets::DropdownMenu;
+using ckv::widgets::MenuItem;
+using ckv::widgets::StatusLine;
+using ckv::widgets::Window;
+using ckv::widgets::WindowSwitcherBar;
+using ckv::widgets::WindowSwitcherTarget;
+namespace ui = ckv::ui;
+
+namespace {
+
+struct Fixture {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    RoleRegistry registry;
+    StandardRoles roles = intern_standard_roles(registry);
+    Theme theme = make_classic_theme(registry, roles);
+    Desktop desktop{Rect{0, 0, 80, 24}};
+
+    Fixture() { desktop.set_context(ui::Context{&theme, &registry, &app}); }
+
+    // A bar living directly on the desktop at a width the test chooses,
+    // rather than docked: docking would re-place it on every desktop resize,
+    // and the narrow-width cases below are precisely about a width nobody
+    // else gets to pick.
+    WindowSwitcherBar* bar(int width = 80) {
+        auto* view = desktop.add(std::make_unique<WindowSwitcherBar>(desktop));
+        view->set_bounds(Rect{0, 0, width, 1});
+        return view;
+    }
+
+    Window* open(std::string title) {
+        return desktop.add_window(std::make_unique<Window>(std::move(title)));
+    }
+};
+
+ckv::MouseEvent press(int x, ckv::MouseButton button = ckv::MouseButton::Left) {
+    return ckv::MouseEvent{ckv::MouseAction::Down, button, Point{x, 0}, std::nullopt,
+                           Modifier::None};
+}
+
+ckv::MouseEvent release(int x, ckv::MouseButton button = ckv::MouseButton::Left) {
+    return ckv::MouseEvent{ckv::MouseAction::Up, button, Point{x, 0}, std::nullopt, Modifier::None};
+}
+
+// Which window is currently frontmost. Desktop::children() holds docks and
+// popups too, so the answer is the last child that is a window — the same
+// thing Desktop's own removal path looks for.
+Window* topmost_window(const Desktop& desktop) {
+    for (auto it = desktop.children().rbegin(); it != desktop.children().rend(); ++it)
+        if (auto* window = dynamic_cast<Window*>(it->get())) return window;
+    return nullptr;
+}
+
+// The middle column of an entry, so a click lands on it whatever its padding.
+int click_column(const WindowSwitcherBar& bar, std::size_t index) {
+    for (const WindowSwitcherBar::DrawnEntry& drawn : bar.drawn_entries())
+        if (drawn.index == index) return drawn.x + drawn.width / 2;
+    return -1;
+}
+
+}  // namespace
+
+// --- The list -------------------------------------------------------------
+
+CK_TEST(three_open_windows_produce_three_entries_in_the_desktops_own_order) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    Window* alpha = f.open("Alpha");
+    Window* bravo = f.open("Bravo");
+    Window* charlie = f.open("Charlie");
+
+    CK_CHECK(bar->entries().size() == 3);
+    CK_CHECK(bar->entries()[0].window == alpha);
+    CK_CHECK(bar->entries()[1].window == bravo);
+    CK_CHECK(bar->entries()[2].window == charlie);
+    CK_CHECK(bar->entries()[0].label == "Alpha");
+    CK_CHECK(bar->entries()[2].label == "Charlie");
+    // The last window opened took activation with it, and exactly one entry
+    // says so.
+    CK_CHECK(!bar->entries()[0].active);
+    CK_CHECK(!bar->entries()[1].active);
+    CK_CHECK(bar->entries()[2].active);
+}
+
+CK_TEST(a_bar_built_after_the_windows_lists_them_without_waiting_for_a_change) {
+    Fixture f;
+    f.open("Alpha");
+    f.open("Bravo");
+    WindowSwitcherBar* bar = f.bar();
+    CK_CHECK(bar->entries().size() == 2);
+}
+
+CK_TEST(entries_track_windows_opening_closing_being_renamed_and_changing_activation) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    Window* alpha = f.open("Alpha");
+    Window* bravo = f.open("Bravo");
+    f.open("Charlie");
+    CK_CHECK(bar->entries().size() == 3);
+
+    // Renamed. Nothing else in the tree carries this: the window repaints its
+    // own frame and the bar would otherwise keep drawing the old name.
+    alpha->set_title("Alpha (edited)");
+    CK_CHECK(bar->entries()[0].label == "Alpha (edited)");
+
+    // Activation moved by the standard cycling command, not by the bar.
+    f.desktop.activate(alpha);
+    CK_CHECK(bar->entries()[0].active);
+    CK_CHECK(!bar->entries()[2].active);
+
+    // Closed.
+    f.desktop.remove_window(bravo).reset();
+    CK_CHECK(bar->entries().size() == 2);
+    CK_CHECK(bar->entries()[0].window == alpha);
+    CK_CHECK(bar->entries()[1].label == "Charlie");
+
+    // Opened again.
+    f.open("Delta");
+    CK_CHECK(bar->entries().size() == 3);
+    CK_CHECK(bar->entries()[2].label == "Delta");
+    CK_CHECK(bar->entries()[2].active);
+}
+
+CK_TEST(a_bar_whose_providers_are_the_hosts_own_never_reads_a_desktop) {
+    // The whole point of the providers: the same row, the same layout and the
+    // same input over a window model that is not a Desktop's.
+    Fixture f;
+    Window standalone_a{"Session 1"};
+    Window standalone_b{"Session 2"};
+    Window* activated = nullptr;
+
+    auto* bar = f.desktop.add(std::make_unique<WindowSwitcherBar>());
+    bar->set_bounds(Rect{0, 0, 80, 1});
+    bar->set_window_source([&] { return std::vector<Window*>{&standalone_a, &standalone_b}; });
+    bar->set_label_provider([](Window& window) { return "[" + window.title() + "]"; });
+    bar->set_active_provider([&]() -> Window* { return &standalone_b; });
+    bar->set_activate_action([&](Window& window) { activated = &window; });
+
+    CK_CHECK(bar->entries().size() == 2);
+    CK_CHECK(bar->entries()[0].label == "[Session 1]");
+    CK_CHECK(bar->entries()[1].active);
+
+    const int x = click_column(*bar, 0);
+    CK_CHECK(bar->on_mouse(press(x)));
+    CK_CHECK(bar->on_mouse(release(x)));
+    CK_CHECK(activated == &standalone_a);
+    // Nothing about the desktop moved: the host's action is the whole of what
+    // clicking a row does.
+    CK_CHECK(f.desktop.windows().empty());
+}
+
+// --- Clicking -------------------------------------------------------------
+
+CK_TEST(clicking_each_entry_activates_and_raises_the_matching_window) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    Window* alpha = f.open("Alpha");
+    Window* bravo = f.open("Bravo");
+    Window* charlie = f.open("Charlie");
+
+    for (Window* expected : {alpha, bravo, charlie, alpha}) {
+        std::size_t index = 0;
+        for (std::size_t i = 0; i < bar->entries().size(); ++i)
+            if (bar->entries()[i].window == expected) index = i;
+        const int x = click_column(*bar, index);
+        CK_CHECK(x >= 0);
+        Window* const before = f.desktop.active_window();
+        CK_CHECK(bar->on_mouse(press(x)));
+        // The press alone decides nothing — it only says which row would act.
+        CK_CHECK(f.desktop.active_window() == before);
+        CK_CHECK(bar->on_mouse(release(x)));
+        CK_CHECK(f.desktop.active_window() == expected);
+        CK_CHECK(topmost_window(f.desktop) == expected);
+        CK_CHECK(bar->entries()[index].active);
+    }
+}
+
+CK_TEST(a_press_released_away_from_its_entry_takes_the_click_back) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    Window* charlie = f.open("Charlie");
+    CK_CHECK(f.desktop.active_window() == charlie);
+
+    const int on_alpha = click_column(*bar, 0);
+    CK_CHECK(bar->on_mouse(press(on_alpha)));
+    CK_CHECK(bar->on_mouse(release(70)));  // empty run past the last entry
+    CK_CHECK(f.desktop.active_window() == charlie);
+}
+
+CK_TEST(a_click_on_the_bars_empty_run_is_unhandled) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    CK_CHECK(!bar->on_mouse(press(70)));
+}
+
+// --- Right-click ----------------------------------------------------------
+
+CK_TEST(right_clicking_a_row_opens_the_hosts_menu_for_that_rows_window) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    Window* alpha = f.open("Alpha");
+    f.open("Bravo");
+    Window* charlie = f.open("Charlie");
+    CK_CHECK(f.desktop.active_window() == charlie);
+
+    Window* asked_about = nullptr;
+    bar->set_context_menu_provider([&](const WindowSwitcherTarget& target) {
+        asked_about = target.window();
+        return std::vector<MenuItem>{MenuItem::action("&Close", target.bind([](Window& window) {
+            window.close();
+        }))};
+    });
+
+    bool closed_alpha = false;
+    bool closed_charlie = false;
+    alpha->on_closed = [&] { closed_alpha = true; };
+    charlie->on_closed = [&] { closed_charlie = true; };
+
+    CK_CHECK(bar->on_mouse(press(click_column(*bar, 0), ckv::MouseButton::Right)));
+    CK_CHECK(asked_about == alpha);
+    CK_CHECK(f.desktop.popups().size() == 1);
+
+    // Right-clicking a background row does NOT take the reader to it.
+    CK_CHECK(f.desktop.active_window() == charlie);
+
+    auto* menu = dynamic_cast<DropdownMenu*>(f.desktop.popups().front());
+    CK_CHECK(menu != nullptr);
+    CK_CHECK(menu->items().size() == 1);
+
+    // The correctness point: command dispatch would have run against the
+    // FOCUSED window, and the focused window here is Charlie. The bound item
+    // acts on the window whose row was clicked.
+    menu->items()[0].action()();
+    CK_CHECK(closed_alpha);
+    CK_CHECK(!closed_charlie);
+}
+
+CK_TEST(a_menu_item_whose_window_closed_while_the_menu_stood_open_is_a_no_op) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    Window* alpha = f.open("Alpha");
+    f.open("Bravo");
+
+    int ran = 0;
+    bar->set_context_menu_provider([&](const WindowSwitcherTarget& target) {
+        return std::vector<MenuItem>{MenuItem::action("&Act", target.bind([&](Window&) { ++ran; }))};
+    });
+    CK_CHECK(bar->on_mouse(press(click_column(*bar, 0), ckv::MouseButton::Right)));
+    auto* menu = dynamic_cast<DropdownMenu*>(f.desktop.popups().front());
+    CK_CHECK(menu != nullptr);
+    const std::function<void()> chosen = menu->items()[0].action();
+
+    // The window goes away between opening the menu and choosing from it —
+    // a timer, a child dialog, or the reader's other hand.
+    f.desktop.remove_window(alpha).reset();
+    chosen();
+    CK_CHECK(ran == 0);
+}
+
+CK_TEST(a_host_with_nothing_to_offer_for_a_window_opens_no_menu) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    bar->set_context_menu_provider([](const WindowSwitcherTarget&) { return std::vector<MenuItem>{}; });
+    // Unconsumed, so an application's own desktop-wide context menu still
+    // gets the press.
+    CK_CHECK(!bar->on_mouse(press(click_column(*bar, 0), ckv::MouseButton::Right)));
+    CK_CHECK(f.desktop.popups().empty());
+}
+
+CK_TEST(a_bar_with_no_context_menu_provider_leaves_the_right_press_alone) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    CK_CHECK(!bar->on_mouse(press(click_column(*bar, 0), ckv::MouseButton::Right)));
+    CK_CHECK(f.desktop.popups().empty());
+}
+
+// --- Layout and elision ---------------------------------------------------
+
+CK_TEST(entries_take_their_natural_width_while_the_bar_is_wide_enough) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+
+    const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
+    CK_CHECK(drawn.size() == 3);
+    // One padding cell either side of each label, one blank cell between
+    // entries.
+    CK_CHECK(drawn[0].x == 0 && drawn[0].width == 7 && drawn[0].text == "Alpha");
+    CK_CHECK(drawn[1].x == 8 && drawn[1].width == 7 && drawn[1].text == "Bravo");
+    CK_CHECK(drawn[2].x == 16 && drawn[2].width == 9 && drawn[2].text == "Charlie");
+}
+
+CK_TEST(a_bar_too_narrow_for_every_title_elides_them_instead_of_dropping_entries) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar(20);
+    f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+
+    const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
+    // Every window keeps a row: a bar that dropped one would make that window
+    // unreachable from the very thing that exists to reach it.
+    CK_CHECK(drawn.size() == 3);
+    CK_CHECK(drawn[0].text == "Alp…");
+    CK_CHECK(drawn[1].text == "Bra…");
+    CK_CHECK(drawn[2].text == "Cha…");
+    // Equal shares, and the row fills its width exactly rather than ending
+    // ragged.
+    CK_CHECK(drawn[0].width == 6 && drawn[1].width == 6 && drawn[2].width == 6);
+    CK_CHECK(drawn[2].x + drawn[2].width == 20);
+    // Still clickable at the squeezed width.
+    CK_CHECK(bar->entry_at(Point{drawn[2].x, 0}).value_or(99) == 2);
+}
+
+CK_TEST(the_leftmost_entries_absorb_a_remainder_the_shares_could_not_divide) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar(19);
+    f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+
+    const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
+    CK_CHECK(drawn.size() == 3);
+    // 19 cells less two gaps is 17 across three entries: 6, 6, 5.
+    CK_CHECK(drawn[0].width == 6 && drawn[1].width == 6 && drawn[2].width == 5);
+    CK_CHECK(drawn[2].x + drawn[2].width == 19);
+}
+
+CK_TEST(a_bar_narrower_than_its_windows_can_be_told_apart_in_lays_out_what_it_can) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar(5);
+    f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+
+    // At four cells per entry (three of text plus a gap) five columns hold
+    // one. Squeezing further would leave rows that say nothing at all.
+    const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
+    CK_CHECK(drawn.size() == 1);
+    CK_CHECK(drawn[0].width == 5);
+}
+
+CK_TEST(the_bar_asks_for_exactly_one_row) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    CK_CHECK((bar->vertical_size_hint() == ui::SizeHint{1, 1, 1}));
+}
+
+// --- Docked over a status line -------------------------------------------
+
+CK_TEST(a_bar_stacked_over_a_status_line_reserves_both_rows_from_a_maximized_window) {
+    Fixture f;
+    auto stack = std::make_unique<ui::Column>();
+    stack->add_item(std::make_unique<WindowSwitcherBar>(f.desktop));
+    stack->add_item(std::make_unique<StatusLine>());
+    f.desktop.dock_bottom(std::move(stack));
+
+    // Column's vertical hint sums its children, so the reserved height comes
+    // out right with no second dock slot and no change to the dock API.
+    CK_CHECK((f.desktop.content_area() == Rect{0, 0, 80, 22}));
+
+    Window* window = f.open("Doc");
+    f.app.execute_command(f.app.commands().standard().zoom);
+    CK_CHECK(window->zoomed());
+    CK_CHECK((window->bounds() == Rect{0, 0, 80, 22}));
+}
+
+// --- The observation seam -------------------------------------------------
+
+CK_TEST(a_window_change_observer_hears_additions_activations_removals_and_renames) {
+    Fixture f;
+    std::vector<Desktop::WindowChange> heard;
+    const auto id = f.desktop.subscribe_window_change(
+        [&](Desktop::WindowChange change, Window&) { heard.push_back(change); });
+
+    Window* alpha = f.open("Alpha");
+    // Added is reported last, after the activation the addition itself caused.
+    CK_CHECK(heard.size() == 2);
+    CK_CHECK(heard[0] == Desktop::WindowChange::Activated);
+    CK_CHECK(heard[1] == Desktop::WindowChange::Added);
+
+    heard.clear();
+    alpha->set_title("Renamed");
+    CK_CHECK(heard.size() == 1 && heard[0] == Desktop::WindowChange::TitleChanged);
+
+    heard.clear();
+    f.desktop.remove_window(alpha).reset();
+    CK_CHECK(heard.size() == 1 && heard[0] == Desktop::WindowChange::Removed);
+
+    f.desktop.unsubscribe_window_change(id);
+    heard.clear();
+    f.open("Bravo");
+    CK_CHECK(heard.empty());
+}
+
+CK_TEST(a_lifetime_bound_observer_stops_being_called_once_its_owner_is_gone) {
+    Fixture f;
+    int calls = 0;
+    {
+        auto owner = std::make_shared<int>(0);
+        f.desktop.subscribe_window_change([&](Desktop::WindowChange, Window&) { ++calls; },
+                                          std::weak_ptr<void>(owner));
+        f.open("Alpha");
+        CK_CHECK(calls > 0);
+    }
+    const int after_owner_died = calls;
+    f.open("Bravo");
+    CK_CHECK(calls == after_owner_died);
+}
+
+CK_TEST(a_detached_and_destroyed_bar_never_hears_from_the_desktop_again) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    CK_CHECK(bar->entries().size() == 1);
+    f.desktop.remove_child(bar).reset();
+    // The subscription was bound to the bar's own lifetime and nothing had to
+    // cancel it; the notification below must simply find nobody listening.
+    f.open("Bravo");
+    CK_CHECK(f.desktop.windows().size() == 2);
+}

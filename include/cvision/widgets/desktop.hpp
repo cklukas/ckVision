@@ -11,6 +11,7 @@
 // tracked as Desktop follow-ons, not folded in here.
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -140,6 +141,61 @@ public:
     const std::vector<Window*>& windows() const noexcept { return windows_; }
 
     Window* active_window() const noexcept { return active_; }
+
+    // --- Observing the window set ----------------------------------
+    //
+    // What just changed about the windows this Desktop owns.
+    enum class WindowChange {
+        // Reported LAST in an addition, once the window is fully attached
+        // and has taken activation — so the Activated its own arrival caused
+        // arrives first. Every observer of this re-reads the list anyway, and
+        // reporting Added earlier would hand one a window whose bindings and
+        // move bounds were not set yet.
+        Added,
+        // Reported after the window has left windows() and whichever window
+        // succeeded it is already active. The reference is still valid: the
+        // detached window is alive in the ownership the removal is about to
+        // hand back.
+        Removed,
+        Activated,
+        TitleChanged,
+    };
+
+    using WindowObserverId = std::uint64_t;
+    using WindowObserver = std::function<void(WindowChange, Window&)>;
+
+    // Learn of windows opening, closing, being renamed, and changing
+    // activation.
+    //
+    // A view that LISTS windows — a switcher bar, a taskbar, a navigator pane
+    // — cannot get by on reading windows() whenever it happens to draw,
+    // because nothing invalidates such a view when a window it does not
+    // contain opens or is renamed. Its list would simply stop matching the
+    // desktop until something unrelated forced a repaint. This is the signal
+    // that tells it, and it exists so that no listing view has to sweep the
+    // window set every frame to find out.
+    //
+    // An observer is a NOTIFICATION, not a place to change the window set: it
+    // runs while this Desktop is part-way through the operation it is
+    // reporting, and detaching or destroying a window from inside one leaves
+    // that operation holding a pointer to something gone. Re-read, repaint,
+    // record — and do anything that adds, removes or activates a window from
+    // Application::post() instead. Unsubscribing from inside one IS safe.
+    //
+    // Multicast (subscribe/unsubscribe with an id, the shape EditorDocument
+    // already uses) rather than one assignable callback: a Desktop routinely
+    // carries a switcher bar AND an application's own bookkeeping, and a
+    // single slot means whichever attaches second silently displaces the
+    // first.
+    WindowObserverId subscribe_window_change(WindowObserver observer);
+    // The same, bound to `owner_lifetime`: once that token expires the
+    // observer is dropped instead of called, and nothing has to cancel it.
+    // The form a docked view needs — such a view is destroyed as part of the
+    // Desktop that owns it, so a destructor cancelling by hand would be
+    // reaching into a Desktop whose own members are already gone.
+    WindowObserverId subscribe_window_change(WindowObserver observer,
+                                             std::weak_ptr<void> owner_lifetime);
+    void unsubscribe_window_change(WindowObserverId observer) noexcept;
 
     // Typed layout snapshot/restore for application-owned session state.
     // The snapshot records current windows by instance identity and liveness,
@@ -411,6 +467,20 @@ private:
     };
     std::vector<LiveWindow> live_windows() const;
     bool still_owned(const LiveWindow& handle) const;
+    // Reports `change` to every live observer — see subscribe_window_change.
+    // Iterates a copy of the list, so an observer may unsubscribe itself (or
+    // another) from inside the call without invalidating the walk.
+    void notify_window_change(WindowChange change, Window& window);
+    struct WindowObserverEntry {
+        WindowObserverId id = 0;
+        WindowObserver observer;
+        std::weak_ptr<void> owner_lifetime;
+        // Whether owner_lifetime means anything. An unbound subscription
+        // carries an empty weak_ptr, and an empty weak_ptr is expired — so
+        // without this flag the caller who asked to manage its own
+        // subscription would be dropped before its first notification.
+        bool lifetime_bound = false;
+    };
     // Everything add_window does except the maximize-follows-on-open
     // policy: registration, the zoom/gesture relationships, move bounds
     // and activation. present_modeless/present_modal/exec_modal attach
@@ -501,6 +571,8 @@ private:
 
     ui::RoleId background_role_ = ui::kInvalidRole;
     std::vector<Window*> windows_;  // parallel to View::children_, same order
+    std::vector<WindowObserverEntry> window_observers_;
+    WindowObserverId next_window_observer_id_ = 1;
     Window* active_ = nullptr;
     int active_gestures_ = 0;
     std::vector<ui::View*> popups_;
