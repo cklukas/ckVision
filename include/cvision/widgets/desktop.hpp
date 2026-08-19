@@ -1,8 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 //
 // Desktop: background fill, owns z-ordered windows, activation,
-// next/previous cycling, select-by-number, tile/cascade
-// (ARCHITECTURE.md §5 "Windows, popups, modality"). Window-list
+// next/previous cycling, select-by-number, tile/tile-horizontally/
+// tile-vertically/tile-grid/cascade and the filled-tiling query the
+// tilings feed (ARCHITECTURE.md §5 "Windows, popups, modality"). Window-list
 // dialog and typed snapshot/restore are separate, larger pieces
 // (dialog needs materialize_dialog + a List view that doesn't exist
 // until M6; snapshot/restore is explicitly an application-owned-
@@ -25,7 +26,8 @@ namespace ckv::widgets {
 
 // Window-management default handlers (M9/WP-13, M10/WP-13 completion,
 // D-029): on_attached() installs itself as kClose/kQuit/kZoom/
-// kNextWindow/kPreviousWindow/kTile/kCascade's default handler — but
+// kNextWindow/kPreviousWindow/kTile/kTileHorizontally/kTileVertically/
+// kTileGrid/kCascade's default handler — but
 // ONLY for whichever of those nothing has claimed yet
 // (CommandRegistry::has_handler), the same guarded-install/guarded-
 // cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
@@ -86,13 +88,20 @@ public:
     // A shadow says "this floats above that". When windows are tiled they
     // leave no desktop between them, so nothing is floating: the shadow one
     // casts on its neighbour is a dark smudge along a shared edge, and it
-    // eats a row and a column of the window beneath. Resizable windows that
-    // between them cover the whole content area therefore stop casting until
-    // a gap reappears.
+    // eats a row and a column of the window beneath. So the answer is
+    // filled_tile_fractions()' — while that reports a filled tiling, the
+    // windows in it stop casting, and the moment one of them is dragged,
+    // resized or closed out of the grid every shadow is back.
+    //
+    // One detection, not two: a second "are we tiled?" rule of its own here
+    // would be a rule that could disagree with the one a layout report is
+    // tagged with, and a reader looking at shadows would be looking at the
+    // wrong answer.
     //
     // Fixed-size and modal windows keep theirs regardless. A dialog IS above
     // the arrangement, whatever the arrangement happens to cover, and it is
-    // the shadow that says so.
+    // the shadow that says so — which is the same reason neither counts as
+    // a participant in the tiling above.
     bool child_casts_shadow(const ui::View& child) const;
 
     // The blocking sibling of present_modal (M9/WP-15, D-021's "blocking
@@ -228,14 +237,114 @@ public:
     void select_by_number(int n);
 
     // Arranges every window to fill an equal vertical slice of the
-    // desktop's content area, left to right, in z-order. A no-op with
+    // desktop's content area, left to right, in windows()' insertion
+    // order — the same arrangement tile_vertically() names. A no-op with
     // zero windows.
     void tile();
+
+    // The three explicitly named tilings, in the sense a desktop
+    // taskbar's own "Tile Windows" commands use — spelled out here
+    // because the two axis words are used inconsistently across
+    // platforms and a caller deserves to know which arrangement it is
+    // asking for:
+    //
+    //   tile_horizontally() — full-WIDTH bands stacked top to bottom.
+    //   tile_vertically()   — full-HEIGHT bands side by side.
+    //   tile_grid()         — a near-square grid: ceil(sqrt(n)) columns,
+    //                         filled row by row, the last row holding
+    //                         whatever is left and stretching across the
+    //                         full width rather than stopping short.
+    //
+    // tile_vertically() produces exactly the arrangement tile() has
+    // always produced; the two are not merged because kTile is a
+    // standard command applications already bind, and renaming or
+    // re-pointing it would change behavior under callers that never
+    // asked for a change.
+    //
+    // All three fill content_area() exactly: the last band, the last row
+    // and the last window in each row absorb whatever the integer
+    // division left over, so no gap row or column is handed back to the
+    // desktop. That is not cosmetic — a one-cell gap, or a short last
+    // grid row, makes the arrangement fail filled_tile_fractions()' own
+    // coverage test, which is what would silently cost the arrangement
+    // its proportional-restore tag and its shadow suppression.
+    //
+    // No-ops with zero windows.
+    void tile_horizontally();
+    void tile_vertically();
+    void tile_grid();
 
     // Arranges every window at the same size (roughly 2/3 of the
     // desktop, clamped to fit), offset diagonally so each remains
     // partially visible, topmost window last (frontmost).
     void cascade();
+
+    // One window's share of a filled tiling, as a fraction of
+    // content_area() — see filled_tile_fractions().
+    struct TileFraction {
+        Window* window = nullptr;
+        // Offsets are measured from content_area()'s own origin, so all
+        // four numbers lie in [0, 1] and x + width <= 1, y + height <= 1.
+        double x = 0.0;
+        double y = 0.0;
+        double width = 0.0;
+        double height = 0.0;
+    };
+
+    // The current arrangement expressed proportionally, IF it is a
+    // filled, non-overlapping tiling of content_area() right now; an
+    // empty vector otherwise. Entries are in windows()' stable insertion
+    // order, the same order every other Desktop enumeration walks.
+    //
+    // What this is for: a proportional restore. A 50/50 split reported
+    // as {0, 0, 0.5, 1} and {0.5, 0, 0.5, 1} is still a 50/50 split when
+    // it is laid back down on a desktop of a different size, which
+    // replaying the absolute cell rects would not be.
+    //
+    // The test is GEOMETRIC — every participating window is inside the
+    // content area, no two overlap, and their areas sum to the content
+    // area's — never a flag the tile commands set. A flag would keep
+    // reporting "filled" after a reader dragged one window off the grid,
+    // handing a restore the wrong fractions to lay down; and it would
+    // never report a reader who arranged the same tiling by hand. Both
+    // cases are answered correctly by measuring what is actually there.
+    //
+    // Two kinds of window are deliberately not participants, because
+    // neither is part of the arrangement: an invisible one, and a
+    // fixed-size or modal window — a dialog is ABOVE whatever the
+    // arrangement covers, and including it would both break the tiling's
+    // coverage test and put the dialog into a restore that has no place
+    // for it.
+    std::vector<TileFraction> filled_tile_fractions() const;
+
+    // --- Maximize-follows-on-open (opt-in, default off) ------------
+    //
+    // When enabled, a window added while the currently active window is
+    // maximized opens maximized too, instead of at whatever bounds it
+    // was constructed with. Opt-in rather than default because it is a
+    // choice about an application's own window discipline: an
+    // application whose windows are dialogs and palettes wants a new
+    // window at its own size even when a document happens to be
+    // maximized, and every ckVision application built before this
+    // existed is one of those by construction.
+    //
+    // It reuses Window's zoom (toggle_zoom/zoomed()) rather than
+    // introducing a second notion of "maximized", so the zoom control on
+    // the new window's frame restores it exactly like any other zoomed
+    // window. A window whose bounds are still empty when it is added is
+    // given its natural centered placement FIRST and zoomed after, so
+    // the geometry the reader restores to is a real rectangle rather
+    // than the 0x0 one an unplaced window would otherwise record.
+    //
+    // Standard-dialog presentation (present_modeless/present_modal/
+    // exec_modal) is deliberately outside the policy: a dialog has
+    // already been sized to what it has to say, and a message box blown
+    // up to the full desktop because the document behind it was
+    // maximized is not what any host is asking for here.
+    void set_maximize_follows_active(bool enabled) noexcept {
+        maximize_follows_active_ = enabled;
+    }
+    bool maximize_follows_active() const noexcept { return maximize_follows_active_; }
 
     // Popups (menu dropdowns, M5): appended after every window in
     // z-order — always topmost regardless of window activation — with
@@ -288,6 +397,38 @@ public:
 
 private:
     struct WindowRelationshipToken {};
+    // A window plus the means to tell whether it is still THE window that
+    // was recorded. Every arrangement pass (tile, cascade, resize reflow)
+    // calls set_bounds in a loop, set_bounds runs on_resized, and an
+    // application's on_resized may detach and destroy any window — its own
+    // or a sibling. A raw pointer alone cannot survive that: a destroyed
+    // window can be replaced by a freshly allocated one at the same
+    // address. The weak token settles identity; the windows_ lookup
+    // settles ownership.
+    struct LiveWindow {
+        Window* window = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<LiveWindow> live_windows() const;
+    bool still_owned(const LiveWindow& handle) const;
+    // Everything add_window does except the maximize-follows-on-open
+    // policy: registration, the zoom/gesture relationships, move bounds
+    // and activation. present_modeless/present_modal/exec_modal attach
+    // through THIS rather than through add_window, because a dialog has
+    // already been given the size it means to open at (see
+    // place_unpositioned_window) and a message box that opened maximized
+    // because a document behind it happened to be maximized is not a
+    // policy any host asked for.
+    Window* attach_window(std::unique_ptr<Window> window);
+    // Which way the bands run in a tiling.
+    enum class BandAxis {
+        Rows,     // full-width bands stacked top to bottom (Tile Horizontally)
+        Columns,  // full-height bands side by side (Tile Vertically, and tile())
+    };
+    void tile_in_bands(BandAxis axis);
+    // Whether `window` is part of the arrangement filled_tile_fractions()
+    // measures — see that function for why a dialog is not.
+    bool tiling_participant(const Window& window) const;
     ui::View* dock_top_impl(std::unique_ptr<ui::View> view);
     ui::View* dock_bottom_impl(std::unique_ptr<ui::View> view);
     ui::View* set_content_impl(std::unique_ptr<ui::View> view);
@@ -341,6 +482,12 @@ private:
     // the same call its own zoom-control click already makes — a
     // no-op with no active window.
     void zoom_active_window();
+    // Maximize-follows-on-open, applied to a window that has just been
+    // added — see set_maximize_follows_active(). Whether the PREVIOUSLY
+    // active window was maximized is decided by add_window before
+    // activation moves, not here: asked afterwards the question could only
+    // ever be about the new window and would answer nothing.
+    void open_maximized(Window& window);
     void on_invalidated(Rect, ui::InvalidationKind) override;
     void on_descendant_invalidated(const ui::View& source, Rect,
                                    ui::InvalidationKind kind) override;
@@ -371,6 +518,7 @@ private:
     ui::View* content_ = nullptr;
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
+    bool maximize_follows_active_ = false;
     std::vector<ui::CommandId> installed_default_handlers_;
     // Whether a Desktop-installed dialog handler (kWindowList,
     // kTerminalReport) already has its dialog up. Shared, like the quit sweep

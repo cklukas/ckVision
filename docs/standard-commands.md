@@ -102,10 +102,14 @@ also the order `CommandRegistry::all()` reports them in:
 | `ckv.focus.next` | `Next Field` | Window | Tab |
 | `ckv.focus.previous` | `Previous Field` | Window | Shift+Tab |
 | `ckv.app.terminal_report` | `&Terminal Report` | System | — |
+| `ckv.window.tile_horizontal` | `Tile &Horizontally` | Window | — |
+| `ckv.window.tile_vertical` | `Tile &Vertically` | Window | — |
+| `ckv.window.tile_grid` | `Tile &Grid` | Window | — |
 
 Application code references these through
 `CommandRegistry::standard()` — `.quit`, `.close`, `.zoom`,
-`.next_window`, `.previous_window`, `.tile`, `.cascade`,
+`.next_window`, `.previous_window`, `.tile`, `.tile_horizontally`,
+`.tile_vertically`, `.tile_grid`, `.cascade`,
 `.window_list`, `.menu`, `.help`, `.terminal_report`, `.focus_next`,
 `.focus_previous` —
 rather than by key; the keys are spelled out in
@@ -122,8 +126,25 @@ choices reviewable in one place.
   `parse_mnemonic()` over whatever text it wants there (see the
   "declare your own command" escape hatch above). `cascade` uses
   `C&ascade` (mnemonic on 'a') rather than 'c', since `close` and
-  `cascade` can plausibly coexist in the same Window menu.
-- **`tile`/`cascade`/`window_list`/`terminal_report` have no default
+  `cascade` can plausibly coexist in the same Window menu. The three
+  explicit tilings put their mnemonic on the distinguishing word
+  (`Tile &Horizontally`, `Tile &Vertically`, `Tile &Grid`) for the same
+  reason: a Window menu carrying all of them alongside `&Tile` would
+  otherwise have four items competing for 'T', and the axis — or
+  "Grid" — is the word the reader is actually choosing between.
+- **The tilings are fixed by the arrangement, not by the word.** The
+  two axis names are used inconsistently across desktops, so the set
+  states which is which: `tile_horizontally` lays full-WIDTH bands
+  stacked top to bottom; `tile_vertically` lays full-HEIGHT bands side
+  by side; `tile_grid` lays a near-square grid of `ceil(sqrt(n))`
+  columns, filled row by row, its last row stretched across the full
+  width so the grid is still an exact cover. `tile_vertically` produces
+  exactly the arrangement `tile` has always produced. The two are not
+  merged because `tile` is a command applications already bind, and
+  re-pointing it would change behavior under callers that never asked
+  for a change.
+- **`tile`/`tile_horizontally`/`tile_vertically`/`tile_grid`/`cascade`/
+  `window_list`/`terminal_report` have no default
   chord.** There is
   no comparably strong, widely-recognized single-key convention for
   them the way there is for Quit/Close/Zoom/Help/Menu/window-cycling —

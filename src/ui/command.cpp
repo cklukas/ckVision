@@ -47,6 +47,15 @@ CommandRegistry::CommandRegistry() {
     // have always been assigned in declaration order.
     standard_.terminal_report =
         declare_standard(kTerminalReport, "&Terminal Report", "System", "");
+    // Mnemonics on the distinguishing word rather than on "Tile": a Window
+    // menu that carries all of these would otherwise have four items
+    // competing for 'T', and the axis (or "Grid") is the word the reader is
+    // actually choosing between.
+    standard_.tile_horizontally =
+        declare_standard(kTileHorizontally, "Tile &Horizontally", "Window", "");
+    standard_.tile_vertically =
+        declare_standard(kTileVertically, "Tile &Vertically", "Window", "");
+    standard_.tile_grid = declare_standard(kTileGrid, "Tile &Grid", "Window", "");
 }
 
 CommandId CommandRegistry::id_for_key(std::string_view key) {

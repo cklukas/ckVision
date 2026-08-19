@@ -1,9 +1,8 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/desktop.hpp"
 
-#include "cvision/scene/rect_ops.hpp"
-
 #include <algorithm>
+#include <cstdint>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/scene/compositor.hpp"
@@ -104,6 +103,9 @@ void Desktop::on_attached() {
     install_default_handler(standard.next_window, [this] { activate_next(); });
     install_default_handler(standard.previous_window, [this] { activate_previous(); });
     install_default_handler(standard.tile, [this] { tile(); });
+    install_default_handler(standard.tile_horizontally, [this] { tile_horizontally(); });
+    install_default_handler(standard.tile_vertically, [this] { tile_vertically(); });
+    install_default_handler(standard.tile_grid, [this] { tile_grid(); });
     install_default_handler(standard.cascade, [this] { cascade(); });
     install_default_handler(standard.window_list, [this] { show_window_list(); });
     install_default_handler(standard.terminal_report, [this] { show_terminal_report(); });
@@ -200,7 +202,7 @@ void Desktop::zoom_active_window() {
     if (active_ != nullptr) active_->toggle_zoom(content_area());
 }
 
-Window* Desktop::add_window(std::unique_ptr<Window> window) {
+Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     CKV_ASSERT(window != nullptr);
     auto* raw = static_cast<Window*>(ui::View::add_child(std::move(window)));
     raw->compositor_layer_id_ = next_compositor_layer_id_++;
@@ -222,6 +224,33 @@ Window* Desktop::add_window(std::unique_ptr<Window> window) {
     return raw;
 }
 
+Window* Desktop::add_window(std::unique_ptr<Window> window) {
+    // Asked here, before the new window takes activation away from it. The
+    // window the reader was looking at when they opened this one is the
+    // whole question; active_ read afterwards can only ever be the new
+    // window, which answers nothing.
+    const bool follow_maximized =
+        maximize_follows_active_ && active_ != nullptr && active_->maximized();
+    Window* const raw = attach_window(std::move(window));
+    if (follow_maximized) open_maximized(*raw);
+    return raw;
+}
+
+void Desktop::open_maximized(Window& window) {
+    // Already maximized — by its own zoom or by a KeepFilling grow policy.
+    // Toggling here would un-zoom the first and give the second a
+    // restore rectangle it never asked for.
+    if (window.maximized()) return;
+    // A window still at its default empty rect has no geometry to restore
+    // to. Zoomed straight from there it would record 0x0 as its restored
+    // bounds, and the reader's first click on the zoom control would make
+    // the window disappear instead of shrinking it. Give it the centered
+    // placement present_modeless() would have given it, then zoom that.
+    if (window.bounds().width <= 0 || window.bounds().height <= 0)
+        place_unpositioned_window(window, content_area());
+    window.toggle_zoom(content_area());
+}
+
 ui::View* Desktop::add_child(std::unique_ptr<ui::View> child) {
     CKV_ASSERT(child != nullptr);
     if (dynamic_cast<Window*>(child.get()) != nullptr) {
@@ -237,7 +266,7 @@ Window* Desktop::present_modeless(WindowHandle handle, ui::Application& app) {
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
     place_unpositioned_window(*window, content_area());
-    add_window(std::move(handle.window));
+    attach_window(std::move(handle.window));
     app.set_focus(handle.initial_focus);
     if (desktop_liveness.expired() || window_liveness.expired()) return nullptr;
     if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) return nullptr;
@@ -250,7 +279,7 @@ Window* Desktop::present_modal(WindowHandle handle, ui::Application& app) {
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
     place_unpositioned_window(*window, content_area());
-    add_window(std::move(handle.window));
+    attach_window(std::move(handle.window));
     app.push_modal(*window);
     app.set_focus(handle.initial_focus);
     if (desktop_liveness.expired() || window_liveness.expired()) return nullptr;
@@ -271,7 +300,7 @@ void Desktop::exec_modal(ui::Application& app, WindowHandle handle) {
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
     place_unpositioned_window(*window, content_area());
-    add_window(std::move(handle.window));
+    attach_window(std::move(handle.window));
     const ui::Application::ModalScopeId modal_scope = app.push_modal(*window);
     app.set_focus(handle.initial_focus);
     const bool window_detached = app.run_until([this, desktop_liveness, window, window_liveness] {
@@ -544,18 +573,10 @@ void Desktop::on_resized() {
     // zoomed() at all; AnchorEdges keeps each such window's current
     // distance to the right/bottom edges, using the area from the
     // PREVIOUS pass to know what that distance was.
-    struct WindowHandle { Window* window; std::weak_ptr<void> liveness; };
-    std::vector<WindowHandle> windows;
-    windows.reserve(windows_.size());
-    for (Window* window : windows_)
-        windows.push_back(WindowHandle{window, window->lifetime_token()});
-    const auto current_window = [this](const WindowHandle& handle) {
-        return !handle.liveness.expired() &&
-               std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end();
-    };
-    for (const WindowHandle& handle : windows) {
+    const std::vector<LiveWindow> windows = live_windows();
+    for (const LiveWindow& handle : windows) {
         if (desktop_liveness.expired()) return;
-        if (!current_window(handle)) continue;
+        if (!still_owned(handle)) continue;
         Window* const w = handle.window;
         if (w->zoomed()) {
             w->refresh_zoom_area(area);
@@ -577,68 +598,183 @@ void Desktop::on_resized() {
     // regardless of grow policy: the policy above only decides
     // whether/how a window grows, this still enforces the
     // never-unreachable floor unconditionally.
-    for (const WindowHandle& handle : windows) {
+    for (const LiveWindow& handle : windows) {
         if (desktop_liveness.expired()) return;
-        if (!current_window(handle)) continue;
+        if (!still_owned(handle)) continue;
         handle.window->reposition_within(area);
     }
     if (desktop_liveness.expired()) return;
     last_content_area_ = area;
 }
 
-void Desktop::tile() {
+std::vector<Desktop::LiveWindow> Desktop::live_windows() const {
+    std::vector<LiveWindow> handles;
+    handles.reserve(windows_.size());
+    for (Window* window : windows_)
+        handles.push_back(LiveWindow{window, window->lifetime_token()});
+    return handles;
+}
+
+bool Desktop::still_owned(const LiveWindow& handle) const {
+    if (handle.liveness.expired()) return false;
+    return std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end();
+}
+
+void Desktop::tile_in_bands(BandAxis axis) {
     if (windows_.empty()) return;
     const std::weak_ptr<void> desktop_liveness = lifetime_token();
-    struct WindowHandle { Window* window; std::weak_ptr<void> liveness; };
-    std::vector<WindowHandle> windows;
-    windows.reserve(windows_.size());
-    for (Window* window : windows_)
-        windows.push_back(WindowHandle{window, window->lifetime_token()});
+    const std::vector<LiveWindow> handles = live_windows();
     const Rect area = content_area();
-    const int n = static_cast<int>(windows.size());
-    const int slice = area.width / n;
-    int x = area.x;
+    const int n = static_cast<int>(handles.size());
+    // One axis is divided into bands; the other is kept whole, which is what
+    // makes every band full-width or full-height.
+    const int origin = axis == BandAxis::Rows ? area.y : area.x;
+    const int divided = axis == BandAxis::Rows ? area.height : area.width;
+    const int band = divided / n;
+    int at = origin;
     for (int i = 0; i < n; ++i) {
-        const int width = (i == n - 1) ? (area.x + area.width - x) : slice;  // last slice absorbs any remainder
-        const WindowHandle& handle = windows[static_cast<std::size_t>(i)];
+        // The last band absorbs whatever the integer division dropped.
+        // Leaving it out would leave a gap row or column down the
+        // arrangement — visible desktop, and enough on its own to cost the
+        // whole tiling its filled_tile_fractions() verdict, and with it the
+        // proportional restore and the shadow suppression that follow from
+        // it.
+        const int extent = (i == n - 1) ? (origin + divided - at) : band;
+        const LiveWindow& handle = handles[static_cast<std::size_t>(i)];
         if (desktop_liveness.expired()) return;
-        if (!handle.liveness.expired() &&
-            std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end())
-            handle.window->set_bounds(Rect{x, area.y, width, area.height});
-        x += width;
+        // set_bounds enters the window's own on_resized, which is
+        // application-extensible and may have destroyed or detached this
+        // window — or this whole Desktop — since the loop began.
+        if (still_owned(handle))
+            handle.window->set_bounds(axis == BandAxis::Rows
+                                          ? Rect{area.x, at, area.width, extent}
+                                          : Rect{at, area.y, extent, area.height});
+        at += extent;
+    }
+}
+
+void Desktop::tile() { tile_in_bands(BandAxis::Columns); }
+
+void Desktop::tile_vertically() { tile_in_bands(BandAxis::Columns); }
+
+void Desktop::tile_horizontally() { tile_in_bands(BandAxis::Rows); }
+
+void Desktop::tile_grid() {
+    if (windows_.empty()) return;
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    const std::vector<LiveWindow> handles = live_windows();
+    const Rect area = content_area();
+    const int n = static_cast<int>(handles.size());
+    // ceil(sqrt(n)) by integer search rather than through std::sqrt: a
+    // library that answers 2.9999999 for 9 would lay nine windows out in
+    // four columns, and the arrangement would come out different on one
+    // machine than on the next — which the determinism rule
+    // (AGENTS.md, "identical inputs must yield byte-identical frames")
+    // forbids outright.
+    int columns = 1;
+    while (columns * columns < n) ++columns;
+    const int rows = (n + columns - 1) / columns;
+    const int row_height = area.height / rows;
+    int y = area.y;
+    for (int row = 0; row < rows; ++row) {
+        const int height = (row == rows - 1) ? (area.y + area.height - y) : row_height;
+        const int first = row * columns;
+        const int end = std::min(first + columns, n);  // a short last row is normal
+        // A short last row spreads across the WHOLE width instead of
+        // stopping where a full row would have. Three windows leave a
+        // half-empty bottom row otherwise, and that gap is not merely ugly:
+        // it is desktop showing through, so the arrangement stops being a
+        // filled tiling and loses both the proportional restore and the
+        // shadow suppression that depend on it.
+        const int column_width = area.width / (end - first);
+        int x = area.x;
+        for (int i = first; i < end; ++i) {
+            const int width = (i == end - 1) ? (area.x + area.width - x) : column_width;
+            const LiveWindow& handle = handles[static_cast<std::size_t>(i)];
+            if (desktop_liveness.expired()) return;
+            // set_bounds enters application-extensible code that may destroy
+            // this window or the whole Desktop — see tile_in_bands.
+            if (still_owned(handle)) handle.window->set_bounds(Rect{x, y, width, height});
+            x += width;
+        }
+        y += height;
     }
 }
 
 void Desktop::cascade() {
     if (windows_.empty()) return;
     const std::weak_ptr<void> desktop_liveness = lifetime_token();
-    struct WindowHandle { Window* window; std::weak_ptr<void> liveness; };
-    std::vector<WindowHandle> windows;
-    windows.reserve(windows_.size());
-    for (Window* window : windows_)
-        windows.push_back(WindowHandle{window, window->lifetime_token()});
+    const std::vector<LiveWindow> handles = live_windows();
     const Rect area = content_area();
     const int width = std::max(10, area.width * 2 / 3);
     const int height = std::max(4, area.height * 2 / 3);
     const int max_x = std::max(0, area.width - width);
     const int max_y = std::max(0, area.height - height);
-    for (std::size_t i = 0; i < windows.size(); ++i) {
+    for (std::size_t i = 0; i < handles.size(); ++i) {
         const int offset = static_cast<int>(i);
         const int x = area.x + (max_x == 0 ? 0 : (offset * 2) % (max_x + 1));
         const int y = area.y + (max_y == 0 ? 0 : (offset * 1) % (max_y + 1));
-        const WindowHandle& handle = windows[i];
         if (desktop_liveness.expired()) return;
-        if (!handle.liveness.expired() &&
-            std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end())
-            handle.window->set_bounds(Rect{x, y, width, height});
+        if (still_owned(handles[i])) handles[i].window->set_bounds(Rect{x, y, width, height});
     }
     // Cascade order should also become z-order: last window frontmost.
-    for (const WindowHandle& handle : windows) {
+    for (const LiveWindow& handle : handles) {
         if (desktop_liveness.expired()) return;
-        if (!handle.liveness.expired() &&
-            std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end())
-            raise_to_front(handle.window);
+        if (still_owned(handle)) raise_to_front(handle.window);
     }
+}
+
+bool Desktop::tiling_participant(const Window& window) const {
+    if (!window.visible()) return false;
+    // A fixed-size window is an alert, an About box, a message: it sits ON
+    // the arrangement, never in it, and it has no band to be resized into.
+    if (!window.resizable()) return false;
+    // Same reason for one that is resizable but modal — modality is the
+    // strongest statement a window makes about being above everything else.
+    if (context().app != nullptr && context().app->is_modal_root(window)) return false;
+    return true;
+}
+
+std::vector<Desktop::TileFraction> Desktop::filled_tile_fractions() const {
+    const Rect area = content_area();
+    if (area.empty()) return {};
+
+    std::vector<Window*> tiles;
+    tiles.reserve(windows_.size());
+    for (Window* window : windows_)
+        if (tiling_participant(*window)) tiles.push_back(window);
+    if (tiles.empty()) return {};
+
+    // Three conditions, and no fourth: every window lies inside the content
+    // area, no two of them overlap, and their areas sum to the content
+    // area's. Together those are an exact partition — which is why this can
+    // answer for an arrangement no tile command produced, and why it stops
+    // answering the moment a reader drags one window a single cell off the
+    // grid (the drag both uncovers a strip and overlaps a neighbour, and
+    // either one alone is already disqualifying).
+    std::int64_t covered = 0;
+    for (std::size_t i = 0; i < tiles.size(); ++i) {
+        const Rect bounds = tiles[i]->bounds();
+        if (bounds.empty()) return {};
+        if (!(bounds.intersected(area) == bounds)) return {};  // reaches outside the area
+        for (std::size_t j = 0; j < i; ++j)
+            if (!bounds.intersected(tiles[j]->bounds()).empty()) return {};
+        covered += static_cast<std::int64_t>(bounds.width) * bounds.height;
+    }
+    if (covered != static_cast<std::int64_t>(area.width) * area.height) return {};
+
+    std::vector<TileFraction> fractions;
+    fractions.reserve(tiles.size());
+    const double area_width = area.width;
+    const double area_height = area.height;
+    for (Window* window : tiles) {
+        const Rect bounds = window->bounds();
+        fractions.push_back(TileFraction{window, (bounds.x - area.x) / area_width,
+                                         (bounds.y - area.y) / area_height,
+                                         bounds.width / area_width,
+                                         bounds.height / area_height});
+    }
+    return fractions;
 }
 
 void Desktop::draw(scene::Painter& painter) {
@@ -706,22 +842,11 @@ bool Desktop::child_casts_shadow(const ui::View& child) const {
     // A modal window is above the arrangement by definition.
     if (context().app != nullptr && context().app->is_modal_root(child)) return true;
 
-    // Does any desktop show between the resizable windows? One visible cell
-    // is enough: it means they are still arranged over a desktop rather than
-    // filling it, and the depth a shadow describes is real.
-    std::vector<Rect> uncovered{content_area()};
-    for (const auto& other_ptr : children()) {
-        const auto* other = dynamic_cast<const Window*>(other_ptr.get());
-        if (other == nullptr || !other->visible() || !other->resizable()) continue;
-        std::vector<Rect> remaining;
-        for (const Rect& piece : uncovered) {
-            std::vector<Rect> cut = scene::subtract_rect(piece, other->bounds());
-            remaining.insert(remaining.end(), cut.begin(), cut.end());
-        }
-        uncovered = std::move(remaining);
-        if (uncovered.empty()) return false;
-    }
-    return true;
+    // Is this window part of a tiling that leaves no desktop between the
+    // windows? One shared detection answers that and the layout query both,
+    // rather than a shadow rule of its own that could disagree with the tag
+    // a layout report carries.
+    return filled_tile_fractions().empty();
 }
 
 void Desktop::paint_children(const scene::Painter& own_painter) {

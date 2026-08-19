@@ -121,10 +121,10 @@ struct CommandDescriptor {
 // Shift+F6, zoom = F5, close = Alt+F3, quit = Alt+X (already the
 // convention every example independently used before this landed),
 // focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029).
-// tile/cascade/window_list/terminal_report get NO default chord —
-// there is no comparably strong, widely-recognized single-key
-// convention for them; an application binds one itself if it wants
-// one.
+// tile/tile_horizontally/tile_vertically/tile_grid/cascade/window_list/
+// terminal_report get NO default chord — there is no comparably
+// strong, widely-recognized single-key convention for them; an
+// application binds one itself if it wants one.
 //
 // The standard set is Hidden: these are the framework's own plumbing,
 // which an application surfaces where it wants them through its own
@@ -157,8 +157,8 @@ struct CommandDescriptor {
 //     installed it, so a destroyed MenuBar can never be called through
 //     a stale handler.
 //   - quit, close, zoom, next_window, previous_window, tile,
-//     cascade, window_list and terminal_report are installed by
-//     Desktop::on_attached()
+//     tile_horizontally, tile_vertically, tile_grid, cascade,
+//     window_list and terminal_report are installed by Desktop::on_attached()
 //     under that same has_handler rule — a Desktop is exactly the
 //     thing that owns the windows they act on, and knows the one
 //     cycling order they all share. An application that claims one
@@ -178,6 +178,16 @@ struct StandardCommands {
     CommandId next_window = kInvalidCommand;
     CommandId previous_window = kInvalidCommand;
     CommandId tile = kInvalidCommand;
+    // The three explicitly named tilings. The two axis words are used
+    // inconsistently across desktops, so each is fixed here by the
+    // arrangement it produces, not by its name: tile_horizontally lays
+    // full-WIDTH bands stacked top to bottom, tile_vertically lays
+    // full-HEIGHT bands side by side, and tile_grid lays a near-square
+    // grid. tile_vertically is the arrangement `tile` has always produced;
+    // `tile` keeps its own identity because applications already bind it.
+    CommandId tile_horizontally = kInvalidCommand;
+    CommandId tile_vertically = kInvalidCommand;
+    CommandId tile_grid = kInvalidCommand;
     CommandId cascade = kInvalidCommand;
     CommandId window_list = kInvalidCommand;
     CommandId menu = kInvalidCommand;
@@ -202,6 +212,9 @@ inline constexpr std::string_view kZoom = "ckv.window.zoom";
 inline constexpr std::string_view kNextWindow = "ckv.window.next";
 inline constexpr std::string_view kPreviousWindow = "ckv.window.previous";
 inline constexpr std::string_view kTile = "ckv.window.tile";
+inline constexpr std::string_view kTileHorizontally = "ckv.window.tile_horizontal";
+inline constexpr std::string_view kTileVertically = "ckv.window.tile_vertical";
+inline constexpr std::string_view kTileGrid = "ckv.window.tile_grid";
 inline constexpr std::string_view kCascade = "ckv.window.cascade";
 inline constexpr std::string_view kWindowList = "ckv.window.list";
 inline constexpr std::string_view kFocusNext = "ckv.focus.next";

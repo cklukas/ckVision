@@ -398,6 +398,7 @@ CK_TEST(every_standard_command_is_declared_with_a_title_by_the_constructor) {
         std_cmd.quit,       std_cmd.close,   std_cmd.zoom,        std_cmd.next_window,
         std_cmd.previous_window, std_cmd.tile, std_cmd.cascade,   std_cmd.menu,
         std_cmd.window_list, std_cmd.help,   std_cmd.focus_next,  std_cmd.focus_previous,
+        std_cmd.tile_horizontally, std_cmd.tile_vertically, std_cmd.tile_grid,
     };
     for (auto id : ids) {
         const auto* info = reg.find(id);
@@ -418,6 +419,9 @@ CK_TEST(the_standard_set_is_reachable_by_its_documented_keys) {
     CK_CHECK(reg.id_for(keys::kNextWindow) == reg.standard().next_window);
     CK_CHECK(reg.id_for(keys::kPreviousWindow) == reg.standard().previous_window);
     CK_CHECK(reg.id_for(keys::kTile) == reg.standard().tile);
+    CK_CHECK(reg.id_for(keys::kTileHorizontally) == reg.standard().tile_horizontally);
+    CK_CHECK(reg.id_for(keys::kTileVertically) == reg.standard().tile_vertically);
+    CK_CHECK(reg.id_for(keys::kTileGrid) == reg.standard().tile_grid);
     CK_CHECK(reg.id_for(keys::kCascade) == reg.standard().cascade);
     CK_CHECK(reg.id_for(keys::kWindowList) == reg.standard().window_list);
     CK_CHECK(reg.id_for(keys::kFocusNext) == reg.standard().focus_next);
@@ -444,6 +448,9 @@ CK_TEST(the_standard_set_leaves_tile_cascade_and_window_list_with_no_default_cho
     CK_CHECK(!reg.find(reg.standard().cascade)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().window_list)->default_chord.has_value());
     CK_CHECK(!reg.find(reg.standard().terminal_report)->default_chord.has_value());
+    CK_CHECK(!reg.find(reg.standard().tile_horizontally)->default_chord.has_value());
+    CK_CHECK(!reg.find(reg.standard().tile_vertically)->default_chord.has_value());
+    CK_CHECK(!reg.find(reg.standard().tile_grid)->default_chord.has_value());
 }
 
 CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
@@ -461,9 +468,13 @@ CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
 CK_TEST(all_holds_exactly_the_standard_set_for_a_freshly_constructed_registry) {
     CommandRegistry reg;
     const auto all = reg.all();
-    CK_CHECK(all.size() == 13);
+    CK_CHECK(all.size() == 16);
     CK_CHECK(all.front().id == reg.standard().quit);
-    CK_CHECK(all.back().id == reg.standard().terminal_report);
+    // A new standard command is declared at the END of the constructor, so
+    // every command declared before it keeps the id it has always been
+    // assigned — which is what lets two registries built the same way still
+    // agree, and what keeps a persisted key resolving to the same command.
+    CK_CHECK(all.back().id == reg.standard().tile_grid);
 }
 
 CK_TEST(all_returns_every_declared_command_in_declaration_order) {

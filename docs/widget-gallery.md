@@ -434,6 +434,30 @@ Header: `include/cvision/widgets/desktop.hpp`. Insert one below the
 Application root. It owns window z-order, docks, popups, activation, and
 desktop-wide tile/cascade commands; do not use a global desktop singleton.
 
+Four tilings, each a standard command `Desktop` installs a default handler
+for: `tile()`/`tile_vertically()` (full-height bands side by side — the same
+arrangement under two names, because `ckv.window.tile` is a command
+applications already bind), `tile_horizontally()` (full-width bands stacked
+top to bottom) and `tile_grid()` (a near-square grid of `ceil(sqrt(n))`
+columns, its short last row stretched across the full width). All of them
+fill `content_area()` exactly, leaving no gap row or column.
+
+`filled_tile_fractions()` reports the current arrangement as a fraction of
+`content_area()` per window — but only while that arrangement really is a
+filled, non-overlapping tiling, which it measures geometrically rather than
+recording when a tile command runs. A host restoring a saved layout onto a
+differently sized desktop lays the fractions back down and keeps a 50/50
+split 50/50. The same detection suppresses window shadows while the desktop
+is filled: a shadow says "this floats above that", and a full tiling leaves
+no desktop between the windows for one to fall on.
+
+`set_maximize_follows_active(true)` opts in to a new window opening
+maximized when the window active at the moment of creation was maximized.
+Off by default, and it reuses `Window`'s own zoom, so the frame's zoom
+control restores such a window normally. Standard-dialog presentation
+(`present_modeless`/`present_modal`/`exec_modal`) is outside the policy: a
+dialog opens at the size it was built for.
+
 ## FieldDescriptor
 
 Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator

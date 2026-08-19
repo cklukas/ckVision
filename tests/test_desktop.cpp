@@ -48,6 +48,28 @@ std::unique_ptr<Window> make_window(Fixture&, std::string title = "W") {
     return std::make_unique<Window>(std::move(title));
 }
 
+// Every cell of `area` covered by exactly one window: no gap the desktop
+// shows through, no cell claimed twice. Counted cell by cell on purpose —
+// re-deriving it from the same rect arithmetic filled_tile_fractions()
+// uses would only prove that function agrees with itself.
+bool covers_exactly_once(const Desktop& desktop, Rect area) {
+    std::vector<int> hits(static_cast<std::size_t>(area.width) * static_cast<std::size_t>(area.height), 0);
+    for (Window* window : desktop.windows()) {
+        const Rect b = window->bounds();
+        if (b.empty()) return false;
+        if (b.x < area.x || b.x + b.width > area.x + area.width) return false;
+        if (b.y < area.y || b.y + b.height > area.y + area.height) return false;
+        for (int y = b.y; y < b.y + b.height; ++y)
+            for (int x = b.x; x < b.x + b.width; ++x)
+                ++hits[static_cast<std::size_t>((y - area.y) * area.width + (x - area.x))];
+    }
+    for (int hit : hits)
+        if (hit != 1) return false;
+    return true;
+}
+
+bool about_equal(double a, double b) { return a - b < 1e-9 && b - a < 1e-9; }
+
 class ResizeSelfRemovingWindow final : public Window {
 public:
     ResizeSelfRemovingWindow(Desktop& desktop, std::string title)
@@ -393,6 +415,494 @@ CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) 
     };
     exercise(false);
     exercise(true);
+}
+
+// --- Tile Horizontally / Tile Vertically (U4-b) ---------------------------
+//
+// The two words are used inconsistently across desktops, so each test names
+// the arrangement rather than the word: horizontal bands are full-WIDTH and
+// stack top to bottom; vertical bands are full-HEIGHT and stand side by side.
+
+CK_TEST(tile_horizontally_stacks_full_width_bands_top_to_bottom) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    desktop.tile_horizontally();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+
+    Window* c = desktop.add_window(make_window(f));
+    desktop.tile_horizontally();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
+    CK_CHECK(b->bounds() == (Rect{0, 8, 80, 8}));
+    CK_CHECK(c->bounds() == (Rect{0, 16, 80, 8}));
+
+    Window* d = desktop.add_window(make_window(f));
+    desktop.tile_horizontally();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 6}));
+    CK_CHECK(b->bounds() == (Rect{0, 6, 80, 6}));
+    CK_CHECK(c->bounds() == (Rect{0, 12, 80, 6}));
+    CK_CHECK(d->bounds() == (Rect{0, 18, 80, 6}));
+}
+
+CK_TEST(tile_vertically_stands_full_height_bands_side_by_side) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 24}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 24}));
+
+    Window* c = desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 26, 24}));
+    CK_CHECK(b->bounds() == (Rect{26, 0, 26, 24}));
+    CK_CHECK(c->bounds() == (Rect{52, 0, 28, 24}));  // last band absorbs the leftover 2
+
+    Window* d = desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 20, 24}));
+    CK_CHECK(b->bounds() == (Rect{20, 0, 20, 24}));
+    CK_CHECK(c->bounds() == (Rect{40, 0, 20, 24}));
+    CK_CHECK(d->bounds() == (Rect{60, 0, 20, 24}));
+}
+
+CK_TEST(tile_vertically_is_the_arrangement_tile_has_always_produced) {
+    // kTile is a standard command applications already bind, and the axis
+    // commands are additive: tile() must keep placing windows exactly where
+    // it always has, which is what tile_vertically() now also names.
+    Fixture f;
+    Desktop tiled(Rect{0, 0, 90, 24});
+    Desktop vertical(Rect{0, 0, 90, 24});
+    for (int i = 0; i < 3; ++i) {
+        tiled.add_window(make_window(f));
+        vertical.add_window(make_window(f));
+    }
+    tiled.tile();
+    vertical.tile_vertically();
+    for (std::size_t i = 0; i < 3; ++i)
+        CK_CHECK(tiled.windows()[i]->bounds() == vertical.windows()[i]->bounds());
+    CK_CHECK(tiled.windows()[0]->bounds() == (Rect{0, 0, 30, 24}));
+}
+
+CK_TEST(tile_grid_lays_a_near_square_grid_with_a_full_width_last_row) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    desktop.tile_grid();  // n=2: 2 columns, 1 row
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 24}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 24}));
+
+    Window* c = desktop.add_window(make_window(f));
+    desktop.tile_grid();  // n=3: 2 columns, 2 rows — the last row holds one
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 12}));
+    // Stretched across the whole width rather than stopping at the column
+    // grid: a half-empty bottom row would be desktop showing through, and
+    // the arrangement would stop counting as a filled tiling.
+    CK_CHECK(c->bounds() == (Rect{0, 12, 80, 12}));
+
+    Window* d = desktop.add_window(make_window(f));
+    desktop.tile_grid();  // n=4: the 2x2 everyone means by "grid"
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 12}));
+    CK_CHECK(c->bounds() == (Rect{0, 12, 40, 12}));
+    CK_CHECK(d->bounds() == (Rect{40, 12, 40, 12}));
+}
+
+CK_TEST(tile_grid_gives_five_windows_three_columns_and_a_two_window_last_row) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 90, 24});
+    for (int i = 0; i < 5; ++i) desktop.add_window(make_window(f));
+    desktop.tile_grid();  // ceil(sqrt(5)) = 3 columns, 2 rows
+    const auto& w = desktop.windows();
+    CK_CHECK(w[0]->bounds() == (Rect{0, 0, 30, 12}));
+    CK_CHECK(w[1]->bounds() == (Rect{30, 0, 30, 12}));
+    CK_CHECK(w[2]->bounds() == (Rect{60, 0, 30, 12}));
+    CK_CHECK(w[3]->bounds() == (Rect{0, 12, 45, 12}));
+    CK_CHECK(w[4]->bounds() == (Rect{45, 12, 45, 12}));
+}
+
+CK_TEST(tile_grid_with_one_window_fills_the_content_area) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* only = desktop.add_window(make_window(f));
+    desktop.tile_grid();
+    CK_CHECK(only->bounds() == desktop.content_area());
+}
+
+CK_TEST(every_tiling_fills_the_content_area_exactly_for_two_to_five_windows) {
+    Fixture f;
+    // A height and a width that divide unevenly by 3, 4 and 5, so every
+    // remainder rule is exercised rather than dodged.
+    Desktop desktop(Rect{0, 0, 79, 26});
+    for (int n = 1; n <= 5; ++n) {
+        desktop.add_window(make_window(f));
+        if (n < 2) continue;
+        desktop.tile_horizontally();
+        CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+        desktop.tile_vertically();
+        CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+        desktop.tile_grid();
+        CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+    }
+}
+
+CK_TEST(the_last_band_absorbs_the_remainder_rather_than_leaving_a_gap_row) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 40, 10});  // 10 / 3 = 3 remainder 1
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    Window* c = desktop.add_window(make_window(f));
+    desktop.tile_horizontally();
+    CK_CHECK(a->bounds().height == 3);
+    CK_CHECK(b->bounds().height == 3);
+    CK_CHECK(c->bounds().height == 4);  // 3 + the leftover row
+    CK_CHECK(c->bounds().y + c->bounds().height == 10);
+}
+
+CK_TEST(every_tiling_stays_inside_the_content_area_under_docked_chrome) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 60, 24});
+    desktop.dock_top(std::make_unique<ckv::ui::View>());
+    desktop.dock_bottom(std::make_unique<ckv::ui::View>());
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 60, 22}));
+
+    for (int which = 0; which < 3; ++which) {
+        if (which == 0) desktop.tile_horizontally();
+        if (which == 1) desktop.tile_vertically();
+        if (which == 2) desktop.tile_grid();
+        CK_CHECK(covers_exactly_once(desktop, desktop.content_area()));
+        CK_CHECK(desktop.windows().front()->bounds().y == 1);  // never under the menu bar
+    }
+}
+
+CK_TEST(every_tiling_survives_a_window_that_destroys_itself_from_on_resized) {
+    Fixture f;
+    const auto exercise = [&f](int which) {
+        Desktop desktop(Rect{0, 0, 80, 24});
+        Window* survivor = desktop.add_window(make_window(f, "Survivor"));
+        auto self_removing = std::make_unique<ResizeSelfRemovingWindow>(desktop, "Self removing");
+        ResizeSelfRemovingWindow* self_removing_ptr = self_removing.get();
+        desktop.add_window(std::move(self_removing));
+        self_removing_ptr->arm();
+
+        if (which == 0) desktop.tile_horizontally();
+        if (which == 1) desktop.tile_vertically();
+        if (which == 2) desktop.tile_grid();
+
+        CK_CHECK(desktop.windows().size() == 1);
+        CK_CHECK(desktop.windows().front() == survivor);
+    };
+    exercise(0);
+    exercise(1);
+    exercise(2);
+}
+
+CK_TEST(every_tiling_is_a_no_op_with_zero_windows) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.tile_horizontally();
+    desktop.tile_vertically();
+    desktop.tile_grid();
+    CK_CHECK(desktop.windows().empty());
+}
+
+// --- filled_tile_fractions (U4-b) ----------------------------------------
+
+CK_TEST(filled_tile_fractions_reports_each_band_after_tile_horizontally) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    Window* c = desktop.add_window(make_window(f));
+    Window* d = desktop.add_window(make_window(f));
+    desktop.tile_horizontally();
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 4);
+    // Insertion order, so a caller can line the fractions up against
+    // windows() without matching pointers itself.
+    CK_CHECK(fractions[0].window == a);
+    CK_CHECK(fractions[1].window == b);
+    CK_CHECK(fractions[2].window == c);
+    CK_CHECK(fractions[3].window == d);
+    for (std::size_t i = 0; i < fractions.size(); ++i) {
+        CK_CHECK(about_equal(fractions[i].x, 0.0));
+        CK_CHECK(about_equal(fractions[i].width, 1.0));
+        CK_CHECK(about_equal(fractions[i].y, 0.25 * static_cast<double>(i)));
+        CK_CHECK(about_equal(fractions[i].height, 0.25));
+    }
+}
+
+CK_TEST(filled_tile_fractions_reports_each_band_after_tile_vertically) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 2);
+    CK_CHECK(about_equal(fractions[0].x, 0.0));
+    CK_CHECK(about_equal(fractions[0].width, 0.5));
+    CK_CHECK(about_equal(fractions[1].x, 0.5));
+    CK_CHECK(about_equal(fractions[1].width, 0.5));
+    for (const auto& fraction : fractions) {
+        CK_CHECK(about_equal(fraction.y, 0.0));
+        CK_CHECK(about_equal(fraction.height, 1.0));
+    }
+}
+
+CK_TEST(filled_tile_fractions_reports_a_grid_including_its_ragged_last_row) {
+    // n=3 is the case an exact-cover check is most likely to fail on: the
+    // last row holds one window and has to span the whole width for the
+    // arrangement to still be filled.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    for (int i = 0; i < 3; ++i) desktop.add_window(make_window(f));
+    desktop.tile_grid();
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 3);
+    CK_CHECK(about_equal(fractions[0].x, 0.0) && about_equal(fractions[0].y, 0.0));
+    CK_CHECK(about_equal(fractions[0].width, 0.5) && about_equal(fractions[0].height, 0.5));
+    CK_CHECK(about_equal(fractions[1].x, 0.5) && about_equal(fractions[1].y, 0.0));
+    CK_CHECK(about_equal(fractions[1].width, 0.5) && about_equal(fractions[1].height, 0.5));
+    CK_CHECK(about_equal(fractions[2].x, 0.0) && about_equal(fractions[2].y, 0.5));
+    CK_CHECK(about_equal(fractions[2].width, 1.0) && about_equal(fractions[2].height, 0.5));
+}
+
+CK_TEST(filled_tile_fractions_reports_a_five_window_grid_with_two_row_widths) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 90, 24});
+    for (int i = 0; i < 5; ++i) desktop.add_window(make_window(f));
+    desktop.tile_grid();
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 5);
+    for (std::size_t i = 0; i < 3; ++i) {
+        CK_CHECK(about_equal(fractions[i].x, static_cast<double>(i) / 3.0));
+        CK_CHECK(about_equal(fractions[i].width, 1.0 / 3.0));
+        CK_CHECK(about_equal(fractions[i].y, 0.0));
+        CK_CHECK(about_equal(fractions[i].height, 0.5));
+    }
+    for (std::size_t i = 3; i < 5; ++i) {
+        CK_CHECK(about_equal(fractions[i].x, 0.5 * static_cast<double>(i - 3)));
+        CK_CHECK(about_equal(fractions[i].width, 0.5));
+        CK_CHECK(about_equal(fractions[i].y, 0.5));
+        CK_CHECK(about_equal(fractions[i].height, 0.5));
+    }
+}
+
+CK_TEST(filled_tile_fractions_measures_the_content_area_not_the_whole_desktop) {
+    // The fractions a restore lays back down must be of the rect the tiling
+    // actually fills; measuring the full bounds would push every window a
+    // menu bar's height too far down on a differently sized desktop.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 25});
+    desktop.dock_top(std::make_unique<ckv::ui::View>());
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.tile_horizontally();
+    CK_CHECK(desktop.content_area() == (Rect{0, 1, 80, 24}));
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 2);
+    CK_CHECK(about_equal(fractions[0].y, 0.0));  // the top band, not 1/25 of the way down
+    CK_CHECK(about_equal(fractions[0].height, 0.5));
+    CK_CHECK(about_equal(fractions[1].y, 0.5));
+}
+
+CK_TEST(filled_tile_fractions_is_empty_once_a_window_is_dragged_off_the_grid) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+    CK_CHECK(!desktop.filled_tile_fractions().empty());
+
+    a->set_bounds(Rect{1, 0, 40, 24});  // dragged one cell right
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(filled_tile_fractions_is_empty_for_a_one_cell_gap_with_no_overlap_at_all) {
+    // The sum condition on its own: nothing overlaps and everything is
+    // inside, but a column of desktop shows down the middle.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+    a->set_bounds(Rect{0, 0, 39, 24});
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(filled_tile_fractions_is_empty_for_windows_that_cover_by_overlapping) {
+    // Two maximized windows leave no desktop showing, but they are not a
+    // tiling: there is no proportional arrangement here to restore.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f));
+    Window* b = desktop.add_window(make_window(f));
+    a->set_bounds(desktop.content_area());
+    b->set_bounds(desktop.content_area());
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(filled_tile_fractions_is_empty_with_no_windows_and_after_a_cascade) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.cascade();
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(filled_tile_fractions_detects_a_tiling_nobody_used_a_tile_command_for) {
+    // Detection is geometric, so a reader who arranged the same grid by hand
+    // — or a host that laid it out itself — is reported exactly like one who
+    // pressed the command. A flag set by the commands could not do this.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* top_left = desktop.add_window(make_window(f));
+    Window* top_right = desktop.add_window(make_window(f));
+    Window* bottom = desktop.add_window(make_window(f));
+    top_left->set_bounds(Rect{0, 0, 40, 12});
+    top_right->set_bounds(Rect{40, 0, 40, 12});
+    bottom->set_bounds(Rect{0, 12, 80, 12});
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 3);
+    CK_CHECK(about_equal(fractions[1].x, 0.5));
+    CK_CHECK(about_equal(fractions[2].height, 0.5));
+}
+
+CK_TEST(a_fixed_size_dialog_over_a_filled_tiling_is_not_one_of_its_windows) {
+    // An About box floats above the arrangement; it has no band, and putting
+    // it in the fractions would both break the coverage test and hand a
+    // restore a window that never belonged to the layout.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.add_window(make_window(f));
+    desktop.add_window(make_window(f));
+    desktop.tile_vertically();
+    Window* dialog = desktop.add_window(make_window(f, "About"));
+    dialog->set_resizable(false);
+    dialog->set_bounds(Rect{20, 6, 30, 8});
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 2);
+    for (const auto& fraction : fractions) CK_CHECK(fraction.window != dialog);
+}
+
+// --- Maximize-follows-on-open (U4-c) --------------------------------------
+
+CK_TEST(maximize_follows_active_is_off_until_a_host_asks_for_it) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    CK_CHECK(!desktop.maximize_follows_active());
+
+    Window* first = desktop.add_window(make_window(f));
+    first->toggle_zoom(desktop.content_area());
+    CK_CHECK(first->maximized());
+
+    auto owned = make_window(f, "Second");
+    owned->set_bounds(Rect{5, 5, 20, 6});
+    Window* second = desktop.add_window(std::move(owned));
+
+    // Every ckVision application written before this existed is one that
+    // never asked for it, and none of them may see their placement change.
+    CK_CHECK(second->bounds() == (Rect{5, 5, 20, 6}));
+    CK_CHECK(!second->zoomed());
+}
+
+CK_TEST(an_enabled_desktop_opens_a_new_window_maximized_beside_a_maximized_one) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_maximize_follows_active(true);
+    Window* first = desktop.add_window(make_window(f));
+    first->toggle_zoom(desktop.content_area());
+
+    auto owned = make_window(f, "Second");
+    owned->set_bounds(Rect{5, 5, 20, 6});
+    Window* second = desktop.add_window(std::move(owned));
+
+    CK_CHECK(second->zoomed());
+    CK_CHECK(second->bounds() == desktop.content_area());
+    // Zoom, not a second notion of "maximized": the frame's own zoom
+    // control restores it to the geometry it was built with.
+    second->toggle_zoom(desktop.content_area());
+    CK_CHECK(second->bounds() == (Rect{5, 5, 20, 6}));
+}
+
+CK_TEST(an_enabled_desktop_leaves_a_new_window_alone_when_the_active_one_is_not_maximized) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_maximize_follows_active(true);
+    Window* first = desktop.add_window(make_window(f));
+    first->set_bounds(Rect{2, 2, 30, 10});
+
+    auto owned = make_window(f, "Second");
+    owned->set_bounds(Rect{5, 5, 20, 6});
+    Window* second = desktop.add_window(std::move(owned));
+
+    CK_CHECK(!second->zoomed());
+    CK_CHECK(second->bounds() == (Rect{5, 5, 20, 6}));
+}
+
+CK_TEST(an_enabled_desktops_very_first_window_has_nothing_to_follow) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_maximize_follows_active(true);
+    auto owned = make_window(f, "First");
+    owned->set_bounds(Rect{5, 5, 20, 6});
+    Window* first = desktop.add_window(std::move(owned));
+    CK_CHECK(!first->zoomed());
+    CK_CHECK(first->bounds() == (Rect{5, 5, 20, 6}));
+}
+
+CK_TEST(a_permanently_filling_active_window_counts_as_maximized_for_the_follow) {
+    // KeepFilling IS a maximized presentation — Window::maximized() says so —
+    // and a reader looking at a full-screen window does not know or care
+    // which of the two mechanisms is holding it there.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_maximize_follows_active(true);
+    Window* first = desktop.add_window(make_window(f));
+    first->set_grow_policy(ckv::widgets::DesktopGrowPolicy::KeepFilling);
+    first->fill(desktop.content_area());
+
+    Window* second = desktop.add_window(make_window(f, "Second"));
+    CK_CHECK(second->zoomed());
+    CK_CHECK(second->bounds() == desktop.content_area());
+}
+
+CK_TEST(a_window_opened_maximized_without_bounds_still_has_somewhere_to_restore_to) {
+    // A window zoomed straight from its default empty rect would record 0x0
+    // as its restored bounds, and the reader's first click on the zoom
+    // control would make it vanish instead of shrinking it.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_context(f.ctx());
+    desktop.set_maximize_follows_active(true);
+    Window* first = desktop.add_window(make_window(f));
+    first->toggle_zoom(desktop.content_area());
+
+    Window* second = desktop.add_window(make_window(f, "Second"));  // no bounds set
+    CK_CHECK(second->zoomed());
+    CK_CHECK(second->bounds() == desktop.content_area());
+
+    second->toggle_zoom(desktop.content_area());
+    CK_CHECK(second->bounds().width > 0);
+    CK_CHECK(second->bounds().height > 0);
 }
 
 CK_TEST(cascade_makes_the_last_window_topmost) {
@@ -1030,6 +1540,9 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(standard(af.app).next_window));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).previous_window));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).tile));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_horizontally));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_vertically));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_grid));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).cascade));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).window_list));
 }
@@ -1407,6 +1920,72 @@ CK_TEST(ktile_default_arranges_every_window_into_the_content_area) {
     CK_CHECK(a->bounds().x != b->bounds().x);
 }
 
+CK_TEST(the_three_named_tiling_commands_are_ordinary_desktop_defaults) {
+    AttachedFixture af;
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_horizontally));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_vertically));
+    CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_grid));
+
+    Window* a = af.desktop->add_window(make_window(af.f));
+    Window* b = af.desktop->add_window(make_window(af.f));
+    Window* c = af.desktop->add_window(make_window(af.f));
+    a->set_bounds(Rect{0, 0, 80, 24});  // all three start fully overlapping
+    b->set_bounds(Rect{0, 0, 80, 24});
+    c->set_bounds(Rect{0, 0, 80, 24});
+
+    CK_CHECK(af.app.commands().execute(standard(af.app).tile_horizontally));
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
+    CK_CHECK(c->bounds() == (Rect{0, 16, 80, 8}));
+
+    CK_CHECK(af.app.commands().execute(standard(af.app).tile_vertically));
+    CK_CHECK(a->bounds() == (Rect{0, 0, 26, 24}));
+    CK_CHECK(c->bounds() == (Rect{52, 0, 28, 24}));
+
+    CK_CHECK(af.app.commands().execute(standard(af.app).tile_grid));
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
+    CK_CHECK(c->bounds() == (Rect{0, 12, 80, 12}));
+}
+
+CK_TEST(a_pre_existing_tile_horizontally_handler_is_not_overridden_by_attaching_a_desktop) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    bool custom_ran = false;
+    app.commands().set_handler(standard(app).tile_horizontally, [&] { custom_ran = true; });
+
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto owned = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+    Desktop* desktop = static_cast<Desktop*>(app.root().add_child(std::move(owned)));
+    Fixture f;
+    Window* only = desktop->add_window(make_window(f));
+    only->set_bounds(Rect{3, 3, 20, 6});
+
+    app.commands().execute(standard(app).tile_horizontally);
+    CK_CHECK(custom_ran);
+    CK_CHECK(only->bounds() == (Rect{3, 3, 20, 6}));  // the default never ran
+}
+
+CK_TEST(a_presented_dialog_does_not_open_maximized_just_because_the_document_behind_it_is) {
+    // Maximize-follows-on-open is about the windows an application opens for
+    // the reader to work in. A message box has already been sized to what it
+    // has to say, and blowing it up to the whole desktop because the document
+    // behind it happened to be maximized is not the policy a host enabled.
+    AttachedFixture af;
+    af.desktop->set_maximize_follows_active(true);
+    Window* document = af.desktop->add_window(make_window(af.f, "Document"));
+    document->toggle_zoom(af.desktop->content_area());
+    CK_CHECK(document->maximized());
+
+    auto dialog = make_window(af.f, "Message");
+    dialog->set_bounds(Rect{10, 5, 30, 8});
+    Window* presented =
+        af.desktop->present_modeless(WindowHandle{std::move(dialog), nullptr}, af.app);
+    CK_CHECK(presented != nullptr);
+    CK_CHECK(!presented->zoomed());
+    CK_CHECK(presented->bounds() == (Rect{10, 5, 30, 8}));
+}
+
 CK_TEST(kcascade_default_arranges_every_window_offset_diagonally) {
     AttachedFixture af;
     Window* a = af.desktop->add_window(make_window(af.f));
@@ -1667,6 +2246,35 @@ CK_TEST(one_visible_cell_of_desktop_is_enough_to_bring_the_shadows_back) {
 
     CK_CHECK(desktop.child_casts_shadow(*left));
     CK_CHECK(desktop.child_casts_shadow(*right));
+}
+
+CK_TEST(shadows_go_the_moment_a_tiling_command_fills_the_desktop_and_return_the_moment_one_moves) {
+    // The visual half of the same detection the layout query reports: while
+    // the arrangement is filled there is no desktop between the windows for
+    // a shadow to fall on, and one drag brings both back at once.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    desktop.set_context(f.ctx());
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+
+    for (int which = 0; which < 3; ++which) {
+        if (which == 0) desktop.tile_horizontally();
+        if (which == 1) desktop.tile_vertically();
+        if (which == 2) desktop.tile_grid();
+        CK_CHECK(!desktop.filled_tile_fractions().empty());
+        CK_CHECK(!desktop.child_casts_shadow(*a));
+        CK_CHECK(!desktop.child_casts_shadow(*b));
+        CK_CHECK(!desktop.child_casts_shadow(*c));
+
+        const Rect moved = b->bounds();
+        b->set_bounds(Rect{moved.x + 1, moved.y + 1, moved.width, moved.height});
+        CK_CHECK(desktop.filled_tile_fractions().empty());
+        CK_CHECK(desktop.child_casts_shadow(*a));
+        CK_CHECK(desktop.child_casts_shadow(*b));
+        CK_CHECK(desktop.child_casts_shadow(*c));
+    }
 }
 
 CK_TEST(a_fixed_size_window_keeps_its_shadow_over_a_full_tiling) {
