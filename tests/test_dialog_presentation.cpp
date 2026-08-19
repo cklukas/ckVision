@@ -268,8 +268,13 @@ CK_TEST(descriptor_dialog_supports_measured_centered_bottom_actions) {
     CK_CHECK(window != nullptr);
     CK_CHECK((window->bounds() == Rect{20, 6, 40, 12}));
     CK_CHECK(window->content() != nullptr);
-    // Field, expanding spacer, and centered action row.
-    CK_CHECK(window->content()->children().size() == 3u);
+    // The fields' scroll viewport and the action row, its sibling below
+    // (U4-g; before it, a third child sat between them — an expanding spacer
+    // whose whole job the pane now does directly). Anchored, so the row takes
+    // the pane's own last two rows; centered, so it sits in the middle of its
+    // width. The measured 12-row window leaves the pane 9 rows.
+    CK_CHECK(window->content()->children().size() == 2u);
+    CK_CHECK((window->content()->children().back()->bounds() == Rect{13, 7, 10, 2}));
     (void)presentation;
 }
 

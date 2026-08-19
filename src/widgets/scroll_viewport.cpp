@@ -5,6 +5,27 @@
 
 namespace ckv::widgets {
 
+namespace {
+
+// Whether a bar of `policy` is on screen for a content extent of `extent`
+// within `available` cells. The same question Scrollbar::should_show()
+// answers about itself, asked before the range has been handed over — the
+// bar cannot be consulted here, because how much room the content gets is
+// exactly what this decides.
+bool bar_is_shown(ScrollbarPolicy policy, int extent, int available) noexcept {
+    switch (policy) {
+        case ScrollbarPolicy::Always:
+            return true;
+        case ScrollbarPolicy::Hidden:
+            return false;
+        case ScrollbarPolicy::Auto:
+            break;
+    }
+    return extent > available;
+}
+
+}  // namespace
+
 ScrollViewport::ScrollViewport() {
     v_scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
@@ -51,9 +72,74 @@ void ScrollViewport::set_scrollbars_always_visible(bool visible) noexcept {
     invalidate();
 }
 
+void ScrollViewport::set_vertical_scrollbar_policy(ScrollbarPolicy policy) {
+    if (v_scrollbar_ == nullptr || v_scrollbar_->policy() == policy) return;
+    v_scrollbar_->set_policy(policy);
+    relayout();
+    invalidate();
+}
+
+void ScrollViewport::set_horizontal_scrollbar_policy(ScrollbarPolicy policy) {
+    if (h_scrollbar_ == nullptr || h_scrollbar_->policy() == policy) return;
+    h_scrollbar_->set_policy(policy);
+    relayout();
+    invalidate();
+}
+
+ScrollbarPolicy ScrollViewport::vertical_scrollbar_policy() const noexcept {
+    return v_scrollbar_ != nullptr ? v_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+}
+
+ScrollbarPolicy ScrollViewport::horizontal_scrollbar_policy() const noexcept {
+    return h_scrollbar_ != nullptr ? h_scrollbar_->policy() : ScrollbarPolicy::Hidden;
+}
+
+bool ScrollViewport::can_scroll_vertically() const noexcept {
+    return v_scrollbar_ != nullptr && v_scrollbar_->max_position() > 0;
+}
+
+bool ScrollViewport::can_scroll_horizontally() const noexcept {
+    return h_scrollbar_ != nullptr && h_scrollbar_->max_position() > 0;
+}
+
 void ScrollViewport::set_scroll(int x, int y) {
     if (h_scrollbar_ != nullptr) h_scrollbar_->set_position(x);
     if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(y);
+}
+
+bool ScrollViewport::ensure_visible(const ui::View& descendant) {
+    if (content_ == nullptr || &descendant == content_) return false;
+    // Where `descendant` sits in CONTENT-local coordinates: the sum of the
+    // parent-local offsets between it and the content view. The same walk
+    // answers whether it is inside this viewport at all — a caller that got
+    // here from "whatever currently has focus" is entitled to ask about a
+    // view living somewhere else entirely.
+    int x = 0;
+    int y = 0;
+    const ui::View* view = &descendant;
+    for (; view != nullptr && view != content_; view = view->parent()) {
+        x += view->bounds().x;
+        y += view->bounds().y;
+    }
+    if (view != content_) return false;
+
+    const int width = std::max(1, content_area_width_);
+    const int height = std::max(1, content_area_height_);
+    const Rect box = descendant.bounds();
+    int target_x = scroll_x_;
+    int target_y = scroll_y_;
+    // Least movement, and the near edge wins: a control taller than the
+    // visible band shows its own top rather than its bottom, since its label
+    // and its cursor are at the top.
+    if (x + box.width > target_x + width) target_x = x + box.width - width;
+    if (x < target_x) target_x = x;
+    if (y + box.height > target_y + height) target_y = y + box.height - height;
+    if (y < target_y) target_y = y;
+    if (target_x == scroll_x_ && target_y == scroll_y_) return false;
+    const int previous_x = scroll_x_;
+    const int previous_y = scroll_y_;
+    set_scroll(target_x, target_y);
+    return scroll_x_ != previous_x || scroll_y_ != previous_y;
 }
 
 void ScrollViewport::on_resized() { relayout(); }
@@ -73,14 +159,23 @@ void ScrollViewport::relayout() {
         preferred_h = std::max(0, content_->vertical_size_hint().preferred);
     }
 
-    bool need_v = scrollbars_always_visible_ || preferred_h > height;
-    bool need_h = scrollbars_always_visible_ || preferred_w > std::max(0, width - (need_v ? 1 : 0));
-    need_v = scrollbars_always_visible_ || preferred_h > std::max(0, height - (need_h ? 1 : 0));
+    const ScrollbarPolicy v_policy = vertical_scrollbar_policy();
+    const ScrollbarPolicy h_policy = horizontal_scrollbar_policy();
+    bool need_v = bar_is_shown(v_policy, preferred_h, height);
+    bool need_h = bar_is_shown(h_policy, preferred_w, std::max(0, width - (need_v ? 1 : 0)));
+    need_v = bar_is_shown(v_policy, preferred_h, std::max(0, height - (need_h ? 1 : 0)));
 
     const int content_area_w = std::max(0, width - (need_v ? 1 : 0));
     const int content_area_h = std::max(0, height - (need_h ? 1 : 0));
-    const int content_w = std::max(content_area_w, preferred_w);
-    const int content_h = std::max(content_area_h, preferred_h);
+    content_area_width_ = content_area_w;
+    content_area_height_ = content_area_h;
+    // A Hidden bar is not merely undrawn: its axis does not scroll, so the
+    // content is held to the visible extent rather than its own larger
+    // preferred one (see the header). Auto and Always are unchanged.
+    const int content_w =
+        h_policy == ScrollbarPolicy::Hidden ? content_area_w : std::max(content_area_w, preferred_w);
+    const int content_h =
+        v_policy == ScrollbarPolicy::Hidden ? content_area_h : std::max(content_area_h, preferred_h);
 
     if (v_scrollbar_ != nullptr)
         v_scrollbar_->set_bounds(Rect{content_area_w, 0, need_v ? std::min(1, width) : 0, content_area_h});
@@ -93,6 +188,10 @@ void ScrollViewport::relayout() {
 }
 
 bool ScrollViewport::on_key(const KeyEvent& event) {
+    // A viewport with nothing to scroll consumes nothing. Otherwise every
+    // surface that happens to be wrapped in one would swallow its
+    // container's arrow keys in order to move by zero cells — which is
+    // exactly what a dialog whose content fits must not do.
     switch (event.chord.key) {
         case Key::Up:
         case Key::Down:
@@ -100,17 +199,20 @@ bool ScrollViewport::on_key(const KeyEvent& event) {
         case Key::PageDown:
         case Key::Home:
         case Key::End:
-            return v_scrollbar_ != nullptr && v_scrollbar_->on_key(event);
+            return can_scroll_vertically() && v_scrollbar_->on_key(event);
         case Key::Left:
         case Key::Right:
-            return h_scrollbar_ != nullptr && h_scrollbar_->on_key(event);
+            return can_scroll_horizontally() && h_scrollbar_->on_key(event);
         default:
             return false;
     }
 }
 
 bool ScrollViewport::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Wheel || v_scrollbar_ == nullptr) return false;
+    // Same rule as on_key: with nothing to scroll the wheel is left
+    // unhandled, so Application's ancestor walk can carry it to whatever
+    // outer surface does have somewhere to go.
+    if (event.action != MouseAction::Wheel || !can_scroll_vertically()) return false;
     if (event.button == MouseButton::WheelUp) {
         v_scrollbar_->set_position(scroll_y_ - 1);
         return true;

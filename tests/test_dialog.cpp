@@ -5,12 +5,15 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/scroll_viewport.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
 using ckv::ManualClock;
 using ckv::Modifier;
+using ckv::Rect;
 using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
@@ -20,9 +23,11 @@ using ckv::ui::Theme;
 using ckv::widgets::Button;
 using ckv::widgets::ButtonDescriptor;
 using ckv::widgets::ButtonRole;
+using ckv::widgets::Desktop;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
 using ckv::widgets::materialize_dialog;
+using ckv::widgets::ScrollViewport;
 using ckv::widgets::validate_dialog;
 using ckv::widgets::wire_dialog_window;
 using ckv::widgets::Window;
@@ -532,4 +537,208 @@ CK_TEST(a_note_field_is_text_the_form_says_rather_than_a_field_it_asks) {
     CK_CHECK(dialog.checks[0] == nullptr);
     // The checkbox below it is what the keyboard lands on, not the prose.
     CK_CHECK(dialog.initial_focus == dialog.checks[1]);
+}
+
+// --- U4-g: a dialog too tall for its space scrolls, buttons pinned ------
+//
+// The numbers below are arithmetic, not measurement: a text field's row is
+// one cell tall (Label and InputLine both prefer one), the field Column
+// spaces by one, and a classic Button prefers two (its own row plus the
+// shadow row under it, which the hosting Window's bottom margin absorbs).
+
+namespace {
+
+DialogDescriptor form_with(int fields) {
+    DialogDescriptor descriptor;
+    descriptor.title = "Form";
+    for (int i = 0; i < fields; ++i)
+        descriptor.fields.push_back(FieldDescriptor{"&F" + std::to_string(i) + ":", "", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"Save", ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"Cancel", ButtonRole::Dismiss, nullptr});
+    return descriptor;
+}
+
+ScrollViewport* find_viewport(ckv::ui::View& view) {
+    if (auto* viewport = dynamic_cast<ScrollViewport*>(&view)) return viewport;
+    for (const auto& child : view.children())
+        if (ScrollViewport* found = find_viewport(*child)) return found;
+    return nullptr;
+}
+
+Button* find_button(ckv::ui::View& view) {
+    if (auto* button = dynamic_cast<Button*>(&view)) return button;
+    for (const auto& child : view.children())
+        if (Button* found = find_button(*child)) return found;
+    return nullptr;
+}
+
+}  // namespace
+
+CK_TEST(a_dialog_with_room_to_spare_is_laid_out_exactly_where_it_always_was) {
+    Fixture f;
+    DialogDescriptor descriptor = form_with(3);
+    auto dialog = materialize_dialog(descriptor);
+    dialog.root->set_bounds(Rect{0, 0, 40, 20});  // 20 rows for the 8 it wants
+
+    CK_CHECK(dialog.content_viewport != nullptr);
+    // Three one-row fields with a blank row between them: five rows, and the
+    // viewport is exactly that tall rather than claiming the leftover space.
+    CK_CHECK(dialog.content_viewport->bounds() == (Rect{0, 0, 40, 5}));
+    // No bar at all, so no column taken off the fields either.
+    CK_CHECK(!dialog.content_viewport->can_scroll_vertically());
+    CK_CHECK(dialog.content_viewport->content()->bounds() == (Rect{0, 0, 40, 5}));
+    CK_CHECK(dialog.inputs[0]->parent()->bounds().y == 0);
+    CK_CHECK(dialog.inputs[1]->parent()->bounds().y == 2);
+    CK_CHECK(dialog.inputs[2]->parent()->bounds().y == 4);
+    // One blank row under the last field, then the buttons — where a plain
+    // Column of Fixed items put them before any of this existed.
+    CK_CHECK(dialog.buttons[0]->parent()->bounds().y == 6);
+    CK_CHECK(dialog.buttons[0]->parent()->bounds().height == 2);
+}
+
+CK_TEST(a_dialog_that_fits_leaves_the_arrow_keys_to_whatever_else_wants_them) {
+    Fixture f;
+    auto dialog = materialize_dialog(form_with(3));
+    dialog.root->set_bounds(Rect{0, 0, 40, 20});
+    CK_CHECK(!dialog.content_viewport->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
+    CK_CHECK(dialog.content_viewport->scroll_y() == 0);
+}
+
+CK_TEST(a_dialog_taller_than_its_space_scrolls_and_keeps_its_buttons_on_the_last_rows) {
+    Fixture f;
+    DialogDescriptor descriptor = form_with(10);  // 19 rows of fields; 22 wanted in all
+    auto dialog = materialize_dialog(descriptor);
+    dialog.root->set_bounds(Rect{0, 0, 40, 10});
+
+    // 10 - 2 (the button row) - 1 (the blank row above it) = 7 rows of form.
+    CK_CHECK(dialog.content_viewport->bounds() == (Rect{0, 0, 40, 7}));
+    // Rows 8 and 9: the pane's own last two, which is what "pinned" means.
+    CK_CHECK(dialog.buttons[0]->parent()->bounds().y == 8);
+    CK_CHECK(dialog.buttons[0]->parent()->bounds().height == 2);
+    // The bar takes the rightmost column; the form keeps all 19 of its rows
+    // and is looked at through seven of them.
+    CK_CHECK(dialog.content_viewport->can_scroll_vertically());
+    CK_CHECK(dialog.content_viewport->content()->bounds() == (Rect{0, 0, 39, 19}));
+}
+
+CK_TEST(the_scrolled_form_moves_under_the_keyboard_while_the_buttons_stay_put) {
+    Fixture f;
+    auto dialog = materialize_dialog(form_with(10));
+    dialog.root->set_bounds(Rect{0, 0, 40, 10});
+    const int buttons_y = dialog.buttons[0]->parent()->bounds().y;
+
+    CK_CHECK(dialog.content_viewport->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
+    CK_CHECK(dialog.content_viewport->scroll_y() == 1);
+    CK_CHECK(dialog.content_viewport->content()->bounds().y == -1);
+    dialog.content_viewport->on_key(ckv::KeyEvent{KeyChord{Key::End, Modifier::None, ""}});
+    CK_CHECK(dialog.content_viewport->scroll_y() == 12);  // 19 rows of form, 7 of them visible
+    CK_CHECK(dialog.buttons[0]->parent()->bounds().y == buttons_y);
+    CK_CHECK(dialog.content_viewport->bounds().y == 0);
+}
+
+CK_TEST(tabbing_to_a_field_below_the_fold_scrolls_it_into_view) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles app_roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), app_roles);
+
+    auto dialog = materialize_dialog(form_with(4));  // rows 0, 2, 4, 6
+    dialog.root->set_fills_root(false);
+    ckv::ui::View* const pane = app.root().add_child(std::move(dialog.root));
+    pane->set_bounds(Rect{0, 0, 40, 6});  // three rows of form, buttons on 4..5
+    app.set_focus(dialog.initial_focus);
+    CK_CHECK(dialog.content_viewport->bounds().height == 3);
+    CK_CHECK(dialog.buttons[0]->parent()->bounds().y == 4);
+
+    const ckv::KeyEvent tab{KeyChord{Key::Tab, Modifier::None, ""}};
+    app.dispatch(tab);
+    app.step(0);  // the reveal is posted, and posted work runs before the frame
+    CK_CHECK(app.focused() == dialog.inputs[1]);  // row 2, the last visible one
+    CK_CHECK(dialog.content_viewport->scroll_y() == 0);
+
+    app.dispatch(tab);
+    app.step(0);
+    CK_CHECK(app.focused() == dialog.inputs[2]);  // row 4: one row past the fold
+    CK_CHECK(dialog.content_viewport->scroll_y() == 2);
+
+    app.dispatch(tab);
+    app.step(0);
+    CK_CHECK(app.focused() == dialog.inputs[3]);  // row 6, and the end of the form
+    CK_CHECK(dialog.content_viewport->scroll_y() == 4);
+
+    // Back up again: the near edge wins, so the form scrolls up rather than
+    // leaving the field it just focused hanging off the top.
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::Shift, ""}});
+    app.step(0);
+    CK_CHECK(app.focused() == dialog.inputs[2]);
+    CK_CHECK(dialog.content_viewport->scroll_y() == 4);  // row 4 is already in the band
+    app.dispatch(ckv::KeyEvent{KeyChord{Key::Tab, Modifier::Shift, ""}});
+    app.step(0);
+    CK_CHECK(app.focused() == dialog.inputs[1]);
+    CK_CHECK(dialog.content_viewport->scroll_y() == 2);  // row 2 back at the top of the band
+}
+
+CK_TEST(an_accept_veto_scrolls_the_invalid_field_into_view_as_it_focuses_it) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    for (int i = 0; i < 4; ++i)
+        descriptor.fields.push_back(FieldDescriptor{"&F:", "filled in", nullptr});
+    descriptor.fields.push_back(
+        FieldDescriptor{"&Last:", "", [](const std::string& s) { return !s.empty(); }});
+    descriptor.buttons.push_back(ButtonDescriptor{"Save", ButtonRole::Accept, nullptr});
+    auto dialog = materialize_dialog(descriptor);
+    dialog.root->set_bounds(Rect{0, 0, 40, 6});  // five fields at rows 0..8, three rows visible
+
+    CK_CHECK(!validate_dialog(dialog, descriptor, app));
+    CK_CHECK(app.focused() == dialog.inputs[4]);
+    // A veto that focuses a field the reader cannot see is a dialog that
+    // refuses to close without saying why.
+    CK_CHECK(dialog.content_viewport->scroll_y() == 6);
+}
+
+CK_TEST(a_presented_dialog_scrolls_when_the_terminal_shrinks_and_recovers_when_it_grows) {
+    ckv::term::HeadlessTerminal term(ckv::Size{60, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles app_roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), app_roles);
+    auto* desktop =
+        static_cast<Desktop*>(app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 60, 24})));
+
+    // Eight one-row fields (15 rows with their gaps), the blank row, the
+    // two-row button row, and three rows of window chrome: 21.
+    auto presentation = ckv::widgets::present_dialog(form_with(8), app, *desktop, app_roles);
+    CK_CHECK(desktop->windows().size() == 1);
+    Window* const window = desktop->windows().back();
+    ScrollViewport* const viewport = find_viewport(*window);
+    Button* const save = find_button(*window);
+    CK_CHECK(viewport != nullptr);
+    CK_CHECK(save != nullptr);
+
+    CK_CHECK(window->bounds().height == 21);
+    CK_CHECK(!viewport->can_scroll_vertically());
+    // 1 border + 1 content margin + 15 rows of form + 1 blank row.
+    CK_CHECK(save->absolute_bounds().y - window->absolute_bounds().y == 18);
+
+    term.resize(ckv::Size{60, 16});
+    CK_CHECK(app.step(0));
+    CK_CHECK(window->bounds().height == 16);
+    CK_CHECK(viewport->can_scroll_vertically());
+    CK_CHECK(viewport->bounds().height == 10);  // 16 - 3 chrome - 2 buttons - 1 gap
+    // Two rows above the bottom border, which is where the buttons live in a
+    // dialog this size and every size below it.
+    CK_CHECK(save->absolute_bounds().y - window->absolute_bounds().y == 13);
+    CK_CHECK(save->absolute_bounds().y - window->absolute_bounds().y == window->bounds().height - 3);
+
+    term.resize(ckv::Size{60, 24});
+    CK_CHECK(app.step(0));
+    CK_CHECK(window->bounds().height == 21);  // grown back to what it recommends
+    CK_CHECK(!viewport->can_scroll_vertically());
+    CK_CHECK(viewport->bounds().height == 15);
+    CK_CHECK(save->absolute_bounds().y - window->absolute_bounds().y == 18);
+    (void)presentation;
 }

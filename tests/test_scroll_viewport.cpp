@@ -20,6 +20,7 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::ui::View;
+using ckv::widgets::ScrollbarPolicy;
 using ckv::widgets::ScrollViewport;
 
 namespace {
@@ -236,4 +237,79 @@ CK_TEST(a_degenerate_one_cell_viewport_does_not_crash) {
     viewport.set_bounds(Rect{0, 0, 1, 1});
     viewport.set_content(make_content(100, 50));
     CK_CHECK(true);
+}
+
+// --- Per-axis policy, and revealing a descendant (U4-g) ------------------
+
+CK_TEST(scrollbar_policies_are_per_axis_and_default_to_auto) {
+    Fixture f;
+    ScrollViewport viewport;
+    CK_CHECK(viewport.vertical_scrollbar_policy() == ScrollbarPolicy::Auto);
+    CK_CHECK(viewport.horizontal_scrollbar_policy() == ScrollbarPolicy::Auto);
+    viewport.set_horizontal_scrollbar_policy(ScrollbarPolicy::Hidden);
+    CK_CHECK(viewport.horizontal_scrollbar_policy() == ScrollbarPolicy::Hidden);
+    CK_CHECK(viewport.vertical_scrollbar_policy() == ScrollbarPolicy::Auto);  // unchanged
+}
+
+CK_TEST(a_hidden_bar_holds_its_axis_to_the_visible_extent_so_nothing_can_be_scrolled_out_of_reach) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 20, 10});
+    viewport.set_horizontal_scrollbar_policy(ScrollbarPolicy::Hidden);
+    viewport.set_content(make_content(100, 50));
+    // The vertical bar still takes its column, and the content is given
+    // exactly the 19 that leaves — not the 100 it asked for.
+    CK_CHECK(viewport.content()->bounds() == (Rect{0, 0, 19, 50}));
+    CK_CHECK(!viewport.can_scroll_horizontally());
+    CK_CHECK(viewport.can_scroll_vertically());
+    CK_CHECK(!viewport.on_key(ckv::KeyEvent{KeyChord{Key::Right, Modifier::None, ""}}));
+    CK_CHECK(viewport.scroll_x() == 0);
+}
+
+CK_TEST(a_viewport_with_nothing_to_scroll_consumes_neither_keys_nor_wheel) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 40, 20});
+    viewport.set_content(make_content(10, 5));
+    CK_CHECK(!viewport.can_scroll_vertically());
+    CK_CHECK(!viewport.on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}}));
+    CK_CHECK(!viewport.on_key(ckv::KeyEvent{KeyChord{Key::PageDown, Modifier::None, ""}}));
+    CK_CHECK(!viewport.on_mouse(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown,
+                                                 ckv::Point{5, 5}, std::nullopt, Modifier::None}));
+}
+
+CK_TEST(ensure_visible_scrolls_the_least_it_can_and_only_when_it_must) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 20, 10});
+    auto content = make_content(10, 50);
+    View* const content_view = content.get();
+    viewport.set_content(std::move(content));
+    View* const child = content_view->add_child(std::make_unique<View>());
+    child->set_bounds(Rect{0, 30, 10, 2});
+
+    // Ten visible rows; the child's last row becomes the band's last row.
+    CK_CHECK(viewport.ensure_visible(*child));
+    CK_CHECK(viewport.scroll_y() == 22);
+    CK_CHECK(!viewport.ensure_visible(*child));  // already in view: nothing moves
+    CK_CHECK(viewport.scroll_y() == 22);
+
+    // Coming back from below, the near edge wins: the child's FIRST row
+    // becomes the band's first row.
+    viewport.set_scroll(0, 40);
+    CK_CHECK(viewport.ensure_visible(*child));
+    CK_CHECK(viewport.scroll_y() == 30);
+}
+
+CK_TEST(ensure_visible_declines_a_view_that_is_not_inside_this_viewport) {
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 20, 10});
+    viewport.set_content(make_content(10, 50));
+    viewport.set_scroll(0, 20);
+    View outsider;
+    outsider.set_bounds(Rect{0, 0, 5, 1});
+    CK_CHECK(!viewport.ensure_visible(outsider));
+    CK_CHECK(!viewport.ensure_visible(*viewport.content()));  // the content has no place in itself
+    CK_CHECK(viewport.scroll_y() == 20);
 }

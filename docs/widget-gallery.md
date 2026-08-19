@@ -500,6 +500,37 @@ retain their ordinary layout and validation semantics.
 Header: `include/cvision/widgets/dialog.hpp`. The materialized view/result of
 a descriptor; normally use `present_dialog` instead of manually managing it.
 
+Its tree always has the same shape: the fields inside a ScrollViewport
+(`content_viewport`), and the button row that viewport's sibling, below it.
+There is no second shape for a dialog that does not fit, because a dialog
+cannot know at materialization time how much room it will be given and is
+given a different amount every time the terminal is resized. Only the layout
+varies, and it is recomputed from the height the dialog actually has:
+
+- **Room for everything** — the viewport is exactly as tall as the fields need,
+  the buttons sit directly under it, and the `Auto` vertical bar stays off
+  screen. Nothing about the result differs from a dialog built before any of
+  this existed: same rows, same columns, no reserved track.
+- **Not enough room** — the buttons keep the bottom rows and the viewport takes
+  what is left. The fields scroll by the bar, by the keyboard, and by the wheel
+  where the field under it does not want it; Tab and Shift-Tab still reach every
+  field, scrolling it into view rather than leaving the cursor off screen; and
+  the accept-time validation veto scrolls the offending field into view as it
+  focuses it. **The buttons never scroll away** — a dialog that cannot show its
+  Save and Cancel is not merely cramped, it is unusable.
+
+Horizontal scrolling is off: a form whose left column has scrolled away is not
+a view of that form.
+
+A dialog opened with `present_dialog`/`exec_dialog` takes its own recommended
+height, clamped to what the desktop can show, and re-answers that on every
+desktop resize: a terminal that shrinks below the form turns the dialog into a
+scrolling one, and a terminal that grows again gives its full height back. A
+`resizable` descriptor is left alone once it is open — the reader has a resize
+grip, so the size is theirs. `wire_dialog_window` does not re-fit a
+caller-owned window at all; the window and its geometry policy belong to the
+caller.
+
 ## DialogResult
 
 Header: `include/cvision/widgets/dialog.hpp`. Typed completion payload for a
@@ -813,6 +844,29 @@ child view through a clipped scrollable region. Pair with Scrollbar when a
 visible position control helps. `set_scrollbars_always_visible(true)` retains
 both conventional tracks for document views whose content may grow. Both
 appear in the navigation capture above.
+
+`set_vertical_scrollbar_policy` and `set_horizontal_scrollbar_policy` set the
+two axes separately, for a surface that wants one bar's rule and not the
+other's. `ScrollbarPolicy::Hidden` says more than "draw no bar": that axis
+does not scroll at all, and the content is held to the visible extent rather
+than to its own larger preferred one — so nothing can end up off screen along
+an axis offering neither a bar nor a key to bring it back. A dialog uses
+exactly that pairing: `Auto` vertically, `Hidden` horizontally.
+
+`ensure_visible(view)` scrolls by the least amount that brings a descendant
+fully into sight, and answers whether it moved anything. Whoever moves focus
+into a scrolled surface should call it: a control that takes focus while
+scrolled out of sight leaves the terminal cursor blinking where the reader
+cannot see it. `can_scroll_vertically()`/`can_scroll_horizontally()` answer
+whether there is anywhere to go — and a viewport with nowhere to go leaves the
+arrow keys and the wheel alone rather than consuming them to move by nothing.
+
+The mouse wheel reaches the viewport from anywhere over its content, because
+Application walks an unhandled wheel event up the ancestors of whatever it hit.
+A content widget that consumes the wheel for its own scrolling keeps it, which
+is the right answer — the innermost scrollable surface under the pointer is the
+one that should move — but it does mean an OUTER viewport never sees a wheel an
+inner one has taken.
 
 ## Scrollbar
 

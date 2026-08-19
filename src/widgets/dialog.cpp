@@ -1,12 +1,14 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/widgets/dialog.hpp"
 
+#include <algorithm>
 #include <charconv>
 
 #include <optional>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/ui/layout.hpp"
+#include "cvision/ui/layout_metrics.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 
@@ -19,12 +21,211 @@ using ui::LayoutSpec;
 using ui::Row;
 using ui::SizePolicy;
 
+// One blank row between the things a reader answers, and between the last
+// of them and the buttons. Named because the pane below has to reproduce
+// exactly the gap the field Column itself uses; two literal 1s that have to
+// agree are a rule waiting to be half-changed.
+constexpr int kFieldSpacing = 1;
+
 ui::View* find_first_focusable(ui::View& view) {
     if (view.focusable()) return &view;
     for (const auto& child : view.children())
         if (ui::View* found = find_first_focusable(*child)) return found;
     return nullptr;
 }
+
+// Scrolls `view` into sight in whichever viewport it lives in, if any. A
+// control the reader cannot see is one the reader cannot use, and a FOCUSED
+// control they cannot see is worse: the terminal cursor is blinking off
+// screen and the keyboard is typing into it.
+//
+// Written as a walk up from the view rather than a call on a known viewport,
+// so a caller needs to know only which view took focus — which is all
+// Application tells anybody.
+void reveal_in_scroll_viewport(ui::View& view) {
+    for (ui::View* ancestor = view.parent(); ancestor != nullptr; ancestor = ancestor->parent())
+        if (auto* viewport = dynamic_cast<ScrollViewport*>(ancestor)) {
+            viewport->ensure_visible(view);
+            return;
+        }
+}
+
+// A descriptor dialog's content root (U4-g): the fields inside a
+// ScrollViewport, the button row a sibling BELOW it, and one layout rule
+// applied to whatever height the window currently has —
+//
+//   fits:         the viewport is exactly as tall as the fields need, the
+//                 buttons sit directly under it, and no bar appears (the
+//                 viewport's vertical bar is ScrollbarPolicy::Auto).
+//                 Identical to the plain Column this replaced, cell for cell.
+//   does not fit: the buttons keep the bottom of the pane, the viewport
+//                 takes what is left, and the fields scroll.
+//
+// The decision is made HERE, in layout, rather than once at materialization,
+// because the height a dialog gets is not knowable when its tree is built
+// and does not stay the same afterwards: terminals are resized, docks
+// appear, the desktop shrinks and grows. A tree that chose its shape once
+// would be right until the first resize.
+class DialogPane final : public ui::View {
+public:
+    DialogPane(ui::Alignment button_alignment, bool anchor_buttons_to_bottom) noexcept
+        : button_alignment_(button_alignment), anchor_buttons_to_bottom_(anchor_buttons_to_bottom) {}
+
+    // Takes the field Column and returns the viewport now holding it.
+    ScrollViewport* set_fields(std::unique_ptr<ui::View> fields) {
+        CKV_ASSERT(viewport_ == nullptr);
+        CKV_ASSERT(fields != nullptr);
+        auto viewport = std::make_unique<ScrollViewport>();
+        // Vertical: Auto, so the bar exists exactly while there is more form
+        // than window. Horizontal: none at all — a form scrolled sideways
+        // has lost its left column, which is where every label is.
+        viewport->set_vertical_scrollbar_policy(ScrollbarPolicy::Auto);
+        viewport->set_horizontal_scrollbar_policy(ScrollbarPolicy::Hidden);
+        fields_ = fields.get();
+        viewport->set_content(std::move(fields));
+        viewport_ = add(std::move(viewport));
+        return viewport_;
+    }
+
+    void set_buttons(std::unique_ptr<Row> buttons) {
+        CKV_ASSERT(buttons_ == nullptr);
+        CKV_ASSERT(buttons != nullptr);
+        buttons_ = add(std::move(buttons));
+        relayout();
+    }
+
+    ui::SizeHint horizontal_size_hint() const override {
+        // The cross axis maxes, exactly as the Column this replaced did.
+        // Deliberately no allowance for the vertical bar: a dialog must not
+        // open one column wider on the chance that it might scroll.
+        ui::SizeHint hint{0, 0, ui::kUnboundedExtent};
+        for (const ui::View* part : {static_cast<const ui::View*>(fields_),
+                                      static_cast<const ui::View*>(buttons_)}) {
+            if (part == nullptr) continue;
+            const ui::SizeHint part_hint = part->horizontal_size_hint();
+            hint.min = std::max(hint.min, part_hint.min);
+            hint.preferred = std::max(hint.preferred, part_hint.preferred);
+        }
+        return hint;
+    }
+
+    // The dialog's RECOMMENDED height: what showing the whole form with its
+    // buttons would take. Desktop::present_modal opens the window at this,
+    // clamped to the space there is — so a dialog that fits is the size it
+    // has always been, and one that does not starts out scrolling.
+    ui::SizeHint vertical_size_hint() const override {
+        ui::SizeHint hint{0, 0, ui::kUnboundedExtent};
+        if (fields_ != nullptr) {
+            const ui::SizeHint fields = fields_->vertical_size_hint();
+            hint.min += fields.min;
+            hint.preferred += fields.preferred;
+        }
+        if (buttons_ != nullptr) {
+            const ui::SizeHint buttons = buttons_->vertical_size_hint();
+            const int between = field_button_gap() + anchor_slack();
+            hint.min += buttons.min + between;
+            hint.preferred += buttons.preferred + between;
+        }
+        return hint;
+    }
+
+    int height_for_width(int width) const override {
+        const int usable = std::max(0, width);
+        int total = fields_ != nullptr ? fields_->height_for_width(usable) : 0;
+        if (buttons_ != nullptr)
+            total += field_button_gap() + anchor_slack() +
+                     ui::detail::preferred_height_for_width(*buttons_, button_row_width(usable));
+        return total;
+    }
+
+    // A row of nothing but buttons already ends in a cast shadow, and the
+    // hosting Window drops its bottom margin when its content says so.
+    // Answering from whichever part occupies this pane's own last row keeps
+    // that unchanged — a dialog that grew a blank row under its buttons
+    // would be a visible difference, which this package does not get to make.
+    bool trailing_row_is_shadow() const noexcept override {
+        if (buttons_ != nullptr) return buttons_->trailing_row_is_shadow();
+        return fields_ != nullptr && fields_->trailing_row_is_shadow();
+    }
+
+    void on_resized() override { relayout(); }
+    void on_child_size_hint_changed(ui::View&) override { relayout(); }
+
+    bool on_key(const KeyEvent&) override {
+        // Never consumes anything. A key that reaches this pane climbed the
+        // focus route from the focused field without being handled, which
+        // makes it a candidate for MOVING focus — Tab, Shift-Tab, an Alt
+        // mnemonic — and Application performs that move after this route
+        // returns. So the reveal is POSTED rather than done here: posted
+        // work runs once the dispatch is over, with focus already wherever
+        // the key sent it, and still before the frame is painted.
+        //
+        // Nothing is posted while the form fits, which is every dialog with
+        // nothing to scroll.
+        if (viewport_ == nullptr || !viewport_->can_scroll_vertically()) return false;
+        ui::Application* const app = context().app;
+        if (app == nullptr) return false;
+        app->post([app] {
+            if (ui::View* focused = app->focused()) reveal_in_scroll_viewport(*focused);
+        });
+        return false;
+    }
+
+private:
+    // Zero when there is nothing on one side of it: a buttons-only dialog
+    // had no gap before this pane existed and must not grow one.
+    int field_button_gap() const noexcept {
+        const bool has_fields = fields_ != nullptr && !fields_->children().empty();
+        return has_fields && buttons_ != nullptr ? kFieldSpacing : 0;
+    }
+
+    // An anchored dialog used to carry an expanding spacer as a Column item
+    // of its own, and so counted one extra spacing row in its natural
+    // height. The spacer is gone — this pane places the buttons at the
+    // bottom directly — but the number it produced is what such dialogs are
+    // sized from today, so the number stays.
+    int anchor_slack() const noexcept { return anchor_buttons_to_bottom_ && buttons_ != nullptr ? 1 : 0; }
+
+    int button_row_width(int width) const {
+        if (buttons_ == nullptr) return 0;
+        const auto [offset, extent] = ui::align_cross_axis(
+            width, buttons_->horizontal_size_hint().preferred, button_alignment_, 0, 0);
+        (void)offset;
+        return extent;
+    }
+
+    void relayout() {
+        if (viewport_ == nullptr) return;
+        const int width = bounds().width;
+        const int height = bounds().height;
+        const int gap = field_button_gap();
+        const int buttons_height =
+            buttons_ != nullptr ? std::max(1, buttons_->vertical_size_hint().preferred) : 0;
+        const int natural =
+            fields_ != nullptr ? ui::detail::preferred_height_for_width(*fields_, width) : 0;
+
+        // THE decision, and the only one: is there room for the whole form
+        // AND its buttons? An anchored dialog takes the same branch as one
+        // that does not fit, because both mean "buttons at the bottom edge".
+        const bool fits = natural + gap + buttons_height <= height;
+        const int viewport_height = (fits && !anchor_buttons_to_bottom_)
+                                        ? natural
+                                        : std::max(0, height - gap - buttons_height);
+        viewport_->set_bounds(Rect{0, 0, width, viewport_height});
+        if (buttons_ == nullptr) return;
+        // Never past this pane's own last row, however little height there is.
+        const int y = std::min(viewport_height + gap, std::max(0, height - buttons_height));
+        const auto [x, button_width] = ui::align_cross_axis(
+            width, buttons_->horizontal_size_hint().preferred, button_alignment_, 0, 0);
+        buttons_->set_bounds(Rect{x, y, button_width, buttons_height});
+    }
+
+    ScrollViewport* viewport_ = nullptr;
+    ui::View* fields_ = nullptr;  // owned by viewport_; kept for measurement
+    Row* buttons_ = nullptr;
+    ui::Alignment button_alignment_ = ui::Alignment::Start;
+    bool anchor_buttons_to_bottom_ = false;
+};
 
 // A Number field's text as a number, or nothing. The whole field has to be
 // the number: "12 or so" is not 12, and a partial parse is how a typo becomes
@@ -84,6 +285,11 @@ bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescript
     }
     if (!all_valid) {
         app.set_focus(first_invalid);
+        // A veto that focuses a field the reader cannot see is a dialog that
+        // refuses to close and will not say why. Scrolled forms are the only
+        // case where that can happen, and this is the one moment the dialog
+        // moves focus itself rather than leaving it to Tab.
+        reveal_in_scroll_viewport(*first_invalid);
         return false;
     }
     return true;
@@ -134,8 +340,32 @@ DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vect
     return result;
 }
 
+// A presented dialog is as tall as it recommends, or as tall as there is
+// room for — whichever is smaller — and it re-answers that question every
+// time the desktop changes size (U4-g).
+//
+// Desktop::on_resized already does one half: reposition_within() SHRINKS a
+// window that no longer fits, which is what turns a too-small terminal into
+// a scrolling dialog. The half it does not do is giving the room back when
+// the terminal grows again, and without it a dialog that was once squeezed
+// keeps scrolling for the rest of the session over a terminal that has been
+// large enough for minutes.
+void refit_dialog_height(Window& window, Rect area) {
+    const Rect current = window.bounds();
+    if (current.width <= 0 || current.height <= 0) return;  // not placed yet
+    // The same measurement Desktop uses to place a dialog in the first
+    // place, so opening at 30 rows and growing back to 30 rows are one rule.
+    const int recommended =
+        std::max(window.vertical_size_hint().preferred, window.height_for_width(current.width));
+    const int height = std::clamp(recommended, 0, std::max(0, area.height));
+    if (height == current.height) return;
+    const int y = std::clamp(current.y, area.y, area.y + std::max(0, area.height - height));
+    window.set_bounds(Rect{current.x, y, current.width, height});
+}
+
 BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const ui::StandardRoles& roles,
-                                              ui::Application& app, ui::View* restore_focus_to) {
+                                              ui::Application& app, ui::View* restore_focus_to,
+                                              Desktop& desktop) {
     auto retained_descriptor = std::make_shared<DialogDescriptor>(std::move(descriptor));
     MaterializedDialog materialized = materialize_dialog(*retained_descriptor);
     std::vector<InputLine*> inputs = materialized.inputs;
@@ -204,11 +434,38 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     // resembles it. No result is recorded on this path, which is what makes
     // the completion's `accepted == false` true of both.
     wire_dismiss_buttons(*retained_descriptor, materialized.buttons, dismiss);
-    window->on_closed = [&app, focus_restore, window_ptr, completion]() {
+    // Re-fit on every desktop resize, for a dialog whose size is the
+    // library's business. A `resizable` dialog is excluded on purpose: once
+    // the reader has been offered a resize grip, the height is theirs, and
+    // snapping it back to the descriptor's own idea of the right size at the
+    // next terminal resize would undo a decision they made.
+    //
+    // Desktop::on_bounds_changed is View's documented geometry observer and
+    // is CHAINED here, not claimed: whatever was installed still runs, and
+    // on_closed puts it back. Modals close in the order they opened, so the
+    // restore is in order too. What this deliberately does not see is a dock
+    // appearing or leaving, which changes content_area() without changing
+    // the Desktop's own bounds; a proper Desktop-side notification would
+    // (see this package's report).
+    Desktop* const desktop_ptr = &desktop;
+    std::function<void(Rect)> previous_desktop_bounds_changed;
+    if (!retained_descriptor->resizable) {
+        previous_desktop_bounds_changed = desktop.on_bounds_changed;
+        desktop.on_bounds_changed = [previous = previous_desktop_bounds_changed, desktop_ptr, window_ptr,
+                                     liveness = window_ptr->lifetime_token()](Rect bounds) {
+            if (previous) previous(bounds);
+            if (liveness.expired()) return;
+            refit_dialog_height(*window_ptr, desktop_ptr->content_area());
+        };
+    }
+    const bool refit_installed = !retained_descriptor->resizable;
+    window->on_closed = [&app, focus_restore, window_ptr, completion, desktop_ptr, refit_installed,
+                         previous_desktop_bounds_changed]() {
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         const detail::DialogFocusRestore held_focus_restore = focus_restore;
         Window* const held_window = window_ptr;
         held_completion->closed = true;
+        if (refit_installed) desktop_ptr->on_bounds_changed = previous_desktop_bounds_changed;
         held_focus_restore.restore(app);
         if (!held_completion->window_liveness.expired()) schedule_self_detach(*held_window, app);
     };
@@ -222,7 +479,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 
     MaterializedDialog result;
     auto column = std::make_unique<Column>();
-    column->set_spacing(1);
+    column->set_spacing(kFieldSpacing);
 
     for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
         const FieldDescriptor& field = descriptor.fields[index];
@@ -343,12 +600,13 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }
 
+    // The fields go into the pane's viewport whatever their height: there is
+    // one tree shape, and the fit is decided in layout (see DialogPane).
+    auto pane = std::make_unique<DialogPane>(descriptor.button_alignment,
+                                             descriptor.anchor_buttons_to_bottom);
+    result.content_viewport = pane->set_fields(std::move(column));
+
     if (!descriptor.buttons.empty()) {
-        if (descriptor.anchor_buttons_to_bottom) {
-            auto spacer = std::make_unique<ui::View>();
-            spacer->set_preferred_size(Size{0, 0});
-            column->add_item(std::move(spacer), LayoutSpec{SizePolicy::Expanding, 1});
-        }
         auto button_row = std::make_unique<Row>();
         button_row->set_spacing(2);
         for (const ButtonDescriptor& bd : descriptor.buttons) {
@@ -367,12 +625,15 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                 result.default_button = button_ptr;
             }
         }
-        column->add_item(std::move(button_row),
-                         LayoutSpec{SizePolicy::Fixed, 1, descriptor.button_alignment});
+        // Outside the viewport, so the one thing a clipped dialog used to
+        // lose is the one thing that can no longer scroll away.
+        pane->set_buttons(std::move(button_row));
     }
 
-    result.initial_focus = find_first_focusable(*column);
-    result.root = std::move(column);
+    // Fields before buttons, exactly as the Column's own child order gave
+    // it: the viewport is added first and is not itself a tab stop.
+    result.initial_focus = find_first_focusable(*pane);
+    result.root = std::move(pane);
     return result;
 }
 
@@ -442,7 +703,7 @@ DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::App
                                              Desktop& desktop, const ui::StandardRoles& roles) {
     using Access = detail::DialogPresentationAccess<DialogResult>;
     auto parts = Access::make();
-    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused());
+    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused(), desktop);
     auto previous_on_detached = std::move(built.handle.window->on_detached);
     built.handle.window->on_detached = [previous = std::move(previous_on_detached), state = parts.state,
                                         completion = built.completion]() {
@@ -456,7 +717,7 @@ DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::App
 
 DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
                          Desktop& desktop, const ui::StandardRoles& roles) {
-    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused());
+    BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused(), desktop);
     const std::shared_ptr<DescriptorDialogCompletion> completion = built.completion;
     desktop.exec_modal(app, std::move(built.handle));
     return completion->selected_result.value_or(DialogResult{});

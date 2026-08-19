@@ -11,6 +11,25 @@
 // are rejected at materialization via CKV_ASSERT rather than producing
 // a dialog with undefined behavior.
 //
+// The materialized tree always has the same two-part shape (U4-g): every
+// field goes inside a ScrollViewport, and the button row is that
+// viewport's SIBLING, below it. There is no second shape for a dialog
+// that happens not to fit — a dialog cannot know at materialization time
+// how much room it will be given, and it is given a different amount
+// every time the terminal is resized. What varies is only the layout the
+// pane computes from the height it actually has:
+//   * room for everything — the viewport is exactly as tall as the fields
+//     need, the button row sits directly under it, and the viewport's
+//     ScrollbarPolicy::Auto vertical bar stays off screen. Nothing about
+//     the result differs from a dialog built before any of this existed.
+//   * not enough room — the button row keeps the bottom of the pane and
+//     the viewport takes what is left, so the content scrolls (by keyboard,
+//     by the bar, and by the wheel where the field under it does not want
+//     it) and the buttons stay on screen and clickable. Buttons that
+//     scroll out of reach are the defect this exists to prevent.
+// Horizontal scrolling is switched off outright: a form whose left column
+// has scrolled away is not a view of that form.
+//
 // wire_dialog_window() below adds window chrome integration: it hosts
 // a MaterializedDialog inside a Window's content, wiring Window's
 // accept_request (default button + accept-time validation veto — a
@@ -38,6 +57,7 @@
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/option_group.hpp"
+#include "cvision/widgets/scroll_viewport.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -199,6 +219,13 @@ struct MaterializedDialog {
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     ui::View* initial_focus = nullptr;
     Button* default_button = nullptr;
+    // The viewport the fields live in (never null; see this file's header
+    // for the shape). Owned by `root`. A caller reads it to scroll the form
+    // itself — to bring its own field into view after changing something,
+    // or to put the form back at the top — and a test reads it to state, in
+    // numbers, what the reader can currently see. The button row is NOT
+    // inside it and never scrolls.
+    ScrollViewport* content_viewport = nullptr;
 };
 
 // The typed outcome of a descriptor dialog. An accepted result contains one
@@ -261,6 +288,11 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 // reference (and `restore_focus_to` by value) — all three must outlive
 // `window` itself; a typical caller keeps `descriptor` alive for the
 // window's whole lifetime (e.g. as a member) rather than a local.
+// The content scrolls and pins its buttons exactly as it does under
+// present_dialog (see this file's header) — that is a property of the
+// materialized tree, not of the presentation. What this function does not
+// do is re-fit `window` to the desktop on a terminal resize: the window is
+// the caller's, and so is its geometry policy.
 void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
                          ui::Application& app, ui::View* restore_focus_to);
 
@@ -268,12 +300,21 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 // The descriptor is taken by value and retained by the presentation until its
 // window detaches, so field validators and button handlers never borrow a
 // caller-local descriptor. Completion fires exactly once after detachment.
+//
+// The window opens at the dialog's own recommended height, clamped to what
+// `desktop` can show, and re-answers that question on every desktop resize
+// (U4-g): a terminal that shrinks below the form turns the dialog into a
+// scrolling one with its buttons still against its bottom edge, and one that
+// grows again gives the dialog its full height back. A `resizable` descriptor
+// is left alone after it opens — once the reader has a resize grip, the size
+// is theirs.
 [[nodiscard]] DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::Application& app,
                                                            Desktop& desktop, const ui::StandardRoles& roles);
 
 // Outer-loop-only blocking counterpart to present_dialog. It delegates to
 // Desktop::exec_modal, so calling it from a handler, posted callback, or timer
 // is rejected before a nested pump starts. A host quit returns `{false, {}}`.
+// Same sizing and resize behaviour as present_dialog.
 DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
                          Desktop& desktop, const ui::StandardRoles& roles);
 
