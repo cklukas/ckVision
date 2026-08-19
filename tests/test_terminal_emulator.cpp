@@ -204,6 +204,43 @@ CK_TEST(terminal_emulator_decodes_bounded_child_sixel_to_private_raster_state) {
     CK_CHECK(pixel.a == 255);
 }
 
+CK_TEST(a_child_that_sets_synchronized_output_is_recognized_and_reported_back) {
+    term::TerminalEmulator emulator;
+    CK_CHECK(!emulator.synchronized_output_active());
+    emulator.feed_output("\x1b[?2026h");
+    CK_CHECK(emulator.synchronized_output_active());
+    emulator.feed_output("\x1b[?2026l");
+    CK_CHECK(!emulator.synchronized_output_active());
+}
+
+CK_TEST(the_synchronized_output_probe_ckvisions_own_child_sends_is_answered_set) {
+    // The exact bracket ckVision's own probe uses (posix_terminal.cpp): set,
+    // then ask, then reset — so a truthful answer requires recognizing the
+    // set that came immediately before the question, not just that the mode
+    // exists.
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?2026h\x1b[?2026$p\x1b[?2026l");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?2026;1$y");
+    CK_CHECK(!emulator.synchronized_output_active());
+}
+
+CK_TEST(a_profile_that_declines_synchronized_output_says_so_and_never_activates) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.synchronized_output = false;
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[?2026h\x1b[?2026$p");
+    CK_CHECK(!emulator.synchronized_output_active());
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?2026;0$y");
+}
+
+CK_TEST(a_hard_reset_closes_an_open_synchronized_frame) {
+    term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?2026h");
+    CK_CHECK(emulator.synchronized_output_active());
+    emulator.feed_output("\x1b" "c");  // RIS
+    CK_CHECK(!emulator.synchronized_output_active());
+}
+
 CK_TEST(a_picture_sent_to_a_terminal_without_graphics_is_refused_by_name) {
     // A child that draws into a terminal with no graphics gets told which
     // sequence was dropped and why. This answer existed but could never be
@@ -801,7 +838,11 @@ CK_TEST(terminal_emulator_consumes_nested_capability_queries_at_the_private_boun
     term::TerminalEmulator emulator;
     emulator.feed_output("\x1b[?2026$p\x1b[?2031$p\x1b[c\x1b[?1016$p\x1b[16t");
     CK_CHECK(emulator.snapshot().diagnostics.empty());
-    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c\x1b[6;18;9t");
+    // 2031 and 1016 are still consumed in silence — the outer terminal's own
+    // probe state, which this boundary does not expose. 2026 is answered for
+    // real (its own test file covers that in depth): recognized, and reset
+    // because nothing set it before asking.
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?2026;2$y\x1b[?1;2;4c\x1b[6;18;9t");
 }
 
 CK_TEST(terminal_emulator_advertises_declared_graphics_in_device_attributes) {

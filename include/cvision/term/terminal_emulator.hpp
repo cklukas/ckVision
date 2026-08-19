@@ -52,6 +52,7 @@ public:
     // report, and there are three of them (a diff engine, a title poll, a bell
     // badge).
     void clear_damage() noexcept override;
+    bool synchronized_output_active() const noexcept override { return synchronized_output_active_; }
     const TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
     void feed_output(std::string_view bytes) override;
     void resize(Size cells, Size cell_pixels) override;
@@ -271,6 +272,11 @@ private:
     std::shared_ptr<Image> last_sixel_image_;
     Size last_sixel_room_;
     int raster_identity_ = 0;
+    // DEC mode 2026: the child asked to hold its damage until it says the
+    // frame is whole. Set and reset in handle_csi's mode dispatch; read by
+    // synchronized_output_active() and answered back truthfully to the
+    // child's own DECRQM probe for it (both below).
+    bool synchronized_output_active_ = false;
     bool alternate_buffer_ = false;
     int scroll_top_ = 0;
     int scroll_bottom_ = 0;

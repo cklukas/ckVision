@@ -51,6 +51,9 @@ public:
     }
     const ckv::core::TerminalDamage& damage() const noexcept override { return emulator_.damage(); }
     void clear_damage() noexcept override { emulator_.clear_damage(); }
+    bool synchronized_output_active() const noexcept override {
+        return emulator_.synchronized_output_active();
+    }
     std::span<const ckv::Cell> cells() const noexcept override { return emulator_.cells(); }
     std::span<const ckv::Cell> scrollback() const noexcept override { return emulator_.scrollback(); }
     std::span<const ckv::core::TerminalRaster> rasters() const noexcept override {

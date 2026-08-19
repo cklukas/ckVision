@@ -42,6 +42,9 @@ public:
     }
     const TerminalDamage& damage() const noexcept override { return emulator_.damage(); }
     void clear_damage() noexcept override { emulator_.clear_damage(); }
+    bool synchronized_output_active() const noexcept override {
+        return emulator_.synchronized_output_active();
+    }
     const TerminalCapabilityProfile& profile() const noexcept override { return emulator_.profile(); }
     void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
     void set_raster_identity(int identity) noexcept override { emulator_.set_raster_identity(identity); }

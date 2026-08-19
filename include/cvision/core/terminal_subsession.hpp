@@ -129,6 +129,12 @@ struct TerminalCapabilityProfile {
     bool sixel = false;
     bool bracketed_paste = true;
     bool mouse_reporting = true;
+    // Whether this terminal can bracket a child's frame update as one
+    // atomic change (DEC mode 2026) instead of exposing every write in
+    // between. Unlike Sixel this costs nothing to support — the emulator
+    // already holds whatever a child wrote until something reads it — so it
+    // defaults on rather than needing a host to opt in.
+    bool synchronized_output = true;
     // The initial state of alternate scroll (DEC mode 1007), which the child
     // may turn off or back on. On, because a wheel over a full-screen program
     // that has not asked for mouse reporting is a request to scroll, and
@@ -563,6 +569,13 @@ public:
     // and a read that cleared would give the news to whichever looked first.
     virtual const TerminalDamage& damage() const noexcept = 0;
     virtual void clear_damage() noexcept = 0;
+    // Whether a child currently has an atomic frame update open (DEC mode
+    // 2026): it asked to hold what it draws until it says the frame is
+    // whole. A host deciding whether now is a good moment to read this
+    // terminal's damage — a diff engine's flush tick chief among them —
+    // treats true as "not yet, ask again": the alternative is showing
+    // exactly the half-drawn frame this mode exists to hide.
+    virtual bool synchronized_output_active() const noexcept = 0;
     virtual std::span<const ::ckv::Cell> cells() const noexcept = 0;
     virtual std::span<const ::ckv::Cell> scrollback() const noexcept = 0;
     // The pictures a child has drawn, and what the terminal has had to

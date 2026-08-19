@@ -927,12 +927,25 @@ void TerminalEmulator::handle_csi(char final_byte) {
             cursor_.shape = CursorShape::Block;
         return;
     }
+    // A nested child's own probe for synchronized output (DEC 2026) is
+    // answered for real: whether to hold a child's damage until the
+    // matching reset is this embedded terminal's own decision, not the
+    // outer terminal's probe state, so — unlike the two below — this is not
+    // something to withhold. ckVision's own probe sequence (posix_terminal.
+    // cpp) sets the mode immediately before asking, so a profile that
+    // supports it answers "set" here precisely because the dispatch above
+    // already ran for the same input.
+    if (final_byte == 'p' && control_.ends_with('$') && control_ == "?2026$") {
+        send_input(std::string("\x1b[?2026;") +
+                   (!profile_.synchronized_output ? "0" : synchronized_output_active_ ? "1" : "2") + "$y");
+        return;
+    }
     // Capability probes emitted by a nested ckVision child are private to
     // that child endpoint.  The profile deliberately does not expose the
     // outer terminal's probe state, so these queries receive no reply but
     // are still consumed as well-formed input rather than diagnostics.
     if (final_byte == 'p' && control_.ends_with('$') &&
-        (control_ == "?2026$" || control_ == "?2031$" || control_ == "?1016$"))
+        (control_ == "?2031$" || control_ == "?1016$"))
         return;
     if (final_byte == 'c' && control_.empty()) {
         // DA1 is where a program asks what this terminal is, and parameter 4
@@ -1079,6 +1092,8 @@ void TerminalEmulator::handle_csi(char final_byte) {
                 printer_print_extent_ = enabled;  // DECPEX
             } else if (mode == 25) {
                 cursor_.visible = enabled;
+            } else if (mode == 2026) {
+                synchronized_output_active_ = enabled && profile_.synchronized_output;
             }
             if (end == std::string_view::npos) break;
             begin = end + 1;
@@ -2133,6 +2148,11 @@ void TerminalEmulator::reset_terminal() {
 
     bracketed_paste_enabled_ = false;
     mouse_tracking_ = TerminalMouseTracking::None;
+    // A hard reset is the child disclaiming everything it had set, so an
+    // open frame it never closed does not survive it either — the
+    // alternative is a terminal a reset was supposed to put back to a known
+    // state, still refusing to show anything past whatever it drew last.
+    synchronized_output_active_ = false;
     mouse_sgr_enabled_ = false;
     application_cursor_keys_ = false;
     focus_reporting_enabled_ = false;

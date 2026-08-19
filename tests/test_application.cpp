@@ -1902,6 +1902,7 @@ public:
     }
     const ckv::core::TerminalDamage& damage() const noexcept override { return damage_; }
     void clear_damage() noexcept override { damage_ = {}; }
+    bool synchronized_output_active() const noexcept override { return false; }
     std::span<const ckv::Cell> cells() const noexcept override {
         return std::span<const ckv::Cell>(cells_.data(), cells_.size());
     }
