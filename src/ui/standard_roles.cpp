@@ -370,9 +370,16 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.flow_view_text, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.status_line_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.status_line_disabled, Style{kLightFg, kLightPanel, Attr::Dim});
-    theme.set(roles.status_line_selected, Style{kLightPanel, kLightAccent, Attr{}});
-    theme.set(roles.status_line_selected_hotkey, Style{kLightPanel, kLightAccent, Attr::Bold});
-    theme.set(roles.status_line_selected_disabled, Style{kLightPanel, kLightAccent, Attr::Dim});
+    // Near-black on the pale accent, not the panel colour: kLightPanel is
+    // rgb(225,225,225) and kLightAccent rgb(190,215,245), so a panel-coloured
+    // glyph on the accent is near-white on pale blue — legible on a designer's
+    // screenshot and not on a real one. Reported from a running ckmux, where
+    // the selected entry of the window switcher bar was the first surface wide
+    // enough to make it obvious. Every other light-scheme role already puts
+    // kLightFg on its background; the selected trio were the exception.
+    theme.set(roles.status_line_selected, Style{kLightFg, kLightAccent, Attr{}});
+    theme.set(roles.status_line_selected_hotkey, Style{kLightRed, kLightAccent, Attr::Bold});
+    theme.set(roles.status_line_selected_disabled, Style{kLightShadow, kLightAccent, Attr::Dim});
     theme.set(roles.splitter_normal, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.splitter_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     set_editor_roles(theme, roles, kLightFg, kLightBg, kLightFocus, kLightAccent, kLightRed,

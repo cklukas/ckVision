@@ -134,11 +134,13 @@ choices reviewable in one place.
   "Grid" — is the word the reader is actually choosing between.
 - **The tilings are fixed by the arrangement, not by the word.** The
   two axis names are used inconsistently across desktops, so the set
-  states which is which: `tile_horizontally` lays full-WIDTH bands
-  stacked top to bottom; `tile_vertically` lays full-HEIGHT bands side
-  by side; `tile_grid` lays a near-square grid of `ceil(sqrt(n))`
+  states which is which: **the axis names what the windows are laid out
+  ALONG, not the direction of the dividers between them.**
+  `tile_horizontally` lays full-HEIGHT bands side by side, in a row
+  across the desktop; `tile_vertically` lays full-WIDTH bands stacked
+  down it; `tile_grid` lays a near-square grid of `ceil(sqrt(n))`
   columns, filled row by row, its last row stretched across the full
-  width so the grid is still an exact cover. `tile_vertically` produces
+  width so the grid is still an exact cover. `tile_horizontally` produces
   exactly the arrangement `tile` has always produced. The two are not
   merged because `tile` is a command applications already bind, and
   re-pointing it would change behavior under callers that never asked

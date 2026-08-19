@@ -724,9 +724,16 @@ void Desktop::tile_in_bands(BandAxis axis) {
 
 void Desktop::tile() { tile_in_bands(BandAxis::Columns); }
 
-void Desktop::tile_vertically() { tile_in_bands(BandAxis::Columns); }
+// The axis names what the windows are laid out ALONG, not the direction the
+// dividers between them run. Tiling horizontally puts them in a row, side by
+// side across the desktop; tiling vertically stacks them down it. Both
+// readings exist in the wild — a divider-named convention would swap these —
+// and this is the one a reader of ckmux reported expecting, which settles it
+// for a pair of commands whose whole job is to be predictable. `tile()` keeps
+// its historical arrangement, which is now the horizontal one.
+void Desktop::tile_horizontally() { tile_in_bands(BandAxis::Columns); }
 
-void Desktop::tile_horizontally() { tile_in_bands(BandAxis::Rows); }
+void Desktop::tile_vertically() { tile_in_bands(BandAxis::Rows); }
 
 void Desktop::tile_grid() {
     if (windows_.empty()) return;

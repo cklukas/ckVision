@@ -423,67 +423,69 @@ CK_TEST(tile_and_cascade_survive_a_window_that_destroys_itself_from_on_resized) 
 // the arrangement rather than the word: horizontal bands are full-WIDTH and
 // stack top to bottom; vertical bands are full-HEIGHT and stand side by side.
 
-CK_TEST(tile_horizontally_stacks_full_width_bands_top_to_bottom) {
+CK_TEST(tile_vertically_stacks_full_width_bands_top_to_bottom) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
-    desktop.tile_horizontally();
+    desktop.tile_vertically();
     CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
     CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
 
     Window* c = desktop.add_window(make_window(f));
-    desktop.tile_horizontally();
+    desktop.tile_vertically();
     CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
     CK_CHECK(b->bounds() == (Rect{0, 8, 80, 8}));
     CK_CHECK(c->bounds() == (Rect{0, 16, 80, 8}));
 
     Window* d = desktop.add_window(make_window(f));
-    desktop.tile_horizontally();
+    desktop.tile_vertically();
     CK_CHECK(a->bounds() == (Rect{0, 0, 80, 6}));
     CK_CHECK(b->bounds() == (Rect{0, 6, 80, 6}));
     CK_CHECK(c->bounds() == (Rect{0, 12, 80, 6}));
     CK_CHECK(d->bounds() == (Rect{0, 18, 80, 6}));
 }
 
-CK_TEST(tile_vertically_stands_full_height_bands_side_by_side) {
+CK_TEST(tile_horizontally_stands_full_height_bands_side_by_side) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
-    desktop.tile_vertically();
+    desktop.tile_horizontally();
     CK_CHECK(a->bounds() == (Rect{0, 0, 40, 24}));
     CK_CHECK(b->bounds() == (Rect{40, 0, 40, 24}));
 
     Window* c = desktop.add_window(make_window(f));
-    desktop.tile_vertically();
+    desktop.tile_horizontally();
     CK_CHECK(a->bounds() == (Rect{0, 0, 26, 24}));
     CK_CHECK(b->bounds() == (Rect{26, 0, 26, 24}));
     CK_CHECK(c->bounds() == (Rect{52, 0, 28, 24}));  // last band absorbs the leftover 2
 
     Window* d = desktop.add_window(make_window(f));
-    desktop.tile_vertically();
+    desktop.tile_horizontally();
     CK_CHECK(a->bounds() == (Rect{0, 0, 20, 24}));
     CK_CHECK(b->bounds() == (Rect{20, 0, 20, 24}));
     CK_CHECK(c->bounds() == (Rect{40, 0, 20, 24}));
     CK_CHECK(d->bounds() == (Rect{60, 0, 20, 24}));
 }
 
-CK_TEST(tile_vertically_is_the_arrangement_tile_has_always_produced) {
+CK_TEST(tile_horizontally_is_the_arrangement_tile_has_always_produced) {
     // kTile is a standard command applications already bind, and the axis
     // commands are additive: tile() must keep placing windows exactly where
-    // it always has, which is what tile_vertically() now also names.
+    // it always has, which is what tile_horizontally() names — the axis is
+    // what the windows are laid out ALONG, so a row of them side by side is
+    // the horizontal one.
     Fixture f;
     Desktop tiled(Rect{0, 0, 90, 24});
-    Desktop vertical(Rect{0, 0, 90, 24});
+    Desktop sideways(Rect{0, 0, 90, 24});
     for (int i = 0; i < 3; ++i) {
         tiled.add_window(make_window(f));
-        vertical.add_window(make_window(f));
+        sideways.add_window(make_window(f));
     }
     tiled.tile();
-    vertical.tile_vertically();
+    sideways.tile_horizontally();
     for (std::size_t i = 0; i < 3; ++i)
-        CK_CHECK(tiled.windows()[i]->bounds() == vertical.windows()[i]->bounds());
+        CK_CHECK(tiled.windows()[i]->bounds() == sideways.windows()[i]->bounds());
     CK_CHECK(tiled.windows()[0]->bounds() == (Rect{0, 0, 30, 24}));
 }
 
@@ -557,7 +559,7 @@ CK_TEST(the_last_band_absorbs_the_remainder_rather_than_leaving_a_gap_row) {
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));
-    desktop.tile_horizontally();
+    desktop.tile_vertically();
     CK_CHECK(a->bounds().height == 3);
     CK_CHECK(b->bounds().height == 3);
     CK_CHECK(c->bounds().height == 4);  // 3 + the leftover row
@@ -616,14 +618,14 @@ CK_TEST(every_tiling_is_a_no_op_with_zero_windows) {
 
 // --- filled_tile_fractions (U4-b) ----------------------------------------
 
-CK_TEST(filled_tile_fractions_reports_each_band_after_tile_horizontally) {
+CK_TEST(filled_tile_fractions_reports_each_band_when_stacked) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
     Window* b = desktop.add_window(make_window(f));
     Window* c = desktop.add_window(make_window(f));
     Window* d = desktop.add_window(make_window(f));
-    desktop.tile_horizontally();
+    desktop.tile_vertically();
 
     const auto fractions = desktop.filled_tile_fractions();
     CK_CHECK(fractions.size() == 4);
@@ -641,12 +643,12 @@ CK_TEST(filled_tile_fractions_reports_each_band_after_tile_horizontally) {
     }
 }
 
-CK_TEST(filled_tile_fractions_reports_each_band_after_tile_vertically) {
+CK_TEST(filled_tile_fractions_reports_each_band_when_side_by_side) {
     Fixture f;
     Desktop desktop(Rect{0, 0, 80, 24});
     desktop.add_window(make_window(f));
     desktop.add_window(make_window(f));
-    desktop.tile_vertically();
+    desktop.tile_horizontally();
 
     const auto fractions = desktop.filled_tile_fractions();
     CK_CHECK(fractions.size() == 2);
@@ -710,7 +712,7 @@ CK_TEST(filled_tile_fractions_measures_the_content_area_not_the_whole_desktop) {
     desktop.dock_top(std::make_unique<ckv::ui::View>());
     desktop.add_window(make_window(f));
     desktop.add_window(make_window(f));
-    desktop.tile_horizontally();
+    desktop.tile_vertically();
     CK_CHECK(desktop.content_area() == (Rect{0, 1, 80, 24}));
 
     const auto fractions = desktop.filled_tile_fractions();
@@ -1933,13 +1935,15 @@ CK_TEST(the_three_named_tiling_commands_are_ordinary_desktop_defaults) {
     b->set_bounds(Rect{0, 0, 80, 24});
     c->set_bounds(Rect{0, 0, 80, 24});
 
+    // Horizontally = laid out along the horizontal axis, so a row of
+    // full-height bands; vertically = stacked down the desktop.
     CK_CHECK(af.app.commands().execute(standard(af.app).tile_horizontally));
-    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
-    CK_CHECK(c->bounds() == (Rect{0, 16, 80, 8}));
-
-    CK_CHECK(af.app.commands().execute(standard(af.app).tile_vertically));
     CK_CHECK(a->bounds() == (Rect{0, 0, 26, 24}));
     CK_CHECK(c->bounds() == (Rect{52, 0, 28, 24}));
+
+    CK_CHECK(af.app.commands().execute(standard(af.app).tile_vertically));
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 8}));
+    CK_CHECK(c->bounds() == (Rect{0, 16, 80, 8}));
 
     CK_CHECK(af.app.commands().execute(standard(af.app).tile_grid));
     CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
