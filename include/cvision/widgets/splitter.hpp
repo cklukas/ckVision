@@ -34,11 +34,15 @@ using ui::View;
 // is what gives a freshly built Splitter its exact 50/50 starting
 // split.
 //
-// Mouse-drag resizing is deliberately out of v1 scope: the catalog's
-// own spec for this widget is "keyboard-adjustable," and that is what
-// this class implements — matching Grid's own "v1 scope" precedent of
-// implementing exactly the documented baseline, not the superset of
-// everything a real-world splitter widget could eventually grow.
+// The divider is also draggable with the pointer. Keyboard adjustment
+// is the catalog's own baseline and remains the complete way to work
+// this widget without a mouse, but a divider that can only be moved
+// after being focused is one most readers never discover: the pointer
+// gesture is what a splitter looks like it affords, and a widget that
+// declines the gesture it advertises reads as broken rather than as
+// keyboard-first. Press the divider, move, release; the position runs
+// through the same clamped set_split_position() the keys use, so both
+// routes obey one rule about how small a pane may get.
 //
 // Resolves its own theme roles from context() once attached (M9 WP-7,
 // D-028): "ckv.splitter.normal/focused".
@@ -58,10 +62,25 @@ public:
     // main_axis's own comment already documents for that case).
     void set_split_position(int position);
 
+    // Overrides the theme-resolved divider roles. A splitter on a dialog
+    // surface otherwise keeps the document-window colouring its theme
+    // gives it, which reads as a seam of another window's chrome lying
+    // across the panel — the same reason ListView and Scrollbar each
+    // carry one of these.
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        normal_role_ = normal_role;
+        focused_role_ = focused_role;
+        invalidate();
+    }
+
+    // Whether the divider is being dragged right now.
+    bool dragging() const noexcept { return dragging_; }
+
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
     bool on_key(const KeyEvent& event) override;
+    bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
     void on_resized() override { relayout(); }
     // A pane's own hint changing (M9/WP-16) can shift its own min,
@@ -84,6 +103,7 @@ private:
     bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    bool dragging_ = false;
 };
 
 }  // namespace ckv::widgets

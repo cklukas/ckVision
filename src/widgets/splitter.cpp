@@ -134,6 +134,41 @@ bool Splitter::on_key(const KeyEvent& event) {
     return false;
 }
 
+bool Splitter::on_mouse(const MouseEvent& event) {
+    const Rect abs = absolute_bounds();
+    // The divider's position is measured along the main axis, in this
+    // view's own coordinates — the same number split_position_ holds, so
+    // the pointer lands on the divider exactly when the two agree.
+    const int along = orientation_ == Orientation::Horizontal ? event.cell.x - abs.x
+                                                              : event.cell.y - abs.y;
+
+    if (event.action == MouseAction::Down) {
+        if (event.button != MouseButton::Left) return false;
+        // Only the divider itself. A press anywhere else belongs to
+        // whichever pane is there, and claiming it would swallow clicks
+        // meant for the list or the document beside it.
+        if (along != split_position_) return false;
+        dragging_ = true;
+        return true;
+    }
+
+    if (!dragging_) return false;
+
+    if (event.action == MouseAction::Move) {
+        // The divider goes where the pointer is, not where it started plus
+        // a delta: the grab point IS the divider, one cell wide, so there
+        // is no offset to carry and none to accumulate error in.
+        set_split_position(along);
+        return true;
+    }
+
+    if (event.action == MouseAction::Up) {
+        dragging_ = false;
+        return true;
+    }
+    return false;
+}
+
 void Splitter::on_focus(const FocusEvent& event) {
     has_focus_ = event.gained;
     invalidate();

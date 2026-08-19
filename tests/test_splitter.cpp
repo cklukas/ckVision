@@ -49,6 +49,11 @@ private:
 };
 
 ckv::KeyEvent key(Key k) { return ckv::KeyEvent{KeyChord{k, Modifier::None, ""}}; }
+
+ckv::MouseEvent mouse(ckv::MouseAction action, int x, int y,
+                      ckv::MouseButton button = ckv::MouseButton::Left) {
+    return ckv::MouseEvent{action, button, ckv::Point{x, y}, std::nullopt, Modifier::None};
+}
 }  // namespace
 
 // --- Construction / default split ---------------------------------------
@@ -239,4 +244,80 @@ CK_TEST(a_zero_size_splitter_does_not_crash_on_draw_or_resize) {
     ckv::scene::Painter painter(s, Rect{0, 0, 1, 1});
     splitter.draw(painter);
     CK_CHECK(true);
+}
+
+// --- Mouse ---------------------------------------------------------------
+
+CK_TEST(pressing_the_divider_and_moving_drags_the_split) {
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
+    CK_CHECK(splitter.split_position() == 10);
+    CK_CHECK(!splitter.dragging());
+
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Down, 10, 4)));
+    CK_CHECK(splitter.dragging());
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Move, 6, 4)));
+    CK_CHECK(splitter.split_position() == 6);
+    CK_CHECK(splitter.first()->bounds() == (Rect{0, 0, 6, 10}));
+    CK_CHECK(splitter.second()->bounds() == (Rect{7, 0, 14, 10}));
+
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Up, 6, 4)));
+    CK_CHECK(!splitter.dragging());
+}
+
+CK_TEST(a_press_beside_the_divider_belongs_to_the_pane_not_the_splitter) {
+    // Claiming it would swallow the click a reader aimed at a list row.
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
+    CK_CHECK(!splitter.on_mouse(mouse(ckv::MouseAction::Down, 3, 4)));
+    CK_CHECK(!splitter.dragging());
+    CK_CHECK(!splitter.on_mouse(mouse(ckv::MouseAction::Down, 17, 4)));
+    CK_CHECK(!splitter.dragging());
+    CK_CHECK(splitter.split_position() == 10);
+}
+
+CK_TEST(motion_without_a_press_moves_nothing) {
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
+    CK_CHECK(!splitter.on_mouse(mouse(ckv::MouseAction::Move, 4, 4)));
+    CK_CHECK(splitter.split_position() == 10);
+}
+
+CK_TEST(a_drag_obeys_the_same_minimums_the_keys_do) {
+    // The pointer may leave the widget entirely; the panes' own minimums
+    // are what stop the divider, exactly as for Left/Right.
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<MinSizedView>(4),
+                      std::make_unique<MinSizedView>(5));
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Down, splitter.split_position(), 2)));
+    splitter.on_mouse(mouse(ckv::MouseAction::Move, -30, 2));
+    CK_CHECK(splitter.split_position() == 4);
+    splitter.on_mouse(mouse(ckv::MouseAction::Move, 900, 2));
+    CK_CHECK(splitter.split_position() == 15);  // 20 usable - 5 second min
+}
+
+CK_TEST(a_vertical_splitter_drags_along_its_own_axis) {
+    Splitter splitter(Rect{0, 0, 10, 21}, std::make_unique<View>(), std::make_unique<View>(),
+                      Orientation::Vertical);
+    CK_CHECK(splitter.split_position() == 10);
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Down, 5, 10)));
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Move, 5, 3)));
+    CK_CHECK(splitter.split_position() == 3);
+}
+
+CK_TEST(a_right_button_press_is_not_a_drag) {
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
+    CK_CHECK(!splitter.on_mouse(mouse(ckv::MouseAction::Down, 10, 4, ckv::MouseButton::Right)));
+    CK_CHECK(!splitter.dragging());
+}
+
+CK_TEST(the_divider_roles_can_be_overridden) {
+    // A splitter on a dialog surface must be able to wear that surface.
+    Fixture f;
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
+    splitter.set_context(f.ctx());
+    splitter.set_role_override(f.roles.dialog_background, f.roles.dialog_background);
+    ckv::scene::Surface s(ckv::Size{21, 10}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 21, 10});
+
+    splitter.draw(painter);
+
+    const ckv::Style expected = f.theme.resolve(f.roles.dialog_background);
+    CK_CHECK(s.at(ckv::Point{splitter.split_position(), 0}).style().bg == expected.bg);
 }

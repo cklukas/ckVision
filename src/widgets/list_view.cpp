@@ -203,6 +203,13 @@ void ListView::ensure_cursor_visible() {
     }
 }
 
+void ListView::set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
+    // Applied through the bar itself rather than remembered here: Scrollbar
+    // already owns this exact override, and a second copy of the state
+    // would be one more thing to keep in step with it.
+    if (scrollbar_ != nullptr) scrollbar_->set_role_override(track_role, thumb_role);
+}
+
 void ListView::set_scrollbar_policy(ScrollbarPolicy policy) {
     if (scrollbar_ != nullptr) scrollbar_->set_policy(policy);
 }

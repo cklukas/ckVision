@@ -73,6 +73,14 @@ public:
     // focused pair keeps working.
     void set_selected_inactive_role_override(ui::RoleId role) noexcept { selected_inactive_role_ = role; }
 
+    // Restyles the embedded scrollbar. It resolves its own roles, which is
+    // right for a list on a document window and wrong for one on a dialog
+    // surface: the bar then keeps the document colouring and reads as a
+    // strip of some other window showing through the panel. A caller that
+    // has already said what surface its list sits on is the only one that
+    // can say what the bar should wear.
+    void set_scrollbar_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept;
+
     // Borrows `model`; it must outlive this ListView or be replaced/cleared
     // before destruction. Changing models clears identities; model_changed()
     // preserves identities that survive a reorder/filter/refresh.
