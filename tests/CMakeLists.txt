@@ -49,6 +49,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_message_box.cpp
     test_mnemonic.cpp
     test_option_group.cpp
+    test_paged_strip.cpp
     test_popup_list.cpp
     test_overlay.cpp
     test_painter.cpp

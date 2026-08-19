@@ -442,6 +442,16 @@ top to bottom) and `tile_grid()` (a near-square grid of `ceil(sqrt(n))`
 columns, its short last row stretched across the full width). All of them
 fill `content_area()` exactly, leaving no gap row or column.
 
+"Every window" means every window on the desktop: a minimized one (and one an
+application hid itself) gets no band, and the area is divided by the count of
+the rest — otherwise the arrangement would leave a gap exactly where the
+hidden window's band would have been. `cascade()` skips them for the same
+reason, `activate_next`/`activate_previous` step over them, and
+`filled_tile_fractions()` does not count them. `activate()` is the exception
+and restores one instead: naming a window is asking for it, and an activation
+pointing at something nobody can see is the incoherence every other rule here
+exists to avoid.
+
 `filled_tile_fractions()` reports the current arrangement as a fraction of
 `content_area()` per window — but only while that arrangement really is a
 filled, non-overlapping tiling, which it measures geometrically rather than
@@ -459,8 +469,9 @@ control restores such a window normally. Standard-dialog presentation
 dialog opens at the size it was built for.
 
 `subscribe_window_change(observer)` reports a window being added, removed,
-activated or renamed. It exists for views that *list* windows rather than
-contain them — a switcher bar, a navigator pane — because nothing else
+activated, renamed, minimized or restored. It exists for views that *list*
+windows rather than contain them — a switcher bar, a navigator pane —
+because nothing else
 invalidates such a view when a window it does not contain opens or is
 renamed, and its list would silently stop matching the desktop. The overload
 taking a `std::weak_ptr<void>` drops the observer once that token expires,
@@ -1072,6 +1083,25 @@ remains false (there is no transient geometry to restore). Its maximize/restore
 control uses the theme's `ckv.window.control` accent while its brackets retain
 the frame background and foreground.
 
+A third control, `[_]`, sits immediately left of the maximize/restore one and
+**minimizes** the window — `set_minimized(true)`, which is what a click on it
+does. A minimized window is hidden but still listed in its `Desktop`'s
+`windows()`: that listing is how a reader gets it back, from the window
+switcher bar, while every tiling, the grid, the cascade, the next/previous
+cycle and `filled_tile_fractions()` step over it. Restoring returns the
+window's bounds, its place in the z-order and its zoom exactly — a window
+minimized while maximized comes back maximized — because minimizing disturbs
+none of the three, so there is nothing to remember and replay. Restoring does
+not activate: `Desktop::activate()` does both, and that is the call a bar
+entry, a window number or a menu item makes.
+
+The control appears from 14 columns wide, where the arithmetic clears the
+close control, and — like the maximize/restore control — not at all on a
+fixed-size window. `set_minimizable(false)` takes it off a resizable window
+that must not be hidden; `Desktop`'s modal presentation does exactly that,
+since hiding the one window accepting input would leave an application
+answering nothing.
+
 ## WindowHandle
 
 Header: `include/cvision/widgets/window.hpp`. Stable window identity used for
@@ -1082,6 +1112,86 @@ activation/listing operations without exposing ownership.
 Header: `include/cvision/widgets/window_list_dialog.hpp`. The standard typed
 dialog for choosing/activating Desktop windows; use its presentation alias and
 result enum rather than building a one-off window list.
+
+## PagedStrip
+
+Header: `include/cvision/widgets/paged_strip.hpp`. One row of variable-width
+items that **pages** when they do not all fit, together with the chrome that
+steers it. Reach for it whenever a one-row strip has more in it than a narrow
+terminal can show at once — a window switcher, a status row of command items,
+a session list — rather than shortening every item until none of them can be
+read.
+
+Left to right, at a width that needs paging:
+
+```text
+▼ ◁ 2/3  Item  Another item  Third   ▷
+│ │  │   └── the items, as many as fit WHOLE
+│ │  └────── the page index, only while there is more than one page
+│ └───────── the previous-page control, live only off the first page
+└─────────── the collapse toggle, only when the host asked for one
+```
+
+An item source is the whole of what the strip does not know:
+
+```cpp
+auto strip = std::make_unique<widgets::PagedStrip>();
+strip->set_item_source([&model] {
+    std::vector<widgets::PagedStrip::Item> items;
+    for (const Session& session : model.sessions())
+        items.push_back({session.display_width(), session.caption(), session.current()});
+    return items;
+});
+strip->on_item_activated = [&model](std::size_t index) { model.select(index); };
+strip->refresh_items();  // whenever the model moves
+```
+
+`Item::width` is the cells the item's **own content** needs and is the
+provider's answer, never a measurement the strip takes of `Item::text`: an
+item that draws a status glyph before its label pays for it there and the
+layout follows. The strip adds one padding cell either side and one blank
+cell between items.
+
+**Paging, not eliding.** An item takes its natural width and overflows onto
+the next page; nothing is shortened to make room. Elision survives in exactly
+one case: an item whose box is wider than the entire item area is alone on
+its page and is elided to that area, because it has nowhere else to go.
+
+**The chrome is reserved for every page alike** once there is more than one,
+including the previous-page cell on the first page, where it is drawn blank.
+Items therefore keep their columns as the reader pages, and which items land
+on which page is a pure function of the width and the item widths — paging
+forward and back returns the reader to the set they came from. Where the row
+is too narrow to carry all of it, the chrome is given up in order of what it
+costs the reader: the page index first (it is information; the controls are
+function), then the collapse toggle, then the controls themselves.
+
+**Revalidation.** `refresh_items()` recomputes the pages on every change,
+because the item set moves underneath — in a terminal multiplexer a session
+opens or ends at any moment. A current page that no longer exists falls back
+to the last one that does, rather than showing a blank row under a `3/2`
+index; a page that survives is kept, so removing an item from an *earlier*
+page does not carry the reader somewhere they did not ask to go. Both
+`on_page_changed` and `page()` report the result.
+
+**The collapse toggle collapses nothing.** `set_collapsible(true)` buys the
+column; the toggle then draws `▼` while expanded and `▲` while collapsed,
+reports through `on_collapse_changed`, and answers `collapsed()`. What
+collapsing *means* — a footer that goes away, a second docked row — is the
+host's other chrome, and a widget that reached out to hide a sibling would be
+deciding something that is not its own. The strip's own geometry never
+changes with the flag.
+
+All four steering glyphs are one column wide by `ckv::text`, this library's
+own width authority: `▼` U+25BC, `▲` U+25B2, `◁` U+25C1 and `▷` U+25B7 are
+East Asian *Ambiguous*, which D-019 resolves to one column, and none of them
+is `Extended_Pictographic`, so no variation selector can widen one into an
+emoji. The black left/right triangles U+25C0/U+25B6 **are**
+`Extended_Pictographic` and are deliberately not used: a two-cell triangle
+would shear the row it is meant to be steering.
+
+Keyboard: none, deliberately. A strip is chrome, and its items are reached by
+whatever commands the host already binds to them.
 
 ## WindowSwitcherTarget
 
@@ -1126,11 +1236,18 @@ desktop.dock_bottom(std::move(stack));
 — and with it the rectangle a maximized window is zoomed into — already
 excludes both rows.
 
-Too narrow for every title, the bar squeezes rather than drops: equal shares
-with the remainder handed to the leftmost entries, each title elided to its
-share. Dropping an entry would make that window unreachable from the very
-bar that exists to reach it. It stops only when a share would be too narrow
-to carry an elision marker.
+Too narrow for every title, the bar **pages** rather than shortening every
+name: it derives from [PagedStrip](#pagedstrip), which owns the layout, the
+page controls, the page index and the collapse toggle. Every window keeps a
+row — dropping one would make that window unreachable from the very bar that
+exists to reach it — but the row it keeps may be on another page. `entries()`
+still lists every window; `drawn_entries()` describes the current page only,
+and `entry_at()` answers for that page. A bar wide enough for its windows
+lays out exactly as it did before it could page: one page, no index, no
+controls, and the first entry at column zero.
+
+The collapse toggle is off until a host calls `set_collapsible(true)`, so a
+bar that never collapses pays no column for the possibility.
 
 No keyboard handling, deliberately: windows are already cycled by the
 standard next/previous-window commands and selected by number.

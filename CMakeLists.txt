@@ -73,6 +73,7 @@ add_library(cvision
     src/widgets/message_box.cpp
     src/widgets/mnemonic.cpp
     src/widgets/option_group.cpp
+    src/widgets/paged_strip.cpp
     src/widgets/popup_list.cpp
     src/widgets/progress.cpp
     src/widgets/scroll_viewport.cpp

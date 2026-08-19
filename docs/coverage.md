@@ -41,6 +41,7 @@ and executable test family. Screenshots are generated, not committed artwork.
 | `include/cvision/widgets/mnemonic.hpp` | [Gallery](widget-gallery.md#mnemonictext) | forms | forms-initial | test_mnemonic |
 | `include/cvision/widgets/mnemonic_internal.hpp` | internal mnemonic paint support | forms/hello | forms-initial/hello-menu-open | test_mnemonic, test_menu |
 | `include/cvision/widgets/option_group.hpp` | [Gallery](widget-gallery.md#checkgroup) | forms | forms-initial | test_option_group |
+| `include/cvision/widgets/paged_strip.hpp` | [Gallery](widget-gallery.md#pagedstrip) | none yet | none yet | test_paged_strip |
 | `include/cvision/widgets/popup_list.hpp` | [Gallery](widget-gallery.md#popuplist) | forms | forms-initial | test_popup_list |
 | `include/cvision/widgets/orientation.hpp` | [Gallery](widget-gallery.md#scrollbar) | layouts | layouts-initial | test_scrollbar |
 | `include/cvision/widgets/progress.hpp` | [Gallery](widget-gallery.md#progress) | workbench | workbench-data | test_progress |

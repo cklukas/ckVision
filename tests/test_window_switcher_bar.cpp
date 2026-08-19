@@ -306,7 +306,7 @@ CK_TEST(a_bar_with_no_context_menu_provider_leaves_the_right_press_alone) {
     CK_CHECK(f.desktop.popups().empty());
 }
 
-// --- Layout and elision ---------------------------------------------------
+// --- Layout, paging and elision -------------------------------------------
 
 CK_TEST(entries_take_their_natural_width_while_the_bar_is_wide_enough) {
     Fixture f;
@@ -322,56 +322,174 @@ CK_TEST(entries_take_their_natural_width_while_the_bar_is_wide_enough) {
     CK_CHECK(drawn[0].x == 0 && drawn[0].width == 7 && drawn[0].text == "Alpha");
     CK_CHECK(drawn[1].x == 8 && drawn[1].width == 7 && drawn[1].text == "Bravo");
     CK_CHECK(drawn[2].x == 16 && drawn[2].width == 9 && drawn[2].text == "Charlie");
+    // A bar wide enough for its windows is exactly what it was before it knew
+    // how to page: one page, no index, no controls, nothing at column zero but
+    // the first window.
+    CK_CHECK(bar->page_count() == 1);
+    CK_CHECK(bar->page_index_text().empty());
+    CK_CHECK(bar->chrome().collapse_x == -1);
+    CK_CHECK(bar->chrome().previous_x == -1);
+    CK_CHECK(bar->chrome().next_x == -1);
+    CK_CHECK(bar->chrome().index_x == -1);
+    CK_CHECK(bar->chrome().items_x == 0);
 }
 
-CK_TEST(a_bar_too_narrow_for_every_title_elides_them_instead_of_dropping_entries) {
+CK_TEST(a_bar_too_narrow_for_its_windows_pages_them_rather_than_shortening_their_names) {
     Fixture f;
     WindowSwitcherBar* bar = f.bar(20);
     f.open("Alpha");
     f.open("Bravo");
     f.open("Charlie");
 
-    const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
-    // Every window keeps a row: a bar that dropped one would make that window
-    // unreachable from the very thing that exists to reach it.
-    CK_CHECK(drawn.size() == 3);
-    CK_CHECK(drawn[0].text == "Alp…");
-    CK_CHECK(drawn[1].text == "Bra…");
-    CK_CHECK(drawn[2].text == "Cha…");
-    // Equal shares, and the row fills its width exactly rather than ending
-    // ragged.
-    CK_CHECK(drawn[0].width == 6 && drawn[1].width == 6 && drawn[2].width == 6);
-    CK_CHECK(drawn[2].x + drawn[2].width == 20);
-    // Still clickable at the squeezed width.
-    CK_CHECK(bar->entry_at(Point{drawn[2].x, 0}).value_or(99) == 2);
+    // Every window still keeps a row — dropping one would make it unreachable
+    // from the very bar that exists to reach it — but the row it keeps is on a
+    // page of its own rather than a squeezed share of this one.
+    CK_CHECK(bar->page_count() == 3);
+    CK_CHECK(bar->page() == 0);
+    CK_CHECK(bar->page_index_text() == "1/3");
+    CK_CHECK(bar->chrome().previous_x == 0);
+    CK_CHECK(bar->chrome().index_x == 1);
+    CK_CHECK(bar->chrome().items_x == 5);
+    CK_CHECK(bar->chrome().next_x == 19);
+
+    std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
+    CK_CHECK(drawn.size() == 1);
+    CK_CHECK(drawn[0].index == 0 && drawn[0].x == 5 && drawn[0].width == 7);
+    CK_CHECK(drawn[0].text == "Alpha");  // whole, not "Alp…"
+
+    CK_CHECK(bar->next_page());
+    drawn = bar->drawn_entries();
+    CK_CHECK(drawn.size() == 1 && drawn[0].index == 1 && drawn[0].text == "Bravo");
+    CK_CHECK(bar->page_index_text() == "2/3");
 }
 
-CK_TEST(the_leftmost_entries_absorb_a_remainder_the_shares_could_not_divide) {
+CK_TEST(a_window_on_another_page_has_no_columns_and_takes_no_clicks) {
     Fixture f;
-    WindowSwitcherBar* bar = f.bar(19);
+    WindowSwitcherBar* bar = f.bar(20);
     f.open("Alpha");
     f.open("Bravo");
-    f.open("Charlie");
+    Window* charlie = f.open("Charlie");
+    CK_CHECK(f.desktop.active_window() == charlie);
 
-    const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
-    CK_CHECK(drawn.size() == 3);
-    // 19 cells less two gaps is 17 across three entries: 6, 6, 5.
-    CK_CHECK(drawn[0].width == 6 && drawn[1].width == 6 && drawn[2].width == 5);
-    CK_CHECK(drawn[2].x + drawn[2].width == 19);
+    // The entries are all still listed; only the current page has columns.
+    CK_CHECK(bar->entries().size() == 3);
+    CK_CHECK(click_column(*bar, 2) < 0);
+    CK_CHECK(bar->entry_at(Point{5, 0}).value_or(99) == 0);
+    // The paging chrome is not an entry.
+    CK_CHECK(!bar->entry_at(Point{19, 0}).has_value());
+    CK_CHECK(bar->on_mouse(press(19)));  // it is a control, though
+    CK_CHECK(bar->page() == 1);
 }
 
-CK_TEST(a_bar_narrower_than_its_windows_can_be_told_apart_in_lays_out_what_it_can) {
+CK_TEST(a_window_whose_title_is_wider_than_the_row_is_alone_on_its_page_and_elided) {
     Fixture f;
-    WindowSwitcherBar* bar = f.bar(5);
-    f.open("Alpha");
-    f.open("Bravo");
-    f.open("Charlie");
+    WindowSwitcherBar* bar = f.bar(20);
+    f.open("An extraordinarily long window title");
+    f.open("Beta");
 
-    // At four cells per entry (three of text plus a gap) five columns hold
-    // one. Squeezing further would leave rows that say nothing at all.
+    // The one case elision survives paging: there is no other page to move a
+    // single over-wide entry to.
+    CK_CHECK(bar->page_count() == 2);
     const std::vector<WindowSwitcherBar::DrawnEntry> drawn = bar->drawn_entries();
     CK_CHECK(drawn.size() == 1);
-    CK_CHECK(drawn[0].width == 5);
+    CK_CHECK(drawn[0].width == 13);
+    CK_CHECK(drawn[0].text == "An extraor…");
+    CK_CHECK(bar->next_page());
+    CK_CHECK(bar->drawn_entries()[0].text == "Beta");
+}
+
+CK_TEST(a_window_opening_or_closing_re_pages_the_bar) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar(20);
+    f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+    CK_CHECK(bar->page_count() == 3);
+
+    Window* delta = f.open("Delta");
+    CK_CHECK(bar->page_count() == 4);
+
+    f.desktop.remove_window(delta).reset();
+    CK_CHECK(bar->page_count() == 3);
+
+    // Down to what fits: no pages left to walk, and the chrome goes with them.
+    f.desktop.remove_window(f.desktop.windows().back()).reset();
+    CK_CHECK(bar->page_count() == 1);
+    CK_CHECK(bar->chrome().next_x == -1);
+    CK_CHECK(bar->drawn_entries().size() == 2);
+}
+
+CK_TEST(closing_the_window_the_reader_is_looking_at_falls_back_a_page) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar(20);
+    f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+    Window* delta = f.open("Delta");
+    CK_CHECK(bar->set_page(3));
+    CK_CHECK(bar->drawn_entries()[0].index == 3);
+
+    // In ckmux this is a terminal ending under the reader's eyes. The page
+    // they were on no longer exists, and a blank row under a 4/3 index is not
+    // the answer.
+    f.desktop.remove_window(delta).reset();
+    CK_CHECK(bar->page_count() == 3);
+    CK_CHECK(bar->page() == 2);
+    CK_CHECK(bar->page_index_text() == "3/3");
+    CK_CHECK(bar->drawn_entries().size() == 1);
+    CK_CHECK(bar->drawn_entries()[0].text == "Charlie");
+}
+
+CK_TEST(closing_a_window_on_an_earlier_page_leaves_the_reader_where_they_were) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar(20);
+    Window* alpha = f.open("Alpha");
+    f.open("Bravo");
+    f.open("Charlie");
+    f.open("Delta");
+    CK_CHECK(bar->set_page(2));
+
+    f.desktop.remove_window(alpha).reset();
+    CK_CHECK(bar->page_count() == 3);
+    CK_CHECK(bar->page() == 2);
+}
+
+// --- The collapse toggle --------------------------------------------------
+
+CK_TEST(the_bar_reports_a_collapse_and_hides_nothing_itself) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    f.open("Alpha");
+    // No toggle until a host asks for one, so a bar that never collapses does
+    // not pay a column for the possibility.
+    CK_CHECK(bar->chrome().collapse_x == -1);
+    CK_CHECK(bar->drawn_entries()[0].x == 0);
+
+    bar->set_collapsible(true);
+    CK_CHECK(bar->chrome().collapse_x == 0);
+    CK_CHECK(bar->drawn_entries()[0].x == 2);
+
+    int reports = 0;
+    bool state = false;
+    bar->on_collapse_changed = [&](bool collapsed) {
+        state = collapsed;
+        ++reports;
+    };
+    CK_CHECK(bar->on_mouse(press(0)));
+    CK_CHECK(reports == 1 && state);
+    CK_CHECK(bar->collapsed());
+    // What collapsing MEANS is the host's — WP-35 in ckmux hides the footer
+    // below this row. The bar itself hid nothing, moved nothing, and is still
+    // listing the same window in the same column.
+    CK_CHECK(bar->visible());
+    CK_CHECK(bar->entries().size() == 1);
+    CK_CHECK(bar->drawn_entries().size() == 1);
+    CK_CHECK(bar->drawn_entries()[0].x == 2);
+    CK_CHECK(f.desktop.windows().size() == 1);
+
+    CK_CHECK(bar->on_mouse(press(0)));
+    CK_CHECK(reports == 2 && !state);
+    CK_CHECK(!bar->collapsed());
 }
 
 CK_TEST(the_bar_asks_for_exactly_one_row) {

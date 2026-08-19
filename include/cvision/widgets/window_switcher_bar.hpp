@@ -13,6 +13,14 @@
 // rather than frames — replaces the providers and keeps the row, the
 // layout, the elision, the input handling and the liveness rules.
 //
+// Paging (U4-l) is not this widget's. It comes from PagedStrip, which the
+// bar derives from: the row of variable-width items, the page controls, the
+// page index and the collapse toggle are a general one-row strip, and this
+// bar is that strip's first consumer exactly as ckmux was this bar's. What
+// stays here is the only thing the strip does not know — that an item is a
+// WINDOW. The bar supplies each item's width and label, and installs the
+// activate and context-menu behaviour on the strip's item callbacks.
+//
 // Docking: Desktop::dock_bottom holds exactly ONE view per edge, so a bar
 // above an application's existing status line is not a second dock. The
 // host composes them:
@@ -39,6 +47,7 @@
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/paged_strip.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::widgets {
@@ -90,21 +99,17 @@ private:
     std::function<bool(Window*)> still_listed_;
 };
 
-// Resolves its own theme roles from context() once attached (D-028):
-// "ckv.statusline.normal" for the bar and its ordinary entries,
-// "ckv.statusline.selected" for the active window's. Deliberately the
-// status line's own roles rather than a family of its own: this is a bar of
-// clickable words docked against the screen edge, it sits directly above a
-// status line in the arrangement it was designed for, and a second family
-// would let the two halves of one docked stack disagree about what a bar
-// looks like in a theme that retinted only one of them. TabControl already
-// borrows the menu bar's roles for the same reason.
+// Theme roles, the one-row size hint, the layout, the paging chrome, the
+// press-and-release input and the pointer shape all come from PagedStrip —
+// including "ckv.statusline.normal"/"ckv.statusline.selected" (D-028) and the
+// reasoning behind borrowing the status line's own roles. Everything this
+// class adds is about windows.
 //
 // Keyboard: none, on purpose. Windows are already cycled by the standard
 // next/previous-window commands (F6 / Shift+F6) and selected by number; a
 // focus stop here would be a second, competing way to walk the same list,
 // and Tab would land the reader in the chrome rather than in their work.
-class WindowSwitcherBar : public ui::View {
+class WindowSwitcherBar : public PagedStrip {
 public:
     // One row, as the bar currently understands it.
     struct Entry {
@@ -116,13 +121,19 @@ public:
     };
 
     // One row as it is actually laid out at the current width — exposed so a
-    // test can read the elided text and the columns it occupies without
-    // scraping rendered cells.
+    // test can read the text and the columns it occupies without scraping
+    // rendered cells. This is PagedStrip::Placement in the bar's own words,
+    // and like it, it describes the CURRENT PAGE: a window on another page has
+    // no columns to describe.
     struct DrawnEntry {
         std::size_t index = 0;  // into entries()
         int x = 0;              // local column of the entry's first cell
         int width = 0;          // cells the entry occupies, padding included
-        std::string text;       // the label as it will be drawn, elided if it had to be
+        // The label as it will be drawn. Elided only where PagedStrip still
+        // elides — an entry alone on a page and wider than the whole item
+        // area. Every other entry takes its natural width and a window that
+        // does not fit moves to the next page rather than losing its name.
+        std::string text;
     };
 
     // Provider-driven: lists nothing until a window source is installed.
@@ -169,27 +180,16 @@ public:
 
     const std::vector<Entry>& entries() const noexcept { return entries_; }
 
-    // How the entries fall at the current width — see DrawnEntry.
+    // How the entries of the current page fall at the current width — see
+    // DrawnEntry. PagedStrip::placed_items() is the same answer in the
+    // library's own vocabulary.
     std::vector<DrawnEntry> drawn_entries() const;
 
     // The entry under an ABSOLUTE cell (a MouseEvent's own coordinates), or
-    // nullopt over the bar's empty space.
+    // nullopt over the bar's empty space, its paging chrome, or a window that
+    // is not on the current page.
     std::optional<std::size_t> entry_at(Point cell) const;
 
-    void set_role_override(ui::RoleId normal_role, ui::RoleId active_role) noexcept {
-        role_ = normal_role;
-        active_role_ = active_role;
-    }
-
-    ui::SizeHint horizontal_size_hint() const override;
-    ui::SizeHint vertical_size_hint() const override;
-
-    void draw(scene::Painter& painter) override;
-    bool on_mouse(const MouseEvent& event) override;
-    // Only over an entry: the empty run to the right of the last window is
-    // background, and a pointer that promises something there promises
-    // something that pressing would not do.
-    std::optional<PointerShape> pointer_shape_at(Point local) const override;
     void on_attached() override;
 
 private:
@@ -200,11 +200,16 @@ private:
     // to answer with is left unconsumed rather than swallowed, so an
     // application with a desktop-wide context menu of its own still gets it.
     bool open_context_menu(std::size_t index, Point at);
-    // The natural width of one entry: its label plus the padding that
-    // belongs to it, so a highlighted entry highlights its own margins and
-    // reads as one row rather than as recoloured words (StatusLine's items
-    // treat their padding the same way, and for the same reason).
+    // The cells one entry's own content needs — today its label, and the one
+    // place a leading status glyph would be paid for. This is the answer
+    // PagedStrip::Item::width carries, so an entry that grows an icon grows
+    // here and the layout follows without being told twice. The strip adds
+    // its own padding either side, which is what makes a highlighted entry
+    // highlight its margins and read as one row rather than as recoloured
+    // words.
     int natural_width(const Entry& entry) const;
+    // The item set the strip pages, built from entries_.
+    std::vector<Item> strip_items() const;
 
     std::function<std::vector<Window*>()> window_source_;
     std::function<std::string(Window&)> label_provider_;
@@ -213,11 +218,6 @@ private:
     std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> context_menu_provider_;
 
     std::vector<Entry> entries_;
-    // The entry currently held down by the pointer, and whether the pointer
-    // is still on it — a press dragged away un-highlights but stays claimed,
-    // so returning to the entry re-arms it.
-    std::optional<std::size_t> pressed_entry_;
-    bool pressed_visible_ = true;
 
     // Where a context-menu popup goes. Found by walking the parent chain at
     // attach, exactly as MenuBar finds the Desktop it drops menus onto:
@@ -225,9 +225,6 @@ private:
     // sits, and stays separate from "where do my windows come from", which
     // the providers answer.
     Desktop* popup_host_ = nullptr;
-
-    ui::RoleId role_ = ui::kInvalidRole;
-    ui::RoleId active_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets
