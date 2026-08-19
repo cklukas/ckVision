@@ -106,6 +106,12 @@ WindowHandle make_terminal_report_dialog(Desktop& desktop, const ui::StandardRol
     document->set_text(body);
     document->set_preferred_size({86, body_rows});
     document->set_vertical_scrollbar_visible(false);
+    // The viewport owns both visible tracks (set_scrollbars_always_visible
+    // above); the vertical half of this document's own pair was hidden, but
+    // its horizontal one defaults to Auto and every report row is wider than
+    // the 86-column preferred size, so it was showing too — a second
+    // horizontal bar stacked under the viewport's own.
+    document->set_horizontal_scrollbar_policy(ScrollbarPolicy::Hidden);
     document->set_role_override(roles.help_text);
     viewport->set_content(std::move(document));
     ScrollViewport* const viewport_ptr = viewport.get();

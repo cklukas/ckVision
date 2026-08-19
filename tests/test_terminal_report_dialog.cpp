@@ -27,6 +27,7 @@ using ckv::ui::StandardRoles;
 using ckv::widgets::Desktop;
 using ckv::widgets::make_terminal_report_dialog;
 using ckv::widgets::present_terminal_report_dialog;
+using ckv::widgets::ScrollbarPolicy;
 using ckv::widgets::TerminalReportDialogOptions;
 using ckv::widgets::TerminalReportDialogResult;
 
@@ -71,6 +72,24 @@ CK_TEST(the_report_leads_with_mouse_diagnostics_and_carries_the_capability_table
     CK_CHECK(text->text().find("SIXEL graphics") != std::string::npos);
     // No probe was given, so the byte-stream line must not pretend to count.
     CK_CHECK(text->text().find("Mouse reports decoded") == std::string::npos);
+}
+
+CK_TEST(the_document_shows_no_scrollbars_of_its_own_the_viewport_already_owns_both) {
+    // Field report: the dialog's bottom scrollbar rendered twice. The
+    // viewport owns both visible tracks (set_scrollbars_always_visible), and
+    // the document's vertical track is hidden through the override flag —
+    // but horizontal has no such override, only a policy that defaults to
+    // Auto, and every report row is wider than the document's 86-column
+    // preferred size. So it showed too: two horizontal bars, one under the
+    // other, where a reader should see one.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    auto handle = make_terminal_report_dialog(desktop, f.roles, f.app, nullptr);
+    const auto* text = report_text(handle);
+    CK_CHECK(text != nullptr);
+    if (text == nullptr) return;
+    CK_CHECK(!text->vertical_scrollbar_visible());
+    CK_CHECK(text->horizontal_scrollbar_policy() == ScrollbarPolicy::Hidden);
 }
 
 CK_TEST(a_decoder_probe_adds_the_decoded_reports_line_with_its_count) {
