@@ -74,7 +74,13 @@ public:
     // Returns -1 when the palette is full, which the callers treat as "this
     // colour has to be quantized" rather than as a failure.
     int intern(std::uint32_t key, int max_entries) noexcept {
-        std::size_t slot = (key * 0x9E3779B1U) % kSlots;
+        // kSlots is a power of two, so the mask is the same remainder a
+        // release build's own strength reduction already produces from `%`
+        // — spelled this way so an unoptimized build pays for a mask
+        // instead of a division on what is otherwise the per-pixel path.
+        static_assert((kSlots & (kSlots - 1)) == 0, "kSlots must be a power of two for the mask below");
+        constexpr std::size_t kMask = kSlots - 1;
+        std::size_t slot = (key * 0x9E3779B1U) & kMask;
         for (;;) {
             if (slots_[slot].index < 0) {
                 if (size_ >= max_entries) return -1;
@@ -82,7 +88,7 @@ public:
                 return size_++;
             }
             if (slots_[slot].key == key) return slots_[slot].index;
-            slot = (slot + 1) % kSlots;
+            slot = (slot + 1) & kMask;
         }
     }
 
