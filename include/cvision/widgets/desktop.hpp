@@ -46,6 +46,10 @@ public:
         DesktopGrowPolicy grow_policy = DesktopGrowPolicy::None;
         bool active = false;
         bool zoomed = false;
+        // Recorded beside the geometry, for the same reason: a layout in
+        // which one window was parked on the switcher bar is not the same
+        // layout with that window back on the desktop.
+        bool minimized = false;
     };
 
     struct Snapshot {
@@ -82,6 +86,12 @@ public:
     // typed completion rather than exposing this raw observer. Returns
     // nullptr if a focus callback synchronously detaches or destroys the
     // new window before this operation returns.
+    //
+    // Also clears the window's minimize control (Window::set_minimizable):
+    // modality is this layer's concept, not Window's, and hiding the one
+    // window that is accepting input would leave the reader an application
+    // answering nothing, with the way back parked on a bar that the modal
+    // scope will not let them click. exec_modal attaches the same way.
     Window* present_modal(WindowHandle handle, ui::Application& app);
 
     // Whether `child` should cast a shadow right now.
@@ -138,6 +148,12 @@ public:
     // windows once activation itself perturbs z-order — see
     // desktop.cpp). Current z-order/topmost is a View::children()
     // concern, not this list's.
+    //
+    // A MINIMIZED window is still in here. Being listed is what a hidden
+    // window has left — it is how a switcher bar shows it and how the
+    // reader asks for it back — so this list is the window set, not the
+    // set of windows currently on screen. Everything that arranges or
+    // cycles windows skips the hidden ones itself.
     const std::vector<Window*>& windows() const noexcept { return windows_; }
 
     Window* active_window() const noexcept { return active_; }
@@ -159,6 +175,22 @@ public:
         Removed,
         Activated,
         TitleChanged,
+        // A window hidden by its `_` control, or by set_minimized(true).
+        // Reported LAST, once whichever window succeeded it is already
+        // active — the same rule Added follows, and for the same reason:
+        // an observer reading active_window() from here reads the answer,
+        // never the gap. The window is still listed in windows(); that is
+        // how a switcher bar offers it back.
+        Minimized,
+        // The same window returning: set_minimized(false), or activate()
+        // being asked for a window that was hidden. Reported BEFORE the
+        // Activated that an activating restore then produces, because the
+        // window is on the desktop again before it is the one in front.
+        // Restoring on its own does NOT activate — putting a window back
+        // and choosing which window the reader is working in are two
+        // requests, and every path a reader can take to make both of them
+        // at once (a bar entry, a number, a menu) comes through activate().
+        Restored,
     };
 
     using WindowObserverId = std::uint64_t;
@@ -278,24 +310,52 @@ public:
     // whichever window was active before (a no-op if `window` is
     // already the active one). CKV_ASSERT if `window` is not owned by
     // this desktop.
+    //
+    // A MINIMIZED window is restored first. Activation means "this is the
+    // window the reader is working in", and a hidden window cannot be
+    // that; the alternative — refusing, or activating something invisible
+    // — would put every caller in charge of a rule that has only one
+    // right answer. It is also what keeps the invariant in one place:
+    // select_by_number, a click on a switcher-bar entry and a host's own
+    // activate() all come through here, so no path can leave activation
+    // pointing at something nobody can see.
     void activate(Window* window);
 
     // Classic "next/previous window" commands: steps activation to the
     // adjacent window in windows()' stable insertion order, wrapping
     // around. No-op with 0 or 1 windows.
+    //
+    // Minimized windows are STEPPED OVER rather than restored: cycling
+    // moves between the windows on the desktop, and a reader pressing it
+    // repeatedly is looking for one of those, not asking to unpack the
+    // ones they parked. (Naming a window — by number, or by its entry in
+    // a bar — is the other kind of request, and that one does restore.)
+    // A full lap that finds nothing else visible leaves activation where
+    // it is.
     void activate_next();
     void activate_previous();
 
     // 1-based index into windows()' insertion order (matching the
     // classic "Alt+1".."Alt+9" window-select convention). Out-of-range
     // n is a harmless no-op, not an error — a stale keybinding from a
-    // since-closed window must not crash the application.
+    // since-closed window must not crash the application. The numbering
+    // counts minimized windows, because it counts windows() and that is
+    // the list a reader is looking at; naming a hidden one restores it,
+    // per activate().
     void select_by_number(int n);
 
     // Arranges every window to fill an equal vertical slice of the
     // desktop's content area, left to right, in windows()' insertion
     // order — the same arrangement tile_vertically() names. A no-op with
     // zero windows.
+    //
+    // "Every window" means every window ON the desktop: a hidden one —
+    // minimized to a switcher bar, or hidden by its own application —
+    // gets no band, and the division is by the count of the rest. Giving
+    // it one would divide the area by a window nobody can see and leave
+    // the visible ones a gap exactly where its band would have been,
+    // which costs the arrangement its filled_tile_fractions() verdict as
+    // surely as any other gap.
     void tile();
 
     // The three explicitly named tilings, in the sense a desktop
@@ -366,11 +426,14 @@ public:
     // cases are answered correctly by measuring what is actually there.
     //
     // Two kinds of window are deliberately not participants, because
-    // neither is part of the arrangement: an invisible one, and a
-    // fixed-size or modal window — a dialog is ABOVE whatever the
+    // neither is part of the arrangement: one that is not on the desktop
+    // — hidden by its application, or minimized to a switcher bar — and a
+    // fixed-size or modal window, which is ABOVE whatever the
     // arrangement covers, and including it would both break the tiling's
     // coverage test and put the dialog into a restore that has no place
-    // for it.
+    // for it. The first test is the same one the tile commands ask before
+    // handing out a band, so what is measured here and what was arranged
+    // there cannot drift apart.
     std::vector<TileFraction> filled_tile_fractions() const;
 
     // --- Maximize-follows-on-open (opt-in, default off) ------------
@@ -466,7 +529,29 @@ private:
         std::weak_ptr<void> liveness;
     };
     std::vector<LiveWindow> live_windows() const;
+    // The same, narrowed to the windows currently ON the desktop — what
+    // every arrangement command lays out.
+    std::vector<LiveWindow> live_shown_windows() const;
     bool still_owned(const LiveWindow& handle) const;
+    // Whether `window` is on the desktop at all: not minimized to a switcher
+    // bar, and not hidden by its own application. One question, asked by
+    // every arrangement, by the cycle step and by the filled-tiling query,
+    // so that no two of them can hold different opinions about which windows
+    // are there to be arranged.
+    static bool shown(const Window& window) noexcept;
+    // Gives activation to the topmost window that is shown, or leaves this
+    // desktop with none if every window is hidden. The successor rule, in
+    // one place: a window leaving — by closing or by being minimized — must
+    // not hand activation to something the reader cannot see.
+    void activate_topmost_shown();
+    // Steps activation one place along windows()' insertion order, skipping
+    // hidden windows — see activate_next/activate_previous.
+    void activate_step(bool forward);
+    // A window minimizing or restoring, reported by the window itself (the
+    // binding in attach_window). Hands activation on when the window that
+    // just went away was the active one, then reports the change to whoever
+    // lists windows.
+    void window_minimize_changed(Window& window);
     // Reports `change` to every live observer — see subscribe_window_change.
     // Iterates a copy of the list, so an observer may unsubscribe itself (or
     // another) from inside the call without invalidating the walk.

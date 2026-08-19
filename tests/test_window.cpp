@@ -962,8 +962,10 @@ CK_TEST(a_top_end_overlay_sits_flush_before_the_zoom_control) {
     w->set_bounds(Rect{0, 0, 30, 10});  // wide enough for the zoom control (b.width > 8)
     const FrameSlot top_end{.edge = Edge::Top, .alignment = ui::Alignment::End};
     auto* overlay = w->add_frame_overlay(std::make_unique<FixedWidthView>(4), top_end);
-    // The zoom control occupies columns width-5 through width-3.
-    CK_CHECK(overlay->bounds() == (Rect{30 - 4 - 4, 0, 4, 1}));
+    // The right-hand controls are one group, and at 30 columns that is three
+    // of them: minimize at width-8..width-6 and zoom at width-5..width-3,
+    // so an End overlay clears seven cells rather than four.
+    CK_CHECK(overlay->bounds() == (Rect{30 - 7 - 4, 0, 4, 1}));
 }
 
 CK_TEST(a_top_start_overlay_on_a_narrow_window_only_clears_the_corner) {

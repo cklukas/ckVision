@@ -79,6 +79,7 @@ Desktop::~Desktop() {
         window->clear_desktop_zoom_target();
         window->clear_gesture_observer();
         window->clear_title_observer();
+        window->clear_minimize_observer();
     }
     window_relationship_.reset();
     // Nothing may be reported from here on. A docked observer is one of the
@@ -271,10 +272,18 @@ Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     raw->bind_title_observer(
         [this, raw] { notify_window_change(WindowChange::TitleChanged, *raw); },
         window_relationship_);
+    // Minimizing is news this Desktop must ACT on rather than merely pass
+    // along: the window that just went away may have been the active one.
+    raw->bind_minimize_observer([this, raw] { window_minimize_changed(*raw); },
+                                window_relationship_);
     // A drag may not carry the title bar out of the content area: under the
     // menu bar or past the footer there is nothing left to grab it by.
     raw->set_move_bounds(content_area());
-    activate(raw);
+    // A window that arrives already minimized stays minimized. Activating it
+    // would restore it (see activate), which turns "open this in the
+    // background" into "open this in front" — and an application that hands
+    // us a hidden window has said which of the two it meant.
+    if (shown(*raw)) activate(raw);
     // Last, so an observer is handed a window that is completely attached —
     // see WindowChange::Added for why the Activated above precedes it.
     notify_window_change(WindowChange::Added, *raw);
@@ -336,6 +345,11 @@ Window* Desktop::present_modal(WindowHandle handle, ui::Application& app) {
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
     place_unpositioned_window(*window, content_area());
+    // Modality is this layer's concept, not Window's. A modal window with a
+    // minimize control offers the reader a way to hide the only window that
+    // is accepting input — and then refuses them the bar they would have to
+    // click to get it back.
+    window->set_minimizable(false);
     attach_window(std::move(handle.window));
     app.push_modal(*window);
     app.set_focus(handle.initial_focus);
@@ -357,6 +371,7 @@ void Desktop::exec_modal(ui::Application& app, WindowHandle handle) {
     CKV_ASSERT(window != nullptr);
     const std::weak_ptr<void> window_liveness = window->lifetime_token();
     place_unpositioned_window(*window, content_area());
+    window->set_minimizable(false);  // modal: see present_modal
     attach_window(std::move(handle.window));
     const ui::Application::ModalScopeId modal_scope = app.push_modal(*window);
     app.set_focus(handle.initial_focus);
@@ -390,6 +405,7 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     window->clear_desktop_zoom_target();
     window->clear_gesture_observer();
     window->clear_title_observer();
+    window->clear_minimize_observer();
     if (active_ == window) {
         active_ = nullptr;
         window->set_active(false);
@@ -398,19 +414,7 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     CKV_ASSERT(detached != nullptr);  // was in windows_, so it must have been a child
     request_layer_recompose();
 
-    if (active_ == nullptr) {
-        // The new topmost WINDOW, not necessarily children().back() —
-        // a popup may currently be topmost, and children() holds both.
-        for (auto rit = children().rbegin(); rit != children().rend(); ++rit) {
-            ui::View* candidate = rit->get();
-            auto found = std::find_if(windows_.begin(), windows_.end(),
-                                       [candidate](Window* w) { return static_cast<ui::View*>(w) == candidate; });
-            if (found != windows_.end()) {
-                activate(*found);
-                break;
-            }
-        }
-    }
+    if (active_ == nullptr) activate_topmost_shown();
     // After the successor is active, so an observer reading active_window()
     // from here never sees the gap between the two. `window` is still alive:
     // `detached` owns it until this function hands that ownership on.
@@ -431,7 +435,8 @@ Desktop::Snapshot Desktop::snapshot() const {
                                                   window->restored_bounds_,
                                                   window->grow_policy_,
                                                   window == active_,
-                                                  window->zoomed_});
+                                                  window->zoomed_,
+                                                  window->minimized_});
     }
     return snapshot;
 }
@@ -459,8 +464,17 @@ void Desktop::restore(const Snapshot& snapshot) {
         window.restored_bounds_ = entry.snapshot->restored_bounds;
         window.grow_policy_ = entry.snapshot->grow_policy;
         window.zoomed_ = entry.snapshot->zoomed;
+        // Through the setter, not the member: hiding a window is what makes
+        // it stop painting and stop answering the pointer, and a restored
+        // layout in which a parked window is marked minimized but still on
+        // screen is not the layout that was recorded.
+        window.set_minimized(entry.snapshot->minimized);
         window.set_bounds(entry.snapshot->bounds);
-        if (entry.snapshot->active) active_ = &window;
+        // The one other place activation is assigned, and it keeps the same
+        // invariant activate() does: never at a window that is not on the
+        // desktop. A snapshot this Desktop took cannot claim both at once;
+        // one assembled by hand can, and the visible half wins.
+        if (entry.snapshot->active && shown(window)) active_ = &window;
     }
 
     for (const LiveEntry& entry : live) raise_layer_to_front(entry.window);
@@ -508,9 +522,48 @@ void Desktop::window_gesture_changed(bool active) {
         for (Window* window : windows_) window->resume_rasters();
 }
 
+bool Desktop::shown(const Window& window) noexcept { return window.visible(); }
+
+void Desktop::activate_topmost_shown() {
+    // The topmost WINDOW, not necessarily children().back() — a popup may
+    // currently be topmost, and children() holds both. Hidden windows are
+    // passed over: handing activation to one would leave the reader with a
+    // desktop whose active window is nowhere on it.
+    for (auto rit = children().rbegin(); rit != children().rend(); ++rit) {
+        ui::View* candidate = rit->get();
+        auto found = std::find_if(windows_.begin(), windows_.end(), [candidate](Window* w) {
+            return static_cast<ui::View*>(w) == candidate;
+        });
+        if (found == windows_.end() || !shown(**found)) continue;
+        activate(*found);
+        return;
+    }
+}
+
+void Desktop::window_minimize_changed(Window& window) {
+    if (window.minimized() && active_ == &window) {
+        // The window the reader was working in has left the desktop. Some
+        // other window has to have their attention, or the next keystroke
+        // has nowhere to go; a desktop whose windows are ALL minimized
+        // legitimately has no active window at all, which is the one case
+        // this loop finds nothing for.
+        active_ = nullptr;
+        window.set_active(false);
+        activate_topmost_shown();
+    }
+    // Last, with activation already settled — see WindowChange::Minimized.
+    notify_window_change(window.minimized() ? WindowChange::Minimized : WindowChange::Restored,
+                         window);
+}
+
 void Desktop::activate(Window* window) {
     CKV_ASSERT(std::find(windows_.begin(), windows_.end(), window) != windows_.end());
     if (window == active_) return;
+    // Naming a window is asking for it: a hidden one comes back rather than
+    // becoming an active window the reader cannot see. This is the only
+    // place that rule lives, so select_by_number, a click on a switcher-bar
+    // entry and an application's own activate() all get it right.
+    if (window->minimized()) window->set_minimized(false);
     if (active_ != nullptr) active_->set_active(false);
     raise_layer_to_front(window);
     reraise_popups();  // keep every open popup above the window that just moved to front
@@ -548,21 +601,28 @@ void Desktop::reraise_popups() {
     for (ui::View* popup : popups_) raise_layer_to_front(popup);
 }
 
-void Desktop::activate_next() {
+void Desktop::activate_step(bool forward) {
     if (windows_.size() < 2 || active_ == nullptr) return;
     auto it = std::find(windows_.begin(), windows_.end(), active_);
     CKV_ASSERT(it != windows_.end());
-    const std::size_t i = static_cast<std::size_t>(it - windows_.begin());
-    activate(windows_[(i + 1) % windows_.size()]);
+    const std::size_t count = windows_.size();
+    const std::size_t stride = forward ? 1 : count - 1;  // one place back, without a signed modulo
+    std::size_t i = static_cast<std::size_t>(it - windows_.begin());
+    // At most one full lap, and never back to where it started: a hidden
+    // window is stepped over, and a desktop where every OTHER window is
+    // hidden leaves activation exactly where it is rather than re-activating
+    // the window it never left.
+    for (std::size_t step = 0; step + 1 < count; ++step) {
+        i = (i + stride) % count;
+        if (!shown(*windows_[i])) continue;
+        activate(windows_[i]);
+        return;
+    }
 }
 
-void Desktop::activate_previous() {
-    if (windows_.size() < 2 || active_ == nullptr) return;
-    auto it = std::find(windows_.begin(), windows_.end(), active_);
-    CKV_ASSERT(it != windows_.end());
-    const std::size_t i = static_cast<std::size_t>(it - windows_.begin());
-    activate(windows_[(i + windows_.size() - 1) % windows_.size()]);
-}
+void Desktop::activate_next() { activate_step(true); }
+
+void Desktop::activate_previous() { activate_step(false); }
 
 void Desktop::select_by_number(int n) {
     if (n < 1 || static_cast<std::size_t>(n) > windows_.size()) return;
@@ -667,6 +727,12 @@ void Desktop::on_resized() {
     // regardless of grow policy: the policy above only decides
     // whether/how a window grows, this still enforces the
     // never-unreachable floor unconditionally.
+    //
+    // Minimized windows included, and deliberately: a hidden window whose
+    // geometry was frozen would come back off the edge of a desktop that
+    // shrank while it was away, which is the very unreachability this pass
+    // exists to prevent. Hiding withholds a window's presentation, not its
+    // owner's sizing policy.
     for (const LiveWindow& handle : windows) {
         if (desktop_liveness.expired()) return;
         if (!still_owned(handle)) continue;
@@ -684,15 +750,29 @@ std::vector<Desktop::LiveWindow> Desktop::live_windows() const {
     return handles;
 }
 
+std::vector<Desktop::LiveWindow> Desktop::live_shown_windows() const {
+    std::vector<LiveWindow> handles;
+    handles.reserve(windows_.size());
+    for (Window* window : windows_)
+        if (shown(*window)) handles.push_back(LiveWindow{window, window->lifetime_token()});
+    return handles;
+}
+
 bool Desktop::still_owned(const LiveWindow& handle) const {
     if (handle.liveness.expired()) return false;
     return std::find(windows_.begin(), windows_.end(), handle.window) != windows_.end();
 }
 
 void Desktop::tile_in_bands(BandAxis axis) {
-    if (windows_.empty()) return;
     const std::weak_ptr<void> desktop_liveness = lifetime_token();
-    const std::vector<LiveWindow> handles = live_windows();
+    // The windows on the desktop, and the count the area is divided by. Both
+    // from the same list: dividing by every window while handing bands only
+    // to the shown ones would leave a hidden window's share of the desktop
+    // showing through, which is the one thing every tiling promises not to
+    // do — and it would cost the arrangement its filled_tile_fractions()
+    // verdict along with the shadow suppression that follows from it.
+    const std::vector<LiveWindow> handles = live_shown_windows();
+    if (handles.empty()) return;
     const Rect area = content_area();
     const int n = static_cast<int>(handles.size());
     // One axis is divided into bands; the other is kept whole, which is what
@@ -736,9 +816,12 @@ void Desktop::tile_horizontally() { tile_in_bands(BandAxis::Columns); }
 void Desktop::tile_vertically() { tile_in_bands(BandAxis::Rows); }
 
 void Desktop::tile_grid() {
-    if (windows_.empty()) return;
     const std::weak_ptr<void> desktop_liveness = lifetime_token();
-    const std::vector<LiveWindow> handles = live_windows();
+    // Shown windows only, and the grid's own shape derived from their count
+    // — see tile_in_bands. Four windows with one minimized is a two-window
+    // grid, not a four-window grid with a hole in it.
+    const std::vector<LiveWindow> handles = live_shown_windows();
+    if (handles.empty()) return;
     const Rect area = content_area();
     const int n = static_cast<int>(handles.size());
     // ceil(sqrt(n)) by integer search rather than through std::sqrt: a
@@ -778,9 +861,13 @@ void Desktop::tile_grid() {
 }
 
 void Desktop::cascade() {
-    if (windows_.empty()) return;
     const std::weak_ptr<void> desktop_liveness = lifetime_token();
-    const std::vector<LiveWindow> handles = live_windows();
+    // A cascade is an arrangement like any other: a hidden window gets no
+    // step in the diagonal, and — since the cascade order becomes z-order —
+    // no place in the restacking either. Offsetting one nobody can see would
+    // leave a gap in the run of title bars the whole arrangement is for.
+    const std::vector<LiveWindow> handles = live_shown_windows();
+    if (handles.empty()) return;
     const Rect area = content_area();
     const int width = std::max(10, area.width * 2 / 3);
     const int height = std::max(4, area.height * 2 / 3);
@@ -801,7 +888,12 @@ void Desktop::cascade() {
 }
 
 bool Desktop::tiling_participant(const Window& window) const {
-    if (!window.visible()) return false;
+    // Not on the desktop, so not in the arrangement: a window minimized to a
+    // switcher bar, or one its application hid, has no band to be measured
+    // and no share to be restored. The SAME test the tile commands ask
+    // before handing out a band, so the measurement and the arrangement
+    // cannot come to different conclusions about who is in it.
+    if (!shown(window)) return false;
     // A fixed-size window is an alert, an About box, a message: it sits ON
     // the arrangement, never in it, and it has no band to be resized into.
     if (!window.resizable()) return false;

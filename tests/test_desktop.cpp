@@ -2460,3 +2460,572 @@ CK_TEST(a_window_that_widening_cannot_shorten_opens_at_its_own_width_anyway) {
     CK_CHECK(placed->bounds().width == 30 + 2);
     CK_CHECK(placed->bounds().height == 10);
 }
+
+// --- Minimize (U4-i) ------------------------------------------------------
+//
+// A hidden window is still one of this desktop's windows — that is how a
+// reader gets it back — while everything that arranges or cycles windows
+// steps over it. Every check below is on the numbers: which rectangle each
+// remaining window got, and how many of them the area was divided by.
+
+namespace {
+
+// Where `window` sits in z-order among the desktop's children: 0 is the
+// bottom of the stack. Minimizing must not move a window in it, which is a
+// claim about a number, not about a rectangle.
+int z_index(const Desktop& desktop, const Window* window) {
+    int index = 0;
+    for (const auto& child : desktop.children()) {
+        if (child.get() == static_cast<const ui::View*>(window)) return index;
+        ++index;
+    }
+    return -1;
+}
+
+}  // namespace
+
+CK_TEST(minimizing_a_window_hides_it_and_leaves_it_listed) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    a->set_minimized(true);
+    CK_CHECK(a->minimized());
+    CK_CHECK(!a->visible());
+    CK_CHECK(b->visible());
+    // Still listed, still in insertion order: a switcher bar has something
+    // to draw, and something to click.
+    CK_CHECK(desktop.windows().size() == 2);
+    CK_CHECK(desktop.windows()[0] == a);
+    CK_CHECK(desktop.windows()[1] == b);
+}
+
+CK_TEST(a_minimized_window_gets_no_band_and_the_rest_divide_the_desktop_exactly) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 90, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    b->set_bounds(Rect{5, 5, 20, 8});
+    b->set_minimized(true);
+    desktop.tile();
+    // Two windows, not three: 90 / 2, not 90 / 3 with a 30-column gap where
+    // the hidden window's band would have been.
+    CK_CHECK(a->bounds() == (Rect{0, 0, 45, 24}));
+    CK_CHECK(c->bounds() == (Rect{45, 0, 45, 24}));
+    CK_CHECK(a->bounds().width + c->bounds().width == 90);
+    CK_CHECK(b->bounds() == (Rect{5, 5, 20, 8}));  // untouched by the arrangement
+}
+
+CK_TEST(tile_vertically_divides_by_the_shown_windows_only) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    c->set_minimized(true);
+    desktop.tile_vertically();
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 12}));
+    CK_CHECK(b->bounds() == (Rect{0, 12, 80, 12}));
+    CK_CHECK(a->bounds().height + b->bounds().height == 24);
+}
+
+CK_TEST(tile_horizontally_divides_by_the_shown_windows_only) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    a->set_minimized(true);
+    desktop.tile_horizontally();
+    CK_CHECK(b->bounds() == (Rect{0, 0, 40, 24}));
+    CK_CHECK(c->bounds() == (Rect{40, 0, 40, 24}));
+}
+
+CK_TEST(tile_grid_takes_its_shape_from_the_shown_windows) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    Window* d = desktop.add_window(make_window(f, "D"));
+    Window* e = desktop.add_window(make_window(f, "E"));
+    c->set_bounds(Rect{1, 1, 12, 6});
+    c->set_minimized(true);
+    desktop.tile_grid();
+    // Four shown windows: two columns and two full rows, not five windows'
+    // three columns with a hole in the last row.
+    CK_CHECK(a->bounds() == (Rect{0, 0, 40, 12}));
+    CK_CHECK(b->bounds() == (Rect{40, 0, 40, 12}));
+    CK_CHECK(d->bounds() == (Rect{0, 12, 40, 12}));
+    CK_CHECK(e->bounds() == (Rect{40, 12, 40, 12}));
+    CK_CHECK(c->bounds() == (Rect{1, 1, 12, 6}));
+}
+
+CK_TEST(cascade_gives_a_minimized_window_no_step_in_the_diagonal) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    b->set_bounds(Rect{7, 3, 20, 8});
+    b->set_minimized(true);
+    desktop.cascade();
+    // The second SHOWN window takes the second step, so the run of title
+    // bars has no gap in it: two cells right and one down per step.
+    CK_CHECK(a->bounds() == (Rect{0, 0, 53, 16}));
+    CK_CHECK(c->bounds() == (Rect{2, 1, 53, 16}));
+    CK_CHECK(b->bounds() == (Rect{7, 3, 20, 8}));
+}
+
+CK_TEST(the_window_cycle_steps_over_a_minimized_window) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    Window* d = desktop.add_window(make_window(f, "D"));
+    c->set_minimized(true);
+    desktop.activate(a);
+    desktop.activate_next();
+    CK_CHECK(desktop.active_window() == b);
+    desktop.activate_next();  // over c
+    CK_CHECK(desktop.active_window() == d);
+    CK_CHECK(c->minimized());  // stepping over is not restoring
+    desktop.activate_next();
+    CK_CHECK(desktop.active_window() == a);
+    desktop.activate_previous();  // over c again, the other way
+    CK_CHECK(desktop.active_window() == d);
+    desktop.activate_previous();
+    CK_CHECK(desktop.active_window() == b);
+}
+
+CK_TEST(cycling_where_every_other_window_is_minimized_leaves_activation_alone) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    b->set_minimized(true);
+    c->set_minimized(true);
+    CK_CHECK(desktop.active_window() == a);
+    desktop.activate_next();
+    CK_CHECK(desktop.active_window() == a);
+    desktop.activate_previous();
+    CK_CHECK(desktop.active_window() == a);
+    CK_CHECK(b->minimized() && c->minimized());
+}
+
+CK_TEST(filled_tile_fractions_does_not_count_a_minimized_window) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    c->set_bounds(Rect{3, 3, 20, 8});
+    c->set_minimized(true);
+    desktop.tile();
+
+    const auto fractions = desktop.filled_tile_fractions();
+    CK_CHECK(fractions.size() == 2);  // not three, and not empty either
+    CK_CHECK(fractions[0].window == a);
+    CK_CHECK(fractions[1].window == b);
+    CK_CHECK(about_equal(fractions[0].x, 0.0));
+    CK_CHECK(about_equal(fractions[0].width, 0.5));
+    CK_CHECK(about_equal(fractions[1].x, 0.5));
+    CK_CHECK(about_equal(fractions[1].width, 0.5));
+
+    // And minimizing one of a filled pair uncovers half the desktop, which
+    // is a gap like any other: the arrangement stops being a tiling.
+    b->set_minimized(true);
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+}
+
+CK_TEST(minimizing_the_active_window_hands_activation_to_the_topmost_shown_one) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    CK_CHECK(desktop.active_window() == c);
+    c->set_minimized(true);
+    CK_CHECK(desktop.active_window() == b);
+    CK_CHECK(b->active());
+    CK_CHECK(!c->active());
+    CK_CHECK(c->minimized());
+    // The successor rose above it, which is activation's own doing and not
+    // a stack slot the hiding forgot: b was raised, c stayed where it was.
+    CK_CHECK(z_index(desktop, a) == 0);
+    CK_CHECK(z_index(desktop, c) == 1);
+    CK_CHECK(z_index(desktop, b) == 2);
+    // Restoring leaves it there rather than bringing it forward: coming back
+    // is not the same request as being asked for.
+    c->set_minimized(false);
+    CK_CHECK(z_index(desktop, c) == 1);
+    CK_CHECK(desktop.active_window() == b);
+}
+
+CK_TEST(closing_the_active_window_skips_a_minimized_successor) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    b->set_minimized(true);
+    CK_CHECK(desktop.active_window() == c);
+    desktop.remove_window(c);
+    // b is topmost of what remains and hidden; the successor is a.
+    CK_CHECK(desktop.active_window() == a);
+    CK_CHECK(a->active());
+    CK_CHECK(b->minimized());
+}
+
+CK_TEST(a_desktop_with_every_window_minimized_is_still_a_working_desktop) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    a->set_bounds(Rect{1, 1, 20, 8});
+    b->set_bounds(Rect{30, 2, 20, 8});
+    b->set_minimized(true);
+    a->set_minimized(true);
+
+    // No activation pointing at something hidden — none at all, which is
+    // the honest answer when there is nothing on the desktop to point at.
+    CK_CHECK(desktop.active_window() == nullptr);
+    CK_CHECK(!a->active());
+    CK_CHECK(!b->active());
+    CK_CHECK(desktop.windows().size() == 2);
+
+    desktop.tile();
+    desktop.tile_grid();
+    desktop.cascade();
+    desktop.activate_next();
+    desktop.activate_previous();
+    CK_CHECK(a->bounds() == (Rect{1, 1, 20, 8}));
+    CK_CHECK(b->bounds() == (Rect{30, 2, 20, 8}));
+    CK_CHECK(desktop.filled_tile_fractions().empty());
+    CK_CHECK(desktop.active_window() == nullptr);
+}
+
+CK_TEST(naming_a_minimized_window_by_number_brings_it_back_and_activates_it) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    a->set_minimized(true);
+    CK_CHECK(desktop.active_window() == b);
+    // The numbering counts every listed window, hidden ones included, so
+    // Alt+1 still means the entry a reader is looking at.
+    desktop.select_by_number(1);
+    CK_CHECK(!a->minimized());
+    CK_CHECK(a->visible());
+    CK_CHECK(desktop.active_window() == a);
+    CK_CHECK(z_index(desktop, a) == 1);  // activated, so raised
+}
+
+CK_TEST(restoring_a_window_returns_its_bounds_z_order_and_activation_unchanged) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    Window* c = desktop.add_window(make_window(f, "C"));
+    b->set_bounds(Rect{12, 6, 30, 9});
+    CK_CHECK(z_index(desktop, b) == 1);
+
+    b->set_minimized(true);  // an inactive window: nothing else moves
+    CK_CHECK(desktop.active_window() == c);
+    CK_CHECK(z_index(desktop, b) == 1);
+    b->set_minimized(false);
+    CK_CHECK(b->bounds() == (Rect{12, 6, 30, 9}));
+    CK_CHECK(z_index(desktop, b) == 1);
+    CK_CHECK(z_index(desktop, a) == 0);
+    CK_CHECK(z_index(desktop, c) == 2);
+    CK_CHECK(desktop.active_window() == c);  // restoring is not activating
+}
+
+CK_TEST(a_window_minimized_while_maximized_comes_back_maximized) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    a->set_bounds(Rect{10, 4, 30, 10});
+    a->toggle_zoom(desktop.content_area());
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+
+    a->set_minimized(true);
+    a->set_minimized(false);
+    CK_CHECK(a->zoomed());
+    CK_CHECK(a->maximized());
+    CK_CHECK(a->bounds() == (Rect{0, 0, 80, 24}));
+    // And the geometry underneath it survived too: un-zooming still finds
+    // the rectangle the window had before it was ever maximized.
+    a->toggle_zoom(desktop.content_area());
+    CK_CHECK(a->bounds() == (Rect{10, 4, 30, 10}));
+}
+
+CK_TEST(a_hidden_maximized_window_keeps_filling_a_desktop_that_resized_while_it_was_away) {
+    // Hiding withholds a window's presentation, not its owner's sizing
+    // policy: a frozen rectangle is how a window comes back off the edge of
+    // a desktop that shrank while it was parked.
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    b->set_bounds(Rect{60, 18, 18, 6});
+    a->toggle_zoom(desktop.content_area());
+    a->set_minimized(true);
+    b->set_minimized(true);
+
+    desktop.set_bounds(Rect{0, 0, 50, 16});
+    a->set_minimized(false);
+    b->set_minimized(false);
+    CK_CHECK(a->bounds() == (Rect{0, 0, 50, 16}));   // still filling, at the new size
+    CK_CHECK(b->bounds().x + b->bounds().width <= 50);
+    CK_CHECK(b->bounds().y + b->bounds().height <= 16);
+}
+
+CK_TEST(the_desktop_reports_minimizing_and_restoring_to_whoever_lists_windows) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    std::vector<Desktop::WindowChange> heard;
+    std::vector<Window*> subjects;
+    desktop.subscribe_window_change([&](Desktop::WindowChange change, Window& window) {
+        heard.push_back(change);
+        subjects.push_back(&window);
+    });
+
+    a->set_minimized(true);  // inactive: nothing else changes
+    CK_CHECK(heard.size() == 1);
+    CK_CHECK(heard[0] == Desktop::WindowChange::Minimized);
+    CK_CHECK(subjects[0] == a);
+
+    heard.clear();
+    subjects.clear();
+    a->set_minimized(false);
+    CK_CHECK(heard.size() == 1);
+    CK_CHECK(heard[0] == Desktop::WindowChange::Restored);
+    CK_CHECK(subjects[0] == a);
+
+    // The active one: the successor's Activated arrives first, so an
+    // observer reading active_window() from the Minimized reads the answer.
+    heard.clear();
+    subjects.clear();
+    b->set_minimized(true);
+    CK_CHECK(heard.size() == 2);
+    CK_CHECK(heard[0] == Desktop::WindowChange::Activated);
+    CK_CHECK(subjects[0] == a);
+    CK_CHECK(heard[1] == Desktop::WindowChange::Minimized);
+    CK_CHECK(subjects[1] == b);
+
+    // Asked for by name: back on the desktop first, in front second.
+    heard.clear();
+    subjects.clear();
+    desktop.activate(b);
+    CK_CHECK(heard.size() == 2);
+    CK_CHECK(heard[0] == Desktop::WindowChange::Restored);
+    CK_CHECK(heard[1] == Desktop::WindowChange::Activated);
+    CK_CHECK(subjects[0] == b);
+    CK_CHECK(subjects[1] == b);
+}
+
+CK_TEST(snapshot_and_restore_carry_the_minimized_state) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    Window* b = desktop.add_window(make_window(f, "B"));
+    a->set_bounds(Rect{2, 2, 24, 9});
+    b->set_bounds(Rect{30, 5, 24, 9});
+    b->set_minimized(true);
+    const Desktop::Snapshot parked = desktop.snapshot();
+
+    b->set_minimized(false);
+    b->set_bounds(Rect{40, 10, 20, 6});
+    desktop.restore(parked);
+    CK_CHECK(b->minimized());
+    CK_CHECK(!b->visible());
+    CK_CHECK(b->bounds() == (Rect{30, 5, 24, 9}));
+    CK_CHECK(a->bounds() == (Rect{2, 2, 24, 9}));
+    CK_CHECK(desktop.active_window() == a);
+}
+
+CK_TEST(a_window_added_already_minimized_neither_shows_nor_takes_activation) {
+    Fixture f;
+    Desktop desktop(Rect{0, 0, 80, 24});
+    Window* a = desktop.add_window(make_window(f, "A"));
+    auto parked = make_window(f, "B");
+    parked->set_minimized(true);
+    Window* b = desktop.add_window(std::move(parked));
+    CK_CHECK(desktop.active_window() == a);
+    CK_CHECK(a->active());
+    CK_CHECK(b->minimized());
+    CK_CHECK(desktop.windows().size() == 2);  // listed all the same
+}
+
+CK_TEST(a_modal_window_has_no_minimize_control_to_hide_itself_with) {
+    AttachedFixture af;
+    Window* plain = af.desktop->add_window(make_window(af.f, "Plain"));
+    CK_CHECK(plain->minimizable());  // an ordinary window keeps it
+
+    auto owned = make_window(af.f, "Modal");
+    owned->set_bounds(Rect{10, 4, 40, 10});
+    Window* modal = owned.get();
+    af.desktop->present_modal(WindowHandle{std::move(owned), nullptr}, af.app);
+    // Hiding the one window that is accepting input would leave an
+    // application answering nothing, with the way back on a bar the modal
+    // scope will not let the reader click.
+    CK_CHECK(!modal->minimizable());
+    af.desktop->remove_window(modal);
+}
+
+CK_TEST(clicking_the_minimize_control_hides_the_window_it_is_on) {
+    // End to end: HeadlessTerminal input enters Application::step(), hit
+    // testing selects the Window, and the control acts on release.
+    AttachedFixture af;
+    auto owned = make_window(af.f, "Park");
+    owned->set_bounds(Rect{10, 5, 24, 10});
+    Window* window = af.desktop->add_window(std::move(owned));
+    af.app.step(0);
+
+    // The minimize control spans local columns width-8..width-6, its glyph
+    // at width-7. For a 24-wide window at x=10 that is absolute column 27 —
+    // three cells left of the maximize control's own glyph at 30.
+    const ckv::Point on_control{27, 5};
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, on_control,
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(!window->minimized());  // a press is a question; the release answers it
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, on_control,
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(window->minimized());
+    CK_CHECK(!window->visible());
+    CK_CHECK(window->bounds() == (Rect{10, 5, 24, 10}));  // nothing moved
+    CK_CHECK(af.desktop->windows().size() == 1);
+}
+
+CK_TEST(a_window_too_narrow_for_a_third_control_does_not_answer_where_it_would_be) {
+    // Twenty-one columns is one short of leaving the window four cells of
+    // its own name beside three controls, so the control is neither drawn
+    // nor hit-tested there: pressing where it would have been is title bar,
+    // and such a window keeps exactly the frame it had before.
+    AttachedFixture af;
+    auto owned = make_window(af.f, "Narrow");
+    owned->set_bounds(Rect{10, 5, 21, 10});
+    Window* window = af.desktop->add_window(std::move(owned));
+    af.app.step(0);
+
+    const ckv::Point where_it_would_be{10 + 14, 5};  // width-7 for a 21-wide window
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                         where_it_would_be, std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left,
+                                         where_it_would_be, std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(!window->minimized());
+    CK_CHECK(window->bounds() == (Rect{10, 5, 21, 10}));
+
+    // One column wider, and the control is there.
+    window->set_bounds(Rect{10, 5, 22, 10});
+    // Pumped, not asserted: step() reports whether an event, timer or posted
+    // work ran, and a bare set_bounds is none of those however much it
+    // repaints.
+    af.app.step(0);
+    const ckv::Point on_control{10 + 15, 5};  // width-7 for a 22-wide window
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, on_control,
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    af.term.inject_event(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, on_control,
+                                         std::nullopt, ckv::Modifier::None});
+    CK_CHECK(af.app.step(0));
+    CK_CHECK(window->minimized());
+}
+
+CK_TEST(the_minimize_control_appears_exactly_where_it_still_leaves_the_window_its_name) {
+    // The width gate and the title budget are ONE number, checked here
+    // without a picture: the control appears at the first width whose
+    // budget still leaves four columns of title, so there is no band where
+    // the frame says "room for a third control" while the caption says
+    // "no room for me at all". Twenty-one columns is one short of that, and
+    // such a window keeps precisely the frame it had before this existed.
+    Fixture f;
+    const auto title_row = [&f](std::string title, int width, bool resizable, bool minimizable) {
+        auto window = std::make_unique<Window>(std::move(title));
+        window->set_context(f.ctx());
+        window->set_resizable(resizable);
+        window->set_minimizable(minimizable);
+        window->set_bounds(Rect{0, 0, width, 5});
+        Surface surface(ckv::Size{width, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+        Painter painter(surface, Rect{0, 0, width, 5});
+        window->draw(painter);
+        std::vector<std::string> row;
+        row.reserve(static_cast<std::size_t>(width));
+        for (int x = 0; x < width; ++x) row.emplace_back(surface.at(ckv::Point{x, 0}).grapheme());
+        return row;
+    };
+    const auto carries_a_minimize_control = [](const std::vector<std::string>& row) {
+        for (const std::string& cell : row)
+            if (cell == "_") return true;
+        return false;
+    };
+
+    // 21 columns: no third control, the maximize control where it has always
+    // been (width-5..width-3), and the old title budget — 21 - 10 = 11
+    // columns, so "Back" centres at (21 - 4) / 2 = 8.
+    const std::vector<std::string> narrow = title_row("Back", 21, true, true);
+    CK_CHECK(!carries_a_minimize_control(narrow));
+    CK_CHECK(narrow[16] == "[");
+    CK_CHECK(narrow[17] == "\xE2\x86\x91");  // U+2191 UPWARDS ARROW
+    CK_CHECK(narrow[18] == "]");
+    CK_CHECK(narrow[7] == " ");
+    CK_CHECK(narrow[8] == "B");
+    CK_CHECK(narrow[11] == "k");
+    CK_CHECK(narrow[12] == " ");
+
+    // 22 columns: the control at width-8..width-6, abutting the maximize
+    // control, and the title still four columns wide — 22 - 2 * 9 — centred
+    // at (22 - 4) / 2 = 9.
+    const std::vector<std::string> gate = title_row("Back", 22, true, true);
+    CK_CHECK(gate[14] == "[");
+    CK_CHECK(gate[15] == "_");
+    CK_CHECK(gate[16] == "]");
+    CK_CHECK(gate[17] == "[");
+    CK_CHECK(gate[18] == "\xE2\x86\x91");
+    CK_CHECK(gate[19] == "]");
+    CK_CHECK(gate[8] == " ");
+    CK_CHECK(gate[9] == "B");
+    CK_CHECK(gate[12] == "k");
+    CK_CHECK(gate[13] == " ");
+
+    // A title that fills its whole budget stops one cell short of the
+    // control, padding included: nine cells a side, not eight, is what
+    // keeps that trailing space off the opening bracket.
+    const std::vector<std::string> elided = title_row("Workspace Manager", 22, true, true);
+    CK_CHECK(elided[9] == "W");
+    CK_CHECK(elided[13] == " ");
+    CK_CHECK(elided[14] == "[");
+    CK_CHECK(elided[15] == "_");
+    CK_CHECK(elided[16] == "]");
+
+    // A wide window keeps more of its name than the gate leaves: 40 - 18.
+    const std::vector<std::string> wide = title_row("Back", 40, true, true);
+    CK_CHECK(wide[32] == "[");
+    CK_CHECK(wide[33] == "_");
+    CK_CHECK(wide[34] == "]");
+    CK_CHECK(wide[17] == " ");
+    CK_CHECK(wide[18] == "B");
+    CK_CHECK(wide[21] == "k");
+
+    // Neither a fixed-size window nor one told not to offer it draws the
+    // control at any width — and turning it off restores the two-control
+    // budget, so the title comes back to (40 - 4) / 2 = 18 either way.
+    const std::vector<std::string> fixed = title_row("Back", 40, false, true);
+    CK_CHECK(!carries_a_minimize_control(fixed));
+    const std::vector<std::string> opted_out = title_row("Back", 40, true, false);
+    CK_CHECK(!carries_a_minimize_control(opted_out));
+    CK_CHECK(opted_out[35] == "[");
+    CK_CHECK(opted_out[36] == "\xE2\x86\x91");
+    CK_CHECK(opted_out[37] == "]");
+    CK_CHECK(opted_out[18] == "B");
+}

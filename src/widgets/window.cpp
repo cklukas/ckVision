@@ -302,6 +302,35 @@ void Window::toggle_zoom(Rect available) {
     }
 }
 
+void Window::set_minimized(bool minimized) {
+    if (minimized == minimized_) return;
+    minimized_ = minimized;
+    // A window that has left the desktop cannot still be being dragged across
+    // it — the same reason set_active() ends the drag when attention moves
+    // away, and the release would land wherever this window no longer is.
+    end_drag();
+    // Deliberately after the state: an observer runs with a window whose
+    // hiddenness and visibility already agree, never between the two.
+    set_visible(!minimized_);
+    if (minimize_observer_ && !minimize_observer_lifetime_.expired()) minimize_observer_();
+}
+
+void Window::set_minimizable(bool minimizable) noexcept {
+    if (minimizable_ == minimizable) return;
+    minimizable_ = minimizable;
+    invalidate();  // one control fewer, or one more, on the top border
+}
+
+void Window::bind_minimize_observer(std::function<void()> observer, std::weak_ptr<void> lifetime) {
+    minimize_observer_ = std::move(observer);
+    minimize_observer_lifetime_ = std::move(lifetime);
+}
+
+void Window::clear_minimize_observer() noexcept {
+    minimize_observer_ = nullptr;
+    minimize_observer_lifetime_.reset();
+}
+
 void Window::fill(Rect available) noexcept { set_bounds(clamp_size(available)); }
 
 void Window::refresh_zoom_area(Rect available) noexcept {
@@ -393,11 +422,15 @@ Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {
     // on the top border for visual symmetry, even though nothing sits
     // in the bottom-left corner). Top's margins instead track whichever
     // controls draw() actually draws (point_in_close_control/
-    // point_in_zoom_control's own gates), so a Start/End overlay never
-    // sits under a control that happens not to be there at this width.
+    // point_in_zoom_control/draws_minimize_control's own gates), so a
+    // Start/End overlay never sits under a control that happens not to be
+    // there at this width.
     const int left_margin = slot.edge == Edge::Top ? (b.width > 6 ? 5 : 1) : 2;
-    const int right_margin =
-        slot.edge == Edge::Top ? (resizable_ && b.width > 8 ? 4 : 1) : 2;
+    // The controls at the right end are one group: a drawn minimize control
+    // extends it leftwards by exactly its own three cells.
+    const int top_right_margin =
+        draws_minimize_control() ? 7 : (resizable_ && b.width > 8 ? 4 : 1);
+    const int right_margin = slot.edge == Edge::Top ? top_right_margin : 2;
     const int y = slot.edge == Edge::Top ? 0 : std::max(0, b.height - 1);
 
     const int preferred = view.horizontal_size_hint().preferred;
@@ -494,6 +527,32 @@ bool Window::point_in_zoom_control(Point local) const noexcept {
     return local.y == 0 && in_range(local.x, w - 5, w - 2);  // "[]" leaves one frame cell before the corner
 }
 
+bool Window::draws_minimize_control() const noexcept {
+    // Three cells, immediately left of the zoom control's own three: the
+    // right-hand group runs from width-8 to width-3, and the title is
+    // budgeted and centred against nine cells a side (see draw()).
+    //
+    // This gate IS that budget, not a second number beside it: 22 is the
+    // smallest width for which `width - 2 * 9 >= 4`, so wherever the
+    // control is drawn the title still has four columns, and there is no
+    // band where the frame claims room for a third control while the
+    // caption has none at all. Below 22 the centred title's own padding
+    // lands on the control's cells — a fourteen-column window centres it
+    // exactly on the brackets — and a control that arrives by eating the
+    // window's name is not worth its cells. Narrow windows therefore keep
+    // precisely the frame they had before this control existed.
+    //
+    // A fixed-size window keeps the close control alone, exactly as it does
+    // for zoom: an alert has nothing to minimize to.
+    return minimizable_ && resizable_ && bounds().width >= 22;
+}
+
+bool Window::point_in_minimize_control(Point local) const noexcept {
+    if (!draws_minimize_control()) return false;
+    const int w = bounds().width;
+    return local.y == 0 && in_range(local.x, w - 8, w - 5);  // "[_]" abutting the zoom control
+}
+
 int Window::resize_grip_width() const noexcept {
     if (!resizable_) return 0;
     // Two cells where there is room for two of them plus a cell of plain
@@ -542,7 +601,9 @@ std::optional<PointerShape> Window::pointer_shape_at(Point local) const {
     // Controls before corners before the title row, matching the press
     // order in on_mouse(): the shape has to promise whatever the press
     // would actually do, and the top corners sit on the title row.
-    if (point_in_close_control(local) || point_in_zoom_control(local)) return PointerShape::Pointer;
+    if (point_in_close_control(local) || point_in_minimize_control(local) ||
+        point_in_zoom_control(local))
+        return PointerShape::Pointer;
     if (const std::optional<Corner> corner = resize_corner_at(local))
         return corner_pointer_shape(*corner);
     if (movable_ && local.y == 0) return PointerShape::Grab;
@@ -651,6 +712,20 @@ void Window::draw(scene::Painter& painter) {
         painter.draw_text(Point{3, 0}, "■", armed ? pressed_style : control_style);
         painter.draw_text(Point{4, 0}, "]", face);
     }
+    if (draws_minimize_control()) {
+        // U+005F LOW LINE for minimize — the mark the reader asked for, and
+        // the one the convention puts on this control: a line along the
+        // bottom of the cell, where the window is about to go. It sits
+        // immediately left of the maximize/restore control, so the two read
+        // as one group of things done TO the window, opposite the one thing
+        // done to close it.
+        const int control_x = b.width - 8;
+        const bool armed = held_control_ == Control::Minimize && held_inside_;
+        const Style face = armed ? pressed_style : frame_style;
+        painter.draw_text(Point{control_x, 0}, "[", face);
+        painter.draw_text(Point{control_x + 1, 0}, "_", armed ? pressed_style : control_style);
+        painter.draw_text(Point{control_x + 2, 0}, "]", face);
+    }
     if (resizable_ && b.width > 8) {
         // Up-arrow "maximize"; changes to an up/down arrow once zoomed.
         // A fixed-size dialog does not draw or expose this control.
@@ -681,7 +756,26 @@ void Window::draw(scene::Painter& painter) {
         // drew the title left-aligned at a fixed column, immediately
         // abutting the close control with no padding at all.
         if (resizable_) {
-            const int available = std::max(0, b.width - (b.width > 6 ? 10 : 4));
+            // The title is CENTRED, so what it may occupy is bounded by the
+            // WIDER of the two control groups counted twice: five cells for
+            // the close control and the frame cell after it, nine once the
+            // minimize control extends the right-hand group to eight.
+            // Budgeting each side separately would centre a full-width title
+            // straight into whichever group is the wider one.
+            //
+            // Nine, not eight, because the title's own padding cell sits
+            // outside its measured width: at eight, a title using its whole
+            // budget would put that space on the minimize control's opening
+            // bracket. The existing five has that same off-by-one against
+            // the zoom control — visible in the goldens as a maximal title
+            // abutting `↑]` — and correcting it there would re-elide titles
+            // on windows this control never appears on.
+            //
+            // draws_minimize_control()'s width gate is derived from this
+            // number: it is exactly the widths at which `available` is still
+            // 4 or more, so the control never costs the window its name.
+            const int reserved = draws_minimize_control() ? 9 : 5;
+            const int available = std::max(0, b.width - (b.width > 6 ? 2 * reserved : 4));
             const std::string shown = text::elide_to_width(title_, available);
             const int shown_width = text::text_width(shown);
             const int start = (b.width - shown_width) / 2;
@@ -771,6 +865,12 @@ bool Window::on_mouse(const MouseEvent& event) {
             invalidate();
             return true;
         }
+        if (point_in_minimize_control(local)) {
+            held_control_ = Control::Minimize;
+            held_inside_ = true;
+            invalidate();
+            return true;
+        }
         if (point_in_zoom_control(local)) {
             held_control_ = Control::Zoom;
             held_inside_ = true;
@@ -799,8 +899,20 @@ bool Window::on_mouse(const MouseEvent& event) {
     }
 
     if (held_control_ != Control::None) {
-        const bool over = held_control_ == Control::Close ? point_in_close_control(local)
-                                                          : point_in_zoom_control(local);
+        // Which region the held control answers in. One answer serves both
+        // questions a held press asks — whether it is still armed, and
+        // whether the release lands on what it went down on — so the two can
+        // never disagree about where the control is.
+        const auto over_control = [&](Control control) {
+            switch (control) {
+                case Control::Close: return point_in_close_control(local);
+                case Control::Minimize: return point_in_minimize_control(local);
+                case Control::Zoom: return point_in_zoom_control(local);
+                case Control::None: break;
+            }
+            return false;
+        };
+        const bool over = over_control(held_control_);
         if (event.action != MouseAction::Up) {
             // Held: nothing is decided, but say whether it still would be.
             if (over != held_inside_) {
@@ -815,8 +927,13 @@ bool Window::on_mouse(const MouseEvent& event) {
         invalidate();
         // Released off the control it started on: the reader moved away, and
         // moving away is how a press is taken back.
-        if (held == Control::Close && point_in_close_control(local)) close();
-        else if (held == Control::Zoom && point_in_zoom_control(local)) toggle_zoom(zoom_target());
+        if (!over) return true;
+        switch (held) {
+            case Control::Close: close(); break;
+            case Control::Minimize: set_minimized(true); break;
+            case Control::Zoom: toggle_zoom(zoom_target()); break;
+            case Control::None: break;
+        }
         return true;
     }
 

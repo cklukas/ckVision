@@ -258,6 +258,52 @@ public:
     // began, regardless of how many resizes happened while zoomed.
     void refresh_zoom_area(Rect available) noexcept;
 
+    // --- Minimize (U4-i) -------------------------------------------
+    //
+    // Hiding a window is neither closing it nor merely making it
+    // invisible. A minimized window stays in its Desktop's windows() —
+    // that listing is how a reader gets it back, from a switcher bar —
+    // while everything that ARRANGES or CYCLES windows steps over it:
+    // no tiling gives it a band, activate_next/previous walk past it,
+    // and the filled-tiling query does not count it.
+    //
+    // Minimizing disturbs nothing about the window's geometry: its
+    // bounds, its zoom state and its place in the stack are what they
+    // were, and that is why restoring needs no remembered copy of any of
+    // them. A window minimized while maximized comes back maximized
+    // because it never stopped being maximized. A recorded rectangle or
+    // stack index would be a second source of truth that a desktop
+    // resize, or a neighbour closing, could silently make wrong — and a
+    // window that comes back somewhere it does not belong is exactly the
+    // failure the reader would see.
+    //
+    // Its owner's sizing policy does still reach it while it is hidden:
+    // Desktop::on_resized() re-clamps a hidden window and keeps a hidden
+    // maximized one filling, because a frozen rectangle is precisely how
+    // a window comes back off the edge of a desktop that shrank while it
+    // was away.
+    //
+    // Invisibility is the MECHANISM, not the state: set_visible(false)
+    // is already what the framework understands as "not painted, not
+    // clickable, transparent to focus traversal", and a second private
+    // notion of hiddenness inside Window would be one more thing for
+    // hit-testing to get wrong. minimized() is the state a listing view
+    // reads and the arrangement code skips on.
+    void set_minimized(bool minimized);
+    bool minimized() const noexcept { return minimized_; }
+
+    // Whether the frame draws and answers the `_` control, immediately
+    // left of the maximize/restore one — from 22 columns wide, which is
+    // where three controls still leave the window its own name (see
+    // draws_minimize_control). Default true, but — like the zoom
+    // control — a fixed-size window keeps the close control alone:
+    // an alert or an About box is not a thing a reader parks. Desktop's
+    // modal presentation clears this as well, because hiding the one
+    // window that is accepting input would leave an application that
+    // answers nothing and no way to bring it back.
+    void set_minimizable(bool minimizable) noexcept;
+    bool minimizable() const noexcept { return minimizable_; }
+
     // How this window's bounds respond to Desktop growth (default
     // None — see DesktopGrowPolicy). Desktop::on_resized() reads this
     // on every owned window; irrelevant for a standalone Window.
@@ -351,6 +397,14 @@ private:
     void relayout_frame_overlays() noexcept;
     bool point_in_close_control(Point local) const noexcept;
     bool point_in_zoom_control(Point local) const noexcept;
+    bool point_in_minimize_control(Point local) const noexcept;
+    // Whether the minimize control is on this frame at this width. One gate,
+    // four readers — the drawing, the hit-testing, the top border's overlay
+    // margins and the title's own budget — because a control that is drawn
+    // where nothing reserves room for it collides with the title, and one
+    // that is hit-tested where it is not drawn answers a press the reader
+    // never aimed at anything.
+    bool draws_minimize_control() const noexcept;
     // The corner `local` grabs, if any. All four answer, whatever is drawn:
     // the classic desktop marks one corner and resizes from any of them, and
     // a reader who tries a corner should find it works.
@@ -391,6 +445,8 @@ private:
     bool active_ = false;
     bool movable_ = true;
     bool resizable_ = true;
+    bool minimizable_ = true;
+    bool minimized_ = false;
     // horizontal_/vertical_ remain the symmetric setter's own record so its
     // getters keep reporting what it was given; the four below are what
     // content_rect() actually measures with.
@@ -424,7 +480,7 @@ private:
     // ("this one?") and the release is the answer. Closing a window the
     // moment the button goes down gives the reader no way to change their
     // mind, and closing is not an action they can take back.
-    enum class Control { None, Close, Zoom };
+    enum class Control { None, Close, Minimize, Zoom };
     Control held_control_ = Control::None;
     // Whether the pointer is still on the control it went down on. A press
     // dragged away un-highlights but stays claimed, so returning to the
@@ -468,6 +524,15 @@ private:
     void clear_title_observer() noexcept;
     std::function<void()> title_observer_;
     std::weak_ptr<void> title_observer_lifetime_;
+    // Minimizing or restoring, reported to the owner, on the same
+    // weak-lifetime terms as the three above. It is news a Desktop must act
+    // on, not only pass along: the window that just went away may have been
+    // the active one, and an activation left pointing at something hidden is
+    // a desktop with no window the reader can type into.
+    void bind_minimize_observer(std::function<void()> observer, std::weak_ptr<void> lifetime);
+    void clear_minimize_observer() noexcept;
+    std::function<void()> minimize_observer_;
+    std::weak_ptr<void> minimize_observer_lifetime_;
     // Clamps `moved` so enough of the title bar stays inside move_bounds_ to
     // grab again. A window dragged entirely under the menu bar or past the
     // footer cannot be brought back with the mouse at all.
