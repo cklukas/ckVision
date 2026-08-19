@@ -28,6 +28,30 @@
 
 namespace ckv::widgets {
 
+// FOCUS IS THE CALLER'S TO DECIDE, and the default (View's own
+// FocusPolicy::None) is deliberately not an answer. A scroll region
+// needs a tab stop exactly when NOTHING INSIDE IT CAN TAKE ONE:
+//
+//   * Wrapping focusable content — a form, a list — the region must NOT
+//     be focusable, or it lands in the tab order twice: once for itself
+//     and again for each control inside. The mechanism there is
+//     scroll-follows-focus, which Dialog implements by walking up from
+//     whatever took focus to the nearest enclosing viewport and calling
+//     ensure_visible().
+//   * Wrapping static content — prose, a read-only report — nothing
+//     inside can hold focus and there is nothing for scrolling to
+//     follow, so the region ITSELF must be focusable
+//     (set_focus_policy(FocusPolicy::TabStop)) or it answers the wheel
+//     and nothing else. A reader without a mouse then sees a scrollbar
+//     promising more text with no way to reach it, which is worse than
+//     visibly truncated text because it looks like it works.
+//
+// Same widget, opposite correct answers, decided by what it wraps —
+// which is why no default can be right and the caller has to say. Both
+// halves were paid for: the second by the CK Office launcher's
+// description pane, the first by a settings dialog that would have been
+// broken had the default gone the other way.
+//
 // Never draws anything itself — its two Scrollbar children resolve
 // their own theme roles independently (M9 WP-7, D-028) once attached,
 // same as if constructed standalone.
