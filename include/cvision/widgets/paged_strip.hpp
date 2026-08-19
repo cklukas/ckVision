@@ -217,6 +217,21 @@ protected:
     // already in front are the same promise.
     bool item_is_selected(std::size_t index) const noexcept;
 
+    // Whether the pointer is currently holding an item down — true from the
+    // press until the release, whether or not the pointer has since been
+    // dragged off the item it claimed.
+    //
+    // For a subclass that changes its own item widths on a TIMER rather than
+    // in answer to an event. This strip resolves a click by INDEX: the press
+    // remembers `pressed_item_`, and the release fires for whatever item now
+    // sits at that index. Relaying out under a held pointer therefore either
+    // moves the item out from under it, so the release misses and the click
+    // silently does nothing, or shifts the columns so the release names an
+    // item the reader never pointed at. A reader mid-click is exactly when
+    // the target must not move, so a subclass that would resize an item while
+    // this is true should defer it and re-run on the release.
+    bool press_in_flight() const noexcept { return pressed_item_.has_value(); }
+
 private:
     // Splits the items into pages, greedily, given the cells items may use.
     // The first item of a page is always taken, even where it does not fit —

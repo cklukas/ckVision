@@ -75,6 +75,11 @@ ckv::MouseEvent press(int x, ckv::MouseButton button = ckv::MouseButton::Left) {
                            Modifier::None};
 }
 
+ckv::MouseEvent move(int x) {
+    return ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, Point{x, 0}, std::nullopt,
+                           Modifier::None};
+}
+
 ckv::MouseEvent release(int x) {
     return ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, Point{x, 0}, std::nullopt,
                            Modifier::None};
@@ -421,6 +426,43 @@ CK_TEST(an_item_activates_on_the_release_and_a_press_dragged_away_takes_it_back)
 
     // And the blank run claims nothing at all.
     CK_CHECK(!f.strip.on_mouse(press(30)));
+}
+
+CK_TEST(the_strip_says_when_a_press_is_in_flight_so_a_subclass_can_hold_still) {
+    // A subclass that resizes its own items on a TIMER needs to know not to,
+    // while the reader has one held down: this strip resolves a click by
+    // index, so moving the columns under a held pointer either makes the
+    // release miss or makes it name a different item.
+    struct Probe : PagedStrip {
+        using PagedStrip::press_in_flight;
+    };
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    RoleRegistry registry;
+    StandardRoles roles = intern_standard_roles(registry);
+    Theme theme = make_classic_theme(registry, roles);
+    std::vector<PagedStrip::Item> items{{5, "Alpha", false}, {5, "Bravo", false}};
+    Probe strip;
+    strip.set_item_source([&] { return items; });
+    strip.set_context(ui::Context{&theme, &registry, &app});
+    strip.set_bounds(Rect{0, 0, 40, 1});
+    strip.refresh_items();
+
+    CK_CHECK(!strip.press_in_flight());     // at rest
+    CK_CHECK(strip.on_mouse(press(10)));    // over "Bravo"
+    CK_CHECK(strip.press_in_flight());
+    CK_CHECK(strip.on_mouse(release(10)));
+    CK_CHECK(!strip.press_in_flight());     // and the release gives it back
+
+    // A press dragged OFF its item is still a press: the claim survives, which
+    // is the whole reason the flag is not "the pointer is over an item".
+    CK_CHECK(strip.on_mouse(press(3)));
+    CK_CHECK(strip.press_in_flight());
+    CK_CHECK(strip.on_mouse(move(30)));     // the blank run past the last item
+    CK_CHECK(strip.press_in_flight());
+    CK_CHECK(strip.on_mouse(release(30)));
+    CK_CHECK(!strip.press_in_flight());
 }
 
 CK_TEST(a_right_press_is_the_hosts_to_consume_or_to_leave_alone) {
