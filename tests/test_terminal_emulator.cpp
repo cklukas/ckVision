@@ -421,8 +421,36 @@ CK_TEST(terminal_emulator_advertises_graphics_however_large_the_window_is) {
     profile.cell_pixels = Size{16, 48};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("\x1b[c\x1b[?2;4;0S");
-    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c\x1b[?2;0;4800;4800S");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;2;4c\x1b[?2;0;8192;8192S");
     emulator.feed_output("\x1bPq#0;2;100;0;0!32~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
+CK_TEST(the_sixel_maximum_a_child_is_promised_survives_every_resize) {
+    // The maximum is probed once — there is no unsolicited re-advertisement —
+    // and a well-behaved emitter refuses outright to send a picture past it
+    // (Presenter::can_emit_raster_slice). So an answer derived from the
+    // window's own size was a promise every resize broke: a child whose
+    // window later grew past the frozen number showed nothing at all, from a
+    // terminal that would have decoded the picture without complaint (field
+    // report, 2026-08-19: ckvision_spin inside a ckmux pane went blank the
+    // moment its window was enlarged, and came back when an outer resize made
+    // the child re-probe). The budget is the one bound decode actually
+    // enforces, so it is the one bound worth advertising.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{40, 12};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1b[?2;4;0S");
+    const std::string before = emulator.take_pending_input();
+    CK_CHECK(before == "\x1b[?2;0;8192;8192S");
+    emulator.resize(Size{200, 60}, Size{16, 32});
+    emulator.feed_output("\x1b[?2;4;0S");
+    CK_CHECK(emulator.take_pending_input() == before);
+    // And a picture wider than the window it was probed in still decodes:
+    // the advertisement promises what decode accepts, not what fits today.
+    emulator.feed_output("\x1bPq#0;2;100;0;0!640~\x1b\\");
     CK_CHECK(emulator.snapshot().rasters.size() == 1U);
     CK_CHECK(emulator.snapshot().diagnostics.empty());
 }
@@ -865,9 +893,10 @@ CK_TEST(terminal_emulator_reports_graphics_limits_instead_of_scrolling_the_child
     profile.cell_pixels = Size{10, 20};
     term::TerminalEmulator emulator(profile);
     emulator.feed_output("ab\x1b[?1;4;0S\x1b[?2;4;0S");
-    // The registers the decoder holds, then the child's own window in pixels:
-    // a Sixel reaching past the last cell is cropped and never seen.
-    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;0;256S\x1b[?2;0;40;60S");
+    // The registers the decoder holds, then the pixel budget as its largest
+    // square — deliberately not this 40x60 px window, whose size would freeze
+    // into a promise the first resize breaks.
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?1;0;256S\x1b[?2;0;8192;8192S");
     // XTSMGRAPHICS and SU share their final byte. Read as SU, both probes
     // would have scrolled this line off the top of the child's screen.
     CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "a");

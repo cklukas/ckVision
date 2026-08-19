@@ -1338,10 +1338,20 @@ void TerminalEmulator::handle_graphics_attributes() {
                          std::to_string(kSixelColorRegisters));
         return;
     }
-    // The geometry a Sixel may occupy is the window it is drawn into: what
-    // reaches past the last cell is cropped away and never seen.
-    const std::string geometry = std::to_string(std::max(1, profile_.cell_pixels.width) * cells_.width) +
-                                 ";" + std::to_string(std::max(1, profile_.cell_pixels.height) * cells_.height);
+    // The pixel budget, as the largest square it admits — NOT the window
+    // size. The window was the first answer here, and it stranded a child
+    // whose picture later outgrew it: this maximum is probed once, there is
+    // no unsolicited re-advertisement in the protocol, and a well-behaved
+    // emitter (ckVision's own presenter among them) refuses outright to send
+    // a picture past the maximum it was told — so a child whose window then
+    // grew showed nothing at all, while a reader's real terminal advertises a
+    // generous fixed maximum (16384x16384 observed) precisely so no resize
+    // can invalidate it. What is decoded is the picture, bounded by the same
+    // budget this derives from and cropped to the room it lands in, so this
+    // is the one answer that stays true at every size the terminal ever has.
+    std::size_t side = 1;
+    while (side < 16384U && (side + 1U) * (side + 1U) <= options_.max_image_pixels) ++side;
+    const std::string geometry = std::to_string(side) + ";" + std::to_string(side);
     send_input(reply + "0;" + geometry + "S");
     if (graphics_log_enabled())
         graphics_log("emulator: child asked XTSMGRAPHICS geometry, answered " + geometry);
