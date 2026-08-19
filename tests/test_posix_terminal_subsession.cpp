@@ -699,3 +699,22 @@ CK_TEST(process_id_names_the_running_child_and_nobody_once_it_has_gone) {
     CK_CHECK(pump_until_exit(*session));
     CK_CHECK(session->process_id() == -1);
 }
+
+CK_TEST(the_seam_answers_the_pid_question_and_defaults_to_nobody) {
+    // U5-b: a host holding only `core::TerminalSubsession&` may ask. The
+    // POSIX session answers with its child; anything not holding a process —
+    // here, the base default itself — answers -1 rather than obliging every
+    // fake and mirror to say "no pid" in its own words.
+    ckv::term::TerminalLaunchSpec launch =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "echo SEAM-UP; read ignored"});
+    launch.profile.cells = ckv::Size{48, 6};
+    launch.environment = {{"TERM", "xterm"}};
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
+    CK_CHECK(pump_until(*session, "SEAM-UP"));
+    ckv::core::TerminalSubsession& seam = *session;
+    CK_CHECK(seam.process_id() == session->process_id());
+    CK_CHECK(seam.process_id() > 0);
+    session->request_kill();
+    CK_CHECK(pump_until_exit(*session));
+    CK_CHECK(seam.process_id() == -1);
+}

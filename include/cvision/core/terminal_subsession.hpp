@@ -591,6 +591,19 @@ public:
     virtual void send_input(std::string_view bytes) = 0;
     virtual std::string take_pending_input() = 0;
     virtual TerminalSubsessionState state() const noexcept = 0;
+
+    // The pid of the operating-system process behind this session, for
+    // OBSERVATION — a host measuring what the process tree under a terminal
+    // costs needs to know where that tree is rooted — and -1 when there is no
+    // such process to name: the default, kept by any session that is not
+    // itself holding one (a remote mirror, a fake in a test). Virtual with a
+    // default rather than abstract, because "no pid" is the honest answer for
+    // most implementations and forcing each to say so would repeat it.
+    //
+    // It is NOT a handle for control: a host ends a child through the owning
+    // class's own request/close protocol, never by signalling the pid itself.
+    // The POSIX implementation says the same where it overrides this.
+    virtual int process_id() const noexcept { return -1; }
 };
 
 }  // namespace ckv::core
