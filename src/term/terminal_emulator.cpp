@@ -1743,7 +1743,19 @@ void TerminalEmulator::place_raster(std::shared_ptr<Image> image, Point anchor, 
         true);
     coverage.live_count = coverage.live_cells.size();
     coverage.image = std::move(image);
-    rasters_.push_back(TerminalRaster{raster_identity_, anchor, cell_extent, coverage.image, "[sixel]"});
+    // Sharing raster_identity_ verbatim across every picture this terminal
+    // ever places was fine while there was ever only one — but a second
+    // picture placed before the first is overwritten (see kMaxRasters above:
+    // that is the expected case, not a corner one) then collided with it on
+    // whatever Surface came to draw both, and Surface::add_raster_region's
+    // own uniqueness contract turned that into a hard abort. An unadopted
+    // terminal (raster_identity_ == 0) keeps every raster at id 0 — the
+    // view's own "don't draw" signal — rather than manufacturing a nonzero
+    // id no adoption ever granted.
+    const int id = raster_identity_ == 0
+                       ? 0
+                       : raster_identity_ + core::allocate_local_raster_slot(rasters_, raster_identity_);
+    rasters_.push_back(TerminalRaster{id, anchor, cell_extent, coverage.image, "[sixel]"});
     raster_coverage_.push_back(std::move(coverage));
 }
 

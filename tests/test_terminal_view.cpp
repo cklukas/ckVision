@@ -323,6 +323,35 @@ CK_TEST(terminal_view_places_child_sixel_only_through_scene_raster_path) {
     CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "[");
 }
 
+CK_TEST(two_simultaneous_child_pictures_in_one_terminal_get_distinct_scene_ids) {
+    // A program that draws a second Sixel without clearing the first is
+    // ordinary — terminal_emulator.cpp keeps up to 64 rasters alive at
+    // once — but every raster of one terminal used to carry that terminal's
+    // bare identity verbatim, so a second one alive at the same time as the
+    // first collided with it the moment both reached the same Surface:
+    // Surface::add_raster_region's own uniqueness contract turned that into
+    // a hard abort. This is the field crash's minimal reproduction.
+    ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
+    profile.cells = ckv::Size{8, 2};
+    profile.cell_pixels = ckv::Size{4, 6};
+    ckv::term::TerminalEmulator session(profile);
+    ckv::widgets::TerminalView view(session);
+    Fixture fixture;
+    view.set_context(fixture.context());
+    view.set_bounds(ckv::Rect{0, 0, 8, 2});
+    session.set_raster_identity(99);
+    session.feed_output("\x1bPq#0;2;100;0;0~\x1b\\");
+    session.feed_output("\x1b[1;5H\x1bPq#0;2;100;0;0~\x1b\\");
+    CK_CHECK(session.snapshot().rasters.size() == 2U);
+
+    ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell{});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 8, 2});
+    view.draw(painter);  // used to abort here
+    CK_CHECK(surface.raster_regions().size() == 2);
+    CK_CHECK(surface.raster_regions()[0].id == 99);
+    CK_CHECK(surface.raster_regions()[1].id == 100);
+}
+
 CK_TEST(terminal_view_uses_its_text_fallback_when_the_outer_terminal_has_no_graphics) {
     ckv::term::HeadlessTerminal terminal(ckv::Size{20, 6}, ckv::term::headless_no_graphics_profile());
     ckv::ManualClock clock;

@@ -299,6 +299,28 @@ struct TerminalRaster {
     std::string fallback;
 };
 
+// The smallest non-negative offset from `base` not already used as an id by
+// any raster in `existing`. A terminal's own identity (`base`) is one value
+// for its whole lifetime, but a program that draws a second picture without
+// clearing the first — ordinary enough that a terminal keeps up to 64 at
+// once — leaves more than one raster alive together. Surface::add_raster_region
+// requires a distinct id per drawn region, not per terminal, so a caller
+// building a TerminalRaster's id combines `base` with this: stable for as
+// long as that raster lives (assigned once, at placement), and distinct from
+// every other raster currently alive on the same terminal. The span checked
+// is bounded (kMaxRasters in terminal_emulator.cpp), so 4096 candidate slots
+// is headroom no real terminal reaches.
+inline int allocate_local_raster_slot(std::span<const TerminalRaster> existing, int base) noexcept {
+    for (int slot = 0; slot < 4096; ++slot) {
+        bool in_use = false;
+        for (const TerminalRaster& raster : existing) {
+            if (raster.id == base + slot) { in_use = true; break; }
+        }
+        if (!in_use) return slot;
+    }
+    return 0;
+}
+
 // What a host asks a snapshot to contain.
 //
 // It exists because the expensive parts are the ones a caller most often does
