@@ -588,6 +588,14 @@ struct Notification {
 // with `Notification::persistent` and outlives any timer.
 class NotificationCenter : public ui::View {
 public:
+    // Focusable by default, because a centre a reader Tabs to and dismisses
+    // with Escape is what a form wants. Set in the CONSTRUCTOR rather than on
+    // attach so a host can say otherwise and be obeyed: an application that
+    // lays toasts over its work — where the notification is news rather than
+    // something to answer — takes the focus stop away, and re-attaching must
+    // not quietly put it back.
+    NotificationCenter();
+
     std::size_t add(Notification notification);
     void dismiss(std::size_t index);
     const std::vector<Notification>& notifications() const noexcept { return notifications_; }

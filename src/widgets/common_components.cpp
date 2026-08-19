@@ -1373,6 +1373,8 @@ void Wizard::on_attached() {
     if (selected_role_ == ui::kInvalidRole) selected_role_ = context().roles->find("ckv.window.title.active");
 }
 
+NotificationCenter::NotificationCenter() { set_focus_policy(ui::FocusPolicy::TabStop); }
+
 std::size_t NotificationCenter::add(Notification notification) {
     // A persistent one is never due; nor is anything added while no interval
     // has been set, or while there is no clock to read. The deadline is fixed
@@ -1501,7 +1503,9 @@ bool NotificationCenter::on_mouse(const MouseEvent& event) {
 }
 
 void NotificationCenter::on_attached() {
-    set_focus_policy(ui::FocusPolicy::TabStop);
+    // The focus policy is NOT set here — see the constructor. Attaching is
+    // where a view learns its context, not where it overrules decisions its
+    // host has already made about it.
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.statusline.normal");
     // Anything posted before there was a clock to read has no deadline yet.
     // Re-timing here is what makes "post first, attach later" behave the same

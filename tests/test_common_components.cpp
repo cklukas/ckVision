@@ -1108,3 +1108,19 @@ CK_TEST(an_empty_centre_paints_nothing_at_all) {
     CK_CHECK(surface.at(ckv::Point{0, 1}).grapheme() == "#");   // untouched
     CK_CHECK(surface.at(ckv::Point{0, 2}).grapheme() == "#");
 }
+
+CK_TEST(a_host_that_takes_the_focus_stop_away_keeps_it_away_across_attach) {
+    // A centre a reader Tabs to is right in a form and wrong over a terminal:
+    // there the notification is news, not something to answer, and a focus
+    // stop would put the reader's Tab in a message about something that
+    // already happened instead of in the program they are typing into. So the
+    // default is a stop, and a host may say otherwise — attaching must not
+    // quietly put it back.
+    Timed t;
+    NotificationCenter centre;
+    CK_CHECK(centre.focus_policy() == ckv::ui::FocusPolicy::TabStop);  // the default
+
+    centre.set_focus_policy(ckv::ui::FocusPolicy::None);
+    t.attach(centre);
+    CK_CHECK(centre.focus_policy() == ckv::ui::FocusPolicy::None);
+}
