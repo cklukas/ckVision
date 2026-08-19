@@ -36,6 +36,28 @@ std::unique_ptr<View> make_content(int w, int h) {
     return v;
 }
 
+// Content whose height depends on the width it is given — the shape of
+// every wrapped text view, and the case a width-independent size hint
+// cannot describe.
+class WrappedContent final : public View {
+public:
+    explicit WrappedContent(int total_cells) : total_(total_cells) {
+        set_preferred_size(ckv::Size{20, 1});
+    }
+
+    void set_total(int total_cells) {
+        total_ = total_cells;
+        size_hint_changed();
+    }
+
+    int height_for_width(int width) const override {
+        return width <= 0 ? 0 : (total_ + width - 1) / width;
+    }
+
+private:
+    int total_;
+};
+
 class WheelIgnoringContent final : public View {
 public:
     int wheel_events = 0;
@@ -312,4 +334,55 @@ CK_TEST(ensure_visible_declines_a_view_that_is_not_inside_this_viewport) {
     CK_CHECK(!viewport.ensure_visible(outsider));
     CK_CHECK(!viewport.ensure_visible(*viewport.content()));  // the content has no place in itself
     CK_CHECK(viewport.scroll_y() == 20);
+}
+
+CK_TEST(wrapped_content_is_measured_at_the_width_it_is_given) {
+    // The defect this pins: measuring by the width-independent hint
+    // alone reports content one row tall, so no bar appears and every
+    // line past the first is unreachable.
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_horizontal_scrollbar_policy(ScrollbarPolicy::Hidden);
+    viewport.set_bounds(Rect{0, 0, 40, 5});
+    viewport.set_content(std::make_unique<WrappedContent>(400));
+
+    // 400 cells over the 39 columns left beside the vertical bar is 11
+    // rows, well past the 5 on screen — so the bar is shown and the
+    // content is laid out at its true height.
+    CK_CHECK(viewport.content()->bounds().height > 5);
+    CK_CHECK(viewport.vertical_scrollbar_policy() == ScrollbarPolicy::Auto);
+    viewport.set_scroll(0, 100);
+    CK_CHECK(viewport.scroll_y() > 0);  // there is somewhere to scroll to
+}
+
+CK_TEST(content_that_grows_after_layout_re_measures_the_viewport) {
+    // A viewport filled in after construction - prose replaced when a
+    // selection changes, a log being appended to - kept the extent its
+    // content had when empty, so the bar never appeared however much
+    // arrived later.
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_horizontal_scrollbar_policy(ScrollbarPolicy::Hidden);
+    viewport.set_bounds(Rect{0, 0, 40, 5});
+    auto content = std::make_unique<WrappedContent>(0);
+    WrappedContent* const raw = content.get();
+    viewport.set_content(std::move(content));
+    CK_CHECK(viewport.content()->bounds().height == 5);  // nothing to scroll yet
+
+    raw->set_total(400);
+    CK_CHECK(viewport.content()->bounds().height > 5);
+    viewport.set_scroll(0, 100);
+    CK_CHECK(viewport.scroll_y() > 0);
+}
+
+CK_TEST(a_view_whose_height_ignores_width_is_measured_exactly_as_before) {
+    // The generalization must not move any existing case: height_for_width
+    // defaults to the stored preferred height, so a plain view still
+    // reports what its hint says.
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 40, 20});
+    viewport.set_content(make_content(10, 5));
+    CK_CHECK(viewport.content()->bounds().height == 20);
+    CK_CHECK(viewport.content()->bounds().width == 40);
 }

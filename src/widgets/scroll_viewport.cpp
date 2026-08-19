@@ -57,7 +57,13 @@ std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> 
 void ScrollViewport::scroll_to_bottom() {
     // set_scroll clamps, so asking for more than there is lands exactly
     // at the end rather than needing the extent computed here.
-    const int reach = content_ != nullptr ? content_->vertical_size_hint().preferred : 0;
+    // Measured the way relayout() measures it, so the bottom of wrapped
+    // content is the bottom a reader can actually see.
+    const int reach =
+        content_ != nullptr
+            ? std::max(content_->vertical_size_hint().preferred,
+                       content_->height_for_width(std::max(0, content_area_width_)))
+            : 0;
     set_scroll(scroll_x_, std::max(0, reach));
 }
 
@@ -149,19 +155,42 @@ void ScrollViewport::reposition_content() {
     content_->set_bounds(Rect{-scroll_x_, -scroll_y_, content_->bounds().width, content_->bounds().height});
 }
 
+void ScrollViewport::on_child_size_hint_changed(View&) {
+    relayout();
+    invalidate();
+}
+
 void ScrollViewport::relayout() {
     const int width = bounds().width;
     const int height = bounds().height;
     int preferred_w = width;
-    int preferred_h = height;
-    if (content_ != nullptr) {
-        preferred_w = std::max(0, content_->horizontal_size_hint().preferred);
-        preferred_h = std::max(0, content_->vertical_size_hint().preferred);
-    }
+    if (content_ != nullptr) preferred_w = std::max(0, content_->horizontal_size_hint().preferred);
+
+    // How tall the content is AT A GIVEN WIDTH. Wrapped content — static
+    // text, a memo — is as tall as its width makes it, and only it can
+    // say how tall (ARCHITECTURE.md §5's one sanctioned second pass).
+    // Measuring by the width-independent hint alone silently loses the
+    // tail of any prose laid out narrower than the width that hint was
+    // measured at: too short an extent means no bar and no way to reach
+    // the rest, so the text is simply not there. The max keeps every
+    // width-independent view reporting exactly what it always did, since
+    // height_for_width defaults to a stored preferred height rather than
+    // to that view's own vertical hint.
+    const auto measured_height = [this, height](int for_width) {
+        if (content_ == nullptr) return height;
+        return std::max({0, content_->vertical_size_hint().preferred,
+                         content_->height_for_width(std::max(0, for_width))});
+    };
 
     const ScrollbarPolicy v_policy = vertical_scrollbar_policy();
     const ScrollbarPolicy h_policy = horizontal_scrollbar_policy();
+    int preferred_h = measured_height(width);
     bool need_v = bar_is_shown(v_policy, preferred_h, height);
+    // A vertical bar costs a column, and a narrower column count makes
+    // wrapped content taller — so the decision is re-measured at the
+    // width the content will actually get. This only ever grows the
+    // content, so it cannot oscillate back.
+    if (need_v) preferred_h = measured_height(width - 1);
     bool need_h = bar_is_shown(h_policy, preferred_w, std::max(0, width - (need_v ? 1 : 0)));
     need_v = bar_is_shown(v_policy, preferred_h, std::max(0, height - (need_h ? 1 : 0)));
 

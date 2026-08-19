@@ -101,6 +101,13 @@ public:
     bool can_scroll_horizontally() const noexcept;
 
     void on_resized() override;
+    // Content that grows or shrinks re-measures the viewport, exactly as
+    // a resize does. Without this a viewport reports the extent its
+    // content had when it was last laid out — for content filled in after
+    // construction, the extent of nothing at all — so the bar never
+    // appears and everything past the first screenful is unreachable.
+    // Splitter carries the same override for the same reason.
+    void on_child_size_hint_changed(View&) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
 
