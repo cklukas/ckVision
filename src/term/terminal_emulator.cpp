@@ -822,8 +822,16 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                             // The same bytes into the same room are the same
                             // picture. Reusing it also lets the presenter
                             // recognise it as one it has already encoded and
-                            // already put on the screen.
-                            constexpr std::size_t kMaxCachedPayload = 2U * 1024U * 1024U;
+                            // already put on the screen — and lets a host
+                            // diffing by object identity see "unchanged"
+                            // without touching a pixel. Sized for real
+                            // pictures at real cell sizes: at 22x48px HiDPI
+                            // cells a window-filling plot's payload passes
+                            // two megabytes easily, and a cap under the
+                            // ordinary case meant the ordinary case re-paid
+                            // the whole decode on every redraw of an
+                            // unchanged picture.
+                            constexpr std::size_t kMaxCachedPayload = 16U * 1024U * 1024U;
                             if (last_sixel_image_ != nullptr && room == last_sixel_room_ &&
                                 control_ == last_sixel_payload_) {
                                 if (graphics_log_enabled())
