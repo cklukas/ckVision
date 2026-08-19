@@ -1089,3 +1089,59 @@ keyboard-only unless a clean dependency-free alternative appears.
 Track mode 2027 (grapheme clustering), terminal Unicode-version
 reporting, and kitty's text-sizing protocol; adopt as probes/capability
 refinements under D-019 when real-world support justifies it.
+
+**D-056 — Minimizing withholds a window's presentation, not its geometry.**
+A minimized `Window` is hidden (`set_visible(false)`) but stays in its
+`Desktop`'s `windows()`: being listed is what a hidden window has left, and it
+is how a reader gets it back. Its bounds, its zoom state and its position in the
+z-order are untouched for as long as it is hidden, so restoring replays nothing
+— a window minimized while maximized comes back maximized because it never
+stopped being maximized. Every operation that *arranges* or *cycles* windows
+asks one shared question (`Desktop::shown`) and steps over the hidden ones: the
+three tilings and the grid divide by the count of shown windows, `cascade` gives
+them no step, `activate_next`/`activate_previous` walk past them, and
+`filled_tile_fractions()` does not count them. Activation is the single
+exception and restores instead of skipping — naming a window is asking for it —
+which keeps the invariant "no activation points at a window nobody can see" in
+one place; a desktop whose windows are all minimized has no active window at
+all, which is the honest answer rather than an incoherent one. The desktop's own
+sizing policy still reaches a hidden window: it is re-clamped and, if maximized,
+kept filling. The width gate for the minimize control IS the title budget rather
+than a second number beside it — the control appears at the first width whose
+budget still leaves the title four columns, so there is no band in which the
+frame claims room for a control while the caption has room for no name at all.
+*Rejected:* recording the pre-minimize rectangle, stack index and zoom flag for
+replay (a second source of truth that a desktop resize or a neighbour closing
+silently makes wrong, and a window that comes back in the wrong place is
+precisely the failure a reader sees); a private "hidden" flag separate from
+visibility (hit-testing, painting and focus traversal already agree on
+`visible()`); freezing a hidden window's geometry (it returns off the edge of a
+desktop that shrank while it was away).
+
+**D-057 — A paged item strip, and paging as a widget rather than a feature.**
+A one-row strip of variable-width items that does not fit is paged, not
+squeezed. The behaviour lives in `widgets::PagedStrip` and not in any one bar:
+`WindowSwitcherBar` derives from it as its first consumer, exactly as its own
+first application was ckmux. `PagedStrip` is provider-driven — an item source
+answers each item's *content* width and text, and the strip never measures the
+text, so an item carrying a leading icon is a wider item and not a special case.
+Items take their natural width and overflow to the next page. Elision survives
+in exactly one case: an item wider than the whole item area, alone on its page,
+elided to it. An item box too narrow for its padding spends every cell on text.
+Once there is more than one page the chrome band — collapse toggle, previous
+control, page index, next control — is reserved identically on every page, the
+previous cell drawn blank on the first. Page composition is therefore a pure
+function of the width and the item widths, and paging forward and back returns
+the reader to the set they came from. The index is sized for the page count's
+digits, settled at a fixed point, and is not drawn at one page. Where the row
+cannot carry all the chrome it is given up in order: index, then collapse
+toggle, then the controls. Pages are recomputed on every change to the item set,
+the width, or the toggle. A current page that no longer exists falls back to the
+last one that does; a page that survives is kept, so removing an item from an
+earlier page does not move the reader. The strip collapses nothing: `▼`/`▲`
+report through `on_collapse_changed` and `collapsed()`, and what collapsing
+means is the host's other chrome. The toggle is off until a host asks for it.
+Glyphs: `▼` U+25BC, `▲` U+25B2, `◁` U+25C1, `▷` U+25B7 — all East Asian
+Ambiguous, one column under D-019, and none `Extended_Pictographic`. The black
+triangles U+25C0/U+25B6 *are* `Extended_Pictographic` and are deliberately not
+used: a variation selector would make them two cells and shear the row.
