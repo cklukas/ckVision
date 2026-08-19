@@ -5,8 +5,20 @@
 #include <utility>
 
 #include "cvision/core/text.hpp"
+#include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
+namespace {
+
+// How long a deferred width change waits before asking again, while a press
+// is in flight. A press is bounded by the reader letting go, and nothing
+// notifies this bar when that happens — the release is PagedStrip's and stops
+// there — so this is a re-ask rather than a wait for the press to end. Short
+// enough that a change comes due within a frame or two of the release, long
+// enough that holding a taskbar button down is not a wake-up per tick.
+constexpr std::int64_t kPressRetryNanos = 100'000'000;
+
+}  // namespace
 
 // --- WindowSwitcherTarget -------------------------------------------------
 
@@ -85,7 +97,11 @@ WindowSwitcherBar::WindowSwitcherBar(Desktop& desktop) : WindowSwitcherBar() {
     refresh();
 }
 
-// No unsubscribe: see the subscription above.
+// No unsubscribe: see the subscription above. The damping wake-up is not
+// cancelled here either, and for the same shape of reason: it is a one-shot
+// holding a liveness token, so a bar destroyed before it fires makes it a
+// no-op, and reaching for context().app from a destructor running as part of
+// a teardown is reaching into whatever else that teardown has already freed.
 WindowSwitcherBar::~WindowSwitcherBar() = default;
 
 void WindowSwitcherBar::set_window_source(std::function<std::vector<Window*>()> source) {
@@ -112,6 +128,29 @@ void WindowSwitcherBar::set_context_menu_provider(
     context_menu_provider_ = std::move(provider);
 }
 
+void WindowSwitcherBar::set_width_damping(std::int64_t grow_delay_nanos,
+                                          std::int64_t shrink_delay_nanos) {
+    // Negatives are read as "off" rather than asserted on: this is a duration
+    // a host computes from a setting, and the answer to a nonsensical one is
+    // an undamped bar, not a dead application.
+    grow_delay_nanos_ = std::max<std::int64_t>(0, grow_delay_nanos);
+    shrink_delay_nanos_ = std::max<std::int64_t>(0, shrink_delay_nanos);
+    // Whatever was being held is released at once. Turning damping off has to
+    // mean the widths are right NOW; leaving a stale box in place until its
+    // old delay elapsed would make the setting take effect at a moment the
+    // host never chose.
+    damped_.clear();
+    refresh();
+}
+
+void WindowSwitcherBar::settle_width(Window& window) {
+    // Erased rather than assigned: "no memory of this window" is already the
+    // state that takes the next measurement at once, so there is no second
+    // rule here to disagree with the one in damp_widths().
+    if (damped_.erase(&window) == 0) return;
+    refresh();
+}
+
 void WindowSwitcherBar::refresh() {
     std::vector<Entry> rebuilt;
     if (window_source_) {
@@ -125,6 +164,12 @@ void WindowSwitcherBar::refresh() {
                                     window == active});
         }
     }
+    // What each box is given, which is its natural width unless a delay is
+    // still holding an older one. Before the comparison below rather than
+    // after it: a width that has just come due is news even under a label that
+    // did not move, and it is the only news there is when the wake-up armed
+    // here is what called this.
+    damp_widths(rebuilt);
     // Repaint only on a real change. Window::set_title reports every
     // assignment, an identical one included, and an application that refreshes
     // a caption on a timer would otherwise leave this row permanently dirty.
@@ -141,11 +186,119 @@ int WindowSwitcherBar::natural_width(const Entry& entry) const {
     return text::text_width(entry.label);
 }
 
+void WindowSwitcherBar::damp_widths(std::vector<Entry>& rebuilt) {
+    const bool damping = grow_delay_nanos_ > 0 || shrink_delay_nanos_ > 0;
+    ui::Application* const app = context().app;
+    // Undamped, or attached to nothing that can tell the time: every box takes
+    // its natural width. Not an assertion — a bar is measured and laid out
+    // before it is ever attached, and a widget that refused to size itself
+    // until it had a clock would have no size to report at that point.
+    if (!damping || app == nullptr) {
+        for (Entry& entry : rebuilt) entry.width = natural_width(entry);
+        damped_.clear();
+        return;
+    }
+
+    // Not while a reader's finger is down. PagedStrip resolves a click by
+    // INDEX — the press remembers one and the release fires for whatever item
+    // now sits at it — so a box that changed width between the two either
+    // moves the item out from under the pointer, and the click does nothing,
+    // or shifts the columns so the release names a window the reader never
+    // pointed at. Every other thing that re-lays this row out is an event the
+    // reader or the host caused; a damping wake-up is the one that can land in
+    // the middle of a click with nothing else happening at all, which is why
+    // it is the one that has to hold still. Every remembered width is carried
+    // over untouched and the wake-up is re-armed for the moment the press is
+    // expected to be over.
+    if (press_in_flight()) {
+        for (Entry& entry : rebuilt) {
+            const auto remembered = damped_.find(entry.window);
+            entry.width = remembered == damped_.end() ? natural_width(entry) : remembered->second.shown;
+        }
+        arm_damping_wake(app->clock().now_nanos() + kPressRetryNanos);
+        return;
+    }
+
+    const std::int64_t now = app->clock().now_nanos();
+    // The earliest moment a deferred change becomes due, over every entry.
+    // One wake-up for the bar rather than one per window: what a due change
+    // costs is a re-layout of the whole row, so waking once and re-reading
+    // everything is both cheaper and the only order in which the widths that
+    // come due together are applied together.
+    std::int64_t next_wake = 0;
+
+    std::unordered_map<const Window*, DampedWidth> kept;
+    kept.reserve(rebuilt.size());
+    for (Entry& entry : rebuilt) {
+        const int natural = natural_width(entry);
+        const auto remembered = damped_.find(entry.window);
+        // A window this bar has not measured before takes its natural width
+        // now. There is no previous width for it to flicker between, and
+        // growing a new row into its own name would BE the flicker.
+        if (remembered == damped_.end()) {
+            entry.width = natural;
+            kept.emplace(entry.window, DampedWidth{natural, now});
+            continue;
+        }
+
+        DampedWidth held = remembered->second;
+        if (natural != held.shown) {
+            // One stamp for both directions, deliberately. It is what makes
+            // the promise the plain one — at most one change per grow delay,
+            // and at most one narrowing per shrink delay — rather than two
+            // clocks that can both come due at once and step a box twice.
+            const std::int64_t delay = natural > held.shown ? grow_delay_nanos_ : shrink_delay_nanos_;
+            const std::int64_t due = held.settled_nanos + delay;
+            if (now >= due) {
+                held.shown = natural;
+                held.settled_nanos = now;
+            } else if (next_wake == 0 || due < next_wake) {
+                next_wake = due;
+            }
+        }
+        entry.width = held.shown;
+        kept.emplace(entry.window, held);
+    }
+    // Rebuilt rather than erased-from: a window that has closed is gone from
+    // `rebuilt`, and carrying its measurement forever would make this map grow
+    // for the whole life of a long session.
+    damped_ = std::move(kept);
+    if (next_wake != 0) arm_damping_wake(next_wake);
+}
+
+void WindowSwitcherBar::arm_damping_wake(std::int64_t deadline_nanos) {
+    ui::Application* const app = context().app;
+    if (app == nullptr) return;
+    // An armed wake-up that would come sooner already covers this one. The
+    // one that comes LATER is replaced, because a change that is due at once
+    // must not sit behind a shrink that is thirty seconds out.
+    if (damping_timer_ != 0 && damping_wake_nanos_ <= deadline_nanos) return;
+    if (damping_timer_ != 0) app->cancel_timer(damping_timer_);
+    const std::int64_t delay = std::max<std::int64_t>(0, deadline_nanos - app->clock().now_nanos());
+    const std::weak_ptr<void> liveness = lifetime_token();
+    damping_wake_nanos_ = deadline_nanos;
+    damping_timer_ = app->start_timer(delay, /*repeating=*/false, [this, liveness] {
+        // One-shot, so nothing has to be cancelled on the way out — but the
+        // bar can be destroyed between arming and firing, and a callback that
+        // read `this` then would be reading freed storage (View's own
+        // per-instance liveness token, the same guard the desktop
+        // subscription above uses).
+        if (liveness.expired()) return;
+        damping_timer_ = 0;
+        damping_wake_nanos_ = 0;
+        // Straight back through refresh(), which re-reads the providers and
+        // re-runs the damping: by now more than one width may have come due,
+        // and a wake-up that applied only the one it was armed for would need
+        // a second wake-up to apply the rest.
+        refresh();
+    });
+}
+
 std::vector<PagedStrip::Item> WindowSwitcherBar::strip_items() const {
     std::vector<Item> items;
     items.reserve(entries_.size());
     for (const Entry& entry : entries_)
-        items.push_back(Item{natural_width(entry), entry.label, entry.active});
+        items.push_back(Item{entry.width, entry.label, entry.active});
     return items;
 }
 

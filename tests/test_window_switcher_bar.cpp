@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "cvision/core/text.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/context.hpp"
@@ -570,4 +571,232 @@ CK_TEST(a_detached_and_destroyed_bar_never_hears_from_the_desktop_again) {
     // cancel it; the notification below must simply find nobody listening.
     f.open("Bravo");
     CK_CHECK(f.desktop.windows().size() == 2);
+}
+
+// --- Damped widths --------------------------------------------------------
+//
+// A window's title is not a stable string — a shell rewrites its caption at
+// every prompt — and an undamped taskbar re-sizes the button and re-flows
+// every button beside it each time. These pin the rule that stops that: at
+// most one widening per grow delay and one narrowing per shrink delay, both
+// measured from the entry's last width change.
+
+namespace {
+
+// The delays ckmux runs with, which are also the ones these tests reason in:
+// a second before a button may get wider, half a minute before it may get
+// narrower.
+constexpr std::int64_t kGrow = 1'000'000'000;
+constexpr std::int64_t kShrink = 30'000'000'000;
+
+// The cells one entry's box occupies, padding included — what a reader sees
+// as the length of the button, and the number damping is about.
+int drawn_width(const WindowSwitcherBar& bar, std::size_t index) {
+    for (const WindowSwitcherBar::DrawnEntry& drawn : bar.drawn_entries())
+        if (drawn.index == index) return drawn.width;
+    return -1;
+}
+
+std::string drawn_text(const WindowSwitcherBar& bar, std::size_t index) {
+    for (const WindowSwitcherBar::DrawnEntry& drawn : bar.drawn_entries())
+        if (drawn.index == index) return drawn.text;
+    return {};
+}
+
+}  // namespace
+
+CK_TEST(an_undamped_bar_follows_every_title_change_at_its_natural_width) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    Window* alpha = f.open("Alpha");
+    const int narrow = drawn_width(*bar, 0);
+
+    // No damping is the default, and it is what every existing consumer gets:
+    // the box follows the name in the same frame, with no clock involved.
+    alpha->set_title("Alpha, at considerably greater length");
+    CK_CHECK(drawn_width(*bar, 0) > narrow);
+    alpha->set_title("A");
+    CK_CHECK(drawn_width(*bar, 0) < narrow);
+}
+
+CK_TEST(a_window_the_bar_has_never_measured_takes_its_width_at_once) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+
+    // Opened under damping, and wide immediately: a row that has just
+    // appeared has no previous width to flicker between, and growing it into
+    // its own name would be the flicker damping exists to remove.
+    Window* alpha = f.open("A window with a long name");
+    CK_CHECK(drawn_width(*bar, 0) >= ckv::text::text_width(alpha->title()));
+}
+
+CK_TEST(a_lengthening_title_shows_at_once_but_its_button_waits_out_the_grow_delay) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha");
+    const int settled = drawn_width(*bar, 0);
+
+    alpha->set_title("Alpha — building target 17 of 300");
+    // The NAME is current; only the box is held. A bar that also held the
+    // label would be showing the reader a caption that is no longer true.
+    CK_CHECK(bar->entries()[0].label == "Alpha — building target 17 of 300");
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+    // And the name it cannot fit is elided into the box it has, rather than
+    // spilling over the entry beside it.
+    CK_CHECK(drawn_text(*bar, 0) != bar->entries()[0].label);
+
+    // Not yet.
+    f.clock.advance(kGrow / 2);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+
+    // The positive half: the delay is a delay, not a refusal.
+    f.clock.advance(kGrow / 2);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) > settled);
+    CK_CHECK(drawn_text(*bar, 0) == bar->entries()[0].label);
+}
+
+CK_TEST(a_deferred_widening_arrives_with_no_further_title_change_to_carry_it) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha");
+    const int settled = drawn_width(*bar, 0);
+
+    // One title change and then silence, which is the ordinary case: a
+    // program renames its window once and says nothing more. Nothing else
+    // re-reads the widths, so a bar that did not wake itself would leave this
+    // name elided into its old box for the rest of the session.
+    alpha->set_title("Alpha — a considerably longer caption");
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+    f.clock.advance(kGrow);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) > settled);
+}
+
+CK_TEST(a_shortening_title_keeps_its_button_width_for_the_longer_shrink_delay) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha — building target 17 of 300");
+    const int settled = drawn_width(*bar, 0);
+
+    alpha->set_title("Alpha");
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+    // Past the grow delay, and still wide: the two directions are not the
+    // same wait, which is the whole point of there being two numbers. A row
+    // that is too WIDE costs the reader nothing and is very often about to be
+    // needed again.
+    f.clock.advance(kGrow * 2);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+
+    f.clock.advance(kShrink);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) < settled);
+}
+
+CK_TEST(a_title_rewritten_every_frame_moves_the_button_at_most_once_per_grow_delay) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha");
+
+    // The case this exists for: a build tool writing its progress into the
+    // caption, one frame at a time. Sixty rewrites over the grow delay must
+    // cost the layout one step, not sixty.
+    int widths_seen = 0;
+    int previous = drawn_width(*bar, 0);
+    for (int frame = 1; frame <= 60; ++frame) {
+        alpha->set_title("Alpha — target " + std::to_string(frame) + " of 300");
+        f.clock.advance(kGrow / 60);
+        f.app.step(0);
+        const int now = drawn_width(*bar, 0);
+        if (now != previous) ++widths_seen;
+        previous = now;
+    }
+    CK_CHECK(widths_seen <= 1);
+}
+
+CK_TEST(a_reader_who_renames_a_window_is_not_made_to_wait_for_the_delay) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha — building target 17 of 300");
+    const int settled = drawn_width(*bar, 0);
+
+    // Damping absorbs what a PROGRAM does to a caption. A reader who has just
+    // renamed the window is not flicker, and a rename that visibly took
+    // effect half a minute later reads as a command that did not work — so
+    // the host says which kind of change this was.
+    alpha->set_title("Alpha");
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+    bar->settle_width(*alpha);
+    CK_CHECK(drawn_width(*bar, 0) < settled);
+}
+
+CK_TEST(turning_damping_off_releases_every_width_it_was_holding) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha — building target 17 of 300");
+    const int settled = drawn_width(*bar, 0);
+    alpha->set_title("Alpha");
+    CK_CHECK(drawn_width(*bar, 0) == settled);
+
+    // A setting has to take effect when the host changes it. Leaving a held
+    // box in place until its old delay elapsed would make it take effect at a
+    // moment nobody chose.
+    bar->set_width_damping(0, 0);
+    CK_CHECK(drawn_width(*bar, 0) < settled);
+}
+
+CK_TEST(a_bar_destroyed_before_its_deferred_width_comes_due_leaves_nothing_to_fire_into) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha");
+    alpha->set_title("Alpha — a considerably longer caption");
+
+    // The wake-up is a one-shot holding a liveness token rather than
+    // something a destructor cancels; under ASan this is the case that says
+    // whether that is true.
+    f.desktop.remove_child(bar).reset();
+    f.clock.advance(kGrow * 2);
+    f.app.step(0);
+    CK_CHECK(f.desktop.windows().size() == 1);
+}
+
+CK_TEST(a_deferred_width_holds_still_while_a_reader_has_a_button_pressed) {
+    Fixture f;
+    WindowSwitcherBar* bar = f.bar();
+    bar->set_width_damping(kGrow, kShrink);
+    Window* alpha = f.open("Alpha");
+    Window* bravo = f.open("Bravo, with a name of its own");
+    const int alpha_width = drawn_width(*bar, 0);
+    const int bravo_column = click_column(*bar, 1);
+
+    // A press on the SECOND entry, and then a caption change on the first
+    // that would widen it and push everything after it sideways. PagedStrip
+    // resolves the release by index, so a box that changed width under the
+    // held pointer either loses the click or spends it on the wrong window.
+    bar->on_mouse(press(bravo_column));
+    alpha->set_title("Alpha — a considerably longer caption");
+    f.clock.advance(kGrow * 2);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) == alpha_width);
+    CK_CHECK(click_column(*bar, 1) == bravo_column);
+
+    // Released on the entry it started on, which still means Bravo.
+    bar->on_mouse(release(bravo_column));
+    CK_CHECK(topmost_window(f.desktop) == bravo);
+
+    // And the change that was held is not lost: the press is over, so the
+    // next wake-up applies it.
+    f.clock.advance(kGrow * 2);
+    f.app.step(0);
+    CK_CHECK(drawn_width(*bar, 0) > alpha_width);
 }

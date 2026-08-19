@@ -37,12 +37,15 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/desktop.hpp"
@@ -116,6 +119,13 @@ public:
         Window* window = nullptr;
         std::string label;
         bool active = false;
+        // The content cells this row's box is CURRENTLY given — which is
+        // `natural_width(entry)` unless damping is holding it at an older
+        // measurement (see set_width_damping). It is part of the row's
+        // identity, and therefore of `operator==`, because a box that changed
+        // width is a row that has to be laid out again even when every label
+        // on the bar reads exactly as it did.
+        int width = 0;
 
         friend bool operator==(const Entry&, const Entry&) = default;
     };
@@ -172,6 +182,60 @@ public:
     void set_context_menu_provider(
         std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> provider);
 
+    // --- Damped widths ------------------------------------------------
+    //
+    // How long an entry's box must hold still before it may change width
+    // again: `grow_delay_nanos` before it may get wider, `shrink_delay_nanos`
+    // before it may get narrower. Both measured on the injected Clock from
+    // the last width change of that entry, whichever direction it went in.
+    // Zero for either — the default — is no damping at all, and every row
+    // takes its natural width the instant its label changes.
+    //
+    // It exists because a window's title is not a stable string. A shell
+    // rewrites its caption at every prompt, a build tool writes its progress
+    // into one, an editor appends and removes a dirty marker; each of those
+    // is a new measurement, and an undamped taskbar re-sizes the button and
+    // re-flows every button beside it each time. The row becomes unreadable
+    // long before the titles do, and a reader aiming at a button hits the one
+    // that took its place.
+    //
+    // The two directions get different delays because they are not equally
+    // urgent. A row that is too NARROW is showing an elided name, so it
+    // should widen soon; a row that is too WIDE is showing the whole name in
+    // a box with slack in it, which costs the reader nothing and is worth
+    // holding on to — a title that just got shorter is very often about to
+    // get longer again.
+    //
+    // What is damped is the LAYOUT width, not a drawn one. That is the point:
+    // the reader's complaint is that the button jitters, and a button's length
+    // is the width the strip lays it out at. So page composition becomes a
+    // function of time as well as of the labels — as it already is, since a
+    // title change re-pages today. Damping does not make a pure function
+    // history-dependent; it lengthens the interval over which that function
+    // holds still, from "until the next title change" to "at most one width
+    // change per delay". Within that interval, paging forward and back returns
+    // the reader to exactly the set they came from.
+    //
+    // A window this bar has not measured before takes its natural width at
+    // once. A row that has just appeared has no previous width to flicker
+    // between, and starting every new window at zero and growing into its name
+    // would be the flicker this exists to remove.
+    void set_width_damping(std::int64_t grow_delay_nanos, std::int64_t shrink_delay_nanos);
+    std::int64_t grow_delay_nanos() const noexcept { return grow_delay_nanos_; }
+    std::int64_t shrink_delay_nanos() const noexcept { return shrink_delay_nanos_; }
+
+    // Forgets one window's damping memory, so its next measurement is taken
+    // at once and the delays start again from there — the state a window the
+    // bar has never seen is already in.
+    //
+    // For the change a READER made. Damping exists to absorb a caption a
+    // program is rewriting; a reader who has just renamed a window is not
+    // flicker to be absorbed, and a rename that visibly took effect a second
+    // later — or, for a shorter name, half a minute later — reads as a
+    // command that did not work. The host calls this where it knows the
+    // difference, which is the one thing this widget cannot know.
+    void settle_width(Window& window);
+
     // Re-reads the providers and repaints if the answer changed. Called for
     // the host by the Desktop subscription and by every setter above; a bar
     // driven by a window model of the host's own calls it when that model
@@ -201,13 +265,25 @@ private:
     // application with a desktop-wide context menu of its own still gets it.
     bool open_context_menu(std::size_t index, Point at);
     // The cells one entry's own content needs — today its label, and the one
-    // place a leading status glyph would be paid for. This is the answer
-    // PagedStrip::Item::width carries, so an entry that grows an icon grows
-    // here and the layout follows without being told twice. The strip adds
-    // its own padding either side, which is what makes a highlighted entry
-    // highlight its margins and read as one row rather than as recoloured
-    // words.
+    // place a leading status glyph would be paid for. The measurement damping
+    // is computed FROM; what the strip is actually given is `Entry::width`,
+    // which is this unless a delay is still holding an older number. An entry
+    // that grows an icon grows here and both the damping and the layout follow
+    // without being told twice. The strip adds its own padding either side,
+    // which is what makes a highlighted entry highlight its margins and read
+    // as one row rather than as recoloured words.
     int natural_width(const Entry& entry) const;
+    // Fills in each rebuilt entry's `width` — carrying the remembered one over
+    // where a delay has not elapsed — and arms a wake-up for the earliest
+    // deferred change there is. Runs BEFORE the "did anything change?"
+    // comparison in refresh(), because a box that is due to widen under a
+    // label that did not move is still news for the layout.
+    void damp_widths(std::vector<Entry>& rebuilt);
+    // Schedules one refresh() at `deadline_nanos`, replacing an armed wake-up
+    // that would come later. Nothing else re-reads the widths: a title that
+    // changes once and then holds still gives the bar no second chance to
+    // apply the growth it deferred, so the bar has to wake itself.
+    void arm_damping_wake(std::int64_t deadline_nanos);
     // The item set the strip pages, built from entries_.
     std::vector<Item> strip_items() const;
 
@@ -218,6 +294,24 @@ private:
     std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> context_menu_provider_;
 
     std::vector<Entry> entries_;
+
+    // What one window's box is currently given, and when it was last given it.
+    // Keyed by window rather than carried on the Entry alone because entries_
+    // is rebuilt from the providers on every refresh, and the whole of damping
+    // is a memory of what the width was BEFORE that rebuild. Pruned in the
+    // same pass that rebuilds, so a closed window's measurement goes with it.
+    struct DampedWidth {
+        int shown = 0;
+        std::int64_t settled_nanos = 0;
+    };
+    std::unordered_map<const Window*, DampedWidth> damped_;
+    std::int64_t grow_delay_nanos_ = 0;
+    std::int64_t shrink_delay_nanos_ = 0;
+    // The wake-up that will apply a deferred change, and when it is due. The
+    // deadline is kept beside the id so that a change which becomes due
+    // SOONER than the armed one replaces it rather than waiting behind it.
+    ui::Application::TimerId damping_timer_ = 0;
+    std::int64_t damping_wake_nanos_ = 0;
 
     // Where a context-menu popup goes. Found by walking the parent chain at
     // attach, exactly as MenuBar finds the Desktop it drops menus onto:
