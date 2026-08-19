@@ -496,6 +496,17 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
 }
 
 bool TerminalView::on_key(const KeyEvent& event) {
+    // Before anything else, and only once there is no child to write to: a
+    // host may claim keys in a window whose program has ended, where every
+    // key would otherwise be written into a subsession that cannot take it.
+    // A live terminal never reaches this, so the child's dialect is untouched.
+    if (on_key_after_exit && session_ != nullptr) {
+        const core::TerminalSubsessionState state = session_->state();
+        if ((state == core::TerminalSubsessionState::Exited ||
+             state == core::TerminalSubsessionState::Failed) &&
+            on_key_after_exit(event))
+            return true;
+    }
     if (event.chord == parent_escape_) {
         // The one chord the child never sees, and it is claimed on the press:
         // letting the matching release through would deliver half a chord to

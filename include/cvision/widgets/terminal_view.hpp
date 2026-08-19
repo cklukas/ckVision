@@ -26,6 +26,20 @@ public:
     void set_parent_escape(KeyChord chord) { parent_escape_ = std::move(chord); }
     const KeyChord& parent_escape() const noexcept { return parent_escape_; }
     std::function<void()> on_parent_escape;
+    // Keys offered to the host once the child is gone.
+    //
+    // A terminal view writes what it is given to its child. When the
+    // subsession has Exited or Failed there is nobody to write to, so every
+    // key a reader presses in that window falls into a hole — and a host that
+    // wants to offer them something there (restart the command, dismiss the
+    // window) has no way to hear it. This is the same idea as
+    // `parent_escape`, which reserves one key while the child is alive; this
+    // reserves whatever the host claims once it is not.
+    //
+    // Consulted before the view's own handling and only in those two states,
+    // so a live terminal is unaffected: returning false, or leaving this
+    // unset, is exactly the behaviour that existed before it.
+    std::function<bool(const KeyEvent&)> on_key_after_exit;
     std::function<void(std::string)> on_selection_copy;
     // The child asked to put text on the clipboard with OSC 52, and its
     // profile allows that. The text has already been decoded, bounded and
