@@ -999,7 +999,16 @@ void TerminalEmulator::handle_csi(char final_byte) {
     if (final_byte == 'p' && control_.ends_with('$') &&
         (control_ == "?2031$" || control_ == "?1016$"))
         return;
-    if (final_byte == 'c' && control_.empty()) {
+    // DA is `CSI Ps c` with `Ps` defaulting to 0 (ECMA-48), and the VT100
+    // manual gives the request as `CSI c` OR `CSI 0 c` — the same question
+    // written two ways. Matching only the empty form left `CSI 0 c` consumed
+    // as an unrecognised CSI: no reply, and no diagnostic either, so a child
+    // that spelled it that way waited forever. vttest spells it that way.
+    //
+    // Compared against the literal "0" rather than through `parameter()`,
+    // which strips a leading private marker and would therefore answer DA2
+    // (`CSI > c`) with a DA1 response.
+    if (final_byte == 'c' && (control_.empty() || control_ == "0")) {
         // DA1 is where a program asks what this terminal is, and parameter 4
         // is the one answer that decides whether it draws a picture at all:
         // img2sixel, chafa, gnuplot and ckVision's own capability probe all

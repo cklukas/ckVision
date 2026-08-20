@@ -887,6 +887,58 @@ CK_TEST(terminal_emulator_advertises_declared_graphics_in_device_attributes) {
     CK_CHECK(without_graphics.take_pending_input() == "\x1b[?1;2c");
 }
 
+CK_TEST(terminal_emulator_answers_device_attributes_however_the_child_spells_it) {
+    // `CSI c` and `CSI 0 c` are the SAME request: ECMA-48 gives DA as
+    // `CSI Ps c` with Ps defaulting to 0, and the VT100 manual lists both
+    // spellings. The emulator matched only the empty form, so `CSI 0 c` was
+    // consumed as an unrecognised CSI — no reply, and no diagnostic to say
+    // one had been skipped, which is why it was invisible until a child that
+    // spells it that way blocked forever waiting.
+    //
+    // Found by driving vttest inside ckmux for WP-21 chapter 6: `Send: <27>
+    // [ 0 c` / `Read:` empty. The consequence is not confined to a test
+    // program — img2sixel, chafa and lsix all probe DA1 before drawing, so
+    // any of them using this spelling concluded "no graphics" on a host that
+    // has them.
+    term::TerminalEmulator bare;
+    bare.feed_output("\x1b[c");
+    const std::string implicit = bare.take_pending_input();
+
+    term::TerminalEmulator zero;
+    zero.feed_output("\x1b[0c");
+    const std::string explicit_zero = zero.take_pending_input();
+
+    // Identical, not merely both non-empty: the same question deserves the
+    // same answer, and an emulator that replied differently to the two
+    // spellings would be a subtler version of the same bug.
+    CK_CHECK(implicit == explicit_zero);
+    CK_CHECK(explicit_zero == "\x1b[?1;2;4c");
+
+    // The negative partner, and the reason the two above mean anything: a fix
+    // that answered DA1 to everything ending in `c` would satisfy them both.
+    // `CSI > c` is DA2 — a different question — and must NOT draw a DA1
+    // reply. This is also what rules out writing the guard as
+    // `parameter(control_, 0, 0) == 0`, which strips the private marker and
+    // would match here.
+    term::TerminalEmulator secondary;
+    secondary.feed_output("\x1b[>c");
+    const std::string da2 = secondary.take_pending_input();
+    CK_CHECK(da2 != implicit);
+    CK_CHECK(da2.find("?1;2") == std::string::npos);
+
+    // And the other side of the widening, because a guard is defined as much
+    // by what it stopped refusing as by what it started accepting. `CSI 5 c`
+    // is a DA request with a parameter this terminal does not answer to; the
+    // correct behaviour is the one the empty form used to get by accident —
+    // consumed, no reply. A fix reaching for "any numeric parameter" rather
+    // than the literal zero would answer it, and would be wrong in the
+    // direction nobody checks, because widening a guard produces no failure
+    // until something relies on the narrowness.
+    term::TerminalEmulator unsupported;
+    unsupported.feed_output("\x1b[5c");
+    CK_CHECK(unsupported.take_pending_input().empty());
+}
+
 CK_TEST(terminal_emulator_reports_graphics_limits_instead_of_scrolling_the_child) {
     term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
     profile.cells = Size{4, 3};
