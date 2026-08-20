@@ -84,6 +84,17 @@ def main() -> int:
             unused = sorted(names - referenced)
             if unused:
                 errors.append("screenshot manifest has no documentation reference: " + ", ".join(unused))
+            # --links skips generated/screenshots/ on purpose, so nothing above
+            # ever asks whether the file behind a reference is actually there.
+            # A clone renders these pages; an absent capture is a broken image
+            # on a published page, not a local inconvenience.
+            shots = root / "docs/generated/screenshots"
+            absent = sorted(n for n in names if not (shots / f"{n}.svg").is_file())
+            if absent:
+                errors.append(
+                    "manifest screenshots absent from docs/generated/screenshots: "
+                    + ", ".join(absent)
+                    + " (regenerate with tools/docgen/generate_docs.sh)")
 
     if errors:
         print("\n".join(errors), file=sys.stderr)
