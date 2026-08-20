@@ -111,6 +111,7 @@ CK_TEST(posix_terminal_subsession_presents_a_real_alternate_screen_transition) {
         "/bin/sh", {"-c", "printf '\\033[?1049h\\033[2J\\033[HALT-SCREEN\\033[?25h'; sleep 1"});
     launch.profile.cells = ckv::Size{48, 4};
     launch.environment = {{"TERM", "xterm-256color"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "ALT-SCREEN"));
     CK_CHECK(session->snapshot().alternate_buffer);
@@ -140,6 +141,7 @@ CK_TEST(a_child_starts_from_default_signal_dispositions_whatever_its_host_ignore
         "/bin/sh", {"-c", "cat /dev/zero | dd bs=1 count=1 of=/dev/null 2>/dev/null; "
                           "printf PIPELINE-DONE"});
     launch.profile.cells = ckv::Size{80, 24};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     const bool finished = pump_until(*session, "PIPELINE-DONE");
     // Put the test process back before asserting, so a failure here cannot
@@ -166,6 +168,7 @@ CK_TEST(posix_terminal_subsession_bounds_a_noisy_child_without_losing_later_outp
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "head -c 50000 /dev/zero | tr '\\000' x; printf FLOOD-DONE"});
     launch.profile.cells = ckv::Size{80, 24};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until_exit(*session));
     CK_CHECK(screen_text(session->snapshot()).find("FLOOD-DONE") != std::string::npos);
@@ -176,6 +179,7 @@ CK_TEST(posix_terminal_subsession_preserves_output_tail_when_child_exits_between
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "head -c 100000 /dev/zero | tr '\\000' x; printf EXIT-TAIL"});
     launch.profile.cells = ckv::Size{80, 24};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     // The tail is written and the child is gone before the last drains run,
     // which is the case this exists for: what was already in the pipe must
@@ -188,6 +192,7 @@ CK_TEST(posix_terminal_subsession_preserves_output_tail_when_child_exits_between
 CK_TEST(posix_terminal_subsession_reads_only_its_private_pty) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf child"});
     launch.profile.cells = ckv::Size{16, 2};
+        launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     std::unique_ptr<ckv::term::PosixTerminalSubsession> session =
         ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(session->file_descriptor() >= 0);
@@ -205,8 +210,10 @@ CK_TEST(application_external_wait_handles_include_attached_private_child_session
     ckv::term::HeadlessTerminal outer(ckv::Size{24, 6});
     ckv::ManualClock clock;
     ckv::ui::Application app(outer, clock);
-    ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(
-        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf child; exit 0"}));
+    ckv::term::TerminalLaunchSpec wait_spec =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf child; exit 0"});
+    wait_spec.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
+    ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(wait_spec));
     const std::span<const ckv::term::WaitHandle> handles = app.wait_handles();
     CK_CHECK(handles.size() == 1U);
     CK_CHECK(handles.front().kind == ckv::term::WaitHandleKind::PosixFileDescriptor);
@@ -228,8 +235,10 @@ CK_TEST(posix_terminal_subsession_output_repaints_a_terminal_view_without_chrome
     ckv::term::HeadlessTerminal outer(ckv::Size{24, 6});
     ckv::ManualClock clock;
     ckv::ui::Application app(outer, clock);
-    ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(
-        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf ready"}));
+    ckv::term::TerminalLaunchSpec paint_spec =
+        ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf ready"});
+    paint_spec.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
+    ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(paint_spec));
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
     view->set_bounds(ckv::Rect{1, 1, 20, 3});
@@ -256,6 +265,7 @@ CK_TEST(posix_terminal_subsession_paints_initial_prompt_and_followup_output_with
         "/bin/sh", {"-i"});
     launch.profile.cells = ckv::Size{24, 4};
     launch.environment = {{"TERM", "xterm"}, {"PS1", "ckv-redraw$ "}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(launch));
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
@@ -287,6 +297,7 @@ CK_TEST(posix_terminal_subsession_paints_initial_prompt_and_followup_output_with
 CK_TEST(posix_terminal_subsession_surfaces_spawn_failure_without_throwing) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/definitely/missing/ckvision-child");
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Failed);
     CK_CHECK(!session->snapshot().diagnostics.empty());
@@ -296,7 +307,9 @@ CK_TEST(posix_terminal_subsession_surfaces_spawn_failure_without_throwing) {
 CK_TEST(posix_terminal_subsessions_are_isolated) {
     ckv::term::TerminalLaunchSpec left = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf left"});
     ckv::term::TerminalLaunchSpec right = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf right"});
+    left.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto first = ckv::term::PosixTerminalSubsession::launch(std::move(left));
+    right.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto second = ckv::term::PosixTerminalSubsession::launch(std::move(right));
     pollfd first_ready{first->file_descriptor(), POLLIN, 0};
     pollfd second_ready{second->file_descriptor(), POLLIN, 0};
@@ -310,6 +323,7 @@ CK_TEST(posix_terminal_subsessions_are_isolated) {
 
 CK_TEST(posix_terminal_subsession_observes_child_exit) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "exit 7"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -329,6 +343,7 @@ CK_TEST(posix_terminal_subsession_observes_child_exit) {
 CK_TEST(posix_terminal_subsession_propagates_content_resize_to_child) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "read ready; stty size"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     session->resize(ckv::Size{40, 12}, ckv::Size{9, 18});
     session->send_input("\n");
@@ -348,6 +363,7 @@ CK_TEST(posix_terminal_subsession_uses_explicit_launch_environment_and_directory
             "/bin/sh", {"-c", "printf %s \"$CKV_CHILD_VALUE\"; test \"$(pwd -P)\" = \"$(cd /tmp && pwd -P)\" && printf directory"});
     launch.working_directory = "/tmp";
     launch.environment.push_back({"CKV_CHILD_VALUE", "declared"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -366,6 +382,7 @@ CK_TEST(a_launch_spec_can_name_the_child_something_other_than_its_executable) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf '[%s]' \"$0\""});
     launch.argv0 = "-sh";
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -383,6 +400,7 @@ CK_TEST(a_launch_spec_without_an_argv0_still_names_the_child_by_its_path) {
     // leaves it empty and must keep seeing exactly what it saw before.
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf '[%s]' \"$0\""});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -402,6 +420,7 @@ CK_TEST(an_explicit_only_subsession_inherits_neither_environment_nor_directory) 
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "test \"$(pwd -P)\" = / && test -z \"$HOME\" && printf isolated"});
     launch.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -416,6 +435,7 @@ CK_TEST(an_explicit_only_subsession_inherits_neither_environment_nor_directory) 
 
 CK_TEST(posix_terminal_subsession_close_releases_private_session_state) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "sleep 10"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(session->file_descriptor() >= 0);
     session->close();
@@ -488,6 +508,7 @@ CK_TEST(a_child_can_be_asked_to_end_without_waiting_for_it) {
     // primitive means a host reaching for the pid.
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf ready; sleep 30"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "ready"));
 
@@ -504,6 +525,7 @@ CK_TEST(a_child_can_be_asked_to_end_without_waiting_for_it) {
 CK_TEST(asking_twice_is_not_an_error_and_neither_is_asking_a_child_that_has_gone) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf ready; exit 0"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until_exit(*session, 5'000));
     session->request_termination();
@@ -557,6 +579,7 @@ CK_TEST(a_child_that_declines_to_end_can_be_ended_without_waiting_for_it) {
 CK_TEST(posix_terminal_subsession_contains_abnormal_child_termination) {
     ckv::term::TerminalLaunchSpec launch =
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "kill -TERM $$"});
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
     CK_CHECK(::poll(&ready, 1, 1'000) == 1);
@@ -574,6 +597,7 @@ CK_TEST(posix_terminal_subsession_confines_a_separately_launched_ckvision_applic
     launch.profile.cells = ckv::Size{40, 12};
     launch.profile.cell_pixels = ckv::Size{9, 18};
     launch.environment = {{"TERM", "xterm"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     for (int attempt = 0; attempt < 50 && screen_text(session->snapshot()).find("NESTED-CKVISION") == std::string::npos;
          ++attempt) {
@@ -593,6 +617,7 @@ CK_TEST(posix_terminal_subsession_keeps_nested_ckvision_pixels_inside_terminal_v
         CKV_NESTED_TERMINAL_CHILD_PATH);
     launch.profile.cells = ckv::Size{40, 12};
     launch.environment = {{"TERM", "xterm"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(launch));
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);
@@ -637,6 +662,7 @@ CK_TEST(posix_terminal_subsession_decodes_the_example_sixel_child_output_private
         "/bin/sh", {"-c", "printf '\\033Pq#0;2;100;0;0!32~-!32~-!32~-!32~-!32~-!32~\\033\\\\'"});
     launch.profile.cells = ckv::Size{8, 4};
     launch.profile.cell_pixels = ckv::Size{9, 18};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     for (int attempt = 0; attempt < 100 && session->snapshot().rasters.empty(); ++attempt) {
         pollfd ready{session->file_descriptor(), POLLIN | POLLHUP, 0};
@@ -660,6 +686,7 @@ CK_TEST(a_child_inherits_the_environment_its_owner_is_running_in) {
     ckv::term::TerminalLaunchSpec launch = ckv::term::TerminalLaunchSpec::program(
         "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
     launch.profile.cells = ckv::Size{48, 4};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "[inherited]"));
     ::unsetenv("CKV_ENV_PROBE");
@@ -671,6 +698,7 @@ CK_TEST(a_spec_entry_replaces_the_inherited_one_rather_than_colliding_with_it) {
         "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
     launch.profile.cells = ckv::Size{48, 4};
     launch.environment = {{"CKV_ENV_PROBE", "overridden"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "[overridden]"));
     ::unsetenv("CKV_ENV_PROBE");
@@ -683,6 +711,7 @@ CK_TEST(an_explicit_only_child_sees_nothing_it_was_not_handed) {
         "/bin/sh", {"-c", "printf '[%s]\\n' \"$CKV_ENV_PROBE\"; sleep 5"});
     launch.profile.cells = ckv::Size{48, 4};
     launch.environment_policy = ckv::term::TerminalEnvironmentPolicy::ExplicitOnly;
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "[]"));
     ::unsetenv("CKV_ENV_PROBE");
@@ -696,6 +725,7 @@ CK_TEST(process_id_names_the_running_child_and_nobody_once_it_has_gone) {
         "/bin/sh", {"-c", "echo CKV-PID:$$:DONE; read ignored"});
     launch.profile.cells = ckv::Size{48, 6};
     launch.environment = {{"TERM", "xterm"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, ":DONE"));
 
@@ -723,6 +753,7 @@ CK_TEST(the_seam_answers_the_pid_question_and_defaults_to_nobody) {
         ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "echo SEAM-UP; read ignored"});
     launch.profile.cells = ckv::Size{48, 6};
     launch.environment = {{"TERM", "xterm"}};
+    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "SEAM-UP"));
     ckv::core::TerminalSubsession& seam = *session;
@@ -731,4 +762,37 @@ CK_TEST(the_seam_answers_the_pid_question_and_defaults_to_nobody) {
     session->request_kill();
     CK_CHECK(pump_until_exit(*session));
     CK_CHECK(seam.process_id() == -1);
+}
+
+CK_TEST(a_launch_that_does_not_name_an_exit_policy_is_refused_before_it_forks) {
+    // The policy decides whether `close()` — and so the destructor — is
+    // bounded. Choosing one on the caller's behalf is the library deciding, in
+    // silence, whether the caller's program can hang on exit: this suite hung
+    // in roughly one run in three for exactly that reason, having never said
+    // which policy it wanted. So an unnamed policy is refused.
+    ckv::term::TerminalLaunchSpec unnamed = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf hi"});
+    CK_CHECK(unnamed.exit_policy == ckv::core::TerminalExitPolicy::Unspecified);
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(unnamed));
+    CK_CHECK(session->state() == ckv::term::TerminalSubsessionState::Failed);
+    CK_CHECK(!session->snapshot().diagnostics.empty());
+    // Refused BEFORE the fork: no child, no descriptor, nothing to reap. A
+    // refusal that had already spawned would leave the very orphan the policy
+    // is about.
+    CK_CHECK(session->file_descriptor() < 0);
+    // And the diagnostic names the way out, not only the fault.
+    const std::string first = session->snapshot().diagnostics.front().message;
+    CK_CHECK(first.find("exit policy") != std::string::npos);
+    CK_CHECK(first.find("TerminateAfterGrace") != std::string::npos);
+}
+
+CK_TEST(naming_a_policy_is_all_that_an_unnamed_launch_was_missing) {
+    // The positive partner. Without it the case above would pass just as
+    // happily if `launch` had been broken for every spec rather than only for
+    // unnamed ones — an "is refused" assertion with nothing saying what is
+    // still accepted proves only that something failed.
+    ckv::term::TerminalLaunchSpec named = ckv::term::TerminalLaunchSpec::program("/bin/sh", {"-c", "printf hi"});
+    named.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
+    auto session = ckv::term::PosixTerminalSubsession::launch(std::move(named));
+    CK_CHECK(session->state() != ckv::term::TerminalSubsessionState::Failed);
+    CK_CHECK(session->file_descriptor() >= 0);
 }

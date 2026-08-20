@@ -96,6 +96,18 @@ PosixTerminalSubsession::PosixTerminalSubsession(TerminalLaunchSpec spec, Termin
 std::unique_ptr<PosixTerminalSubsession> PosixTerminalSubsession::launch(TerminalLaunchSpec spec,
                                                                            TerminalSubsessionOptions options) {
     auto session = std::unique_ptr<PosixTerminalSubsession>(new PosixTerminalSubsession(std::move(spec), std::move(options)));
+    // Refused before the fork, not diagnosed after it: an unnamed exit policy
+    // decides whether `close()` is bounded, and picking one here would be the
+    // library making that choice behind the caller's back — which is the whole
+    // failure this enumeration exists to prevent. Reported as a Failed session
+    // so it arrives through the same channel as any other launch failure.
+    if (session->spec_.exit_policy == core::TerminalExitPolicy::Unspecified) {
+        session->emulator_.mark_failed(
+            "terminal launch spec did not name an exit policy: set "
+            "`exit_policy` to TerminateAfterGrace (bounded close) or "
+            "WaitForExit (waits for the child, never escalates)");
+        return session;
+    }
     if (!session->spawn()) session->emulator_.mark_failed("unable to launch private child PTY session");
     return session;
 }

@@ -106,7 +106,25 @@ constexpr TerminalKeyboardFlags supported_terminal_keyboard_flags() noexcept {
            TerminalKeyboardFlags::ReportAllKeysAsEscapeCodes |
            TerminalKeyboardFlags::ReportAssociatedText;
 }
-enum class TerminalExitPolicy : std::uint8_t { WaitForExit, TerminateAfterGrace };
+// What `close()` — and therefore the destructor — may do to a child that has
+// not exited. There is deliberately NO default: `Unspecified` is the value a
+// caller gets by forgetting, and a launch carrying it fails immediately rather
+// than picking one on the caller's behalf.
+//
+// The two policies differ in whether they are BOUNDED, which is the property a
+// caller must choose knowingly:
+//   * `WaitForExit` sends SIGHUP then SIGTERM and waits for the child to
+//     honour them, never escalating. It cannot be hurried, so a child that
+//     ignores those signals — an interactive shell does, by design — blocks
+//     the destructor for as long as it likes.
+//   * `TerminateAfterGrace` escalates to SIGKILL once the grace expires, so
+//     `close()` returns whatever the child does.
+//
+// The unbounded one is a legitimate choice for a child whose output must never
+// be lost. It is not a reasonable thing to acquire by omission, which is what
+// this enumeration's shape is for: the accident is a diagnosable state rather
+// than a silent hang.
+enum class TerminalExitPolicy : std::uint8_t { Unspecified, WaitForExit, TerminateAfterGrace };
 enum class TerminalSubsessionState : std::uint8_t { Ready, Running, Exited, Failed, Closed };
 enum class TerminalMouseEncoding : std::uint8_t { None, X10, Sgr };
 // How much of what the pointer does a child asked to hear about. The three DEC
@@ -193,7 +211,9 @@ struct TerminalLaunchSpec {
     std::vector<std::pair<std::string, std::string>> environment;
     TerminalEnvironmentPolicy environment_policy = TerminalEnvironmentPolicy::InheritAndOverride;
     TerminalCapabilityProfile profile = embedded_xterm_sixel_profile();
-    TerminalExitPolicy exit_policy = TerminalExitPolicy::WaitForExit;
+    // Must be named. See `TerminalExitPolicy` — a launch left `Unspecified`
+    // fails rather than choosing for you.
+    TerminalExitPolicy exit_policy = TerminalExitPolicy::Unspecified;
 
     static TerminalLaunchSpec program(std::string executable, std::vector<std::string> arguments = {}) {
         TerminalLaunchSpec spec;

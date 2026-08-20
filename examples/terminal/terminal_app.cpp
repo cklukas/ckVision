@@ -154,6 +154,12 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
 
 widgets::Window* TerminalApp::new_terminal() {
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(user_shell(), {"-i"});
+    // Bounded, and this example is exactly why the policy must be named. The
+    // child is an INTERACTIVE shell: it ignores SIGTERM by design, so the
+    // unbounded policy would let a single unclosed terminal block teardown for
+    // as long as that shell felt like living. A demo that hangs on exit teaches
+    // the wrong thing twice — once about terminals, once about ckVision.
+    launch.exit_policy = core::TerminalExitPolicy::TerminateAfterGrace;
     launch.profile = term::embedded_xterm_sixel_profile();
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
@@ -209,6 +215,10 @@ widgets::Window* TerminalApp::new_sixel_demo() {
     // runs the same everywhere, and its last act is to hand the window over
     // to the reader's own shell.
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {});
+    // Bounded for the same reason as the plain terminal above: this script's
+    // last act is to exec the reader's own shell, so what this window ends up
+    // holding is interactive whatever it started as.
+    launch.exit_policy = core::TerminalExitPolicy::TerminateAfterGrace;
     launch.profile = term::embedded_xterm_sixel_profile();
     // Sized from the child's own cell metric, so the picture lands on whole
     // cells whatever the profile is configured with.
