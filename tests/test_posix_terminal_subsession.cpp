@@ -84,6 +84,20 @@ CK_TEST(posix_terminal_subsession_runs_bash_interactively_with_readline_input) {
         "/bin/bash", {"--noprofile", "--norc", "-i"});
     launch.profile.cells = ckv::Size{48, 4};
     launch.environment = {{"TERM", "xterm"}, {"PS1", "ckv-bash$ "}};
+    // Bounded, because this child is an INTERACTIVE shell and the default
+    // policy is not bounded. `WaitForExit` sends SIGHUP and SIGTERM and then
+    // loops until the child is reaped, never escalating — which is exactly
+    // what that policy promises. An interactive bash ignores SIGTERM, and
+    // whether it dies on the SIGHUP is a race against its own startup: this
+    // test hung in ~1 run in 3, in the DESTRUCTOR, long after its assertions
+    // had passed, and was read by four sessions as one of the waits above
+    // timing out. It is not — `pump_until` is bounded at 5 s and returns
+    // false, so a needle that never arrives fails in five seconds and cannot
+    // produce a 60 s timeout.
+    //
+    // The three cases below whose children resist signals already say this;
+    // this one needed it for the same reason and did not say it.
+    launch.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
     auto session = ckv::term::PosixTerminalSubsession::launch(std::move(launch));
     CK_CHECK(pump_until(*session, "ckv-bash$"));
 
