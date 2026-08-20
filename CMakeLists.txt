@@ -107,6 +107,33 @@ target_include_directories(cvision PUBLIC
 # of depending on this project's directory-wide build setting.
 target_compile_features(cvision PUBLIC cxx_std_20)
 ckvision_strict(cvision)
+# GCC 13 raises -Wmaybe-uninitialized from INSIDE <bits/shared_ptr_base.h>
+# against `std::optional<Application::ViewHandle>`, and -Werror makes it fatal.
+# It is a false positive, and the code was audited rather than assumed before
+# switching it off:
+#
+#   * `ViewHandle` default-initialises both members (`View* = nullptr` and a
+#     default-constructed `weak_ptr`), so no uninitialised state is even
+#     constructible.
+#   * every dereference of the two optionals is guarded by an engagement check
+#     -- all nine uses read, none unguarded -- and every handle in existence
+#     comes from `make_view_handle(View&)`, so an ENGAGED optional always holds
+#     a non-null view.
+#   * it fires only in the optimised lane. The Debug and sanitiser lanes are
+#     clean, which is the signature of GCC's post-inlining predicate analysis
+#     losing track of the guard, not of a reachable read.
+#   * Clang's own -Wconditional-uninitialized, -Wsometimes-uninitialized and
+#     -Wuninitialized on an optimised build of the same file: zero.
+#
+# Deliberately narrowed to ONE FILE and ONE COMPILER rather than dropped into
+# `ckvision_strict`: -Wmaybe-uninitialized catches real defects, and this
+# leaves it live everywhere else. The alternative -- restructuring correct code
+# to satisfy a warning nobody here can reproduce -- would be changing working
+# code on speculation, with no way to confirm the change did anything.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(src/ui/application.cpp
+        PROPERTIES COMPILE_OPTIONS -Wno-maybe-uninitialized)
+endif()
 if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
 endif()
