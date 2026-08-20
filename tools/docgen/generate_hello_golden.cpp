@@ -27,7 +27,7 @@ void write_dump(const std::filesystem::path& dir, const std::string& name, Appli
     const std::string text = ckv::golden::serialize(doc);
     std::ofstream out(dir / (name + ".dump"));
     out << text;
-    std::fprintf(stderr, "wrote %s\n", (dir / (name + ".dump")).c_str());
+    std::fprintf(stderr, "wrote %s\n", (dir / (name + ".dump")).string().c_str());
 }
 }  // namespace
 

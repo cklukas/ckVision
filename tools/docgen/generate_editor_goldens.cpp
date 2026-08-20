@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
         const std::filesystem::path output = output_directory / (std::string(name) + ".dump");
         std::ofstream out(output, std::ios::binary);
         out << ckv::golden::serialize(ckv::scene::capture(app.composed_surface(), app.current_cursor()));
-        std::fprintf(stderr, "wrote %s\n", output.c_str());
+        std::fprintf(stderr, "wrote %s\n", output.string().c_str());
         return static_cast<bool>(out);
     };
     ckv::term::HeadlessTerminal terminal(ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile());

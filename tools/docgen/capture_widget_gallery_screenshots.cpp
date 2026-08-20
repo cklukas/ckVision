@@ -25,7 +25,7 @@ void write_svg(const std::filesystem::path& dir, const ckv::term::VirtualDisplay
     const std::filesystem::path path = dir / "widget-navigation.svg";
     std::ofstream out(path);
     out << ckv::docgen::render_virtual_display_svg(display);
-    std::fprintf(stderr, "wrote %s (%dx%d cells)\n", path.c_str(), display.size().width, display.size().height);
+    std::fprintf(stderr, "wrote %s (%dx%d cells)\n", path.string().c_str(), display.size().width, display.size().height);
 }
 }  // namespace
 
