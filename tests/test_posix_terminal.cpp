@@ -20,7 +20,9 @@
 #include <signal.h>
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -2587,6 +2589,74 @@ CK_TEST(exhausting_the_session_registry_aborts_without_mutating_the_failed_termi
     CK_CHECK(ninth_output.empty());  // zero mutation: no alt-screen/mode bytes ever reached it
 
     for (int m : master_fds) ::close(m);
+}
+
+namespace ckv::term {
+// Defined at namespace scope in posix_terminal.cpp for exactly this reach:
+// the D-024 handler paths write restore sequences and diagnostics through
+// it, where a short count or an EINTR silently truncating output was the
+// failure CI's -Werror=unused-result pointed at.
+void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcept;
+}  // namespace ckv::term
+
+namespace {
+extern "C" void interrupting_alarm(int) {}
+}  // namespace
+
+CK_TEST(the_signal_safe_write_loop_delivers_every_byte_through_interruptions) {
+    int pipe_fds[2];
+    CK_CHECK(::pipe(pipe_fds) == 0);
+
+    // A reader slow enough that the writer must block on a full pipe, in a
+    // child so the write side genuinely stalls rather than racing a thread.
+    constexpr std::size_t kTotal = 8u * 1024u * 1024u;
+    const pid_t reader = ::fork();
+    CK_CHECK(reader >= 0);
+    if (reader == 0) {
+        ::close(pipe_fds[1]);
+        char chunk[64 * 1024];
+        std::size_t received = 0;
+        for (;;) {
+            const ssize_t got = ::read(pipe_fds[0], chunk, sizeof chunk);
+            if (got <= 0) break;
+            received += static_cast<std::size_t>(got);
+            const struct timespec briefly{0, 2'000'000};  // keep the pipe full
+            ::nanosleep(&briefly, nullptr);
+        }
+        ::_exit(received == kTotal ? 0 : 1);
+    }
+    ::close(pipe_fds[0]);
+
+    // SIGALRM without SA_RESTART, firing faster than the reader drains:
+    // every blocked write is interrupted, repeatedly — EINTR before any byte
+    // moved, a short count after some did. Those are the two conditions the
+    // loop exists for, and the two a bare ::write silently mishandles.
+    struct sigaction interrupter{};
+    interrupter.sa_handler = &interrupting_alarm;
+    sigemptyset(&interrupter.sa_mask);
+    interrupter.sa_flags = 0;  // deliberately not SA_RESTART
+    struct sigaction saved_action{};
+    CK_CHECK(::sigaction(SIGALRM, &interrupter, &saved_action) == 0);
+    struct itimerval tick{};
+    tick.it_interval.tv_usec = 1000;
+    tick.it_value.tv_usec = 1000;
+    CK_CHECK(::setitimer(ITIMER_REAL, &tick, nullptr) == 0);
+
+    const std::vector<char> payload(kTotal, '\x5A');
+    ckv::term::write_all_signal_safe(pipe_fds[1], payload.data(), payload.size());
+
+    struct itimerval off{};
+    (void)::setitimer(ITIMER_REAL, &off, nullptr);
+    (void)::sigaction(SIGALRM, &saved_action, nullptr);
+    ::close(pipe_fds[1]);  // EOF: the child can now total what arrived
+
+    int status = 0;
+    CK_CHECK(::waitpid(reader, &status, 0) == reader);
+    // The child's verdict IS the assertion: every byte arrived despite the
+    // interruptions. Degrading the helper to a single ::write delivers one
+    // pipe buffer's worth and fails here.
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
 }
 
 #endif  // CKVISION_HAS_POSIX_TERMINAL

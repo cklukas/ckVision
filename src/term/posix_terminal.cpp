@@ -28,6 +28,33 @@
 #include "cvision/term/presenter.hpp"  // sanitize_osc_text
 
 namespace ckv::term {
+
+// The async-signal-safe sibling of write_all (below): it retries the two
+// conditions a caller can survive — EINTR and a short count — and gives up on
+// everything else. write_all's answer to backpressure is poll(), which is not
+// async-signal-safe, so the D-024 handler paths use this one. The loop is the
+// half that matters: a short count would otherwise truncate a restore
+// sequence or a diagnostic MID-ESCAPE, leaving the terminal in exactly the
+// state the sequence exists to prevent. The give-up is deliberate, not
+// neglect: every caller is on a path — fatal handler, suspend, resume, stderr
+// diagnostic — with nowhere to report a dead descriptor and no license to
+// block on one. Zero is treated as give-up too, so no descriptor that
+// answers "wrote nothing" can spin a signal handler.
+// At namespace scope rather than in the anonymous namespace below so the
+// suite can drive the loop against a signal-interrupted pipe by extern
+// declaration; nothing else should call it outside this file.
+void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcept {
+    while (count != 0U) {
+        const ssize_t wrote = ::write(fd, bytes, count);
+        if (wrote <= 0) {
+            if (wrote < 0 && errno == EINTR) continue;
+            return;
+        }
+        bytes += wrote;
+        count -= static_cast<std::size_t>(wrote);
+    }
+}
+
 namespace {
 
 // --- D-024: the one sanctioned process-level facility --------------------
@@ -213,20 +240,26 @@ constexpr char kContractViolationPrefix[] = "ckVision contract violation: ";
 extern "C" void on_sigwinch(int) {}
 
 void restore_session(SessionRecord& session) noexcept {
-    ::write(session.output_fd, session.restore_bytes, session.restore_len);
+    // A truncated restore is worse than none: the terminal is left mid-escape
+    // with the screen it was about to leave. The loop, not a (void), is the
+    // answer to glibc's warn_unused_result here.
+    write_all_signal_safe(session.output_fd, session.restore_bytes, session.restore_len);
     ::tcsetattr(session.input_fd, TCSANOW, &session.original_termios);
 }
 
 void write_decimal(int value) noexcept {
+    // Filled from the end so the digits leave in one write instead of one
+    // syscall each — which is also what makes a partial write recoverable:
+    // write_all_signal_safe can resume a run of bytes, not a loop's cursor.
     char digits[16];
-    std::size_t count = 0;
+    std::size_t at = sizeof digits;
     unsigned int magnitude = value < 0 ? static_cast<unsigned int>(-(value + 1)) + 1U
                                        : static_cast<unsigned int>(value);
     do {
-        digits[count++] = static_cast<char>('0' + magnitude % 10U);
+        digits[--at] = static_cast<char>('0' + magnitude % 10U);
         magnitude /= 10U;
     } while (magnitude != 0U);
-    while (count != 0U) ::write(STDERR_FILENO, &digits[--count], 1);
+    write_all_signal_safe(STDERR_FILENO, &digits[at], sizeof digits - at);
 }
 
 void write_assertion_diagnostic() noexcept {
@@ -236,13 +269,18 @@ void write_assertion_diagnostic() noexcept {
     const std::size_t expr_size = g_assertion_expr_size.load(std::memory_order_relaxed);
     const std::size_t file_size = g_assertion_file_size.load(std::memory_order_relaxed);
     const int line = g_assertion_line.load(std::memory_order_relaxed);
-    ::write(STDERR_FILENO, kContractViolationPrefix, sizeof(kContractViolationPrefix) - 1);
-    ::write(STDERR_FILENO, expr, expr_size);
-    ::write(STDERR_FILENO, " (", 2);
-    if (file != nullptr) ::write(STDERR_FILENO, file, file_size);
-    ::write(STDERR_FILENO, ":", 1);
+    // The diagnostic is best-effort — stderr may be a pipe whose reader died —
+    // but a SHORT count is not the same failure as a dead fd: it truncates
+    // the one message this path exists to deliver. Loop for the short
+    // counts; the dead-fd give-up lives documented in the helper.
+    write_all_signal_safe(STDERR_FILENO, kContractViolationPrefix,
+                          sizeof(kContractViolationPrefix) - 1);
+    write_all_signal_safe(STDERR_FILENO, expr, expr_size);
+    write_all_signal_safe(STDERR_FILENO, " (", 2);
+    if (file != nullptr) write_all_signal_safe(STDERR_FILENO, file, file_size);
+    write_all_signal_safe(STDERR_FILENO, ":", 1);
     write_decimal(line);
-    ::write(STDERR_FILENO, ")\n", 2);
+    write_all_signal_safe(STDERR_FILENO, ")\n", 2);
 }
 
 // D-024's handler path uses only POSIX.1-2017 async-signal-safe operations:
@@ -261,12 +299,17 @@ extern "C" void fatal_signal_handler(int sig) {
     if (g_assertion_expr.load(std::memory_order_acquire) != nullptr)
         write_assertion_diagnostic();
     else if (g_callback_failure.load(std::memory_order_acquire))
-        ::write(STDERR_FILENO, kCallbackFailureDiagnostic, sizeof(kCallbackFailureDiagnostic) - 1);
+        write_all_signal_safe(STDERR_FILENO, kCallbackFailureDiagnostic,
+                              sizeof(kCallbackFailureDiagnostic) - 1);
     ::signal(sig, SIG_DFL);
     ::raise(sig);
 }
 
 extern "C" void on_sigtstp(int) {
+    // A handler that RETURNS must leave errno as it found it (POSIX XSH
+    // 2.4.3): the interrupted code may be between a failed call and reading
+    // its errno, and everything below is free to clobber it.
+    const int saved_errno = errno;
     for (SessionRecord& session : g_sessions)
         if (session.state.load(std::memory_order_acquire) == kReady) restore_session(session);
     ::signal(SIGTSTP, SIG_DFL);
@@ -283,16 +326,23 @@ extern "C" void on_sigtstp(int) {
     // If the default stop was ignored (for example, an orphaned process
     // group), no SIGCONT arrives to reinstall us. Keep future suspends live.
     ::signal(SIGTSTP, &on_sigtstp);
+    errno = saved_errno;
 }
 
 extern "C" void on_sigcont(int) {
+    const int saved_errno = errno;  // same obligation as on_sigtstp
     for (SessionRecord& session : g_sessions) {
         if (session.state.load(std::memory_order_acquire) != kReady) continue;
         ::tcsetattr(session.input_fd, TCSANOW, &session.raw_termios);
-        ::write(session.output_fd, session.enter_bytes, session.enter_len);
+        // The sharpest of this file's eleven once-ignored writes: a short
+        // count here would resume the PROGRAM with the terminal half-entered
+        // — raw termios active, the enter sequence truncated mid-escape —
+        // and everything drawn afterwards inherits the corruption.
+        write_all_signal_safe(session.output_fd, session.enter_bytes, session.enter_len);
         session.resumed.store(true, std::memory_order_release);
     }
     ::signal(SIGTSTP, &on_sigtstp);
+    errno = saved_errno;
 }
 
 struct sigaction make_signal_action(void (*handler)(int)) {
@@ -1030,8 +1080,17 @@ void PosixTerminal::write_clipboard(std::string_view text) {
 }
 
 void PosixTerminal::wake() noexcept {
+    // A lost wake is a poll() sleeping through work that is already queued,
+    // so EINTR — nothing written — is retried. EAGAIN is the opposite of
+    // lost: the pipe still holds an unread wake byte, so the wake this call
+    // wanted is already pending; that is the self-pipe design coalescing,
+    // not a failure. A one-byte pipe write cannot be short (atomic ≤
+    // PIPE_BUF), so those two exhaust the outcomes worth acting on.
     const char byte = 0;
-    ::write(self_pipe_write_, &byte, 1);
+    ssize_t result = 0;
+    do {
+        result = ::write(self_pipe_write_, &byte, 1);
+    } while (result < 0 && errno == EINTR);
 }
 
 }  // namespace ckv::term

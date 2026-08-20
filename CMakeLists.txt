@@ -133,6 +133,19 @@ ckvision_strict(cvision)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set_source_files_properties(src/ui/application.cpp
         PROPERTIES COMPILE_OPTIONS -Wno-maybe-uninitialized)
+    # The same GCC-13 post-inlining analysis, relocated to
+    # <bits/basic_string.h> (4 sites in this file). The audit here is a TYPE
+    # argument, stronger than application.cpp's site enumeration: a
+    # std::string cannot be uninitialised — every declaration runs a
+    # constructor — and this file holds zero std::optional<std::string>,
+    # zero unions and zero reinterpret_casts to string, the only constructs
+    # that could put a string object over never-constructed storage.
+    # Optimised lane only; Debug, the sanitiser lanes and Clang's
+    # uninitialised-warning family are all clean. Audited by ckmux-33.
+    # Precondition for the file-scoped property (directory scoping):
+    # posix_terminal.cpp is compiled into exactly one target, cvision.
+    set_source_files_properties(src/term/posix_terminal.cpp
+        PROPERTIES COMPILE_OPTIONS -Wno-maybe-uninitialized)
 endif()
 if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
