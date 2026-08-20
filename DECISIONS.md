@@ -1155,6 +1155,41 @@ it (`PagedStrip` resolves clicks by index, so relaying the row 30 times a
 second under a reader's pointer is the press-in-flight hazard of D-057 at frame
 rate).
 
+**D-061 — A terminal's exit policy is named by its caller, never defaulted.**
+`TerminalExitPolicy` carries `Unspecified` as its first enumerator, and a
+`TerminalLaunchSpec` that still holds it is refused by `launch()` before the
+fork, as a Failed session with a diagnostic naming both real choices. There is
+no default.
+
+The two policies differ in whether `close()` is BOUNDED, and `close()` runs
+from the destructor. `WaitForExit` sends SIGHUP then SIGTERM and waits for the
+child to honour them, never escalating — a legitimate choice for a child whose
+output must never be lost, and a poor thing to acquire by omission, because a
+child that ignores those signals blocks the destructor for as long as it likes.
+An interactive shell ignores SIGTERM by design. This library's own
+`bash -i` test hung in roughly one run in three for exactly that reason, having
+never said which policy it wanted; four sessions read the 60-second timeout as
+one of the test's waits rather than as its destructor, and the helper that
+would have refuted that reading — bounded at five seconds — went unopened for
+hours. ckmux's serverless client had the same defect in shipping code, unnoticed
+because its server path named the policy and a check of that one path was
+generalised to the product.
+
+Rejected: flipping the default to the bounded policy (it makes the accident
+quieter rather than absent, and silently changes what every existing consumer's
+`close()` does); leaving the default and documenting it harder (the enumeration
+was already documented, and documentation cannot make an omission visible at
+the call site); requiring the policy as a parameter of
+`TerminalLaunchSpec::program()` (it forces the choice at exactly one
+construction path while aggregate initialisation still reaches the field, so
+the guarantee would hold only where it was least needed).
+
+The cost is a breaking change for any consumer outside this repository and
+ckmux: such a caller now fails at launch with a clear message instead of
+silently taking the unbounded policy. That is the right failure — the
+alternative is a program that hangs on exit for reasons its author cannot see —
+but it is a real break, and no gate in either repository can detect one.
+
 ## Open
 
 **D-OPEN-1 — License at first public release.**
