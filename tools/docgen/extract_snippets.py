@@ -42,7 +42,12 @@ def process_document(root: pathlib.Path, document: pathlib.Path, write: bool) ->
         if not write and match.group("code") != expected:
             errors.append(
                 f"{document.relative_to(root)}: stale snippet from {source}:{first}-{last}; "
-                "run tools/docgen/extract_snippets.py --write"
+                "FIRST check the lines= range still points at the intended code, "
+                "THEN run tools/docgen/extract_snippets.py --write. --write trusts "
+                "the cited ranges: if the source gained or lost lines (a header "
+                "sweep, a refactor), it rewrites the docs to match the stale range "
+                "and this check goes green over wrong snippets — fix the ranges "
+                "first (found the expensive way, 2026-08-20)"
             )
         return (
             f'<!-- ckvision-snippet source="{source}" lines="{first}-{last}" -->\n'
@@ -60,7 +65,10 @@ def process_document(root: pathlib.Path, document: pathlib.Path, write: bool) ->
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path.cwd())
-    parser.add_argument("--write", action="store_true", help="replace snippet bodies from their source ranges")
+    parser.add_argument("--write", action="store_true", help="replace snippet bodies from their source ranges. Trusts the "
+                    "cited lines= ranges: after a source gained or lost lines, fix "
+                    "the ranges FIRST or this rewrites the docs to match the stale "
+                    "range and the check passes over wrong snippets")
     arguments = parser.parse_args()
     root = arguments.root.resolve()
     documents = sorted((root / "docs").glob("*.md"))
