@@ -57,9 +57,10 @@ This is the actual interactive entry point from Hello. `HelloApp` owns the
 application-specific view graph; the host owns the terminal, clock, clipboard,
 and loop.
 
-<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-17" -->
+<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-18" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ckVision Hello — a compact visual integration example; see
 // docs/hello-example.md for its behavior contract and golden coverage.

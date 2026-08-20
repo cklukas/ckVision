@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 """Enforce the 60-line Hello example gate from ROADMAP.md M9.
 
 The count covers non-comment, non-blank physical lines in the three

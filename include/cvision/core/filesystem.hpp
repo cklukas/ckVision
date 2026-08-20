@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The library's only filesystem access (ARCHITECTURE.md §5 "Platform
 // services", D-039): file dialogs enumerate through this interface,

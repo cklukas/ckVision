@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The M1 acceptance corpus (ROADMAP.md M1 exit criteria): ASCII, East
 // Asian wide, combining marks, zero-width joins, and emoji sequences —

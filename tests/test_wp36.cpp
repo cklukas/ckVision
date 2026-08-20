@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // WP-36 acceptance closes the gap between isolated container math and visible
 // application behavior: wrapping height participates in hosted dialog content,

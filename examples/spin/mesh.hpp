@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The Spin example's model layer: rigid three-dimensional shapes as plain
 // data, and the catalog its "new window" menu is built from.

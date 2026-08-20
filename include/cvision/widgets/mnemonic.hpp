@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Shared '&'-marked mnemonic parsing for Label and Button (classic CUA
 // convention: "&Save" underlines 'S' as the mnemonic; "&&" is a

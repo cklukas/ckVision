@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ScrollViewport: scrolls any content view via keyboard and its own
 // Scrollbar children (plans/widgets.md M6a baseline "Scrolls any

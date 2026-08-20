@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The Spin example: one window per rotating solid, every frame drawn on a
 // worker thread and shown through the ordinary invalidation path.

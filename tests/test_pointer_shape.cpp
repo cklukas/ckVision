@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Mouse pointer shapes (OSC 22), end to end: the two host vocabularies and
 // their degradations, the support query and the one reply shape that counts

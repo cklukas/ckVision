@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // A first-class command system (ARCHITECTURE.md §5, DECISIONS.md
 // D-013): a command's identity is a namespaced string key it declares

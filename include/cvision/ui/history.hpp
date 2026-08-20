@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Application-scoped named history lists (ARCHITECTURE.md §5
 // "Application services"): input lines, combo boxes, and file dialogs

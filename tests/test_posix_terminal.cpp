@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Integration tests for PosixTerminal, run against a forked PTY child
 // — never against this test process's own controlling terminal, so a

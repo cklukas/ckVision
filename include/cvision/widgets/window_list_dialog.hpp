@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Window-list dialog: select/activate/close from a list of a Desktop's
 // open windows (plans/widgets.md M6c baseline "Window list").

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // What a PointerShape is called on the wire (OSC 22), and how a shape a
 // host cannot draw degrades to one it can.

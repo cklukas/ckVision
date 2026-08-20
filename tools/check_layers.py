@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 """Enforce ckVision include discipline (ARCHITECTURE.md section 1).
 
 Three checks over include/cvision and src:

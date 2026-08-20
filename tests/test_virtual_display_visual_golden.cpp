@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Hash-pinned pixel-plane checks for the bounded, independently implemented
 // VT/Sixel protocol display. The first fixture is hand-authored protocol input;

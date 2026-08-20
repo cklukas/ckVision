@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ImageView: shows an Image scaled to its cell box, mandatory fallback
 // content, dual-space (cell + pixel) mouse events where the terminal

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The render pipeline (View tree -> off-screen Surface -> Presenter ->
 // Terminal bytes) that Application::step() now drives — before this,

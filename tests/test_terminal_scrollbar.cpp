@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The terminal scrollbar binding: a Scrollbar on the window frame, driven by
 // the TerminalView's scroll state and driving it back. What is pinned here is

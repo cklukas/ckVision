@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The geometry every scrolling text surface needs, in one place: where a
 // logical line breaks into display rows, and which scrollbars a viewport

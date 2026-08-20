@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The incremental byte-to-event state machine (ARCHITECTURE.md §4).
 // Coverage and every scope decision are documented in

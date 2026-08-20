@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Golden suites for the M2 exit criteria (ROADMAP.md): clipping/text
 // layout, automatic junction merging, shadow occlusion, and raster

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Instance-owned language profiles and line-state highlighters for TextEditor.
 #pragma once

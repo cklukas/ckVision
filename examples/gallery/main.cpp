@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ckVision Gallery — a real, runnable demonstration application
 // (ROADMAP.md M8 "examples finalized"), inspired in spirit by

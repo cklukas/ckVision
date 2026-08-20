@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Message boxes: info/warning/error/confirm with standard button sets
 // (plans/widgets.md M5 baseline). Built directly from Window + Button

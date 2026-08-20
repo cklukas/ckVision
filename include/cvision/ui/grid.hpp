@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Grid: the row/column-span container from D-006's remaining set
 // (M10/WP-19). Unlike Row/Column, whose per-child SizePolicy lets each

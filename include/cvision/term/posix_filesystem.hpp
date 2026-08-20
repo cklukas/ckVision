@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The one concrete real-filesystem FileSystem (D-039), mirroring
 // PosixTerminal/PosixClock's pattern: core/ui/widgets never touch the

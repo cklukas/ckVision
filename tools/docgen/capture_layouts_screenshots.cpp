@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Captures the real LayoutsApp at representative sizes, including the
 // application's normal resize, hard-floor degradation, and recovery paths.

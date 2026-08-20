@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Captures every Workbench tab.  Tab changes use TabControl's public API so
 // each documented page is still the app's production object graph.

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // One-shot generator for tests/golden/hello_*.dump — NOT run by the
 // test suite or CI; run by hand (and only by hand, deliberately, same

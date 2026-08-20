@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Directory picker: tree-based selection (plans/widgets.md M6c
 // baseline "Directory picker": "Tree-based selection"), built on

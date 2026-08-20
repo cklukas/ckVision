@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Typed, non-blocking standard-dialog completion (D-038). Factories
 // retain the internal state until their Window detaches; callers retain

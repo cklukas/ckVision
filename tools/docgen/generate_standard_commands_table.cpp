@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // One-shot generator for the command table embedded in
 // docs/standard-commands.md — NOT run by the test suite or CI; run by

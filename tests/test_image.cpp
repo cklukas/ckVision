@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "cvision/core/image.hpp"
 
 #include "cvision/testing/cktest.hpp"

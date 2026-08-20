@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // What ckVision's own terminal layer decodes from THIS terminal. Run it in
 // the terminal that misbehaves and click a few times: it reports the

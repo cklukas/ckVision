@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Documentation tooling, NOT part of the cvision library: renders a
 // composed FrameView (whatever a real Application last presented) to

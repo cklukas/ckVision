@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Every public method translates its LOCAL-space parameters to
 // absolute Surface space once, at the boundary, via to_absolute(); the

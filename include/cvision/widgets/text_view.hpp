@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // TextView: read-only styled text, scrolling, activatable links, and a
 // deterministic OSC 8 export path (plans/widgets.md M6b).

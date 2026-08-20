@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "gallery_app.hpp"
 
 #include "cvision/widgets/button.hpp"

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Scrollbar: proportional thumb, arrows, paging, drag (plans/
 // widgets.md M6a baseline). Orientation-agnostic math lives in one

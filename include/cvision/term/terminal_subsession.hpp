@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Platform-facing embedded-terminal contracts (D-042). The deterministic
 // session values and UI seam live in cvision/core; this layer adds readiness

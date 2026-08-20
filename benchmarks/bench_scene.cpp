@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // M2 benchmark smoke: exercises the compositor's compose stage, both a
 // full initial composition and the steady-state (no damage) path the

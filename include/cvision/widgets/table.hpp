@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Table: a provider-backed, typed, editable data view (D-043). A TableModel is
 // caller-owned and queried only for visible cells. Row identity, never display

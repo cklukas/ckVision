@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Cell-level golden evidence for the private terminal model.  The fixture
 // includes primary/alternate-buffer transitions and cursor/style state, so a

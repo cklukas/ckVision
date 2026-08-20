@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // WP-24's literal resize acceptance: one desktop is driven only through
 // HeadlessTerminal::resize and Application::step, then its composed frame is

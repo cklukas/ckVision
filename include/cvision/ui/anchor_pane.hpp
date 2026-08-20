@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // AnchorPane: the modern equivalent of the classic per-view grow flags
 // (M10/WP-18) — a container for children placed at their own explicit

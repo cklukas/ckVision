@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // U4-k: what "animation" means in this toolkit, and the minimize flight as
 // its first consumer.

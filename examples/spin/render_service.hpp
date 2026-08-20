@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The Spin example's boundary between the render threads and the
 // application's owning thread (ARCHITECTURE.md §9): worker threads take

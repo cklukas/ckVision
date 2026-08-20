@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The Spin example's software renderer: one Mesh, one orientation, one
 // RGBA Image. It depends on nothing above it — no view, no terminal, no

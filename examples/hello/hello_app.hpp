@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // A compact ckVision-owned integration example: desktop, menu/status chrome,
 // modal greeting dialog, and golden coverage. See docs/hello-example.md.

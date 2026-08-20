@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Editor performance smoke: timing is diagnostic, while the exercised edit
 // and incremental-highlighting invariants make this a deterministic CTest

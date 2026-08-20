@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Paired visual acceptance for the Gallery graphics path. These checks consume
 // exact Terminal::write bytes through VirtualDisplay; they do not read the

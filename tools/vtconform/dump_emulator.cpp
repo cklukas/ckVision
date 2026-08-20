@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // One half of the VT conformance harness (tools/vtconform/README.md): feed a
 // byte script to ckVision's embedded-terminal emulator and print what the

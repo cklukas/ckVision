@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "cvision/core/clock.hpp"
 #include "cvision/core/diagnostics.hpp"
 #include "cvision/core/error.hpp"

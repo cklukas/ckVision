@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Row and Column: explicit linear-container layouts computed in one
 // top-down, non-iterative pass over each container's direct children

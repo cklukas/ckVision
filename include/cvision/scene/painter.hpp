@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Painter: the one drawing API (ARCHITECTURE.md §3). Widgets never
 // emit escape sequences and never touch cells directly — every mutation

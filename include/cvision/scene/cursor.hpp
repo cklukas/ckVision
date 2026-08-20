@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // CursorShape/CursorState live in core (core/cursor.hpp) so that
 // term::Presenter can consume them without depending on scene

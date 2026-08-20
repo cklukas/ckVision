@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Demonstrates why Cell::from_grapheme's full control-character
 // neutralization (D-040) matters to the golden dump format itself: an

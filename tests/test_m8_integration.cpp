@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // End-to-end M8 regressions for seams whose mechanisms are built and
 // unit-tested elsewhere but were never wired to a real terminal

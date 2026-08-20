@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // cktest — ckVision's minimal, dependency-free unit-test harness.
 #pragma once

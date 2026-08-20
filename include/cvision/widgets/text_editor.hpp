@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // TextEditor is the document-editor widget. Memo remains a compact form field;
 // this type is designed around a shared revisioned EditorDocument.

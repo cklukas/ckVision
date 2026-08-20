@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ListView: provider-backed scrolling, identity-stable single/multi selection,
 // keyboard search, and double-click activation (D-043). It owns its vertical

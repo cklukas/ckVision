@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Explicit injected-file-service workflow for a shared EditorDocument.
 #pragma once

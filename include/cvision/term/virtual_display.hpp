@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Deterministic terminal-output model used by HeadlessTerminal. It
 // consumes the exact VT/Sixel bytes Presenter writes and exposes the

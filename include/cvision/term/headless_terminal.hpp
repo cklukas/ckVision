@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // A full in-memory Terminal for tests and headless automation
 // (ARCHITECTURE.md §4): scripted input, captured output, no real I/O.

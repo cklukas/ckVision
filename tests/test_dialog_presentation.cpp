@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Cross-family D-038 presentation-result contract tests. Individual widget
 // suites cover each dialog's controls; this file keeps lifecycle outcomes

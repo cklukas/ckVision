@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Golden regression test for HelloApp's ckVision-owned visual contract.
 // It pins its D-014 frames so regressions in Window/MenuBar/StatusLine/

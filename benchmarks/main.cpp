@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The single entry point for the cvision_bench executable — every
 // other bench_*.cpp exposes a run_*_benchmarks() function and must NOT

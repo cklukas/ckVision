@@ -1192,11 +1192,25 @@ but it is a real break, and no gate in either repository can detect one.
 
 ## Open
 
-**D-OPEN-1 — License at first public release.**
-Sole copyright rests with the project owner, so every option stays
-available until release. Candidates: permissive (MIT or Apache-2.0) for
-maximum adoption; GPL-3.0-only; or dual licensing. Decide no later than
-the 0.1 release gate (ROADMAP M11).
+**D-OPEN-1 — Resolved by the owner, 2026-08-20: MIT, for ckVision and ckmux
+jointly (ckmux WP-26).** The standard MIT license, deliberately not MIT-0
+and deliberately not Apache-2.0: attribution stays required, and what
+Apache-2.0 would have added in writing — contribution licensing and a
+patent grant — is recovered in `CONTRIBUTING.md` instead (DCO sign-off; an
+explicit patent grant from contributors; and a relicense grant to the
+owner, so a future commercial dual-license of the library needs no hunt
+for past contributors). What decided it over Apache-2.0: MIT is compatible
+with everything including GPLv2-only, and it keeps the BSD base-system
+door open — OpenBSD imports no Apache-2.0 code into base, and tmux is IN
+OpenBSD base precisely because it is ISC; a permissively licensed
+multiplexer keeps that story available. Sole copyright rests with the
+owner, whose own commercial applications may therefore use both projects,
+with any accepted contributions, without restriction. Mechanics: `LICENSE`
+at each repo root is the authoritative text; every code file keeps its
+copyright line verbatim and gains `SPDX-License-Identifier: MIT` beneath
+it (swept by ckmux's `tools/add_spdx.py`); the "All rights reserved"
+phrase in the existing lines is vestigial alongside the MIT grant and is
+retained rather than churning every header a second time.
 
 **D-OPEN-2 — Resolved (superseded by D-017).**
 Graphics are mainline 0.1 scope, first-class in every layer, not an

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Contract: a private-terminal state change invalidates a TerminalView even
 // when it is attached through the normal application view tree.  This guards

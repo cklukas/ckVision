@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // A human-readable account of what this terminal reported and what
 // ckVision concluded from it. Terminals disagree with their own

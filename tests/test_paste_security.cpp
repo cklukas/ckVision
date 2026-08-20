@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Semantic hostile-paste assertions: observe the command dispatcher and the
 // focused widget, not merely the decoder's variant types.

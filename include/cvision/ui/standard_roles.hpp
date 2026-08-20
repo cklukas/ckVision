@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The theme roles ckVision's own M4-M6 widgets resolve through — the
 // "ckv." namespace prefix (DECISIONS.md D-007) so third-party widgets

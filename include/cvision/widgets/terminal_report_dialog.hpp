@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Terminal report dialog: capability_report()'s evidence table together
 // with the application's own mouse-dispatch diagnostics, as one standard

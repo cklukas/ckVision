@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # Documentation tooling — not part of the cvision library, not
 # installed, not part of ckVision's own public API. Only built when

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Core contract for an embedded terminal child session (D-042).  The
 // contract contains only deterministic values and operations; process and

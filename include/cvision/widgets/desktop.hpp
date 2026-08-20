@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Desktop: background fill, owns z-ordered windows, activation,
 // next/previous cycling, select-by-number, tile/tile-horizontally/

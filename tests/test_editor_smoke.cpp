@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // End-to-end evidence for the shipped editor example. The test drives its
 // public application path against HeadlessTerminal, the same object graph as

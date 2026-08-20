@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Canvas: application draws RGBA at the widget's current pixel size,
 // mandatory fallback painter, dual-space mouse events (plans/

@@ -70,6 +70,12 @@ reference documentation is not done.
   acceptable only for public, factual statements (e.g. adopters).
 - Every source, build, and tooling file begins with the copyright line
   `Copyright (c) 2026 C. Klukas. All rights reserved.` in the file's
-  comment syntax. No SPDX license identifier until D-OPEN-1 is resolved.
+  comment syntax, followed by `SPDX-License-Identifier: MIT` on the next
+  line — D-OPEN-1 was resolved by the owner on 2026-08-20: **MIT** (the
+  standard MIT license, not MIT-0; `LICENSE` at the repo root holds the
+  authoritative text), with contribution terms in `CONTRIBUTING.md` (DCO
+  sign-off, an explicit patent grant, and a relicense grant to the owner).
+  The copyright line stays verbatim; the SPDX line beneath it is the
+  license statement, swept by ckmux's `tools/add_spdx.py`.
 - Commit messages: one-line summary, then what and why, then verification
   evidence (test/benchmark counts). Never commit with failing gates.

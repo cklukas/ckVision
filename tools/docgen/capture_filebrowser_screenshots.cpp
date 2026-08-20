@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Same discipline as capture_gallery_screenshots.cpp, for the File
 // Browser example — against a scripted MemoryFileSystem (not the real

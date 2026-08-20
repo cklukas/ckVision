@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // WP-26's visible ownership contract: a standard dialog attached through
 // Desktop's generic View API is active, participates in F6 cycling, then

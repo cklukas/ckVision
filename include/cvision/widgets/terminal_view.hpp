@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // TerminalView consumes the deterministic core session seam. It owns neither
 // a process nor a PTY and has no access to the outer Terminal.

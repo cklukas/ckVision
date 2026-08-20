@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Compile-backed public-API example: application-owned INI profile.
 #include "cvision/widgets/syntax_profile.hpp"

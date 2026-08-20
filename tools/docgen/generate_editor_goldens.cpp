@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Deliberately explicit golden regeneration for the shipped editor example.
 // Run this tool manually after an intentional visual-contract change, review

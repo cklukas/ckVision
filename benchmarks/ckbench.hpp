@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ckbench — ckVision's minimal, dependency-free benchmark harness.
 // Note: benchmarks are tooling and may read the steady clock; library

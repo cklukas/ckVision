@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Base64 (RFC 4648 §4), the encoding OSC 52 carries clipboard text in — in
 // both directions, because ckVision is at both ends of that sequence: it

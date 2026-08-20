@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Standalone POSIX launch contract. It remains independently runnable when
 // the aggregate test binary is temporarily blocked by an unrelated suite.

@@ -23,7 +23,7 @@ Hello declares its own application commands, while the larger examples attach
 a handler to the framework's standard Quit command, `commands().standard().quit`.
 The menu/status chrome is then simple data that references a command id.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="11-24" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="12-25" -->
 ```cpp
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     // Each command names itself; the registry hands back the id this
@@ -66,7 +66,7 @@ Apply, Browse…, Reset. A Cancel button is therefore written `ButtonRole::Dismi
 and needs no handler of its own — the role is the behaviour, and a button whose
 only instruction was "not the default" used to be an inert control.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="174-199" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="175-200" -->
 ```cpp
     help->set_bounds(Rect{33, 14, 12, 2});
     help->on_press = [this] { present_help(); };
@@ -168,7 +168,7 @@ currently permitted. Here Step 1 is unavailable until Name has text; entering
 `Ada` produces the enabled state shown below. The predicate is reevaluated from
 the actual control state, so a caller does not manually synchronize a button.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="144-149" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="145-150" -->
 ```cpp
     spin_box_ = spin.get();
     content->add_child(std::move(spin));

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Drives the same GalleryApp object graph the interactive
 // examples/gallery binary and tests/test_gallery_smoke.cpp use, headlessly,

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // A correct, public-protocol Sixel encoder (ARCHITECTURE.md §4/§7:
 // "graphics encoders"). v1 scope: a deterministic, always-in-budget

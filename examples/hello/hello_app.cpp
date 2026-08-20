@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "hello_app.hpp"
 
 #include "cvision/widgets/application_shell.hpp"

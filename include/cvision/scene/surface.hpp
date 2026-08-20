@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Surface: an owned rectangular grid of Cells with per-row damage
 // tracking and cell-anchored raster regions (ARCHITECTURE.md §3).

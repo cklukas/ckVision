@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The POSIX backend (macOS/Linux): raw-mode tty management, a
 // poll-based event loop with a self-pipe for cross-thread wakeups,

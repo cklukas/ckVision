@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Context: the flat {theme, roles, application} bundle a widget needs
 // to resolve its own theme roles and (for the few widgets that need

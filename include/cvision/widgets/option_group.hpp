@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // CheckGroup (multi-select) and RadioGroup (exclusive-select): arrow
 // navigation, mnemonics (plans/widgets.md M6a baseline). CheckGroup renders

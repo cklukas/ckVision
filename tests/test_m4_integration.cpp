@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // End-to-end M4 exit-criteria smoke test: a materialized dialog driven
 // entirely through Application's headless event dispatch — Tab

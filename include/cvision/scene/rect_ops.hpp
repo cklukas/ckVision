@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Small, self-contained rectangle-set arithmetic used for raster-region
 // occlusion slicing (ARCHITECTURE.md §3/§7) — plain computational

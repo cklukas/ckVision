@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // WP-25's visible activation contract: two genuinely overlapping windows
 // begin with the front one active; a click on a descendant in the exposed

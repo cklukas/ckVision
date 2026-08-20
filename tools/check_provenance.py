@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 """Reject prohibited claim patterns under DECISIONS.md D-012.
 
 This deliberately narrow lexical guard supplements mandatory human review; it

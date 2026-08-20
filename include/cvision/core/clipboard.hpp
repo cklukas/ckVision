@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Platform clipboard-export contract (ARCHITECTURE.md §1 and D-039).
 // Application owns the portable, in-process clipboard text.  A host may

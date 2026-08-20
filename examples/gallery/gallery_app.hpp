@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The object graph behind the ckVision Gallery example, factored out
 // of main.cpp so tests/test_gallery_smoke.cpp can build and drive the

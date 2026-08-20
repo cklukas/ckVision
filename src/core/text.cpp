@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Unicode 15.1 extended-grapheme segmentation (UAX #29) and terminal-column
 // width policy. The generated UCD property tables are the sole character-data

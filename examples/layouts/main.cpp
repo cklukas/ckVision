@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
 #include "cvision/term/terminal_clipboard.hpp"

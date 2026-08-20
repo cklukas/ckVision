@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // WP-31 allocation gates. The process-wide replacement lives only in the
 // test executable; library state remains instance-owned. It counts ordinary

@@ -21,7 +21,7 @@ documented cell fallback instead of a blank area.
 The same app gives each view a click callback and switches pages through a
 normal `TabControl`:
 
-<!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="43-98" -->
+<!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="44-99" -->
 ```cpp
 
     auto status = std::make_unique<widgets::StatusLine>();
@@ -105,7 +105,7 @@ busy. The [Spin example](example-apps.md) is the reference for all four.
 
 `SpinView` is the whole of the application-side contract:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="102-165" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="103-166" -->
 ```cpp
 void SpinView::request_frame(RenderService& service, std::int64_t now_nanos) {
     // The back-pressure, and the whole of it: while a frame is being
@@ -261,7 +261,7 @@ animation but a slow application.
 
 Spin answers that with two rules and no polling at all:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="457-492" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="458-493" -->
 ```cpp
     last_tick_nanos_.reset();
 }

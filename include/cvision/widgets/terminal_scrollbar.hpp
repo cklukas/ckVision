@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The scrollbar a terminal window's frame carries — the classic desktop's
 // own place for one: a vertical Scrollbar standing on the window's right

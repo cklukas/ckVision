@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The one concrete real-time Clock (D-039): core/scene/ui/widgets never
 // read wall-clock time directly, so applications need SOMETHING at the

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Declarative dialog descriptors, validated materialization
 // (ARCHITECTURE.md §5 "Layout and dialog construction"): an

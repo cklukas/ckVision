@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The cases below are mechanically generated from the Unicode 15.1.0
 // GraphemeBreakTest conformance corpus. Their source hash is recorded in the

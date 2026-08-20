@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ckVision Hello — a compact visual integration example; see
 // docs/hello-example.md for its behavior contract and golden coverage.

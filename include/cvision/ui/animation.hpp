@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Animation (U4-k): one bounded, interruptible run of frames over the
 // injected Clock — and the whole of what "animation" means in this toolkit.

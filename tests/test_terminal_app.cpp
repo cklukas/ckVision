@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // POSIX integration coverage for the runnable contained-terminal example.
 // The example intentionally launches real private PTYs, so this remains a

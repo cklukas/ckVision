@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "cvision/widgets/window_list_dialog.hpp"
 
 #include "cvision/widgets/list_view.hpp"

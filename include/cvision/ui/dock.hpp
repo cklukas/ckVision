@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Dock: the edges-plus-center container from D-006's remaining set
 // (M10/WP-19) — the classic border layout (Top/Bottom/Left/Right

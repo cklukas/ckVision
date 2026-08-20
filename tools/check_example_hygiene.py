@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 """WP-35 public-example hygiene gate.
 
 The examples are the client-facing construction surface. They must not retain

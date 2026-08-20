@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // StatusLine: context-sensitive hints bound to focus, clickable
 // command items (plans/widgets.md M5 baseline). The hint mechanism

@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # Generate ckVision's pinned Unicode 15.1.0 property tables and the official
 # extended-grapheme-cluster conformance cases. This script deliberately reads

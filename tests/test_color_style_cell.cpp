@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "cvision/core/cell.hpp"
 #include "cvision/core/color.hpp"
 #include "cvision/core/palette.hpp"

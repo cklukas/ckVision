@@ -38,7 +38,7 @@ Application
 The layouts example shows the ordinary explicit construction style: make a
 Desktop, transfer it to the root, then build chrome and windows.
 
-<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="20-32" -->
+<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="21-33" -->
 ```cpp
 
 LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {

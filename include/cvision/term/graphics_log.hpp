@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Opt-in tracing of the graphics path, for the questions that cannot be
 // answered by reading the code: did this child ask about graphics and what was

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # Regenerates everything under docs/generated/: the example-app
 # screenshots (SVG, from the real virtual-terminal render — see

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Overlay: the layered-composition container from D-006's remaining
 // set (M10/WP-19) — a stack of children sharing the same footprint

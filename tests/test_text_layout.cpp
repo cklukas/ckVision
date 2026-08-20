@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The shared geometry every scrolling text surface uses. It is tested here,
 // once, so TextView, Memo and TextEditor cannot drift apart on where a line

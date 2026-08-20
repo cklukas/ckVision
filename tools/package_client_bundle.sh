@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # Build a self-contained local client handoff: the installable SDK, runnable
 # examples, source documentation, and fresh visual documentation captures.

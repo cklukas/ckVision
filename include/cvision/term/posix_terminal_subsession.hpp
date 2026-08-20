@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // POSIX private-PTY adapter for the D-042 embedded-terminal boundary.
 #pragma once

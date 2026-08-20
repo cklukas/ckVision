@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // MenuBar + DropdownMenu (ARCHITECTURE.md §5 "Menus" / plans/
 // widgets.md M5 baseline): F10-equivalent activation (activate(),

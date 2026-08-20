@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # The interactive gallery binary only builds where a real terminal
 # backend exists (POSIX today; the Windows/ConPTY backend is M7 scope

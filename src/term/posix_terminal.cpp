@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // `deadline_nanos` in poll() is interpreted on the injected monotonic
 // Clock shared with the owning Application. Platform time enters through

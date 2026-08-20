@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The core-typed frame data boundary between scene (which owns
 // Surface/Compositor) and term (whose Presenter must not depend on

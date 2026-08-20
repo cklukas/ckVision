@@ -53,9 +53,10 @@ root and is propagated through the tree.
 The header is deliberately tiny: keep a direct reference only to services you
 use and a non-owning handle to a view whose lifetime is contained by the app.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.hpp" lines="1-25" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.hpp" lines="1-26" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // A compact ckVision-owned integration example: desktop, menu/status chrome,
 // modal greeting dialog, and golden coverage. See docs/hello-example.md.
@@ -91,9 +92,10 @@ title, chord, enablement and mnemonic from that one declaration. The menu
 override changes only its visible title to `Exit`; it does not create a second
 quit command.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-28" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-29" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "hello_app.hpp"
 
 #include "cvision/widgets/application_shell.hpp"
@@ -128,7 +130,7 @@ The greeting handler returns immediately after presenting the dialog. Its
 typed completion handler observes the result without capturing a raw dialog
 window pointer, so close/removal remains owned by the presentation API.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="37-44" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="38-45" -->
 ```cpp
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.
@@ -143,9 +145,10 @@ void HelloApp::greeting_box() {
 
 The interactive host is equally short and is the complete `main.cpp`:
 
-<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-17" -->
+<!-- ckvision-snippet source="examples/hello/main.cpp" lines="1-18" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ckVision Hello — a compact visual integration example; see
 // docs/hello-example.md for its behavior contract and golden coverage.

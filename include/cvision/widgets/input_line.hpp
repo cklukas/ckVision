@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Single-line text editing (plans/widgets.md baseline). Grapheme-
 // indexed throughout (never splits a cluster), with cursor movement,

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Memo: multi-line editing, scrolling, selection (plans/widgets.md
 // M6b baseline). Grapheme-indexed per line, mirroring InputLine's own

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Themes are flat, inspectable semantic tables (ARCHITECTURE.md §5,
 // DECISIONS.md D-007): interned role ids resolve to Style via one

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Presenter: diffs a composed frame against the last one presented and
 // writes the minimal byte sequence to a Terminal (ARCHITECTURE.md §4).

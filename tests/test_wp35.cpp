@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"

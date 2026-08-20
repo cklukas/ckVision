@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The shape of the mouse pointer, as a view means it rather than as any
 // one host spells it. A sibling of CursorState in cursor.hpp and separate

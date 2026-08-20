@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 
 if(NOT DEFINED CKVISION_BUILD_DIR OR NOT DEFINED CKVISION_SMOKE_DIR)
     message(FATAL_ERROR "install_package_smoke requires CKVISION_BUILD_DIR and CKVISION_SMOKE_DIR")

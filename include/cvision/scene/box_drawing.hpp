@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Box-drawing connector glyphs and automatic junction merging, from the
 // public Unicode Box Drawing block (U+2500-257F). Scope: v1 merges

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Captures the contained-terminal view through its normal Application,
 // Window backing, TerminalView, scene, and Presenter path. The deterministic

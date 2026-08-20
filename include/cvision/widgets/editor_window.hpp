@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Optional reusable Window composition for a TextEditor and its injected file
 // lifecycle. Clients may use the lower-level document/controller separately.

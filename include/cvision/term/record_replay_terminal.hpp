@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Record/replay backend (ARCHITECTURE.md §4): wraps any Terminal,
 // recording the event stream (including capability-probe responses,

@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 """Enforce the client-documentation coverage, link, and screenshot contract."""
 
 from __future__ import annotations

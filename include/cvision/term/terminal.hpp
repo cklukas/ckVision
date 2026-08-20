@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // The Terminal interface (ARCHITECTURE.md §4): capability report,
 // input event stream, raw output, clipboard write, title, bell. Every

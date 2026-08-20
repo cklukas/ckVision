@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Golden dump format, version 1 — the textual frame representation that
 // serves as the project's specification medium (DECISIONS.md D-014).

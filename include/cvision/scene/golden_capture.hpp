@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Bridges the scene layer to the golden dump format (DECISIONS.md
 // D-014): captures a Surface into a core::golden::Document, the

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // PagedStrip (U4-l): one row of variable-width items that PAGES when they do
 // not all fit, plus the chrome that steers it — a collapse toggle at the far

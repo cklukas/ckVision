@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Window: frame chrome, title, close/zoom controls, move/resize (mouse
 // drag or keyboard mode), min/max size limits, shadow declaration, and

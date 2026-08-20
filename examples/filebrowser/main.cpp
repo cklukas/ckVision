@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // ckVision File Browser — a master-detail example: a folder-hierarchy
 // TreeView drives a ListView showing the selected folder's contents in

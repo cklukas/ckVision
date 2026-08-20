@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // M0 benchmark smoke: exercises the golden format on a realistic frame
 // size so the harness wiring is proven end to end.

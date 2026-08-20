@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Coverage and every scope decision: docs/input-decoder.md.
 #include "cvision/term/input_decoder.hpp"

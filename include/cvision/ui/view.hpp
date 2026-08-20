@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // View: the one base class of the ui tree (ARCHITECTURE.md §5).
 // Parents own children (unique_ptr, explicit transfer API); bounds are

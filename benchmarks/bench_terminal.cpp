@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Terminal resilience benchmark: the measured paths are deliberately bounded
 // workloads, while the checked invariants make this a deterministic budget

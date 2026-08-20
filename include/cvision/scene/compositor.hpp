@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Compositor: assembles the desktop background and z-ordered layers
 // into one frame, composing only damaged regions and applying shadows

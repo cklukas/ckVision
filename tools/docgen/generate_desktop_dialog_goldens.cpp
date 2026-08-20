@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Manual fixture generator for WP-26's desktop/dialog ownership script.
 #include <cstdio>

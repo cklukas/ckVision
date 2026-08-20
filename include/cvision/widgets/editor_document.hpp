@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Revisioned UTF-8 document model for TextEditor.  The document deliberately
 // has no View, terminal, filesystem, clock, or syntax-profile dependency: it

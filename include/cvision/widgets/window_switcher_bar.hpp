@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // WindowSwitcherBar (U4-a): one row listing every open window by title and
 // by state, left-click to bring it forward or put it away, right-click for

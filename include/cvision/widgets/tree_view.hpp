@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // TreeView: expand/collapse, keyboard navigation (plans/widgets.md
 // M6b baseline). A forest of TreeNode value trees — reparenting or

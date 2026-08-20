@@ -1,4 +1,5 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 #
 # Central strict build settings for ckVision (AGENTS.md: warnings are
 # errors; one place defines the flag set).

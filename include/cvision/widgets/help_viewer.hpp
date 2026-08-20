@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Help viewer: context topics (F1 from any view via help-context keys,
 // D-027 — already routed by Application::set_help_provider), activatable

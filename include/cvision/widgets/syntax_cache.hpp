@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Deterministic line-state cache shared by source-editor views. It owns no
 // document and does no I/O: callers provide the current logical lines.

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Grapheme segmentation and column-width computation — the single,
 // central, testable width policy (ARCHITECTURE.md §2). Coverage and

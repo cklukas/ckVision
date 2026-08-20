@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 C. Klukas. All rights reserved.
+# SPDX-License-Identifier: MIT
 """Differential VT conformance: ckVision's emulator against a reference one.
 
 Terminal semantics are not a matter of taste. "Does an erase keep the

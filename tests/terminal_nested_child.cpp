@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Independently launched ckVision child used by the private-PTY integration
 // fixture.  It leaves one composed frame live long enough for the parent

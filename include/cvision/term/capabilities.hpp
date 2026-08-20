@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // Terminal capability model (ARCHITECTURE.md §4). A plain, inspectable
 // struct: baseline profile at startup, refined by runtime probes,

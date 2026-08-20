@@ -31,7 +31,7 @@ overwritten. `MemoryFileSystem` implements these operations for deterministic
 editor lifecycle tests. See [Editor](editor.md) for the document/controller
 composition.
 
-<!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="100-139" -->
+<!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="101-140" -->
 ```cpp
     window->set_min_size(Size{40, 10});
     // Keeps filling the content area as the terminal grows, rather

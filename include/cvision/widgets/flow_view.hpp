@@ -1,4 +1,5 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
 //
 // FlowView: wrapped, styled, read-only flow content with link navigation and
 // inline raster atoms. Its document is an application-owned value; semantic
