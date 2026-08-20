@@ -109,11 +109,28 @@ void View::set_bounds(Rect bounds) {
 
 Rect View::absolute_bounds() const noexcept {
     Rect result = bounds_;
+    // This view's own paint offset, then every ancestor's position AND theirs:
+    // where a view really is on the screen is where the chain of parents draws
+    // it, which is not the same as where the chain of parents SAYS it is the
+    // moment any of them is panned (see set_paint_offset).
+    result.x += paint_offset_.x;
+    result.y += paint_offset_.y;
     for (const View* ancestor = parent_; ancestor != nullptr; ancestor = ancestor->parent_) {
-        result.x += ancestor->bounds_.x;
-        result.y += ancestor->bounds_.y;
+        result.x += ancestor->bounds_.x + ancestor->paint_offset_.x;
+        result.y += ancestor->bounds_.y + ancestor->paint_offset_.y;
     }
     return result;
+}
+
+void View::set_paint_offset(Point offset) {
+    if (offset.x == paint_offset_.x && offset.y == paint_offset_.y) return;
+    paint_offset_ = offset;
+    // The view has moved on screen without its bounds changing, so nothing
+    // else will invalidate for it — and its OLD footprint needs repainting as
+    // much as its new one, which is the parent's business rather than this
+    // view's.
+    if (parent_ != nullptr) parent_->invalidate();
+    invalidate();
 }
 
 void View::set_visible(bool visible) {
@@ -173,7 +190,8 @@ std::optional<scene::Painter> View::paint_one_child(
     if (!child.visible()) return std::nullopt;
     const Rect local_bounds{0, 0, child.bounds().width, child.bounds().height};
     scene::Painter child_painter = parent_painter.isolated().translated(
-        Point{child.bounds().x, child.bounds().y}, local_bounds);
+        Point{child.bounds().x + child.paint_offset_.x, child.bounds().y + child.paint_offset_.y},
+        local_bounds);
     child.draw(child_painter);
     child.paint_children(child_painter);
     return child_painter;
@@ -208,7 +226,9 @@ void View::paint_retained(const scene::Painter& own_painter,
         if (!child.visible()) continue;
         const Rect local_bounds{0, 0, child.bounds().width, child.bounds().height};
         scene::Painter child_painter = own_painter.isolated().translated(
-            Point{child.bounds().x, child.bounds().y}, local_bounds);
+            Point{child.bounds().x + child.paint_offset_.x,
+                  child.bounds().y + child.paint_offset_.y},
+            local_bounds);
         child.draw_retained(child_painter);
         child.paint_retained(child_painter, layers);
     }

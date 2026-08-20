@@ -342,7 +342,53 @@ public:
     // chrome.
     Rect content_area() const noexcept;
 
+    // --- A world larger than the view of it (U7-a) --------------------
+    //
+    // A `Desktop` is its own viewport by default: windows live in its bounds
+    // and there is nowhere else for them to be. An EXTENT makes the world it
+    // contains bigger than the hole it is seen through, and a PAN says which
+    // part of that world the hole is over.
+    //
+    // Two vocabularies, deliberately, because every call site belongs to one
+    // of them and the bugs live where they are confused:
+    //
+    //   * WORLD — `extent()`, `content_area()`, every window's `bounds()`,
+    //     the tilings, the cascade, `filled_tile_fractions()` and the
+    //     remembered arrangement (D-058). An arrangement is a statement about
+    //     the world and does not change because somebody looked elsewhere.
+    //   * VIEW — this desktop's own `bounds()`, where things are drawn, and
+    //     where a click lands. That is what `pan()` moves.
+    //
+    // The extent defaults to the desktop's own size and follows it on resize
+    // while nobody has set one, so a `Desktop` that never calls this behaves
+    // exactly as it always has — which is the regression bar for the whole
+    // feature: with a viewport equal to the extent, every existing test must
+    // be unable to tell the difference.
+    //
+    // Docked chrome does NOT pan. A menu bar that scrolled away from the top
+    // of the screen would not be a menu bar, and `content_area()` is the seam
+    // where that is decided: the docks belong to the view, the content to the
+    // world.
+    void set_extent(Size extent);
+    Size extent() const noexcept { return extent_; }
+    // Where the view sits over the world, clamped so it can never show a
+    // region the world does not have. A pan of (0,0) is the top-left corner,
+    // which is where every desktop that has never panned already is.
+    void set_pan(Point pan);
+    Point pan() const noexcept { return pan_; }
+    // Moves the view the least distance that brings `world` fully into it —
+    // nothing if it is already there. What a host calls when a reader focuses
+    // a window that is off-screen: they meant to see it.
+    void pan_to_show(Rect world);
+
     void on_resized() override;
+
+    // Puts every window where the pan says it should be drawn. Called
+    // whenever the pan or the extent moves; docked chrome is skipped, which
+    // is the whole of "the docks belong to the view".
+    void apply_pan_to_windows();
+    // The pan, held inside what the world actually has to show.
+    Point clamped_pan(Point wanted) const noexcept;
     void on_attached() override;
     // A docked view's own preferred height changing (M9/WP-16) — e.g. a
     // status line whose content now wraps to two rows — needs the same
@@ -850,6 +896,11 @@ private:
     ui::View* bottom_dock_ = nullptr;
     ui::Application* app_ = nullptr;
     bool maximize_follows_active_ = false;
+    // Zero height or width means "no extent of my own": the world is whatever
+    // this desktop's bounds are, which is what every consumer written before
+    // U7-a assumes and continues to get.
+    Size extent_{0, 0};
+    Point pan_{0, 0};
     std::vector<ui::CommandId> installed_default_handlers_;
     // Whether a Desktop-installed dialog handler (kWindowList,
     // kTerminalReport) already has its dialog up. Shared, like the quit sweep

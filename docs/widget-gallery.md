@@ -454,6 +454,43 @@ Header: `include/cvision/widgets/desktop.hpp`. Insert one below the
 Application root. It owns window z-order, docks, popups, activation, and
 desktop-wide tile/cascade commands; do not use a global desktop singleton.
 
+### A world larger than the view of it (U7-a)
+
+A `Desktop` is its own viewport until a host says otherwise. `set_extent()`
+makes the world it contains bigger than the hole it is seen through, and
+`set_pan()` says which part of that world the hole is over. `pan_to_show(rect)`
+moves the view the least distance that brings a world rect fully into it —
+what a host calls when a reader focuses a window that is off-screen.
+
+Two vocabularies, and every call site belongs to exactly one:
+
+| | Reads | Examples |
+|---|---|---|
+| **World** | `extent()`, `content_area()` | window `bounds()`, the tilings, the cascade, `filled_tile_fractions()`, the remembered arrangement (D-058) |
+| **View** | the desktop's own `bounds()`, `pan()` | where things are drawn, where a click lands, docked chrome |
+
+An arrangement is a statement about the world and does not change because
+somebody looked elsewhere. That is enforced rather than asked for: panning sets
+each window's `View::set_paint_offset`, which moves where a view is DRAWN
+without touching its `bounds()`. A host whose window rects are shared state —
+ckmux's are session state held by a server and seen by two readers — can pan
+one reader's view without restating anybody's arrangement.
+
+Drawing and hit-testing cannot disagree, because the offset is applied in the
+three places that compose coordinates: both child-painting paths and
+`absolute_bounds()`. A view drawn somewhere is hit-tested there.
+
+**Docked chrome does not pan.** A menu bar that scrolled off the top of the
+screen would not be a menu bar, so the docks keep their own position and full
+view width; popups likewise stay where they were put, since a dropdown belongs
+to the bar it hangs from and a context menu was opened at a place on the
+screen.
+
+With no extent set, the world is the desktop's own bounds and every answer is
+what it has always been — which is the regression bar for the feature: a
+viewport equal to the extent must be invisible to a consumer that never asked
+for one.
+
 Four tilings, each a standard command `Desktop` installs a default handler
 for: `tile()`/`tile_vertically()` (full-height bands side by side — the same
 arrangement under two names, because `ckv.window.tile` is a command

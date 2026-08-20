@@ -190,6 +190,29 @@ public:
     // and cache within a single pass rather than per-cell.
     Rect absolute_bounds() const noexcept;
 
+    // --- Where a view is DRAWN, as against where it IS ----------------
+    //
+    // An offset added to this view's own position within its parent, without
+    // touching `bounds()`. Zero for almost everything, and the whole of what
+    // makes a panned surface possible: a `Desktop` whose world is larger than
+    // the view of it moves its windows by setting this, and every window's
+    // `bounds()` goes on meaning what it always meant.
+    //
+    // That distinction is the point rather than an implementation detail. A
+    // window's rect is an ARRANGEMENT — in ckmux it is session state, shared
+    // between readers and stored by a server — while a pan is one reader
+    // looking somewhere. Folding the second into the first would mean a reader
+    // moved everybody's windows by scrolling, and it would do it invisibly,
+    // because the numbers would still look like an arrangement.
+    //
+    // Applied in exactly three places, which is what keeps drawing and
+    // hit-testing from disagreeing: the two child-painting paths and
+    // `absolute_bounds()`. A view that is drawn somewhere is hit-tested there
+    // too, or a reader's click lands on what WOULD have been under the
+    // pointer if nobody had scrolled.
+    void set_paint_offset(Point offset);
+    Point paint_offset() const noexcept { return paint_offset_; }
+
     // Preferred size (ARCHITECTURE.md §5 layout): deliberately decoupled
     // from the LIVE bounds_ (set once at construction, or explicitly via
     // set_preferred_size) rather than reflecting wherever a layout
@@ -513,6 +536,7 @@ private:
     bool fills_root_ = true;
     std::unique_ptr<Theme> theme_override_;
     std::optional<std::string> help_context_key_;
+    Point paint_offset_{0, 0};
     std::optional<std::string> command_context_;
     DirtyRectSink dirty_rect_sink_;
     DetachSink detach_sink_;

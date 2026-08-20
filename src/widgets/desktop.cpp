@@ -365,6 +365,11 @@ Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     auto* raw = static_cast<Window*>(ui::View::add_child(std::move(window)));
     raw->compositor_layer_id_ = next_compositor_layer_id_++;
     windows_.push_back(raw);  // stable insertion order — cycling order, not z-order
+    // A window opened while the view is panned belongs to the world like every
+    // other, so it is drawn where the pan says rather than where an unpanned
+    // desktop would have put it (U7-a). Zero for every desktop that has never
+    // panned, which is all of them until a host asks.
+    raw->set_paint_offset(Point{-pan_.x, -pan_.y});
     // Window never exposes a Desktop callback publicly.  This private,
     // lifetime-bound capability is cleared before either participant can
     // detach, so a retained Window cannot call into a former Desktop.
@@ -887,7 +892,81 @@ std::unique_ptr<ui::View> Desktop::take_content() {
 Rect Desktop::content_area() const noexcept {
     const int top = top_dock_ != nullptr ? std::max(1, top_dock_->vertical_size_hint().preferred) : 0;
     const int bottom = bottom_dock_ != nullptr ? std::max(1, bottom_dock_->vertical_size_hint().preferred) : 0;
-    return Rect{0, top, bounds().width, std::max(0, bounds().height - top - bottom)};
+    // The WORLD's content area, not the view's (U7-a). Everything that
+    // arranges windows is expressed in it — the tilings, the cascade, a
+    // maximized window's rect, the remembered arrangement — and none of those
+    // may change because a reader scrolled. With no extent set, the world IS
+    // this desktop's bounds and the answer is what it has always been.
+    const Size world = extent_.width > 0 && extent_.height > 0
+                           ? extent_
+                           : Size{bounds().width, bounds().height};
+    return Rect{0, top, world.width, std::max(0, world.height - top - bottom)};
+}
+
+void Desktop::set_extent(Size extent) {
+    const Size wanted{std::max(0, extent.width), std::max(0, extent.height)};
+    if (wanted.width == extent_.width && wanted.height == extent_.height) return;
+    extent_ = wanted;
+    // A world that just shrank may leave the view looking past its edge, and a
+    // world that grew may let it look further; either way the pan is re-held
+    // inside what there is to show before anything is drawn with it.
+    pan_ = clamped_pan(pan_);
+    apply_pan_to_windows();
+    // The content area has changed shape, which is the same event a resize is
+    // as far as every window and dock is concerned.
+    on_resized();
+}
+
+Point Desktop::clamped_pan(Point wanted) const noexcept {
+    const Rect world = content_area();
+    const int top = world.y;
+    const int view_height = std::max(0, bounds().height - top -
+                                            (bottom_dock_ != nullptr
+                                                 ? std::max(1, bottom_dock_->vertical_size_hint().preferred)
+                                                 : 0));
+    // Never past the edge, and never negative: a pan is which part of the
+    // world the hole is over, and there is no world left of zero.
+    const int max_x = std::max(0, world.width - bounds().width);
+    const int max_y = std::max(0, world.height - view_height);
+    return Point{std::clamp(wanted.x, 0, max_x), std::clamp(wanted.y, 0, max_y)};
+}
+
+void Desktop::set_pan(Point pan) {
+    const Point held = clamped_pan(pan);
+    if (held.x == pan_.x && held.y == pan_.y) return;
+    pan_ = held;
+    apply_pan_to_windows();
+    invalidate();
+}
+
+void Desktop::pan_to_show(Rect world) {
+    const Rect area = content_area();
+    const int view_width = bounds().width;
+    const int view_height = std::max(0, bounds().height - area.y -
+                                            (bottom_dock_ != nullptr
+                                                 ? std::max(1, bottom_dock_->vertical_size_hint().preferred)
+                                                 : 0));
+    Point wanted = pan_;
+    // The least movement that brings it in: a reader who focused an off-screen
+    // window means to see it, not to have their view thrown somewhere new.
+    if (world.x < pan_.x) wanted.x = world.x;
+    else if (world.right() > pan_.x + view_width) wanted.x = world.right() - view_width;
+    const int world_top = world.y - area.y;
+    const int world_bottom = world_top + world.height;
+    if (world_top < pan_.y) wanted.y = world_top;
+    else if (world_bottom > pan_.y + view_height) wanted.y = world_bottom - view_height;
+    set_pan(wanted);
+}
+
+void Desktop::apply_pan_to_windows() {
+    // Windows move; docked chrome does not. A menu bar that scrolled off the
+    // top of the screen would not be a menu bar — the docks belong to the
+    // view, the windows to the world.
+    const Point offset{-pan_.x, -pan_.y};
+    for (Window* window : windows_) window->set_paint_offset(offset);
+    // Popups are the view's too, and stay where they were put: a dropdown that
+    // slid away from the bar it hangs from is not a dropdown, and a context
+    // menu was opened at a place on the SCREEN.
 }
 
 void Desktop::on_resized() {

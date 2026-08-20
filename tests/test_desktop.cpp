@@ -3566,3 +3566,130 @@ CK_TEST(shadows_stay_off_across_a_resize_that_keeps_the_tiling) {
     CK_CHECK(!desktop.child_casts_shadow(*a));
     CK_CHECK(!desktop.child_casts_shadow(*b));
 }
+
+// --- A world larger than the view of it (U7-a) -----------------------------
+//
+// A Desktop is its own viewport until a host says otherwise. An EXTENT makes
+// the world bigger than the hole it is seen through; a PAN says which part of
+// it the hole is over. The distinction these cases exist to pin is that the
+// two vocabularies never mix: an arrangement is a statement about the world
+// and does not change because a reader looked somewhere else, while drawing
+// and hit-testing follow the view and must agree with each other.
+
+CK_TEST(a_desktop_with_no_extent_is_its_own_world) {
+    // The regression bar for the whole feature, stated once: a viewport equal
+    // to the extent is the desktop every existing consumer already has.
+    AttachedFixture af;
+    Window* w = af.desktop->add_window(make_window(af.f));
+
+    CK_CHECK((af.desktop->extent() == ckv::Size{0, 0}));  // "no extent of my own"
+    CK_CHECK(af.desktop->content_area().width == af.desktop->bounds().width);
+    CK_CHECK((af.desktop->pan() == ckv::Point{0, 0}));
+    CK_CHECK((w->paint_offset() == ckv::Point{0, 0}));
+    CK_CHECK(w->absolute_bounds().x == w->bounds().x);
+}
+
+CK_TEST(an_extent_makes_the_content_area_the_worlds_rather_than_the_views) {
+    AttachedFixture af;
+    const int view_width = af.desktop->bounds().width;
+    af.desktop->set_extent(ckv::Size{200, 60});
+
+    // Everything that ARRANGES windows reads this, so it has to answer in
+    // world units: a maximized window fills the world, not the hole.
+    CK_CHECK(af.desktop->content_area().width == 200);
+    CK_CHECK(af.desktop->content_area().width != view_width);
+    CK_CHECK(af.desktop->bounds().width == view_width);  // the view did not move
+}
+
+CK_TEST(panning_moves_where_a_window_is_drawn_and_not_where_it_is) {
+    // The invariant ckmux depends on: a window's rect is session state shared
+    // between readers, and a reader scrolling must not restate it.
+    AttachedFixture af;
+    af.desktop->set_extent(ckv::Size{200, 60});
+    Window* w = af.desktop->add_window(make_window(af.f));
+    w->set_bounds(ckv::Rect{100, 20, 30, 8});
+    const ckv::Rect stated = w->bounds();
+
+    af.desktop->set_pan(ckv::Point{40, 5});
+    CK_CHECK(w->bounds() == stated);                       // the arrangement is untouched
+    CK_CHECK((w->paint_offset() == ckv::Point{-40, -5}));  // it is DRAWN elsewhere
+    // And hit-testing follows the drawing, or a click lands on whatever would
+    // have been there if nobody had scrolled.
+    CK_CHECK(w->absolute_bounds().x == stated.x - 40);
+    CK_CHECK(w->absolute_bounds().y == stated.y - 5);
+
+    af.desktop->set_pan(ckv::Point{0, 0});
+    CK_CHECK(w->bounds() == stated);
+    CK_CHECK(w->absolute_bounds().x == stated.x);
+}
+
+CK_TEST(a_pan_cannot_look_past_the_edge_of_the_world) {
+    AttachedFixture af;
+    af.desktop->set_extent(ckv::Size{200, 60});
+
+    af.desktop->set_pan(ckv::Point{10'000, 10'000});
+    const ckv::Point far = af.desktop->pan();
+    CK_CHECK(far.x == 200 - af.desktop->bounds().width);
+    CK_CHECK(far.x >= 0 && far.y >= 0);
+
+    af.desktop->set_pan(ckv::Point{-50, -50});
+    CK_CHECK((af.desktop->pan() == ckv::Point{0, 0}));
+}
+
+CK_TEST(a_world_that_shrinks_under_the_view_pulls_the_pan_back_with_it) {
+    AttachedFixture af;
+    af.desktop->set_extent(ckv::Size{200, 60});
+    af.desktop->set_pan(ckv::Point{100, 20});
+    CK_CHECK(af.desktop->pan().x == 100);
+
+    // The session desktop got smaller. The view cannot go on looking at a
+    // region that no longer exists.
+    af.desktop->set_extent(ckv::Size{100, 30});
+    // Held against what the VIEW can show, which is the desktop's own bounds —
+    // comparing the world against itself, as an earlier draft of this case
+    // did, asserts that a 30-row world seen through a 24-row hole may not be
+    // panned at all, and it may be panned by six.
+    CK_CHECK(af.desktop->pan().x <= std::max(0, 100 - af.desktop->bounds().width));
+    CK_CHECK(af.desktop->pan().y <= std::max(0, 30 - af.desktop->bounds().height));
+}
+
+CK_TEST(a_window_opened_while_panned_is_drawn_where_the_pan_says) {
+    AttachedFixture af;
+    af.desktop->set_extent(ckv::Size{200, 60});
+    af.desktop->set_pan(ckv::Point{40, 5});
+
+    Window* late = af.desktop->add_window(make_window(af.f));
+    CK_CHECK((late->paint_offset() == ckv::Point{-40, -5}));
+}
+
+CK_TEST(docked_chrome_does_not_pan) {
+    // A menu bar that scrolled off the top of the screen would not be a menu
+    // bar. The docks belong to the view; the windows belong to the world.
+    AttachedFixture af;
+    auto* bar = af.desktop->dock_top(std::make_unique<ckv::ui::View>());
+    af.desktop->set_extent(ckv::Size{200, 60});
+    af.desktop->set_pan(ckv::Point{40, 5});
+
+    CK_CHECK((bar->paint_offset() == ckv::Point{0, 0}));
+    CK_CHECK(bar->absolute_bounds().y == bar->bounds().y);
+    CK_CHECK(bar->bounds().width == af.desktop->bounds().width);  // the view's width
+}
+
+CK_TEST(pan_to_show_moves_the_least_it_can_and_nothing_if_it_need_not) {
+    AttachedFixture af;
+    af.desktop->set_extent(ckv::Size{200, 60});
+    const int view_width = af.desktop->bounds().width;
+
+    // Already visible: a reader who focuses what they can see does not want
+    // their view thrown anywhere.
+    af.desktop->pan_to_show(ckv::Rect{2, 2, 10, 4});
+    CK_CHECK((af.desktop->pan() == ckv::Point{0, 0}));
+
+    // Off to the right: brought in by exactly as much as it takes.
+    af.desktop->pan_to_show(ckv::Rect{150, 2, 20, 4});
+    CK_CHECK(af.desktop->pan().x == 170 - view_width);
+
+    // And back the other way.
+    af.desktop->pan_to_show(ckv::Rect{0, 2, 10, 4});
+    CK_CHECK(af.desktop->pan().x == 0);
+}
