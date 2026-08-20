@@ -46,8 +46,8 @@ source is not.
 
 ## The practical bar
 
-[AGENTS.md](AGENTS.md) is the working agreement. In short: every change
-lands with a test that fails without it; the build is zero-warning and green
-under ASan/UBSan with examples ON; DECISIONS.md records what changed and
-why when a design decision moves; and commit messages carry real
-verification evidence, not "all tests pass".
+Every change lands with a test that fails without it. The build is
+zero-warning and green under ASan/UBSan with examples ON. Documentation is
+updated in the same commit when behavior changes, and a change to a public
+API says so. Commit messages carry real verification evidence — what you ran
+and what it showed — not "all tests pass".

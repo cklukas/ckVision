@@ -1,0 +1,29 @@
+# Paths kept out of the published snapshot (tools/publish/make-public.sh).
+#
+# These stay tracked on `main` — they are version-controlled locally and never
+# pushed. One path per line; a trailing `/` means the whole directory. Lines
+# starting with `#` and blank lines are ignored.
+
+# The working agreement with the agents that develop this repository.
+AGENTS.md
+
+# Development-internal design record: mission, target architecture, decision
+# log, milestones. docs/ is the published documentation; these are not.
+VISION.md
+ARCHITECTURE.md
+DECISIONS.md
+ROADMAP.md
+
+# Delivery plans, work-package queues, review findings, traceability matrices.
+plans/
+
+# Release acceptance checklist — an internal QA artifact, and the only docs
+# page that links into plans/. (docs/coverage.md deliberately stays: the
+# doc_widget_coverage CTest gate reads it.)
+docs/release-audit.md
+
+# CTest scratch output, committed by accident.
+Testing/
+
+# This machinery itself.
+tools/publish/
