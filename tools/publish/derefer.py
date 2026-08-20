@@ -75,13 +75,13 @@ BACKTICKED = re.compile("`(?:" + TOKEN.pattern + ")`")
 # behavior rather than a pointer.
 TEXT_SUFFIXES = {".cc", ".cmake", ".cpp", ".h", ".hpp", ".md", ".py", ".sh",
                  ".yaml", ".yml"}
-TEXT_NAMES = {"CMakeLists.txt"}
+TEXT_NAMES = {".gitattributes", "CMakeLists.txt"}
 SKIP_PREFIXES = ("fuzz/corpus/",)
 
 # A citation that opens a sentence has to keep opening one, and one that
 # already has an article in front of it must not grow a second.
 SENTENCE_END = re.compile(r"(?:^|[.!?]|//+|/\*|^\s*\*|#)$")
-DETERMINER = re.compile(r"\b(?:an?|An?|the|The|this|This)$")
+DETERMINER = re.compile(r"(?:\b(?:an?|An?|the|The|this|This)|[\w)]'s|[\w)]’s)$")
 
 
 # "plans/widgets.md", "../plans/widgets.md", "ARCHITECTURE.md" — one parser,
