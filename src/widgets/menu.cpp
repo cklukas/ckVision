@@ -815,10 +815,10 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
     raw->set_bounds(clamp_popup_to_desktop(Rect{local_x, local_y, w.preferred, h.preferred}, desktop_->bounds()));
-    raw->on_dismiss = [this](MenuDismissReason reason) {
+    raw->on_dismiss = [this](MenuDismissReason dismiss_reason) {
         // A chosen item ends the menu interaction; anything else only
         // closes the popup and leaves the bar where the reader left it.
-        if (reason == MenuDismissReason::ItemChosen)
+        if (dismiss_reason == MenuDismissReason::ItemChosen)
             deactivate();
         else
             close_dropdown();

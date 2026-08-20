@@ -77,9 +77,9 @@ void RenderService::run_worker() {
             // else. It is const and freshly allocated, so publishing it is
             // a pointer hand-off rather than shared mutable state.
             app_.post([subscriber = std::move(job.subscriber), handler = std::move(job.on_frame),
-                       frame = std::move(frame)] {
+                       held_frame = std::move(frame)] {
                 if (subscriber.expired()) return;
-                handler(frame);
+                handler(held_frame);
             });
         }
 

@@ -161,9 +161,9 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
         raw->on_press = [window_ptr, completion, result]() {
             // Locals survive even if on_result destroys the running Button
             // callback and its owning Window.
-            Window* const window = window_ptr;
+            Window* const report_window = window_ptr;
             const std::shared_ptr<MessageBoxCompletion> held_completion = completion;
-            held_completion->report(result, window);
+            held_completion->report(result, report_window);
         };
         if (is_default) default_button = raw;
     }
@@ -182,9 +182,9 @@ WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::
 
     const MessageBoxResult cancel = escape_result(descriptor.buttons);
     window->cancel_request = [window_ptr, completion, cancel]() {
-        Window* const window = window_ptr;
+        Window* const report_window = window_ptr;
         const std::shared_ptr<MessageBoxCompletion> held_completion = completion;
-        held_completion->report(cancel, window);
+        held_completion->report(cancel, report_window);
     };
 
     window->on_closed = [&app, focus_restore, window_ptr, window_liveness]() {
@@ -207,8 +207,8 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
     // that outlive any handler by construction.
     app.commands().set_handler(
         app.commands().standard().help,
-        [&app, &desktop, roles, title = std::move(title), body = std::move(body)] {
-            MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", title + "\n\n" + body,
+        [&app, &desktop, roles, held_title = std::move(title), held_body = std::move(body)] {
+            MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", held_title + "\n\n" + held_body,
                                             MessageBoxButtons::Ok};
             descriptor.emphasized_leading_lines = 1;
             // The body reads down a straight left edge, not centred. A

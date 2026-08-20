@@ -283,14 +283,14 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         chosen = fs.is_absolute_path(chosen) ? fs.normalize_path(chosen) : fs.join(*current_dir, chosen);
         if (options_state->recent_locations != nullptr)
             options_state->recent_locations->record(options_state->recent_locations_key, *current_dir);
-        Window* const window = window_ptr;
+        Window* const report_window = window_ptr;
         const std::shared_ptr<FileDialogCompletion> held_completion = completion;
-        held_completion->report(FileDialogResult{true, std::move(chosen)}, window);
+        held_completion->report(FileDialogResult{true, std::move(chosen)}, report_window);
     };
     cancel_ptr->on_press = [window_ptr, completion]() {
-        Window* const window = window_ptr;
+        Window* const report_window = window_ptr;
         const std::shared_ptr<FileDialogCompletion> held_completion = completion;
-        held_completion->report(FileDialogResult{}, window);
+        held_completion->report(FileDialogResult{}, report_window);
     };
     window_ptr->accept_request = [ok_ptr]() {
         if (ok_ptr->on_press) ok_ptr->on_press();

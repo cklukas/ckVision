@@ -113,14 +113,14 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
             auto it = path_of->find(selected);
             if (it != path_of->end()) chosen = it->second;
         }
-        Window* const window = window_ptr;
+        Window* const report_window = window_ptr;
         const std::shared_ptr<DirectoryPickerCompletion> held_completion = completion;
-        held_completion->report(true, std::move(chosen), window);
+        held_completion->report(true, std::move(chosen), report_window);
     };
     cancel_ptr->on_press = [window_ptr, completion]() {
-        Window* const window = window_ptr;
+        Window* const report_window = window_ptr;
         const std::shared_ptr<DirectoryPickerCompletion> held_completion = completion;
-        held_completion->report(false, "", window);
+        held_completion->report(false, "", report_window);
     };
     window_ptr->accept_request = [select_ptr]() {
         if (select_ptr->on_press) select_ptr->on_press();

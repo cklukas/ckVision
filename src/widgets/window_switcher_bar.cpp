@@ -57,11 +57,11 @@ Window* WindowSwitcherTarget::window() const {
 }
 
 std::function<void()> WindowSwitcherTarget::bind(std::function<void(Window&)> run) const {
-    return [target = *this, run = std::move(run)] {
-        if (!run) return;
+    return [target = *this, held_run = std::move(run)] {
+        if (!held_run) return;
         Window* const window = target.window();
         if (window == nullptr) return;
-        run(*window);
+        held_run(*window);
     };
 }
 

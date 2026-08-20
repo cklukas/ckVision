@@ -26,6 +26,20 @@
 #include <pty.h>
 #endif
 
+#if !defined(__APPLE__)
+// At GLOBAL scope on purpose, and it must stay there. Written inside the
+// anonymous namespace below, `extern char** environ;` does not refer to the
+// process's environment at all: block scope inside an internal-linkage
+// namespace declares a NEW `(anonymous namespace)::environ` that nothing ever
+// defines, and the build fails at LINK time with "undefined symbols" on every
+// platform that takes this branch. It was invisible here because macOS takes
+// the other one -- `environ` is not declared in a header on Apple, which is
+// why `_NSGetEnviron()` exists -- so the first build on Linux found it.
+//
+// Moving it back inside looks tidier and would silently break it again.
+extern "C" char** environ;
+#endif
+
 namespace {
 // The environment this process was given. Reaching for it belongs here, in
 // the platform adapter, and nowhere above it.
@@ -33,8 +47,7 @@ char** parent_environment() noexcept {
 #if defined(__APPLE__)
     return *::_NSGetEnviron();
 #else
-    extern char** environ;
-    return environ;
+    return ::environ;
 #endif
 }
 
@@ -217,9 +230,9 @@ void PosixTerminalSubsession::resize(Size cells, Size cell_pixels) {
     winsize size{};
     size.ws_col = static_cast<unsigned short>(bounded.width);
     size.ws_row = static_cast<unsigned short>(bounded.height);
-    const auto pixel_dimension = [](int cell_pixels, int cells) noexcept {
-        const std::int64_t product = static_cast<std::int64_t>(std::max(0, cell_pixels)) *
-                                     static_cast<std::int64_t>(std::max(0, cells));
+    const auto pixel_dimension = [](int pixels_per_cell, int cell_count) noexcept {
+        const std::int64_t product = static_cast<std::int64_t>(std::max(0, pixels_per_cell)) *
+                                     static_cast<std::int64_t>(std::max(0, cell_count));
         return static_cast<unsigned short>(std::clamp<std::int64_t>(
             product, 0, std::numeric_limits<unsigned short>::max()));
     };
