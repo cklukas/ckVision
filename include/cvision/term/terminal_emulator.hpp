@@ -54,6 +54,32 @@ public:
     void clear_damage() noexcept override;
     bool synchronized_output_active() const noexcept override { return synchronized_output_active_; }
     const TerminalCapabilityProfile& profile() const noexcept override { return profile_; }
+
+    // The printer policy, changed on a terminal that is already running.
+    //
+    // Every other capability in the profile is a statement about the terminal
+    // a child was launched into and is answered to that child for its whole
+    // life: changing what it has already been told it can draw would make a
+    // liar of the advertisement it read at startup. The printer is not like
+    // that, and the difference is consent rather than capability. Whether a
+    // host keeps what a child prints is the READER's decision, they make it in
+    // a settings dialog while the child runs, and there is nothing to unsay —
+    // a child asks `CSI ? 15 n` afresh each time it wants to know, and gets an
+    // honest answer for the policy in force at that moment.
+    //
+    // Without this a host could only offer the choice by relaunching the
+    // child, which for a terminal multiplexer means killing the reader's shell
+    // to change a preference about printing.
+    //
+    // Turning capture OFF does not discard what is already spooled: the jobs a
+    // child finished under a policy that was in force belong to the reader who
+    // had it in force, and are still handed over by take_printer_jobs(). What
+    // stops is new capture — and an open controller job stops with it, sunk
+    // rather than resumed to the screen, for the reason print_bytes() gives.
+    void set_printer_policy(TerminalPrinterPolicy policy) override;
+    // How much one job may collect before it is abandoned and the terminal
+    // sinks. Zero is refused — see the seam.
+    void set_printer_spool_limit(std::size_t bytes) override;
     void feed_output(std::string_view bytes) override;
     void resize(Size cells, Size cell_pixels) override;
     void send_input(std::string_view bytes) override;
@@ -70,7 +96,13 @@ public:
     // snapshot carries only how many are waiting, because a snapshot is a
     // value that may be read as often as anyone likes and a job is a document
     // that must be delivered once.
-    std::vector<TerminalPrinterJob> take_printer_jobs();
+    //
+    // This is the seam's drain (core::TerminalSubsession::take_printer_jobs),
+    // which it had promised in prose before it declared it: the base's
+    // TerminalStatus comment already told hosts that jobs came out this way,
+    // and the method existed only here — so a host holding the terminal
+    // through the seam, which is how every host holds one, could not reach it.
+    std::vector<TerminalPrinterJob> take_printer_jobs() override;
 
     // The child's life, as the host observing the process reports it. Both set
     // the lifecycle damage flag: a terminal that has stopped is news, and a

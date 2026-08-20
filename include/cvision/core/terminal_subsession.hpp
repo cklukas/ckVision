@@ -469,6 +469,19 @@ struct TerminalStatus {
     bool printer_controller_active = false;
     std::size_t printer_pending_bytes = 0;
     std::size_t printer_jobs_ready = 0;
+    // The job in progress went over the limit, its buffer was freed, and the
+    // terminal is SINKING — still in printer-controller mode, still scanning
+    // for `CSI 4 i`, still keeping the child's bytes off the screen, and
+    // storing none of them.
+    //
+    // Beside `printer_controller_active` rather than folded into it, because
+    // the two are different things to tell a reader and only one of them is
+    // reassuring. "Capturing" and "capturing nothing" look identical from
+    // outside, and a host whose badge said the first while the second was true
+    // would be promising a document it is not keeping. A probing child is
+    // already told the difference (`CSI ? 15 n` answers not-ready while sunk);
+    // this is the same honesty offered to the host.
+    bool printer_sunk = false;
     // What the child exited with, once it has. Nothing until then: "still
     // running" and "exited 0" are different answers.
     std::optional<int> exit_code;
@@ -585,6 +598,47 @@ public:
     // exists to remove.
     virtual std::span<const TerminalRaster> rasters() const noexcept = 0;
     virtual std::span<const TerminalDiagnostic> diagnostics() const noexcept = 0;
+    // The finished print jobs, handed over ONCE and forgotten by the terminal
+    // that made them.
+    //
+    // A drain rather than a borrow, which is the whole difference between this
+    // and every read above it: `cells()`, `rasters()` and `diagnostics()` are
+    // values a host may read as often as it likes, and a job is a thing that
+    // must be delivered exactly once. A host that took the same job twice
+    // would show a reader the same capture twice; one that never took it would
+    // grow the emulator's spool without bound.
+    //
+    // Not on the snapshot, deliberately. `TerminalStatus` carries three
+    // printer scalars so a host can draw a badge and a button every frame
+    // without paying for the payload — and the payload can be a megabyte, so a
+    // snapshot that carried it would undo exactly what U0-b was for.
+    //
+    // Defaulted to nothing rather than pure, because printing is a capability
+    // a terminal may simply not have: a mirror of a remote terminal, a
+    // recording, a test double. An implementation that captures overrides it;
+    // one that does not is honest by saying so with an empty answer, and its
+    // `printer_jobs_ready` stays zero to match.
+    virtual std::vector<TerminalPrinterJob> take_printer_jobs() { return {}; }
+
+    // The printer's two runtime settings: whether this terminal captures at
+    // all, and how much one job may collect before it is abandoned.
+    //
+    // Runtime because they are the READER's, not the child's. Every other
+    // capability in a profile is a statement about the terminal a child was
+    // launched into and must not change under it; these two are a preference
+    // a reader edits in a dialog while the child runs, and a child asks
+    // `CSI ? 15 n` afresh whenever it wants to know. Without them a host could
+    // offer the choice only by relaunching — which for a multiplexer means
+    // killing somebody's shell to change a preference about printing.
+    //
+    // Defaulted to nothing, like the drain above: a terminal that captures
+    // nothing has no policy worth setting, and saying so by ignoring the call
+    // is more honest than pretending to store it.
+    virtual void set_printer_policy(TerminalPrinterPolicy) {}
+    // Zero is refused rather than treated as "no limit": an unbounded spool is
+    // exactly the hazard the capture design exists to remove, and a host that
+    // asked for one has made a mistake this seam should not honour.
+    virtual void set_printer_spool_limit(std::size_t) {}
     virtual const TerminalCapabilityProfile& profile() const noexcept = 0;
     virtual void feed_output(std::string_view bytes) = 0;
     virtual void resize(::ckv::Size cells, ::ckv::Size cell_pixels) = 0;

@@ -40,6 +40,17 @@ public:
     std::span<const TerminalDiagnostic> diagnostics() const noexcept override {
         return emulator_.diagnostics();
     }
+    // Drained, not borrowed: the emulator hands each finished job over once
+    // and forgets it (core::TerminalSubsession::take_printer_jobs).
+    std::vector<TerminalPrinterJob> take_printer_jobs() override {
+        return emulator_.take_printer_jobs();
+    }
+    void set_printer_policy(TerminalPrinterPolicy policy) override {
+        emulator_.set_printer_policy(policy);
+    }
+    void set_printer_spool_limit(std::size_t bytes) override {
+        emulator_.set_printer_spool_limit(bytes);
+    }
     const TerminalDamage& damage() const noexcept override { return emulator_.damage(); }
     void clear_damage() noexcept override { emulator_.clear_damage(); }
     bool synchronized_output_active() const noexcept override {

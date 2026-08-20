@@ -147,6 +147,7 @@ TerminalStatus TerminalEmulator::status() const {
         .printer_controller_active = printer_controller_,
         .printer_pending_bytes = printer_spool_.size(),
         .printer_jobs_ready = printer_jobs_.size(),
+        .printer_sunk = printer_overflowed_,
         .exit_code = exit_code_};
 }
 
@@ -454,6 +455,49 @@ void TerminalEmulator::handle_title_stack(bool push) {
 
 bool TerminalEmulator::printer_available() const noexcept {
     return profile_.printer_policy == TerminalPrinterPolicy::Capture;
+}
+
+void TerminalEmulator::set_printer_spool_limit(std::size_t bytes) {
+    // Refused rather than honoured: an unbounded spool is the hazard the whole
+    // capture design exists to remove, so a host asking for one has made a
+    // mistake this terminal should not carry out.
+    if (bytes == 0) return;
+    options_.max_printer_spool_bytes = bytes;
+    // A job already over the new, smaller bound is NOT retro-actively
+    // abandoned. It was collected under a limit that permitted it, and
+    // discarding a reader's capture because they later lowered a preference
+    // would be deciding something they did not ask for. The new bound governs
+    // what is collected from here.
+}
+
+void TerminalEmulator::set_printer_policy(TerminalPrinterPolicy policy) {
+    if (profile_.printer_policy == policy) return;
+    profile_.printer_policy = policy;
+    // Turning capture off mid-document. The controller stays ON — the three
+    // ways out of it are `CSI 4 i`, RIS and the child exiting, and a policy
+    // change is none of them — but nothing is stored from here, and the
+    // reader's screen is deliberately NOT resumed: the child is still sending
+    // a document, and painting the middle of one across the terminal is the
+    // failure print_bytes() already refuses on overflow. So an in-flight job's
+    // buffer goes and the terminal sinks, which is the state a probing child
+    // is told about honestly (`CSI ? 15 n` answers ?13n with no printer at
+    // all, so it learns the policy changed rather than that a job failed).
+    //
+    // Completed jobs are NOT touched. They were finished while the policy said
+    // to keep them, they belong to the reader who had it in force, and
+    // take_printer_jobs() still hands them over. Discarding a reader's own
+    // captures because they later turned capture off would be deciding
+    // something they did not ask for.
+    if (policy == TerminalPrinterPolicy::Deny) {
+        printer_spool_.clear();
+        printer_spool_.shrink_to_fit();
+        printer_job_open_ = false;
+        printer_overflowed_ = false;
+    }
+    // The button, the badge and the probe answer all change with this, and a
+    // host that sends what damage names would otherwise show the old policy
+    // until the child happened to print again.
+    damage_.printer = true;
 }
 
 // Media Copy. The forms a real program uses, and honest silence for the ones
