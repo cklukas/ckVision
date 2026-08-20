@@ -1073,6 +1073,21 @@ void Application::paint_and_present() {
     if (focused_ != nullptr) {
         if (const std::optional<CursorState> focused_cursor = focused_->cursor_state()) cursor = *focused_cursor;
     }
+    // A focused view can be carried off the screen entirely -- a window on a
+    // desktop panned past it (Desktop::set_pan) is the ordinary way -- and its
+    // cursor goes with it. Then there is no cell to put the cursor in, and
+    // saying so to the terminal means addressing a row and column that do not
+    // exist: `ESC[-3;-27H`, which a strict host refuses outright and a lenient
+    // one interprets as it pleases. Not showing it is also what a reader means
+    // by scrolling something out of view, so the honest answer and the safe
+    // one are the same answer.
+    //
+    // Deliberately here rather than in the widget: every cursor in the tree
+    // arrives through this one line, and a cursor being off-screen is a fact
+    // about the frame, not a special case of any widget that owns one.
+    if (cursor.visible &&
+        !Rect{0, 0, current_size.width, current_size.height}.contains(cursor.position))
+        cursor = CursorState{};
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
                        compositor_.visible_rasters());

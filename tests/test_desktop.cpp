@@ -1522,6 +1522,19 @@ struct AttachedFixture {
     }
 };
 
+// Owns a cursor at its own top-left, which is the whole point: a cursor is
+// reported in ABSOLUTE screen cells, so panning the view that owns it is what
+// moves the cursor off the screen.
+class CursorProbe final : public ui::View {
+public:
+    CursorProbe() { set_focus_policy(ui::FocusPolicy::TabStop); }
+
+    std::optional<ckv::CursorState> cursor_state() const override {
+        const Rect here = absolute_bounds();
+        return ckv::CursorState{true, ckv::Point{here.x, here.y}, ckv::CursorShape::Block, true};
+    }
+};
+
 class FocusLossProbe final : public ui::View {
 public:
     FocusLossProbe() { set_focus_policy(ui::FocusPolicy::TabStop); }
@@ -3673,6 +3686,47 @@ CK_TEST(docked_chrome_does_not_pan) {
     CK_CHECK((bar->paint_offset() == ckv::Point{0, 0}));
     CK_CHECK(bar->absolute_bounds().y == bar->bounds().y);
     CK_CHECK(bar->bounds().width == af.desktop->bounds().width);  // the view's width
+}
+
+CK_TEST(a_cursor_panned_off_the_screen_is_withdrawn_rather_than_addressed) {
+    // The case U7-a's own tests never posed, because every one of them panned
+    // TOWARDS a window: what becomes of a window the pan LEAVES BEHIND, when
+    // that window holds the focus and therefore the cursor. Found consuming
+    // the feature (WP-43), where a reader with a world larger than their
+    // screen pans past their own terminal in two keystrokes.
+    //
+    // A cursor is reported in absolute screen cells, so a pan takes it
+    // negative, and `emit_cursor_move` will say `ESC[-3;-27H` — a row and a
+    // column that do not exist. A strict host refuses the frame outright.
+    //
+    // The whole assertion is that a frame completes: painting is not a query,
+    // so there is nothing to read back, and what there is to check is that
+    // nothing addressed a cell the screen does not have. Under HeadlessTerminal
+    // the VirtualDisplay IS that check — it parses what the presenter emits and
+    // refuses anything it cannot address.
+    AttachedFixture af;
+    af.desktop->set_extent(ckv::Size{200, 60});
+    Window* left_behind = af.desktop->add_window(make_window(af.f));
+    left_behind->set_bounds(Rect{2, 4, 40, 10});
+    auto* probe = left_behind->add_child(std::make_unique<CursorProbe>());
+    probe->set_bounds(Rect{1, 1, 4, 2});
+    af.app.set_focus(probe);
+    af.app.step(0);
+
+    af.desktop->set_pan(ckv::Point{60, 20});
+    // Wholly outside the view: its right edge lands well left of column zero,
+    // so not one of its cells — and not its cursor — is on screen.
+    CK_CHECK((left_behind->paint_offset() == ckv::Point{-60, -20}));
+    CK_CHECK(left_behind->absolute_bounds().x + left_behind->bounds().width <= 0);
+    af.app.step(0);
+
+    // And back: the window that was left behind is where it was, and its
+    // cursor is addressable again — which is what says the frame above
+    // withdrew the cursor rather than corrupting anything.
+    af.desktop->set_pan(ckv::Point{0, 0});
+    af.app.step(0);
+    CK_CHECK((left_behind->absolute_bounds() == Rect{2, 4, 40, 10}));
+    CK_CHECK((probe->cursor_state()->position == ckv::Point{3, 5}));
 }
 
 CK_TEST(pan_to_show_moves_the_least_it_can_and_nothing_if_it_need_not) {
