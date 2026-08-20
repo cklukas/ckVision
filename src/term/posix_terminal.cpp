@@ -188,6 +188,12 @@ constexpr std::array<int, 8> kManagedSignals = {
 std::array<struct sigaction, kManagedSignals.size()> g_saved_signal_actions{};
 std::atomic_flag g_signal_action_lock = ATOMIC_FLAG_INIT;
 int g_live_session_count = 0;  // guarded by g_signal_action_lock
+// The same fact as `g_live_session_count != 0`, readable without the lock.
+// `publish_assertion_failure` needs it and must not take the lock to get it:
+// `release_session_handlers` CKV_ASSERTs while HOLDING it, and a spinlock is
+// not recursive — an assert that waited for it would hang instead of abort,
+// which is a strictly worse outcome than the silence being fixed here.
+std::atomic<bool> g_fatal_handler_installed{false};
 std::atomic<bool> g_callback_failure{false};
 std::atomic<const char*> g_assertion_expr{nullptr};
 std::atomic<const char*> g_assertion_file{nullptr};
@@ -329,6 +335,7 @@ bool retain_session_handlers() noexcept {
     while (g_signal_action_lock.test_and_set(std::memory_order_acquire)) {}
     const bool installed = g_live_session_count != 0 || install_session_handlers_unlocked();
     if (installed) ++g_live_session_count;
+    g_fatal_handler_installed.store(g_live_session_count != 0, std::memory_order_release);
     g_signal_action_lock.clear(std::memory_order_release);
     return installed;
 }
@@ -338,6 +345,7 @@ void release_session_handlers() noexcept {
     CKV_ASSERT(g_live_session_count > 0);
     --g_live_session_count;
     if (g_live_session_count == 0) restore_session_handlers_unlocked();
+    g_fatal_handler_installed.store(g_live_session_count != 0, std::memory_order_release);
     g_signal_action_lock.clear(std::memory_order_release);
 }
 
@@ -432,8 +440,14 @@ void publish_assertion_failure_to_session(const char* expr, const char* file, in
 
 namespace ckv::detail {
 
-void publish_assertion_failure(const char* expr, const char* file, int line) noexcept {
+bool publish_assertion_failure(const char* expr, const char* file, int line) noexcept {
     term::publish_assertion_failure_to_session(expr, file, line);
+    // Whether anybody is going to READ what was just published. With no live
+    // session there is no fatal handler to restore a screen and print it, and
+    // the metadata sits in the ledger unseen — which is every headless test in
+    // the fleet: they abort with no message at all, and the reader is left to
+    // guess which contract broke. Saying so lets the caller speak instead.
+    return term::g_fatal_handler_installed.load(std::memory_order_acquire);
 }
 
 }  // namespace ckv::detail

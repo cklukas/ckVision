@@ -1,6 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 #include "cvision/term/headless_terminal.hpp"
 
+#include <cstdio>
 #include <stdexcept>
 #include <utility>
 
@@ -30,7 +31,15 @@ std::vector<TerminalEvent> HeadlessTerminal::poll(std::int64_t /*deadline_nanos*
 
 void HeadlessTerminal::write(std::string_view bytes) {
     written_.append(bytes);
-    CKV_ASSERT(display_.feed(bytes));
+    // The display knows precisely what it refused and why, and `error()` says
+    // so in a sentence. Asserting on the bare call discarded that and left the
+    // reader a false — which cost a session an afternoon on a clipping bug the
+    // display had been describing the whole time. An assertion can only carry
+    // an expression, so the sentence goes out just before it fires.
+    if (!display_.feed(bytes))
+        std::fprintf(stderr, "ckVision headless display refused output: %s\n",
+                     display_.error().c_str());
+    CKV_ASSERT(display_.valid());
 }
 
 void HeadlessTerminal::inject_event(TerminalEvent event) {

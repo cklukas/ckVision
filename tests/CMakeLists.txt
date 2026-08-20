@@ -158,6 +158,14 @@ if(UNIX)
     set_tests_properties(theme_assertion_contract PROPERTIES
         LABELS "contract;platform;posix"
         TIMEOUT 30)
+
+    add_executable(assertion_diagnostic_contract test_assertion_diagnostic_contract.cpp)
+    target_link_libraries(assertion_diagnostic_contract PRIVATE ckvision::cvision)
+    ckvision_strict(assertion_diagnostic_contract)
+    add_test(NAME assertion_diagnostic_contract COMMAND assertion_diagnostic_contract)
+    set_tests_properties(assertion_diagnostic_contract PROPERTIES
+        LABELS "contract;platform;posix;terminal"
+        TIMEOUT 30)
 endif()
 
 # gallery_app only exists when CKVISION_BUILD_EXAMPLES is on (default,

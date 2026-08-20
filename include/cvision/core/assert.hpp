@@ -8,16 +8,24 @@ namespace ckv::detail {
 // raises SIGABRT. It deliberately lives in the core-facing contract header:
 // core never includes a term header, while term (the allowed higher layer)
 // supplies the POSIX implementation.
+//
+// Returns whether the metadata will actually be READ: true when a live session
+// is holding the fatal handler that prints it, false when the ledger has no
+// audience — no session, no restore, nobody to say what broke. False obliges
+// the caller to print it instead.
 #if defined(CKVISION_HAS_POSIX_TERMINAL)
-void publish_assertion_failure(const char* expr, const char* file, int line) noexcept;
+bool publish_assertion_failure(const char* expr, const char* file, int line) noexcept;
 #endif
 
 // Reports a failed contract check and terminates the process. The sole,
-// deliberate exception to "core performs no I/O" (ARCHITECTURE.md §1) is
-// the no-POSIX fallback below. On a PosixTerminal host, D-024 holds this
-// immutable metadata until its fatal handler restored every live session,
-// then emits it to stderr. A contract violation therefore remains loud
-// without writing into an active alternate-screen session.
+// deliberate exception to "core performs no I/O" (ARCHITECTURE.md §1) is the
+// stderr fallback below. On a PosixTerminal host with a live session, D-024
+// holds this immutable metadata until its fatal handler restored every screen
+// and then emits it: a contract violation stays loud without writing into an
+// active alternate screen. With NO live session there is no alternate screen
+// to protect and no handler to do the emitting, so the fallback speaks — which
+// is the case every headless test runs under, and the reason one used to abort
+// with no message at all.
 [[noreturn]] void assertion_failed(const char* expr, const char* file, int line) noexcept;
 
 }  // namespace ckv::detail
