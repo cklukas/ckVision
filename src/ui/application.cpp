@@ -3,6 +3,7 @@
 #include "cvision/ui/application.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
 #include <string>
 #include <type_traits>
@@ -268,6 +269,15 @@ void Application::set_focus(View* view) {
         }
     } catch (...) {
         terminal_.terminate_after_callback_failure();
+        std::abort();  // the [[noreturn]] contract, locally enforced —
+                       // see the first call site in this file
+        // Unreachable while every Terminal override honours the base's
+        // [[noreturn]] — which nothing but convention makes an override
+        // do. Enforced here so a host that breaks the contract aborts
+        // deterministically instead of letting control fall off a
+        // non-void function, which is undefined behaviour and exactly
+        // what GCC's -Wreturn-type flagged at five call sites.
+        std::abort();
     }
 }
 
@@ -437,6 +447,8 @@ bool Application::execute_command(CommandId id) {
         return commands_.execute(id, focused_command_contexts());
     } catch (...) {
         terminal_.terminate_after_callback_failure();
+        std::abort();  // the [[noreturn]] contract, locally enforced —
+                       // see the first call site in this file
     }
 }
 
@@ -690,8 +702,11 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             mouse_capture_ = nullptr;
                         return false;
                     }
-                    bool handled = delivery_target->on_mouse(e);
-                    if (!handled && e.action == MouseAction::Wheel) {
+                    // `target_handled`, not `handled`: the visit's own result
+                    // at the top of this dispatch is already called that, and
+                    // GCC's -Wshadow is right that two of them is one too many.
+                    bool target_handled = delivery_target->on_mouse(e);
+                    if (!target_handled && e.action == MouseAction::Wheel) {
                         std::vector<ViewHandle>& wheel_route = mouse_capture_route_scratch_;
                         for (const ViewHandle& ancestor_handle : wheel_route) {
                             View* const current_target = resolve_attached_view(target_handle);
@@ -700,7 +715,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                                 !is_ancestor_of(*ancestor, *current_target))
                                 break;
                             if (ancestor->on_mouse(e)) {
-                                handled = true;
+                                target_handled = true;
                                 break;
                             }
                             if (ancestor == modal_root())
@@ -732,7 +747,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                                 break;
                         }
                     }
-                    return handled;
+                    return target_handled;
                 } else if constexpr (std::is_same_v<T, FocusEvent>) {
                     View* recipient = focused_;
                     View* const scope_root = modal_root();
@@ -768,6 +783,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
         return handled;
     } catch (...) {
         terminal_.terminate_after_callback_failure();
+        std::abort();  // the [[noreturn]] contract, locally enforced —
+                       // see the first call site in this file
     }
 }
 
@@ -1000,6 +1017,8 @@ bool Application::step(std::int64_t deadline_nanos) {
         return did_work;
     } catch (...) {
         terminal_.terminate_after_callback_failure();
+        std::abort();  // the [[noreturn]] contract, locally enforced —
+                       // see the first call site in this file
     }
 }
 
@@ -1153,6 +1172,8 @@ bool Application::run_until(const std::function<bool()>& done) {
         return finished;
     } catch (...) {
         terminal_.terminate_after_callback_failure();
+        std::abort();  // the [[noreturn]] contract, locally enforced —
+                       // see the first call site in this file
     }
 }
 

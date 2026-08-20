@@ -55,7 +55,21 @@ bool open_log() {
     const bool already_owned = owned != nullptr && *owned != '\0';
     log.stream = std::fopen(target.c_str(), already_owned ? "a" : "w");
     if (log.stream == nullptr) return false;
-    if (!already_owned) ::setenv(kOwnerMarker, "1", 1);
+    if (!already_owned) {
+#if defined(_WIN32)
+        // MSVC has never had POSIX `setenv`; `_putenv_s` is the spelling, and
+        // it always overwrites, which is what the `1` on the POSIX call asks
+        // for. The two diverge on REMOVAL — `_putenv_s(name, "")` deletes the
+        // variable where POSIX needs a separate `unsetenv` — so this shim is
+        // deliberately not a general one: nothing here removes, and the value
+        // is the literal "1", so the divergence cannot be reached from this
+        // call site. Anyone widening it to take a caller's value has to
+        // decide what an empty one means before they do.
+        (void)::_putenv_s(kOwnerMarker, "1");
+#else
+        (void)::setenv(kOwnerMarker, "1", 1);
+#endif
+    }
     return true;
 }
 

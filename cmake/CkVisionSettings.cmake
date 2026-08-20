@@ -31,6 +31,22 @@ function(ckvision_strict target)
             # dismantle it one -Werror build at a time.
             target_compile_options(${target} PRIVATE
                 -Wno-missing-designated-field-initializers)
+        else()
+            # And the same decision in the older spelling, which is the half
+            # that was missing. A Clang without the designated-specific flag
+            # folds the identical diagnostic into -Wmissing-field-initializers,
+            # which -Wextra above turns on — so the suppression was silently
+            # absent on exactly the compilers that emit the warning, and
+            # present on the ones that do not. GitHub's Clang found it the
+            # first time ckVision was built anywhere but this machine:
+            # `command.cpp:31: missing field 'context'`.
+            #
+            # Deliberately narrowed to that case rather than switched off
+            # everywhere: where the specific flag exists it stays the one in
+            # use, so ordinary aggregate initialisation keeps its warning on
+            # modern compilers.
+            target_compile_options(${target} PRIVATE
+                -Wno-missing-field-initializers)
         endif()
     endif()
     if(CKVISION_SANITIZE)
