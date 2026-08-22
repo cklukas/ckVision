@@ -167,9 +167,12 @@ std::string read_output_until_status(int output_fd, int status_fd, char expected
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(max_wait_ms);
     char output[4096];
     while (std::chrono::steady_clock::now() < deadline) {
+        bool drained_any = false;
         for (ssize_t n = ::read(output_fd, output, sizeof(output)); n > 0;
-             n = ::read(output_fd, output, sizeof(output)))
+             n = ::read(output_fd, output, sizeof(output))) {
             out.append(output, static_cast<std::size_t>(n));
+            drained_any = true;
+        }
 
         char status = 0;
         const ssize_t n = ::read(status_fd, &status, 1);
@@ -179,7 +182,13 @@ std::string read_output_until_status(int output_fd, int status_fd, char expected
             break;
         }
         if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // Idle only when there was nothing to move. A child blocked writing a
+        // large payload can proceed no faster than this side drains, so
+        // sleeping after a productive pass throttles the very transfer being
+        // waited for: 256 KiB through a small PTY buffer is hundreds of passes,
+        // and at 5ms each that overran the deadline on a loaded CI runner while
+        // finishing in milliseconds here.
+        if (!drained_any) std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     for (ssize_t n = ::read(output_fd, output, sizeof(output)); n > 0;
          n = ::read(output_fd, output, sizeof(output)))
@@ -202,8 +211,45 @@ std::string last_presented_frame(std::string_view output) {
     return std::string(output.substr(start, end + kFrameEnd.size() - start));
 }
 
-int wait_child(pid_t pid) {
+// Bounded on purpose. An unbounded waitpid() turns any stuck child into a hang
+// of the whole shard, which CTest can only report as a timeout naming the shard
+// rather than the test -- exactly how a PTY deadlock reached CI as an opaque
+// 120s stall. Waiting to a deadline and killing the straggler turns that into an
+// ordinary failure at the CK_CHECK(WIFEXITED(...)) every caller already has.
+int wait_child(pid_t pid, int max_wait_ms = 20'000) {
     int status = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(max_wait_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const pid_t reaped = ::waitpid(pid, &status, WNOHANG);
+        if (reaped == pid || reaped < 0) return status;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    ::kill(pid, SIGKILL);
+    ::waitpid(pid, &status, 0);
+    return status;
+}
+
+// The companion for a child that is mid-write to a PTY. Such a child can only
+// reach its exit once this side has taken the bytes, so waiting without draining
+// deadlocks outright: the parent blocks in waitpid() while the child blocks in
+// write(), and neither moves again. Drains while it waits.
+int wait_child_draining(pid_t pid, int output_fd, std::string* sink = nullptr,
+                        int max_wait_ms = 20'000) {
+    int status = 0;
+    char buf[4096];
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(max_wait_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        bool drained_any = false;
+        for (ssize_t n = ::read(output_fd, buf, sizeof(buf)); n > 0;
+             n = ::read(output_fd, buf, sizeof(buf))) {
+            if (sink != nullptr) sink->append(buf, static_cast<std::size_t>(n));
+            drained_any = true;
+        }
+        const pid_t reaped = ::waitpid(pid, &status, WNOHANG);
+        if (reaped == pid || reaped < 0) return status;
+        if (!drained_any) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ::kill(pid, SIGKILL);
     ::waitpid(pid, &status, 0);
     return status;
 }
@@ -1534,7 +1580,7 @@ CK_TEST(posix_terminal_delivers_a_backpressured_pty_write_without_truncation) {
     ::close(acknowledge_pipe[0]);
     CK_CHECK(::fcntl(status_pipe[0], F_SETFL, O_NONBLOCK) == 0);
     std::string output = read_output_until_status(master_fd, status_pipe[0], 'R', 1'000);
-    output += read_output_until_status(master_fd, status_pipe[0], 'D', 3'000);
+    output += read_output_until_status(master_fd, status_pipe[0], 'D', 15'000);
     // Keep the slave open until the parent has drained the payload. A PTY may
     // discard output that remains queued when its slave is closed, which is a
     // transport-lifecycle concern rather than evidence that write_all() lost
@@ -1543,8 +1589,9 @@ CK_TEST(posix_terminal_delivers_a_backpressured_pty_write_without_truncation) {
     const std::size_t payload_count = count_occurrences(output, "Z");
     const char acknowledged = 'A';
     CK_CHECK(::write(acknowledge_pipe[1], &acknowledged, 1) == 1);
-    const int child_status = wait_child(child);
-    output += read_available(master_fd, 50);
+    // Drain while waiting: the child is only past its 256 KiB write once this
+    // side has consumed it, so a plain wait_child() here is a deadlock.
+    const int child_status = wait_child_draining(child, master_fd, &output);
 
     CK_CHECK(WIFEXITED(child_status));
     CK_CHECK(WEXITSTATUS(child_status) == 0);
