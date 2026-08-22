@@ -3642,9 +3642,9 @@ CK_TEST(a_pan_cannot_look_past_the_edge_of_the_world) {
     af.desktop->set_extent(ckv::Size{200, 60});
 
     af.desktop->set_pan(ckv::Point{10'000, 10'000});
-    const ckv::Point far = af.desktop->pan();
-    CK_CHECK(far.x == 200 - af.desktop->bounds().width);
-    CK_CHECK(far.x >= 0 && far.y >= 0);
+    const ckv::Point panned = af.desktop->pan();
+    CK_CHECK(panned.x == 200 - af.desktop->bounds().width);
+    CK_CHECK(panned.x >= 0 && panned.y >= 0);
 
     af.desktop->set_pan(ckv::Point{-50, -50});
     CK_CHECK((af.desktop->pan() == ckv::Point{0, 0}));
