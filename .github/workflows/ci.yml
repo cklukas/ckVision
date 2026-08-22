@@ -33,7 +33,7 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure -R '^(theme_assertion_contract|suite_test_posix_filesystem)$'
       - name: Test POSIX PTY contracts
         if: runner.os != 'Windows'
-        run: ctest --test-dir build -C Release --output-on-failure -L pty --repeat until-pass:3
+        run: ctest --test-dir build -C Release --output-on-failure -L pty --repeat until-pass:2
       - name: Test Windows ConPTY contracts (WP-37 pending)
         if: runner.os == 'Windows'
         run: echo "No ConPTY suite is registered yet; WP-37 owns this platform backend gate."

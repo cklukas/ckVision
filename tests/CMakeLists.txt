@@ -268,7 +268,12 @@ function(ckvision_add_sharded_test_suites source labels shard_count)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         set_tests_properties(suite_${suite_name}_${shard_index} PROPERTIES
             LABELS "${labels}"
-            TIMEOUT 30)
+            # PTY shards spawn real child processes and are I/O-bound; 30s was
+            # tight enough that a loaded GitHub macOS runner tripped it on
+            # suite_test_posix_terminal_0 (seconds locally). A hang would run
+            # past any ceiling, so a higher one gives slow-but-progressing runs
+            # room without hiding a real deadlock. The pty CI lane also retries.
+            TIMEOUT 120)
     endforeach()
 endfunction()
 

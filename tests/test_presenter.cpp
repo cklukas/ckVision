@@ -451,7 +451,7 @@ CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
 
     CK_CHECK(term.written_bytes().find(fallback) == std::string_view::npos);
     for (int x = 0; x < 7; ++x) {
-        const Cell& cell = term.display().frame().at(Point{x, 0});
+        const Cell cell = term.display().frame().at(Point{x, 0});
         CK_CHECK(cell.grapheme() == " ");
         CK_CHECK(cell.style().bg == panel.bg);
     }

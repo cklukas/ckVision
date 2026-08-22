@@ -26,7 +26,7 @@ CK_TEST(named_headless_graphics_profiles_differ_only_in_sixel_support) {
 CK_TEST(virtual_display_decodes_cursor_position_truecolor_style_and_text) {
     VirtualDisplay display(Size{4, 2}, Size{2, 3});
     CK_CHECK(display.write("\x1B[2;2H\x1B[0;1;38;2;10;20;30;48;2;40;50;60mQ\x1B[?25l"));
-    const Cell& cell = display.frame().at(Point{1, 1});
+    const Cell cell = display.frame().at(Point{1, 1});
     CK_CHECK(cell.grapheme() == "Q");
     CK_CHECK(cell.style().fg == Color::rgb(10, 20, 30));
     CK_CHECK(cell.style().bg == Color::rgb(40, 50, 60));
