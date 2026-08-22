@@ -11,4 +11,17 @@ add_custom_target(bench_smoke_run
 # Unlike a printed benchmark target, this deterministic scene budget gate is
 # a CTest failure when the checked cells-touched limits regress.
 add_test(NAME scene_budget_gate COMMAND cvision_bench)
-set_tests_properties(scene_budget_gate PROPERTIES LABELS "benchmark;budget" TIMEOUT 60)
+# What this gate asserts is deterministic — cells touched, not time — so it stays
+# meaningful under a sanitizer; only its wall-clock cost changes, and ASan/TSan
+# make it an order of magnitude slower. A 60s ceiling was enough for an ordinary
+# build and not for an instrumented one, so the sanitizer lanes failed on the
+# clock while the budget itself was never in question. The ceiling follows the
+# instrumentation rather than the gate being skipped, which would drop a real
+# regression check from exactly the lanes that run it most carefully.
+if(CKVISION_SANITIZE)
+    set(ckvision_budget_gate_timeout 600)
+else()
+    set(ckvision_budget_gate_timeout 60)
+endif()
+set_tests_properties(scene_budget_gate PROPERTIES LABELS "benchmark;budget"
+    TIMEOUT ${ckvision_budget_gate_timeout})
