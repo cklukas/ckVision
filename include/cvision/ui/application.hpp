@@ -687,6 +687,16 @@ private:
     // once the sanitizer lanes first built on Linux. Same rule, same
     // reason as roles_/theme_/commands_ above.
     std::vector<ModalScope> modal_stack_;
+    // Same rule, same sink, same reason as modal_stack_ directly above. When
+    // root_'s teardown drops a still-open innermost modal scope, the detach
+    // sink hands that scope's saved focus to this member. Declared after root_
+    // it had already been destroyed by then, and assigning to a destroyed
+    // std::optional re-constructs the ViewHandle — and its weak_ptr — into
+    // storage nothing will ever destroy again, pinning the focused View's
+    // liveness control block forever. That is LeakSanitizer's "Direct leak of
+    // 24 byte(s)" out of View's make_shared, one per test that leaves a modal
+    // with a saved focus target standing when the Application goes.
+    std::optional<ViewHandle> pending_modal_focus_restore_;
     View root_;
     // The retained base layer for root-owned chrome/background. Desktop and
     // other retained containers contribute child backing stores separately to
@@ -728,7 +738,6 @@ private:
     std::vector<View*> focus_scratch_;
     std::vector<std::string> command_context_scratch_;
     ModalScopeId next_modal_scope_id_ = 1;
-    std::optional<ViewHandle> pending_modal_focus_restore_;
 
     bool step_active_ = false;
     bool dispatch_active_ = false;
