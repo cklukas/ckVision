@@ -29,6 +29,17 @@ if(NOT TARGET docgen_frame_svg)
     add_library(docgen_frame_svg STATIC frame_svg.cpp)
     target_link_libraries(docgen_frame_svg PRIVATE ckvision::cvision)
     ckvision_strict(docgen_frame_svg)
+    # GCC 13/14 raises -Wfree-nonheap-object from inside libstdc++ against the
+    # std::vector churn in the PNG/zlib packer under -O2 (`operator delete …
+    # with nonzero offset`). It is a known optimiser false positive on
+    # move-into-by-value-vector code, optimised-lane only, and this is
+    # docgen tooling rather than the shipped library. Narrowed to this file and
+    # this compiler, exactly like the -Wmaybe-uninitialized suppressions the
+    # library carries for the same class of GCC post-inlining analysis.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_source_files_properties(frame_svg.cpp
+            PROPERTIES COMPILE_OPTIONS -Wno-free-nonheap-object)
+    endif()
 endif()
 
 add_executable(capture_widget_gallery_screenshots capture_widget_gallery_screenshots.cpp)

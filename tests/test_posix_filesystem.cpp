@@ -30,7 +30,8 @@ struct ScratchDir {
         // Best-effort recursive cleanup; test scratch dirs are small
         // and flat by construction, so a fixed two-level rm suffices.
         const std::string cmd = "rm -rf '" + root + "'";
-        std::system(cmd.c_str());
+        const int rc = std::system(cmd.c_str());
+        (void)rc;  // best-effort cleanup; glibc marks system() warn_unused_result
     }
 
     void make_dir(const std::string& relative) const { ::mkdir((root + "/" + relative).c_str(), 0755); }

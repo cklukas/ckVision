@@ -92,7 +92,23 @@ public:
     void resize(Size new_size) {
         size_ = new_size;
         display_.resize(new_size);
+        // GCC 13/14 raises a -Wmaybe-uninitialized from inside libstdc++'s
+        // push_back → construct_at when this call is inlined into a consuming
+        // TU under optimisation (the std::string member of the pushed
+        // TerminalEvent). It is the same post-inlining false positive already
+        // audited and suppressed for the library's own files in CMakeLists.txt;
+        // here the warning surfaces in every TU that inlines resize(), so the
+        // suppression belongs at the trigger. A TerminalEvent cannot hold an
+        // uninitialised string — every member runs a constructor — and Clang's
+        // uninitialised-warning family reports nothing on the same build.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
         pending_events_.push_back(TerminalEvent{ResizeEvent{new_size}});
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
     }
 
     std::string_view written_bytes() const noexcept { return written_; }

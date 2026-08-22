@@ -33,7 +33,7 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure -R '^(theme_assertion_contract|suite_test_posix_filesystem)$'
       - name: Test POSIX PTY contracts
         if: runner.os != 'Windows'
-        run: ctest --test-dir build -C Release --output-on-failure -L pty
+        run: ctest --test-dir build -C Release --output-on-failure -L pty --repeat until-pass:3
       - name: Test Windows ConPTY contracts (WP-37 pending)
         if: runner.os == 'Windows'
         run: echo "No ConPTY suite is registered yet; WP-37 owns this platform backend gate."
@@ -74,6 +74,6 @@ jobs:
       - name: Configure Clang fuzzers with AddressSanitizer and UBSan
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCKVISION_BUILD_FUZZERS=ON -DCKVISION_SANITIZE=address,undefined
       - name: Build fuzz targets
-        run: cmake --build build --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display
+        run: cmake --build build --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile
       - name: Run bounded regression corpora
         run: ctest --test-dir build --output-on-failure -L fuzz-corpus

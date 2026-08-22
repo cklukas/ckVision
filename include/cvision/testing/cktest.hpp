@@ -12,6 +12,17 @@
 #include <vector>
 
 #if defined(_WIN32)
+// windows.h defines min()/max() macros and the legacy `near`/`far` keywords,
+// which collide with std::min/std::max and with ordinary identifiers in the
+// tests that include this header. NOMINMAX and WIN32_LEAN_AND_MEAN keep those
+// out; MSVC's C2589 "illegal token on right side of '::'" on std::max is the
+// symptom when they are not.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #else
 #include <sys/wait.h>

@@ -8,6 +8,7 @@
 // replay and debugging.
 #pragma once
 
+#include <cstdlib>  // std::abort
 #include <string>
 #include <variant>
 #include <vector>
@@ -75,6 +76,12 @@ public:
     }
     [[noreturn]] void terminate_after_callback_failure() noexcept override {
         inner_.terminate_after_callback_failure();
+        // inner_'s override is [[noreturn]], but that attribute does not cross
+        // the virtual call, so GCC (correctly, by the language rules) sees this
+        // function as able to return and -Werror rejects it. abort() states the
+        // contract and matches PosixTerminal's own handler; it is unreachable
+        // because inner_ has already terminated the process.
+        std::abort();
     }
 
     void write(std::string_view bytes) override {

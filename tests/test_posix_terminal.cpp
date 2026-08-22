@@ -1757,7 +1757,7 @@ CK_TEST(poll_decodes_bytes_written_from_the_other_side_of_the_pty) {
         ::close(acknowledge_fd);
     });
     ::usleep(100'000);  // let the child finish constructing and enter poll()
-    ::write(child.master_fd, "Q", 1);
+    if (::write(child.master_fd, "Q", 1) != 1) CK_CHECK(false);
     const std::string output = read_available(child.master_fd, 2000);
     CK_CHECK(output.find("GOT-Q") != std::string::npos);
     acknowledge_output(child);
@@ -2112,7 +2112,7 @@ CK_TEST(a_session_reads_the_last_frames_answer_before_it_hands_the_terminal_back
         int pending = -1;
         if (::ioctl(slave_fd, FIONREAD, &pending) != 0) ::_exit(6);
         const char verdict = pending == 0 ? 'D' : 'L';
-        (void)::write(status_pipe[1], &verdict, 1);
+        if (::write(status_pipe[1], &verdict, 1) != 1) ::_exit(9);
         ::_exit(pending == 0 ? 0 : 7);
     }
     ::close(slave_fd);
@@ -2221,7 +2221,7 @@ CK_TEST(resume_applies_a_resize_that_occurred_while_the_session_was_stopped_befo
         const bool correct_size = app.root().bounds() == Rect{0, 0, 100, 40} &&
                                   app.current_frame().size() == Size{100, 40};
         const char done = correct_size ? 'P' : 'F';
-        (void)::write(status_pipe[1], &done, 1);
+        if (::write(status_pipe[1], &done, 1) != 1) ::_exit(9);
         ::_exit(correct_size ? 0 : 1);
     }
     ::close(slave_fd);
@@ -2285,7 +2285,7 @@ CK_TEST(resume_invalidates_runtime_pixel_metrics_until_fresh_probe_evidence) {
         app.step(clock.now_nanos());
         const bool invalidated = terminal.capabilities().cell_pixels == Size{} && !terminal.capabilities().pixel_mouse;
         const char done = invalidated ? 'P' : 'F';
-        (void)::write(status_pipe[1], &done, 1);
+        if (::write(status_pipe[1], &done, 1) != 1) ::_exit(9);
         ::_exit(invalidated ? 0 : 1);
     }
 
@@ -2375,7 +2375,7 @@ CK_TEST(suspend_restores_and_resume_reenters_a_non_orphaned_terminal_session) {
         int worker_status = 0;
         if (::waitpid(worker, &worker_status, WUNTRACED) != worker || !WIFSTOPPED(worker_status)) ::_exit(1);
         const char stopped = 'S';
-        ::write(status_pipe[1], &stopped, 1);
+        if (::write(status_pipe[1], &stopped, 1) != 1) ::_exit(1);
         if (::waitpid(worker, &worker_status, 0) != worker || !WIFEXITED(worker_status)) ::_exit(1);
         ::_exit(WEXITSTATUS(worker_status));
     }

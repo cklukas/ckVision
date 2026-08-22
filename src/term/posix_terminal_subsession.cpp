@@ -189,7 +189,12 @@ bool PosixTerminalSubsession::spawn() {
         (void)::close(exec_status[0]);
         auto report_exec_failure = [&exec_status]() noexcept {
             const unsigned char failure = 1;
-            (void)::write(exec_status[1], &failure, sizeof(failure));
+            // Best-effort by design: the child _exit(127)s whether or not the
+            // parent reads this byte. Consume the result into a variable —
+            // (void)::write(...) does NOT satisfy GCC's warn_unused_result on
+            // write(), which is why every build but this platform's was clean.
+            const ssize_t reported = ::write(exec_status[1], &failure, sizeof(failure));
+            (void)reported;
             _exit(127);
         };
         // Before anything the child could be interrupted during, and before the
