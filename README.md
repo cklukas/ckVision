@@ -56,8 +56,9 @@ headlessly in a test.
   profiles, incremental syntax caching, search and replace, and a safe file
   workflow.
 - **Backends** — POSIX (real termios, signals, PTY-tested), headless, and
-  record/replay. macOS and Linux are supported today; Windows/ConPTY is a
-  target, not yet a claim.
+  record/replay. macOS is the verified platform; Linux builds and is close
+  behind, with GCC's stricter warning set still being worked through;
+  Windows/ConPTY is a target, not yet a claim.
 
 Zero mandatory dependencies. C++20. `find_package(ckvision)` gives you one
 target: `ckvision::cvision`.
@@ -67,8 +68,9 @@ target: `ckvision::cvision`.
 Version 0.1, pre-release. The framework is substantially implemented and
 substantially tested — the suite covers unit behavior, byte-exact golden
 output, PTY contracts, fuzzed decoders, allocation budgets, and visual
-captures, and CI builds and runs it on macOS, Linux and Windows plus dedicated
-Address, UndefinedBehavior and Thread sanitizer lanes.
+captures. CI builds it on macOS, Linux and Windows plus dedicated Address,
+UndefinedBehavior and Thread sanitizer lanes; macOS is the lane held green
+today, and the others are being brought to it.
 
 It is not yet a finished 1.0. No milestone has been signed off against its
 full written acceptance criteria: cross-platform gates, some performance and
