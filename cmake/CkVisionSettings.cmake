@@ -88,20 +88,30 @@ function(ckvision_strict target)
         endif()
     endif()
     if(CKVISION_SANITIZE)
+        # PUBLIC, not PRIVATE: a sanitizer is a USAGE requirement of the
+        # artifact, not merely a way of building it. libcvision.a carries
+        # __asan_*/__ubsan_* references, so anything linking it must compile
+        # and link with the same sanitizer or the link fails on hundreds of
+        # undefined symbols. PRIVATE keeps the flags out of
+        # INTERFACE_COMPILE_OPTIONS/INTERFACE_LINK_OPTIONS and therefore out of
+        # the installed ckvisionTargets.cmake — which is exactly how
+        # install_package_smoke's generated consumer came to be built without
+        # them against an instrumented archive, and why that gate failed on the
+        # sanitizer lanes only.
         if(MSVC)
             if(NOT CKVISION_SANITIZE STREQUAL "address")
                 message(FATAL_ERROR "MSVC supports only CKVISION_SANITIZE=address "
                                     "(got '${CKVISION_SANITIZE}')")
             endif()
-            target_compile_options(${target} PRIVATE /fsanitize=address)
+            target_compile_options(${target} PUBLIC /fsanitize=address)
         else()
             # -fno-sanitize-recover=all: findings must abort, not scroll by
             # as green-looking log noise.
-            target_compile_options(${target} PRIVATE
+            target_compile_options(${target} PUBLIC
                 -fsanitize=${CKVISION_SANITIZE}
                 -fno-sanitize-recover=all
                 -fno-omit-frame-pointer)
-            target_link_options(${target} PRIVATE
+            target_link_options(${target} PUBLIC
                 -fsanitize=${CKVISION_SANITIZE}
                 -fno-sanitize-recover=all)
         endif()
