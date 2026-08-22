@@ -618,6 +618,7 @@ private:
     static bool is_ancestor_of(const View& ancestor, const View& descendant) noexcept;
     bool in_modal_scope(const View& view) const noexcept;
     void restore_modal_focus_if_needed();
+    void apply_deferred_focus_request();
 
     View* topmost_view_at(Point absolute_point) noexcept;
     static View* topmost_view_at_recursive(View& view, Point absolute_point) noexcept;
@@ -697,6 +698,12 @@ private:
     // 24 byte(s)" out of View's make_shared, one per test that leaves a modal
     // with a saved focus target standing when the Application goes.
     std::optional<ViewHandle> pending_modal_focus_restore_;
+    // A focus request made WHILE a modal scope was up, kept rather than
+    // dropped. set_focus refuses such a request — correctly, because focus may
+    // not escape the active scope — but refusing is not the same as forgetting,
+    // and its own comment says "defer". Declared here for the same lifetime
+    // reason as the two members above it.
+    std::optional<ViewHandle> deferred_focus_request_;
     View root_;
     // The retained base layer for root-owned chrome/background. Desktop and
     // other retained containers contribute child backing stores separately to

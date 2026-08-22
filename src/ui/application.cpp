@@ -240,8 +240,18 @@ void Application::set_focus(View* view) {
         // rather than letting focus escape the active scope; the detach path
         // restores the scope's saved focus once routing is safe again.
         if (view != nullptr && modal_root() != nullptr &&
-            (!tree_contains(root_, view) || !in_modal_scope(*view)))
+            (!tree_contains(root_, view) || !in_modal_scope(*view))) {
+            // Refused, and REMEMBERED. Dropping it here is what made a ckmux
+            // terminal open, render, prompt — and never receive a keystroke:
+            // the client focuses its new terminal once, inline, and if any
+            // transient modal happened to be up at that instant the request
+            // went on the floor with no retry. The window looked active and
+            // every key went to the command table instead of the child.
+            // Deferring is what the comment above has always promised.
+            if (view != nullptr && tree_contains(root_, view))
+                deferred_focus_request_ = make_view_handle(*view);
             return;
+        }
         if (view == focused_)
             return;
         // Application-owned trees get the lifetime-safe path below. A few
@@ -301,11 +311,33 @@ bool Application::in_modal_scope(const View& view) const noexcept {
 }
 
 void Application::restore_modal_focus_if_needed() {
-    if (!pending_modal_focus_restore_)
+    // Not an early return any more. A deferred focus REQUEST and a modal's
+    // saved RESTORE are independent: a scope can end with a request waiting and
+    // nothing to restore, and returning early there dropped the request for a
+    // second time — which is how the first version of this fix applied only
+    // three of seven deferrals and left the bug looking half-fixed.
+    if (pending_modal_focus_restore_) {
+        const ViewHandle restore = *pending_modal_focus_restore_;
+        pending_modal_focus_restore_.reset();
+        View* const candidate = resolve_attached_view(restore);
+        if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate))
+            set_focus(candidate);
+    }
+    apply_deferred_focus_request();
+}
+
+// A focus request that arrived during a modal scope, applied once routing is
+// safe again. It runs after the scope's own restoration and therefore wins:
+// the caller asked for this view later than the modal saved its predecessor,
+// and the later explicit intent is the one to honour. Silently dropped if the
+// view has gone away or is no longer focusable, which is the same contract
+// set_focus itself keeps.
+void Application::apply_deferred_focus_request() {
+    if (!deferred_focus_request_)
         return;
-    const ViewHandle restore = *pending_modal_focus_restore_;
-    pending_modal_focus_restore_.reset();
-    View* const candidate = resolve_attached_view(restore);
+    const ViewHandle wanted = *deferred_focus_request_;
+    deferred_focus_request_.reset();
+    View* const candidate = resolve_attached_view(wanted);
     if (candidate != nullptr && candidate->focusable() && in_modal_scope(*candidate))
         set_focus(candidate);
 }
