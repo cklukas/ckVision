@@ -177,6 +177,24 @@ Desktop::~Desktop() {
     // exist.
     window_observers_.clear();
 
+    // Children are torn down HERE, not by the base View destructor that runs
+    // after this body. By then popups_, popup_backings_ and windows_ are gone,
+    // and a child that talks to its Desktop on the way out reads members that
+    // no longer exist: ~DropdownMenu dismisses itself into remove_popup(), and
+    // ~MenuBar closes its dropdown the same way. Declaration order cannot fix
+    // this the way Application orders commands_ and modal_stack_ before root_
+    // — children_ lives in the BASE, and a base subobject is always destroyed
+    // after every derived member. remove_child() is the per-kind teardown
+    // (window, popup, dock); discarding the owner it hands back destroys the
+    // child while everything it might call into is still alive.
+    while (!children().empty()) {
+        ui::View* const child = children().back().get();
+        std::unique_ptr<ui::View> owned = remove_child(child);
+        // A specialised path that declined the child must still leave the list
+        // shorter, or this loop would not terminate.
+        if (owned == nullptr) owned = ui::View::remove_child(child);
+    }
+
     if (app_ != nullptr)
         for (ui::CommandId id : installed_default_handlers_) app_->commands().set_handler(id, nullptr);
 }
