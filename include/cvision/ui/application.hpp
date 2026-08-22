@@ -679,6 +679,14 @@ private:
     std::vector<term::WaitHandle> terminal_subsession_wait_handles_;
     mutable std::vector<term::WaitHandle> external_wait_handles_;
     int next_terminal_raster_identity_ = 1'000'000;
+    // Declared before root_ so it is destroyed AFTER it: root_'s teardown
+    // fires the detach sink (set in the constructor), which walks
+    // modal_stack_ to drop scopes for departing windows. Declared after
+    // root_, the vector's storage was already freed by the time root_'s
+    // children ran their destructors — a heap-use-after-free ASan caught
+    // once the sanitizer lanes first built on Linux. Same rule, same
+    // reason as roles_/theme_/commands_ above.
+    std::vector<ModalScope> modal_stack_;
     View root_;
     // The retained base layer for root-owned chrome/background. Desktop and
     // other retained containers contribute child backing stores separately to
@@ -711,7 +719,6 @@ private:
     View* mouse_capture_ = nullptr;
     View* hovered_ = nullptr;
     View* input_capture_ = nullptr;
-    std::vector<ModalScope> modal_stack_;
     // Reused only on the owning thread. These preserve Application's
     // callback-safe snapshot semantics while keeping an already-warmed event
     // and focus path free of transient heap allocation.
