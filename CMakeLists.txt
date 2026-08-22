@@ -106,6 +106,22 @@ target_include_directories(cvision PUBLIC
 # package target so an independent consumer is configured correctly instead
 # of depending on this project's directory-wide build setting.
 target_compile_features(cvision PUBLIC cxx_std_20)
+# One version, stated once. `project()` above is where ckVision's version
+# lives: it is what `write_basic_package_version_file` writes into
+# ckvisionConfigVersion.cmake, and therefore what `find_package(ckvision 0.1.0)`
+# matches against. The C++ API used to repeat the same three numbers in
+# src/core/version.cpp, so a release could ship a library reporting one version
+# to a consumer that had found it by another — and nothing would have said so,
+# because the only test compared the repeated numbers to each other.
+#
+# PRIVATE: the definitions are for compiling this library, not a promise to
+# anything that links it. A consumer asks `ckv::version()`, which is what these
+# make correct.
+target_compile_definitions(cvision PRIVATE
+    CKVISION_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    CKVISION_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    CKVISION_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+    CKVISION_VERSION_STRING="${PROJECT_VERSION}")
 ckvision_strict(cvision)
 # GCC 13 raises -Wmaybe-uninitialized from INSIDE <bits/shared_ptr_base.h>
 # against `std::optional<Application::ViewHandle>`, and -Werror makes it fatal.
