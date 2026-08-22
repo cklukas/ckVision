@@ -50,12 +50,39 @@ public:
 
 }  // namespace
 
+namespace {
+
+// The nothrow forms have to be replaced alongside the throwing ones, or the
+// replacement set is only half applied. libstdc++'s std::get_temporary_buffer
+// — reached from std::stable_sort, and in this tree only from
+// Table::rebuild_order — allocates with ::operator new(n, std::nothrow) and
+// releases through the sized ::operator delete. Replacing one side and not the
+// other hands a sanitizer-owned pointer to std::free, which is exactly the
+// alloc-dealloc-mismatch ASan reported. The std::align_val_t overloads are
+// deliberately left alone: neither side is replaced, so they are already
+// consistent, and replacing one of them would manufacture the same bug again.
+void* counted_allocate_nothrow(std::size_t size) noexcept {
+    if (allocation_measurement_active.load(std::memory_order_relaxed))
+        measured_allocations.fetch_add(1, std::memory_order_relaxed);
+    return std::malloc(size == 0 ? 1 : size);
+}
+
+}  // namespace
+
 void* operator new(std::size_t size) { return counted_allocate(size); }
 void* operator new[](std::size_t size) { return counted_allocate(size); }
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+    return counted_allocate_nothrow(size);
+}
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+    return counted_allocate_nothrow(size);
+}
 void operator delete(void* memory) noexcept { std::free(memory); }
 void operator delete[](void* memory) noexcept { std::free(memory); }
 void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
+void operator delete(void* memory, const std::nothrow_t&) noexcept { std::free(memory); }
+void operator delete[](void* memory, const std::nothrow_t&) noexcept { std::free(memory); }
 
 CK_TEST(warmed_compositor_and_presenter_allocate_nothing_for_an_unchanged_frame) {
     ckv::scene::Compositor compositor(ckv::Size{8, 4});
