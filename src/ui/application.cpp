@@ -1090,7 +1090,15 @@ void Application::paint_and_present() {
 
     compositor_.compose(composition_layers_, surface_, shadow_spec_);
     CursorState cursor;
-    if (focused_ != nullptr) {
+    // A hidden view keeps the focus — a minimized window whose content nothing
+    // else could take the keyboard from is the ordinary way — but it does not
+    // keep the cursor. Not a cell of it was painted, so a cursor still placed
+    // at its coordinates is a lit block sitting on whatever the reader IS
+    // looking at: the desktop background, once a window is put away.
+    //
+    // Same place and the same reason as the off-screen rule just below, which
+    // is the other half of one question: is this view on the frame at all?
+    if (focused_ != nullptr && focused_->visible_in_tree()) {
         if (const std::optional<CursorState> focused_cursor = focused_->cursor_state()) cursor = *focused_cursor;
     }
     // A focused view can be carried off the screen entirely -- a window on a

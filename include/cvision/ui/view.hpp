@@ -264,6 +264,13 @@ public:
     bool visible() const noexcept { return visible_; }
     void set_visible(bool visible);
 
+    // This view AND every ancestor visible, which is what "on the frame at
+    // all" means: a view is hidden as effectively by a minimized window three
+    // levels up as by its own set_visible(false), and its own flag cannot say
+    // so. Nothing is painted for such a view, so nothing that describes where
+    // it is — its cursor, above all — describes anything the reader can see.
+    bool visible_in_tree() const noexcept;
+
     bool enabled() const noexcept { return enabled_; }
     void set_enabled(bool enabled);
 

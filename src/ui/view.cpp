@@ -134,6 +134,12 @@ void View::set_paint_offset(Point offset) {
     invalidate();
 }
 
+bool View::visible_in_tree() const noexcept {
+    for (const View* current = this; current != nullptr; current = current->parent_)
+        if (!current->visible_) return false;
+    return true;
+}
+
 void View::set_visible(bool visible) {
     if (visible == visible_) return;
     visible_ = visible;

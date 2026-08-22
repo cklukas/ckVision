@@ -3730,6 +3730,45 @@ CK_TEST(a_cursor_panned_off_the_screen_is_withdrawn_rather_than_addressed) {
     CK_CHECK((probe->cursor_state()->position == ckv::Point{3, 5}));
 }
 
+CK_TEST(a_minimized_window_takes_its_cursor_off_the_screen_with_it) {
+    // The other half of the question the pan test above asks: a window can
+    // leave the screen without moving at all. Minimizing it hides the frame
+    // and everything in it, but nothing takes the keyboard away — with no
+    // other window to hand it to there is nowhere for it to go — so the view
+    // inside it still holds the focus and still reports a cursor, at the
+    // absolute cell it occupied while it was visible.
+    //
+    // Reported by a reader as "the cursor does not disappear when I minimize
+    // a window; it sits on the background as a bright cell", which is exactly
+    // what a terminal draws when it is told to put the cursor in a cell that
+    // now shows the desktop.
+    AttachedFixture af;
+    Window* window = af.desktop->add_window(make_window(af.f));
+    window->set_bounds(Rect{2, 4, 40, 10});
+    auto* probe = window->add_child(std::make_unique<CursorProbe>());
+    probe->set_bounds(Rect{1, 1, 4, 2});
+    af.app.set_focus(probe);
+    af.app.step(0);
+    CK_CHECK(af.app.current_cursor().visible);
+    CK_CHECK((af.app.current_cursor().position == ckv::Point{3, 5}));
+
+    window->set_minimized(true);
+    af.app.step(0);
+    CK_CHECK(!af.app.current_cursor().visible);
+    // And the reason it is gone is the frame's, not the widget's: the focus
+    // never moved and the view still offers the same cursor it always did.
+    // Checked so a later change that fixed this by taking the focus away
+    // instead cannot pass this test while leaving the frame rule unwritten.
+    CK_CHECK(af.app.focused() == probe);
+    CK_CHECK(probe->cursor_state().has_value());
+
+    // Restored, the cursor comes back to the cell it left.
+    window->set_minimized(false);
+    af.app.step(0);
+    CK_CHECK(af.app.current_cursor().visible);
+    CK_CHECK((af.app.current_cursor().position == ckv::Point{3, 5}));
+}
+
 CK_TEST(pan_to_show_moves_the_least_it_can_and_nothing_if_it_need_not) {
     AttachedFixture af;
     af.desktop->set_extent(ckv::Size{200, 60});
