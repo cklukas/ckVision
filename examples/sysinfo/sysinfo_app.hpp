@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -70,6 +71,8 @@ public:
     static constexpr std::string_view kBenchmarksWindowKey = "sysinfo.benchmarks-window";
     static constexpr std::string_view kRunBenchmarksKey = "sysinfo.run-benchmarks";
     static constexpr std::string_view kCancelBenchmarksKey = "sysinfo.cancel-benchmarks";
+    static constexpr std::string_view kNextPageKey = "sysinfo.next-page";
+    static constexpr std::string_view kPreviousPageKey = "sysinfo.previous-page";
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
 
@@ -96,6 +99,14 @@ public:
     widgets::ComboBox* compare_picker() const noexcept { return compare_picker_; }
     widgets::Progress* benchmark_progress() const noexcept { return benchmark_progress_; }
     BarChartView* chart() const noexcept { return chart_; }
+    // Which topic the Benchmarks window is showing: 0 is the page that
+    // chooses and runs them, and each measured metric has its own after it.
+    std::size_t benchmark_page() const noexcept { return benchmark_page_; }
+    std::size_t benchmark_page_count() const noexcept { return chart_groups_.size() + 1; }
+    const std::string& benchmark_page_title() const noexcept { return benchmark_page_title_; }
+    // Every bar the current results would draw, across all topics. The
+    // chart itself holds only the page on screen.
+    const std::vector<ChartBar>& all_chart_bars() const noexcept { return chart_bars_; }
     widgets::StaticText* benchmark_footnote() const noexcept { return benchmark_footnote_; }
     BenchmarkService& benchmarks() noexcept { return benchmarks_; }
 
@@ -164,6 +175,8 @@ private:
     void start_benchmarks();
     void cancel_benchmarks();
     void update_chart();
+    void show_benchmark_page(std::size_t page);
+    void step_benchmark_page(int direction);
     // The kernel whose published reference figures are on the chart, or
     // nothing when the reader asked for this run only.
     std::optional<BenchmarkId> comparison_kernel() const;
@@ -233,6 +246,15 @@ private:
     widgets::StaticText* benchmark_note_ = nullptr;
     widgets::StaticText* benchmark_footnote_ = nullptr;
     BarChartView* chart_ = nullptr;
+
+    // Every group the current results would draw, in order: the topics the
+    // window pages through.
+    std::vector<std::string> chart_groups_;
+    // Each topic's units, shown under its axis.
+    std::map<std::string, std::string> chart_captions_;
+    std::vector<ChartBar> chart_bars_;
+    std::size_t benchmark_page_ = 0;
+    std::string benchmark_page_title_;
 
     std::vector<BenchmarkResult> current_results_;
     std::vector<BenchmarkResult> previous_results_;

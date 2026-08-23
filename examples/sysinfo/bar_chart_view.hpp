@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include "cvision/core/color.hpp"
+#include "cvision/core/style.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 
@@ -32,6 +34,31 @@ enum class BarKind {
     Reference,
 };
 
+// The chart's own paper. A bar chart in the classic diagnostic tools was a
+// blue page with white bars and a hard black drop shadow, and that is not
+// decoration: the shadow is what separates a bar from the one under it
+// without a rule between them, and the dark ground is what makes a white
+// bar read as a quantity rather than as a highlighted row.
+//
+// The example's own palette rather than the theme's roles, for the same
+// reason latency_plot has one: these are the colours of a chart, not of a
+// list or a dialog, and there is no theme role for "the paper a chart is
+// drawn on".
+struct ChartPalette {
+    Style paper{Color::rgb(255, 255, 255), Color::rgb(0, 0, 170)};
+    Style heading{Color::rgb(255, 255, 85), Color::rgb(0, 0, 170)};
+    Style label{Color::rgb(255, 255, 255), Color::rgb(0, 0, 170)};
+    Style sublabel{Color::rgb(0, 170, 170), Color::rgb(0, 0, 170)};
+    Style highlight_label{Color::rgb(255, 255, 85), Color::rgb(0, 0, 170)};
+    // A measured bar is solid white; a published ceiling is grey. Both are
+    // fills rather than glyphs, so neither depends on a font.
+    Style bar{Color::rgb(0, 0, 170), Color::rgb(255, 255, 255)};
+    Style reference_bar{Color::rgb(0, 0, 170), Color::rgb(170, 170, 170)};
+    Style shadow{Color::rgb(0, 0, 0), Color::rgb(0, 0, 0)};
+    Style axis{Color::rgb(170, 170, 170), Color::rgb(0, 0, 170)};
+    Style value{Color::rgb(255, 255, 255), Color::rgb(0, 0, 170)};
+};
+
 struct ChartBar {
     // Bars sharing a group are drawn against each other and against
     // nothing else: each group is normalized to its own longest bar and
@@ -40,6 +67,11 @@ struct ChartBar {
     // however tidy the picture.
     std::string group;
     std::string label;
+    // A second line under the label, in the row the shadow occupies: what
+    // this bar's number actually was ("812 MFLOPS"), or where a published
+    // figure came from ("3200 MT/s x 8 B"). The classic charts put the
+    // machine's clock speed here; the same row, the same purpose.
+    std::string sublabel;
     // The number, as text, printed past the end of the bar. Carried rather
     // than derived: only the producer of the value knows what unit it is
     // in and how many digits of it were actually measured.
@@ -78,6 +110,14 @@ public:
     // What stands in the chart's place before there is anything to draw.
     void set_placeholder(std::string text);
 
+    void set_palette(ChartPalette palette);
+    const ChartPalette& palette() const noexcept { return palette_; }
+
+    // Draws the value axis under the bars: a ruled line with ticks at round
+    // numbers and their labels. Off for a chart whose numbers are already
+    // beside every bar and whose scale is not the point.
+    void set_axis_visible(bool visible);
+
     // The chart as lines of text at the current width, exactly as draw()
     // paints them. This is what the tests assert against and what the
     // exported report (WP-54) writes out, so the picture in the file and
@@ -101,10 +141,13 @@ private:
     };
 
     bool has_groups() const noexcept;
+    bool has_single_group() const noexcept;
     Layout layout_for(int width) const;
     std::string row_text(const ChartBar& bar, const Layout& layout, double maximum) const;
 
     std::vector<ChartBar> bars_;
+    ChartPalette palette_;
+    bool axis_visible_ = true;
     std::string caption_;
     std::string legend_;
     std::string placeholder_ = "No measurements yet.";

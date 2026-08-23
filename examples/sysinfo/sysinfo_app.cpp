@@ -113,6 +113,12 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId plot_command = app_.commands().declare(
         {.key = std::string(kLatencyPlotKey), .title = "Cache latency &plot", .category = "Benchmarks",
          .handler = [this] { open_latency_plot_window(); }});
+    const ui::CommandId next_page_command = app_.commands().declare(
+        {.key = std::string(kNextPageKey), .title = "&Next topic", .category = "Benchmarks", .chord = "F8",
+         .handler = [this] { step_benchmark_page(1); }});
+    const ui::CommandId previous_page_command = app_.commands().declare(
+        {.key = std::string(kPreviousPageKey), .title = "&Previous topic", .category = "Benchmarks",
+         .chord = "F4", .handler = [this] { step_benchmark_page(-1); }});
     const ui::CommandId cancel_command = app_.commands().declare(
         {.key = std::string(kCancelBenchmarksKey), .title = "&Cancel run", .category = "Benchmarks",
          .handler = [this] { cancel_benchmarks(); }});
@@ -124,6 +130,9 @@ void SysInfoApp::build_chrome() {
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{run_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{cancel_command}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{next_page_command}),
+            widgets::MenuItem::command(widgets::CommandPresentation{previous_page_command}),
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{plot_command}),
         }};
@@ -154,6 +163,7 @@ void SysInfoApp::build_chrome() {
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{refresh_command}},
                    widgets::StatusLineItem{widgets::CommandPresentation{run_command}},
+                   widgets::StatusLineItem{widgets::CommandPresentation{next_page_command}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}}});
     desktop_ = &shell.desktop();
@@ -359,8 +369,10 @@ const std::vector<SeriesPoint>& SysInfoApp::latency_series() const {
 std::vector<ChartBar> SysInfoApp::latency_bars() const {
     std::vector<ChartBar> bars;
     for (const SeriesPoint& point : latency_series())
-        bars.push_back(ChartBar{"Cache latency - ns per access", point.label, point.value_text, point.value,
-                                BarKind::Measured, false});
+        bars.push_back(ChartBar{.group = "Cache latency - ns per access",
+                                .label = point.label,
+                                .value_text = point.value_text,
+                                .value = point.value});
     return bars;
 }
 
@@ -473,6 +485,7 @@ void SysInfoApp::open_benchmarks_window() {
     benchmark_progress_ = progress.get();
     column->add_item(std::move(progress), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
+
     auto chart = std::make_unique<BarChartView>();
     chart->set_placeholder("No measurements yet - press F9 to run.");
     chart->set_help_context_key("sysinfo.benchmarks");
@@ -484,6 +497,23 @@ void SysInfoApp::open_benchmarks_window() {
     auto footnote = std::make_unique<widgets::StaticText>(measurement_caveat_text(probe_.build()));
     benchmark_footnote_ = footnote.get();
     column->add_item(std::move(footnote), ui::LayoutSpec{ui::SizePolicy::Fixed});
+
+    // The row the tools this follows put at the bottom of every page.
+    auto buttons = std::make_unique<ui::Row>();
+    buttons->set_spacing(2);
+    auto next = std::make_unique<widgets::Button>("&Next");
+    next->on_press = [this] { step_benchmark_page(1); };
+    auto previous = std::make_unique<widgets::Button>("&Previous");
+    previous->on_press = [this] { step_benchmark_page(-1); };
+    auto print = std::make_unique<widgets::Button>("P&rint");
+    print->on_press = [this] { save_report_with_dialog(ReportFormat::Text); };
+    auto run = std::make_unique<widgets::Button>("&Run");
+    run->on_press = [this] { start_benchmarks(); };
+    buttons->add_item(std::move(next), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    buttons->add_item(std::move(previous), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    buttons->add_item(std::move(run), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    buttons->add_item(std::move(print), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    column->add_item(std::move(buttons), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
     window->set_content(std::move(column));
 
@@ -513,6 +543,7 @@ void SysInfoApp::open_benchmarks_window() {
     };
     benchmarks_window_ = desktop_->add_window(std::move(window));
     update_chart();
+    show_benchmark_page(benchmark_page_);
     app_.set_focus(benchmark_picker_);
 }
 
@@ -648,7 +679,6 @@ void SysInfoApp::update_chart() {
     std::vector<ChartBar> bars;
     bool any_reference = false;
     bool any_ideal = false;
-    bool any_index = false;
     for (const BenchmarkDescriptor& descriptor : benchmark_catalogue()) {
         const BenchmarkResult* const current = result_for(current_results_, descriptor.id);
         const BenchmarkResult* const previous = result_for(previous_results_, descriptor.id);
@@ -659,13 +689,20 @@ void SysInfoApp::update_chart() {
         // point, in its own group, with the perfect result beside each
         // point that has one.
         if (current != nullptr && !current->series.empty()) {
-            const std::string group = std::string(descriptor.title) + " - " + current->series_caption;
+            const std::string group = std::string(descriptor.title);
+            chart_captions_[group] = current->series_caption;
             for (const SeriesPoint& point : current->series) {
-                bars.push_back(ChartBar{group, point.label + marker, point.value_text, point.value,
-                                        BarKind::Measured, false});
+                bars.push_back(ChartBar{.group = group,
+                                        .label = point.label + marker,
+                                        .value_text = point.value_text,
+                                        .value = point.value});
                 if (point.ideal <= 0.0) continue;
-                bars.push_back(ChartBar{group, point.label + ", perfect", format_decimal(point.ideal, 2) + "x",
-                                        point.ideal, BarKind::Reference, false});
+                bars.push_back(ChartBar{.group = group,
+                                        .label = point.label + ", perfect",
+                                        .sublabel = "if the cores were independent",
+                                        .value_text = format_decimal(point.ideal, 2) + "x",
+                                        .value = point.ideal,
+                                        .kind = BarKind::Reference});
                 any_ideal = true;
             }
             continue;
@@ -677,24 +714,40 @@ void SysInfoApp::update_chart() {
         // chart could only name one scale, and named the wrong one for
         // every other group the moment there was more than one: the disk
         // index is per 100 MB/s where the memory index is per 1 GB/s.
-        const std::string group = std::string(descriptor.title) + " - index, 1.0 = " +
-                                  format_rate(descriptor.id, unit_rate(descriptor.id));
-        any_index = true;
+        const std::string group = std::string(descriptor.title);
+        chart_captions_[group] = "index: 1.0 = " + format_rate(descriptor.id, unit_rate(descriptor.id)) +
+                                 ", measured on this machine";
         if (current != nullptr)
-            bars.push_back(ChartBar{group, "This computer" + marker, current->index_text, current->index,
-                                    BarKind::Measured, true});
+            bars.push_back(ChartBar{.group = group,
+                                    .label = "This computer" + marker,
+                                    .sublabel = current->rate_text,
+                                    .value_text = current->index_text,
+                                    .value = current->index,
+                                    .highlighted = true});
         if (previous != nullptr && previous->series.empty())
-            bars.push_back(ChartBar{group, "Previous run" + marker, previous->index_text, previous->index,
-                                    BarKind::Measured, false});
+            bars.push_back(ChartBar{.group = group,
+                                    .label = "Previous run" + marker,
+                                    .sublabel = previous->rate_text,
+                                    .value_text = previous->index_text,
+                                    .value = previous->index});
         if (!comparing) continue;
         for (const ReferencePoint& point : reference_points_for(descriptor.id)) {
             const double index = point.rate / unit_rate(descriptor.id);
-            bars.push_back(ChartBar{group, std::string(point.label), format_decimal(index, 1), index,
-                                    BarKind::Reference, false});
+            bars.push_back(ChartBar{.group = group,
+                                    .label = std::string(point.label),
+                                    // The arithmetic that produced the bar,
+                                    // in the row its shadow occupies.
+                                    .sublabel = std::string(point.basis),
+                                    .value_text = format_decimal(index, 1),
+                                    .value = index,
+                                    .kind = BarKind::Reference});
             any_reference = true;
         }
     }
-    chart_->set_bars(std::move(bars));
+    chart_bars_ = std::move(bars);
+    chart_groups_.clear();
+    for (const ChartBar& bar : chart_bars_)
+        if (chart_groups_.empty() || chart_groups_.back() != bar.group) chart_groups_.push_back(bar.group);
     // Which ink means what. Only while both kinds are on the chart: a
     // legend for bars that are not there teaches a distinction the reader
     // cannot see.
@@ -702,17 +755,72 @@ void SysInfoApp::update_chart() {
     // standard, or the result a perfect machine would have shown. Both are
     // things nobody measured, and neither is the other.
     std::string legend;
+    // Named for what the bars now ARE -- filled rectangles, not block
+    // glyphs -- because a legend that describes the previous rendering is
+    // worse than none.
     if (any_reference && any_ideal)
-        legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 not measured: a published ceiling or a perfect result";
+        legend = "white: measured here.  grey: a published ceiling or a perfect result.";
     else if (any_reference)
-        legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 published ceiling, not a measurement";
+        legend = "white: measured here.  grey: a published ceiling, not a measurement.";
     else if (any_ideal)
-        legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 perfect scaling, not a measurement";
+        legend = "white: measured here.  grey: perfect scaling, never reached.";
     chart_->set_legend(std::move(legend));
     // Each index group names its own 1.0 in its heading, so the caption
     // says the one thing that is true of the whole chart rather than a
     // scale that belongs to one group of it.
-    chart_->set_caption(any_index ? "each group is drawn against its own longest bar" : "");
+    // A new measurement lands on the page it belongs to, and a run that has
+    // just finished shows its first topic rather than leaving the reader on
+    // the page they started it from.
+    show_benchmark_page(benchmark_page_ == 0 && !chart_groups_.empty() ? 1 : benchmark_page_);
+}
+
+// One topic per page, the way the tools this example follows did it: page 0
+// chooses and runs the measurements, and every metric measured has a page of
+// its own. A single scrolling column of every chart at once is a list of
+// numbers; a page with one chart on it is a chart.
+void SysInfoApp::show_benchmark_page(std::size_t page) {
+    if (chart_ == nullptr) return;
+    benchmark_page_ = std::min(page, chart_groups_.size());
+
+    const bool setup = benchmark_page_ == 0;
+    if (benchmark_picker_ != nullptr) benchmark_picker_->set_visible(setup);
+    if (compare_picker_ != nullptr) compare_picker_->set_visible(setup);
+    if (benchmark_progress_ != nullptr) benchmark_progress_->set_visible(setup);
+    chart_->set_visible(!setup);
+
+    if (setup) {
+        benchmark_page_title_ = chart_groups_.empty() ? "Measure" : "Measure  (1 of " +
+                                                                       std::to_string(benchmark_page_count()) + ")";
+        chart_->set_bars({});
+    } else {
+        const std::string& group = chart_groups_[benchmark_page_ - 1];
+        std::vector<ChartBar> page_bars;
+        for (const ChartBar& bar : chart_bars_)
+            if (bar.group == group) page_bars.push_back(bar);
+        chart_->set_bars(std::move(page_bars));
+        // The topic names the window; the scale goes under the axis, where
+        // a chart's units belong.
+        const auto caption = chart_captions_.find(group);
+        chart_->set_caption(caption != chart_captions_.end() ? caption->second : std::string());
+        benchmark_page_title_ = group;
+    }
+    if (benchmarks_window_ != nullptr)
+        benchmarks_window_->set_title("Benchmarks - " + benchmark_page_title_);
+    if (benchmarks_window_ != nullptr)
+        benchmarks_window_->set_footer(chart_groups_.empty()
+                                           ? std::string()
+                                           : "page " + std::to_string(benchmark_page_ + 1) + " of " +
+                                                 std::to_string(benchmark_page_count()));
+}
+
+void SysInfoApp::step_benchmark_page(int direction) {
+    open_benchmarks_window();
+    const std::size_t pages = benchmark_page_count();
+    if (pages == 0) return;
+    // Wraps, because a Next that stops working on the last page is a
+    // button that looks broken.
+    const std::size_t next = (benchmark_page_ + static_cast<std::size_t>(direction < 0 ? pages - 1 : 1)) % pages;
+    show_benchmark_page(next);
 }
 
 const BenchmarkResult* SysInfoApp::result_for(const std::vector<BenchmarkResult>& results, BenchmarkId id) {

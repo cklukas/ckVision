@@ -78,9 +78,9 @@ CK_TEST(a_bar_never_runs_past_its_own_axis) {
 CK_TEST(every_chart_row_fills_exactly_the_width_it_was_given) {
     BarChartView chart;
     chart.set_bounds(ckv::Rect{0, 0, 44, 8});
-    chart.set_bars({ChartBar{"", "Integer mix", "48.3", 48.3, ckv::sysinfo::BarKind::Measured, true},
-                    ChartBar{"", "Floating point", "24.0", 24.0, ckv::sysinfo::BarKind::Measured, false},
-                    ChartBar{"", "Memory bandwidth", "20.0", 20.0, ckv::sysinfo::BarKind::Measured, false}});
+    chart.set_bars({ChartBar{.label = "Integer mix", .value_text = "48.3", .value = 48.3, .highlighted = true},
+                    ChartBar{.label = "Floating point", .value_text = "24.0", .value = 24.0},
+                    ChartBar{.label = "Memory bandwidth", .value_text = "20.0", .value = 20.0}});
     chart.set_caption("index: 1.0 = this program's own unit");
 
     const std::vector<std::string> rows = chart.text_rows();
@@ -118,8 +118,8 @@ CK_TEST(an_empty_chart_says_so_instead_of_drawing_an_empty_axis) {
 CK_TEST(bars_that_are_all_zero_draw_empty_rather_than_dividing_by_nothing) {
     BarChartView chart;
     chart.set_bounds(ckv::Rect{0, 0, 40, 6});
-    chart.set_bars({ChartBar{"", "one", "0.0", 0.0, ckv::sysinfo::BarKind::Measured, false},
-                    ChartBar{"", "two", "0.0", 0.0, ckv::sysinfo::BarKind::Measured, false}});
+    chart.set_bars({ChartBar{.label = "one", .value_text = "0.0", .value = 0.0},
+                    ChartBar{.label = "two", .value_text = "0.0", .value = 0.0}});
     const std::vector<std::string> rows = chart.text_rows();
     CK_CHECK(rows.size() == 2);
     for (const std::string& row : rows) {
@@ -147,9 +147,12 @@ CK_TEST(bars_are_normalized_within_their_group_and_headed_by_its_name) {
     BarChartView chart;
     chart.set_bounds(ckv::Rect{0, 0, 44, 12});
     chart.set_bars({
-        ChartBar{"Floating point", "This computer", "130.0", 130.0, ckv::sysinfo::BarKind::Measured, true},
-        ChartBar{"Floating point", "AVX-512", "960.0", 960.0, ckv::sysinfo::BarKind::Reference, false},
-        ChartBar{"Memory bandwidth", "This computer", "70.0", 70.0, ckv::sysinfo::BarKind::Measured, true},
+        ChartBar{.group = "Floating point", .label = "This computer", .value_text = "130.0", .value = 130.0,
+                 .highlighted = true},
+        ChartBar{.group = "Floating point", .label = "AVX-512", .value_text = "960.0", .value = 960.0,
+                 .kind = ckv::sysinfo::BarKind::Reference},
+        ChartBar{.group = "Memory bandwidth", .label = "This computer", .value_text = "70.0", .value = 70.0,
+                 .highlighted = true},
     });
 
     const std::vector<std::string> rows = chart.text_rows();
@@ -171,11 +174,13 @@ CK_TEST(a_chart_taller_than_its_box_says_how_much_it_could_not_show) {
     chart.set_bounds(ckv::Rect{0, 0, 40, 6});
     std::vector<ChartBar> bars;
     for (int index = 0; index < 12; ++index)
-        bars.push_back(ChartBar{"Group", "row " + std::to_string(index), "1.0", 1.0,
-                                ckv::sysinfo::BarKind::Measured, false});
+        bars.push_back(ChartBar{.group = "Group", .label = "row " + std::to_string(index),
+                                .value_text = "1.0", .value = 1.0});
     chart.set_bars(std::move(bars));
     // text_rows() is the whole chart; what fits is draw()'s business, and
     // the size hint is what a layout uses to give it more room.
     CK_CHECK(chart.text_rows().size() == 13);
-    CK_CHECK(chart.vertical_size_hint().preferred == 13);
+    // Two drawn rows per bar -- the bar and its shadow -- plus the heading
+    // and the two axis rows the group carries.
+    CK_CHECK(chart.vertical_size_hint().preferred == 12 * 2 + 3);
 }

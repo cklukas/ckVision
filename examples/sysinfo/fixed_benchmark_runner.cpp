@@ -58,10 +58,14 @@ FixedBenchmarkRunner::FixedBenchmarkRunner() {
         double speedup;
     } lanes[] = {{1, 1.0}, {2, 1.95}, {4, 3.70}, {8, 6.40}};
     for (const auto& lane : lanes)
+        // One thread is the baseline, so it has no "perfect" bar to be
+        // drawn against -- the same rule the measured kernel follows, and
+        // a fixture that disagreed with it would be scripting a machine
+        // this program cannot produce.
         scaling.series.push_back(SeriesPoint{std::to_string(lane.threads) +
                                                  (lane.threads == 1 ? " thread" : " threads"),
                                              lane.speedup, format_decimal(lane.speedup, 2) + "x",
-                                             static_cast<double>(lane.threads)});
+                                             lane.threads == 1 ? 0.0 : static_cast<double>(lane.threads)});
     scaling.rate_text = "6.40x on 8 threads";
     results.push_back(scaling);
 

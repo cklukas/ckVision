@@ -4,12 +4,15 @@
 
 #include <algorithm>
 #include <cmath>
+
+#include "report_format.hpp"
 #include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "cvision/core/text.hpp"
+#include "cvision/scene/box_drawing.hpp"
 #include "cvision/scene/painter.hpp"
 
 namespace ckv::sysinfo {
@@ -33,7 +36,7 @@ constexpr std::string_view kPartialBlocks[] = {
 constexpr std::string_view kShadeBlock = "\xE2\x96\x92";  // U+2592 MEDIUM SHADE
 
 constexpr int kLabelColumnMinimum = 8;
-constexpr int kLabelColumnMaximum = 24;
+constexpr int kLabelColumnMaximum = 26;
 
 // Grouped rows are indented under their heading.
 constexpr std::string_view kGroupIndent = "  ";
@@ -117,6 +120,9 @@ BarChartView::Layout BarChartView::layout_for(int width) const {
     const int indent = has_groups() ? text::text_width(std::string(kGroupIndent)) : 0;
     for (const ChartBar& bar : bars_) {
         layout.label_width = std::max(layout.label_width, text::text_width(bar.label) + indent);
+        // The second line counts too: it is the line that carries a
+        // reference row's arithmetic, and "3200 MT/s x 8 B/tr" is not that.
+        layout.label_width = std::max(layout.label_width, text::text_width(bar.sublabel) + indent);
         layout.value_width = std::max(layout.value_width, text::text_width(bar.value_text));
     }
     layout.label_width = std::clamp(layout.label_width, kLabelColumnMinimum, kLabelColumnMaximum);
@@ -183,52 +189,148 @@ std::vector<std::string> BarChartView::text_rows() const {
     return rows;
 }
 
+bool BarChartView::has_single_group() const noexcept {
+    for (const ChartBar& bar : bars_)
+        if (bar.group != bars_.front().group) return false;
+    return !bars_.empty();
+}
+
 bool BarChartView::has_groups() const noexcept {
     for (const ChartBar& bar : bars_)
         if (!bar.group.empty()) return true;
     return false;
 }
 
+void BarChartView::set_palette(ChartPalette palette) {
+    palette_ = palette;
+    invalidate();
+}
+
+void BarChartView::set_axis_visible(bool visible) {
+    if (axis_visible_ == visible) return;
+    axis_visible_ = visible;
+    invalidate();
+}
+
+namespace {
+
+// A tick step a reader can count in: 1, 2 or 5 times a power of ten, so the
+// numbers under the axis are 10, 20, 30 rather than 8.3, 16.6, 24.9.
+double nice_step(double span, int wanted_ticks) {
+    if (!(span > 0.0) || wanted_ticks < 1) return 0.0;
+    const double raw = span / static_cast<double>(wanted_ticks);
+    const double magnitude = std::pow(10.0, std::floor(std::log10(raw)));
+    const double normalized = raw / magnitude;
+    const double step = normalized <= 1.0 ? 1.0 : normalized <= 2.0 ? 2.0 : normalized <= 5.0 ? 5.0 : 10.0;
+    return step * magnitude;
+}
+
+std::string tick_label(double value) {
+    if (value >= 100.0 || value == std::floor(value)) return format_decimal(value, 0);
+    return format_decimal(value, value >= 10.0 ? 0 : 1);
+}
+
+}  // namespace
+
+// The chart as a picture rather than as rows of text: filled bars with a
+// hard drop shadow, a value axis with round-numbered ticks, and each bar's
+// own figure beside its end. text_rows() remains the same chart as text,
+// for the exported report and for a terminal that cannot show this one.
 void BarChartView::draw(scene::Painter& painter) {
     const int width = bounds().width;
     const int height = bounds().height;
     if (width <= 0 || height <= 0) return;
 
-    const Style normal = context().theme->resolve(normal_role_);
-    const Style highlight = context().theme->resolve(highlight_role_);
-    painter.fill(Rect{0, 0, width, height}, Cell::from_grapheme(" ", normal));
+    painter.fill(Rect{0, 0, width, height}, Cell::from_grapheme(" ", palette_.paper));
+    if (bars_.empty()) {
+        painter.draw_text(Point{0, 0}, text::clip_to_width(placeholder_, width), palette_.label);
+        return;
+    }
 
-    // Which rows are highlighted is decided from the bars, not from the row
-    // index: the group headings between them mean the two no longer line up.
-    std::vector<bool> row_highlighted;
-    row_highlighted.reserve(bars_.size() + 3);
+    const Layout layout = layout_for(width);
+    const bool single_group = has_single_group();
+    // The bar column ends where the widest value needs to start, plus one
+    // cell for the shadow that hangs off the end of a full-length bar.
+    const int bar_x = layout.label_width + 1;
+    const int bar_width = std::max(1, width - bar_x - layout.value_width - 2);
+
+    int y = 0;
     std::size_t index = 0;
-    while (index < bars_.size()) {
+    while (index < bars_.size() && y < height) {
         const std::string& group = bars_[index].group;
-        if (!group.empty()) row_highlighted.push_back(false);
-        while (index < bars_.size() && bars_[index].group == group) {
-            row_highlighted.push_back(bars_[index].highlighted);
-            ++index;
+        std::size_t end = index;
+        double maximum = 0.0;
+        while (end < bars_.size() && bars_[end].group == group) {
+            if (std::isfinite(bars_[end].value)) maximum = std::max(maximum, bars_[end].value);
+            ++end;
         }
+        if (maximum <= 0.0) maximum = 1.0;
+
+        // A heading only when this chart carries more than one group. On a
+        // page showing one topic, the window's own title says which, and a
+        // heading under it is the same words twice.
+        if (!group.empty() && !single_group && y < height) {
+            painter.draw_text(Point{0, y}, text::clip_to_width(group, width), palette_.heading);
+            ++y;
+        }
+
+        for (std::size_t row = index; row < end && y < height; ++row) {
+            const ChartBar& bar = bars_[row];
+            const double share = std::isfinite(bar.value) && bar.value > 0.0
+                                     ? std::min(1.0, bar.value / maximum)
+                                     : 0.0;
+            // At least one cell for anything that was measured at all: a
+            // bar of zero length says "not measured", which is a different
+            // claim from "very small".
+            const int length = share > 0.0
+                                   ? std::max(1, static_cast<int>(std::llround(share * bar_width)))
+                                   : 0;
+
+            painter.draw_text(Point{0, y}, text::clip_to_width(bar.label, layout.label_width),
+                              bar.highlighted ? palette_.highlight_label : palette_.label);
+            if (length > 0) {
+                const Style fill = bar.kind == BarKind::Reference ? palette_.reference_bar : palette_.bar;
+                painter.fill(Rect{bar_x, y, length, 1}, Cell::from_grapheme(" ", fill));
+                // The shadow: one row down and one cell right, which is
+                // what makes the bar sit ON the paper rather than in it.
+                if (y + 1 < height)
+                    painter.fill(Rect{bar_x + 1, y + 1, length, 1}, Cell::from_grapheme(" ", palette_.shadow));
+            }
+            if (!bar.value_text.empty()) {
+                const int value_x = std::min(width - text::text_width(bar.value_text),
+                                             bar_x + length + 2);
+                if (value_x >= 0) painter.draw_text(Point{value_x, y}, bar.value_text, palette_.value);
+            }
+            if (!bar.sublabel.empty() && y + 1 < height)
+                painter.draw_text(Point{0, y + 1}, text::clip_to_width(bar.sublabel, layout.label_width),
+                                  palette_.sublabel);
+            y += 2;
+        }
+
+        if (axis_visible_ && y + 1 < height) {
+            // The ruled line, its ticks, and the numbers under them.
+            painter.hline(Point{bar_x, y}, bar_width, scene::LineStyle::Single, palette_.axis);
+            const double step = nice_step(maximum, 5);
+            std::string labels(static_cast<std::size_t>(width), ' ');
+            for (double tick = step; step > 0.0 && tick <= maximum + step * 0.001; tick += step) {
+                const int tick_x = bar_x + static_cast<int>(std::llround(tick / maximum * bar_width)) - 1;
+                if (tick_x < bar_x || tick_x >= bar_x + bar_width) continue;
+                painter.draw_text(Point{tick_x, y}, "\xE2\x94\xAC", palette_.axis);  // U+252C
+                const std::string text = tick_label(tick);
+                const int text_x = std::clamp(tick_x - text::text_width(text) / 2, 0,
+                                              width - text::text_width(text));
+                labels.replace(static_cast<std::size_t>(text_x), text.size(), text);
+            }
+            painter.draw_text(Point{0, y + 1}, labels, palette_.axis);
+            y += 2;
+        }
+        index = end;
     }
 
-    const std::vector<std::string> rows = text_rows();
-    for (int row = 0; row < height && static_cast<std::size_t>(row) < rows.size(); ++row) {
-        const std::size_t at = static_cast<std::size_t>(row);
-        // A chart with more rows than box says how many it could not draw.
-        // Silently stopping at the bottom edge is how a reader comes to
-        // believe they have seen the whole comparison.
-        if (row == height - 1 && rows.size() > static_cast<std::size_t>(height)) {
-            const std::size_t hidden = rows.size() - static_cast<std::size_t>(height) + 1;
-            painter.draw_text(Point{0, row},
-                              text::clip_to_width("... " + std::to_string(hidden) + " more rows - resize or zoom",
-                                                  width),
-                              normal);
-            break;
-        }
-        const Style style = at < row_highlighted.size() && row_highlighted[at] ? highlight : normal;
-        painter.draw_text(Point{0, row}, rows[at], style);
-    }
+    if (!legend_.empty() && y < height) painter.draw_text(Point{0, y++}, text::clip_to_width(legend_, width),
+                                                          palette_.sublabel);
+    if (!caption_.empty() && y < height)
+        painter.draw_text(Point{0, y}, text::clip_to_width(caption_, width), palette_.sublabel);
 }
 
 ui::SizeHint BarChartView::horizontal_size_hint() const {
@@ -238,13 +340,15 @@ ui::SizeHint BarChartView::horizontal_size_hint() const {
 }
 
 ui::SizeHint BarChartView::vertical_size_hint() const {
-    // Counted from the bars rather than from text_rows(), which needs a
-    // width -- and a size hint asked for before the first layout has none.
-    int rows = static_cast<int>(bars_.size());
+    // Two rows per bar (the bar and its shadow), a heading per group, and
+    // two more for the axis under each. Counted from the bars rather than
+    // from text_rows(), which needs a width, and a size hint asked for
+    // before the first layout has none.
+    int rows = 2 * static_cast<int>(bars_.size());
     std::string previous;
     bool first = true;
     for (const ChartBar& bar : bars_) {
-        if (!bar.group.empty() && (first || bar.group != previous)) ++rows;
+        if (!bar.group.empty() && (first || bar.group != previous)) rows += axis_visible_ ? 3 : 1;
         previous = bar.group;
         first = false;
     }
