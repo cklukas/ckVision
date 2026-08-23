@@ -1,0 +1,45 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+#
+# The documentation site, built by Actions instead of the legacy Pages
+# builder. The legacy builder wedged indefinitely on this repository —
+# "building", duration 0, no error, for hours — and it publishes no logs, so
+# a failure there is not even debuggable. This workflow runs the same Jekyll
+# rendering with its log in the open, then deploys the result.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
