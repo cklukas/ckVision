@@ -78,9 +78,13 @@ dependent row's package prerequisite; `Blocked` does not.
 | 29 | WP-47 — TerminalView interaction, resize, and nested ckVision sessions | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-46 | Full terminal usability; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 30 | WP-48 — Contained child Sixel and terminal hardening | 5–7 pw | **Implementation complete — Mac current-host gate passed** | WP-47 | Raster no-spill guarantee; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 31 | WP-49 — Terminal example, documentation, and end-to-end acceptance | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-48 | Client proof point; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 32 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 33 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 34 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 32 | WP-51 — SysInfo probe boundary and machine report panes | 1–2 pw | Ready | WP-49 | Example coverage: a second injected platform service; [SysInfo plan](sysinfo-example.md) |
+| 33 | WP-52 — Bar chart view, benchmark kernels, and the threaded run | 1–2 pw | Blocked | WP-51 | Example coverage: comparative visualization and cancellable background work; [SysInfo plan](sysinfo-example.md) |
+| 34 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | Blocked | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
+| 35 | WP-54 — SysInfo report export, help, and documentation | 1 pw | Blocked | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
+| 36 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 37 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 38 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2271,6 +2275,107 @@ public proof point required by [embedded-terminal-delivery-target.md](embedded-t
   how to extend it, and why raw pass-through is prohibited.
 - The example and guide meet the same source/screenshot/hierarchy/evidence
   gates as WP-36C and WP-44's editor example.
+
+### WP-51 — SysInfo probe boundary and machine report panes
+
+**Purpose.** Give the example set a second, differently-shaped instance of the
+D-039 injected-impurity pattern, and the static half of the SysInfo
+application. Its work and acceptance items are stated in full in
+[sysinfo-example.md](sysinfo-example.md); this row is the queue's copy.
+
+**Work.**
+
+- Add `examples/sysinfo` with the established object-graph library plus
+  POSIX-only interactive binary split.
+- Define the `SystemProbe` interface and its host, processor, memory, volume,
+  power and build report structures, with absence expressed as absence.
+- Implement `PosixSystemProbe` (macOS and Linux) and `FixedSystemProbe`.
+- Build the System, Memory and Volumes panes and the desktop chrome, with a
+  refresh timer on the live figures.
+
+**Acceptance.**
+
+- Every pane renders headlessly against `FixedSystemProbe` with identical
+  content on macOS and Linux.
+- Only the POSIX probe translation unit includes a platform header or reads
+  the environment; the object graph builds without any probe implementation.
+- An unavailable field renders as an explicit absence, proven per report
+  structure.
+- A POSIX-only suite asserts the real probe's internal consistency and never a
+  specific machine.
+
+### WP-52 — Bar chart view, benchmark kernels, and the threaded run
+
+**Purpose.** The comparative picture the example exists to show, and the
+cancellable background work that fills it.
+
+**Work.**
+
+- Add `BarChartView`, cell-drawn through `scene::box_drawing`.
+- Add the integer-index, floating-point and memory-bandwidth kernels with
+  fixed work quanta, warm-up and best-of-N reduction.
+- Add `BenchmarkService`: one worker, queued run, per-kernel progress, a
+  cancel flag observed between kernels, results returned through
+  `Application::post`.
+- Add the Benchmarks window with picker, progress, Esc-cancel and the chart
+  drawn against a documented reference-machine table.
+
+**Acceptance.**
+
+- Every kernel has a correctness test whose expected answer is independent of
+  elapsed time; no test asserts a score, rate or duration.
+- A scripted run reports non-decreasing progress, terminates, and delivers one
+  result per selected kernel.
+- Cancel is proven deterministically, not by timing.
+- The chart has a golden capture, and the reference rows are documented as
+  reference data with stated provenance.
+
+### WP-53 — Cache hierarchy, multicore scaling, and host capabilities
+
+**Purpose.** The two analyses that make the chart worth reading, and the
+capability report only a terminal framework can produce about its own host.
+
+**Work.**
+
+- Add the pointer-chase latency kernel over a growing working set and its
+  stair-step presentation.
+- Add the 1..N thread scaling run charted against the ideal line, bounded by
+  the probe's core count.
+- Add the Terminal pane over
+  `Application::terminal_capability_report_text`, the cell metric and the
+  graphics answer.
+- Render the latency data through `Canvas` where the host reports graphics and
+  through `BarChartView` where it does not, from one data set.
+
+**Acceptance.**
+
+- The pointer chase is proven to visit every slot exactly once in a
+  non-sequential order.
+- The scaling run produces one sample per thread count and never exceeds the
+  probe's core count.
+- Both chart paths render the same data set and each has a capture.
+
+### WP-54 — SysInfo report export, help, and documentation
+
+**Purpose.** Let the example's output leave the program, and make the program
+teachable to a client reading it as reference code.
+
+**Work.**
+
+- Compose the full report as text and Markdown and write it through the
+  injected `FileSystem` from a save dialog.
+- Add a help topic per pane and per benchmark.
+- Add `docs/sysinfo-example.md`, the `docs/example-apps.md` row and section,
+  generated screenshots, and the `plans/example-coverage.md` rows.
+
+**Acceptance.**
+
+- The export is produced against `MemoryFileSystem` in a test and contains
+  every pane and no value the panes do not show.
+- Every pane and benchmark answers F1 with its own topic, proven by a test
+  that no topic is missing.
+- The guide is source-backed by the shared snippet mechanism and its
+  screenshots are generated.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 
