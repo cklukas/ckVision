@@ -1024,6 +1024,25 @@ std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
     if (it == popups_.end()) return nullptr;
     popups_.erase(it);
     popup_backings_.erase(popup);
+    // A parked stub is a popup, and a stub that leaves the tree must leave
+    // the parking registry in the same breath — whoever removed it.
+    // unpark_window() erases its entry before calling here, so this is a
+    // no-op on that path; it is the OTHER paths that needed it, and the
+    // destructor is one: ~Desktop tears children down back to front through
+    // remove_child(), which reached this function for a stub, destroyed it,
+    // and left its pointer in parked_stubs_ — so a window removed a moment
+    // later walked unpark_window()'s find_if straight into freed memory
+    // (heap-use-after-free, Linux ASan, suite_test_minimize_chrome; macOS
+    // did not notice). Registry hygiene at the removal point closes every
+    // such path at once instead of the one that was seen.
+    const auto parked = std::find_if(parked_stubs_.begin(), parked_stubs_.end(),
+                                     [popup](const MinimizedWindowStub* stub) {
+                                         return static_cast<const ui::View*>(stub) == popup;
+                                     });
+    if (parked != parked_stubs_.end()) {
+        parked_stubs_.erase(parked);
+        layout_parked_stubs();
+    }
     std::unique_ptr<ui::View> detached = ui::View::remove_child(popup);
     request_layer_recompose();
     return detached;

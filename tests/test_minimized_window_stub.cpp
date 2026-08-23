@@ -392,3 +392,25 @@ CK_TEST(a_window_that_arrives_already_minimized_arrives_with_its_row) {
     CK_CHECK(f.desktop->parked_windows().size() == 1U);
     CK_CHECK(screen_contains(f, "background"));
 }
+
+CK_TEST(removing_a_parked_stubs_popup_takes_it_out_of_the_parked_registry) {
+    // parked_windows() holds raw pointers to views the POPUP list owns, so
+    // every path that destroys a stub must scrub the registry — not just
+    // unpark_window. A Desktop tears its children down through
+    // remove_child(), which routes a stub to remove_popup(), and a registry
+    // still holding that pointer is read moments later by the next window's
+    // removal, on freed memory. That read is what ASan catches (Linux only,
+    // as it happened); this is the same defect one step earlier, where it is
+    // a number rather than a crash — and therefore visible on every platform,
+    // with no sanitizer at all. The window itself is deliberately left as it
+    // is: a host that removes a stub popup by hand has asked for that, and
+    // teardown must never resurrect windows.
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    CK_CHECK(f.desktop->parked_windows().size() == 1U);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const std::unique_ptr<ui::View> taken = f.desktop->remove_popup(stub);
+    CK_CHECK(taken != nullptr);
+    CK_CHECK(f.desktop->parked_windows().empty());
+}
