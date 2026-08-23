@@ -15,6 +15,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/progress.hpp"
+#include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/table.hpp"
 #include "cvision/widgets/window.hpp"
 
@@ -252,14 +253,30 @@ CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {
     CK_CHECK(f.sysinfo.benchmark_progress()->fraction() == 1.0);
 }
 
-CK_TEST(a_debug_build_says_so_in_the_window_that_shows_the_numbers) {
+CK_TEST(a_debug_build_marks_every_bar_it_measured_and_answers_the_mark_below_the_chart) {
     Fixture f;
     f.probe.build_report.build_type = "Debug";
-    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
-    f.app.step(0);
-    f.app.step(0);
+    f.run_benchmarks();
+
+    // The mark is on the bars...
+    CK_CHECK(!f.sysinfo.chart()->bars().empty());
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+        CK_CHECK(bar.label.find(" *") != std::string::npos);
+    // ... and the footnote under the chart is what it points at.
+    CK_CHECK(f.sysinfo.benchmark_footnote() != nullptr);
+    CK_CHECK(f.sysinfo.benchmark_footnote()->text().rfind("* Debug build", 0) == 0);
+    CK_CHECK(f.sysinfo.benchmark_footnote()->text().find("greatly reduced") != std::string::npos);
+
     const std::string bytes(f.term.written_bytes());
     CK_CHECK(bytes.find("Debug build") != std::string::npos);
+}
+
+CK_TEST(an_optimized_build_marks_nothing_because_it_has_nothing_to_explain) {
+    Fixture f;  // the scripted machine reports a Release build
+    f.run_benchmarks();
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+        CK_CHECK(bar.label.find("*") == std::string::npos);
+    CK_CHECK(f.sysinfo.benchmark_footnote()->text().find("indicative") != std::string::npos);
 }
 
 CK_TEST(the_run_before_this_one_stays_on_the_chart_to_be_compared_against) {

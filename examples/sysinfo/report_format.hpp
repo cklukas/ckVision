@@ -73,10 +73,15 @@ std::string memory_usage_text(const MemoryReport& memory);
 double used_fraction(const std::optional<std::uint64_t>& total,
                      const std::optional<std::uint64_t>& free_bytes);
 
-// What a benchmark window must say before it says a number. An
-// unoptimized build measures the compiler's idleness; an unknown one
-// cannot promise otherwise.
+// The line under a chart of measured bars. An unoptimized build measures
+// the compiler's idleness rather than the machine, and the footnote is
+// where the asterisk on those bars is answered.
 std::string measurement_caveat_text(const BuildReport& build);
+
+// The mark a measured bar's label carries so the footnote has something to
+// point at: an asterisk where the build cannot be trusted for speed,
+// nothing at all where it can.
+std::string measured_bar_marker(const BuildReport& build);
 
 // Field/value rows. A row of two empty strings is a group separator.
 std::vector<std::vector<std::string>> system_rows(const SystemProbe& probe);

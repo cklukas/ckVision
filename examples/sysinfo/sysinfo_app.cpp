@@ -229,7 +229,10 @@ void SysInfoApp::open_benchmarks_window() {
         return;
     }
     auto window = std::make_unique<widgets::Window>("Benchmarks");
-    window->set_bounds(Rect{4, 2, 68, 19});
+    // Tall enough on an 80x24 terminal for the picker, the controls, the
+    // chart with one bar per kernel, and the footnote under it -- the
+    // whole point of the window is that all four are visible at once.
+    window->set_bounds(Rect{4, 1, 68, 21});
     window->set_min_size(Size{40, 12});
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
 
@@ -260,7 +263,7 @@ void SysInfoApp::open_benchmarks_window() {
     benchmark_progress_ = progress.get();
     column->add_item(std::move(progress), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
-    auto note = std::make_unique<widgets::StaticText>(measurement_caveat_text(probe_.build()));
+    auto note = std::make_unique<widgets::StaticText>("Nothing measured yet.");
     benchmark_note_ = note.get();
     column->add_item(std::move(note), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
@@ -268,6 +271,12 @@ void SysInfoApp::open_benchmarks_window() {
     chart->set_placeholder("No measurements yet - press Run.");
     chart_ = chart.get();
     column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Expanding});
+
+    // Under the chart, where a footnote belongs and where the asterisk on
+    // every measured bar is answered.
+    auto footnote = std::make_unique<widgets::StaticText>(measurement_caveat_text(probe_.build()));
+    benchmark_footnote_ = footnote.get();
+    column->add_item(std::move(footnote), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
     window->set_content(std::move(column));
 
@@ -291,6 +300,7 @@ void SysInfoApp::open_benchmarks_window() {
         benchmark_picker_ = nullptr;
         benchmark_progress_ = nullptr;
         benchmark_note_ = nullptr;
+        benchmark_footnote_ = nullptr;
         chart_ = nullptr;
         widgets::schedule_self_detach(*opened, app_);
     };
@@ -341,9 +351,6 @@ void SysInfoApp::start_benchmarks() {
         },
         [this](bool cancelled) {
             last_run_cancelled_ = cancelled;
-            // The caveat is the last word, not the first: it is what the
-            // reader should be looking at while they read the chart.
-            if (benchmark_note_ != nullptr) benchmark_note_->set_text(measurement_caveat_text(probe_.build()));
             if (benchmark_progress_ == nullptr) return;
             benchmark_progress_->set_fraction(cancelled ? benchmark_progress_->fraction() : 1.0);
             benchmark_progress_->set_label(cancelled ? "cancelled" : "done");
@@ -354,13 +361,18 @@ void SysInfoApp::cancel_benchmarks() { benchmarks_.cancel(); }
 
 void SysInfoApp::update_chart() {
     if (chart_ == nullptr) return;
+    // Every bar on this chart was measured by this build, so every bar
+    // carries the build's mark -- an asterisk the footnote answers, or
+    // nothing at all when the build is one whose speed means something.
+    const std::string marker = measured_bar_marker(probe_.build());
     std::vector<ChartBar> bars;
     bars.reserve(current_results_.size() + previous_results_.size());
     for (const BenchmarkResult& result : current_results_)
-        bars.push_back(ChartBar{std::string(describe(result.id).title), result.index_text, result.index, true});
+        bars.push_back(
+            ChartBar{std::string(describe(result.id).title) + marker, result.index_text, result.index, true});
     for (const BenchmarkResult& result : previous_results_)
-        bars.push_back(ChartBar{std::string(describe(result.id).title) + " (previous)", result.index_text,
-                                result.index, false});
+        bars.push_back(ChartBar{std::string(describe(result.id).title) + marker + " (previous)",
+                                result.index_text, result.index, false});
     chart_->set_bars(std::move(bars));
     // The scale, spelled out under the chart, because an index whose
     // definition is somewhere else is a number nobody can check.

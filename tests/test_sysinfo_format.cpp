@@ -146,13 +146,22 @@ CK_TEST(an_unoptimized_build_says_so_before_it_shows_a_number) {
     CK_CHECK(ckv::sysinfo::build_is_optimized(build));
     CK_CHECK(ckv::sysinfo::measurement_caveat_text(build).find("indicative") != std::string::npos);
 
+    // An optimized build has nothing to footnote, so its bars carry no mark.
+    CK_CHECK(ckv::sysinfo::measured_bar_marker(build).empty());
+
     build.build_type = "Debug";
     CK_CHECK(!ckv::sysinfo::build_is_optimized(build));
     CK_CHECK(ckv::sysinfo::measurement_caveat_text(build) ==
-             "This is a Debug build: the numbers below measure an unoptimized binary, not this machine.");
+             "* Debug build: these scores are greatly reduced. An unoptimized binary measures the build, "
+             "not the machine.");
+    // The mark on the bar and the mark on the footnote are the same mark;
+    // a footnote pointing at nothing is worse than no footnote.
+    CK_CHECK(ckv::sysinfo::measured_bar_marker(build) == " *");
+    CK_CHECK(ckv::sysinfo::measurement_caveat_text(build).rfind("*", 0) == 0);
 
     build.build_type.clear();
     CK_CHECK(!ckv::sysinfo::build_is_optimized(build));
+    CK_CHECK(ckv::sysinfo::measured_bar_marker(build) == " *");
     CK_CHECK(ckv::sysinfo::measurement_caveat_text(build).find("does not say how it was compiled") !=
              std::string::npos);
 }

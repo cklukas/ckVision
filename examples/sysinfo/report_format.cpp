@@ -194,10 +194,19 @@ std::string measurement_caveat_text(const BuildReport& build) {
         return "Measurements are indicative: they describe this machine as it is right now, "
                "not as a certification.";
     if (build.build_type.empty())
-        return "This build does not say how it was compiled, so its measurements cannot be "
+        return "* This build does not say how it was compiled, so its scores cannot be "
                "attributed to this machine rather than to the build.";
-    return "This is a " + build.build_type +
-           " build: the numbers below measure an unoptimized binary, not this machine.";
+    // The asterisk answers the one on every measured bar above it. "Greatly
+    // reduced" is not a hedge: the same kernels on the same machine score
+    // several times lower unoptimized, so a reader comparing a Debug score
+    // with anything at all is comparing compilers.
+    return "* " + build.build_type +
+           " build: these scores are greatly reduced. An unoptimized binary measures the build, "
+           "not the machine.";
+}
+
+std::string measured_bar_marker(const BuildReport& build) {
+    return build_is_optimized(build) ? std::string() : std::string(" *");
 }
 
 std::vector<std::vector<std::string>> system_rows(const SystemProbe& probe) {

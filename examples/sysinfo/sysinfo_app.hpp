@@ -65,6 +65,7 @@ public:
     widgets::CheckGroup* benchmark_picker() const noexcept { return benchmark_picker_; }
     widgets::Progress* benchmark_progress() const noexcept { return benchmark_progress_; }
     BarChartView* chart() const noexcept { return chart_; }
+    widgets::StaticText* benchmark_footnote() const noexcept { return benchmark_footnote_; }
     BenchmarkService& benchmarks() noexcept { return benchmarks_; }
 
     // The run being charted, and the one before it.
@@ -129,6 +130,7 @@ private:
     widgets::CheckGroup* benchmark_picker_ = nullptr;
     widgets::Progress* benchmark_progress_ = nullptr;
     widgets::StaticText* benchmark_note_ = nullptr;
+    widgets::StaticText* benchmark_footnote_ = nullptr;
     BarChartView* chart_ = nullptr;
 
     std::vector<BenchmarkResult> current_results_;
