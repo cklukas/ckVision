@@ -704,6 +704,26 @@ private:
     // and its own comment says "defer". Declared here for the same lifetime
     // reason as the two members above it.
     std::optional<ViewHandle> deferred_focus_request_;
+    // The timer table, declared BEFORE root_ for the same reason as commands_
+    // and modal_stack_ above it: members are destroyed in reverse order, and
+    // the view tree under root_ is torn down while this Application is. A
+    // Desktop owns an Animation whose destructor calls cancel_timer(); with
+    // timers_ declared after root_ it was already freed when that call came —
+    // heap-use-after-free in Application::cancel_timer during ~Application,
+    // found by Linux ASan (and by glibc, as "double free detected in tcache"
+    // at the end of a ckmux e2e suite — macOS never said a word). Present
+    // since the first Animation; anything a View may touch from its
+    // destructor must outlive root_.
+    struct Timer {
+        TimerId id;
+        std::int64_t next_fire_nanos;
+        std::int64_t interval_nanos;
+        bool repeating;
+        std::function<void()> callback;
+    };
+    std::vector<Timer> timers_;
+    std::vector<std::function<void()>> due_callback_scratch_;
+    TimerId next_timer_id_ = 1;
     View root_;
     // The retained base layer for root-owned chrome/background. Desktop and
     // other retained containers contribute child backing stores separately to
@@ -753,16 +773,6 @@ private:
     std::function<void(const std::string&)> help_provider_;
     std::function<void()> capability_changed_handler_;
 
-    struct Timer {
-        TimerId id;
-        std::int64_t next_fire_nanos;
-        std::int64_t interval_nanos;
-        bool repeating;
-        std::function<void()> callback;
-    };
-    std::vector<Timer> timers_;
-    std::vector<std::function<void()>> due_callback_scratch_;
-    TimerId next_timer_id_ = 1;
 
     std::mutex post_mutex_;
     std::vector<std::function<void()>> posted_;

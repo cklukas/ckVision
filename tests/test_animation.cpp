@@ -490,3 +490,44 @@ CK_TEST(replacing_the_target_provider_mid_flight_ends_the_flight) {
     CK_CHECK(decoration(f.desktop) == nullptr);
     CK_CHECK(window->minimized());
 }
+
+CK_TEST(an_application_whose_root_owns_a_desktop_with_a_flight_in_the_air_can_be_destroyed) {
+    // Regression for a heap-use-after-free in ~Application. Members go in
+    // reverse order of declaration, and Application's timer table was
+    // declared AFTER root_ — so the view tree was torn down into a timer
+    // table that had already been freed: a Desktop owns an Animation whose
+    // destructor calls cancel_timer(). This fixture's own Desktop is a
+    // separate member and cannot show it; the Desktop here lives UNDER
+    // root_, the way every real host's does, so its Animation dies during
+    // ~Application. The claim is the sanitizer's, and a LINUX sanitizer's at
+    // that: libstdc++'s ~vector leaves its pointers behind, so the dead timer
+    // table is walked as freed memory (ASan: heap-use-after-free in
+    // cancel_timer; glibc without ASan: "double free detected in tcache" at
+    // the end of a ckmux e2e suite), while libc++'s ~vector nulls them and
+    // the same walk sees an empty range — macOS cannot witness this defect
+    // at all, with or without ASan. Red on the Linux ASan lane before the
+    // declaration moved, green after.
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    {
+        Application app{term, clock};
+        StandardRoles roles = intern_standard_roles(app.roles());
+        app.theme() = make_classic_theme(app.roles(), roles);
+        Desktop* const desktop = static_cast<Desktop*>(
+            app.root().add_child(std::make_unique<Desktop>(app.root().bounds())));
+        desktop->set_minimized_window_placement(
+            ckv::widgets::MinimizedWindowPlacement::HostListed);
+        desktop->set_minimize_target_provider(
+            [](Window&) { return std::optional<Rect>(Rect{2, 23, 12, 1}); });
+        Window* const window = desktop->add_window(std::make_unique<Window>("W"));
+        window->set_bounds(Rect{20, 4, 40, 12});
+        window->set_minimized(true);  // arms the flight's timer
+        app.step(0);
+        CK_CHECK(window->minimized());
+        // The precondition, asserted: a flight IS in the air, so the Animation
+        // holds a live timer and its destructor will reach cancel_timer().
+        // Without this line the test could pass by never arming anything.
+        CK_CHECK(decoration(*desktop) != nullptr);
+    }  // ~Application: root_, the desktop, and its Animation's cancel_timer()
+    CK_CHECK(true);
+}
