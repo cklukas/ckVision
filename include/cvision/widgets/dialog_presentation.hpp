@@ -48,6 +48,33 @@ public:
     DialogPresentation(DialogPresentation&&) noexcept = default;
     DialogPresentation& operator=(DialogPresentation&&) noexcept = default;
 
+    // Dropping the presentation withdraws the handler registered through
+    // it. The handler is a capability the caller installed FROM somewhere,
+    // and at every call site that does anything with it, it captures the
+    // object it was installed from. The shared state, though, outlives
+    // this object — the presented Window holds it too. Left installed, the
+    // handler is therefore still called when that Window finally detaches,
+    // and the last thing to detach every Window is
+    // `Application::~Application`: by then a caller that lived in a
+    // narrower scope than its Application is already gone. The editor
+    // example's `close_confirmation_` is exactly that — an EditorApp
+    // member, so EditorApp is destroyed one step before the Application
+    // whose teardown calls back into it, and the capture reads a dead
+    // stack frame.
+    //
+    // This is the rule D-038 already states for the OTHER capability a
+    // presentation retains across a modal interval — "a saved focus
+    // target is a per-instance lifetime capability, never an unchecked
+    // raw pointer" — applied to the completion handler; and it is the
+    // rule `Desktop::show_window_list` already hand-rolls, by capturing
+    // the presentation's own shared_ptr inside its handler to hold it
+    // open. A caller that wants the completion keeps the presentation; a
+    // caller that drops it has declined the completion, which is what
+    // dropping a [[nodiscard]] handle ought to mean.
+    ~DialogPresentation() {
+        if (state_ != nullptr) state_->completion_handler = nullptr;
+    }
+
     bool completed() const noexcept { return state_ != nullptr && state_->completed_result.has_value(); }
     std::optional<Result> result() const { return state_ != nullptr ? state_->completed_result : std::nullopt; }
 
