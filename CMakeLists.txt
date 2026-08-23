@@ -73,6 +73,7 @@ add_library(cvision
     src/widgets/menu.cpp
     src/widgets/memo.cpp
     src/widgets/message_box.cpp
+    src/widgets/minimized_window_stub.cpp
     src/widgets/mnemonic.cpp
     src/widgets/option_group.cpp
     src/widgets/paged_strip.cpp

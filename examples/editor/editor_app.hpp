@@ -29,6 +29,10 @@ public:
 
     widgets::TextEditor* editor() const noexcept { return editor_; }
     widgets::Window* window() const noexcept { return window_; }
+    // The desktop the window lives on — exposed for the same reason
+    // window() is: the example's own behaviour is what the smoke test
+    // drives, and where a minimized window is parked is part of it.
+    widgets::Desktop* desktop() const noexcept { return desktop_; }
     const std::shared_ptr<widgets::EditorDocument>& document() const noexcept { return document_; }
     // The File/Samples menu calls the same public workflow. Exposing it keeps
     // the example's profile-detection proof directly scriptable as well.

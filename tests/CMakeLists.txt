@@ -49,6 +49,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_menu.cpp
     test_memo.cpp
     test_message_box.cpp
+    test_minimized_window_stub.cpp
     test_mnemonic.cpp
     test_option_group.cpp
     test_paged_strip.cpp

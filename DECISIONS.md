@@ -1467,3 +1467,69 @@ added to each public handler the audit found (that is the shape of the defect,
 repeated); making XTMODKEYS an `UnsupportedSequence` only for levels 1 and 2
 and not for the reset (a distinction nothing could read, since the query tells
 the truth either way).
+
+**D-064 — A window put away is still on the desktop, as its own top frame.**
+Amends D-056, which said a minimized `Window` is hidden and stays in
+`windows()` because "being listed is what a hidden window has left, and it is
+how a reader gets it back". That was right about the mechanism and silent
+about the default: `Desktop` listed nothing itself, so every application that
+had not built a listing offered a `_` control that led nowhere. Nine of the
+nine shipped examples were in exactly that state — `ckvision_editor`'s only
+window could be minimized and then only be got back by quitting, since the
+example installs no `WindowSwitcherBar` and `ckv.window.list` is declared with
+no key. A control whose whole meaning is "you can get this back" must not be
+the one control that cannot be undone.
+
+So a `Desktop` now draws the way back itself unless something else already
+does. `MinimizedWindowPlacement` names the three answers and `Parked` is the
+default: a minimized window leaves a `MinimizedWindowStub` — one row,
+`┌─[■] Editor — config.yaml [↑]─┐` — on the desktop's bottom edge. `HostListed`
+is D-056's behaviour unchanged, for a host with its own listing (ckmux sets
+it, and its switcher bar would otherwise be a second row saying the same
+thing). `Disabled` takes the control off every window, ignores the command,
+restores anything already parked, and puts back a window an application
+minimizes directly — "not reachable" that covered only the reader's routes
+would leave the same trap one level down.
+
+The stub is drawn rather than iconified because the window's own frame is a
+vocabulary the reader has already been taught: the corners, the rule, the
+bracketed `[■]` of the close control and the `[↑]` of the zoom control are
+`Window::draw`'s, and the one control that is missing is the `_`, because it
+has already happened. `[↑]` and not `[↕]`: the pair means "maximize" and
+"restore from maximized", a question about SIZE, and a parked window's size is
+not what this control changes. It draws in the window's INACTIVE roles, since
+there is no state in which a stub is the active window — activating one
+restores it, and the stub is gone before the activation lands.
+
+It is a popup, not an ordinary child, and that is the load-bearing choice: a
+stub composed into the base surface would be under the windows, and a parked
+window a maximized neighbour could cover is back where it started. It is
+therefore in `popups()`, which is why the flight tests set `HostListed` — they
+read that list to ask whether a decoration is on screen. It is reached by Tab
+and answers Enter, because a window recoverable only by pointer is only half
+recovered on a keyboard-first desktop.
+
+Nothing about the window changes. D-056's geometry rule is what makes the
+stub possible rather than something it has to work around: the window keeps
+its bounds, its zoom state and its z-order while it is away, the stub owns no
+part of it, and restoring deletes the stub and makes the window visible again
+— which is why a window minimized while maximized still comes back maximized.
+Restoring goes through `Desktop::activate`, not `set_minimized(false)`, so
+every route back agrees on what naming a window means; closing goes through
+`Window::close`, so a parked editor with unsaved changes still gets to ask.
+
+*Rejected:* leaving it to each application and fixing only the examples (the
+same trap for every application written next, and the examples are meant to
+show what the library does, not to paper over it); docking a
+`WindowSwitcherBar` in each example (a permanent row in every one of them,
+listing every window rather than the put-away ones, and it re-blesses most of
+the golden dumps and every docs screenshot to fix a case that arises when a
+window is minimized); reserving a row in `content_area()` for the parking
+strip (every minimize would re-flow the maximized windows, and D-056's "its
+geometry is untouched" is the promise that buys the whole feature);
+`Window::set_minimized` refusing when `minimizable()` is false (that flag
+gates the CONTROL — `present_modal` clears it on a window that is perfectly
+capable of being hidden — and overloading it would make a modal's gate mean
+two things); a blanket `set_minimizable(true)` when leaving `Disabled` (it
+hands the control to modals and to windows an application fixed itself, so
+the gate records who it took the control FROM).

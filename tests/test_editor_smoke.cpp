@@ -13,7 +13,10 @@
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/minimized_window_stub.hpp"
 #include "cvision/widgets/text_editor.hpp"
+#include "cvision/widgets/window.hpp"
 #include "editor_app.hpp"
 
 using ckv::ManualClock;
@@ -158,6 +161,60 @@ CK_TEST(the_editor_example_publishes_a_wrap_aware_visible_caret_for_the_focused_
     CK_CHECK(f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Insert, ckv::Modifier::None, ""}}));
     f.app.step(0);
     CK_CHECK(f.app.current_cursor().shape == ckv::CursorShape::Block);
+}
+
+CK_TEST(the_editor_example_frame_shows_the_new_edit_mode_on_the_frame_after_insert_alone) {
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "INS"));
+    CK_CHECK(!display_contains(f.term.display(), "OVR"));
+    CK_CHECK(f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Insert, ckv::Modifier::None, ""}}));
+    // One frame, and no second keystroke behind it: the toggle itself has to
+    // reach the frame overlay, not the next cursor move that happens to.
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "OVR"));
+    CK_CHECK(!display_contains(f.term.display(), "INS"));
+}
+
+CK_TEST(the_editor_example_minimized_window_is_parked_where_the_reader_can_get_it_back) {
+    // The reported bug, in the example it was reported against: minimizing
+    // the editor's only window used to leave a bare desktop with no way back
+    // — no switcher bar in this example, and no key bound to the window list
+    // — so the reader had to quit. D-064 puts the window's own top frame on
+    // the bottom edge instead.
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(f.editor.window() != nullptr);
+    CK_CHECK(display_contains(f.term.display(), "Editor — config.yaml"));
+
+    f.editor.window()->set_minimized(true);
+    f.app.step(0);
+    CK_CHECK(!f.editor.window()->visible());
+    // Still on screen, and readable as a window: its name, its close control
+    // and the control that brings it back.
+    CK_CHECK(display_contains(f.term.display(), "Editor — config.yaml"));
+    CK_CHECK(display_contains(f.term.display(), "[↑]"));
+    CK_CHECK(display_contains(f.term.display(), "[■]"));
+
+    const ckv::widgets::Desktop* const desktop = f.editor.desktop();
+    CK_CHECK(desktop != nullptr);
+    CK_CHECK(desktop->parked_windows().size() == 1U);
+    const ckv::Rect stub = desktop->parked_windows().front()->bounds();
+    // Above the status line, not over it.
+    CK_CHECK(display_contains(f.term.display(), "Alt+X Quit"));
+    CK_CHECK(stub.y == 22);
+
+    // One click on the parked frame and the reader has their editor back,
+    // the size and shape it was.
+    const ckv::Rect before = f.editor.window()->bounds();
+    CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                            ckv::Point{stub.x + stub.width / 2, stub.y},
+                                            std::nullopt, ckv::Modifier::None}));
+    f.app.step(0);
+    CK_CHECK(!f.editor.window()->minimized());
+    CK_CHECK(f.editor.window()->visible());
+    CK_CHECK(f.editor.window()->bounds() == before);
+    CK_CHECK(desktop->parked_windows().empty());
 }
 
 CK_TEST(the_editor_example_search_command_path_finds_the_current_selection) {

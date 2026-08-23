@@ -17,6 +17,7 @@ using ckv::TextEvent;
 using ckv::widgets::EditorDocument;
 using ckv::widgets::DocumentEncoding;
 using ckv::widgets::DocumentNewline;
+using ckv::widgets::EditorStatus;
 using ckv::widgets::EditorStatusModel;
 using ckv::widgets::TextEditor;
 
@@ -60,6 +61,26 @@ CK_TEST(text_editor_overwrite_replaces_complete_graphemes_without_crossing_a_lin
     CK_CHECK(document->text() == "aXY\ncd");
     CK_CHECK(editor.on_text(TextEvent{"!", false}));
     CK_CHECK(document->text() == "aXY!\ncd");
+}
+
+CK_TEST(text_editor_publishes_the_overwrite_mode_with_the_keystroke_that_toggled_it) {
+    auto document = std::make_shared<EditorDocument>("abc");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 30, 4});
+    std::vector<bool> published;
+    editor.set_status_changed_handler([&](const EditorStatus& state) { published.push_back(state.overwrite); });
+    // The handler answers once on installation, and that first answer is the
+    // insert mode the frame starts out showing.
+    CK_CHECK(published.size() == 1U);
+    CK_CHECK(!published.back());
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Insert, Modifier::None, ""}}));
+    // Not "the state is now overwrite" — the point is that it was said out
+    // loud during this keystroke, with no cursor move behind it to say it.
+    CK_CHECK(published.size() == 2U);
+    CK_CHECK(published.back());
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Insert, Modifier::None, ""}}));
+    CK_CHECK(published.size() == 3U);
+    CK_CHECK(!published.back());
 }
 
 CK_TEST(text_editor_search_uses_selection_as_a_revision_bound_query_and_wraps_in_both_directions) {

@@ -57,7 +57,16 @@ struct Fixture {
     Theme theme = make_classic_theme(registry, roles);
     Desktop desktop{Rect{0, 0, 80, 24}};
 
-    Fixture() { desktop.set_context(Context{&theme, &registry, &app}); }
+    Fixture() {
+        desktop.set_context(Context{&theme, &registry, &app});
+        // These tests are about the FLIGHT, and every one of them installs a
+        // host's own minimize target — which is what a host that lists its
+        // windows itself does (D-064). Left on the default the desktop would
+        // also park a stub for each window put away, and `decoration` below
+        // reads the popup list to answer "is an effect on screen".
+        desktop.set_minimized_window_placement(
+            ckv::widgets::MinimizedWindowPlacement::HostListed);
+    }
 
     // One turn of the loop at the current clock. Timers due now run.
     void step() { app.step(0); }

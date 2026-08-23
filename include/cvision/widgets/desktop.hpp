@@ -27,6 +27,8 @@
 
 namespace ckv::widgets {
 
+class MinimizedWindowStub;
+
 // Window-management default handlers (M9/WP-13, M10/WP-13 completion,
 // D-029): on_attached() installs itself as kClose/kQuit/kZoom/
 // kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
@@ -38,6 +40,31 @@ namespace ckv::widgets {
 // attaching a Desktop is never overridden, and the destructor clears
 // only the ones THIS instance actually installed, never one it found
 // already claimed.
+// Where a window goes when it is put away (D-064). The question every
+// desktop has to answer and only a host can: `Desktop` draws the way back
+// itself unless something else already does.
+enum class MinimizedWindowPlacement {
+    // The default. A minimized window leaves a MinimizedWindowStub — its own
+    // top frame, one row tall — parked along the bottom of the desktop, and
+    // comes back when that stub is clicked. Nothing is required of the
+    // application: a window put away is on screen as the thing it is, which
+    // is the only arrangement in which the `_` control is not a trap.
+    Parked,
+    // The host lists its windows itself — a WindowSwitcherBar, a session
+    // picker, a window menu of its own — and does not want a second listing
+    // under it. The window is hidden and nothing is drawn for it, which is
+    // what this Desktop did before there was a choice to make.
+    HostListed,
+    // Windows are never put away at all. Every window's minimize control
+    // disappears (Window::set_minimizable(false)), `minimize_active_window`
+    // does nothing, anything already parked comes back, and a window that an
+    // application minimizes directly is put straight back — an application
+    // that turns minimizing off must not strand what was minimized while it
+    // was on, and "no way to reach it" is not a promise that can be kept for
+    // the reader's routes only.
+    Disabled,
+};
+
 class Desktop : public ui::View {
 public:
     // Long enough to read as a movement between two places, short enough
@@ -271,6 +298,30 @@ public:
     }
     ui::View* top_dock() const noexcept { return top_dock_; }
     ui::View* bottom_dock() const noexcept { return bottom_dock_; }
+
+    // --- Where put-away windows go (D-064) ---------------------------
+    //
+    // `Parked` by default, so an application that has thought about none of
+    // this still cannot lose a window: the `_` control leads somewhere
+    // visible. A host with its own listing sets `HostListed` and gets the
+    // bare hiding it already builds on; a host with no use for minimizing at
+    // all sets `Disabled` and the control is not offered.
+    //
+    // Changing this settles the windows that are already here: switching
+    // away from `Parked` takes the stubs down, switching to it puts one up
+    // for every window that is currently minimized, and `Disabled` restores
+    // them — see the enum.
+    void set_minimized_window_placement(MinimizedWindowPlacement placement);
+    MinimizedWindowPlacement minimized_window_placement() const noexcept {
+        return minimized_placement_;
+    }
+
+    // The stubs on screen, in the order their windows were put away. Empty
+    // unless the placement is `Parked`. A host reads this to lay something
+    // out around them; a test reads it to name what a reader can see.
+    const std::vector<MinimizedWindowStub*>& parked_windows() const noexcept {
+        return parked_stubs_;
+    }
 
     // --- The minimize flight (U4-k) ---------------------------------
     //
@@ -666,6 +717,22 @@ private:
     // makes the effect skippable at no risk (Window::set_minimized notifies
     // after set_visible, deliberately).
     void begin_minimize_flight(Window& window);
+    // The parking row: one stub per put-away window, laid left to right
+    // along the bottom of the desktop and wrapped upwards when the row runs
+    // out. Called whenever the set changes or the desktop is resized, and
+    // it is the ONLY thing that positions a stub — so there is one answer
+    // to where a parked window is, not one per caller.
+    void layout_parked_stubs();
+    // Puts `window`'s stub up / takes it down. Both are no-ops unless the
+    // placement is `Parked`, and both are safe to call for a window that is
+    // already in the state they describe.
+    void park_window(Window& window);
+    void unpark_window(Window& window);
+    MinimizedWindowStub* stub_for(const Window& window) const noexcept;
+    // Takes the minimize control off a window and records that this Desktop
+    // is the one who did, so `Disabled` can be switched back off without
+    // handing the control to a window that never had it.
+    void gate_minimize(Window& window);
     // Reports `change` to every live observer — see subscribe_window_change.
     // Iterates a copy of the list, so an observer may unsubscribe itself (or
     // another) from inside the call without invalidating the walk.
@@ -882,6 +949,11 @@ private:
     std::int64_t minimize_animation_nanos_ = kDefaultMinimizeAnimationNanos;
     ui::Animation minimize_animation_;
     ui::View* minimize_flight_ = nullptr;
+    MinimizedWindowPlacement minimized_placement_ = MinimizedWindowPlacement::Parked;
+    // Parking order, which is minimize order — not window order. A reader
+    // who puts three windows away reads them back in the order they left.
+    std::vector<MinimizedWindowStub*> parked_stubs_;
+    std::vector<std::pair<Window*, std::weak_ptr<void>>> minimize_gated_;
     struct PopupBacking {
         std::optional<scene::Surface> surface;
         int compositor_layer_id = 0;
