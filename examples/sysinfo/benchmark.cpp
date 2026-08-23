@@ -40,7 +40,9 @@ std::vector<double> seeded_matrix(std::size_t n, double offset) {
     return matrix;
 }
 
-std::string rate_text_for(BenchmarkId id, double rate) {
+}  // namespace
+
+std::string format_rate(BenchmarkId id, double rate) {
     switch (id) {
         case BenchmarkId::IntegerMix: return format_decimal(rate / 1e6, 1) + " M steps/s";
         case BenchmarkId::FloatingPoint: return format_decimal(rate / 1e6, 0) + " MFLOPS";
@@ -51,8 +53,6 @@ std::string rate_text_for(BenchmarkId id, double rate) {
     }
     return std::string(kNotReported);
 }
-
-}  // namespace
 
 const std::vector<BenchmarkDescriptor>& benchmark_catalogue() {
     static const std::vector<BenchmarkDescriptor> catalogue = {
@@ -252,7 +252,7 @@ BenchmarkResult MeasuredBenchmarkRunner::run(BenchmarkId id, const std::atomic<b
 
     result.rate = work_per_pass * kNanosPerSecond / static_cast<double>(best_nanos);
     result.index = result.rate / unit_rate(id);
-    result.rate_text = rate_text_for(id, result.rate);
+    result.rate_text = format_rate(id, result.rate);
     result.index_text = format_decimal(result.index, 1);
 
     // The two sinks exist so no pass can be deleted for having no effect.

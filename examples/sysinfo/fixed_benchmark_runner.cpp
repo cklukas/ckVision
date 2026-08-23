@@ -25,20 +25,7 @@ FixedBenchmarkRunner::FixedBenchmarkRunner() {
         result.rate = entry.rate;
         result.index = entry.rate / unit_rate(entry.id);
         result.index_text = format_decimal(result.index, 1);
-        switch (entry.id) {
-            case BenchmarkId::IntegerMix:
-                result.rate_text = format_decimal(entry.rate / 1e6, 1) + " M steps/s";
-                break;
-            case BenchmarkId::FloatingPoint:
-                result.rate_text = format_decimal(entry.rate / 1e6, 0) + " MFLOPS";
-                break;
-            case BenchmarkId::MemoryBandwidth:
-                result.rate_text = format_decimal(entry.rate / 1e9, 2) + " GB/s";
-                break;
-            case BenchmarkId::CacheLatency:
-            case BenchmarkId::ThreadScaling:
-                break;  // scripted as series below, not as a single rate
-        }
+        result.rate_text = format_rate(entry.id, entry.rate);
         results.push_back(result);
     }
 

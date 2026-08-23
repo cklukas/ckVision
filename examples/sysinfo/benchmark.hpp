@@ -66,6 +66,11 @@ inline constexpr double kMemoryUnitRate = 1e9;    // bytes per second of triad t
 
 double unit_rate(BenchmarkId id) noexcept;
 
+// A rate in the unit its kernel counts, spelled the way that kernel spells
+// it: "48.3 M steps/s", "812 MFLOPS", "3.42 GB/s". One place, so the
+// window, the report and the fixture cannot each round it differently.
+std::string format_rate(BenchmarkId id, double rate);
+
 // One point of an analysis that has no single answer: a working-set size
 // and its access latency, a thread count and its speedup.
 struct SeriesPoint {

@@ -18,12 +18,15 @@
 #include <string_view>
 #include <vector>
 
+#include "cvision/core/filesystem.hpp"
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/help_viewer.hpp"
 #include "cvision/widgets/table.hpp"
 
 #include "bar_chart_view.hpp"
+#include "report_document.hpp"
 #include "benchmark_service.hpp"
 #include "reference_points.hpp"
 #include "system_probe.hpp"
@@ -42,9 +45,13 @@ namespace ckv::sysinfo {
 
 class SysInfoApp {
 public:
-    // `probe` and `runner` must outlive the application: the probe is read
-    // on every refresh, and the runner on every benchmark run.
-    SysInfoApp(ui::Application& app, const SystemProbe& probe, const BenchmarkRunner& runner);
+    // `probe`, `runner` and `files` must all outlive the application: the
+    // probe is read on every refresh, the runner on every benchmark run,
+    // and the filesystem whenever a report is saved. `report_directory` is
+    // where the save dialog opens -- a host decision, since only the host
+    // knows whose machine this is.
+    SysInfoApp(ui::Application& app, const SystemProbe& probe, const BenchmarkRunner& runner, FileSystem& files,
+               std::string report_directory);
 
     // Command keys, named here so a test asks for a command the way the
     // menu does — by key — rather than by where it happens to sit.
@@ -54,6 +61,8 @@ public:
     static constexpr std::string_view kRefreshKey = "sysinfo.refresh";
     static constexpr std::string_view kTerminalWindowKey = "sysinfo.terminal-window";
     static constexpr std::string_view kLatencyPlotKey = "sysinfo.latency-plot";
+    static constexpr std::string_view kSaveTextKey = "sysinfo.save-text-report";
+    static constexpr std::string_view kSaveMarkdownKey = "sysinfo.save-markdown-report";
     static constexpr std::string_view kBenchmarksWindowKey = "sysinfo.benchmarks-window";
     static constexpr std::string_view kRunBenchmarksKey = "sysinfo.run-benchmarks";
     static constexpr std::string_view kCancelBenchmarksKey = "sysinfo.cancel-benchmarks";
@@ -92,6 +101,17 @@ public:
     // Re-reads the live reports and repopulates whichever panes are open.
     // The refresh timer calls this; so does the Refresh command, so a
     // reader who wants a figure now does not have to wait a second for it.
+    // The whole report, exactly as the panes show it.
+    std::string report_text(ReportFormat format) const;
+    // The path of the last report written, for a test to read back.
+    const std::string& last_saved_report() const noexcept { return last_saved_report_; }
+
+    // Writes `format` to `path` through the injected filesystem, without a
+    // dialog. The dialog path calls this; a test can too.
+    bool save_report(const std::string& path, ReportFormat format);
+
+    const widgets::HelpProvider& help() const noexcept { return help_; }
+
     void refresh();
     int refresh_count() const noexcept { return refresh_count_; }
 
@@ -111,6 +131,9 @@ private:
     // wrong key.
     void refill(widgets::Table& table, widgets::TableRowId cursor,
                 std::vector<std::vector<std::string>> rows);
+
+    void save_report_with_dialog(ReportFormat format);
+    void install_help();
 
     void open_latency_plot_window();
     void update_latency_plot();
@@ -136,6 +159,10 @@ private:
 
     ui::Application& app_;
     const SystemProbe& probe_;
+    FileSystem& files_;
+    std::string report_directory_;
+    widgets::MemoryHelpProvider help_;
+    std::string last_saved_report_;
     ui::StandardRoles roles_;
 
     widgets::Desktop* desktop_ = nullptr;
