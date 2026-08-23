@@ -90,6 +90,21 @@ ckv::MouseEvent press_at(Point cell) {
     return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, cell, std::nullopt,
                            Modifier::None};
 }
+ckv::MouseEvent release_at(Point cell) {
+    return ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, cell, std::nullopt,
+                           Modifier::None};
+}
+ckv::MouseEvent drag_to(Point cell) {
+    return ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Left, cell, std::nullopt,
+                           Modifier::None};
+}
+// A click is a press AND a release on the same cell — the row decides on the
+// release, like the window frame's own controls (see the press/release tests).
+bool click_at(Application& app, Point cell) {
+    const bool pressed = app.dispatch(press_at(cell));
+    const bool released = app.dispatch(release_at(cell));
+    return pressed && released;
+}
 
 }  // namespace
 
@@ -177,7 +192,7 @@ CK_TEST(clicking_a_parked_stub_brings_its_window_back_the_size_it_left) {
     CK_CHECK(f.desktop->parked_windows().size() == 1U);
     const Rect stub = f.desktop->parked_windows().front()->bounds();
 
-    CK_CHECK(f.app.dispatch(press_at(Point{stub.x + stub.width / 2, stub.y})));
+    CK_CHECK(click_at(f.app, Point{stub.x + stub.width / 2, stub.y}));
     CK_CHECK(!window->minimized());
     CK_CHECK(window->visible());
     // D-056: restoring replays nothing, because nothing was recorded.
@@ -198,7 +213,7 @@ CK_TEST(the_restore_control_and_the_caption_are_the_same_request) {
     for (int x = 0; x < where.width; ++x)
         if (stub->point_in_restore_control(Point{x, 0})) restore_x = x;
     CK_CHECK(restore_x > 0);
-    CK_CHECK(f.app.dispatch(press_at(Point{where.x + restore_x, where.y})));
+    CK_CHECK(click_at(f.app, Point{where.x + restore_x, where.y}));
     CK_CHECK(!window->minimized());
 }
 
@@ -234,14 +249,14 @@ CK_TEST(closing_a_parked_window_from_its_stub_still_asks_the_window_first) {
         if (stub->point_in_close_control(Point{x, 0})) close_x = x;
     CK_CHECK(close_x > 0);
 
-    CK_CHECK(f.app.dispatch(press_at(Point{where.x + close_x, where.y})));
+    CK_CHECK(click_at(f.app, Point{where.x + close_x, where.y}));
     CK_CHECK(asked);
     // Refused, so the window is still here — and so is its row.
     CK_CHECK(f.desktop->windows().size() == 1U);
     CK_CHECK(f.desktop->parked_windows().size() == 1U);
 
     window->close_request = [] { return true; };
-    CK_CHECK(f.app.dispatch(press_at(Point{where.x + close_x, where.y})));
+    CK_CHECK(click_at(f.app, Point{where.x + close_x, where.y}));
     // Window::close with no on_closed schedules its own detach rather than
     // deleting itself inside the click, so the removal lands on the step.
     f.app.step(0);
@@ -413,4 +428,158 @@ CK_TEST(removing_a_parked_stubs_popup_takes_it_out_of_the_parked_registry) {
     const std::unique_ptr<ui::View> taken = f.desktop->remove_popup(stub);
     CK_CHECK(taken != nullptr);
     CK_CHECK(f.desktop->parked_windows().empty());
+}
+
+// --- Press arms, release decides -------------------------------------------
+//
+// The owner's report, verbatim in substance: the row's controls reacted on
+// the button going DOWN, where the window frame's close and restore controls
+// react on the button coming UP — so a reader could not press, move away, and
+// let go without the action happening. These cases pin the frame's semantics
+// onto the row.
+
+CK_TEST(the_close_control_fires_on_release_and_not_on_the_press) {
+    Fixture f;
+    int closes = 0;
+    Window* const window = f.open("config.yaml");
+    window->close_request = [&closes] {
+        ++closes;
+        return false;  // refused, so the row stays and can be pressed again
+    };
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const Rect where = stub->bounds();
+    int close_x = -1;
+    for (int x = 0; x < where.width; ++x)
+        if (stub->point_in_close_control(Point{x, 0})) close_x = x;
+    const Point on_close{where.x + close_x, where.y};
+
+    CK_CHECK(f.app.dispatch(press_at(on_close)));
+    CK_CHECK(closes == 0);  // armed, not fired
+    CK_CHECK(f.app.dispatch(release_at(on_close)));
+    CK_CHECK(closes == 1);  // decided on the release
+}
+
+CK_TEST(a_press_on_the_close_control_released_elsewhere_is_taken_back) {
+    Fixture f;
+    int closes = 0;
+    int restores = 0;
+    Window* const window = f.open("config.yaml");
+    window->close_request = [&closes] {
+        ++closes;
+        return false;
+    };
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    stub->on_restore = [&restores] { ++restores; };  // observe without restoring
+    const Rect where = stub->bounds();
+    int close_x = -1;
+    for (int x = 0; x < where.width; ++x)
+        if (stub->point_in_close_control(Point{x, 0})) close_x = x;
+    const Point on_close{where.x + close_x, where.y};
+    const Point on_caption{where.x + where.width / 2, where.y};
+    const Point off_row{where.x + close_x, where.y - 3};
+
+    // Down on close, slide onto the caption, up there: neither control fires —
+    // not the one it went down on, and not the one it came up on.
+    CK_CHECK(f.app.dispatch(press_at(on_close)));
+    CK_CHECK(f.app.dispatch(drag_to(on_caption)));
+    CK_CHECK(f.app.dispatch(release_at(on_caption)));
+    CK_CHECK(closes == 0);
+    CK_CHECK(restores == 0);
+
+    // Down on close, slide off the row entirely, up out there: nothing.
+    CK_CHECK(f.app.dispatch(press_at(on_close)));
+    CK_CHECK(f.app.dispatch(drag_to(off_row)));
+    f.app.dispatch(release_at(off_row));
+    CK_CHECK(closes == 0);
+    CK_CHECK(restores == 0);
+    // And the row is still here, armed no longer, ready for a real click.
+    CK_CHECK(f.desktop->parked_windows().size() == 1U);
+    CK_CHECK(f.app.dispatch(press_at(on_close)));
+    CK_CHECK(f.app.dispatch(release_at(on_close)));
+    CK_CHECK(closes == 1);
+}
+
+CK_TEST(a_press_on_the_caption_released_off_the_row_does_not_restore) {
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const Rect where = stub->bounds();
+    const Point on_caption{where.x + where.width / 2, where.y};
+    const Point off_row{where.x + where.width / 2, where.y - 4};
+
+    CK_CHECK(f.app.dispatch(press_at(on_caption)));
+    CK_CHECK(window->minimized());  // armed, not restored
+    CK_CHECK(f.app.dispatch(drag_to(off_row)));
+    f.app.dispatch(release_at(off_row));
+    CK_CHECK(window->minimized());  // taken back
+    CK_CHECK(f.desktop->parked_windows().size() == 1U);
+
+    // Slid off and back on again before letting go: the press still counts,
+    // because it was released over what it went down on.
+    CK_CHECK(f.app.dispatch(press_at(on_caption)));
+    CK_CHECK(f.app.dispatch(drag_to(off_row)));
+    CK_CHECK(f.app.dispatch(drag_to(on_caption)));
+    CK_CHECK(f.app.dispatch(release_at(on_caption)));
+    CK_CHECK(!window->minimized());
+}
+
+CK_TEST(the_armed_control_wears_the_pressed_face_only_while_the_pointer_is_over_it) {
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const Rect where = stub->bounds();
+    int close_x = -1;
+    for (int x = 0; x < where.width; ++x)
+        if (stub->point_in_close_control(Point{x, 0})) close_x = x;
+    const Point on_close{where.x + close_x, where.y};
+    const Point off_row{where.x + close_x, where.y - 3};
+    const ckv::ui::RoleId pressed_role = f.app.roles().find("ckv.window.control.pressed");
+    const ckv::ui::RoleId control_role = f.app.roles().find("ckv.window.control");
+    const ckv::Style pressed = f.app.theme().resolve(pressed_role);
+    const ckv::Style control = f.app.theme().resolve(control_role);
+    CK_CHECK(pressed.fg != control.fg || pressed.bg != control.bg);  // or the face says nothing
+
+    f.app.step(0);
+    const ckv::Style at_rest = f.app.current_frame().at(on_close).style();
+    CK_CHECK(f.app.dispatch(press_at(on_close)));
+    f.app.step(0);
+    const ckv::Style armed = f.app.current_frame().at(on_close).style();
+    CK_CHECK(armed.fg == pressed.fg);
+    CK_CHECK(armed.fg != at_rest.fg || armed.bg != at_rest.bg);
+    CK_CHECK(f.app.dispatch(drag_to(off_row)));
+    f.app.step(0);
+    const ckv::Style disarmed = f.app.current_frame().at(on_close).style();
+    CK_CHECK(disarmed.fg == at_rest.fg && disarmed.bg == at_rest.bg);
+    f.app.dispatch(release_at(off_row));
+}
+
+CK_TEST(a_release_the_row_never_saw_disarms_it_when_the_pointer_comes_back) {
+    // Releasing outside the terminal delivers the release to nobody. The
+    // next thing this row hears is motion with no button held — and that is
+    // the proof the press ended. Without this, a row could stay drawn armed
+    // forever, and a later release over it would fire a press the reader let
+    // go of somewhere else long ago.
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const Rect where = stub->bounds();
+    const Point on_caption{where.x + where.width / 2, where.y};
+    CK_CHECK(f.app.dispatch(press_at(on_caption)));
+    CK_CHECK(window->minimized());
+    // The pointer comes back over the row with no button down.
+    f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::None, on_caption,
+                                   std::nullopt, Modifier::None});
+    // A release now is a release of nothing: the press it would have decided
+    // ended where this row could not see it.
+    f.app.dispatch(release_at(on_caption));
+    CK_CHECK(window->minimized());
+    CK_CHECK(f.desktop->parked_windows().size() == 1U);
+    // And a fresh click still works.
+    CK_CHECK(click_at(f.app, on_caption));
+    CK_CHECK(!window->minimized());
 }
