@@ -312,19 +312,22 @@ CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {
         for (const ckv::sysinfo::SeriesPoint& point : result.series)
             expected_bars += point.ideal > 0.0 ? 2 : 1;
     }
-    CK_CHECK(f.sysinfo.chart()->bars().size() == expected_bars);
-    CK_CHECK(f.sysinfo.chart()->bars().front().highlighted);
-    // Every index group names its own 1.0 where the bars are, because a
-    // single caption can only name one scale and this chart has several.
-    bool named_a_scale = false;
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) {
-        if (bar.group.find("1.0 = ") == std::string::npos) continue;
-        named_a_scale = true;
-        if (bar.group.rfind("Memory bandwidth", 0) == 0) CK_CHECK(bar.group.find("1.00 GB/s") != std::string::npos);
-        if (bar.group.rfind("Disk throughput", 0) == 0) CK_CHECK(bar.group.find("100 MB/s") != std::string::npos);
+    CK_CHECK(f.sysinfo.all_chart_bars().size() == expected_bars);
+    CK_CHECK(f.sysinfo.all_chart_bars().front().highlighted);
+    // One topic per page, each naming its own scale under its own axis --
+    // a single caption could only ever name one of them.
+    CK_CHECK(f.sysinfo.benchmark_page_count() == f.sysinfo.current_results().size() + 1);
+    bool saw_memory_scale = false;
+    for (std::size_t page = 0; page < f.sysinfo.benchmark_page_count(); ++page) {
+        CK_CHECK(f.run_command(SysInfoApp::kNextPageKey));
+        if (f.sysinfo.benchmark_page_title() != "Memory bandwidth") continue;
+        saw_memory_scale = true;
+        CK_CHECK(f.sysinfo.chart()->caption().find("1.0 = 1.00 GB/s") != std::string::npos);
+        // And the page holds that topic's bars and nobody else's.
+        for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+            CK_CHECK(bar.group == "Memory bandwidth");
     }
-    CK_CHECK(named_a_scale);
-    CK_CHECK(f.sysinfo.chart()->caption().find("its own longest bar") != std::string::npos);
+    CK_CHECK(saw_memory_scale);
     CK_CHECK(f.sysinfo.benchmark_progress()->label() == "done");
     CK_CHECK(f.sysinfo.benchmark_progress()->fraction() == 1.0);
 }
@@ -337,8 +340,8 @@ CK_TEST(a_debug_build_marks_every_bar_it_measured_and_answers_the_mark_below_the
     // The mark is on every bar this build measured -- and on none of the
     // bars it did not, because a perfect-scaling bar was not measured by
     // any build.
-    CK_CHECK(!f.sysinfo.chart()->bars().empty());
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) {
+    CK_CHECK(!f.sysinfo.all_chart_bars().empty());
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.all_chart_bars()) {
         if (bar.kind == ckv::sysinfo::BarKind::Measured)
             CK_CHECK(bar.label.find(" *") != std::string::npos);
         else
@@ -356,7 +359,7 @@ CK_TEST(a_debug_build_marks_every_bar_it_measured_and_answers_the_mark_below_the
 CK_TEST(an_optimized_build_marks_nothing_because_it_has_nothing_to_explain) {
     Fixture f;  // the scripted machine reports a Release build
     f.run_benchmarks();
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.all_chart_bars())
         CK_CHECK(bar.label.find("*") == std::string::npos);
     CK_CHECK(f.sysinfo.benchmark_footnote()->text().find("indicative") != std::string::npos);
 }
@@ -368,7 +371,8 @@ CK_TEST(the_run_before_this_one_stays_on_the_chart_to_be_compared_against) {
     f.run_benchmarks();
 
     CK_CHECK(f.sysinfo.previous_results().size() == kernels);
-    const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.chart()->bars();
+    // Across every page, not just the one on screen.
+    const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.all_chart_bars();
 
     // Every metric measured as a single rate shows this run and the one
     // before it, in that order, with the newest the row the eye is sent to.
@@ -429,7 +433,7 @@ CK_TEST(a_comparison_adds_published_bars_to_one_chart_and_marks_them_as_publishe
     // "this run only" is the default: nothing on the chart from outside
     // this program except the perfect-scaling line, which is arithmetic on
     // the thread count rather than a figure about anybody's hardware.
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.all_chart_bars())
         if (bar.kind == ckv::sysinfo::BarKind::Reference)
             CK_CHECK(bar.label.find("perfect") != std::string::npos);
 
@@ -443,7 +447,7 @@ CK_TEST(a_comparison_adds_published_bars_to_one_chart_and_marks_them_as_publishe
     compare->set_selected_index(memory_choice);
     if (compare->on_select) compare->on_select(memory_choice);
 
-    const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.chart()->bars();
+    const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.all_chart_bars();
     std::size_t references = 0;
     for (const ckv::sysinfo::ChartBar& bar : bars) {
         if (bar.kind != ckv::sysinfo::BarKind::Reference) continue;
@@ -471,7 +475,7 @@ CK_TEST(a_comparison_can_be_asked_for_before_anything_has_been_measured) {
     // The comparison stands on its own: the reader can see what the
     // published figures are before deciding to spend a second measuring.
     CK_CHECK(!f.sysinfo.chart()->bars().empty());
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.all_chart_bars())
         CK_CHECK(bar.kind == ckv::sysinfo::BarKind::Reference);
     CK_CHECK(f.sysinfo.chart()->legend().find("published ceiling") != std::string::npos);
 }
@@ -559,7 +563,7 @@ CK_TEST(a_curve_is_charted_as_a_curve_and_never_as_an_index) {
     // a curve contribute one bar per point, and no index bar at all.
     bool saw_latency_group = false;
     bool saw_scaling_ideal = false;
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) {
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.all_chart_bars()) {
         if (bar.group.find("Cache latency") != std::string::npos) {
             saw_latency_group = true;
             CK_CHECK(bar.label.find("This computer") == std::string::npos);
@@ -578,6 +582,49 @@ CK_TEST(a_curve_is_charted_as_a_curve_and_never_as_an_index) {
 // The one kernel that writes to the reader's machine does not start until
 // they have said where. A run that quietly picked a directory would be a
 // program writing to somebody's disk because they pressed "measure".
+// Two bugs this test exists for, both found by running the program.
+//
+// First: a DialogPresentation IS its handler's lifetime -- dropping the
+// handle withdraws the handler -- so a completion installed on a local that
+// dies at the end of the function never runs. The question appeared, the
+// reader answered it, and nothing happened.
+//
+// Second: the question was asked with a directory PICKER, whose own header
+// says its tree is materialized eagerly and in full and is not for a real
+// filesystem root. Pointed at a home directory it walked every file the
+// reader owns, and the application stopped answering.
+//
+// So this drives the whole chain: ask, answer, and measure.
+CK_TEST(answering_the_disk_question_actually_starts_the_run) {
+    Fixture f;
+    f.sysinfo.set_scratch_directory("");
+    f.files.add_directory("/");
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+
+    CK_CHECK(f.run_command(SysInfoApp::kRunBenchmarksKey));
+    f.app.step(0);
+
+    // The question is on screen, it says how much it will write, and
+    // nothing has been measured or written yet.
+    CK_CHECK(f.sysinfo.pending_directory_open());
+    CK_CHECK(f.runner.runs() == 0);
+    const std::string asked(f.term.written_bytes());
+    CK_CHECK(asked.find("64.0 MiB") != std::string::npos);
+
+    // Enter accepts the dialog's default button, its validator asks the
+    // injected filesystem whether that directory exists, and the handler
+    // that survives the dialog starts the run.
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    for (int turn = 0; turn < 4; ++turn) f.app.step(0);
+    f.sysinfo.benchmarks().wait_until_idle();
+    for (int turn = 0; turn < 8; ++turn) f.app.step(0);
+
+    CK_CHECK(f.sysinfo.scratch_directory() == "/");
+    CK_CHECK(f.runner.last_options().scratch_directory == "/");
+    CK_CHECK(f.sysinfo.current_results().size() == ckv::sysinfo::benchmark_catalogue().size());
+}
+
 CK_TEST(a_disk_measurement_asks_before_it_writes_anywhere) {
     Fixture f;
     f.sysinfo.set_scratch_directory("");
@@ -603,4 +650,45 @@ CK_TEST(a_disk_measurement_asks_before_it_writes_anywhere) {
     // And the thread count the kernels were given is the machine's own,
     // as the probe reported it.
     CK_CHECK(f.runner.last_options().maximum_threads == f.probe.processor_report.logical_cores.value());
+}
+
+// One topic per page, the way the tools this example follows presented
+// them: a page that chooses and runs the measurements, and a page per
+// metric measured. A single column holding every chart at once is a list of
+// numbers rather than a chart.
+CK_TEST(the_benchmark_window_pages_one_topic_at_a_time) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    // Before anything is measured there is one page, and it is the one that
+    // measures.
+    CK_CHECK(f.sysinfo.benchmark_page() == 0);
+    CK_CHECK(f.sysinfo.benchmark_page_count() == 1);
+    CK_CHECK(f.sysinfo.benchmark_picker()->visible());
+    CK_CHECK(!f.sysinfo.chart()->visible());
+
+    f.run_benchmarks();
+
+    // A finished run lands on the first topic rather than leaving the
+    // reader on the page they pressed Run from.
+    CK_CHECK(f.sysinfo.benchmark_page() == 1);
+    CK_CHECK(f.sysinfo.chart()->visible());
+    CK_CHECK(!f.sysinfo.benchmark_picker()->visible());
+    CK_CHECK(f.sysinfo.benchmark_page_title() == "Integer mix");
+    CK_CHECK(f.sysinfo.benchmarks_window()->title() == "Benchmarks - Integer mix");
+
+    // Every page holds exactly one topic's bars.
+    const std::size_t pages = f.sysinfo.benchmark_page_count();
+    CK_CHECK(pages == ckv::sysinfo::benchmark_catalogue().size() + 1);
+    for (std::size_t step = 1; step < pages; ++step) {
+        CK_CHECK(f.run_command(SysInfoApp::kNextPageKey));
+        const std::string& title = f.sysinfo.benchmark_page_title();
+        for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) CK_CHECK(bar.group == title);
+    }
+
+    // The walk above ended where it started, because Next wraps rather
+    // than stopping dead on the last page.
+    CK_CHECK(f.sysinfo.benchmark_page() == 0);
+    CK_CHECK(f.run_command(SysInfoApp::kPreviousPageKey));
+    CK_CHECK(f.sysinfo.benchmark_page() == pages - 1);
 }

@@ -93,6 +93,20 @@ private:
     ui::RoleId frame_role_ = ui::kInvalidRole;
     ui::RoleId title_role_ = ui::kInvalidRole;
     ui::RoleId control_role_ = ui::kInvalidRole;
+    ui::RoleId control_pressed_role_ = ui::kInvalidRole;
+
+    // A press on this row is ARMED on the way down and DECIDED on the way up,
+    // exactly as the window frame's own controls are (Window::on_mouse's
+    // held_control_): held while the button is down, drawn pressed only while
+    // the pointer is still over what it went down on, fired only if released
+    // there, and taken back by releasing anywhere else. Firing on the press
+    // itself — what this row did first — gave a reader no way to change
+    // their mind, and closed a window from a press they were still deciding
+    // about. Two controls: Close, and Restore — which the caption and the
+    // arrow both are.
+    enum class Held : unsigned char { None, Close, Restore };
+    Held held_ = Held::None;
+    bool held_inside_ = true;
 };
 
 }  // namespace ckv::widgets

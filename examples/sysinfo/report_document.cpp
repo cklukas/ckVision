@@ -3,6 +3,7 @@
 #include "report_document.hpp"
 
 #include <algorithm>
+#include <cstddef>
 
 #include "reference_points.hpp"
 #include "report_format.hpp"

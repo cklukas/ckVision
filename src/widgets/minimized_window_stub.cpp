@@ -35,6 +35,8 @@ void MinimizedWindowStub::on_attached() {
     if (frame_role_ == ui::kInvalidRole) frame_role_ = context().roles->find("ckv.window.frame.inactive");
     if (title_role_ == ui::kInvalidRole) title_role_ = context().roles->find("ckv.window.title.inactive");
     if (control_role_ == ui::kInvalidRole) control_role_ = context().roles->find("ckv.window.control");
+    if (control_pressed_role_ == ui::kInvalidRole)
+        control_pressed_role_ = context().roles->find("ckv.window.control.pressed");
 }
 
 int MinimizedWindowStub::natural_width() const {
@@ -80,6 +82,10 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
     // the border it sits in.
     const Style control_style = theme.resolve(control_role_);
     const Style control{control_style.fg, frame.bg, frame.attrs | control_style.attrs};
+    // The same pressed face the window frame's controls wear while a press is
+    // held over them — and only while it is over them, so a pointer that has
+    // moved away shows the reader the press is no longer going to count.
+    const Style pressed = theme.resolve(control_pressed_role_);
 
     const int width = bounds().width;
     if (width <= 0) return;
@@ -88,9 +94,12 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
     painter.draw_text(Point{width - 1, 0}, "┐", frame);
     if (width < kChromeWidth) return;
 
-    painter.draw_text(Point{2, 0}, "[", frame);
-    painter.draw_text(Point{3, 0}, "■", control);
-    painter.draw_text(Point{4, 0}, "]", frame);
+    // Brackets and glyph alike, as Window draws its frame controls: the whole
+    // three-cell control is the thing that is pressed.
+    const bool close_armed = held_ == Held::Close && held_inside_;
+    painter.draw_text(Point{2, 0}, "[", close_armed ? pressed : frame);
+    painter.draw_text(Point{3, 0}, "■", close_armed ? pressed : control);
+    painter.draw_text(Point{4, 0}, "]", close_armed ? pressed : frame);
 
     // U+2191 UPWARDS ARROW: the frame's own maximize glyph, which on a
     // window that is nowhere on screen says the only thing it can say —
@@ -98,9 +107,10 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
     // from maximized", a question about SIZE, and a parked window's size is
     // whatever it was and is not what this control changes.
     const int restore_x = restore_control_x();
-    painter.draw_text(Point{restore_x, 0}, "[", frame);
-    painter.draw_text(Point{restore_x + 1, 0}, "↑", control);
-    painter.draw_text(Point{restore_x + 2, 0}, "]", frame);
+    const bool restore_armed = held_ == Held::Restore && held_inside_;
+    painter.draw_text(Point{restore_x, 0}, "[", restore_armed ? pressed : frame);
+    painter.draw_text(Point{restore_x + 1, 0}, "↑", restore_armed ? pressed : control);
+    painter.draw_text(Point{restore_x + 2, 0}, "]", restore_armed ? pressed : frame);
 
     // Centred between the two controls, with a padding space each side —
     // the frame centres its caption, and a stub that left-aligned would read
@@ -122,21 +132,69 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
 // std::function it was stored in. (The event router already re-resolves its
 // target through a liveness handle, so a view dying inside its own handler
 // is a case the dispatch itself is built for.)
+//
+// And neither runs on the press. The press ARMS a control and the release
+// DECIDES it, the way Window::on_mouse treats the frame's own controls: a
+// reader may go down on the close mark, think better of it, and slide off
+// before letting go — and a row that had already closed the window on the
+// way down had taken that choice away. Everything on the row that is not the
+// close control is the restore control: a reader who clicks the caption of a
+// window they want back is asking for it as plainly as one who aims at the
+// arrow, and there is no second thing a one-row frame could have meant.
 bool MinimizedWindowStub::on_mouse(const MouseEvent& event) {
-    if (!enabled() || event.button != MouseButton::Left || event.action != MouseAction::Down) return false;
+    if (!enabled()) return false;
     const Rect absolute = absolute_bounds();
     const Point local{event.cell.x - absolute.x, event.cell.y - absolute.y};
-    if (point_in_close_control(local)) {
-        const std::function<void()> close = on_close;
-        if (close) close();
+    const auto over_control = [&](Held control) {
+        const bool on_row = local.y == 0 && local.x >= 0 && local.x < bounds().width;
+        switch (control) {
+            case Held::Close: return point_in_close_control(local);
+            case Held::Restore: return on_row && !point_in_close_control(local);
+            case Held::None: break;
+        }
+        return false;
+    };
+
+    if (held_ != Held::None) {
+        // Motion with no button held: the release happened where this row
+        // could not see it, and the pointer coming back is the proof. A press
+        // nobody is holding is not armed.
+        if (event.action == MouseAction::Move && event.button == MouseButton::None) {
+            held_ = Held::None;
+            held_inside_ = true;
+            invalidate();
+            return false;
+        }
+        const bool over = over_control(held_);
+        if (event.action != MouseAction::Up) {
+            // Held: nothing is decided, but say whether it still would be.
+            if (over != held_inside_) {
+                held_inside_ = over;
+                invalidate();
+            }
+            return true;
+        }
+        const Held held = held_;
+        held_ = Held::None;
+        held_inside_ = true;
+        invalidate();
+        // Released off what it went down on: the reader moved away, and
+        // moving away is how a press is taken back.
+        if (!over) return true;
+        if (held == Held::Close) {
+            const std::function<void()> close = on_close;
+            if (close) close();
+            return true;
+        }
+        const std::function<void()> restore = on_restore;
+        if (restore) restore();
         return true;
     }
-    // Everything else on the stub is the same request as its restore
-    // control. A reader who clicks the caption of a window they want back is
-    // asking for it as plainly as one who aims at the arrow, and there is no
-    // second thing a one-row frame could have meant.
-    const std::function<void()> restore = on_restore;
-    if (restore) restore();
+
+    if (event.button != MouseButton::Left || event.action != MouseAction::Down) return false;
+    held_ = point_in_close_control(local) ? Held::Close : Held::Restore;
+    held_inside_ = true;
+    invalidate();
     return true;
 }
 

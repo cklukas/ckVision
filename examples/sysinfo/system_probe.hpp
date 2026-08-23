@@ -120,6 +120,7 @@ bool build_is_optimized(const BuildReport& build) noexcept;
 // something each platform re-derives.
 BuildReport current_build_report();
 
+// ckvision-doc: system-probe
 class SystemProbe {
 public:
     virtual ~SystemProbe() = default;
@@ -134,5 +135,6 @@ public:
     virtual PowerReport power() const = 0;
     virtual BuildReport build() const = 0;
 };
+// ckvision-doc-end: system-probe
 
 }  // namespace ckv::sysinfo

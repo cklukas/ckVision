@@ -205,10 +205,16 @@ CK_TEST(the_editor_example_minimized_window_is_parked_where_the_reader_can_get_i
     CK_CHECK(stub.y == 22);
 
     // One click on the parked frame and the reader has their editor back,
-    // the size and shape it was.
+    // the size and shape it was. A click is a press AND a release: the row
+    // decides on the release, like the frame's own controls, so the press
+    // alone leaves the window where it is.
     const ckv::Rect before = f.editor.window()->bounds();
-    CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                            ckv::Point{stub.x + stub.width / 2, stub.y},
+    const ckv::Point on_stub{stub.x + stub.width / 2, stub.y};
+    CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, on_stub,
+                                            std::nullopt, ckv::Modifier::None}));
+    f.app.step(0);
+    CK_CHECK(f.editor.window()->minimized());  // armed, not decided
+    CK_CHECK(f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, on_stub,
                                             std::nullopt, ckv::Modifier::None}));
     f.app.step(0);
     CK_CHECK(!f.editor.window()->minimized());

@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -22,7 +23,10 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/dialog.hpp"
+#include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/help_viewer.hpp"
+#include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/table.hpp"
 
 #include "bar_chart_view.hpp"
@@ -67,6 +71,8 @@ public:
     static constexpr std::string_view kBenchmarksWindowKey = "sysinfo.benchmarks-window";
     static constexpr std::string_view kRunBenchmarksKey = "sysinfo.run-benchmarks";
     static constexpr std::string_view kCancelBenchmarksKey = "sysinfo.cancel-benchmarks";
+    static constexpr std::string_view kNextPageKey = "sysinfo.next-page";
+    static constexpr std::string_view kPreviousPageKey = "sysinfo.previous-page";
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
 
@@ -93,6 +99,14 @@ public:
     widgets::ComboBox* compare_picker() const noexcept { return compare_picker_; }
     widgets::Progress* benchmark_progress() const noexcept { return benchmark_progress_; }
     BarChartView* chart() const noexcept { return chart_; }
+    // Which topic the Benchmarks window is showing: 0 is the page that
+    // chooses and runs them, and each measured metric has its own after it.
+    std::size_t benchmark_page() const noexcept { return benchmark_page_; }
+    std::size_t benchmark_page_count() const noexcept { return chart_groups_.size() + 1; }
+    const std::string& benchmark_page_title() const noexcept { return benchmark_page_title_; }
+    // Every bar the current results would draw, across all topics. The
+    // chart itself holds only the page on screen.
+    const std::vector<ChartBar>& all_chart_bars() const noexcept { return chart_bars_; }
     widgets::StaticText* benchmark_footnote() const noexcept { return benchmark_footnote_; }
     BenchmarkService& benchmarks() noexcept { return benchmarks_; }
 
@@ -114,6 +128,10 @@ public:
     // answer in the directory picker; a host that already knows where its
     // scratch space is may set it up front, and a test may too.
     void set_scratch_directory(std::string path) { scratch_directory_ = std::move(path); }
+    // Whether the directory question has actually reached a picker. The
+    // dialog chain that asks it broke silently once; this is how a test
+    // sees that it is still connected.
+    bool pending_directory_open() const noexcept { return pending_scratch_dialog_.has_value(); }
 
     // Writes `format` to `path` through the injected filesystem, without a
     // dialog. The dialog path calls this; a test can too.
@@ -157,6 +175,8 @@ private:
     void start_benchmarks();
     void cancel_benchmarks();
     void update_chart();
+    void show_benchmark_page(std::size_t page);
+    void step_benchmark_page(int direction);
     // The kernel whose published reference figures are on the chart, or
     // nothing when the reader asked for this run only.
     std::optional<BenchmarkId> comparison_kernel() const;
@@ -179,6 +199,21 @@ private:
     // until the reader says otherwise, and this program never fills it in
     // on their behalf.
     std::string scratch_directory_;
+
+    // A dialog's completion handler lives exactly as long as the
+    // presentation handle it was installed through: dropping the handle
+    // withdraws the handler (dialog_presentation.hpp says so, and D-038 is
+    // why). Held as members, so the question this application asks is
+    // actually answered -- see ask_for_scratch_directory, which asked and
+    // then discarded the answer until this was fixed.
+    //
+    // Members of SysInfoApp specifically, which every host constructs after
+    // its Application and therefore destroys before it: a handler that
+    // outlived its owner would be called from Application's teardown into
+    // a dead frame, which is the failure that destructor is guarding.
+    std::optional<widgets::MessageBoxPresentation> pending_message_;
+    std::optional<widgets::DescriptorDialogPresentation> pending_scratch_dialog_;
+    std::optional<widgets::FileDialogPresentation> pending_save_;
     ui::StandardRoles roles_;
 
     widgets::Desktop* desktop_ = nullptr;
@@ -210,7 +245,17 @@ private:
     widgets::Progress* benchmark_progress_ = nullptr;
     widgets::StaticText* benchmark_note_ = nullptr;
     widgets::StaticText* benchmark_footnote_ = nullptr;
+    ui::View* benchmark_spacer_ = nullptr;
     BarChartView* chart_ = nullptr;
+
+    // Every group the current results would draw, in order: the topics the
+    // window pages through.
+    std::vector<std::string> chart_groups_;
+    // Each topic's units, shown under its axis.
+    std::map<std::string, std::string> chart_captions_;
+    std::vector<ChartBar> chart_bars_;
+    std::size_t benchmark_page_ = 0;
+    std::string benchmark_page_title_;
 
     std::vector<BenchmarkResult> current_results_;
     std::vector<BenchmarkResult> previous_results_;
