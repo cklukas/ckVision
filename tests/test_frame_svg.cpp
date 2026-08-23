@@ -117,9 +117,107 @@ CK_TEST(box_drawing_cells_use_cell_aligned_svg_geometry_instead_of_font_glyphs) 
     const std::string svg = render_frame_svg(surface.view());
     CK_CHECK(svg.find("data-box-drawing=\"double\"") != std::string::npos);
     CK_CHECK(svg.find(">╝</text>") == std::string::npos);
-    CK_CHECK(svg.find("stroke-linecap=\"square\"") != std::string::npos);
     CK_CHECK(svg.find("d=\"M 31.5 35.5 L 31.5 45 L 26.5 45\"") !=
              std::string::npos);  // bottom-right corner reaches both neighboring cell edges
+}
+
+CK_TEST(box_drawing_strokes_end_where_the_path_does_so_a_double_rule_stays_unbroken) {
+    Surface surface(Size{4, 3});
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 4, 3});
+    painter.draw_box(ckv::Rect{0, 0, 4, 3}, ckv::scene::LineStyle::Double,
+                     Style{Color::rgb(255, 255, 255), Color::rgb(0, 0, 170), Attr{}});
+    const std::string svg = render_frame_svg(surface.view());
+
+    // A SQUARE cap runs half a stroke width past the endpoint. The wide
+    // outer stroke would then overhang further than the narrow inner one
+    // that carves the gap between a double rule's two lines, so each cell
+    // painted foreground across its neighbour's gap and the frame came out
+    // as a chain of little rectangles. Butt caps make the two overhangs
+    // agree.
+    CK_CHECK(svg.find("stroke-linecap=\"square\"") == std::string::npos);
+    CK_CHECK(svg.find("stroke-linecap=\"butt\"") != std::string::npos);
+
+    // The positive half: a double rule is still TWO strokes on one path,
+    // the outer in the foreground and the inner in the background, and the
+    // outer is three times the inner so the two lines and the gap between
+    // them come out the same weight.
+    CK_CHECK(svg.find("stroke=\"#ffffff\" stroke-width=\"6\"") != std::string::npos);
+    CK_CHECK(svg.find("stroke=\"#0000aa\" stroke-width=\"2\"") != std::string::npos);
+}
+
+CK_TEST(a_shade_glyph_is_dithered_geometry_rather_than_a_font_glyph) {
+    const Style desktop{Color::rgb(0, 0, 170), Color::rgb(200, 200, 200), Attr{}};
+    Surface surface(Size{3, 2}, Cell::from_grapheme("░", desktop));
+    const std::string svg = render_frame_svg(surface.view());
+
+    // Drawn by a font, ░ is a shape sized for the font's em box sitting
+    // inside a cell sized by the terminal: a screen of them comes out as
+    // rows of dots with gaps between the rows.
+    CK_CHECK(svg.find("<text") == std::string::npos);
+
+    // Drawn as a dither in USER space, the tiles line up across cells, so
+    // the whole run is one rectangle of one even tint.
+    CK_CHECK(svg.find("<pattern id=\"dither1-0000aa\"") != std::string::npos);
+    CK_CHECK(svg.find("width=\"27\" height=\"36\" fill=\"url(#dither1-0000aa)\"") !=
+             std::string::npos);
+}
+
+CK_TEST(the_three_shades_differ_in_how_much_of_the_dither_tile_they_mark) {
+    const auto marks_in_tile = [](const char* grapheme) {
+        Surface surface(Size{1, 1});
+        surface.set_cell(Point{0, 0},
+                         Cell::from_grapheme(grapheme, Style{Color::rgb(255, 0, 0), Color{}, Attr{}}));
+        const std::string svg = render_frame_svg(surface.view());
+        std::size_t count = 0;
+        std::size_t pos = 0;
+        while ((pos = svg.find("shape-rendering=\"crispEdges\"", pos)) != std::string::npos) {
+            ++count;
+            pos += 1;
+        }
+        return count;
+    };
+    CK_CHECK(marks_in_tile("░") == 1);  // a quarter
+    CK_CHECK(marks_in_tile("▒") == 2);  // a half, as a checkerboard
+    CK_CHECK(marks_in_tile("▓") == 3);  // three quarters
+}
+
+CK_TEST(a_full_block_covers_its_whole_cell_and_a_half_block_covers_exactly_half) {
+    Surface full_surface(Size{1, 1});
+    full_surface.set_cell(Point{0, 0},
+                          Cell::from_grapheme("█", Style{Color::rgb(255, 0, 0), Color{}, Attr{}}));
+    const std::string full = render_frame_svg(full_surface.view());
+    CK_CHECK(full.find("<text") == std::string::npos);
+    CK_CHECK(full.find("x=\"0\" y=\"0\" width=\"9\" height=\"18\" fill=\"#ff0000\"") !=
+             std::string::npos);
+
+    // The partial shapes are not merged with anything, but they must still
+    // meet: ▌ and ▐ divide the same nine columns between them without a
+    // seam or an overlap, which is what rounding the EDGES rather than the
+    // widths buys.
+    Surface halves(Size{2, 1});
+    halves.set_cell(Point{0, 0},
+                    Cell::from_grapheme("▌", Style{Color::rgb(255, 0, 0), Color{}, Attr{}}));
+    halves.set_cell(Point{1, 0},
+                    Cell::from_grapheme("▐", Style{Color::rgb(255, 0, 0), Color{}, Attr{}}));
+    const std::string svg = render_frame_svg(halves.view());
+    CK_CHECK(svg.find("x=\"0\" y=\"0\" width=\"5\" height=\"18\"") != std::string::npos);
+    CK_CHECK(svg.find("x=\"14\" y=\"0\" width=\"4\" height=\"18\"") != std::string::npos);
+}
+
+CK_TEST(the_font_size_follows_the_cell_box_rather_than_a_constant_inset) {
+    Surface surface(Size{1, 1});
+    surface.set_cell(Point{0, 0}, Cell::from_grapheme("M", Style{}));
+    // 9x18 is the metric every capture uses, and the monospace face that
+    // advances 9px there is a 15px one — not the 14px "height minus four"
+    // that left a gap above and below every row of glyphs.
+    CK_CHECK(render_frame_svg(surface.view()).find("font-size:15px") != std::string::npos);
+
+    FrameSvgOptions narrow;
+    narrow.cell_width_px = 6;
+    narrow.cell_height_px = 18;
+    // Bounded by the width too: a 15px glyph in a 6px column would run
+    // into the next one.
+    CK_CHECK(render_frame_svg(surface.view(), narrow).find("font-size:10px") != std::string::npos);
 }
 
 CK_TEST(virtual_display_svg_contains_pixels_decoded_from_sixel_output) {

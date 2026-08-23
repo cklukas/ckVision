@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "cvision/core/text.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/scene/surface.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/context.hpp"
@@ -21,6 +23,8 @@ using ckv::ManualClock;
 using ckv::Modifier;
 using ckv::Point;
 using ckv::Rect;
+using ckv::scene::Painter;
+using ckv::scene::Surface;
 using ckv::ui::Application;
 using ckv::ui::intern_standard_roles;
 using ckv::ui::make_classic_theme;
@@ -30,6 +34,7 @@ using ckv::ui::Theme;
 using ckv::widgets::Desktop;
 using ckv::widgets::DropdownMenu;
 using ckv::widgets::MenuItem;
+using ckv::widgets::PagedStrip;
 using ckv::widgets::StatusLine;
 using ckv::widgets::Window;
 using ckv::widgets::WindowSwitcherBar;
@@ -414,7 +419,7 @@ CK_TEST(a_window_whose_title_is_wider_than_the_row_is_alone_on_its_page_and_elid
     // The glyph is at the FRONT of the text, so what the elision takes is the
     // tail of the name and what survives is the state — which is the half a
     // reader cannot recover by widening their terminal.
-    CK_CHECK(drawn[0].text == "▯ An extra…");
+    CK_CHECK(drawn[0].text == entry_text(WindowSwitcherBar::Status::Visible, "An extra…"));
     CK_CHECK(bar->next_page());
     CK_CHECK(bar->drawn_entries()[0].text ==
              entry_text(WindowSwitcherBar::Status::Active, "Beta"));
@@ -873,15 +878,80 @@ CK_TEST(each_row_says_whether_its_window_is_active_behind_or_put_away) {
     CK_CHECK(drawn[0].text == entry_text(Status::Minimized, "Alpha"));
     CK_CHECK(drawn[1].text == entry_text(Status::Visible, "Bravo"));
     CK_CHECK(drawn[2].text == entry_text(Status::Active, "Charlie"));
-    // Three distinct shapes, which is the whole job. Checked against each
-    // other rather than against literals, so a later table is still held to
-    // saying three different things.
-    CK_CHECK(WindowSwitcherBar::status_glyph(Status::Active) !=
+    // The mark says WHERE, not which: a window in front and one behind it
+    // are both on the desktop and answer with the same shape, while one that
+    // has been put away answers with another. Checked against each other
+    // rather than against literals, so a later table is still held to the
+    // distinction rather than to two particular characters.
+    CK_CHECK(WindowSwitcherBar::status_glyph(Status::Active) ==
              WindowSwitcherBar::status_glyph(Status::Visible));
-    CK_CHECK(WindowSwitcherBar::status_glyph(Status::Visible) !=
-             WindowSwitcherBar::status_glyph(Status::Minimized));
     CK_CHECK(WindowSwitcherBar::status_glyph(Status::Minimized) !=
              WindowSwitcherBar::status_glyph(Status::Active));
+    // And the two shapes are the window frame's own controls, so a row and
+    // the window it stands for wear the same chrome. Read off a drawn Window
+    // rather than named here: a frame that re-lettered its controls and left
+    // this bar behind is exactly the drift this pair exists to catch.
+    // Wide enough that the frame draws its minimize control at all — see
+    // Window::draws_minimize_control, which gives it up below 22 columns.
+    constexpr int kFrameWidth = 24;
+    Surface frame(ckv::Size{kFrameWidth, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter frame_painter(frame, Rect{0, 0, kFrameWidth, 5});
+    charlie->set_bounds(Rect{0, 0, kFrameWidth, 5});
+    charlie->draw(frame_painter);
+    CK_CHECK(frame.at(Point{3, 0}).grapheme() ==
+             WindowSwitcherBar::status_glyph(Status::Active));  // the close control's square
+    CK_CHECK(frame.at(Point{kFrameWidth - 7, 0}).grapheme() ==
+             WindowSwitcherBar::status_glyph(Status::Minimized));  // the minimize control's line
+}
+
+CK_TEST(the_active_rows_mark_wears_the_window_control_colour_and_every_other_row_does_not) {
+    // The frame's own rule, on the bar: Window::draw lights the controls of
+    // the ACTIVE window and lets every other window's fall back to the frame
+    // style, and that — not a third shape — is what says which window the
+    // reader is in. The label beside the mark stays the row's own style in
+    // both cases, so this is a mark that is coloured, not a row that is.
+    Fixture f;
+    // A control colour the selected row is not already filled with. The
+    // classic theme pairs both with green — see PagedStrip::Item::icon_role's
+    // legibility floor, which is what a theme that collides gets instead, and
+    // which would leave this test passing on the fallback while believing it
+    // had checked the borrow.
+    f.theme.set(f.roles.window_control,
+                ckv::Style{ckv::Color::rgb(255, 255, 85), ckv::Color::rgb(0, 0, 170),
+                           ckv::Attr::Bold});
+    WindowSwitcherBar* bar = f.bar(40);
+    f.open("Alpha");
+    f.open("Bravo");
+    CK_CHECK(bar->entries()[1].status() == Status::Active);
+
+    Surface s(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 40, 1});
+    bar->draw(painter);
+
+    const ckv::Color control = f.theme.resolve(f.roles.window_control).fg;
+    const auto mark_at = [&](std::size_t index) {
+        for (const WindowSwitcherBar::DrawnEntry& drawn : bar->drawn_entries())
+            if (drawn.index == index) return drawn.x + PagedStrip::kItemPadding;
+        return -1;
+    };
+    const int behind = mark_at(0);
+    const int in_front = mark_at(1);
+    CK_CHECK(behind >= 0 && in_front >= 0);
+    // The mark is where the test says it is, on both rows, before any claim
+    // about its colour: a colour assertion on a blank cell passes for the
+    // wrong reason.
+    CK_CHECK(s.at(Point{behind, 0}).grapheme() == WindowSwitcherBar::status_glyph(Status::Visible));
+    CK_CHECK(s.at(Point{in_front, 0}).grapheme() == WindowSwitcherBar::status_glyph(Status::Active));
+
+    CK_CHECK(s.at(Point{in_front, 0}).style().fg == control);
+    CK_CHECK(s.at(Point{behind, 0}).style().fg != control);
+    // The mark takes the control's colour, never its background: the row's
+    // highlight has to run unbroken underneath it, or the mark reads as a
+    // hole punched in the button rather than as a lit control on it.
+    CK_CHECK(s.at(Point{in_front, 0}).style().bg == s.at(Point{in_front + 2, 0}).style().bg);
+    // The name beside it is the row's own style either way.
+    CK_CHECK(s.at(Point{behind + 2, 0}).style().fg == s.at(Point{behind + 3, 0}).style().fg);
+    CK_CHECK(s.at(Point{behind, 0}).style().fg == s.at(Point{behind + 2, 0}).style().fg);
 }
 
 CK_TEST(every_status_glyph_is_one_cell_so_a_state_change_never_re_flows_the_row) {

@@ -239,6 +239,21 @@ it could observe — and every curses program sends both, which would fill a
 bounded diagnostic ring with the one thing every child does. D-053 records what
 real support would take.
 
+modifyOtherKeys is the second. `CSI > 4 ; 2 m` (xterm's XTMODKEYS), which vim,
+neovim, emacs, tmux and Claude Code send on the way in and reset on the way
+out, is consumed without effect and without a diagnostic, for the keypad's
+reason — and unlike the keypad it can be asked about: `CSI ? 4 m` is answered
+truthfully, as `CSI > 4 ; 0 m`, the level really in force, so a program that
+set it is not told a promise the next keystroke breaks. The cursor and
+function keys already travel in the form xterm's level 2 produces, so those two
+resources answer `2`. D-062 records the decision and what real support would
+take. More generally, a CSI whose parameters begin with a private marker (`<`,
+`=`, `>`, `?`) is dispatched by that marker before its final byte is looked at,
+and what this terminal does not implement is refused with a diagnostic rather
+than read as the public control that shares the final byte — which is how
+`CSI > 4 m` was once reported as a malformed colour at the bottom of the
+window.
+
 For a full-screen smoke test, launch a child that uses the alternate buffer,
 for example `printf '\033[?1049h\033[2J\033[Hfull-screen\033[?1049l'`, and
 observe that the child returns to its primary buffer without changing the

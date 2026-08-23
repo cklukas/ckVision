@@ -49,6 +49,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_menu.cpp
     test_memo.cpp
     test_message_box.cpp
+    test_minimized_window_stub.cpp
     test_mnemonic.cpp
     test_option_group.cpp
     test_paged_strip.cpp
@@ -228,6 +229,24 @@ if(TARGET spin_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_spin_smoke.cpp)
     target_sources(cvision_tests PRIVATE test_spin_smoke.cpp)
     target_link_libraries(cvision_tests PRIVATE spin_app)
+endif()
+
+if(TARGET sysinfo_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
+        test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
+        test_sysinfo_smoke.cpp)
+    target_sources(cvision_tests PRIVATE test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
+        test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
+        test_sysinfo_smoke.cpp)
+    target_link_libraries(cvision_tests PRIVATE sysinfo_app)
+endif()
+
+# The real machine can only be read where there is one to read: this suite
+# asserts the POSIX probe's internal consistency, never a value, because the
+# machine it runs on is not the machine it was written on.
+if(UNIX AND TARGET sysinfo_app)
+    list(APPEND CKVISION_POSIX_TEST_SOURCES test_posix_system_probe.cpp)
+    target_sources(cvision_tests PRIVATE test_posix_system_probe.cpp)
 endif()
 
 if(TARGET ckvision_editor_profile_sample)

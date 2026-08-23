@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/desktop.hpp"
 
+#include "cvision/widgets/minimized_window_stub.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -361,6 +363,10 @@ void Desktop::zoom_active_window() {
 }
 
 void Desktop::minimize_active_window() {
+    // Disabled is enforced here as well as by clearing every window's
+    // minimizable flag, because a command is reachable from a menu or a key
+    // that no frame control gates.
+    if (minimized_placement_ == MinimizedWindowPlacement::Disabled) return;
     if (active_ == nullptr || !active_->minimizable()) return;
     // Straight to the window, exactly as the `_` control does. Everything
     // that follows — activation moving to whatever is still shown, the
@@ -402,7 +408,16 @@ Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     // A rename is news for whoever LISTS windows; this window's own
     // invalidate reaches only its own frame.
     raw->bind_title_observer(
-        [this, raw] { notify_window_change(WindowChange::TitleChanged, *raw); },
+        [this, raw] {
+            // The parked row carries the window's name, so a rename has to
+            // reach it. Before the observers, which is where a host that
+            // lists windows itself will re-read the same title.
+            if (MinimizedWindowStub* const stub = stub_for(*raw)) {
+                stub->refresh();
+                layout_parked_stubs();
+            }
+            notify_window_change(WindowChange::TitleChanged, *raw);
+        },
         window_relationship_);
     // Minimizing is news this Desktop must ACT on rather than merely pass
     // along: the window that just went away may have been the active one.
@@ -415,7 +430,18 @@ Window* Desktop::attach_window(std::unique_ptr<Window> window) {
     // would restore it (see activate), which turns "open this in the
     // background" into "open this in front" — and an application that hands
     // us a hidden window has said which of the two it meant.
-    if (shown(*raw)) activate(raw);
+    if (shown(*raw)) {
+        activate(raw);
+    } else {
+        // It went nowhere and so was never announced; it still needs the row
+        // that says where it is. `set_minimized` was called before this
+        // Desktop had any relationship with the window, so the minimize
+        // observer that normally does this never fired.
+        park_window(*raw);
+    }
+    // Minimizing may be off for this desktop, in which case no window it owns
+    // offers the control — including one that arrives after the switch.
+    if (minimized_placement_ == MinimizedWindowPlacement::Disabled) gate_minimize(*raw);
     // Last, so an observer is handed a window that is completely attached —
     // see WindowChange::Added for why the Activated above precedes it.
     notify_window_change(WindowChange::Added, *raw);
@@ -549,6 +575,10 @@ std::unique_ptr<Window> Desktop::remove_window(Window* window) {
     // The relationship must disappear before View's detach sink can call
     // application/user code.  The Window may outlive the Desktop in the
     // unique_ptr returned below, but it can no longer reach this Desktop.
+    // Before the observers are cleared and before anything can run
+    // application code: a stub outliving its window is a row pointing at
+    // freed storage, and it is this Desktop's to take down.
+    unpark_window(*window);
     window->clear_desktop_zoom_target();
     window->clear_gesture_observer();
     window->clear_title_observer();
@@ -716,6 +746,23 @@ void Desktop::window_minimize_changed(Window& window) {
         window.set_active(false);
         activate_topmost_shown();
     }
+    // Minimizing is off for this desktop, so a window that has just been
+    // minimized anyway — by an application calling set_minimized directly,
+    // past the control that is no longer drawn and the command that no
+    // longer runs — is put back. `Disabled` promises there is no state in
+    // which a window is away with no way to reach it, and a promise that
+    // only covers the routes a READER takes is not that promise.
+    if (minimized_placement_ == MinimizedWindowPlacement::Disabled && window.minimized()) {
+        window.set_minimized(false);
+        return;
+    }
+    // The way back, before either the effect or the notification: the stub
+    // IS where the window went, so it has to exist before the flight is told
+    // to fly to it and before an observer is told the window is gone.
+    if (window.minimized())
+        park_window(window);
+    else
+        unpark_window(window);
     // The effect, before the notification rather than after it: an observer
     // is allowed to minimize something else, and a flight that started after
     // that would be the second one describing the first one's window.
@@ -729,12 +776,160 @@ void Desktop::window_minimize_changed(Window& window) {
                          window);
 }
 
+void Desktop::gate_minimize(Window& window) {
+    // Recorded only where there is something to take away, so switching back
+    // gives the control to exactly the windows that had it. A window that
+    // was already fixed — a modal, or one an application set itself — is
+    // left out of the list and therefore left alone.
+    if (!window.minimizable()) return;
+    window.set_minimizable(false);
+    minimize_gated_.emplace_back(&window, window.lifetime_token());
+}
+
+MinimizedWindowStub* Desktop::stub_for(const Window& window) const noexcept {
+    const auto it = std::find_if(parked_stubs_.begin(), parked_stubs_.end(),
+                                 [&window](const MinimizedWindowStub* stub) {
+                                     return stub != nullptr && stub->window() == &window;
+                                 });
+    return it == parked_stubs_.end() ? nullptr : *it;
+}
+
+void Desktop::park_window(Window& window) {
+    if (minimized_placement_ != MinimizedWindowPlacement::Parked) return;
+    if (!window.minimized()) return;
+    if (stub_for(window) != nullptr) return;
+
+    auto owned = std::make_unique<MinimizedWindowStub>(window);
+    Window* const target = &window;
+    // Both actions hold this Desktop and the window weakly as well as by
+    // address, the rule every default in this file follows: a stub is
+    // clicked at some later moment, and by then either participant may be
+    // gone, or a different one may be living at the same address.
+    const std::weak_ptr<void> desktop_liveness = lifetime_token();
+    const std::weak_ptr<void> window_liveness = window.lifetime_token();
+    owned->on_restore = [this, target, desktop_liveness, window_liveness] {
+        if (desktop_liveness.expired() || window_liveness.expired()) return;
+        if (std::find(windows_.begin(), windows_.end(), target) == windows_.end()) return;
+        // activate(), not set_minimized(false): naming a window is asking
+        // for it, and D-056 puts "restore on the way to the front" in
+        // activate so that every route back agrees. The stub is destroyed
+        // inside this call, by the minimize observer it triggers.
+        activate(target);
+    };
+    owned->on_close = [this, target, desktop_liveness, window_liveness] {
+        if (desktop_liveness.expired() || window_liveness.expired()) return;
+        if (std::find(windows_.begin(), windows_.end(), target) == windows_.end()) return;
+        // The window's own close(), so close_request still gets to refuse —
+        // a parked editor with unsaved changes asks the same question from
+        // its stub as it would from its frame.
+        (void)target->close();
+    };
+    // A popup rather than a plain child, so it is drawn above the windows.
+    // A parked window that a maximized neighbour could cover would be back
+    // where it started: on the desktop, and invisible.
+    parked_stubs_.push_back(add_popup(std::move(owned)));
+    layout_parked_stubs();
+}
+
+void Desktop::unpark_window(Window& window) {
+    const auto it = std::find_if(parked_stubs_.begin(), parked_stubs_.end(),
+                                 [&window](const MinimizedWindowStub* stub) {
+                                     return stub != nullptr && stub->window() == &window;
+                                 });
+    if (it == parked_stubs_.end()) return;
+    MinimizedWindowStub* const stub = *it;
+    // Out of the list before it is out of the tree: removing the popup runs
+    // detach sinks, and one of those may ask this Desktop what is parked.
+    parked_stubs_.erase(it);
+    remove_popup(stub);
+    layout_parked_stubs();
+}
+
+void Desktop::layout_parked_stubs() {
+    if (parked_stubs_.empty()) return;
+    const int width = bounds().width;
+    const int bottom_dock_height =
+        bottom_dock_ != nullptr ? std::max(1, bottom_dock_->vertical_size_hint().preferred) : 0;
+    const int top_dock_height =
+        top_dock_ != nullptr ? std::max(1, top_dock_->vertical_size_hint().preferred) : 0;
+    // The desktop's OWN bottom edge, not the world's: a parked window is
+    // parked on the screen. Panning moves the windows under it (U7-a) and
+    // leaves the row where the reader can reach it, which is the one
+    // property the row exists for.
+    int y = bounds().height - bottom_dock_height - 1;
+    int x = 0;
+    for (MinimizedWindowStub* const stub : parked_stubs_) {
+        if (stub == nullptr) continue;
+        const int wanted = std::min(stub->natural_width(), std::max(1, width));
+        // Wrapped UPWARDS, away from the status line and towards the empty
+        // middle of the desktop: a second row of parked windows grows into
+        // the space the windows left, not into the furniture.
+        if (x > 0 && x + wanted > width) {
+            x = 0;
+            y = std::max(top_dock_height, y - 1);
+        }
+        stub->set_bounds(Rect{x, y, wanted, 1});
+        // One cell between neighbours, so two stubs read as two windows
+        // rather than one long frame.
+        x += wanted + 1;
+    }
+}
+
 void Desktop::set_minimize_target_provider(std::function<std::optional<Rect>(Window&)> provider) {
     minimize_target_provider_ = std::move(provider);
     // Whatever is in the air was flying to an answer this Desktop no longer
     // gives. Ended rather than redirected: a decoration mid-flight between two
     // superseded places is not worth the arithmetic to rescue.
     finish_minimize_animation();
+}
+
+void Desktop::set_minimized_window_placement(MinimizedWindowPlacement placement) {
+    if (minimized_placement_ == placement) return;
+    minimized_placement_ = placement;
+    // Whatever is parked belongs to the placement that put it there, so the
+    // row comes down first and whichever windows are still minimized are
+    // settled again under the new rule.
+    while (!parked_stubs_.empty()) {
+        MinimizedWindowStub* const stub = parked_stubs_.back();
+        parked_stubs_.pop_back();
+        remove_popup(stub);
+    }
+    // Only the windows THIS placement took the control from get it back —
+    // never a blanket set_minimizable(true), which would hand it to a modal
+    // that gave it up for a reason of its own (present_modal) and to any
+    // window an application deliberately fixed.
+    if (placement != MinimizedWindowPlacement::Disabled) {
+        const std::vector<std::pair<Window*, std::weak_ptr<void>>> restored = minimize_gated_;
+        minimize_gated_.clear();
+        for (const auto& [window, liveness] : restored) {
+            if (liveness.expired()) continue;
+            if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) continue;
+            window->set_minimizable(true);
+        }
+    }
+    // A copy: closing or restoring below can reach application code, and one
+    // of the things that code may do is add or remove a window.
+    const std::vector<LiveWindow> windows = live_windows();
+    for (const LiveWindow& handle : windows) {
+        if (!still_owned(handle)) continue;
+        Window* const window = handle.window;
+        switch (placement) {
+            case MinimizedWindowPlacement::Parked:
+                park_window(*window);
+                break;
+            case MinimizedWindowPlacement::HostListed:
+                break;
+            case MinimizedWindowPlacement::Disabled:
+                // Turning minimizing off must not strand what was minimized
+                // while it was on: there would be no control left to bring
+                // those windows back with.
+                if (window->minimized()) window->set_minimized(false);
+                gate_minimize(*window);
+                break;
+        }
+    }
+    layout_parked_stubs();
+    invalidate();
 }
 
 void Desktop::set_minimize_animation_duration(std::int64_t nanos) noexcept {
@@ -829,6 +1024,25 @@ std::unique_ptr<ui::View> Desktop::remove_popup(ui::View* popup) {
     if (it == popups_.end()) return nullptr;
     popups_.erase(it);
     popup_backings_.erase(popup);
+    // A parked stub is a popup, and a stub that leaves the tree must leave
+    // the parking registry in the same breath — whoever removed it.
+    // unpark_window() erases its entry before calling here, so this is a
+    // no-op on that path; it is the OTHER paths that needed it, and the
+    // destructor is one: ~Desktop tears children down back to front through
+    // remove_child(), which reached this function for a stub, destroyed it,
+    // and left its pointer in parked_stubs_ — so a window removed a moment
+    // later walked unpark_window()'s find_if straight into freed memory
+    // (heap-use-after-free, Linux ASan, suite_test_minimize_chrome; macOS
+    // did not notice). Registry hygiene at the removal point closes every
+    // such path at once instead of the one that was seen.
+    const auto parked = std::find_if(parked_stubs_.begin(), parked_stubs_.end(),
+                                     [popup](const MinimizedWindowStub* stub) {
+                                         return static_cast<const ui::View*>(stub) == popup;
+                                     });
+    if (parked != parked_stubs_.end()) {
+        parked_stubs_.erase(parked);
+        layout_parked_stubs();
+    }
     std::unique_ptr<ui::View> detached = ui::View::remove_child(popup);
     request_layer_recompose();
     return detached;
@@ -1009,6 +1223,9 @@ void Desktop::on_resized() {
     // reachable within has moved with them.
     for (Window* window : windows_)
         if (window != nullptr) window->set_move_bounds(area);
+    // The parking row is measured from the bottom edge and wraps against the
+    // right one, so both of its ends just moved.
+    layout_parked_stubs();
 
     // Desktop growth tracking (M8 WP-4): a zoomed window keeps filling
     // the (possibly now larger or smaller) content area rather than

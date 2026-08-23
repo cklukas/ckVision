@@ -144,6 +144,75 @@ CK_TEST(an_item_that_carries_an_icon_is_as_wide_as_its_provider_says) {
     CK_CHECK(placed[1].x == 10 && placed[1].width == 7);
 }
 
+CK_TEST(an_icon_role_recolours_the_leading_cells_and_nothing_else_on_the_row) {
+    // What a taskbar needs to say "this is the window you are in" the way a
+    // window frame says it: the mark is lit, the name beside it is not, and
+    // the row's own background runs unbroken underneath both. Only the
+    // FOREGROUND comes from the role — a mark that brought its own background
+    // would punch a hole in the highlight it is standing on.
+    Fixture f;
+    f.size(40);
+    // A control colour the selected row does not already fill with — the
+    // classic theme pairs both with green, which is the collision the
+    // legibility floor below is about, and would leave this test asserting
+    // the fallback while believing it asserted the borrow.
+    f.theme.set(f.roles.window_control, ckv::Style{ckv::Color::rgb(255, 255, 85),
+                                                   ckv::Color::rgb(0, 0, 170), ckv::Attr::Bold});
+    f.items = {PagedStrip::Item{7, "* Alpha", true, 1, f.roles.window_control},
+               PagedStrip::Item{7, "* Bravo", false, 1, ui::kInvalidRole}};
+    f.strip.refresh_items();
+
+    Surface surface(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 40, 1});
+    f.strip.draw(painter);
+
+    const std::vector<PagedStrip::Placement> placed = f.strip.placed_items();
+    const int lit = placed[0].x + PagedStrip::kItemPadding;
+    const int plain = placed[1].x + PagedStrip::kItemPadding;
+    // The mark is where the test believes it is on both rows, before any
+    // claim about colour: an assertion made against a blank cell passes for
+    // the wrong reason.
+    CK_CHECK(surface.at(Point{lit, 0}).grapheme() == "*");
+    CK_CHECK(surface.at(Point{plain, 0}).grapheme() == "*");
+
+    const ckv::Style control = f.theme.resolve(f.roles.window_control);
+    const ckv::Style selected = f.theme.resolve(f.roles.status_line_selected);
+    CK_CHECK(surface.at(Point{lit, 0}).style().fg == control.fg);
+    CK_CHECK(surface.at(Point{lit, 0}).style().bg == selected.bg);
+    // One cell on: the label is the row's own style, icon role or not.
+    CK_CHECK(surface.at(Point{lit + 2, 0}).style().fg == selected.fg);
+    // And an item that named no role is one style end to end.
+    CK_CHECK(surface.at(Point{plain, 0}).style().fg ==
+             surface.at(Point{plain + 2, 0}).style().fg);
+}
+
+CK_TEST(a_mark_whose_role_colour_is_the_rows_own_background_is_drawn_legibly_instead) {
+    // The legibility floor. A borrowed foreground lands on someone else's
+    // background, and two of the library's own themes pair the window control
+    // with a status line that fills with exactly that colour — classic green
+    // on green, mono foreground on inverted foreground. Drawn faithfully, the
+    // mark would be a gap in the middle of the row; the row's own style wins
+    // instead, and the highlight goes on saying which row it is.
+    Fixture f;
+    f.size(40);
+    const ckv::Style selected = f.theme.resolve(f.roles.status_line_selected);
+    f.theme.set(f.roles.window_control, ckv::Style{selected.bg, selected.bg, ckv::Attr::Bold});
+    f.items = {PagedStrip::Item{7, "* Alpha", true, 1, f.roles.window_control}};
+    f.strip.refresh_items();
+
+    Surface surface(ckv::Size{40, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 40, 1});
+    f.strip.draw(painter);
+
+    const int mark = f.strip.placed_items()[0].x + PagedStrip::kItemPadding;
+    CK_CHECK(surface.at(Point{mark, 0}).grapheme() == "*");
+    CK_CHECK(surface.at(Point{mark, 0}).style().fg != surface.at(Point{mark, 0}).style().bg);
+    // Not merely "not invisible": it is the row's own foreground, the same
+    // one the name beside it is drawn in.
+    CK_CHECK(surface.at(Point{mark, 0}).style().fg == selected.fg);
+    CK_CHECK(surface.at(Point{mark, 0}).style().fg == surface.at(Point{mark + 2, 0}).style().fg);
+}
+
 // --- Paging ----------------------------------------------------------------
 
 CK_TEST(a_strip_too_narrow_for_its_items_pages_them_instead_of_truncating) {

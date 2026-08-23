@@ -162,3 +162,49 @@ if(UNIX)
     ckvision_strict(ckvision_spin)
     install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
+
+# SysInfo: what this machine is and how fast it is, read through a single
+# injected probe (the internal plans). Same split as every example
+# above, with one addition: the POSIX probe is a source of the otherwise
+# portable object-graph library rather than of the interactive binary, so
+# a host with no probe implementation still builds and tests everything
+# except the reading of that host.
+add_library(sysinfo_app STATIC
+    sysinfo/bar_chart_view.cpp
+    sysinfo/benchmark.cpp
+    sysinfo/benchmark_service.cpp
+    sysinfo/build_report.cpp
+    sysinfo/fixed_benchmark_runner.cpp
+    sysinfo/fixed_system_probe.cpp
+    sysinfo/latency_plot.cpp
+    sysinfo/reference_points.cpp
+    sysinfo/report_format.cpp
+    sysinfo/sysinfo_app.cpp)
+target_link_libraries(sysinfo_app PRIVATE ckvision::cvision)
+# The benchmark service runs its measurements on a worker thread; this is
+# the second example target (after spin) that needs one.
+find_package(Threads REQUIRED)
+target_link_libraries(sysinfo_app PUBLIC Threads::Threads)
+target_include_directories(sysinfo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sysinfo)
+ckvision_strict(sysinfo_app)
+# The one fact about this binary that the compiler does not know, and that a
+# program reporting benchmark scores must not omit: an unoptimized build
+# measures itself rather than the machine.
+target_compile_definitions(sysinfo_app PRIVATE CKV_SYSINFO_BUILD_TYPE="$<CONFIG>")
+
+if(UNIX)
+    target_sources(sysinfo_app PRIVATE sysinfo/posix_system_probe.cpp)
+    if(APPLE)
+        # The battery is the one figure macOS does not put behind sysctl.
+        # IOKit is the platform's own answer to that question and ships with
+        # the system, so this is a platform API like sysctl and termios --
+        # not a dependency in the sense the engineering standard forbids -- and it is
+        # confined to the one target that reads the host.
+        target_link_libraries(sysinfo_app PRIVATE "-framework IOKit" "-framework CoreFoundation")
+    endif()
+
+    add_executable(ckvision_sysinfo sysinfo/main.cpp)
+    target_link_libraries(ckvision_sysinfo PRIVATE sysinfo_app ckvision::cvision)
+    ckvision_strict(ckvision_sysinfo)
+    install(TARGETS ckvision_sysinfo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

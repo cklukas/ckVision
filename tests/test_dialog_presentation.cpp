@@ -695,3 +695,65 @@ CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_ind
         CK_CHECK(!result.numbers[5].has_value());
     }
 }
+
+CK_TEST(a_dropped_presentation_withdraws_its_handler_while_a_kept_one_still_completes) {
+    Fixture f;
+    int dropped_completions = 0;
+    int kept_completions = 0;
+
+    // Two dialogs, identical but for what the caller does with the handle.
+    auto kept = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    auto* const kept_box = f.desktop->windows().back();
+    kept.set_completion_handler([&](MessageBoxResult) { ++kept_completions; });
+
+    Window* dropped_box = nullptr;
+    {
+        auto dropped = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+        dropped_box = f.desktop->windows().back();
+        dropped.set_completion_handler([&](MessageBoxResult) { ++dropped_completions; });
+    }  // the caller declined the completion; the dialog is still on screen
+
+    CK_CHECK(f.desktop->remove_window(dropped_box) != nullptr);
+    CK_CHECK(f.desktop->remove_window(kept_box) != nullptr);
+    f.app.step(0);
+
+    // The negative claim, and the positive one that proves the completion
+    // path itself still runs — without it this test would pass just as
+    // happily if detaching stopped completing anything at all.
+    CK_CHECK(dropped_completions == 0);
+    CK_CHECK(kept_completions == 1);
+}
+
+CK_TEST(an_owner_destroyed_before_its_application_is_not_called_back_during_teardown) {
+    // The shape that made capture_editor_screenshots die roughly two runs
+    // in five: an object narrower-lived than the Application registers a
+    // completion handler that captures it, then the Application's own
+    // destructor detaches the dialog and completes the presentation. The
+    // handler must already be gone by then — a raw `bool alive` here is
+    // what `this` was in the real one.
+    Fixture f;
+    bool called_after_owner_died = false;
+
+    struct Owner {
+        bool* flag;
+        std::optional<ckv::widgets::MessageBoxPresentation> presentation;
+    };
+
+    {
+        Owner owner{&called_after_owner_died, std::nullopt};
+        owner.presentation.emplace(
+            present_message_box(f.app, *f.desktop, f.roles, confirmation()));
+        owner.presentation->set_completion_handler(
+            [&owner](MessageBoxResult) { *owner.flag = true; });
+        // The dialog outlives the owner: nothing removes it here, exactly
+        // as nothing removed the editor's confirmation box before main
+        // returned.
+    }
+
+    // Standing in for ~Application: detach every remaining window.
+    while (!f.desktop->windows().empty())
+        CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
+    f.app.step(0);
+
+    CK_CHECK(!called_after_owner_died);
+}

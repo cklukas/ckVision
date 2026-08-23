@@ -1,7 +1,7 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.0 LANGUAGES CXX)
+project(ckvision VERSION 0.1.1 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(GNUInstallDirs)
@@ -73,6 +73,7 @@ add_library(cvision
     src/widgets/menu.cpp
     src/widgets/memo.cpp
     src/widgets/message_box.cpp
+    src/widgets/minimized_window_stub.cpp
     src/widgets/mnemonic.cpp
     src/widgets/option_group.cpp
     src/widgets/paged_strip.cpp

@@ -1369,6 +1369,40 @@ one in front: command dispatch has no target, and every standard
 window-management handler a `Desktop` installs acts on `active_window()`, so
 a `Close` chosen from a background row would close the wrong window.
 
+## MinimizedWindowStub
+
+Header: `include/cvision/widgets/minimized_window_stub.hpp`. The one row a
+put-away window leaves behind: its own top frame, rolled up and parked along
+the bottom of the desktop.
+
+```
+┌[■]── config.yaml ──[↑]┐
+```
+
+A `Desktop` creates, places and destroys these itself whenever its
+`minimized_window_placement()` is `Parked`, which is the default — an
+application never constructs one. `[■]` closes the window through its own
+`close_request`, so a parked editor with unsaved changes still gets to ask;
+`[↑]`, the caption, or Enter on a stub reached by Tab brings the window back
+through `Desktop::activate`, which restores it on the way to the front
+(D-056). It draws in the window roles — `ckv.window.frame.inactive`,
+`ckv.window.title.inactive` and `ckv.window.control` — so a theme that
+retints inactive frames retints these with them.
+
+The stub is a popup, not an ordinary child: it is drawn above the windows,
+because a parked window that a maximized neighbour could cover would be back
+where it started. The window behind it is untouched — hidden, with its
+bounds, zoom state and z-order exactly as they were — which is why restoring
+replays nothing.
+
+The three placements a host chooses between (D-064):
+
+| `MinimizedWindowPlacement` | What a minimized window leaves on screen |
+|---|---|
+| `Parked` (default) | A stub on the desktop's bottom edge |
+| `HostListed` | Nothing — the host lists its own windows, e.g. with a [WindowSwitcherBar](#windowswitcherbar) |
+| `Disabled` | Nothing, and no window offers the `_` control at all |
+
 ## WindowSwitcherBar
 
 Header: `include/cvision/widgets/window_switcher_bar.hpp`. One row listing

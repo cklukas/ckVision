@@ -118,7 +118,8 @@ private:
 class WindowSwitcherBar : public PagedStrip {
 public:
     // What one row says about its window, in the taskbar's three states
-    // (U4-j). Each is drawn as a glyph one space left of the title — see
+    // (U4-j). Each is drawn as a mark one space left of the title, in a
+    // colour that says whether the reader is in that window — see
     // status_glyph, which is the single table that maps the three.
     //
     // The state is also what a left-click MEANS, which is why the two live
@@ -130,21 +131,36 @@ public:
         Minimized,  // put away, and reachable only from this row
     };
 
-    // The glyph one row draws for each state — the ONE place the three are
+    // The mark one row draws for each state — the ONE place they are
     // spelled, so a menu legend, a help page or a host's own listing names
-    // the same shapes this bar draws rather than copying literals that then
-    // drift apart.
+    // the shapes this bar draws rather than copying literals that then drift
+    // apart.
     //
-    // All three were checked against ckv::text — this library's own width
-    // authority — before being chosen, the check PagedStrip's own steering
-    // glyphs record: U+25AE, U+25AF and U+2584 are neither East Asian Wide
-    // nor Extended_Pictographic, so no host widens them and no variation
-    // selector can turn one into a two-cell emoji. That is why they are
-    // these and not the BLACK/WHITE SQUARE U+25A0/U+25A1 the request was
-    // first written with: those two are East Asian **Ambiguous**, which
-    // D-019 resolves to one column here while a host rendering a CJK font
-    // gives them two — and a taskbar whose every entry is one cell wider
-    // than the layout believes shears the whole row.
+    // They are the window frame's own controls: U+25A0, the square of the
+    // close control, for a window that is on the desktop, and U+005F, the
+    // line of the minimize control, for one that has been put away. Active
+    // and Visible therefore answer with the SAME mark — a window in front and
+    // a window behind it are in the same place, and place is what the mark
+    // says. Which one the reader is in is said in colour, the way the desktop
+    // already says it: the active row draws its mark in the window control
+    // role while every other row lets it fall back to the row's own style,
+    // exactly as Window::draw lights the controls of the active window alone.
+    // The strip's selected highlight sits under that same row, and is what
+    // carries the distinction where there is no colour to carry it.
+    //
+    // Both were checked against ckv::text — this library's own width
+    // authority — before being chosen: neither is East Asian Wide nor
+    // Extended_Pictographic, so no variation selector can turn one into a
+    // two-cell emoji, and each is one column, which is what keeps a window
+    // changing state from re-flowing the row U4-m exists to hold still.
+    // U+25A0 is East Asian **Ambiguous**, resolved to one column by D-019 —
+    // the resolution PagedStrip's own steering triangles already rest on, and
+    // the one the frame's close control rests on. This is a reversal: the
+    // first version of U4-j rejected the squares over that ambiguity and drew
+    // U+25AE/U+25AF/U+2584 instead. What it bought was a third distinct
+    // shape; what it cost was a bar whose chrome said nothing the frame said,
+    // and a Minimized slab an order of magnitude heavier in ink than the two
+    // it stood beside. D-059 records the trade.
     static std::string_view status_glyph(Status status) noexcept;
 
     // One row, as the bar currently understands it.
@@ -384,6 +400,12 @@ private:
     std::function<std::vector<MenuItem>(const WindowSwitcherTarget&)> context_menu_provider_;
 
     std::vector<Entry> entries_;
+
+    // The window family's control role ("ckv.window.control"), resolved on
+    // attach, and drawn on the ACTIVE row's mark alone — see the glyph table
+    // in the .cpp. Held here rather than resolved per draw because a role id
+    // is a registry lookup and a bar redraws on every desktop change.
+    ui::RoleId control_role_ = ui::kInvalidRole;
 
     // What one window's box is currently given, and when it was last given it.
     // Keyed by window rather than carried on the Entry alone because entries_

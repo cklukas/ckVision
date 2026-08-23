@@ -203,9 +203,14 @@ CK_TEST(removing_an_inactive_window_does_not_disturb_the_active_one) {
 
 CK_TEST(activate_on_an_already_active_window_is_a_no_op) {
     Fixture f;
+    // Declared BEFORE the desktop, because the sink below captures it by
+    // reference and the desktop's teardown may still call that sink: a local
+    // declared after the desktop is destroyed first, and the call lands on a
+    // dead frame (stack-use-after-scope, caught by ASan once D-064's teardown
+    // reached the dirty sink). Capture lifetime is the test's to get right.
+    int calls = 0;
     Desktop desktop(Rect{0, 0, 80, 24});
     Window* a = desktop.add_window(make_window(f));
-    int calls = 0;
     a->set_dirty_rect_sink([&](Rect) { ++calls; });
     desktop.activate(a);  // already active
     CK_CHECK(calls == 0);

@@ -1711,6 +1711,125 @@ CK_TEST(a_bare_cursor_restore_is_still_a_cursor_restore) {
     CK_CHECK(emulator.snapshot().keyboard_flags == ckv::term::TerminalKeyboardFlags::None);
 }
 
+CK_TEST(xtmodkeys_is_a_keyboard_option_and_not_a_malformed_colour) {
+    // `CSI > Pp ; Pv m` (XTMODKEYS) shares SGR's final byte, and a dispatcher
+    // that chose its handler from the final byte alone handed it to the SGR
+    // parser, which rejected the `>` — so every program that resets
+    // modifyOtherKeys on its way out left "malformed child SGR sequence" at
+    // the bottom of the window. The bytes here are Claude Code's own
+    // teardown, preceded by the set form vim and neovim write on the way in.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?1049h\x1b[>4;2m\x1b[1mx\x1b[<u\x1b[?1049l\x1b[>4m\x1b[>m");
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+    CK_CHECK(!emulator.snapshot().alternate_buffer);
+    // It set nothing, and it is not the reset it resembled either: the bold
+    // `x` written between the two forms kept its SGR 1.
+    emulator.feed_output("\x1b[?1049h\x1b[1m\x1b[>4;2mx");
+    CK_CHECK(has_attr(emulator.snapshot().cell_buffer[0].style().attrs, ckv::Attr::Bold));
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "x");
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+    // The positive partner, so the absence above is not the parser having
+    // stopped complaining: an SGR that is malformed still says so.
+    emulator.feed_output("\x1b[1;2 m");
+    const std::span<const ckv::term::TerminalDiagnostic> diagnostics = emulator.diagnostics();
+    CK_CHECK(diagnostics.size() == 1U);
+    if (!diagnostics.empty())
+        CK_CHECK(diagnostics.back().kind == ckv::term::TerminalDiagnostic::Kind::MalformedSequence);
+}
+
+CK_TEST(xtqmodkeys_is_answered_in_the_set_form_and_truthfully) {
+    // `CSI ? Pp m` asks after one key-modifier resource; the answer is the
+    // XTMODKEYS control that would restore it. modifyOtherKeys (4) is not
+    // implemented here, so it reads back as 0 — including right after a
+    // program has set it, which is the case the honesty is for: a program
+    // told 2 would stop expecting the legacy encoding it is about to receive.
+    // The cursor and function keys already travel in the form xterm's level 2
+    // produces, so those two read back as 2.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[?4m");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[>4;0m");
+    emulator.feed_output("\x1b[>4;2m\x1b[?4m");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[>4;0m");
+    emulator.feed_output("\x1b[?1;2m");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[>1;2m\x1b[>2;2m");
+    // A resource this terminal has no value for is answered the way xterm
+    // answers for one it lacks: named, with the value left empty.
+    emulator.feed_output("\x1b[?9m");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[>9;m");
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+
+    // A profile that answers nothing answers this nothing either.
+    ckv::term::TerminalCapabilityProfile silent = ckv::term::embedded_xterm_sixel_profile();
+    silent.query_policy = ckv::term::TerminalQueryPolicy::NoResponse;
+    ckv::term::TerminalEmulator quiet(silent);
+    quiet.feed_output("\x1b[?4m");
+    CK_CHECK(quiet.take_pending_input().empty());
+}
+
+// XTMODKEYS was one instance of a class: a marked sequence reaching the public
+// handler that merely shares its final byte, because the dispatcher chose the
+// handler from the final byte and left each one to notice a marker or not. The
+// marker is now read first. Each case below pairs the marked form with what
+// the public one would have done, so the check is that nothing happened AND
+// that the public form still does it.
+CK_TEST(xtrestore_is_not_a_scrolling_region) {
+    // `CSI ? 25 r` read as DECSTBM set a region at row 25 and sent the
+    // cursor home. Not kept here, and refused out loud: a program that
+    // saved a mode and restores it cannot tell from the bytes that it did
+    // not get it back.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[3;4H\x1b[?25r");
+    CK_CHECK(emulator.snapshot().cursor.position == (ckv::Point{3, 2}));
+    const std::span<const ckv::term::TerminalDiagnostic> diagnostics = emulator.diagnostics();
+    CK_CHECK(diagnostics.size() == 1U);
+    if (!diagnostics.empty())
+        CK_CHECK(diagnostics.back().kind == ckv::term::TerminalDiagnostic::Kind::UnsupportedSequence);
+    emulator.feed_output("\x1b[2;3r");
+    CK_CHECK(emulator.snapshot().cursor.position == (ckv::Point{0, 0}));
+}
+
+CK_TEST(xtsave_is_not_a_cursor_save) {
+    // `CSI ? 1049 s` read as SCOSC overwrote the cursor a program had saved.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[5;6H\x1b[s\x1b[1;1H\x1b[?1049s\x1b[u");
+    CK_CHECK(emulator.snapshot().cursor.position == (ckv::Point{5, 4}));
+    emulator.feed_output("\x1b[1;1H\x1b[s\x1b[5;6H\x1b[u");
+    CK_CHECK(emulator.snapshot().cursor.position == (ckv::Point{0, 0}));
+}
+
+CK_TEST(xtrmtitle_is_not_a_scroll) {
+    // `CSI > 2 T` read as SD scrolled the screen down a line.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[2J\x1b[1;1Ha\x1b[>2T");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == "a");
+    emulator.feed_output("\x1b[T");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == " ");
+    CK_CHECK(emulator.snapshot().cell_buffer[static_cast<std::size_t>(emulator.snapshot().cells.width)]
+                 .grapheme() == "a");
+}
+
+CK_TEST(decxcpr_is_answered_in_the_form_it_was_asked_in) {
+    // `CSI ? 6 n` was answered as CPR, without its marker — and a program
+    // that asked the DEC way reads only the DEC answer.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[2;3H\x1b[?6n\x1b[6n");
+    CK_CHECK(emulator.take_pending_input() == "\x1b[?2;3R\x1b[2;3R");
+}
+
+CK_TEST(a_selective_erase_is_the_ordinary_one_because_nothing_is_protected) {
+    // DECSED/DECSEL (`CSI ? Ps J/K`) ARE honoured, and through the same code
+    // as ED/EL rather than by falling into it: nothing here is ever
+    // protected, so the selective erase and the ordinary one are the same.
+    ckv::term::TerminalEmulator emulator;
+    emulator.feed_output("\x1b[2J\x1b[1;1Hab\x1b[?2J");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == " ");
+    CK_CHECK(emulator.snapshot().cell_buffer[1].grapheme() == " ");
+    emulator.feed_output("\x1b[1;1Hab\x1b[1;1H\x1b[?0K");
+    CK_CHECK(emulator.snapshot().cell_buffer[0].grapheme() == " ");
+    CK_CHECK(emulator.snapshot().cell_buffer[1].grapheme() == " ");
+    CK_CHECK(emulator.snapshot().diagnostics.empty());
+}
+
 CK_TEST(a_childs_bell_is_counted_rather_than_latched) {
     // A flag reading clears makes the first reader the only one to see the
     // bell; a flag reading does not clear cannot say a second one arrived.

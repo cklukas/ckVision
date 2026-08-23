@@ -21,20 +21,30 @@ namespace {
 // enough that holding a taskbar button down is not a wake-up per tick.
 constexpr std::int64_t kPressRetryNanos = 100'000'000;
 
-// The status icons (U4-j), and the blank between an icon and the name it
-// belongs to. Rectangles, as asked for, and each checked against ckv::text
-// before being chosen — see WindowSwitcherBar::status_glyph for why these
-// three and not the squares the request was first written with.
+// The status marks (U4-j), and the blank between a mark and the name it
+// belongs to. They are the window FRAME's own controls, drawn on the bar:
+// U+25A0 is the square a window wears in its close control, and U+005F is the
+// line it wears in its minimize control. A row therefore shows the reader the
+// same two characters the window it stands for shows, and there is one
+// vocabulary of window chrome to learn rather than two.
 //
-// They are chosen to be read as a group rather than one at a time: a filled
-// upright box is the window standing in front of the reader, the same box
-// hollow is one standing behind, and a bar along the floor is one that has
-// been put down. A theme that colours the active entry says the same thing
-// twice, which is the point — the icon is what survives a monochrome
-// terminal, and the colour is what survives a glance.
-constexpr std::string_view kActiveGlyph = "▮";     // U+25AE
-constexpr std::string_view kVisibleGlyph = "▯";    // U+25AF
-constexpr std::string_view kMinimizedGlyph = "▄";  // U+2584
+// WHICH of the two a row draws says where the window is: on the desktop, or
+// put away — flattened onto this bar by the very control the mark is copied
+// from. Which window the reader is IN is said the way the desktop itself says
+// it, in colour: Window::draw lights its controls on the active window and
+// lets them fall back to the frame's own style on every other one, and a row
+// does exactly that through Item::icon_role. Under the active row the strip
+// also draws its selected highlight, and that is what carries the answer on a
+// terminal with no colour at all.
+//
+// U+25A0 is East Asian Ambiguous, which D-019 resolves to one column here —
+// the same resolution PagedStrip's own steering triangles rest on, and the
+// same one the frame's close control has rested on since it was drawn. A host
+// resolving Ambiguous the other way widens the frame control and this mark
+// together; it cannot make the two disagree, which is the property this bar
+// now trades a third distinct shape for.
+constexpr std::string_view kOpenGlyph = "■";       // U+25A0, the frame's close control
+constexpr std::string_view kMinimizedGlyph = "_";  // U+005F, the frame's minimize control
 constexpr int kStatusGap = 1;
 
 }  // namespace
@@ -69,14 +79,17 @@ std::function<void()> WindowSwitcherTarget::bind(std::function<void(Window&)> ru
 
 std::string_view WindowSwitcherBar::status_glyph(Status status) noexcept {
     switch (status) {
-        case Status::Active:
-            return kActiveGlyph;
         case Status::Minimized:
             return kMinimizedGlyph;
+        // A window in front and a window behind it are in the same PLACE, and
+        // the mark says place. What tells them apart is the colour the row
+        // draws the mark in and the highlight underneath it — see the glyph
+        // table above, and strip_items for where the role is chosen.
+        case Status::Active:
         case Status::Visible:
             break;
     }
-    return kVisibleGlyph;
+    return kOpenGlyph;
 }
 
 WindowSwitcherBar::WindowSwitcherBar() {
@@ -382,7 +395,15 @@ std::vector<PagedStrip::Item> WindowSwitcherBar::strip_items() const {
         // one the reader is in, whatever a host's active provider says —
         // status() has already settled that, and the highlight follows it
         // rather than asking again.
-        items.push_back(Item{entry.width, std::move(text), status == Status::Active});
+        // The mark's own style, and the one place the frame's rule is
+        // copied: the ACTIVE row's mark wears the control colour, every
+        // other row lets it fall back to the row's own — which is exactly
+        // what Window::draw does with its controls, and why a desktop of
+        // windows shows one set of live controls rather than several
+        // competing for the eye.
+        items.push_back(Item{entry.width, std::move(text), status == Status::Active,
+                             text::text_width(status_glyph(status)),
+                             status == Status::Active ? control_role_ : ui::kInvalidRole});
     }
     return items;
 }
@@ -401,6 +422,13 @@ std::optional<std::size_t> WindowSwitcherBar::entry_at(Point cell) const { retur
 void WindowSwitcherBar::on_attached() {
     // Theme roles and the first item read are the strip's.
     PagedStrip::on_attached();
+    // Except one: the mark on the active row is a window CONTROL, and it is
+    // resolved from the window family's own role rather than the status
+    // line's, by the same name Window::on_attached resolves it by. A theme
+    // that retints window controls therefore retints the bar's marks with
+    // them, which is the whole point of drawing the frame's characters here.
+    if (control_role_ == ui::kInvalidRole)
+        control_role_ = context().roles->find("ckv.window.control");
     // Where a context menu goes, found the way MenuBar finds the desktop it
     // drops its own menus onto. Separate from wherever the windows come from:
     // one is a fact about where this view sits, the other is the host's model.
