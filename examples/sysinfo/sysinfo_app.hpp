@@ -13,6 +13,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,10 +25,12 @@
 
 #include "bar_chart_view.hpp"
 #include "benchmark_service.hpp"
+#include "reference_points.hpp"
 #include "system_probe.hpp"
 
 namespace ckv::widgets {
 class CheckGroup;
+class ComboBox;
 class Progress;
 class StaticText;
 class Window;
@@ -63,6 +66,7 @@ public:
     widgets::Progress* volumes_bar() const noexcept { return volumes_bar_; }
     widgets::Window* benchmarks_window() const noexcept { return benchmarks_window_; }
     widgets::CheckGroup* benchmark_picker() const noexcept { return benchmark_picker_; }
+    widgets::ComboBox* compare_picker() const noexcept { return compare_picker_; }
     widgets::Progress* benchmark_progress() const noexcept { return benchmark_progress_; }
     BarChartView* chart() const noexcept { return chart_; }
     widgets::StaticText* benchmark_footnote() const noexcept { return benchmark_footnote_; }
@@ -101,6 +105,11 @@ private:
     void start_benchmarks();
     void cancel_benchmarks();
     void update_chart();
+    // The kernel whose published reference figures are on the chart, or
+    // nothing when the reader asked for this run only.
+    std::optional<BenchmarkId> comparison_kernel() const;
+    static std::vector<std::string> comparison_choices();
+    static const BenchmarkResult* result_for(const std::vector<BenchmarkResult>& results, BenchmarkId id);
 
     void fill_system_table();
     void fill_memory_pane();
@@ -128,6 +137,7 @@ private:
 
     widgets::Window* benchmarks_window_ = nullptr;
     widgets::CheckGroup* benchmark_picker_ = nullptr;
+    widgets::ComboBox* compare_picker_ = nullptr;
     widgets::Progress* benchmark_progress_ = nullptr;
     widgets::StaticText* benchmark_note_ = nullptr;
     widgets::StaticText* benchmark_footnote_ = nullptr;

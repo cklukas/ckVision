@@ -13,6 +13,7 @@
 #include "cvision/core/key.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/progress.hpp"
 #include "cvision/widgets/static_text.hpp"
@@ -20,6 +21,7 @@
 #include "cvision/widgets/window.hpp"
 
 #include "fixed_benchmark_runner.hpp"
+#include "reference_points.hpp"
 #include "fixed_system_probe.hpp"
 #include "report_format.hpp"
 #include "sysinfo_app.hpp"
@@ -286,11 +288,17 @@ CK_TEST(the_run_before_this_one_stays_on_the_chart_to_be_compared_against) {
     f.run_benchmarks();
 
     CK_CHECK(f.sysinfo.previous_results().size() == kernels);
-    CK_CHECK(f.sysinfo.chart()->bars().size() == kernels * 2);
-    // The newest run leads and is the row the eye is sent to.
-    CK_CHECK(f.sysinfo.chart()->bars().front().highlighted);
-    CK_CHECK(!f.sysinfo.chart()->bars().back().highlighted);
-    CK_CHECK(f.sysinfo.chart()->bars().back().label.find("(previous)") != std::string::npos);
+    const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.chart()->bars();
+    CK_CHECK(bars.size() == kernels * 2);
+    // Each metric's group holds this run and the one before it, in that
+    // order, with the newest the row the eye is sent to.
+    for (std::size_t index = 0; index + 1 < bars.size(); index += 2) {
+        CK_CHECK(bars[index].group == bars[index + 1].group);
+        CK_CHECK(bars[index].label.rfind("This computer", 0) == 0);
+        CK_CHECK(bars[index].highlighted);
+        CK_CHECK(bars[index + 1].label.rfind("Previous run", 0) == 0);
+        CK_CHECK(!bars[index + 1].highlighted);
+    }
 }
 
 CK_TEST(a_pane_the_reader_did_not_ask_for_is_not_measured) {
@@ -325,4 +333,54 @@ CK_TEST(cancelling_a_run_leaves_the_application_running_and_the_chart_honest) {
     f.tick();
     CK_CHECK(f.sysinfo.system_window() != nullptr);
     CK_CHECK(f.sysinfo.refresh_count() > 0);
+}
+
+CK_TEST(a_comparison_adds_published_bars_to_one_chart_and_marks_them_as_published) {
+    Fixture f;
+    f.run_benchmarks();
+    // "this run only" is the default: nothing on the chart that this
+    // program did not measure.
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+        CK_CHECK(bar.kind == ckv::sysinfo::BarKind::Measured);
+    CK_CHECK(f.sysinfo.chart()->legend().empty());
+
+    // Ask for the memory comparison, and only that group grows.
+    ckv::widgets::ComboBox* const compare = f.sysinfo.compare_picker();
+    CK_CHECK(compare != nullptr);
+    std::size_t memory_choice = 0;
+    for (std::size_t index = 0; index < compare->items().size(); ++index)
+        if (compare->items()[index].find("Memory") != std::string::npos) memory_choice = index;
+    CK_CHECK(memory_choice != 0);
+    compare->set_selected_index(memory_choice);
+    if (compare->on_select) compare->on_select(memory_choice);
+
+    const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.chart()->bars();
+    std::size_t references = 0;
+    for (const ckv::sysinfo::ChartBar& bar : bars) {
+        if (bar.kind != ckv::sysinfo::BarKind::Reference) continue;
+        ++references;
+        // A published bar sits in the group of the metric it is published
+        // for, and nowhere else.
+        CK_CHECK(bar.group.find("Memory") != std::string::npos);
+    }
+    CK_CHECK(references == ckv::sysinfo::reference_points_for(ckv::sysinfo::BenchmarkId::MemoryBandwidth).size());
+    // And the legend appears only once there are two kinds of ink to tell
+    // apart.
+    CK_CHECK(f.sysinfo.chart()->legend().find("published ceiling") != std::string::npos);
+}
+
+CK_TEST(a_comparison_can_be_asked_for_before_anything_has_been_measured) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    ckv::widgets::ComboBox* const compare = f.sysinfo.compare_picker();
+    compare->set_selected_index(1);
+    if (compare->on_select) compare->on_select(1);
+    f.app.step(0);
+
+    // The comparison stands on its own: the reader can see what the
+    // published figures are before deciding to spend a second measuring.
+    CK_CHECK(!f.sysinfo.chart()->bars().empty());
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
+        CK_CHECK(bar.kind == ckv::sysinfo::BarKind::Reference);
 }

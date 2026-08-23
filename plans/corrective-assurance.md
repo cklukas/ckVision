@@ -80,11 +80,13 @@ dependent row's package prerequisite; `Blocked` does not.
 | 31 | WP-49 — Terminal example, documentation, and end-to-end acceptance | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-48 | Client proof point; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 32 | WP-51 — SysInfo probe boundary and machine report panes | 1–2 pw | **Implementation complete — Mac and Linux gates passed** | WP-49 | Example coverage: a second injected platform service; [SysInfo plan](sysinfo-example.md) |
 | 33 | WP-52 — Bar chart view, benchmark kernels, and the threaded run | 1–2 pw | **Implementation complete — Mac current-host gate passed** | WP-51 | Example coverage: comparative visualization and cancellable background work; [SysInfo plan](sysinfo-example.md) |
-| 34 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | Ready | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
-| 35 | WP-54 — SysInfo report export, help, and documentation | 1 pw | Blocked | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
-| 36 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 37 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 38 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 34 | WP-55 — Comparison bars from published figures | 0.5–1 pw | **Implementation complete — Mac current-host gate passed** | WP-52 | Example coverage: a score against something, without a fabricated bar; [SysInfo plan](sysinfo-example.md) |
+| 35 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | Ready | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
+| 36 | WP-54 — SysInfo report export, help, and documentation | 1 pw | Blocked | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
+| 37 | WP-56 — Storage throughput and its interface ceilings | 0.5–1 pw | Blocked | WP-54 | Example coverage: the disk question, measured and compared; [SysInfo plan](sysinfo-example.md) |
+| 38 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 39 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 40 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2334,6 +2336,47 @@ cancellable background work that fills it.
 - Cancel is proven deterministically, not by timing.
 - The chart states its scale, and every bar on it was measured by this program
   on this machine.
+
+### WP-55 — Comparison bars from published figures
+
+**Purpose.** Give a measured score something to be a score against, the way
+the classic tools' tables of other computers did, without presenting a bar
+this program never measured as a measurement. Stated in full in
+[sysinfo-example.md](sysinfo-example.md).
+
+**Work.**
+
+- A reference table whose rows each carry a rate, the arithmetic that
+  produced it, and the standard it came from.
+- Reference bars drawn in a different character from measured ones, legended
+  only when both kinds are present.
+- A chart grouped by metric, each group normalized to its own longest bar.
+- A picker choosing which metric gets its comparison.
+
+**Acceptance.**
+
+- A test redoes each row's arithmetic instead of pinning its number.
+- A kernel with no published figure has no comparison bars at all.
+- Reference bars appear only in their own metric's group.
+
+### WP-56 — Storage throughput and its interface ceilings
+
+**Purpose.** The disk question the classic tools answered, and the interface
+ceilings that make its answer legible.
+
+**Work.**
+
+- A sequential write-then-read kernel over a file in a reader-chosen
+  directory, sized and flushed to measure the device rather than the cache,
+  opt-in because it writes to their machine.
+- Interface reference rows with the arithmetic that produced each ceiling.
+
+**Acceptance.**
+
+- The benchmark writes only where it was told, removes what it wrote, and
+  says how much it will write first.
+- Cache defeat is stated in the source, including what it does not guarantee.
+- No test writes to the machine running it.
 
 ### WP-53 — Cache hierarchy, multicore scaling, and host capabilities
 

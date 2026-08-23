@@ -29,8 +29,14 @@ constexpr std::string_view kPartialBlocks[] = {
     "\xE2\x96\x89",      // U+2589
 };
 
+// A published ceiling, in ink nobody mistakes for a measurement.
+constexpr std::string_view kShadeBlock = "\xE2\x96\x92";  // U+2592 MEDIUM SHADE
+
 constexpr int kLabelColumnMinimum = 8;
-constexpr int kLabelColumnMaximum = 22;
+constexpr int kLabelColumnMaximum = 24;
+
+// Grouped rows are indented under their heading.
+constexpr std::string_view kGroupIndent = "  ";
 
 std::string padded_right(const std::string& text, int width) {
     const std::string clipped = text::clip_to_width(text, width);
@@ -46,13 +52,23 @@ std::string padded_left(const std::string& text, int width) {
 
 }  // namespace
 
-std::string bar_text(double value, double maximum, int width) {
+std::string bar_text(double value, double maximum, int width, BarKind kind) {
     if (width <= 0 || !std::isfinite(value) || !std::isfinite(maximum) || maximum <= 0.0 || value <= 0.0)
         return std::string();
     // Clamped rather than scaled: a value past the maximum is a caller's
     // mistake about its own scale, and a bar that ran past its axis would
     // hide it.
     const double share = std::min(1.0, value / maximum);
+    if (kind == BarKind::Reference) {
+        // Whole cells only: a figure computed from a standard is exact to
+        // the standard and to nothing finer, and eighths of a cell would
+        // dress it up as a measurement.
+        const int cells = std::max(1, static_cast<int>(std::llround(share * static_cast<double>(width))));
+        std::string bar;
+        for (int cell = 0; cell < std::min(width, cells); ++cell) bar += kShadeBlock;
+        return bar;
+    }
+
     const int eighths = static_cast<int>(std::llround(share * static_cast<double>(width) * 8.0));
     // A measured value that rounds to nothing still gets its eighth: a bar
     // of zero cells says "not measured", which is a different claim.
@@ -85,6 +101,12 @@ void BarChartView::set_caption(std::string caption) {
     invalidate();
 }
 
+void BarChartView::set_legend(std::string legend) {
+    if (legend_ == legend) return;
+    legend_ = std::move(legend);
+    invalidate();
+}
+
 void BarChartView::set_placeholder(std::string text) {
     placeholder_ = std::move(text);
     invalidate();
@@ -92,8 +114,9 @@ void BarChartView::set_placeholder(std::string text) {
 
 BarChartView::Layout BarChartView::layout_for(int width) const {
     Layout layout;
+    const int indent = has_groups() ? text::text_width(std::string(kGroupIndent)) : 0;
     for (const ChartBar& bar : bars_) {
-        layout.label_width = std::max(layout.label_width, text::text_width(bar.label));
+        layout.label_width = std::max(layout.label_width, text::text_width(bar.label) + indent);
         layout.value_width = std::max(layout.value_width, text::text_width(bar.value_text));
     }
     layout.label_width = std::clamp(layout.label_width, kLabelColumnMinimum, kLabelColumnMaximum);
@@ -110,9 +133,10 @@ BarChartView::Layout BarChartView::layout_for(int width) const {
 }
 
 std::string BarChartView::row_text(const ChartBar& bar, const Layout& layout, double maximum) const {
-    const std::string drawn = bar_text(bar.value, maximum, layout.bar_width);
+    const std::string drawn = bar_text(bar.value, maximum, layout.bar_width, bar.kind);
     const int used = text::text_width(drawn);
-    return padded_right(bar.label, layout.label_width) + " " + drawn +
+    const std::string label = has_groups() ? std::string(kGroupIndent) + bar.label : bar.label;
+    return padded_right(label, layout.label_width) + " " + drawn +
            std::string(static_cast<std::size_t>(std::max(0, layout.bar_width - used)), ' ') + " " +
            padded_left(bar.value_text, layout.value_width);
 }
@@ -126,18 +150,36 @@ std::vector<std::string> BarChartView::text_rows() const {
         return rows;
     }
 
-    double maximum = 0.0;
-    for (const ChartBar& bar : bars_)
-        if (std::isfinite(bar.value)) maximum = std::max(maximum, bar.value);
-    // Every bar at zero would divide by nothing; they are all drawn empty,
-    // which is exactly what they measured.
-    if (maximum <= 0.0) maximum = 1.0;
-
     const Layout layout = layout_for(width);
-    rows.reserve(bars_.size() + 1);
-    for (const ChartBar& bar : bars_) rows.push_back(row_text(bar, layout, maximum));
+    rows.reserve(bars_.size() + 3);
+    std::size_t index = 0;
+    while (index < bars_.size()) {
+        // One group at a time, each normalized to its own longest bar. A
+        // group's heading is emitted from the group name rather than by the
+        // caller, so a chart cannot show a heading over the wrong bars.
+        const std::string& group = bars_[index].group;
+        std::size_t end = index;
+        double maximum = 0.0;
+        while (end < bars_.size() && bars_[end].group == group) {
+            if (std::isfinite(bars_[end].value)) maximum = std::max(maximum, bars_[end].value);
+            ++end;
+        }
+        // Every bar in the group at zero would divide by nothing; they are
+        // all drawn empty, which is exactly what they measured.
+        if (maximum <= 0.0) maximum = 1.0;
+        if (!group.empty()) rows.push_back(text::clip_to_width(group, width));
+        for (std::size_t row = index; row < end; ++row) rows.push_back(row_text(bars_[row], layout, maximum));
+        index = end;
+    }
+    if (!legend_.empty()) rows.push_back(text::clip_to_width(legend_, width));
     if (!caption_.empty()) rows.push_back(text::clip_to_width(caption_, width));
     return rows;
+}
+
+bool BarChartView::has_groups() const noexcept {
+    for (const ChartBar& bar : bars_)
+        if (!bar.group.empty()) return true;
+    return false;
 }
 
 void BarChartView::draw(scene::Painter& painter) {
@@ -149,11 +191,36 @@ void BarChartView::draw(scene::Painter& painter) {
     const Style highlight = context().theme->resolve(highlight_role_);
     painter.fill(Rect{0, 0, width, height}, Cell::from_grapheme(" ", normal));
 
+    // Which rows are highlighted is decided from the bars, not from the row
+    // index: the group headings between them mean the two no longer line up.
+    std::vector<bool> row_highlighted;
+    row_highlighted.reserve(bars_.size() + 3);
+    std::size_t index = 0;
+    while (index < bars_.size()) {
+        const std::string& group = bars_[index].group;
+        if (!group.empty()) row_highlighted.push_back(false);
+        while (index < bars_.size() && bars_[index].group == group) {
+            row_highlighted.push_back(bars_[index].highlighted);
+            ++index;
+        }
+    }
+
     const std::vector<std::string> rows = text_rows();
     for (int row = 0; row < height && static_cast<std::size_t>(row) < rows.size(); ++row) {
-        const bool is_bar = static_cast<std::size_t>(row) < bars_.size();
-        const Style style = is_bar && bars_[static_cast<std::size_t>(row)].highlighted ? highlight : normal;
-        painter.draw_text(Point{0, row}, rows[static_cast<std::size_t>(row)], style);
+        const std::size_t at = static_cast<std::size_t>(row);
+        // A chart with more rows than box says how many it could not draw.
+        // Silently stopping at the bottom edge is how a reader comes to
+        // believe they have seen the whole comparison.
+        if (row == height - 1 && rows.size() > static_cast<std::size_t>(height)) {
+            const std::size_t hidden = rows.size() - static_cast<std::size_t>(height) + 1;
+            painter.draw_text(Point{0, row},
+                              text::clip_to_width("... " + std::to_string(hidden) + " more rows - resize or zoom",
+                                                  width),
+                              normal);
+            break;
+        }
+        const Style style = at < row_highlighted.size() && row_highlighted[at] ? highlight : normal;
+        painter.draw_text(Point{0, row}, rows[at], style);
     }
 }
 
@@ -164,9 +231,19 @@ ui::SizeHint BarChartView::horizontal_size_hint() const {
 }
 
 ui::SizeHint BarChartView::vertical_size_hint() const {
-    const int rows = static_cast<int>(bars_.size()) + (caption_.empty() ? 0 : 1);
-    const int wanted = std::max(1, rows);
-    return ui::SizeHint{1, wanted, ui::kUnboundedExtent};
+    // Counted from the bars rather than from text_rows(), which needs a
+    // width -- and a size hint asked for before the first layout has none.
+    int rows = static_cast<int>(bars_.size());
+    std::string previous;
+    bool first = true;
+    for (const ChartBar& bar : bars_) {
+        if (!bar.group.empty() && (first || bar.group != previous)) ++rows;
+        previous = bar.group;
+        first = false;
+    }
+    if (!legend_.empty()) ++rows;
+    if (!caption_.empty()) ++rows;
+    return ui::SizeHint{1, std::max(1, rows), ui::kUnboundedExtent};
 }
 
 }  // namespace ckv::sysinfo

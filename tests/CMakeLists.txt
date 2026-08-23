@@ -49,7 +49,6 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_menu.cpp
     test_memo.cpp
     test_message_box.cpp
-    test_minimized_window_stub.cpp
     test_mnemonic.cpp
     test_option_group.cpp
     test_paged_strip.cpp
@@ -233,9 +232,9 @@ endif()
 
 if(TARGET sysinfo_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_benchmark.cpp test_sysinfo_chart.cpp
-        test_sysinfo_format.cpp test_sysinfo_smoke.cpp)
+        test_sysinfo_format.cpp test_sysinfo_reference_points.cpp test_sysinfo_smoke.cpp)
     target_sources(cvision_tests PRIVATE test_sysinfo_benchmark.cpp test_sysinfo_chart.cpp
-        test_sysinfo_format.cpp test_sysinfo_smoke.cpp)
+        test_sysinfo_format.cpp test_sysinfo_reference_points.cpp test_sysinfo_smoke.cpp)
     target_link_libraries(cvision_tests PRIVATE sysinfo_app)
 endif()
 

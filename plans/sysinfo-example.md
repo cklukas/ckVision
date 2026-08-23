@@ -158,6 +158,57 @@ report only a terminal framework can produce.
   threads than the probe offered.
 - Both chart paths render the same data set, and a capture exists for each.
 
+### WP-55 — Comparison bars from published figures
+
+**Purpose.** Give a score something to be a score *against*, which is what
+the tools this example takes its shape from did with a table of other
+computers — without presenting a bar this program never measured as a
+measurement.
+
+**Work.**
+
+- Add a reference table: for each kernel, rows carrying a rate, the
+  arithmetic that produced it, and the standard it came from. Memory rows are
+  a generation's headline transfer rate times the eight bytes of a 64-bit
+  channel; processor rows are a vector unit's double-precision throughput per
+  cycle times a clock.
+- Draw a reference bar in a different character from a measured one, and
+  legend the difference only when both are on the chart.
+- Group the chart by metric, each group normalized to its own longest bar and
+  headed by its name, so a bandwidth is never drawn against a floating-point
+  rate.
+- Let the reader choose which metric gets its comparison, one at a time.
+
+**Acceptance.**
+
+- Every reference row states its arithmetic and its source, and a test redoes
+  the arithmetic rather than pinning the number.
+- A kernel with no published figure — this program's own integer mix — has no
+  comparison bars at all rather than an invented one.
+- Reference bars appear only in the group of the metric they belong to, and
+  the legend appears only when the chart carries both kinds.
+
+### WP-56 — Storage throughput and its interface ceilings
+
+**Purpose.** The third question the classic tools answered — how fast is the
+disk — and the comparison bars that make its answer legible.
+
+**Work.**
+
+- Add a sequential write-then-read kernel over a file in a directory the
+  reader chooses, sized and flushed so it measures the device rather than the
+  page cache, and explicitly opt-in because it writes to their machine.
+- Add the interface reference rows: the ceilings of the buses a device is
+  attached through, each with the arithmetic that produced it.
+
+**Acceptance.**
+
+- The benchmark writes only where the reader asked it to, removes what it
+  wrote, and says how much it will write before it starts.
+- Cache defeat is stated in the source: what was done, and what it does not
+  guarantee.
+- No test writes to the machine running it.
+
 ### WP-54 — Report export, help, and documentation
 
 **Purpose.** Make the example's output leave the program, and make the program
@@ -194,17 +245,6 @@ teachable.
   user's machine, and a meaningful result needs cache defeat that differs per
   platform and filesystem. It is a candidate for a later package, not part of
   this one.
-- **Reference bars, in this package.** The tools this example takes its shape
-  from drew your computer against a fixed table — an XT at 1.0, a 386 at 34.7.
-  Those bars are worth having, and WP-55 adds them, under one rule that keeps
-  them honest: a bar this program did not measure must not be presented as a
-  measurement. What a reference row may carry is a published figure or one
-  computed from a published standard — a memory generation's peak transfer
-  rate, an interface's ceiling, a core's peak floating-point throughput — with
-  its provenance stated and its status marked on the chart. What this package
-  ships is the comparison that needs no outside source: kernel against kernel
-  on one stated scale, and this run against the last one.
-
 - **A library chart widget.** If the chart proves generally useful, promoting
   it into `include/cvision/widgets` is a DECISIONS.md matter with its own
   catalog, golden and documentation obligations.

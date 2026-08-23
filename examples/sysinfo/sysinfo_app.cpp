@@ -11,6 +11,7 @@
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -229,46 +230,43 @@ void SysInfoApp::open_benchmarks_window() {
         return;
     }
     auto window = std::make_unique<widgets::Window>("Benchmarks");
-    // Tall enough on an 80x24 terminal for the picker, the controls, the
-    // chart with one bar per kernel, and the footnote under it -- the
-    // whole point of the window is that all four are visible at once.
-    window->set_bounds(Rect{4, 1, 68, 21});
-    window->set_min_size(Size{40, 12});
+    // The chart is the window: it is given whatever height the desktop can
+    // spare, because a comparison the reader has to scroll is a comparison
+    // they cannot make.
+    const Rect available = desktop_->content_area();
+    const int height = std::clamp(available.height, 12, 26);
+    window->set_bounds(Rect{2, available.y, std::min(available.width - 4, 72), height});
+    window->set_min_size(Size{44, 12});
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
 
     auto column = std::make_unique<ui::Column>();
-    column->set_spacing(1);
 
     std::vector<std::string> labels;
     for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
         labels.emplace_back(descriptor.title);
     auto picker = std::make_unique<widgets::CheckGroup>(std::move(labels));
-    picker->set_group_label("Measure");
+    picker->set_group_label("Measure  (F9 runs, Esc cancels)");
     for (std::size_t index = 0; index < benchmark_catalogue().size(); ++index) picker->set_checked(index, true);
     benchmark_picker_ = picker.get();
     column->add_item(std::move(picker), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
-    auto buttons = std::make_unique<ui::Row>();
-    buttons->set_spacing(2);
-    auto run = std::make_unique<widgets::Button>("&Run");
-    run->on_press = [this] { start_benchmarks(); };
-    auto stop = std::make_unique<widgets::Button>("&Cancel");
-    stop->on_press = [this] { cancel_benchmarks(); };
-    buttons->add_item(std::move(run), ui::LayoutSpec{ui::SizePolicy::Fixed});
-    buttons->add_item(std::move(stop), ui::LayoutSpec{ui::SizePolicy::Fixed});
-    column->add_item(std::move(buttons), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    // Which metric gets its comparison bars. One at a time on purpose: six
+    // reference rows for each of three kernels is a screen of numbers
+    // nobody reads, and the question a reader has is about one of them.
+    auto compare = std::make_unique<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
+    compare->set_items(comparison_choices());
+    compare->set_selected_index(0);
+    compare->on_select = [this](std::size_t) { update_chart(); };
+    compare_picker_ = compare.get();
+    column->add_item(std::move(compare), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
     auto progress = std::make_unique<widgets::Progress>();
     progress->set_label("idle");
     benchmark_progress_ = progress.get();
     column->add_item(std::move(progress), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
-    auto note = std::make_unique<widgets::StaticText>("Nothing measured yet.");
-    benchmark_note_ = note.get();
-    column->add_item(std::move(note), ui::LayoutSpec{ui::SizePolicy::Fixed});
-
     auto chart = std::make_unique<BarChartView>();
-    chart->set_placeholder("No measurements yet - press Run.");
+    chart->set_placeholder("No measurements yet - press F9 to run.");
     chart_ = chart.get();
     column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Expanding});
 
@@ -298,8 +296,8 @@ void SysInfoApp::open_benchmarks_window() {
         cancel_benchmarks();
         benchmarks_window_ = nullptr;
         benchmark_picker_ = nullptr;
+        compare_picker_ = nullptr;
         benchmark_progress_ = nullptr;
-        benchmark_note_ = nullptr;
         benchmark_footnote_ = nullptr;
         chart_ = nullptr;
         widgets::schedule_self_detach(*opened, app_);
@@ -307,6 +305,29 @@ void SysInfoApp::open_benchmarks_window() {
     benchmarks_window_ = desktop_->add_window(std::move(window));
     update_chart();
     app_.set_focus(benchmark_picker_);
+}
+
+// The comparison picker's items: no comparison, then every kernel this
+// program has published reference figures for.
+std::vector<std::string> SysInfoApp::comparison_choices() {
+    std::vector<std::string> choices{"Compare with: this run only"};
+    for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
+        if (!reference_points_for(descriptor.id).empty())
+            choices.push_back("Compare with: " + std::string(descriptor.title) + " references");
+    return choices;
+}
+
+std::optional<BenchmarkId> SysInfoApp::comparison_kernel() const {
+    if (compare_picker_ == nullptr) return std::nullopt;
+    const std::optional<std::size_t> selected = compare_picker_->selected_index();
+    if (!selected.has_value() || *selected == 0) return std::nullopt;
+    std::size_t offset = 1;
+    for (const BenchmarkDescriptor& descriptor : benchmark_catalogue()) {
+        if (reference_points_for(descriptor.id).empty()) continue;
+        if (offset == *selected) return descriptor.id;
+        ++offset;
+    }
+    return std::nullopt;
 }
 
 void SysInfoApp::start_benchmarks() {
@@ -361,22 +382,53 @@ void SysInfoApp::cancel_benchmarks() { benchmarks_.cancel(); }
 
 void SysInfoApp::update_chart() {
     if (chart_ == nullptr) return;
-    // Every bar on this chart was measured by this build, so every bar
-    // carries the build's mark -- an asterisk the footnote answers, or
-    // nothing at all when the build is one whose speed means something.
+    // Every measured bar carries the build's mark -- an asterisk the
+    // footnote answers, or nothing at all when the build is one whose speed
+    // means something.
     const std::string marker = measured_bar_marker(probe_.build());
+    const std::optional<BenchmarkId> compared = comparison_kernel();
+
     std::vector<ChartBar> bars;
-    bars.reserve(current_results_.size() + previous_results_.size());
-    for (const BenchmarkResult& result : current_results_)
-        bars.push_back(
-            ChartBar{std::string(describe(result.id).title) + marker, result.index_text, result.index, true});
-    for (const BenchmarkResult& result : previous_results_)
-        bars.push_back(ChartBar{std::string(describe(result.id).title) + marker + " (previous)",
-                                result.index_text, result.index, false});
+    bool any_reference = false;
+    for (const BenchmarkDescriptor& descriptor : benchmark_catalogue()) {
+        const BenchmarkResult* const current = result_for(current_results_, descriptor.id);
+        const BenchmarkResult* const previous = result_for(previous_results_, descriptor.id);
+        const bool comparing = compared.has_value() && *compared == descriptor.id;
+        if (current == nullptr && previous == nullptr && !comparing) continue;
+
+        // Each metric is its own chart: bars are drawn against the longest
+        // bar in their own group and against nothing else.
+        const std::string group = std::string(descriptor.title) + " - index";
+        if (current != nullptr)
+            bars.push_back(ChartBar{group, "This computer" + marker, current->index_text, current->index,
+                                    BarKind::Measured, true});
+        if (previous != nullptr)
+            bars.push_back(ChartBar{group, "Previous run" + marker, previous->index_text, previous->index,
+                                    BarKind::Measured, false});
+        if (!comparing) continue;
+        for (const ReferencePoint& point : reference_points_for(descriptor.id)) {
+            const double index = point.rate / unit_rate(descriptor.id);
+            bars.push_back(ChartBar{group, std::string(point.label), format_decimal(index, 1), index,
+                                    BarKind::Reference, false});
+            any_reference = true;
+        }
+    }
     chart_->set_bars(std::move(bars));
+    // Which ink means what. Only while both kinds are on the chart: a
+    // legend for bars that are not there teaches a distinction the reader
+    // cannot see.
+    chart_->set_legend(any_reference ? "\xE2\x96\x88 measured here   \xE2\x96\x92 published ceiling, "
+                                       "not a measurement"
+                                     : "");
     // The scale, spelled out under the chart, because an index whose
     // definition is somewhere else is a number nobody can check.
     chart_->set_caption("index scale: 10 M steps/s, 100 MFLOPS or 1 GB/s = 1.0");
+}
+
+const BenchmarkResult* SysInfoApp::result_for(const std::vector<BenchmarkResult>& results, BenchmarkId id) {
+    for (const BenchmarkResult& result : results)
+        if (result.id == id) return &result;
+    return nullptr;
 }
 
 void SysInfoApp::refresh() {

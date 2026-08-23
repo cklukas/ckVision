@@ -176,6 +176,7 @@ add_library(sysinfo_app STATIC
     sysinfo/build_report.cpp
     sysinfo/fixed_benchmark_runner.cpp
     sysinfo/fixed_system_probe.cpp
+    sysinfo/reference_points.cpp
     sysinfo/report_format.cpp
     sysinfo/sysinfo_app.cpp)
 target_link_libraries(sysinfo_app PRIVATE ckvision::cvision)
