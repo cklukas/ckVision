@@ -14,6 +14,7 @@
 #include <string>
 
 #include "cvision/core/frame_view.hpp"
+#include "cvision/core/geometry.hpp"
 #include "cvision/term/virtual_display.hpp"
 
 namespace ckv::docgen {
@@ -22,6 +23,16 @@ struct FrameSvgOptions {
     int cell_width_px = 9;
     int cell_height_px = 18;
     std::string font_family = "ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace";
+
+    // The cell rectangle to emit — a cut-out of the screen the
+    // application actually composed, for a widget-sized figure that
+    // still shows real chrome around the control instead of a widget
+    // rendered alone in a terminal the size of itself. An empty rect
+    // (the default) renders the whole surface, so every existing
+    // caller keeps its full-screen capture. The rect is clamped to the
+    // surface; a crop that falls entirely outside it renders the whole
+    // surface rather than an empty image.
+    Rect crop{};
 };
 
 // Renders every cell of `frame` as a background rect plus (for
