@@ -58,6 +58,7 @@ public:
     static constexpr std::string_view kSystemWindowKey = "sysinfo.system-window";
     static constexpr std::string_view kMemoryWindowKey = "sysinfo.memory-window";
     static constexpr std::string_view kVolumesWindowKey = "sysinfo.volumes-window";
+    static constexpr std::string_view kShowAllMountsKey = "sysinfo.show-all-mounts";
     static constexpr std::string_view kRefreshKey = "sysinfo.refresh";
     static constexpr std::string_view kTerminalWindowKey = "sysinfo.terminal-window";
     static constexpr std::string_view kLatencyPlotKey = "sysinfo.latency-plot";
@@ -76,6 +77,9 @@ public:
     widgets::Progress* memory_bar() const noexcept { return memory_bar_; }
     widgets::Window* volumes_window() const noexcept { return volumes_window_; }
     widgets::Table* volumes_table() const noexcept { return volumes_table_; }
+    bool showing_all_mounts() const noexcept { return show_all_mounts_; }
+    // How many mount points the pane is currently not showing.
+    int hidden_mount_count() const noexcept { return hidden_mounts_; }
     widgets::Progress* volumes_bar() const noexcept { return volumes_bar_; }
     widgets::Window* latency_plot_window() const noexcept { return latency_plot_window_; }
     widgets::Canvas* latency_canvas() const noexcept { return latency_canvas_; }
@@ -105,6 +109,11 @@ public:
     std::string report_text(ReportFormat format) const;
     // The path of the last report written, for a test to read back.
     const std::string& last_saved_report() const noexcept { return last_saved_report_; }
+    const std::string& scratch_directory() const noexcept { return scratch_directory_; }
+    // Where the disk kernel may write. Normally set by the reader's own
+    // answer in the directory picker; a host that already knows where its
+    // scratch space is may set it up front, and a test may too.
+    void set_scratch_directory(std::string path) { scratch_directory_ = std::move(path); }
 
     // Writes `format` to `path` through the injected filesystem, without a
     // dialog. The dialog path calls this; a test can too.
@@ -132,6 +141,8 @@ private:
     void refill(widgets::Table& table, widgets::TableRowId cursor,
                 std::vector<std::vector<std::string>> rows);
 
+    RunOptions run_options() const;
+    void ask_for_scratch_directory();
     void save_report_with_dialog(ReportFormat format);
     void install_help();
 
@@ -156,6 +167,7 @@ private:
     void fill_memory_pane();
     void fill_volumes_table();
     void show_volume_usage(std::size_t row);
+    void set_show_all_mounts(bool show);
 
     ui::Application& app_;
     const SystemProbe& probe_;
@@ -163,6 +175,10 @@ private:
     std::string report_directory_;
     widgets::MemoryHelpProvider help_;
     std::string last_saved_report_;
+    // Where the disk kernel has been given permission to write. Empty
+    // until the reader says otherwise, and this program never fills it in
+    // on their behalf.
+    std::string scratch_directory_;
     ui::StandardRoles roles_;
 
     widgets::Desktop* desktop_ = nullptr;
@@ -174,6 +190,9 @@ private:
     widgets::Window* volumes_window_ = nullptr;
     widgets::Table* volumes_table_ = nullptr;
     widgets::Progress* volumes_bar_ = nullptr;
+    widgets::CheckGroup* mount_filter_ = nullptr;
+    bool show_all_mounts_ = false;
+    int hidden_mounts_ = 0;
 
     // The row each pane's cursor is on, by the identity Table handed out.
     widgets::TableRowId system_cursor_ = widgets::kInvalidTableRowId;

@@ -39,9 +39,14 @@ FixedSystemProbe::FixedSystemProbe() {
 
     volume_reports = {
         VolumeReport{"/", std::string("/dev/demo0s1"), std::string("demofs"),
-                     512ULL * 1024 * 1024 * 1024, 128ULL * 1024 * 1024 * 1024, false},
+                     512ULL * 1024 * 1024 * 1024, 128ULL * 1024 * 1024 * 1024, false, false},
         VolumeReport{"/Volumes/Archive", std::string("/dev/demo1s1"), std::string("demofs"),
-                     2048ULL * 1024 * 1024 * 1024, 96ULL * 1024 * 1024 * 1024, true},
+                     2048ULL * 1024 * 1024 * 1024, 96ULL * 1024 * 1024 * 1024, true, false},
+        // One of the operating system's own, so the fixture demonstrates
+        // the pane's default and its "show all" the way a real machine
+        // does -- a real one has a dozen of these.
+        VolumeReport{"/System/Volumes/Preboot", std::string("/dev/demo0s2"), std::string("demofs"),
+                     512ULL * 1024 * 1024 * 1024, 128ULL * 1024 * 1024 * 1024, false, true},
     };
 
     power_report.source = PowerReport::Source::Battery;

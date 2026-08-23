@@ -50,6 +50,11 @@ struct Fixture {
     ckv::MemoryFileSystem files;
     SysInfoApp sysinfo{app, probe, runner, files, "/"};
 
+    // The disk kernel's question is answered up front, so every test here
+    // measures rather than waiting on a dialog. The one test about that
+    // question clears it again.
+    Fixture() { sysinfo.set_scratch_directory("/scratch"); }
+
     // By key, the way the menu asks for it: a command's numeric id is the
     // registry's business and a test that knew one would be asserting
     // about the registry instead of about this application.
@@ -66,7 +71,9 @@ struct Fixture {
     }
 
     // A benchmark run, start to finish, with the worker's posted results
-    // delivered on this thread the way step() delivers them.
+    // delivered on this thread the way step() delivers them. The scratch
+    // directory is answered up front; the test below covers what happens
+    // when it has not been.
     void run_benchmarks() {
         run_command(SysInfoApp::kRunBenchmarksKey);
         sysinfo.benchmarks().wait_until_idle();
@@ -211,6 +218,51 @@ CK_TEST(the_memory_bar_states_the_same_two_figures_its_table_lists) {
     CK_CHECK(value_of(rows, "Swap used") == "512.0 MiB");
 }
 
+// A machine has a dozen mount points that are the operating system's own
+// bookkeeping. A reader asking what disks they have means none of them --
+// but hiding something silently is its own defect, so the count is on the
+// window and the whole list is one keystroke away.
+CK_TEST(the_disk_pane_shows_disks_and_says_how_many_it_is_not_showing) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kVolumesWindowKey));
+    f.app.step(0);
+
+    CK_CHECK(!f.sysinfo.showing_all_mounts());
+    CK_CHECK(f.sysinfo.hidden_mount_count() == 1);
+    CK_CHECK(f.sysinfo.volumes_table()->row_count() == 2);
+    CK_CHECK(f.sysinfo.volumes_window()->footer() == "1 system mount points hidden");
+
+    const std::string hidden(f.term.written_bytes());
+    CK_CHECK(hidden.find("/System/Volumes/") == std::string::npos);
+
+    CK_CHECK(f.run_command(SysInfoApp::kShowAllMountsKey));
+    f.app.step(0);
+    CK_CHECK(f.sysinfo.showing_all_mounts());
+    CK_CHECK(f.sysinfo.hidden_mount_count() == 0);
+    CK_CHECK(f.sysinfo.volumes_table()->row_count() == 3);
+    CK_CHECK(f.sysinfo.volumes_window()->footer().empty());
+    // What reaches the screen is the mount column's 22 cells of it, so the
+    // positive check is for what is actually drawn rather than for a path
+    // the column has no room to finish.
+    const std::string shown(f.term.written_bytes());
+    CK_CHECK(shown.find("/System/Volumes/") != std::string::npos);
+
+    // And the checkbox in the window says the same thing the command did.
+    CK_CHECK(f.sysinfo.volumes_window() != nullptr);
+    CK_CHECK(f.run_command(SysInfoApp::kShowAllMountsKey));
+    CK_CHECK(!f.sysinfo.showing_all_mounts());
+    CK_CHECK(f.sysinfo.hidden_mount_count() == 1);
+}
+
+CK_TEST(a_refresh_does_not_bring_hidden_mount_points_back) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kVolumesWindowKey));
+    f.app.step(0);
+    f.tick();
+    CK_CHECK(f.sysinfo.volumes_table()->row_count() == 2);
+    CK_CHECK(f.sysinfo.hidden_mount_count() == 1);
+}
+
 CK_TEST(the_disk_bar_follows_the_cursor_rather_than_the_first_row) {
     Fixture f;
     CK_CHECK(f.run_command(SysInfoApp::kVolumesWindowKey));
@@ -262,10 +314,17 @@ CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {
     }
     CK_CHECK(f.sysinfo.chart()->bars().size() == expected_bars);
     CK_CHECK(f.sysinfo.chart()->bars().front().highlighted);
-    // The scale is named under the chart, because an index whose definition
-    // is somewhere else is a number nobody can check.
-    CK_CHECK(f.sysinfo.chart()->caption().find("MFLOPS") != std::string::npos);
-    CK_CHECK(f.sysinfo.chart()->caption().find("1.0") != std::string::npos);
+    // Every index group names its own 1.0 where the bars are, because a
+    // single caption can only name one scale and this chart has several.
+    bool named_a_scale = false;
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) {
+        if (bar.group.find("1.0 = ") == std::string::npos) continue;
+        named_a_scale = true;
+        if (bar.group.rfind("Memory bandwidth", 0) == 0) CK_CHECK(bar.group.find("1.00 GB/s") != std::string::npos);
+        if (bar.group.rfind("Disk throughput", 0) == 0) CK_CHECK(bar.group.find("100 MB/s") != std::string::npos);
+    }
+    CK_CHECK(named_a_scale);
+    CK_CHECK(f.sysinfo.chart()->caption().find("its own longest bar") != std::string::npos);
     CK_CHECK(f.sysinfo.benchmark_progress()->label() == "done");
     CK_CHECK(f.sysinfo.benchmark_progress()->fraction() == 1.0);
 }
@@ -514,4 +573,34 @@ CK_TEST(a_curve_is_charted_as_a_curve_and_never_as_an_index) {
     CK_CHECK(saw_latency_group);
     CK_CHECK(saw_scaling_ideal);
     CK_CHECK(f.sysinfo.chart()->legend().find("perfect") != std::string::npos);
+}
+
+// The one kernel that writes to the reader's machine does not start until
+// they have said where. A run that quietly picked a directory would be a
+// program writing to somebody's disk because they pressed "measure".
+CK_TEST(a_disk_measurement_asks_before_it_writes_anywhere) {
+    Fixture f;
+    f.sysinfo.set_scratch_directory("");
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    CK_CHECK(f.sysinfo.scratch_directory().empty());
+
+    CK_CHECK(f.run_command(SysInfoApp::kRunBenchmarksKey));
+    f.sysinfo.benchmarks().wait_until_idle();
+    for (int turn = 0; turn < 8; ++turn) f.app.step(0);
+
+    // Nothing ran, and nothing was measured: the question is on screen.
+    CK_CHECK(f.runner.runs() == 0);
+    CK_CHECK(f.sysinfo.current_results().empty());
+    const std::string bytes(f.term.written_bytes());
+    CK_CHECK(bytes.find("64.0 MiB") != std::string::npos);
+
+    // With an answer, the same command runs everything.
+    f.sysinfo.set_scratch_directory("/scratch");
+    f.run_benchmarks();
+    CK_CHECK(f.sysinfo.current_results().size() == ckv::sysinfo::benchmark_catalogue().size());
+    CK_CHECK(f.runner.last_options().scratch_directory == "/scratch");
+    // And the thread count the kernels were given is the machine's own,
+    // as the probe reported it.
+    CK_CHECK(f.runner.last_options().maximum_threads == f.probe.processor_report.logical_cores.value());
 }

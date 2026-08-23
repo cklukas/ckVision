@@ -64,12 +64,22 @@ FixedBenchmarkRunner::FixedBenchmarkRunner() {
                                              static_cast<double>(lane.threads)});
     scaling.rate_text = "6.40x on 8 threads";
     results.push_back(scaling);
+
+    BenchmarkResult disk;
+    disk.id = BenchmarkId::DiskThroughput;
+    disk.rate = 1.2e9;
+    disk.index = disk.rate / unit_rate(BenchmarkId::DiskThroughput);
+    disk.index_text = format_decimal(disk.index, 1);
+    disk.rate_text = "write 800 MB/s, read " + format_rate(BenchmarkId::DiskThroughput, disk.rate);
+    results.push_back(disk);
 }
 
-BenchmarkResult FixedBenchmarkRunner::run(BenchmarkId id, const std::atomic<bool>& cancelled) const {
+BenchmarkResult FixedBenchmarkRunner::run(BenchmarkId id, const RunOptions& options,
+                                          const std::atomic<bool>& cancelled) const {
     {
         std::unique_lock<std::mutex> lock(mutex_);
         ++runs_;
+        last_options_ = options;
         entered_.notify_all();
         gate_.wait(lock, [this] { return !held_; });
         if (cancelled.load(std::memory_order_relaxed)) ++cancelled_runs_;
@@ -97,6 +107,11 @@ void FixedBenchmarkRunner::release() {
 void FixedBenchmarkRunner::wait_until_entered(int count) {
     std::unique_lock<std::mutex> lock(mutex_);
     entered_.wait(lock, [this, count] { return runs_ >= count; });
+}
+
+RunOptions FixedBenchmarkRunner::last_options() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_options_;
 }
 
 int FixedBenchmarkRunner::runs() const {

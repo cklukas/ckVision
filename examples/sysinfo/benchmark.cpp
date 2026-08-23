@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <limits>
+#include <filesystem>
+#include <fstream>
+#include <system_error>
 #include <thread>
 #include <utility>
 
@@ -33,6 +36,30 @@ constexpr std::size_t kLatencySets[] = {
 };
 constexpr std::size_t kLatencySteps = 2'000'000;
 
+// One mebibyte at a time, which is large enough that the per-call overhead
+// is not what is being measured and small enough that Esc is still answered
+// within a block.
+constexpr std::size_t kDiskBlockBytes = 1024 * 1024;
+
+// Removes the test file whatever happens -- a cancelled run, an early
+// return, an exception. A benchmark that writes to somebody's machine and
+// leaves the file behind has done something it did not ask permission for.
+class ScratchFile {
+public:
+    explicit ScratchFile(std::filesystem::path path) : path_(std::move(path)) {}
+    ~ScratchFile() {
+        std::error_code ignored;
+        std::filesystem::remove(path_, ignored);
+    }
+    ScratchFile(const ScratchFile&) = delete;
+    ScratchFile& operator=(const ScratchFile&) = delete;
+
+    const std::filesystem::path& path() const noexcept { return path_; }
+
+private:
+    std::filesystem::path path_;
+};
+
 std::vector<double> seeded_matrix(std::size_t n, double offset) {
     std::vector<double> matrix(n * n);
     for (std::size_t index = 0; index < matrix.size(); ++index)
@@ -47,6 +74,8 @@ std::string format_rate(BenchmarkId id, double rate) {
         case BenchmarkId::IntegerMix: return format_decimal(rate / 1e6, 1) + " M steps/s";
         case BenchmarkId::FloatingPoint: return format_decimal(rate / 1e6, 0) + " MFLOPS";
         case BenchmarkId::MemoryBandwidth: return format_decimal(rate / 1e9, 2) + " GB/s";
+        case BenchmarkId::DiskThroughput:
+            return rate >= 1e9 ? format_decimal(rate / 1e9, 2) + " GB/s" : format_decimal(rate / 1e6, 0) + " MB/s";
         // The two that answer with a curve have no single rate to spell.
         case BenchmarkId::CacheLatency:
         case BenchmarkId::ThreadScaling: break;
@@ -76,6 +105,11 @@ const std::vector<BenchmarkDescriptor>& benchmark_catalogue() {
          "The integer kernel on one thread, then two, then four, up to this machine's "
          "core count, each doing the same work per thread. Where the measured bar "
          "falls short of the shaded one is where the cores stopped being independent."},
+        {BenchmarkId::DiskThroughput, "disk", "Disk throughput", "bytes per second",
+         "Writes 64 MiB to a directory you choose, reads it back, and removes it. The "
+         "read is the headline. It does not defeat the operating system's page cache, "
+         "which needs a different platform call on every platform -- so a very fast "
+         "read here may be memory rather than storage."},
     };
     return catalogue;
 }
@@ -91,6 +125,7 @@ double unit_rate(BenchmarkId id) noexcept {
         case BenchmarkId::IntegerMix: return kIntegerUnitRate;
         case BenchmarkId::FloatingPoint: return kFloatingUnitRate;
         case BenchmarkId::MemoryBandwidth: return kMemoryUnitRate;
+        case BenchmarkId::DiskThroughput: return kDiskUnitRate;
         // A curve is not on the index scale: there is no single rate to
         // divide, and a 1.0 here would put a meaningless bar on the chart.
         case BenchmarkId::CacheLatency:
@@ -168,13 +203,11 @@ void stream_triad(std::vector<double>& a, const std::vector<double>& b, const st
     for (std::size_t index = 0; index < count; ++index) a[index] = b[index] + scalar * c[index];
 }
 
-void MeasuredBenchmarkRunner::set_maximum_threads(int threads) noexcept {
-    maximum_threads_ = std::max(1, threads);
-}
-
-BenchmarkResult MeasuredBenchmarkRunner::run(BenchmarkId id, const std::atomic<bool>& cancelled) const {
+BenchmarkResult MeasuredBenchmarkRunner::run(BenchmarkId id, const RunOptions& options,
+                                             const std::atomic<bool>& cancelled) const {
     if (id == BenchmarkId::CacheLatency) return run_cache_latency(cancelled);
-    if (id == BenchmarkId::ThreadScaling) return run_thread_scaling(cancelled);
+    if (id == BenchmarkId::ThreadScaling) return run_thread_scaling(options, cancelled);
+    if (id == BenchmarkId::DiskThroughput) return run_disk_throughput(options, cancelled);
 
     BenchmarkResult result;
     result.id = id;
@@ -208,7 +241,8 @@ BenchmarkResult MeasuredBenchmarkRunner::run(BenchmarkId id, const std::atomic<b
             break;
         // Handled above, before any of this was set up.
         case BenchmarkId::CacheLatency:
-        case BenchmarkId::ThreadScaling: break;
+        case BenchmarkId::ThreadScaling:
+        case BenchmarkId::DiskThroughput: break;
     }
 
     // A warm-up pass, not timed: the first touch of a fresh allocation is a
@@ -231,7 +265,8 @@ BenchmarkResult MeasuredBenchmarkRunner::run(BenchmarkId id, const std::atomic<b
                 checksum += a.front() + a.back();
                 break;
             case BenchmarkId::CacheLatency:
-            case BenchmarkId::ThreadScaling: break;
+            case BenchmarkId::ThreadScaling:
+            case BenchmarkId::DiskThroughput: break;
         }
     };
     one_pass();
@@ -298,7 +333,9 @@ BenchmarkResult MeasuredBenchmarkRunner::run_cache_latency(const std::atomic<boo
     return result;
 }
 
-BenchmarkResult MeasuredBenchmarkRunner::run_thread_scaling(const std::atomic<bool>& cancelled) const {
+BenchmarkResult MeasuredBenchmarkRunner::run_thread_scaling(const RunOptions& options,
+                                                            const std::atomic<bool>& cancelled) const {
+    const int maximum_threads_ = std::max(1, options.maximum_threads);
     BenchmarkResult result;
     result.id = BenchmarkId::ThreadScaling;
     result.series_caption = "speedup over one thread - shaded is perfect scaling";
@@ -352,6 +389,88 @@ BenchmarkResult MeasuredBenchmarkRunner::run_thread_scaling(const std::atomic<bo
 
     if (!result.series.empty())
         result.rate_text = result.series.back().value_text + " on " + result.series.back().label;
+    return result;
+}
+
+BenchmarkResult MeasuredBenchmarkRunner::run_disk_throughput(const RunOptions& options,
+                                                             const std::atomic<bool>& cancelled) const {
+    BenchmarkResult result;
+    result.id = BenchmarkId::DiskThroughput;
+
+    // No directory, no measurement. This kernel is the only one that writes
+    // to the reader's machine, and it does not choose the place itself.
+    if (options.scratch_directory.empty()) {
+        result.rate_text = "no directory chosen";
+        return result;
+    }
+
+    const ScratchFile scratch(std::filesystem::path(options.scratch_directory) /
+                              "ckvision-sysinfo-disk-test.tmp");
+    const std::vector<char> block(kDiskBlockBytes, '\x5a');
+    const std::size_t blocks = static_cast<std::size_t>(RunOptions::kDiskBytes / kDiskBlockBytes);
+
+    std::int64_t write_nanos = 0;
+    {
+        std::ofstream out(scratch.path(), std::ios::binary | std::ios::trunc);
+        if (!out) {
+            result.rate_text = "could not write in " + options.scratch_directory;
+            return result;
+        }
+        const std::int64_t start = clock_.now_nanos();
+        for (std::size_t written = 0; written < blocks; ++written) {
+            if (cancelled.load(std::memory_order_relaxed)) return result;
+            out.write(block.data(), static_cast<std::streamsize>(block.size()));
+            if (!out) {
+                result.rate_text = "the write failed part way through";
+                return result;
+            }
+        }
+        // Flushed and closed inside the timing, because a write nobody has
+        // handed to the operating system yet has not been measured.
+        out.flush();
+        out.close();
+        write_nanos = clock_.now_nanos() - start;
+    }
+
+    std::int64_t read_nanos = 0;
+    std::uint64_t checksum = 0;
+    {
+        std::ifstream in(scratch.path(), std::ios::binary);
+        if (!in) {
+            result.rate_text = "the file could not be read back";
+            return result;
+        }
+        std::vector<char> buffer(kDiskBlockBytes);
+        const std::int64_t start = clock_.now_nanos();
+        while (in.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || in.gcount() > 0) {
+            if (cancelled.load(std::memory_order_relaxed)) return result;
+            checksum += static_cast<std::uint64_t>(buffer.front());
+        }
+        read_nanos = clock_.now_nanos() - start;
+    }
+    if (write_nanos <= 0 || read_nanos <= 0) return result;
+
+    const double bytes = static_cast<double>(RunOptions::kDiskBytes);
+    const double write_rate = bytes * kNanosPerSecond / static_cast<double>(write_nanos);
+    const double read_rate = bytes * kNanosPerSecond / static_cast<double>(read_nanos);
+
+    // The read is the headline, because that is what the interface ceilings
+    // this is drawn against are ceilings ON.
+    //
+    // What this does NOT do, and cannot portably: defeat the operating
+    // system's page cache. The file was written seconds earlier and most of
+    // it is still in memory, so a fast read here may be a measurement of
+    // RAM wearing a filesystem's clothes. Doing better needs F_NOCACHE on
+    // macOS, O_DIRECT on Linux and FILE_FLAG_NO_BUFFERING on Windows --
+    // three platform calls, in a kernel that is otherwise portable, for a
+    // number this example does not need to be exact. The help topic says
+    // the same thing to the reader.
+    result.rate = read_rate;
+    result.index = read_rate / kDiskUnitRate;
+    result.index_text = format_decimal(result.index, 1);
+    result.rate_text = "write " + format_rate(BenchmarkId::DiskThroughput, write_rate) + ", read " +
+                       format_rate(BenchmarkId::DiskThroughput, read_rate);
+    if (checksum == 0xFFFFFFFFFFFFFFFFull) result.rate += 0.0;  // the bytes read, consumed
     return result;
 }
 

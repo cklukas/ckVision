@@ -20,15 +20,15 @@ BenchmarkService::~BenchmarkService() {
     worker_.join();
 }
 
-bool BenchmarkService::start(std::vector<BenchmarkId> plan, std::weak_ptr<void> subscriber,
+bool BenchmarkService::start(std::vector<BenchmarkId> plan, RunOptions options, std::weak_ptr<void> subscriber,
                              ProgressHandler on_progress, ResultHandler on_result,
                              FinishedHandler on_finished) {
     if (plan.empty()) return false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (stopping_ || running_ || !pending_.empty()) return false;
-        pending_.push_back(Job{std::move(plan), std::move(subscriber), std::move(on_progress),
-                               std::move(on_result), std::move(on_finished)});
+        pending_.push_back(Job{std::move(plan), std::move(options), std::move(subscriber),
+                               std::move(on_progress), std::move(on_result), std::move(on_finished)});
         running_ = true;
     }
     cancelled_.store(false, std::memory_order_relaxed);
@@ -82,7 +82,7 @@ void BenchmarkService::run_worker() {
                     handler(progress);
                 });
 
-            const BenchmarkResult result = runner_.run(id, cancelled_);
+            const BenchmarkResult result = runner_.run(id, job.options, cancelled_);
 
             // A cancelled kernel returns whatever it had, which is not a
             // measurement of anything; it is dropped rather than charted.
