@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "sysinfo_app.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -13,6 +14,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/widgets/canvas.hpp"
+#include "cvision/widgets/directory_picker.hpp"
 #include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
@@ -79,6 +81,12 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId terminal_command = app_.commands().declare(
         {.key = std::string(kTerminalWindowKey), .title = "&Terminal", .category = "System",
          .handler = [this] { open_terminal_window(); }});
+    const ui::CommandId all_mounts_command = app_.commands().declare(
+        {.key = std::string(kShowAllMountsKey), .title = "Show &all mount points", .category = "System",
+         .handler = [this] {
+             open_volumes_window();
+             set_show_all_mounts(!show_all_mounts_);
+         }});
     const ui::CommandId refresh_command = app_.commands().declare(
         {.key = std::string(kRefreshKey), .title = "&Refresh", .category = "System", .chord = "F2",
          .handler = [this] { refresh(); }});
@@ -89,6 +97,7 @@ void SysInfoApp::build_chrome() {
             widgets::MenuItem::command(widgets::CommandPresentation{system_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{memory_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{volumes_command}),
+            widgets::MenuItem::command(widgets::CommandPresentation{all_mounts_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{terminal_command}),
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{refresh_command}),
@@ -223,19 +232,37 @@ void SysInfoApp::open_volumes_window() {
         return;
     }
     auto window = std::make_unique<widgets::Window>("Disks");
-    window->set_bounds(Rect{3, 3, 72, 16});
+    // 76 wide, which is what the five columns plus the table's scrollbar
+    // need and still fits an 80-column terminal. At 72 the last column was
+    // one cell short and drew "not reporte", which is how a stated absence
+    // turns back into a typographical accident.
+    window->set_bounds(Rect{2, 3, 76, 16});
     window->set_min_size(Size{36, 7});
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
 
     auto column = std::make_unique<ui::Column>();
     column->set_spacing(1);
+
+    // The default is the disks a reader means when they say "disks"; the
+    // rest are one keystroke away and are counted in the window's footer
+    // so that hiding them is never silent.
+    auto filter = std::make_unique<widgets::CheckGroup>(std::vector<std::string>{"Show &all mount points"});
+    filter->set_checked(0, show_all_mounts_);
+    filter->on_changed = [this](std::size_t, bool checked) { set_show_all_mounts(checked); };
+    mount_filter_ = filter.get();
+    column->add_item(std::move(filter), ui::LayoutSpec{ui::SizePolicy::Fixed});
+
     auto table = std::make_unique<widgets::Table>();
-    table->set_columns({widgets::TableColumn{"Mounted on", 22, 10}, widgets::TableColumn{"Filesystem", 10, 6},
+    table->set_columns({widgets::TableColumn{"Mounted on", 20, 10}, widgets::TableColumn{"Filesystem", 10, 6},
                         widgets::TableColumn{"Capacity", 11, 8}, widgets::TableColumn{"Free", 11, 8},
                         // Wide enough for the absence text: a column that
                         // clips "not reported" to "not re" has turned a
                         // stated absence into a typographical accident.
-                        widgets::TableColumn{"Used", 12, 5}});
+                        // Thirteen, not twelve: the table's scrollbar takes
+                        // the last cell of the last column, and twelve left
+                        // "not reported" one letter short on screen while
+                        // being exactly wide enough in the model.
+                        widgets::TableColumn{"Used", 13, 5}});
     table->set_help_context_key("sysinfo.volumes");
     volumes_table_ = table.get();
     // The bar follows the cursor, so the number under it is always the
@@ -259,6 +286,7 @@ void SysInfoApp::open_volumes_window() {
         volumes_cursor_ = widgets::kInvalidTableRowId;
         volumes_table_ = nullptr;
         volumes_bar_ = nullptr;
+        mount_filter_ = nullptr;
         widgets::schedule_self_detach(*opened, app_);
     };
     volumes_window_ = desktop_->add_window(std::move(window));
@@ -522,6 +550,15 @@ void SysInfoApp::start_benchmarks() {
         return;
     }
 
+    // The disk kernel writes to the reader's machine, so it asks first --
+    // once, and then remembers. Asking every run would train the reader to
+    // dismiss the question, which is worse than not asking.
+    const bool wants_disk = std::find(plan.begin(), plan.end(), BenchmarkId::DiskThroughput) != plan.end();
+    if (wants_disk && scratch_directory_.empty()) {
+        ask_for_scratch_directory();
+        return;
+    }
+
     // The completed run becomes the comparison, and the new one starts
     // empty. A machine compared against itself an hour ago is the only
     // comparison this program can make honestly.
@@ -532,7 +569,7 @@ void SysInfoApp::start_benchmarks() {
 
     const std::size_t total = plan.size();
     benchmarks_.start(
-        std::move(plan), chart_->lifetime_token(),
+        std::move(plan), run_options(), chart_->lifetime_token(),
         [this, total](BenchmarkService::Progress progress) {
             if (benchmark_progress_ == nullptr) return;
             benchmark_progress_->set_fraction(total == 0 ? 0.0
@@ -559,6 +596,41 @@ void SysInfoApp::start_benchmarks() {
 }
 
 void SysInfoApp::cancel_benchmarks() { benchmarks_.cancel(); }
+
+RunOptions SysInfoApp::run_options() const {
+    RunOptions options;
+    // From the probe, not from the standard library behind the
+    // application's back: how many cores this machine has is a fact about
+    // the host, and the host is what SystemProbe is for.
+    options.maximum_threads = std::max(1, probe_.processor().logical_cores.value_or(1));
+    options.scratch_directory = scratch_directory_;
+    return options;
+}
+
+void SysInfoApp::ask_for_scratch_directory() {
+    // Says how much it will write before it asks where, because "choose a
+    // directory" is not a question a reader can answer without that.
+    auto message = widgets::present_message_box(
+        app_, *desktop_, roles_,
+        {widgets::MessageBoxKind::Confirm, "Measure disk throughput?",
+         "This writes " + format_bytes(RunOptions::kDiskBytes) +
+             " to a directory you choose, reads it back, and removes it. Choose the directory next.",
+         widgets::MessageBoxButtons::OkCancel});
+    message.set_completion_handler([this](widgets::MessageBoxResult answer) {
+        if (answer != widgets::MessageBoxResult::Ok) {
+            if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("disk measurement declined");
+            return;
+        }
+        auto picker = widgets::present_directory_picker(files_, report_directory_, app_, *desktop_, roles_);
+        picker.set_completion_handler([this](widgets::DirectoryPickerResult chosen) {
+            if (!chosen.accepted || chosen.path.empty()) return;
+            scratch_directory_ = chosen.path;
+            // The reader answered the question they were asked; running is
+            // what they asked for.
+            start_benchmarks();
+        });
+    });
+}
 
 void SysInfoApp::update_chart() {
     if (chart_ == nullptr) return;
@@ -595,8 +667,13 @@ void SysInfoApp::update_chart() {
         }
 
         // Each metric is its own chart: bars are drawn against the longest
-        // bar in their own group and against nothing else.
-        const std::string group = std::string(descriptor.title) + " - index";
+        // bar in their own group and against nothing else -- and each
+        // carries its own 1.0 in its heading. A single caption under the
+        // chart could only name one scale, and named the wrong one for
+        // every other group the moment there was more than one: the disk
+        // index is per 100 MB/s where the memory index is per 1 GB/s.
+        const std::string group = std::string(descriptor.title) + " - index, 1.0 = " +
+                                  format_rate(descriptor.id, unit_rate(descriptor.id));
         any_index = true;
         if (current != nullptr)
             bars.push_back(ChartBar{group, "This computer" + marker, current->index_text, current->index,
@@ -627,11 +704,10 @@ void SysInfoApp::update_chart() {
     else if (any_ideal)
         legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 perfect scaling, not a measurement";
     chart_->set_legend(std::move(legend));
-    // The scale, spelled out under the chart, because an index whose
-    // definition is somewhere else is a number nobody can check -- and
-    // only while there is an index on the chart, since a chart of
-    // nanoseconds explained in MFLOPS explains nothing.
-    chart_->set_caption(any_index ? "index scale: 10 M steps/s, 100 MFLOPS or 1 GB/s = 1.0" : "");
+    // Each index group names its own 1.0 in its heading, so the caption
+    // says the one thing that is true of the whole chart rather than a
+    // scale that belongs to one group of it.
+    chart_->set_caption(any_index ? "each group is drawn against its own longest bar" : "");
 }
 
 const BenchmarkResult* SysInfoApp::result_for(const std::vector<BenchmarkResult>& results, BenchmarkId id) {
@@ -771,12 +847,36 @@ void SysInfoApp::fill_memory_pane() {
 }
 
 void SysInfoApp::fill_volumes_table() {
-    volumes_ = probe_.volumes();
+    const std::vector<VolumeReport> reported = probe_.volumes();
+    volumes_.clear();
+    hidden_mounts_ = 0;
+    for (const VolumeReport& volume : reported) {
+        if (!show_all_mounts_ && volume.system) {
+            ++hidden_mounts_;
+            continue;
+        }
+        volumes_.push_back(volume);
+    }
+    if (volumes_window_ != nullptr)
+        volumes_window_->set_footer(hidden_mounts_ == 0
+                                        ? std::string()
+                                        : std::to_string(hidden_mounts_) + " system mount points hidden");
     refill(*volumes_table_, volumes_cursor_, volume_rows(volumes_));
     // A restore notifies and the bar follows; a first fill does not, so
     // the bar is told about the row the table settled on either way.
     const int cursor = volumes_table_->cursor_row();
     show_volume_usage(cursor >= 0 ? static_cast<std::size_t>(cursor) : 0);
+}
+
+void SysInfoApp::set_show_all_mounts(bool show) {
+    if (show_all_mounts_ == show) return;
+    show_all_mounts_ = show;
+    // The cursor was on a row of the old list; the new list is a different
+    // list, so it starts at the top rather than on whatever now happens to
+    // sit at that position.
+    volumes_cursor_ = widgets::kInvalidTableRowId;
+    if (mount_filter_ != nullptr && mount_filter_->checked(0) != show) mount_filter_->set_checked(0, show);
+    if (volumes_table_ != nullptr) fill_volumes_table();
 }
 
 void SysInfoApp::show_volume_usage(std::size_t row) {

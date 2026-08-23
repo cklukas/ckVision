@@ -43,6 +43,25 @@ const std::vector<ReferencePoint>& reference_points() {
          "AVX2 with FMA, two 256-bit FMA pipes"},
         {BenchmarkId::FloatingPoint, "AVX-512 core, 3.0 GHz", 96.0e9, "32 FLOP/cycle x 3.0 GHz",
          "AVX-512, two 512-bit FMA pipes"},
+
+        // Storage rows are interface ceilings: what the wire between the
+        // machine and the device can carry, which no device reaches and
+        // none exceeds. The serial buses carry their encoding overhead in
+        // the arithmetic, since that is where it is actually paid -- 8b/10b
+        // costs a fifth of SATA and USB 3.0, and PCIe 3.0 onwards spends
+        // 2 bits in 130 instead.
+        {BenchmarkId::DiskThroughput, "UDMA-33 (ATA)", 33.3e6, "33.3 MB/s parallel transfer",
+         "ATA-4 Ultra DMA mode 2"},
+        {BenchmarkId::DiskThroughput, "ATA-100", 100.0e6, "100 MB/s parallel transfer",
+         "ATA-6 Ultra DMA mode 5"},
+        {BenchmarkId::DiskThroughput, "SATA I", 150.0e6, "1.5 Gbit/s x 8/10 encoding", "SATA 1.0"},
+        {BenchmarkId::DiskThroughput, "SATA III", 600.0e6, "6.0 Gbit/s x 8/10 encoding", "SATA 3.0"},
+        {BenchmarkId::DiskThroughput, "USB 3.0", 500.0e6, "5.0 Gbit/s x 8/10 encoding",
+         "USB 3.0 SuperSpeed"},
+        {BenchmarkId::DiskThroughput, "NVMe, PCIe 3.0 x4", 3.938e9, "984.6 MB/s per lane x 4 lanes",
+         "PCIe 3.0, 8 GT/s with 128b/130b encoding"},
+        {BenchmarkId::DiskThroughput, "NVMe, PCIe 4.0 x4", 7.877e9, "1969 MB/s per lane x 4 lanes",
+         "PCIe 4.0, 16 GT/s with 128b/130b encoding"},
     };
     return points;
 }

@@ -444,6 +444,13 @@ std::vector<VolumeReport> PosixSystemProbe::volumes() const {
         volume.device = non_empty(trimmed(mount.f_mntfromname));
         volume.filesystem = non_empty(type);
         volume.read_only = (mount.f_flags & MNT_RDONLY) != 0;
+        // MNT_DONTBROWSE is the kernel's own answer to this question -- it
+        // is the flag Finder reads to decide what not to show -- so this
+        // pane does not need a list of paths that would go stale with the
+        // next macOS. On this machine it separates "/" and /Volumes/* from
+        // every /System/Volumes/*, every simulator image and every cryptex
+        // mount, exactly.
+        volume.system = (mount.f_flags & MNT_DONTBROWSE) != 0;
         fill_space(volume);
         volumes.push_back(std::move(volume));
     }
@@ -465,6 +472,15 @@ std::vector<VolumeReport> PosixSystemProbe::volumes() const {
             volume.device = non_empty(unescape_mount_field(device));
             volume.filesystem = non_empty(type);
             volume.read_only = options == "ro" || options.rfind("ro,", 0) == 0;
+            // Linux has no DONTBROWSE, so the question is answered from
+            // what the mount is: storage arrives through a block device
+            // under /dev, and the places a distribution keeps its own
+            // machinery are named. Anything else -- tmpfs, overlay, a bind
+            // mount of a directory -- is bookkeeping.
+            volume.system = volume.device.value_or("").rfind("/dev/", 0) != 0 ||
+                            volume.mount_point.rfind("/snap/", 0) == 0 ||
+                            volume.mount_point.rfind("/var/lib/", 0) == 0 ||
+                            volume.mount_point.rfind("/run/", 0) == 0;
             fill_space(volume);
             volumes.push_back(std::move(volume));
         }

@@ -29,7 +29,13 @@ public:
     // Scripted, in catalogue order, and public so a test can vary one.
     std::vector<BenchmarkResult> results;
 
-    BenchmarkResult run(BenchmarkId id, const std::atomic<bool>& cancelled) const override;
+    BenchmarkResult run(BenchmarkId id, const RunOptions& options,
+                        const std::atomic<bool>& cancelled) const override;
+
+    // The options the last run was given, so a test can prove the
+    // application passed the machine's own core count and the directory
+    // the reader chose.
+    RunOptions last_options() const;
 
     // Makes every subsequent run() block on entry until release().
     void hold();
@@ -50,6 +56,7 @@ private:
     mutable std::condition_variable gate_;
     bool held_ = false;
     mutable int runs_ = 0;
+    mutable RunOptions last_options_;
     mutable int cancelled_runs_ = 0;
 };
 

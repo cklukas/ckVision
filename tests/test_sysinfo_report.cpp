@@ -53,6 +53,7 @@ struct Fixture {
     }
 
     void run_benchmarks() {
+        sysinfo.set_scratch_directory("/reports");
         run_command(SysInfoApp::kRunBenchmarksKey);
         sysinfo.benchmarks().wait_until_idle();
         for (int turn = 0; turn < 8; ++turn) app.step(0);

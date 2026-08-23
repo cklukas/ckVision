@@ -58,8 +58,8 @@ public:
     // runs at once would measure each other. Callbacks fire only while
     // `subscriber` is still alive (ui::View::lifetime_token), so a window
     // closed mid-run takes its handlers with it.
-    bool start(std::vector<BenchmarkId> plan, std::weak_ptr<void> subscriber, ProgressHandler on_progress,
-               ResultHandler on_result, FinishedHandler on_finished);
+    bool start(std::vector<BenchmarkId> plan, RunOptions options, std::weak_ptr<void> subscriber,
+               ProgressHandler on_progress, ResultHandler on_result, FinishedHandler on_finished);
 
     // Asks the run to stop. Observed between kernels and, for a kernel that
     // looks at it, inside one; the finished handler still fires, with
@@ -76,6 +76,7 @@ public:
 private:
     struct Job {
         std::vector<BenchmarkId> plan;
+        RunOptions options;
         std::weak_ptr<void> subscriber;
         ProgressHandler on_progress;
         ResultHandler on_result;

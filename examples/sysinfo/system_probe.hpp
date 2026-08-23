@@ -74,6 +74,13 @@ struct VolumeReport {
     std::optional<std::uint64_t> capacity_bytes;
     std::optional<std::uint64_t> free_bytes;
     bool read_only = false;
+    // The operating system's own bookkeeping rather than storage anybody
+    // thinks of as a disk: preboot and recovery volumes, simulator images,
+    // container runtimes' overlays. A machine has a dozen of them and a
+    // reader asking "what disks do I have" means none of them -- so the
+    // pane hides them until asked, and the probe, which is the only thing
+    // here that can tell, is what decides.
+    bool system = false;
 };
 
 struct PowerReport {

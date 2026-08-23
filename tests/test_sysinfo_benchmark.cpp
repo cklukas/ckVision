@@ -51,8 +51,10 @@ struct Harness {
     int finished = 0;
     bool cancelled = false;
 
+    ckv::sysinfo::RunOptions options;
+
     bool start(std::vector<BenchmarkId> plan) {
-        return service.start(std::move(plan), std::weak_ptr<void>(token),
+        return service.start(std::move(plan), options, std::weak_ptr<void>(token),
                              [this](BenchmarkService::Progress step) { progress.push_back(step); },
                              [this](BenchmarkResult result) { results.push_back(result); },
                              [this](bool was_cancelled) {
@@ -209,4 +211,33 @@ CK_TEST(a_subscriber_that_died_mid_run_receives_nothing) {
     // The run still ended cleanly; nobody was told, because nobody was
     // there to tell.
     CK_CHECK(!h.service.running());
+}
+
+// The kernels are handed what they cannot ask for themselves. A test that
+// did not check this would let the scaling run silently fall back to one
+// thread, and the disk kernel to a directory nobody chose.
+CK_TEST(the_run_options_reach_the_kernel_that_needs_them) {
+    Harness h;
+    h.options.maximum_threads = 6;
+    h.options.scratch_directory = "/scratch";
+    CK_CHECK(h.start({BenchmarkId::ThreadScaling}));
+    h.drain();
+
+    CK_CHECK(h.runner.last_options().maximum_threads == 6);
+    CK_CHECK(h.runner.last_options().scratch_directory == "/scratch");
+}
+
+CK_TEST(the_disk_kernel_without_a_directory_measures_nothing_rather_than_choosing_one) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::sysinfo::MeasuredBenchmarkRunner runner(clock);
+    std::atomic<bool> cancelled{false};
+
+    ckv::sysinfo::RunOptions options;  // no scratch directory
+    const BenchmarkResult result = runner.run(BenchmarkId::DiskThroughput, options, cancelled);
+    CK_CHECK(result.rate == 0.0);
+    CK_CHECK(result.rate_text == "no directory chosen");
+    // And it is the only kernel that could have written anything, so this
+    // suite writes nothing to the machine running it.
 }

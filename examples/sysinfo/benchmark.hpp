@@ -40,6 +40,25 @@ enum class BenchmarkId {
     // same cancellation -- and differ only in what they hand back.
     CacheLatency,
     ThreadScaling,
+    // The one kernel that writes to the reader's machine, and so the one
+    // that does nothing at all unless it has been told where.
+    DiskThroughput,
+};
+
+// What a run needs to know that the kernels cannot ask for themselves: how
+// many threads this machine has, and whether -- and where -- the disk
+// kernel has been given permission to write. Both are facts about the
+// host, so both arrive from the application rather than being read behind
+// its back.
+struct RunOptions {
+    int maximum_threads = 1;
+    // Empty means the reader has not chosen a directory, and the disk
+    // kernel then measures nothing rather than picking one itself.
+    std::string scratch_directory;
+    // How much the disk kernel writes, so the number the application shows
+    // the reader beforehand and the number it actually writes are the same
+    // number.
+    static constexpr std::uint64_t kDiskBytes = 64ull * 1024 * 1024;
 };
 
 struct BenchmarkDescriptor {
@@ -63,6 +82,7 @@ const BenchmarkDescriptor& describe(BenchmarkId id);
 inline constexpr double kIntegerUnitRate = 1e7;   // mix steps per second
 inline constexpr double kFloatingUnitRate = 1e8;  // floating-point operations per second
 inline constexpr double kMemoryUnitRate = 1e9;    // bytes per second of triad traffic
+inline constexpr double kDiskUnitRate = 1e8;      // bytes per second read back from a file
 
 double unit_rate(BenchmarkId id) noexcept;
 
@@ -145,7 +165,8 @@ public:
     // Runs one kernel and returns its result. `cancelled` may become true
     // at any moment; a long kernel is expected to look at it and return
     // early, and what it returns then is ignored.
-    virtual BenchmarkResult run(BenchmarkId id, const std::atomic<bool>& cancelled) const = 0;
+    virtual BenchmarkResult run(BenchmarkId id, const RunOptions& options,
+                                const std::atomic<bool>& cancelled) const = 0;
 };
 
 // The real thing. Takes the injected clock rather than reading one: the
@@ -156,7 +177,8 @@ class MeasuredBenchmarkRunner final : public BenchmarkRunner {
 public:
     explicit MeasuredBenchmarkRunner(const Clock& clock) noexcept : clock_(clock) {}
 
-    BenchmarkResult run(BenchmarkId id, const std::atomic<bool>& cancelled) const override;
+    BenchmarkResult run(BenchmarkId id, const RunOptions& options,
+                        const std::atomic<bool>& cancelled) const override;
 
     // Each kernel is run this many times and the FASTEST pass is reported.
     // Not the mean: the slow passes are the ones that were interrupted by
@@ -165,18 +187,12 @@ public:
     // doing only this.
     static constexpr int kPasses = 3;
 
-    // How many threads the scaling run may use. The application passes the
-    // machine's own core count from the probe, because the number of cores
-    // is a fact about the host and this class does not read the host.
-    void set_maximum_threads(int threads) noexcept;
-    int maximum_threads() const noexcept { return maximum_threads_; }
-
 private:
     BenchmarkResult run_cache_latency(const std::atomic<bool>& cancelled) const;
-    BenchmarkResult run_thread_scaling(const std::atomic<bool>& cancelled) const;
+    BenchmarkResult run_thread_scaling(const RunOptions& options, const std::atomic<bool>& cancelled) const;
+    BenchmarkResult run_disk_throughput(const RunOptions& options, const std::atomic<bool>& cancelled) const;
 
     const Clock& clock_;
-    int maximum_threads_ = 1;
 };
 
 }  // namespace ckv::sysinfo
