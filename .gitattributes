@@ -1,0 +1,7 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+#
+# Golden dumps and sources must be byte-identical on every checkout —
+# CRLF conversion (default on Windows CI runners) would break the
+# byte-exact golden contract (the decision log D-014).
+* text=auto eol=lf
+*.dump text eol=lf

@@ -1,0 +1,47 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+# Every name is emitted by a capture_*_screenshots executable and referenced by
+# client documentation.  check_docs.py rejects either missing direction.
+widget-navigation
+gallery-initial
+gallery-no-graphics
+gallery-typed-name
+gallery-menu-open
+filebrowser-initial
+filebrowser-src-selected
+filebrowser-include-selected
+hello-initial
+hello-greeting
+hello-menu-open
+editor-initial
+editor-json
+editor-search
+editor-close-confirm
+terminal-initial
+terminal-initial-dark
+terminal-initial-light
+terminal-initial-mono
+terminal-menu
+terminal-full-screen
+terminal-nested
+terminal-sixel
+terminal-no-graphics
+layouts-initial
+layouts-wide
+layouts-narrow
+layouts-too-small
+layouts-recovered
+forms-initial
+forms-invalid-dialog
+forms-info-message
+forms-wizard-ready
+workbench-text
+workbench-data
+workbench-help
+graphics-sixel-image
+graphics-sixel-canvas
+graphics-no-graphics-image
+graphics-no-graphics-canvas
+spin-initial
+spin-menu
+spin-desktop
+spin-no-graphics

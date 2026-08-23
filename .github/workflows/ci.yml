@@ -1,0 +1,79 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+name: ci
+on: [push, pull_request]
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test inventory
+        run: ctest --test-dir build -C Release -V -R '^test_inventory$'
+      - name: Test unit suites
+        run: ctest --test-dir build -C Release --output-on-failure -L unit
+      - name: Test scripted and policy gates
+        run: ctest --test-dir build -C Release --output-on-failure -L script
+      - name: Test golden and visual gates
+        run: ctest --test-dir build -C Release --output-on-failure -L golden
+      - name: Test raw-byte Presenter assertions
+        run: ctest --test-dir build -C Release --output-on-failure -L raw-byte
+      - name: Test symbolic-scene raster goldens
+        run: ctest --test-dir build -C Release --output-on-failure -L symbolic-scene
+      - name: Test decoded visual goldens
+        run: ctest --test-dir build -C Release --output-on-failure -L visual
+      - name: Test platform assertion and filesystem contracts
+        run: ctest --test-dir build -C Release --output-on-failure -R '^(theme_assertion_contract|suite_test_posix_filesystem)$'
+      - name: Test POSIX PTY contracts
+        if: runner.os != 'Windows'
+        run: ctest --test-dir build -C Release --output-on-failure -L pty --repeat until-pass:2
+      - name: Test Windows ConPTY contracts (WP-37 pending)
+        if: runner.os == 'Windows'
+        run: echo "No ConPTY suite is registered yet; WP-37 owns this platform backend gate."
+      - name: Fuzz corpus inventory (WP-33 pending)
+        run: ctest --test-dir build -C Release -V -R '^test_inventory$'
+      - name: Test benchmark budget gate
+        run: ctest --test-dir build -C Release --output-on-failure -L benchmark
+      - name: Benchmark smoke
+        run: cmake --build build --config Release --target bench_smoke_run
+      - name: Sanitizer support matrix
+        run: echo "Release lane only. Address, undefined, and thread sanitizers run in the explicit Ubuntu sanitizer jobs; macOS and Windows sanitizer coverage is not silently claimed."
+
+  sanitize:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address,undefined, thread]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCKVISION_SANITIZE=${{ matrix.sanitizer }}
+      - name: Build
+        run: cmake --build build
+      - name: Test inventory
+        env:
+          CKVISION_SANITIZER: ${{ matrix.sanitizer }}
+        run: ctest --test-dir build -V -R '^test_inventory$'
+      - name: Test under ${{ matrix.sanitizer }} sanitizer
+        run: ctest --test-dir build --output-on-failure
+      - name: Unsupported sanitizer configurations
+        run: echo "TSan is run on Ubuntu only; macOS and Windows sanitizer configurations are explicitly outside this CI lane."
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure Clang fuzzers with AddressSanitizer and UBSan
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++ -DCKVISION_BUILD_FUZZERS=ON -DCKVISION_SANITIZE=address,undefined
+      - name: Build fuzz targets
+        run: cmake --build build --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile
+      - name: Run bounded regression corpora
+        run: ctest --test-dir build --output-on-failure -L fuzz-corpus

@@ -1,0 +1,925 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="432" viewBox="0 0 720 432">
+<rect x="0" y="0" width="720" height="432" fill="#000000"/>
+<rect x="0" y="0" width="720" height="18" fill="#c8c8c8"/>
+<rect x="0" y="18" width="720" height="18" fill="#0000aa"/>
+<rect x="0" y="36" width="9" height="378" fill="#0000aa"/>
+<rect x="9" y="36" width="333" height="360" fill="#ffffff"/>
+<rect x="342" y="36" width="9" height="378" fill="#0000aa"/>
+<rect x="351" y="36" width="9" height="360" fill="#c8c8c8"/>
+<rect x="360" y="36" width="342" height="360" fill="#ffffff"/>
+<rect x="702" y="36" width="18" height="378" fill="#0000aa"/>
+<rect x="9" y="396" width="333" height="18" fill="#0000aa"/>
+<rect x="351" y="396" width="279" height="18" fill="#0000aa"/>
+<rect x="630" y="396" width="72" height="36" fill="#c8c8c8"/>
+<rect x="0" y="414" width="630" height="18" fill="#c8c8c8"/>
+<rect x="702" y="414" width="18" height="18" fill="#c8c8c8"/>
+<text x="9" y="14" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">F</text>
+<text x="18" y="14" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">i</text>
+<text x="27" y="14" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">l</text>
+<text x="36" y="14" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<g data-box-drawing="double">
+<path d="M 4.5 36.5 L 4.5 27 L 9.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 36.5 L 4.5 27 L 9.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="9" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">[</text>
+<text x="18" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">■</text>
+<text x="27" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">]</text>
+<g data-box-drawing="double">
+<path d="M 35.5 27 L 40.5 27 L 45.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 35.5 27 L 40.5 27 L 45.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 44.5 27 L 49.5 27 L 54.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 44.5 27 L 49.5 27 L 54.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 53.5 27 L 58.5 27 L 63.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 53.5 27 L 58.5 27 L 63.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 62.5 27 L 67.5 27 L 72.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 62.5 27 L 67.5 27 L 72.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 71.5 27 L 76.5 27 L 81.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 71.5 27 L 76.5 27 L 81.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 80.5 27 L 85.5 27 L 90.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 80.5 27 L 85.5 27 L 90.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 89.5 27 L 94.5 27 L 99.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 89.5 27 L 94.5 27 L 99.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 98.5 27 L 103.5 27 L 108.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 98.5 27 L 103.5 27 L 108.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 107.5 27 L 112.5 27 L 117.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 107.5 27 L 112.5 27 L 117.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 116.5 27 L 121.5 27 L 126.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 116.5 27 L 121.5 27 L 126.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 125.5 27 L 130.5 27 L 135.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 125.5 27 L 130.5 27 L 135.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 134.5 27 L 139.5 27 L 144.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 134.5 27 L 139.5 27 L 144.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 143.5 27 L 148.5 27 L 153.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 143.5 27 L 148.5 27 L 153.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 152.5 27 L 157.5 27 L 162.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 152.5 27 L 157.5 27 L 162.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 161.5 27 L 166.5 27 L 171.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 161.5 27 L 166.5 27 L 171.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 170.5 27 L 175.5 27 L 180.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 170.5 27 L 175.5 27 L 180.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 179.5 27 L 184.5 27 L 189.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 179.5 27 L 184.5 27 L 189.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 188.5 27 L 193.5 27 L 198.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 188.5 27 L 193.5 27 L 198.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 197.5 27 L 202.5 27 L 207.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 197.5 27 L 202.5 27 L 207.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 206.5 27 L 211.5 27 L 216.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 206.5 27 L 211.5 27 L 216.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 215.5 27 L 220.5 27 L 225.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 215.5 27 L 220.5 27 L 225.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 224.5 27 L 229.5 27 L 234.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 224.5 27 L 229.5 27 L 234.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 233.5 27 L 238.5 27 L 243.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 233.5 27 L 238.5 27 L 243.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 242.5 27 L 247.5 27 L 252.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 242.5 27 L 247.5 27 L 252.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 251.5 27 L 256.5 27 L 261.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 251.5 27 L 256.5 27 L 261.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 260.5 27 L 265.5 27 L 270.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 260.5 27 L 265.5 27 L 270.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 269.5 27 L 274.5 27 L 279.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 269.5 27 L 274.5 27 L 279.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 278.5 27 L 283.5 27 L 288.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 278.5 27 L 283.5 27 L 288.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 287.5 27 L 292.5 27 L 297.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 287.5 27 L 292.5 27 L 297.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="306" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">F</text>
+<text x="315" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">i</text>
+<text x="324" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">l</text>
+<text x="333" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">e</text>
+<text x="351" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">B</text>
+<text x="360" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">r</text>
+<text x="369" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">o</text>
+<text x="378" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">w</text>
+<text x="387" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">s</text>
+<text x="396" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">e</text>
+<text x="405" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">r</text>
+<g data-box-drawing="double">
+<path d="M 422.5 27 L 427.5 27 L 432.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 422.5 27 L 427.5 27 L 432.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 431.5 27 L 436.5 27 L 441.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 431.5 27 L 436.5 27 L 441.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 440.5 27 L 445.5 27 L 450.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 440.5 27 L 445.5 27 L 450.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 449.5 27 L 454.5 27 L 459.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 449.5 27 L 454.5 27 L 459.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 458.5 27 L 463.5 27 L 468.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 458.5 27 L 463.5 27 L 468.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 467.5 27 L 472.5 27 L 477.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 467.5 27 L 472.5 27 L 477.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 476.5 27 L 481.5 27 L 486.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 476.5 27 L 481.5 27 L 486.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 485.5 27 L 490.5 27 L 495.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 485.5 27 L 490.5 27 L 495.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 494.5 27 L 499.5 27 L 504.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 494.5 27 L 499.5 27 L 504.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 503.5 27 L 508.5 27 L 513.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 503.5 27 L 508.5 27 L 513.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 512.5 27 L 517.5 27 L 522.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 512.5 27 L 517.5 27 L 522.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 521.5 27 L 526.5 27 L 531.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 521.5 27 L 526.5 27 L 531.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 530.5 27 L 535.5 27 L 540.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 530.5 27 L 535.5 27 L 540.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 539.5 27 L 544.5 27 L 549.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 539.5 27 L 544.5 27 L 549.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 548.5 27 L 553.5 27 L 558.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 548.5 27 L 553.5 27 L 558.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 557.5 27 L 562.5 27 L 567.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 557.5 27 L 562.5 27 L 567.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 566.5 27 L 571.5 27 L 576.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 566.5 27 L 571.5 27 L 576.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 575.5 27 L 580.5 27 L 585.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 575.5 27 L 580.5 27 L 585.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 584.5 27 L 589.5 27 L 594.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 584.5 27 L 589.5 27 L 594.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 593.5 27 L 598.5 27 L 603.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 593.5 27 L 598.5 27 L 603.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 602.5 27 L 607.5 27 L 612.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 602.5 27 L 607.5 27 L 612.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 611.5 27 L 616.5 27 L 621.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 611.5 27 L 616.5 27 L 621.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 620.5 27 L 625.5 27 L 630.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 620.5 27 L 625.5 27 L 630.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 629.5 27 L 634.5 27 L 639.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 629.5 27 L 634.5 27 L 639.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 638.5 27 L 643.5 27 L 648.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 638.5 27 L 643.5 27 L 648.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 647.5 27 L 652.5 27 L 657.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 647.5 27 L 652.5 27 L 657.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 656.5 27 L 661.5 27 L 666.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 656.5 27 L 661.5 27 L 666.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 665.5 27 L 670.5 27 L 675.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 665.5 27 L 670.5 27 L 675.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 674.5 27 L 679.5 27 L 684.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 674.5 27 L 679.5 27 L 684.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="684" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">[</text>
+<text x="693" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#00aa00" font-weight="bold">↕</text>
+<text x="702" y="32" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#ffffff" font-weight="bold">]</text>
+<g data-box-drawing="double">
+<path d="M 715.5 36.5 L 715.5 27 L 710.5 27" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 36.5 L 715.5 27 L 710.5 27" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 35.5 L 4.5 45 L 4.5 54.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 35.5 L 4.5 45 L 4.5 54.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="9" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">-</text>
+<text x="27" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">/</text>
+<text x="36" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">p</text>
+<text x="45" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">r</text>
+<text x="54" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">o</text>
+<text x="63" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">j</text>
+<text x="72" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">e</text>
+<text x="81" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">c</text>
+<text x="90" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000" text-decoration="underline">t</text>
+<text x="342" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">▲</text>
+<g data-box-drawing="single">
+<path d="M 355.5 35.5 L 355.5 45 L 355.5 54.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="360" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">i</text>
+<text x="369" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">n</text>
+<text x="378" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">c</text>
+<text x="387" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">l</text>
+<text x="396" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">u</text>
+<text x="405" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">d</text>
+<text x="414" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="423" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">/</text>
+<text x="702" y="50" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">▲</text>
+<g data-box-drawing="double">
+<path d="M 715.5 35.5 L 715.5 45 L 715.5 54.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 35.5 L 715.5 45 L 715.5 54.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 53.5 L 4.5 63 L 4.5 72.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 53.5 L 4.5 63 L 4.5 72.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="27" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">+</text>
+<text x="45" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">i</text>
+<text x="54" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">n</text>
+<text x="63" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">c</text>
+<text x="72" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">l</text>
+<text x="81" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">u</text>
+<text x="90" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">d</text>
+<text x="99" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="342" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 53.5 L 355.5 63 L 355.5 72.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="360" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="369" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">r</text>
+<text x="378" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">c</text>
+<text x="387" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">/</text>
+<text x="702" y="68" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 53.5 L 715.5 63 L 715.5 72.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 53.5 L 715.5 63 L 715.5 72.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 71.5 L 4.5 81 L 4.5 90.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 71.5 L 4.5 81 L 4.5 90.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="27" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">+</text>
+<text x="45" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="54" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">r</text>
+<text x="63" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">c</text>
+<text x="342" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 71.5 L 355.5 81 L 355.5 90.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="360" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="369" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="378" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="387" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="396" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="405" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">/</text>
+<text x="702" y="86" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 71.5 L 715.5 81 L 715.5 90.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 71.5 L 715.5 81 L 715.5 90.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 89.5 L 4.5 99 L 4.5 108.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 89.5 L 4.5 99 L 4.5 108.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="27" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">+</text>
+<text x="45" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="54" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="63" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="72" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="81" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="342" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 89.5 L 355.5 99 L 355.5 108.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="360" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">C</text>
+<text x="369" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">M</text>
+<text x="378" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">a</text>
+<text x="387" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">k</text>
+<text x="396" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="405" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">L</text>
+<text x="414" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">i</text>
+<text x="423" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="432" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="441" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">s</text>
+<text x="450" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">.</text>
+<text x="459" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="468" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">x</text>
+<text x="477" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="702" y="104" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 89.5 L 715.5 99 L 715.5 108.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 89.5 L 715.5 99 L 715.5 108.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 107.5 L 4.5 117 L 4.5 126.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 107.5 L 4.5 117 L 4.5 126.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 107.5 L 355.5 117 L 355.5 126.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="360" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">R</text>
+<text x="369" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">E</text>
+<text x="378" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">A</text>
+<text x="387" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">D</text>
+<text x="396" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">M</text>
+<text x="405" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">E</text>
+<text x="414" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">.</text>
+<text x="423" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">m</text>
+<text x="432" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">d</text>
+<text x="702" y="122" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 107.5 L 715.5 117 L 715.5 126.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 107.5 L 715.5 117 L 715.5 126.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 125.5 L 4.5 135 L 4.5 144.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 125.5 L 4.5 135 L 4.5 144.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="140" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 125.5 L 355.5 135 L 355.5 144.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="140" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 125.5 L 715.5 135 L 715.5 144.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 125.5 L 715.5 135 L 715.5 144.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 143.5 L 4.5 153 L 4.5 162.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 143.5 L 4.5 153 L 4.5 162.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="158" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 143.5 L 355.5 153 L 355.5 162.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="158" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 143.5 L 715.5 153 L 715.5 162.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 143.5 L 715.5 153 L 715.5 162.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 161.5 L 4.5 171 L 4.5 180.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 161.5 L 4.5 171 L 4.5 180.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="176" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 161.5 L 355.5 171 L 355.5 180.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="176" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 161.5 L 715.5 171 L 715.5 180.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 161.5 L 715.5 171 L 715.5 180.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 179.5 L 4.5 189 L 4.5 198.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 179.5 L 4.5 189 L 4.5 198.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="194" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 179.5 L 355.5 189 L 355.5 198.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="194" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 179.5 L 715.5 189 L 715.5 198.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 179.5 L 715.5 189 L 715.5 198.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 197.5 L 4.5 207 L 4.5 216.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 197.5 L 4.5 207 L 4.5 216.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="212" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 197.5 L 355.5 207 L 355.5 216.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="212" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 197.5 L 715.5 207 L 715.5 216.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 197.5 L 715.5 207 L 715.5 216.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 215.5 L 4.5 225 L 4.5 234.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 215.5 L 4.5 225 L 4.5 234.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="230" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 215.5 L 355.5 225 L 355.5 234.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="230" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 215.5 L 715.5 225 L 715.5 234.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 215.5 L 715.5 225 L 715.5 234.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 233.5 L 4.5 243 L 4.5 252.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 233.5 L 4.5 243 L 4.5 252.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="248" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 233.5 L 355.5 243 L 355.5 252.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="248" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 233.5 L 715.5 243 L 715.5 252.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 233.5 L 715.5 243 L 715.5 252.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 251.5 L 4.5 261 L 4.5 270.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 251.5 L 4.5 261 L 4.5 270.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="266" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 251.5 L 355.5 261 L 355.5 270.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="266" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 251.5 L 715.5 261 L 715.5 270.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 251.5 L 715.5 261 L 715.5 270.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 269.5 L 4.5 279 L 4.5 288.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 269.5 L 4.5 279 L 4.5 288.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="284" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 269.5 L 355.5 279 L 355.5 288.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="284" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 269.5 L 715.5 279 L 715.5 288.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 269.5 L 715.5 279 L 715.5 288.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 287.5 L 4.5 297 L 4.5 306.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 287.5 L 4.5 297 L 4.5 306.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="302" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 287.5 L 355.5 297 L 355.5 306.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="302" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 287.5 L 715.5 297 L 715.5 306.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 287.5 L 715.5 297 L 715.5 306.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 305.5 L 4.5 315 L 4.5 324.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 305.5 L 4.5 315 L 4.5 324.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="320" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 305.5 L 355.5 315 L 355.5 324.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="320" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 305.5 L 715.5 315 L 715.5 324.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 305.5 L 715.5 315 L 715.5 324.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 323.5 L 4.5 333 L 4.5 342.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 323.5 L 4.5 333 L 4.5 342.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="338" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 323.5 L 355.5 333 L 355.5 342.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="338" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 323.5 L 715.5 333 L 715.5 342.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 323.5 L 715.5 333 L 715.5 342.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 341.5 L 4.5 351 L 4.5 360.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 341.5 L 4.5 351 L 4.5 360.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="356" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 341.5 L 355.5 351 L 355.5 360.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="356" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 341.5 L 715.5 351 L 715.5 360.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 341.5 L 715.5 351 L 715.5 360.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 359.5 L 4.5 369 L 4.5 378.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 359.5 L 4.5 369 L 4.5 378.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="374" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="single">
+<path d="M 355.5 359.5 L 355.5 369 L 355.5 378.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="374" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">█</text>
+<g data-box-drawing="double">
+<path d="M 715.5 359.5 L 715.5 369 L 715.5 378.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 359.5 L 715.5 369 L 715.5 378.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 377.5 L 4.5 387 L 4.5 396.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 377.5 L 4.5 387 L 4.5 396.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="342" y="392" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">▼</text>
+<g data-box-drawing="single">
+<path d="M 355.5 377.5 L 355.5 387 L 355.5 396.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="702" y="392" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#55ffff">▼</text>
+<g data-box-drawing="double">
+<path d="M 715.5 377.5 L 715.5 387 L 715.5 396.5" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 377.5 L 715.5 387 L 715.5 396.5" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 4.5 395.5 L 4.5 405 L 9.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 4.5 395.5 L 4.5 405 L 9.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 8.5 405 L 13.5 405 L 18.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 8.5 405 L 13.5 405 L 18.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 17.5 405 L 22.5 405 L 27.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 17.5 405 L 22.5 405 L 27.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 26.5 405 L 31.5 405 L 36.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 26.5 405 L 31.5 405 L 36.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 35.5 405 L 40.5 405 L 45.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 35.5 405 L 40.5 405 L 45.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 44.5 405 L 49.5 405 L 54.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 44.5 405 L 49.5 405 L 54.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 53.5 405 L 58.5 405 L 63.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 53.5 405 L 58.5 405 L 63.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 62.5 405 L 67.5 405 L 72.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 62.5 405 L 67.5 405 L 72.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 71.5 405 L 76.5 405 L 81.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 71.5 405 L 76.5 405 L 81.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 80.5 405 L 85.5 405 L 90.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 80.5 405 L 85.5 405 L 90.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 89.5 405 L 94.5 405 L 99.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 89.5 405 L 94.5 405 L 99.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 98.5 405 L 103.5 405 L 108.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 98.5 405 L 103.5 405 L 108.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 107.5 405 L 112.5 405 L 117.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 107.5 405 L 112.5 405 L 117.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 116.5 405 L 121.5 405 L 126.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 116.5 405 L 121.5 405 L 126.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 125.5 405 L 130.5 405 L 135.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 125.5 405 L 130.5 405 L 135.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 134.5 405 L 139.5 405 L 144.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 134.5 405 L 139.5 405 L 144.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 143.5 405 L 148.5 405 L 153.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 143.5 405 L 148.5 405 L 153.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 152.5 405 L 157.5 405 L 162.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 152.5 405 L 157.5 405 L 162.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 161.5 405 L 166.5 405 L 171.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 161.5 405 L 166.5 405 L 171.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 170.5 405 L 175.5 405 L 180.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 170.5 405 L 175.5 405 L 180.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 179.5 405 L 184.5 405 L 189.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 179.5 405 L 184.5 405 L 189.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 188.5 405 L 193.5 405 L 198.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 188.5 405 L 193.5 405 L 198.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 197.5 405 L 202.5 405 L 207.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 197.5 405 L 202.5 405 L 207.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 206.5 405 L 211.5 405 L 216.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 206.5 405 L 211.5 405 L 216.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 215.5 405 L 220.5 405 L 225.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 215.5 405 L 220.5 405 L 225.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 224.5 405 L 229.5 405 L 234.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 224.5 405 L 229.5 405 L 234.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 233.5 405 L 238.5 405 L 243.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 233.5 405 L 238.5 405 L 243.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 242.5 405 L 247.5 405 L 252.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 242.5 405 L 247.5 405 L 252.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 251.5 405 L 256.5 405 L 261.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 251.5 405 L 256.5 405 L 261.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 260.5 405 L 265.5 405 L 270.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 260.5 405 L 265.5 405 L 270.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 269.5 405 L 274.5 405 L 279.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 269.5 405 L 274.5 405 L 279.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 278.5 405 L 283.5 405 L 288.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 278.5 405 L 283.5 405 L 288.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 287.5 405 L 292.5 405 L 297.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 287.5 405 L 292.5 405 L 297.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 296.5 405 L 301.5 405 L 306.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 296.5 405 L 301.5 405 L 306.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 305.5 405 L 310.5 405 L 315.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 305.5 405 L 310.5 405 L 315.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 314.5 405 L 319.5 405 L 324.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 314.5 405 L 319.5 405 L 324.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 323.5 405 L 328.5 405 L 333.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 323.5 405 L 328.5 405 L 333.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 332.5 405 L 337.5 405 L 342.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 332.5 405 L 337.5 405 L 342.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 341.5 405 L 346.5 405 L 351.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 341.5 405 L 346.5 405 L 351.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 350.5 405 L 355.5 405 L 360.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 350.5 405 L 355.5 405 L 360.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 359.5 405 L 364.5 405 L 369.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 359.5 405 L 364.5 405 L 369.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 368.5 405 L 373.5 405 L 378.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 368.5 405 L 373.5 405 L 378.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 377.5 405 L 382.5 405 L 387.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 377.5 405 L 382.5 405 L 387.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 386.5 405 L 391.5 405 L 396.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 386.5 405 L 391.5 405 L 396.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 395.5 405 L 400.5 405 L 405.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 395.5 405 L 400.5 405 L 405.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 404.5 405 L 409.5 405 L 414.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 404.5 405 L 409.5 405 L 414.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 413.5 405 L 418.5 405 L 423.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 413.5 405 L 418.5 405 L 423.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 422.5 405 L 427.5 405 L 432.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 422.5 405 L 427.5 405 L 432.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 431.5 405 L 436.5 405 L 441.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 431.5 405 L 436.5 405 L 441.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 440.5 405 L 445.5 405 L 450.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 440.5 405 L 445.5 405 L 450.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 449.5 405 L 454.5 405 L 459.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 449.5 405 L 454.5 405 L 459.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 458.5 405 L 463.5 405 L 468.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 458.5 405 L 463.5 405 L 468.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 467.5 405 L 472.5 405 L 477.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 467.5 405 L 472.5 405 L 477.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 476.5 405 L 481.5 405 L 486.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 476.5 405 L 481.5 405 L 486.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 485.5 405 L 490.5 405 L 495.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 485.5 405 L 490.5 405 L 495.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 494.5 405 L 499.5 405 L 504.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 494.5 405 L 499.5 405 L 504.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 503.5 405 L 508.5 405 L 513.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 503.5 405 L 508.5 405 L 513.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 512.5 405 L 517.5 405 L 522.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 512.5 405 L 517.5 405 L 522.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 521.5 405 L 526.5 405 L 531.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 521.5 405 L 526.5 405 L 531.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 530.5 405 L 535.5 405 L 540.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 530.5 405 L 535.5 405 L 540.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 539.5 405 L 544.5 405 L 549.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 539.5 405 L 544.5 405 L 549.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 548.5 405 L 553.5 405 L 558.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 548.5 405 L 553.5 405 L 558.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 557.5 405 L 562.5 405 L 567.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 557.5 405 L 562.5 405 L 567.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 566.5 405 L 571.5 405 L 576.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 566.5 405 L 571.5 405 L 576.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 575.5 405 L 580.5 405 L 585.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 575.5 405 L 580.5 405 L 585.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 584.5 405 L 589.5 405 L 594.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 584.5 405 L 589.5 405 L 594.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 593.5 405 L 598.5 405 L 603.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 593.5 405 L 598.5 405 L 603.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 602.5 405 L 607.5 405 L 612.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 602.5 405 L 607.5 405 L 612.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 611.5 405 L 616.5 405 L 621.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 611.5 405 L 616.5 405 L 621.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 620.5 405 L 625.5 405 L 630.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 620.5 405 L 625.5 405 L 630.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="630" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">/</text>
+<text x="639" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">p</text>
+<text x="648" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">r</text>
+<text x="657" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">o</text>
+<text x="666" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">j</text>
+<text x="675" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="684" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">c</text>
+<text x="693" y="410" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<g data-box-drawing="double">
+<path d="M 701.5 405 L 706.5 405 L 711.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 701.5 405 L 706.5 405 L 711.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 715.5 395.5 L 715.5 405 L 710.5 405" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M 715.5 395.5 L 715.5 405 L 710.5 405" fill="none" stroke="#0000aa" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</g>
+<text x="0" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">T</text>
+<text x="9" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">a</text>
+<text x="18" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">b</text>
+<text x="36" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">N</text>
+<text x="45" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="54" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">x</text>
+<text x="63" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<text x="81" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">F</text>
+<text x="90" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">i</text>
+<text x="99" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">e</text>
+<text x="108" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">l</text>
+<text x="117" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">d</text>
+<text x="135" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">|</text>
+<text x="153" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">A</text>
+<text x="162" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">l</text>
+<text x="171" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">t</text>
+<text x="180" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">+</text>
+<text x="189" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#aa0000">X</text>
+<text x="207" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">Q</text>
+<text x="216" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">u</text>
+<text x="225" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">i</text>
+<text x="234" y="428" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" fill="#000000">t</text>
+<g id="raster-plane">
+</g>
+</svg>

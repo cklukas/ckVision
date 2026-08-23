@@ -1,0 +1,6 @@
+# Copyright (c) 2026 C. Klukas. All rights reserved.
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/ckvisionTargets.cmake")
+check_required_components(ckvision)

@@ -1,0 +1,19 @@
+ckvision-golden 1
+frame 10 5
+cursor hidden
+styles 2
+0 fg default bg default attrs -
+1 fg #000000 bg #000000 attrs -
+grid
+|..........|
+|.┌───┐....|
+|.│   │....|
+|.└───┘....|
+|..........|
+stylemap
+|0000000000|
+|0000000000|
+|0000001100|
+|0000001100|
+|0001111100|
+end

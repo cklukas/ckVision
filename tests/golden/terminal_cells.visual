@@ -1,0 +1,48 @@
+primary-buffer-before-restore
+ckvision-golden 1
+frame 8 3
+cursor hidden
+styles 1
+0 fg #BBBBBB bg #000000 attrs -
+grid
+|primary |
+|        |
+|        |
+stylemap
+|00000000|
+|00000000|
+|00000000|
+end
+
+alternate-buffer
+ckvision-golden 1
+frame 8 3
+cursor 3 0 block
+styles 2
+0 fg @2 bg #000000 attrs -
+1 fg #BBBBBB bg #000000 attrs -
+grid
+|ALT     |
+|        |
+|        |
+stylemap
+|00011111|
+|11111111|
+|11111111|
+end
+
+primary-buffer-after-restore
+ckvision-golden 1
+frame 8 3
+cursor hidden
+styles 1
+0 fg #BBBBBB bg #000000 attrs -
+grid
+|primary |
+|        |
+|        |
+stylemap
+|00000000|
+|00000000|
+|00000000|
+end
