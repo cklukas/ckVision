@@ -79,6 +79,8 @@ public:
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
     bool on_key(const KeyEvent& event) override;
+    bool on_key_release(const KeyEvent& event) override;
+    void on_focus(const FocusEvent& event) override;
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
 
@@ -107,6 +109,15 @@ private:
     enum class Held : unsigned char { None, Close, Restore };
     Held held_ = Held::None;
     bool held_inside_ = true;
+    // The keyboard half of the same grammar, Button's way (D-055): Enter or
+    // Space on a focused stub arms the restore control; on a session whose
+    // verified key enhancements report releases, the key coming back up is
+    // what restores, and Escape or focus moving away in between takes the
+    // press back; on a session that cannot report a release the press acts
+    // at once, held visibly down for a moment so an accepted keystroke does
+    // not look exactly like an ignored one.
+    bool key_armed_ = false;
+    bool key_flash_ = false;
 };
 
 }  // namespace ckv::widgets

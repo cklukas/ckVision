@@ -1387,7 +1387,12 @@ application never constructs one. `[■]` closes the window through its own
 through `Desktop::activate`, which restores it on the way to the front
 (D-056). Both mouse controls arm on the press and decide on the release,
 exactly like the frame's own: the pressed face shows while the pointer is
-over the control, and releasing anywhere else takes the press back. It draws in the window roles — `ckv.window.frame.inactive`,
+over the control, and releasing anywhere else takes the press back. The
+keyboard follows `Button`'s rule (D-055): on a session whose verified key
+enhancements report releases, Enter or Space arms and the key coming back
+up restores — Escape or focus moving away in between takes it back — and on
+a session that cannot report a release the press acts at once, held
+visibly down for a moment. It draws in the window roles — `ckv.window.frame.inactive`,
 `ckv.window.title.inactive` and `ckv.window.control` — so a theme that
 retints inactive frames retints these with them.
 
