@@ -205,6 +205,12 @@ std::string measurement_caveat_text(const BuildReport& build) {
            "not the machine.";
 }
 
+std::string first_sentence(std::string_view text) {
+    const std::size_t stop = text.find(". ");
+    if (stop == std::string_view::npos) return std::string(text);
+    return std::string(text.substr(0, stop + 1));
+}
+
 std::string measured_bar_marker(const BuildReport& build) {
     return build_is_optimized(build) ? std::string() : std::string(" *");
 }

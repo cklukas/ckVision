@@ -181,6 +181,7 @@ private:
     // nothing when the reader asked for this run only.
     std::optional<BenchmarkId> comparison_kernel() const;
     static std::vector<std::string> comparison_choices();
+    static std::string catalogue_summary();
     static const BenchmarkResult* result_for(const std::vector<BenchmarkResult>& results, BenchmarkId id);
 
     void fill_system_table();
@@ -245,7 +246,7 @@ private:
     widgets::Progress* benchmark_progress_ = nullptr;
     widgets::StaticText* benchmark_note_ = nullptr;
     widgets::StaticText* benchmark_footnote_ = nullptr;
-    ui::View* benchmark_spacer_ = nullptr;
+    widgets::StaticText* benchmark_summary_ = nullptr;
     BarChartView* chart_ = nullptr;
 
     // Every group the current results would draw, in order: the topics the

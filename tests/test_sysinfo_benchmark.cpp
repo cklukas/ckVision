@@ -241,3 +241,25 @@ CK_TEST(the_disk_kernel_without_a_directory_measures_nothing_rather_than_choosin
     // And it is the only kernel that could have written anything, so this
     // suite writes nothing to the machine running it.
 }
+
+// Every catalogue entry carries both a one-line synopsis and the longer
+// explanation, and they are not the same string. This exists because they
+// were: adding `synopsis` ahead of `explanation` shifted one entry's fields
+// by one, so the memory kernel wore its explanation as its synopsis and had
+// no explanation at all -- an empty help topic and an empty paragraph in
+// every exported report, from an initializer that still compiled.
+CK_TEST(every_benchmark_says_what_it_is_briefly_and_at_length) {
+    for (const ckv::sysinfo::BenchmarkDescriptor& descriptor : ckv::sysinfo::benchmark_catalogue()) {
+        CK_CHECK(!descriptor.key.empty());
+        CK_CHECK(!descriptor.title.empty());
+        CK_CHECK(!descriptor.rate_unit.empty());
+        CK_CHECK(!descriptor.synopsis.empty());
+        CK_CHECK(!descriptor.explanation.empty());
+        // A synopsis is one line; an explanation is what a reader gets when
+        // they ask about this one in particular.
+        CK_CHECK(descriptor.synopsis != descriptor.explanation);
+        CK_CHECK(descriptor.synopsis.size() < descriptor.explanation.size());
+        CK_CHECK(descriptor.synopsis.size() <= 62);
+        CK_CHECK(descriptor.synopsis.find('\n') == std::string_view::npos);
+    }
+}
