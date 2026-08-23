@@ -1,6 +1,6 @@
 # Terminal capabilities: what ckVision supports, and what it depends on
 
-Status: current as of 2026-08-16 · verified against the source, not from memory
+Status: current as of 2026-08-23 · verified against the source, not from memory
 
 There are **two different terminals** in play whenever ckVision runs, and
 almost every confusing capability question comes from mixing them up:
@@ -50,6 +50,7 @@ entry with which one applies:
 | `CSI J` | ED (0/1/2/3) | 3 clears scrollback; **fills with the selected background (`bce`)** |
 | `CSI K` | EL (0/1/2) | as above |
 | `CSI X` | ECH | as above |
+| `CSI ? J` / `CSI ? K` | DECSED/DECSEL selective erase | the ordinary erase through the same code: DECSCA is not implemented, so nothing is ever protected |
 | `CSI @` / `CSI P` | ICH/DCH | fills with the selected background |
 | `CSI L` / `CSI M` | IL/DL | as above |
 | `CSI S` / `CSI T` | SU/SD | as above |
@@ -80,6 +81,8 @@ against a reference terminal rather than decided — see
 | `CSI ? 2004 h/l` | bracketed paste | E | |
 | `CSI ? 1007 h/l` | alternate scroll | E+H | on unless the child says otherwise; the wheel is the *host's* to report |
 | `ESC =` / `ESC >`, `CSI ? 66 h/l` | DECPAM/DECPNM/DECNKM application keypad | **N** | consumed, no effect, **no diagnostic** — the key model has no keypad identity to switch, and every curses program sends these (D-053) |
+| `CSI > Pp ; Pv m`, `CSI > Pp ; Pv f` | XTMODKEYS / XTFMTKEYS key-modifier options — modifyOtherKeys and its formats | **N** | consumed, no effect, **no diagnostic** (D-062): the cursor and function keys already travel in xterm's level-2 forms, and modifyOtherKeys' `CSI 27 ; mod ; code ~` encoding of an ordinary key is not implemented. Vim, neovim, emacs, tmux and Claude Code set this on the way in and reset it on the way out; a child that wants to know whether it took asks (`CSI ? Pp m`, below) and is told |
+| `CSI ? Pm s` / `CSI ? Pm r` | XTSAVE / XTRESTORE DEC private mode save/restore | **N** | refused with a diagnostic — a program that saved a mode and restores it cannot tell from the bytes that it did not get it back |
 | `CSI ? 2026` | synchronized output | **N** (inner) / H (outer) | we *use* it against the host; a child asking for it is ignored |
 | `CSI ? 1016` | pixel mouse | H | outer-terminal capability, negotiated by the host layer |
 
@@ -135,6 +138,24 @@ has said it can draw one.
 | `CSI ? Pi ; Pa ; Pv S` | XTSMGRAPHICS | the graphics limits behind that advertisement: the decoder's 256 colour registers, and a maximum geometry of the child's own window in pixels. Requests to *set* a limit, ReGIS geometry, and every request under a profile without Sixel are refused with a status — never with silence, which costs the asking program a timeout |
 | `CSI SP q` | DECSCUSR | cursor shape |
 | `CSI ? u` | kitty keyboard query | the enhancements actually in force — see below |
+| `CSI ? Pp m` | XTQMODKEYS | the key-modifier resource as it really stands, in the XTMODKEYS set-form so the answer restores it: `2` for the cursor and function keys (they already travel as `CSI 1 ; mod A` / `CSI 1 ; mod P`), `0` for modifyOtherKeys, which is not implemented — a program that set it and asks is told it keeps the legacy encoding (D-062) |
+| `CSI ? 6 n` | DECXCPR | the cursor position in the DEC form it was asked in, `CSI ? r ; c R`; the answer without its marker is CPR, which a program that asked this way does not read |
+
+### Private markers are read first
+
+A CSI whose parameters begin with `<`, `=`, `>` or `?` — ECMA-48's reserved
+parameter bytes 03/12 to 03/15 — is a different control from the public one
+that shares its final byte, and the emulator dispatches it by the marker
+*before* the final byte decides anything (`handle_private_csi`). Every marked
+form in the tables above lives there; a marked form not listed is refused with
+a diagnostic, never read as the public control it resembles. That is the class
+XTMODKEYS belonged to: decided by final byte alone, `CSI > 4 m` was a malformed
+colour, `CSI ? 25 r` (XTRESTORE) set a scrolling region at row 25, and
+`CSI > 2 T` (XTRMTITLE) scrolled the screen. Refused this way, by design:
+DA2/DA3 and XTVERSION (`CSI > c`, `CSI = c`, `CSI > q`), which ask for an
+identity and a firmware version where DA1 asks for capabilities — the same
+decision as answerback; the title modes (`CSI > Pm t` / `T`); XTSMPOINTER
+(`CSI > Ps p`).
 
 ### Graphics and metadata
 
@@ -224,7 +245,9 @@ emulator captures; it still cannot open a device or run a command.
 ### Deliberately never supported
 
 Tektronix and ReGIS graphics. DRCS soft fonts. Answerback (`ENQ` returns
-empty, never a fingerprint). Unknown string sequences are parsed to
+empty, never a fingerprint), and for the same reason DA2, DA3 and XTVERSION —
+DA1 states what this terminal can do and is answered; those three state what
+it *is*. Unknown string sequences are parsed to
 completion and dropped, so an unrecognised sequence can never desynchronise
 the parser.
 
@@ -297,3 +320,17 @@ documented above. What is left, in the same order of what a program notices:
 4. **Printer capture** (`MC`), designed above and waiting on its policy.
 5. **The `APC`/`PM`/`SOS` routing bug** noted above, which is a three-line fix
    to a contract this document already claims.
+6. **modifyOtherKeys** (`CSI > 4 ; 1 m` / `CSI > 4 ; 2 m`), the xterm side of
+   what the kitty flags do: an ordinary key held with a modifier travels as
+   `CSI 27 ; mod ; code ~`, which is how vim, neovim and Claude Code tell
+   `Shift+Enter` from `Enter` on a terminal without the kitty protocol. Today
+   the request is consumed and the query answers 0, which is true (D-062).
+   Real support is a level per screen beside the kitty flags in the emulator's
+   `KeyboardState` and in `TerminalStatus` (a host that forwards this terminal
+   carries it as it carries the flags); `TerminalView::encode_key` producing
+   the form for Ctrl- and Alt-held keys and for modified Enter, Tab, Escape
+   and Backspace — Shift+Tab stays `CSI Z`, a shifted printable stays text —
+   with level 1 sparing the keys whose legacy byte is well known (Ctrl+letter,
+   the control aliases, Backspace), per xterm's manual; XTQMODKEYS answering
+   the level in force; and the kitty encoding taking precedence where both are
+   on, because it is the more specific request.

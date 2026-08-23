@@ -1400,3 +1400,70 @@ detached session, a document closed but listed — would have had no seam);
 drawing the icon only for minimized entries (it would say "put away" and
 nothing else, and the active/behind distinction would rest on colour alone,
 which a monochrome theme does not have).
+
+**D-062 — A private marker is read before the final byte decides anything, and
+modifyOtherKeys is declined out loud.**
+A CSI whose parameters begin with `<`, `=`, `>` or `?` — ECMA-48's reserved
+parameter bytes 03/12 to 03/15 — is a different control from the public one
+that shares its final byte: DECSET is not SM, XTSMGRAPHICS is not SU, the kitty
+keyboard forms are not SCORC, XTMODKEYS is not SGR, XTSAVE/XTRESTORE are not
+SCOSC/DECSTBM. `TerminalEmulator::handle_csi` reads the marker FIRST and hands
+a marked sequence to `handle_private_csi`, where every marked form this
+terminal honours lives, dispatched by final byte; a marked form it does not
+implement is refused with a diagnostic there. No public handler is reachable
+with a marker any more.
+
+The defect this replaces was a class, found through one instance. Each handler
+in the old dispatch decided for itself whether to look for a marker, and the
+ones that did not were reached by whatever marked sequence happened to share
+their final byte: `CSI > 4 m` — what vim, neovim and Claude Code write on their
+way out to reset modifyOtherKeys — reached the SGR parser, which rejected the
+`>` as a malformed colour and left "malformed child SGR sequence" at the bottom
+of every ckmux window a Claude Code session had exited from; `CSI ? 25 r`
+(XTRESTORE) would have set a scrolling region at row 25; `CSI > 2 T`
+(XTRMTITLE) would have scrolled the screen; `CSI ? 6 n` (DECXCPR) was answered
+as CPR, without the marker a program that asked that way reads for. Guarding
+each handler in turn would have fixed the instances and kept the class; reading
+the marker first is the grammar ECMA-48 gives, and it makes the next such
+sequence a diagnostic rather than a fresh mystery.
+
+modifyOtherKeys itself — `CSI > 4 ; 1 m` / `CSI > 4 ; 2 m`, the xterm side of
+what the kitty flags do, under which an ordinary key held with a modifier
+travels as `CSI 27 ; mod ; code ~` — is not implemented, and the decision is
+how to say so. The set and reset forms are consumed without effect and without
+a diagnostic, by D-053's reasoning: vim, neovim, emacs, tmux and Claude Code
+all send them on the way in and out, so a diagnostic would fill the bounded
+ring with the one thing most full-screen programs do. Unlike the keypad, the
+setting can be asked about, and `CSI ? 4 m` (XTQMODKEYS) is answered — in the
+XTMODKEYS set-form, as xterm answers it, so the reply restores the state — and
+answered truthfully: `0`, the level really in force, including right after a
+program has set 2. A program told 2 would stop expecting the legacy encoding
+it is about to receive; a program told 0 keeps its fallback. The cursor and
+function keys already travel in the form xterm's default level 2 produces
+(`CSI 1 ; mod A`, `CSI 1 ; mod P`, `CSI 15 ; mod ~`), so those two resources
+answer `2`; modifyKeyboard and modifyKeypadKeys answer `0`; a resource this
+terminal has no value for is answered the way xterm answers for one it lacks,
+named and with the value left empty. XTFMTKEYS (`CSI > Pp ; Pv f`), the
+formats behind those resources, is consumed exactly as XTMODKEYS is — none of
+the keys it formats is sent here.
+
+What real support would take is recorded in `plans/term_capabilities.md`'s
+gaps: a level per screen beside the kitty flags in the emulator's
+`KeyboardState` and in `TerminalStatus`, the view's `encode_key` producing the
+`CSI 27` form for Ctrl- and Alt-held keys and for modified Enter, Tab, Escape
+and Backspace (Shift+Tab staying `CSI Z`, a shifted printable staying text),
+level 1 sparing the keys whose legacy byte is well known, the query answering
+the level in force, and the kitty encoding taking precedence where both are on.
+Until that is worth doing, the honest state is none, and the query says so.
+
+*Rejected:* tracking the level and exposing it in `TerminalStatus` without an
+encoder behind it (the query would then report a level the keys do not
+follow, which is the one lie the protocol is designed to let a program detect);
+an `UnsupportedSequence` diagnostic for each set (the ring would hold every
+vim's entry and exit, crowding out complaints a reader needs — and the child
+can ask); answering the query with silence (a program that asked waits for a
+timeout, and one restoring state from the answer gets nothing); a marker check
+added to each public handler the audit found (that is the shape of the defect,
+repeated); making XTMODKEYS an `UnsupportedSequence` only for levels 1 and 2
+and not for the reset (a distinction nothing could read, since the query tells
+the truth either way).

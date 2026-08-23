@@ -147,11 +147,15 @@ private:
     void put_text(bool flush_incomplete = false);
     void put_grapheme(std::string_view grapheme);
     void handle_csi(char final_byte);
+    void handle_private_csi(char final_byte);
+    void erase_in_display(int mode);
+    void erase_in_line(int mode);
     static std::vector<SgrParameter> parse_sgr_parameters(std::string_view text, bool& valid);
     void handle_sgr();
     bool graphics_available() const noexcept;
     void handle_graphics_attributes();
     void handle_keyboard_protocol();
+    void handle_key_modifier_options();
     bool extended_color(const std::vector<SgrParameter>& parameters, std::size_t& index,
                         const SgrParameter& parameter, Color& color);
     // The cell an erase leaves behind. Not the profile default: erasing

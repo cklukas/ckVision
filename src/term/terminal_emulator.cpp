@@ -965,7 +965,45 @@ int TerminalEmulator::parameter(std::string_view text, std::size_t index, int de
     return result.ec == std::errc{} && result.ptr == value.data() + value.size() ? parsed : default_value;
 }
 
+// ED and EL, by mode. Shared by the public forms and by DECSED/DECSEL, whose
+// selective erase spares only what DECSCA protected — and nothing here is ever
+// protected, so a selective erase is the ordinary one.
+void TerminalEmulator::erase_in_display(int mode) {
+    if (mode == 0) erase_cells(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
+    if (mode == 0 && cursor_.position.y + 1 < cells_.height)
+        erase_cells(0, cursor_.position.y + 1, cells_.width, cells_.height);
+    else if (mode == 1) {
+        if (cursor_.position.y > 0) erase_cells(0, 0, cells_.width, cursor_.position.y);
+        erase_cells(0, cursor_.position.y, cursor_.position.x + 1, cursor_.position.y + 1);
+    } else if (mode == 2) {
+        erase_cells(0, 0, cells_.width, cells_.height);
+        clear_rasters();
+    } else if (mode == 3) {
+        clear_scrollback();
+    }
+}
+
+void TerminalEmulator::erase_in_line(int mode) {
+    if (mode == 0) erase_cells(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
+    else if (mode == 1) erase_cells(0, cursor_.position.y, cursor_.position.x + 1, cursor_.position.y + 1);
+    else if (mode == 2) erase_cells(0, cursor_.position.y, cells_.width, cursor_.position.y + 1);
+}
+
 void TerminalEmulator::handle_csi(char final_byte) {
+    // A private marker — `<`, `=`, `>` or `?` in front of the parameters,
+    // ECMA-48's reserved parameter bytes 03/12 to 03/15 — makes a sequence a
+    // different control from the public one that shares its final byte, and
+    // it is read FIRST, before the final byte decides anything. Deciding from
+    // the final byte alone, with each handler checking for a marker or not
+    // as it happened to, is how `CSI > 4 m` reached the SGR parser as a
+    // malformed colour, how `CSI ? 25 r` would have set a scrolling region
+    // at row 25, and how `CSI > 2 T` would have scrolled the screen: every
+    // handler below reads its parameters as plain numbers, and none of them
+    // is reachable with a marker any more.
+    if (!control_.empty() && control_.front() >= '<' && control_.front() <= '?') {
+        handle_private_csi(final_byte);
+        return;
+    }
     // DECSCUSR (CSI Ps SP q) is emitted by interactive shells to select a
     // steady/blinking cursor style. The core records the declaration; the
     // outer presenter emits the host terminal's corresponding mode.
@@ -980,35 +1018,14 @@ void TerminalEmulator::handle_csi(char final_byte) {
             cursor_.shape = CursorShape::Block;
         return;
     }
-    // A nested child's own probe for synchronized output (DEC 2026) is
-    // answered for real: whether to hold a child's damage until the
-    // matching reset is this embedded terminal's own decision, not the
-    // outer terminal's probe state, so — unlike the two below — this is not
-    // something to withhold. ckVision's own probe sequence (posix_terminal.
-    // cpp) sets the mode immediately before asking, so a profile that
-    // supports it answers "set" here precisely because the dispatch above
-    // already ran for the same input.
-    if (final_byte == 'p' && control_.ends_with('$') && control_ == "?2026$") {
-        send_input(std::string("\x1b[?2026;") +
-                   (!profile_.synchronized_output ? "0" : synchronized_output_active_ ? "1" : "2") + "$y");
-        return;
-    }
-    // Capability probes emitted by a nested ckVision child are private to
-    // that child endpoint.  The profile deliberately does not expose the
-    // outer terminal's probe state, so these queries receive no reply but
-    // are still consumed as well-formed input rather than diagnostics.
-    if (final_byte == 'p' && control_.ends_with('$') &&
-        (control_ == "?2031$" || control_ == "?1016$"))
-        return;
     // DA is `CSI Ps c` with `Ps` defaulting to 0 (ECMA-48), and the VT100
     // manual gives the request as `CSI c` OR `CSI 0 c` — the same question
     // written two ways. Matching only the empty form left `CSI 0 c` consumed
     // as an unrecognised CSI: no reply, and no diagnostic either, so a child
     // that spelled it that way waited forever. vttest spells it that way.
-    //
-    // Compared against the literal "0" rather than through `parameter()`,
-    // which strips a leading private marker and would therefore answer DA2
-    // (`CSI > c`) with a DA1 response.
+    // DA2 (`CSI > c`) and DA3 (`CSI = c`) ask a different question — an
+    // identity, not a capability list — and carry a marker, so they never
+    // reach this; handle_private_csi() declines them.
     if (final_byte == 'c' && (control_.empty() || control_ == "0")) {
         // DA1 is where a program asks what this terminal is, and parameter 4
         // is the one answer that decides whether it draws a picture at all:
@@ -1022,14 +1039,6 @@ void TerminalEmulator::handle_csi(char final_byte) {
                 graphics_log(std::string("emulator: child asked DA1, answered ") +
                              (graphics_available() ? "?1;2;4c (Sixel)" : "?1;2c (no Sixel)"));
         }
-        return;
-    }
-    // XTSMGRAPHICS asks for the graphics limits behind that advertisement.
-    // It shares its final byte with SU (scroll up) and only the private
-    // marker separates them: read as SU, a probe scrolls the child's own
-    // screen away instead of answering it.
-    if (final_byte == 'S' && !control_.empty() && control_.front() == '?') {
-        handle_graphics_attributes();
         return;
     }
     if (final_byte == 't' && control_ == "16") {
@@ -1059,111 +1068,17 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     if (final_byte == 'u') {
-        // Bare `CSI u` is the cursor restore it has always been. The kitty
-        // keyboard protocol's forms all carry a private prefix, which is what
-        // keeps the two apart.
-        if (control_.empty()) {
-            if (saved_cursor_valid_) cursor_ = saved_cursor_;
-            return;
-        }
-        handle_keyboard_protocol();
-        return;
-    }
-    if ((final_byte == 'h' || final_byte == 'l') && !control_.empty() && control_.front() == '?') {
-        // One mark for the whole loop: which of the modes changed is the
-        // host's business to read out of the snapshot, and this only has to
-        // say that the set is no longer what it last sent.
-        damage_.modes = true;
-        const bool enabled = final_byte == 'h';
-        std::string_view modes(control_);
-        modes.remove_prefix(1);
-        std::size_t begin = 0;
-        while (begin <= modes.size()) {
-            const std::size_t end = modes.find(';', begin);
-            const std::string_view value = modes.substr(begin, end == std::string_view::npos ? modes.size() - begin : end - begin);
-            const int mode = parameter(value, 0, -1);
-            if (mode == 1049) {
-                // A different screen entirely: nothing a host knew about the
-                // one it was shown carries over.
-                if (alternate_buffer_ != enabled) damage_everything();
-                if (enabled) {
-                    saved_cursor_ = cursor_;
-                    saved_cursor_valid_ = true;
-                    alternate_buffer_ = true;
-                    reset_active_buffer();
-                    clear_rasters();
-                    cursor_.position = {};
-                } else {
-                    alternate_buffer_ = false;
-                    clear_rasters();
-                    if (saved_cursor_valid_) cursor_ = saved_cursor_;
-                }
-            } else if (mode == 47 || mode == 1047) {
-                if (alternate_buffer_ != enabled) damage_everything();
-                alternate_buffer_ = enabled;
-                if (enabled) {
-                    reset_active_buffer();
-                    clear_rasters();
-                    cursor_.position = {};
-                } else {
-                    clear_rasters();
-                }
-            } else if (mode == 1048) {
-                if (enabled) {
-                    saved_cursor_ = cursor_;
-                    saved_cursor_valid_ = true;
-                } else if (saved_cursor_valid_) {
-                    cursor_ = saved_cursor_;
-                }
-            } else if (mode == 2004) {
-                bracketed_paste_enabled_ = enabled && profile_.bracketed_paste;
-            } else if (mode == 7) {
-                autowrap_ = enabled;
-            } else if (mode == 6) {
-                origin_mode_ = enabled;
-                cursor_.position = Point{0, origin_mode_ ? scroll_top_ : 0};
-            } else if (mode == 1) {
-                application_cursor_keys_ = enabled;
-            } else if (mode == 1000 || mode == 1002 || mode == 1003) {
-                // Three levels of one facility, not three switches. Setting one
-                // selects that level — a program that wants drag motion sends
-                // 1002 and means "instead of", not "as well as" — and resetting
-                // any of them ends tracking, which is how a program that turned
-                // on 1002 and puts back 1000 and 1002 on its way out leaves the
-                // pointer to the terminal rather than half-tracked.
-                const TerminalMouseTracking level = mode == 1000 ? TerminalMouseTracking::Buttons
-                                                    : mode == 1002
-                                                        ? TerminalMouseTracking::ButtonMotion
-                                                        : TerminalMouseTracking::AnyMotion;
-                mouse_tracking_ = enabled && profile_.mouse_reporting ? level
-                                                                      : TerminalMouseTracking::None;
-                if (mouse_tracking_ == TerminalMouseTracking::None) mouse_sgr_enabled_ = false;
-            } else if (mode == 1006) {
-                mouse_sgr_enabled_ = enabled && profile_.mouse_reporting;
-            } else if (mode == 1004) {
-                focus_reporting_enabled_ = enabled;
-            } else if (mode == 1007) {
-                // Alternate scroll: with the alternate screen up and no mouse
-                // tracking of its own, the child wants a wheel notch as cursor
-                // keys. The emulator only records the request — turning a
-                // wheel into keys needs a wheel, and that is the view's end.
-                alternate_scroll_enabled_ = enabled;
-            } else if (mode == 18) {
-                printer_form_feed_ = enabled;  // DECPFF
-            } else if (mode == 19) {
-                printer_print_extent_ = enabled;  // DECPEX
-            } else if (mode == 25) {
-                cursor_.visible = enabled;
-            } else if (mode == 2026) {
-                synchronized_output_active_ = enabled && profile_.synchronized_output;
-            }
-            if (end == std::string_view::npos) break;
-            begin = end + 1;
-        }
+        // Bare `CSI u` is the cursor restore it has always been; the kitty
+        // keyboard protocol's forms all carry a private marker and arrive
+        // through handle_private_csi().
+        if (control_.empty() && saved_cursor_valid_) cursor_ = saved_cursor_;
+        else if (!control_.empty())
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child CSI sequence");
         return;
     }
     // The ANSI modes, which carry no '?' and are a separate space from the
-    // DEC private ones above: the same number means different things in each.
+    // DEC private ones in handle_private_csi(): the same number means
+    // different things in each.
     if (final_byte == 'h' || final_byte == 'l') {
         damage_.modes = true;
         const bool enabled = final_byte == 'h';
@@ -1239,15 +1154,9 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     if (final_byte == 'W') {
-        // DECST8C (CSI ? 5 W) puts the default stops back, which is how a
-        // program that found the terminal in an unknown state starts from a
-        // known one. CTC (no private marker) is the same three operations
-        // under their ECMA-48 names.
-        if (!control_.empty() && control_.front() == '?') {
-            if (parameter(control_, 0, 0) == 5) reset_tab_stops();
-            else diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-set form");
-            return;
-        }
+        // CTC: the three tab operations under their ECMA-48 names. DECST8C
+        // (`CSI ? 5 W`), which puts the default stops back, carries a private
+        // marker and arrives through handle_private_csi().
         const int mode = parameter(control_, 0, 0);
         const std::size_t column = static_cast<std::size_t>(std::max(0, cursor_.position.x));
         if (mode == 0 && column < tab_stops_.size()) tab_stops_[column] = true;
@@ -1291,29 +1200,8 @@ void TerminalEmulator::handle_csi(char final_byte) {
         erase_cells(cursor_.position.x, cursor_.position.y, cursor_.position.x + count, cursor_.position.y + 1);
         return;
     }
-    if (final_byte == 'J') {
-        const int mode = parameter(control_, 0, 0);
-        if (mode == 0) erase_cells(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
-        if (mode == 0 && cursor_.position.y + 1 < cells_.height)
-            erase_cells(0, cursor_.position.y + 1, cells_.width, cells_.height);
-        else if (mode == 1) {
-            if (cursor_.position.y > 0) erase_cells(0, 0, cells_.width, cursor_.position.y);
-            erase_cells(0, cursor_.position.y, cursor_.position.x + 1, cursor_.position.y + 1);
-        } else if (mode == 2) {
-            erase_cells(0, 0, cells_.width, cells_.height);
-            clear_rasters();
-        } else if (mode == 3) {
-            clear_scrollback();
-        }
-        return;
-    }
-    if (final_byte == 'K') {
-        const int mode = parameter(control_, 0, 0);
-        if (mode == 0) erase_cells(cursor_.position.x, cursor_.position.y, cells_.width, cursor_.position.y + 1);
-        else if (mode == 1) erase_cells(0, cursor_.position.y, cursor_.position.x + 1, cursor_.position.y + 1);
-        else if (mode == 2) erase_cells(0, cursor_.position.y, cells_.width, cursor_.position.y + 1);
-        return;
-    }
+    if (final_byte == 'J') { erase_in_display(parameter(control_, 0, 0)); return; }
+    if (final_byte == 'K') { erase_in_line(parameter(control_, 0, 0)); return; }
     if (final_byte == 'r') {
         const int top = std::clamp(parameter(control_, 0, 1) - 1, 0, cells_.height - 1);
         const int bottom = std::clamp(parameter(control_, 1, cells_.height), 1, cells_.height);
@@ -1335,16 +1223,6 @@ void TerminalEmulator::handle_csi(char final_byte) {
     }
     if (final_byte == 'n' && profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
         const int query = parameter(control_, 0, 0);
-        // DSR 15: is there a printer? Answered honestly, because a program
-        // that is told there is one and then prints into silence has no way
-        // to find out otherwise. Ready, not-ready (a job overflowed and is
-        // being sunk), or no-printer at all.
-        if (!control_.empty() && control_.front() == '?' && query == 15) {
-            if (!printer_available()) send_input("\x1b[?13n");
-            else if (printer_overflowed_) send_input("\x1b[?11n");
-            else send_input("\x1b[?10n");
-            return;
-        }
         if (query == 5) send_input("\x1b[0n");
         else if (query == 6)
             send_input("\x1b[" + std::to_string(cursor_.position.y + 1) + ";" +
@@ -1352,6 +1230,233 @@ void TerminalEmulator::handle_csi(char final_byte) {
         return;
     }
     diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child CSI sequence");
+}
+
+// Every CSI whose parameters begin with a private marker. The marker is what
+// distinguishes these from the public controls that share their final bytes
+// — DECSET from SM, XTSMGRAPHICS from SU, the kitty keyboard forms from SCORC,
+// XTMODKEYS from SGR, XTSAVE/XTRESTORE from SCOSC/DECSTBM — and handle_csi()
+// has already read it, so nothing here can fall into a public handler. What
+// this terminal honours is dispatched by final byte; what it knows and
+// deliberately leaves alone is consumed (XTMODKEYS, D-062) or refused with a
+// diagnostic (XTSAVE/XTRESTORE, DA2/DA3, XTVERSION, the title modes); and an
+// unknown marked sequence is a diagnostic rather than the public control it
+// merely resembled.
+void TerminalEmulator::handle_private_csi(char final_byte) {
+    const char marker = control_.front();
+    switch (final_byte) {
+        case 'p':
+            // A nested child's own probe for synchronized output (DEC 2026) is
+            // answered for real: whether to hold a child's damage until the
+            // matching reset is this embedded terminal's own decision, not the
+            // outer terminal's probe state, so — unlike the two below — this is not
+            // something to withhold. ckVision's own probe sequence (posix_terminal.
+            // cpp) sets the mode immediately before asking, so a profile that
+            // supports it answers "set" here precisely because the dispatch above
+            // already ran for the same input.
+            if (control_ == "?2026$") {
+                send_input(std::string("\x1b[?2026;") +
+                           (!profile_.synchronized_output ? "0" : synchronized_output_active_ ? "1" : "2") + "$y");
+                return;
+            }
+            // Capability probes emitted by a nested ckVision child are private to
+            // that child endpoint.  The profile deliberately does not expose the
+            // outer terminal's probe state, so these queries receive no reply but
+            // are still consumed as well-formed input rather than diagnostics.
+            if (control_ == "?2031$" || control_ == "?1016$") return;
+            break;
+        case 'S':
+            // XTSMGRAPHICS asks for the graphics limits behind that advertisement.
+            // It shares its final byte with SU (scroll up) and only the private
+            // marker separates them: read as SU, a probe scrolls the child's own
+            // screen away instead of answering it.
+            if (marker != '?') break;
+            handle_graphics_attributes();
+            return;
+        case 'u':
+            // The kitty keyboard protocol: `>` pushes, `<` pops, `=` sets
+            // and `?` asks. Bare `CSI u`, the cursor restore, has no marker
+            // and never arrives here.
+            handle_keyboard_protocol();
+            return;
+        case 'h':
+        case 'l': {
+            if (marker != '?') break;
+            // One mark for the whole loop: which of the modes changed is the
+            // host's business to read out of the snapshot, and this only has to
+            // say that the set is no longer what it last sent.
+            damage_.modes = true;
+            const bool enabled = final_byte == 'h';
+            std::string_view modes(control_);
+            modes.remove_prefix(1);
+            std::size_t begin = 0;
+            while (begin <= modes.size()) {
+                const std::size_t end = modes.find(';', begin);
+                const std::string_view value = modes.substr(begin, end == std::string_view::npos ? modes.size() - begin : end - begin);
+                const int mode = parameter(value, 0, -1);
+                if (mode == 1049) {
+                    // A different screen entirely: nothing a host knew about the
+                    // one it was shown carries over.
+                    if (alternate_buffer_ != enabled) damage_everything();
+                    if (enabled) {
+                        saved_cursor_ = cursor_;
+                        saved_cursor_valid_ = true;
+                        alternate_buffer_ = true;
+                        reset_active_buffer();
+                        clear_rasters();
+                        cursor_.position = {};
+                    } else {
+                        alternate_buffer_ = false;
+                        clear_rasters();
+                        if (saved_cursor_valid_) cursor_ = saved_cursor_;
+                    }
+                } else if (mode == 47 || mode == 1047) {
+                    if (alternate_buffer_ != enabled) damage_everything();
+                    alternate_buffer_ = enabled;
+                    if (enabled) {
+                        reset_active_buffer();
+                        clear_rasters();
+                        cursor_.position = {};
+                    } else {
+                        clear_rasters();
+                    }
+                } else if (mode == 1048) {
+                    if (enabled) {
+                        saved_cursor_ = cursor_;
+                        saved_cursor_valid_ = true;
+                    } else if (saved_cursor_valid_) {
+                        cursor_ = saved_cursor_;
+                    }
+                } else if (mode == 2004) {
+                    bracketed_paste_enabled_ = enabled && profile_.bracketed_paste;
+                } else if (mode == 7) {
+                    autowrap_ = enabled;
+                } else if (mode == 6) {
+                    origin_mode_ = enabled;
+                    cursor_.position = Point{0, origin_mode_ ? scroll_top_ : 0};
+                } else if (mode == 1) {
+                    application_cursor_keys_ = enabled;
+                } else if (mode == 1000 || mode == 1002 || mode == 1003) {
+                    // Three levels of one facility, not three switches. Setting one
+                    // selects that level — a program that wants drag motion sends
+                    // 1002 and means "instead of", not "as well as" — and resetting
+                    // any of them ends tracking, which is how a program that turned
+                    // on 1002 and puts back 1000 and 1002 on its way out leaves the
+                    // pointer to the terminal rather than half-tracked.
+                    const TerminalMouseTracking level = mode == 1000 ? TerminalMouseTracking::Buttons
+                                                        : mode == 1002
+                                                            ? TerminalMouseTracking::ButtonMotion
+                                                            : TerminalMouseTracking::AnyMotion;
+                    mouse_tracking_ = enabled && profile_.mouse_reporting ? level
+                                                                          : TerminalMouseTracking::None;
+                    if (mouse_tracking_ == TerminalMouseTracking::None) mouse_sgr_enabled_ = false;
+                } else if (mode == 1006) {
+                    mouse_sgr_enabled_ = enabled && profile_.mouse_reporting;
+                } else if (mode == 1004) {
+                    focus_reporting_enabled_ = enabled;
+                } else if (mode == 1007) {
+                    // Alternate scroll: with the alternate screen up and no mouse
+                    // tracking of its own, the child wants a wheel notch as cursor
+                    // keys. The emulator only records the request — turning a
+                    // wheel into keys needs a wheel, and that is the view's end.
+                    alternate_scroll_enabled_ = enabled;
+                } else if (mode == 18) {
+                    printer_form_feed_ = enabled;  // DECPFF
+                } else if (mode == 19) {
+                    printer_print_extent_ = enabled;  // DECPEX
+                } else if (mode == 25) {
+                    cursor_.visible = enabled;
+                } else if (mode == 2026) {
+                    synchronized_output_active_ = enabled && profile_.synchronized_output;
+                }
+                if (end == std::string_view::npos) break;
+                begin = end + 1;
+            }
+            return;
+        }
+        case 'W':
+            // DECST8C (`CSI ? 5 W`) puts the default tab stops back, which
+            // is how a program that found the terminal in an unknown state
+            // starts from a known one.
+            if (marker != '?') break;
+            if (parameter(control_, 0, 0) == 5) reset_tab_stops();
+            else diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child tab-set form");
+            return;
+        case 'J':
+        case 'K':
+            // DECSED / DECSEL (VT220): erase what DECSCA left unprotected.
+            // Nothing is ever protected here, so the selective erase is the
+            // ordinary one, and parameter() reads past the marker.
+            if (marker != '?') break;
+            if (final_byte == 'J') erase_in_display(parameter(control_, 0, 0));
+            else erase_in_line(parameter(control_, 0, 0));
+            return;
+        case 'm':
+            // XTMODKEYS (`>`) and XTQMODKEYS (`?`), which share SGR's final
+            // byte: read as SGR, `CSI > 4 m` — what vim, neovim and Claude
+            // Code write on their way out — was a malformed colour, and said
+            // so at the bottom of the window.
+            if (marker != '>' && marker != '?') break;
+            handle_key_modifier_options();
+            return;
+        case 'f':
+            // XTFMTKEYS (`CSI > Pp ; Pv f`), the formats behind XTMODKEYS'
+            // resources: consumed exactly as those are, and for the same
+            // reason — none of the keys it formats is sent here.
+            if (marker != '>') break;
+            return;
+        case 'i':
+            // `CSI ? Ps i`, the DEC forms of Media Copy; the public forms
+            // share handle_media_copy(), which reads the marker itself.
+            if (marker != '?') break;
+            handle_media_copy();
+            return;
+        case 'n': {
+            // The DEC forms of DSR. Under a profile that answers nothing they
+            // fall through to the diagnostic below, exactly as the public
+            // forms do.
+            if (marker != '?' || profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) break;
+            const int query = parameter(control_, 0, 0);
+            // DECXCPR: the cursor position, answered in the DEC form the
+            // question was asked in. The answer without its marker is the
+            // public CPR, which a program that asked this way does not read.
+            if (query == 6) {
+                send_input("\x1b[?" + std::to_string(cursor_.position.y + 1) + ";" +
+                           std::to_string(cursor_.position.x + 1) + "R");
+                return;
+            }
+            // DSR 15: is there a printer? Answered honestly, because a program
+            // that is told there is one and then prints into silence has no way
+            // to find out otherwise. Ready, not-ready (a job overflowed and is
+            // being sunk), or no-printer at all.
+            if (query == 15) {
+                if (!printer_available()) send_input("\x1b[?13n");
+                else if (printer_overflowed_) send_input("\x1b[?11n");
+                else send_input("\x1b[?10n");
+                return;
+            }
+            break;
+        }
+        case 's':
+        case 'r':
+            // XTSAVE / XTRESTORE: a one-level cache of DEC private mode
+            // values. Not kept here, and said so — a program that saved a
+            // mode and restores it expects the mode back, and cannot tell
+            // from the bytes that it did not get it.
+            if (marker != '?') break;
+            diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence,
+                       "unsupported child DEC private mode save/restore");
+            return;
+        default:
+            break;
+    }
+    // DA2 (`CSI > c`) and DA3 (`CSI = c`), which are deliberately not
+    // answered: DA1 states capabilities, those two state an identity, and this
+    // terminal declines to be fingerprinted (the same decision as answerback).
+    // XTVERSION (`CSI > q`) for the same reason; XTSMTITLE/XTRMTITLE
+    // (`CSI > t`/`T`), XTSMPOINTER (`CSI > p`) and whatever else is marked
+    // and unknown, because none of it is the public control it resembled.
+    diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child private CSI sequence");
 }
 
 // Whether a child's picture can be shown at all, which is what every graphics
@@ -1501,6 +1606,48 @@ void TerminalEmulator::handle_keyboard_protocol() {
         default:
             diagnostic(TerminalDiagnostic::Kind::UnsupportedSequence, "unsupported child CSI sequence");
             return;
+    }
+}
+
+// xterm's key-modifier options. `CSI > Pp ; Pv m` (XTMODKEYS) sets resource
+// Pp — 4 is modifyOtherKeys — to Pv, `CSI > Pp m` resets it, `CSI > m` resets
+// them all, and `CSI ? Pp m` (XTQMODKEYS) asks, answered in the set form so
+// that the answer can be played back to restore the state.
+//
+// None of the resources moves anything here, and the set forms are consumed
+// the way DECPAM is (D-053): known, without effect, and without a diagnostic
+// — every vim, neovim, emacs and tmux session sets modifyOtherKeys on the way
+// in and resets it on the way out, which would fill the bounded ring with the
+// one thing most full-screen programs do, and a child that wants to know
+// whether the setting took is not left guessing: the query is answered, and
+// answered truthfully (D-062). The cursor and function keys already travel in
+// the form xterm's default level 2 produces — `CSI 1 ; mod A`, `CSI 1 ; mod P`,
+// `CSI 15 ; mod ~` — so those two resources read back as 2. modifyOtherKeys,
+// the `CSI 27 ; mod ; code ~` spelling of an ordinary key held with a
+// modifier, is not implemented, so it reads back as 0: a program that set it
+// and asked is told it will keep receiving the legacy encoding, rather than
+// told a promise the next keystroke breaks. Resources this terminal has no
+// value for are answered the way xterm answers them, with the value left
+// empty.
+void TerminalEmulator::handle_key_modifier_options() {
+    if (control_.front() == '>') return;
+    if (profile_.query_policy != TerminalQueryPolicy::DeclaredProfile) return;
+    const std::string_view parameters = std::string_view(control_).substr(1);
+    if (parameters.empty()) return;
+    const std::size_t count =
+        static_cast<std::size_t>(std::count(parameters.begin(), parameters.end(), ';')) + 1;
+    for (std::size_t index = 0; index < count; ++index) {
+        const int resource = parameter(parameters, index, 0);
+        std::string reply = "\x1b[>" + std::to_string(resource) + ";";
+        switch (resource) {
+            case 0: reply += "0"; break;  // modifyKeyboard: nothing is remapped
+            case 1: reply += "2"; break;  // modifyCursorKeys: `CSI 1 ; mod A`
+            case 2: reply += "2"; break;  // modifyFunctionKeys: `CSI 1 ; mod P`, `CSI 15 ; mod ~`
+            case 3: reply += "0"; break;  // modifyKeypadKeys: there is no keypad to modify (D-053)
+            case 4: reply += "0"; break;  // modifyOtherKeys: not implemented, and said so
+            default: break;               // no value here, as xterm answers for one it lacks
+        }
+        send_input(reply + "m");
     }
 }
 
