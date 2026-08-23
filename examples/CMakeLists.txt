@@ -176,6 +176,7 @@ add_library(sysinfo_app STATIC
     sysinfo/build_report.cpp
     sysinfo/fixed_benchmark_runner.cpp
     sysinfo/fixed_system_probe.cpp
+    sysinfo/latency_plot.cpp
     sysinfo/reference_points.cpp
     sysinfo/report_format.cpp
     sysinfo/sysinfo_app.cpp)

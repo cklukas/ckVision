@@ -51,6 +51,13 @@ struct ChartBar {
     bool highlighted = false;
 };
 
+// The chart as lines of text at `width`, grouped and normalized exactly as
+// BarChartView draws it. A free function because two things need it: the
+// view, and the fallback a Canvas must paint where the terminal cannot show
+// its picture -- and those two showing the same data differently is the one
+// outcome a capability fallback must not produce.
+std::vector<std::string> chart_rows(const std::vector<ChartBar>& bars, int width);
+
 class BarChartView : public ui::View {
 public:
     BarChartView();

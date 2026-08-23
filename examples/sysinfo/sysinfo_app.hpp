@@ -29,8 +29,10 @@
 #include "system_probe.hpp"
 
 namespace ckv::widgets {
+class Canvas;
 class CheckGroup;
 class ComboBox;
+class TextView;
 class Progress;
 class StaticText;
 class Window;
@@ -50,6 +52,8 @@ public:
     static constexpr std::string_view kMemoryWindowKey = "sysinfo.memory-window";
     static constexpr std::string_view kVolumesWindowKey = "sysinfo.volumes-window";
     static constexpr std::string_view kRefreshKey = "sysinfo.refresh";
+    static constexpr std::string_view kTerminalWindowKey = "sysinfo.terminal-window";
+    static constexpr std::string_view kLatencyPlotKey = "sysinfo.latency-plot";
     static constexpr std::string_view kBenchmarksWindowKey = "sysinfo.benchmarks-window";
     static constexpr std::string_view kRunBenchmarksKey = "sysinfo.run-benchmarks";
     static constexpr std::string_view kCancelBenchmarksKey = "sysinfo.cancel-benchmarks";
@@ -64,6 +68,13 @@ public:
     widgets::Window* volumes_window() const noexcept { return volumes_window_; }
     widgets::Table* volumes_table() const noexcept { return volumes_table_; }
     widgets::Progress* volumes_bar() const noexcept { return volumes_bar_; }
+    widgets::Window* latency_plot_window() const noexcept { return latency_plot_window_; }
+    widgets::Canvas* latency_canvas() const noexcept { return latency_canvas_; }
+    // What the Canvas's cell fallback would draw, which is what a test can
+    // assert without a terminal that decodes pictures.
+    std::vector<ChartBar> latency_bars_for_test() const { return latency_bars(); }
+    widgets::Window* terminal_window() const noexcept { return terminal_window_; }
+    widgets::TextView* terminal_report() const noexcept { return terminal_report_; }
     widgets::Window* benchmarks_window() const noexcept { return benchmarks_window_; }
     widgets::CheckGroup* benchmark_picker() const noexcept { return benchmark_picker_; }
     widgets::ComboBox* compare_picker() const noexcept { return compare_picker_; }
@@ -101,6 +112,13 @@ private:
     void refill(widgets::Table& table, widgets::TableRowId cursor,
                 std::vector<std::vector<std::string>> rows);
 
+    void open_latency_plot_window();
+    void update_latency_plot();
+    const std::vector<SeriesPoint>& latency_series() const;
+    // The same series as chart bars, for the Canvas's cell fallback.
+    std::vector<ChartBar> latency_bars() const;
+    void open_terminal_window();
+    void fill_terminal_report();
     void open_benchmarks_window();
     void start_benchmarks();
     void cancel_benchmarks();
@@ -135,6 +153,11 @@ private:
     widgets::TableRowId memory_cursor_ = widgets::kInvalidTableRowId;
     widgets::TableRowId volumes_cursor_ = widgets::kInvalidTableRowId;
 
+    widgets::Window* latency_plot_window_ = nullptr;
+    widgets::Canvas* latency_canvas_ = nullptr;
+    widgets::StaticText* latency_plot_footer_ = nullptr;
+    widgets::Window* terminal_window_ = nullptr;
+    widgets::TextView* terminal_report_ = nullptr;
     widgets::Window* benchmarks_window_ = nullptr;
     widgets::CheckGroup* benchmark_picker_ = nullptr;
     widgets::ComboBox* compare_picker_ = nullptr;

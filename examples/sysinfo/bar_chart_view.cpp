@@ -141,6 +141,13 @@ std::string BarChartView::row_text(const ChartBar& bar, const Layout& layout, do
            padded_left(bar.value_text, layout.value_width);
 }
 
+std::vector<std::string> chart_rows(const std::vector<ChartBar>& bars, int width) {
+    BarChartView chart;
+    chart.set_bounds(Rect{0, 0, width, 1});
+    chart.set_bars(bars);
+    return chart.text_rows();
+}
+
 std::vector<std::string> BarChartView::text_rows() const {
     const int width = bounds().width;
     std::vector<std::string> rows;

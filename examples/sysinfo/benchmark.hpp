@@ -35,6 +35,11 @@ enum class BenchmarkId {
     IntegerMix,
     FloatingPoint,
     MemoryBandwidth,
+    // The two that answer with a curve rather than a number. They are
+    // kernels like the others -- same catalogue, same picker, same worker,
+    // same cancellation -- and differ only in what they hand back.
+    CacheLatency,
+    ThreadScaling,
 };
 
 struct BenchmarkDescriptor {
@@ -61,12 +66,29 @@ inline constexpr double kMemoryUnitRate = 1e9;    // bytes per second of triad t
 
 double unit_rate(BenchmarkId id) noexcept;
 
+// One point of an analysis that has no single answer: a working-set size
+// and its access latency, a thread count and its speedup.
+struct SeriesPoint {
+    std::string label;
+    double value = 0.0;
+    std::string value_text;
+    // The value a perfect machine would have shown here, where such a
+    // thing exists (ideal scaling is exactly the thread count). Absent
+    // where it does not, because most questions have no perfect answer.
+    double ideal = 0.0;
+};
+
 struct BenchmarkResult {
     BenchmarkId id = BenchmarkId::IntegerMix;
     double rate = 0.0;   // in the kernel's own unit
     double index = 0.0;  // rate / unit_rate(id)
     std::string rate_text;   // "3.4 GB/s", "812 MFLOPS"
     std::string index_text;  // "34.1"
+    // Empty for a kernel that measures one thing. A kernel that measures a
+    // curve fills this instead, and the chart draws one bar per point.
+    std::vector<SeriesPoint> series;
+    // What the series is a series of, on the chart's group heading.
+    std::string series_caption;
 };
 
 // --- Kernels -------------------------------------------------------------
@@ -94,6 +116,17 @@ std::vector<double> multiply_matrices(const std::vector<double>& left, const std
 // cache, so what it measures is the path to memory.
 void stream_triad(std::vector<double>& a, const std::vector<double>& b, const std::vector<double>& c,
                   double scalar) noexcept;
+
+// A ring of `elements` slots, each holding the index of the next, arranged
+// as one cycle through every slot in an order no prefetcher can follow.
+// Built with Sattolo's algorithm, which produces a single cycle rather than
+// an arbitrary permutation -- an arbitrary one would break into shorter
+// cycles and the walk would revisit a handful of hot slots forever.
+std::vector<std::uint32_t> make_pointer_chase(std::size_t elements, std::uint64_t seed);
+
+// Walks the ring `steps` times from slot 0 and returns where it stopped,
+// which is what stops the walk from being deleted for having no effect.
+std::uint32_t walk_pointer_chase(const std::vector<std::uint32_t>& ring, std::size_t steps) noexcept;
 
 // --- Running them --------------------------------------------------------
 
@@ -127,8 +160,18 @@ public:
     // doing only this.
     static constexpr int kPasses = 3;
 
+    // How many threads the scaling run may use. The application passes the
+    // machine's own core count from the probe, because the number of cores
+    // is a fact about the host and this class does not read the host.
+    void set_maximum_threads(int threads) noexcept;
+    int maximum_threads() const noexcept { return maximum_threads_; }
+
 private:
+    BenchmarkResult run_cache_latency(const std::atomic<bool>& cancelled) const;
+    BenchmarkResult run_thread_scaling(const std::atomic<bool>& cancelled) const;
+
     const Clock& clock_;
+    int maximum_threads_ = 1;
 };
 
 }  // namespace ckv::sysinfo

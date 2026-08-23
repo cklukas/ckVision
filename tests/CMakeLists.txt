@@ -231,10 +231,12 @@ if(TARGET spin_app)
 endif()
 
 if(TARGET sysinfo_app)
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_benchmark.cpp test_sysinfo_chart.cpp
-        test_sysinfo_format.cpp test_sysinfo_reference_points.cpp test_sysinfo_smoke.cpp)
-    target_sources(cvision_tests PRIVATE test_sysinfo_benchmark.cpp test_sysinfo_chart.cpp
-        test_sysinfo_format.cpp test_sysinfo_reference_points.cpp test_sysinfo_smoke.cpp)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
+        test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
+        test_sysinfo_smoke.cpp)
+    target_sources(cvision_tests PRIVATE test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
+        test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
+        test_sysinfo_smoke.cpp)
     target_link_libraries(cvision_tests PRIVATE sysinfo_app)
 endif()
 

@@ -11,6 +11,8 @@
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/scene/painter.hpp"
+#include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/static_text.hpp"
@@ -19,8 +21,10 @@
 #include "cvision/widgets/progress.hpp"
 #include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/table.hpp"
+#include "cvision/widgets/text_view.hpp"
 #include "cvision/widgets/window.hpp"
 
+#include "latency_plot.hpp"
 #include "report_format.hpp"
 
 namespace ckv::sysinfo {
@@ -52,6 +56,9 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId volumes_command = app_.commands().declare(
         {.key = std::string(kVolumesWindowKey), .title = "&Disks", .category = "System",
          .handler = [this] { open_volumes_window(); }});
+    const ui::CommandId terminal_command = app_.commands().declare(
+        {.key = std::string(kTerminalWindowKey), .title = "&Terminal", .category = "System",
+         .handler = [this] { open_terminal_window(); }});
     const ui::CommandId refresh_command = app_.commands().declare(
         {.key = std::string(kRefreshKey), .title = "&Refresh", .category = "System", .chord = "F2",
          .handler = [this] { refresh(); }});
@@ -62,6 +69,7 @@ void SysInfoApp::build_chrome() {
             widgets::MenuItem::command(widgets::CommandPresentation{system_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{memory_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{volumes_command}),
+            widgets::MenuItem::command(widgets::CommandPresentation{terminal_command}),
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{refresh_command}),
             widgets::MenuItem::separator(),
@@ -73,6 +81,9 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId run_command = app_.commands().declare(
         {.key = std::string(kRunBenchmarksKey), .title = "&Run selected", .category = "Benchmarks", .chord = "F9",
          .handler = [this] { start_benchmarks(); }});
+    const ui::CommandId plot_command = app_.commands().declare(
+        {.key = std::string(kLatencyPlotKey), .title = "Cache latency &plot", .category = "Benchmarks",
+         .handler = [this] { open_latency_plot_window(); }});
     const ui::CommandId cancel_command = app_.commands().declare(
         {.key = std::string(kCancelBenchmarksKey), .title = "&Cancel run", .category = "Benchmarks",
          .handler = [this] { cancel_benchmarks(); }});
@@ -84,6 +95,8 @@ void SysInfoApp::build_chrome() {
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{run_command}),
             widgets::MenuItem::command(widgets::CommandPresentation{cancel_command}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{plot_command}),
         }};
     widgets::MenuBarItem window_menu{
         "&Window",
@@ -222,6 +235,139 @@ void SysInfoApp::open_volumes_window() {
     volumes_window_ = desktop_->add_window(std::move(window));
     fill_volumes_table();
     app_.set_focus(volumes_table_);
+}
+
+// The cache-latency series, drawn the way this terminal can show it. Both
+// renderings exist and both are correct; which one is on screen is decided
+// by asking the terminal, not by assuming an answer. That question is the
+// whole content of this window.
+void SysInfoApp::open_latency_plot_window() {
+    if (latency_plot_window_ != nullptr) {
+        desktop_->activate(latency_plot_window_);
+        return;
+    }
+    auto window = std::make_unique<widgets::Window>("Cache latency");
+    window->set_bounds(Rect{8, 4, 60, 16});
+    window->set_min_size(Size{32, 8});
+    window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
+
+    auto column = std::make_unique<ui::Column>();
+
+    // One Canvas, always -- not a choice between two widgets made once at
+    // construction. A terminal's answer about graphics can change while an
+    // application is running, and Canvas's mandatory fallback painter is
+    // the design's answer to that: the same data, drawn in cells, by the
+    // same composition the cell chart uses.
+    auto canvas = std::make_unique<widgets::Canvas>();
+    // Canvas never asks the terminal for its cell metric itself; the owner
+    // injects it (D-039), which is what keeps the picture's proportions
+    // right on a terminal with tall thin cells and on one with square ones.
+    canvas->set_cell_metrics(app_.terminal_cell_pixels());
+    canvas->set_draw_callback([this](Image& image) { draw_latency_plot(image, latency_series()); });
+    const ui::RoleId fallback_role = app_.roles().find("ckv.list.normal");
+    canvas->set_fallback_painter([this, fallback_role](scene::Painter& painter, Rect area) {
+        const Style style = app_.theme().resolve(fallback_role);
+        const std::vector<std::string> rows = chart_rows(latency_bars(), area.width);
+        for (int row = 0; row < area.height && static_cast<std::size_t>(row) < rows.size(); ++row)
+            painter.draw_text(Point{0, row}, rows[static_cast<std::size_t>(row)], style);
+    });
+    latency_canvas_ = canvas.get();
+    column->add_item(std::move(canvas), ui::LayoutSpec{ui::SizePolicy::Expanding});
+
+    auto footer = std::make_unique<widgets::StaticText>("");
+    latency_plot_footer_ = footer.get();
+    column->add_item(std::move(footer), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    window->set_content(std::move(column));
+
+    widgets::Window* const opened = window.get();
+    window->on_closed = [this, opened] {
+        latency_plot_window_ = nullptr;
+        latency_canvas_ = nullptr;
+        latency_plot_footer_ = nullptr;
+        widgets::schedule_self_detach(*opened, app_);
+    };
+    latency_plot_window_ = desktop_->add_window(std::move(window));
+    update_latency_plot();
+}
+
+const std::vector<SeriesPoint>& SysInfoApp::latency_series() const {
+    static const std::vector<SeriesPoint> none;
+    const BenchmarkResult* const result = result_for(current_results_, BenchmarkId::CacheLatency);
+    return result != nullptr ? result->series : none;
+}
+
+std::vector<ChartBar> SysInfoApp::latency_bars() const {
+    std::vector<ChartBar> bars;
+    for (const SeriesPoint& point : latency_series())
+        bars.push_back(ChartBar{"Cache latency - ns per access", point.label, point.value_text, point.value,
+                                BarKind::Measured, false});
+    return bars;
+}
+
+void SysInfoApp::update_latency_plot() {
+    const std::vector<SeriesPoint>& series = latency_series();
+    if (latency_canvas_ != nullptr) latency_canvas_->invalidate_content();
+    if (latency_plot_footer_ == nullptr) return;
+    if (series.empty()) {
+        latency_plot_footer_->set_text(app_.terminal_shows_graphics()
+                                           ? "This terminal shows pictures; run Cache latency to draw one."
+                                           : "This terminal shows no pictures, so the same data is drawn in cells.");
+        return;
+    }
+    latency_plot_footer_->set_text(series.front().label + " " + series.front().value_text + "  ...  " +
+                                   series.back().label + " " + series.back().value_text +
+                                   (app_.terminal_shows_graphics() ? "   (drawn in pixels)"
+                                                                   : "   (drawn in cells)"));
+}
+
+// The one report in this program that is not about the machine: what the
+// terminal on the other end of the connection can do. A client choosing
+// between a Canvas and a cell-drawn fallback is choosing on exactly these
+// answers, and until now the only way to see them was to write a program.
+void SysInfoApp::open_terminal_window() {
+    if (terminal_window_ != nullptr) {
+        desktop_->activate(terminal_window_);
+        return;
+    }
+    auto window = std::make_unique<widgets::Window>("Terminal");
+    window->set_bounds(Rect{5, 3, 64, 17});
+    window->set_min_size(Size{36, 8});
+    window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
+
+    auto report = std::make_unique<widgets::TextView>();
+    terminal_report_ = report.get();
+    window->set_content(std::move(report));
+
+    widgets::Window* const opened = window.get();
+    window->on_closed = [this, opened] {
+        terminal_window_ = nullptr;
+        terminal_report_ = nullptr;
+        widgets::schedule_self_detach(*opened, app_);
+    };
+    terminal_window_ = desktop_->add_window(std::move(window));
+    fill_terminal_report();
+    app_.set_focus(terminal_report_);
+}
+
+void SysInfoApp::fill_terminal_report() {
+    if (terminal_report_ == nullptr) return;
+    const Size cell = app_.terminal_cell_pixels();
+    const bool graphics = app_.terminal_shows_graphics();
+
+    std::string text = app_.terminal_capability_report_text();
+    if (!text.empty() && text.back() != '\n') text += "\n";
+    text += "\n";
+    // The two lines a client actually decides on, spelled out rather than
+    // left to be inferred from the capability list above them.
+    text += "Cell size: ";
+    text += cell.width > 0 && cell.height > 0
+                ? std::to_string(cell.width) + " x " + std::to_string(cell.height) + " pixels"
+                : std::string("not reported - a picture cannot be sized in true proportion");
+    text += "\n";
+    text += graphics ? "Pictures: this terminal decodes them, so Canvas and ImageView draw in pixels.\n"
+                     : "Pictures: not available here, so Canvas and ImageView draw their cell fallback.\n";
+    text += "\nThis is the same report a ckVision application reads to decide what to draw.\n";
+    terminal_report_->set_text(std::move(text));
 }
 
 void SysInfoApp::open_benchmarks_window() {
@@ -365,6 +511,7 @@ void SysInfoApp::start_benchmarks() {
         },
         [this](BenchmarkResult result) {
             current_results_.push_back(result);
+            update_latency_plot();
             if (benchmark_note_ != nullptr)
                 benchmark_note_->set_text(std::string(describe(result.id).title) + ": " + result.rate_text +
                                           " = index " + result.index_text);
@@ -390,19 +537,38 @@ void SysInfoApp::update_chart() {
 
     std::vector<ChartBar> bars;
     bool any_reference = false;
+    bool any_ideal = false;
+    bool any_index = false;
     for (const BenchmarkDescriptor& descriptor : benchmark_catalogue()) {
         const BenchmarkResult* const current = result_for(current_results_, descriptor.id);
         const BenchmarkResult* const previous = result_for(previous_results_, descriptor.id);
         const bool comparing = compared.has_value() && *compared == descriptor.id;
         if (current == nullptr && previous == nullptr && !comparing) continue;
 
+        // A kernel that measured a curve draws the curve: one bar per
+        // point, in its own group, with the perfect result beside each
+        // point that has one.
+        if (current != nullptr && !current->series.empty()) {
+            const std::string group = std::string(descriptor.title) + " - " + current->series_caption;
+            for (const SeriesPoint& point : current->series) {
+                bars.push_back(ChartBar{group, point.label + marker, point.value_text, point.value,
+                                        BarKind::Measured, false});
+                if (point.ideal <= 0.0) continue;
+                bars.push_back(ChartBar{group, point.label + ", perfect", format_decimal(point.ideal, 2) + "x",
+                                        point.ideal, BarKind::Reference, false});
+                any_ideal = true;
+            }
+            continue;
+        }
+
         // Each metric is its own chart: bars are drawn against the longest
         // bar in their own group and against nothing else.
         const std::string group = std::string(descriptor.title) + " - index";
+        any_index = true;
         if (current != nullptr)
             bars.push_back(ChartBar{group, "This computer" + marker, current->index_text, current->index,
                                     BarKind::Measured, true});
-        if (previous != nullptr)
+        if (previous != nullptr && previous->series.empty())
             bars.push_back(ChartBar{group, "Previous run" + marker, previous->index_text, previous->index,
                                     BarKind::Measured, false});
         if (!comparing) continue;
@@ -417,12 +583,22 @@ void SysInfoApp::update_chart() {
     // Which ink means what. Only while both kinds are on the chart: a
     // legend for bars that are not there teaches a distinction the reader
     // cannot see.
-    chart_->set_legend(any_reference ? "\xE2\x96\x88 measured here   \xE2\x96\x92 published ceiling, "
-                                       "not a measurement"
-                                     : "");
+    // Naming the shaded ink for what it is on THIS chart: a figure from a
+    // standard, or the result a perfect machine would have shown. Both are
+    // things nobody measured, and neither is the other.
+    std::string legend;
+    if (any_reference && any_ideal)
+        legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 not measured: a published ceiling or a perfect result";
+    else if (any_reference)
+        legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 published ceiling, not a measurement";
+    else if (any_ideal)
+        legend = "\xE2\x96\x88 measured here   \xE2\x96\x92 perfect scaling, not a measurement";
+    chart_->set_legend(std::move(legend));
     // The scale, spelled out under the chart, because an index whose
-    // definition is somewhere else is a number nobody can check.
-    chart_->set_caption("index scale: 10 M steps/s, 100 MFLOPS or 1 GB/s = 1.0");
+    // definition is somewhere else is a number nobody can check -- and
+    // only while there is an index on the chart, since a chart of
+    // nanoseconds explained in MFLOPS explains nothing.
+    chart_->set_caption(any_index ? "index scale: 10 M steps/s, 100 MFLOPS or 1 GB/s = 1.0" : "");
 }
 
 const BenchmarkResult* SysInfoApp::result_for(const std::vector<BenchmarkResult>& results, BenchmarkId id) {
@@ -436,6 +612,10 @@ void SysInfoApp::refresh() {
     if (system_table_ != nullptr) fill_system_table();
     if (memory_table_ != nullptr) fill_memory_pane();
     if (volumes_table_ != nullptr) fill_volumes_table();
+    // The terminal can change under a running application -- a resize, a
+    // capability answer arriving late -- so its report is refreshed with
+    // everything else rather than frozen at the moment the pane opened.
+    fill_terminal_report();
 }
 
 // Table::set_rows() re-seats the cursor on the first row, and these panes

@@ -23,6 +23,10 @@ int main() {
     // measurement that reached for a clock of its own would be the one
     // place in this example that broke the rule the rest of it teaches.
     ckv::sysinfo::MeasuredBenchmarkRunner runner(clock);
+    // How many threads the scaling run may use is a fact about the host, so
+    // it comes from the probe rather than from the runner asking the
+    // standard library behind the application's back.
+    runner.set_maximum_threads(probe.processor().logical_cores.value_or(1));
     ckv::ui::Application app(terminal, clock, clipboard);
     ckv::sysinfo::SysInfoApp sysinfo(app, probe, runner);
     app.run();

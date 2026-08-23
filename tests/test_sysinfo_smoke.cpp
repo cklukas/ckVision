@@ -16,7 +16,9 @@
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/progress.hpp"
+#include "cvision/widgets/canvas.hpp"
 #include "cvision/widgets/static_text.hpp"
+#include "cvision/widgets/text_view.hpp"
 #include "cvision/widgets/table.hpp"
 #include "cvision/widgets/window.hpp"
 
@@ -245,7 +247,18 @@ CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {
 
     CK_CHECK(f.sysinfo.current_results().size() == ckv::sysinfo::benchmark_catalogue().size());
     CK_CHECK(!f.sysinfo.last_run_cancelled());
-    CK_CHECK(f.sysinfo.chart()->bars().size() == f.sysinfo.current_results().size());
+    // One bar per kernel that measured a single rate, and one bar per point
+    // for the two that measured a curve.
+    std::size_t expected_bars = 0;
+    for (const ckv::sysinfo::BenchmarkResult& result : f.sysinfo.current_results()) {
+        if (result.series.empty()) {
+            ++expected_bars;
+            continue;
+        }
+        for (const ckv::sysinfo::SeriesPoint& point : result.series)
+            expected_bars += point.ideal > 0.0 ? 2 : 1;
+    }
+    CK_CHECK(f.sysinfo.chart()->bars().size() == expected_bars);
     CK_CHECK(f.sysinfo.chart()->bars().front().highlighted);
     // The scale is named under the chart, because an index whose definition
     // is somewhere else is a number nobody can check.
@@ -260,10 +273,16 @@ CK_TEST(a_debug_build_marks_every_bar_it_measured_and_answers_the_mark_below_the
     f.probe.build_report.build_type = "Debug";
     f.run_benchmarks();
 
-    // The mark is on the bars...
+    // The mark is on every bar this build measured -- and on none of the
+    // bars it did not, because a perfect-scaling bar was not measured by
+    // any build.
     CK_CHECK(!f.sysinfo.chart()->bars().empty());
-    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
-        CK_CHECK(bar.label.find(" *") != std::string::npos);
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) {
+        if (bar.kind == ckv::sysinfo::BarKind::Measured)
+            CK_CHECK(bar.label.find(" *") != std::string::npos);
+        else
+            CK_CHECK(bar.label.find(" *") == std::string::npos);
+    }
     // ... and the footnote under the chart is what it points at.
     CK_CHECK(f.sysinfo.benchmark_footnote() != nullptr);
     CK_CHECK(f.sysinfo.benchmark_footnote()->text().rfind("* Debug build", 0) == 0);
@@ -289,16 +308,24 @@ CK_TEST(the_run_before_this_one_stays_on_the_chart_to_be_compared_against) {
 
     CK_CHECK(f.sysinfo.previous_results().size() == kernels);
     const std::vector<ckv::sysinfo::ChartBar>& bars = f.sysinfo.chart()->bars();
-    CK_CHECK(bars.size() == kernels * 2);
-    // Each metric's group holds this run and the one before it, in that
-    // order, with the newest the row the eye is sent to.
-    for (std::size_t index = 0; index + 1 < bars.size(); index += 2) {
-        CK_CHECK(bars[index].group == bars[index + 1].group);
-        CK_CHECK(bars[index].label.rfind("This computer", 0) == 0);
+
+    // Every metric measured as a single rate shows this run and the one
+    // before it, in that order, with the newest the row the eye is sent to.
+    // A curve has no "previous" row: two stair-steps drawn over each other
+    // would be unreadable, and the newest is the one being asked about.
+    std::size_t pairs = 0;
+    for (std::size_t index = 0; index + 1 < bars.size(); ++index) {
+        if (bars[index].label.rfind("This computer", 0) != 0) continue;
+        ++pairs;
         CK_CHECK(bars[index].highlighted);
+        CK_CHECK(bars[index].group == bars[index + 1].group);
         CK_CHECK(bars[index + 1].label.rfind("Previous run", 0) == 0);
         CK_CHECK(!bars[index + 1].highlighted);
     }
+    std::size_t rate_kernels = 0;
+    for (const ckv::sysinfo::BenchmarkResult& result : f.sysinfo.current_results())
+        if (result.series.empty()) ++rate_kernels;
+    CK_CHECK(pairs == rate_kernels);
 }
 
 CK_TEST(a_pane_the_reader_did_not_ask_for_is_not_measured) {
@@ -338,11 +365,12 @@ CK_TEST(cancelling_a_run_leaves_the_application_running_and_the_chart_honest) {
 CK_TEST(a_comparison_adds_published_bars_to_one_chart_and_marks_them_as_published) {
     Fixture f;
     f.run_benchmarks();
-    // "this run only" is the default: nothing on the chart that this
-    // program did not measure.
+    // "this run only" is the default: nothing on the chart from outside
+    // this program except the perfect-scaling line, which is arithmetic on
+    // the thread count rather than a figure about anybody's hardware.
     for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
-        CK_CHECK(bar.kind == ckv::sysinfo::BarKind::Measured);
-    CK_CHECK(f.sysinfo.chart()->legend().empty());
+        if (bar.kind == ckv::sysinfo::BarKind::Reference)
+            CK_CHECK(bar.label.find("perfect") != std::string::npos);
 
     // Ask for the memory comparison, and only that group grows.
     ckv::widgets::ComboBox* const compare = f.sysinfo.compare_picker();
@@ -358,6 +386,7 @@ CK_TEST(a_comparison_adds_published_bars_to_one_chart_and_marks_them_as_publishe
     std::size_t references = 0;
     for (const ckv::sysinfo::ChartBar& bar : bars) {
         if (bar.kind != ckv::sysinfo::BarKind::Reference) continue;
+        if (bar.label.find("perfect") != std::string::npos) continue;  // the scaling ideal
         ++references;
         // A published bar sits in the group of the metric it is published
         // for, and nowhere else.
@@ -383,4 +412,103 @@ CK_TEST(a_comparison_can_be_asked_for_before_anything_has_been_measured) {
     CK_CHECK(!f.sysinfo.chart()->bars().empty());
     for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars())
         CK_CHECK(bar.kind == ckv::sysinfo::BarKind::Reference);
+    CK_CHECK(f.sysinfo.chart()->legend().find("published ceiling") != std::string::npos);
+}
+
+CK_TEST(the_terminal_pane_reports_what_this_terminal_can_do) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kTerminalWindowKey));
+    f.app.step(0);
+
+    CK_CHECK(f.sysinfo.terminal_window() != nullptr);
+    const std::string text = f.sysinfo.terminal_report()->text();
+    CK_CHECK(text.find("Cell size:") != std::string::npos);
+    CK_CHECK(text.find("Pictures:") != std::string::npos);
+    // The headless terminal shows no pictures, and the pane says so rather
+    // than leaving the reader to infer it from a capability list.
+    CK_CHECK(!f.app.terminal_shows_graphics());
+    CK_CHECK(text.find("cell fallback") != std::string::npos);
+}
+
+CK_TEST(the_latency_plot_falls_back_to_the_same_data_in_cells) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kLatencyPlotKey));
+    f.app.step(0);
+    CK_CHECK(f.sysinfo.latency_plot_window() != nullptr);
+    // One Canvas, whatever the terminal can do: the fallback is the
+    // widget's, not a second widget chosen at construction.
+    CK_CHECK(f.sysinfo.latency_canvas() != nullptr);
+
+    f.run_benchmarks();
+    const std::vector<ckv::sysinfo::ChartBar> bars = f.sysinfo.latency_bars_for_test();
+    CK_CHECK(bars.size() == 8);  // the scripted stair-step
+    CK_CHECK(bars.front().label == "4.0 KiB");
+    CK_CHECK(bars.back().label == "64.0 MiB");
+    CK_CHECK(bars.back().value > bars.front().value);
+
+    // And what the fallback would draw is the same series, row for row.
+    const std::vector<std::string> rows = ckv::sysinfo::chart_rows(bars, 40);
+    CK_CHECK(rows.size() == bars.size() + 1);  // one heading
+    CK_CHECK(rows[1].find("4.0 KiB") != std::string::npos);
+    CK_CHECK(rows.back().find("96.0 ns") != std::string::npos);
+}
+
+// The same window, on a terminal that decodes pictures. The Canvas is
+// given a real pixel size from the terminal's cell metric and paints the
+// series into it -- and this is the assertion that the graphics path is
+// exercised at all, since every other test here runs on a terminal that
+// shows none.
+CK_TEST(where_the_terminal_shows_pictures_the_plot_is_drawn_in_pixels) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_sixel_profile());
+    ManualClock clock;
+    Application app(term, clock);
+    FixedSystemProbe probe;
+    FixedBenchmarkRunner runner;
+    SysInfoApp sysinfo{app, probe, runner};
+
+    CK_CHECK(app.terminal_shows_graphics());
+    const std::optional<ckv::ui::CommandId> plot = app.commands().id_for(std::string(SysInfoApp::kLatencyPlotKey));
+    CK_CHECK(plot.has_value() && app.execute_command(*plot));
+    app.step(0);
+
+    ckv::widgets::Canvas* const canvas = sysinfo.latency_canvas();
+    CK_CHECK(canvas != nullptr);
+    // Sized from the terminal's own cell metric rather than from an
+    // assumed one, which is what keeps the picture in proportion.
+    CK_CHECK(canvas->cell_metrics() == term.capabilities().cell_pixels);
+    CK_CHECK(canvas->pixel_size().width > 0);
+    CK_CHECK(canvas->pixel_size().height > 0);
+
+    const std::optional<ckv::ui::CommandId> run = app.commands().id_for(std::string(SysInfoApp::kRunBenchmarksKey));
+    CK_CHECK(run.has_value() && app.execute_command(*run));
+    sysinfo.benchmarks().wait_until_idle();
+    for (int turn = 0; turn < 8; ++turn) app.step(0);
+
+    // The picture reached the terminal: a Sixel introducer in the bytes.
+    const std::string bytes(term.written_bytes());
+    CK_CHECK(bytes.find("\x1bP") != std::string::npos);
+}
+
+CK_TEST(a_curve_is_charted_as_a_curve_and_never_as_an_index) {
+    Fixture f;
+    f.run_benchmarks();
+
+    // The scripted run measures all five kernels; the two that answer with
+    // a curve contribute one bar per point, and no index bar at all.
+    bool saw_latency_group = false;
+    bool saw_scaling_ideal = false;
+    for (const ckv::sysinfo::ChartBar& bar : f.sysinfo.chart()->bars()) {
+        if (bar.group.find("Cache latency") != std::string::npos) {
+            saw_latency_group = true;
+            CK_CHECK(bar.label.find("This computer") == std::string::npos);
+        }
+        if (bar.group.find("Thread scaling") != std::string::npos &&
+            bar.kind == ckv::sysinfo::BarKind::Reference) {
+            saw_scaling_ideal = true;
+            CK_CHECK(bar.label.find("perfect") != std::string::npos);
+        }
+    }
+    CK_CHECK(saw_latency_group);
+    CK_CHECK(saw_scaling_ideal);
+    CK_CHECK(f.sysinfo.chart()->legend().find("perfect") != std::string::npos);
 }
