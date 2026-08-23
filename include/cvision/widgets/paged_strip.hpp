@@ -90,6 +90,23 @@ public:
         std::string text;
         // Drawn in the selected role rather than the normal one.
         bool selected = false;
+        // A leading run of `text`, this many cells wide, drawn in `icon_role`
+        // instead of the item's own style — the state mark a taskbar row
+        // carries in front of its name. Only the FOREGROUND and attributes
+        // come from the role: the background stays the item's, exactly as
+        // Window draws a frame control, so a selected row's highlight runs
+        // unbroken underneath the mark rather than being punched through by
+        // it. Zero cells, or a role left unresolved, means the item is one
+        // style end to end — what every other consumer wants.
+        //
+        // One exception, and it is a legibility floor rather than a policy: a
+        // role whose foreground IS the row's background would draw a mark
+        // nobody can see (the classic and mono themes both pair the window
+        // control with the status line that way), and there the row's own
+        // style wins. A mark in the wrong colour is readable; a mark in the
+        // colour underneath it is a gap in the name.
+        int icon_width = 0;
+        ui::RoleId icon_role = ui::kInvalidRole;
 
         friend bool operator==(const Item&, const Item&) = default;
     };

@@ -1379,6 +1379,9 @@ are East Asian **Ambiguous** — one column here by D-019 and two on a host
 rendering a CJK font, which would shear every entry on the row. All three are
 one cell, so a window changing state does not change its button's length and
 minimize/restore cannot re-flow the row the damped widths exist to hold still.
+(The glyph table is amended by D-063, which replaces the three shapes with the
+frame's own two controls and moves the active/behind distinction into colour;
+the one-cell property and everything else in this entry stand.)
 The icon is part of the item's TEXT and paid for in `natural_width`, the one
 place an entry's content is measured, so the paging and the damping follow it
 without being told; it sits at the FRONT, so the lone-item elision takes the
@@ -1467,6 +1470,49 @@ added to each public handler the audit found (that is the shape of the defect,
 repeated); making XTMODKEYS an `UnsupportedSequence` only for levels 1 and 2
 and not for the reset (a distinction nothing could read, since the query tells
 the truth either way).
+
+
+**D-063 — A taskbar row wears the window frame's own controls, and says which
+window the reader is in the way the frame does: in colour.** Amends D-059's
+glyph table. `WindowSwitcherBar::status_glyph` now answers `■` (U+25A0) for a
+window that is on the desktop — `Active` and `Visible` alike — and `_`
+(U+005F) for one that has been put away: the square the frame draws in its
+close control, and the line it draws in its minimize control. The mark says
+WHERE the window is, which is the one thing a taskbar knows that the desktop
+cannot show. Which window the reader is IN is carried the way the frame
+carries it: `PagedStrip::Item` gains an `icon_role` and an `icon_width`, and
+the leading cells of an item take that role's foreground and attributes while
+keeping the row's own background, so the active row draws its mark in
+`ckv.window.control` and every other row lets it fall back — precisely what
+`Window::draw` does with its controls, for the reason it does it: a desktop
+shows one set of live controls, not several competing for the eye. Only the
+foreground is borrowed, because a mark that brought its own background would
+punch a hole in the highlight it stands on.
+
+D-059 chose three distinct shapes, `▮`/`▯`/`▄` (U+25AE/25AF/2584), and
+rejected `■`/`□` as East Asian **Ambiguous**. That rejection does not survive
+contact with the rest of the widget: `PagedStrip`'s own steering chrome
+(`▼▲◁▷`) is Ambiguous and rests on D-019's one-column resolution, and the
+window frame has drawn U+25A0 in its close control since the control existed.
+A host resolving ambiguity the other way widens the frame's control and the
+bar's mark together — it cannot make the two disagree, and it was already
+drawing a broken frame before the bar was asked. What the three shapes cost
+was plain on screen: `▄` is a cell-wide, half-cell-tall slab carrying an order
+of magnitude more ink than the thin rectangles beside it, so the state a
+reader looks at least — a window put away — shouted loudest of the three;
+and no mark on the bar said anything the window it stood for said. The
+monochrome legibility D-059 bought with a third shape is bought again by the
+strip's selected highlight, which sits under the active row already.
+
+*Rejected:* keeping three shapes and replacing only the slab (the lightest
+change, and it leaves the bar teaching a vocabulary the frame does not use);
+`▬`/`▭`/`_` (better proportioned than what they replace and Neutral by width,
+but still an alphabet that exists nowhere else in the library); drawing the
+mark bracketed as the frame draws it, `[■]` (two more cells on every entry, in
+a row whose whole design problem is width); a `set_control_role` seam on the
+bar (the role is resolved by the name `Window` resolves, so a theme that
+retints window controls retints the marks with them — a second seam would let
+one half of that be retinted without the other).
 
 **D-064 — A window put away is still on the desktop, as its own top frame.**
 Amends D-056, which said a minimized `Window` is hidden and stays in

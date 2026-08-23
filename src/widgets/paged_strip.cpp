@@ -321,7 +321,39 @@ void PagedStrip::draw(scene::Painter& painter) {
         const Style style = item_is_selected(placed.index) ? selected : normal;
         painter.fill(Rect{placed.x, 0, placed.width, 1}, Cell::from_grapheme(" ", style));
         if (placed.text.empty()) continue;
-        painter.draw_text(Point{text_column(placed.x, placed.width), 0}, placed.text, style);
+        const int column = text_column(placed.x, placed.width);
+        // An item's leading mark, where it asked for one, is the only part of
+        // a row drawn in a style that is not the row's — see Item::icon_role.
+        // It is taken off the front of the text AS IT WILL BE DRAWN rather
+        // than off the source text, so a lone over-wide item that lost its
+        // tail to elision keeps its mark, and one clipped so hard that the
+        // mark itself is gone has nothing left to recolour and says so by
+        // handing back an empty prefix.
+        const Item& item = items_[placed.index];
+        const std::string mark = item.icon_width > 0 && item.icon_role != ui::kInvalidRole
+                                     ? text::clip_to_width(placed.text, item.icon_width)
+                                     : std::string();
+        if (!mark.empty()) {
+            const Style mark_role_style = context().theme->resolve(item.icon_role);
+            // A borrowed foreground can land on a background of its own
+            // colour: the classic theme gives the window control the green
+            // the status line selects with, and the mono theme gives it the
+            // foreground the status line inverts to. A mark drawn in the
+            // colour it stands on is not a mark, it is a gap in the name —
+            // so where the two agree the row's own style wins. Nothing is
+            // lost that the reader needs: the highlight under that row is
+            // already saying which one it is, and a legible mark in the
+            // row's colour beats an invisible one in the right colour.
+            const Style mark_style =
+                mark_role_style.fg == style.bg
+                    ? style
+                    : Style{mark_role_style.fg, style.bg, style.attrs | mark_role_style.attrs};
+            painter.draw_text(Point{column, 0}, mark, mark_style);
+            painter.draw_text(Point{column + text::text_width(mark), 0},
+                              placed.text.substr(mark.size()), style);
+            continue;
+        }
+        painter.draw_text(Point{column, 0}, placed.text, style);
     }
 }
 
