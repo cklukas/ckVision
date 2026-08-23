@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "cvision/core/filesystem.hpp"
 #include "cvision/core/key.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
@@ -46,7 +47,8 @@ struct Fixture {
     Application app{term, clock};
     FixedSystemProbe probe;
     FixedBenchmarkRunner runner;
-    SysInfoApp sysinfo{app, probe, runner};
+    ckv::MemoryFileSystem files;
+    SysInfoApp sysinfo{app, probe, runner, files, "/"};
 
     // By key, the way the menu asks for it: a command's numeric id is the
     // registry's business and a test that knew one would be asserting
@@ -464,7 +466,8 @@ CK_TEST(where_the_terminal_shows_pictures_the_plot_is_drawn_in_pixels) {
     Application app(term, clock);
     FixedSystemProbe probe;
     FixedBenchmarkRunner runner;
-    SysInfoApp sysinfo{app, probe, runner};
+    ckv::MemoryFileSystem files;
+    SysInfoApp sysinfo{app, probe, runner, files, "/"};
 
     CK_CHECK(app.terminal_shows_graphics());
     const std::optional<ckv::ui::CommandId> plot = app.commands().id_for(std::string(SysInfoApp::kLatencyPlotKey));

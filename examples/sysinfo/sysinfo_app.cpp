@@ -13,6 +13,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/widgets/canvas.hpp"
+#include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/static_text.hpp"
@@ -29,8 +30,15 @@
 
 namespace ckv::sysinfo {
 
-SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const BenchmarkRunner& runner)
-    : app_(app), probe_(probe), roles_(ui::intern_standard_roles(app.roles())), benchmarks_(app, runner) {
+SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const BenchmarkRunner& runner,
+                       FileSystem& files, std::string report_directory)
+    : app_(app),
+      probe_(probe),
+      files_(files),
+      report_directory_(std::move(report_directory)),
+      roles_(ui::intern_standard_roles(app.roles())),
+      benchmarks_(app, runner) {
+    install_help();
     build_chrome();
 
     open_system_window();
@@ -42,8 +50,14 @@ SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const Ben
     // "current" without the pane becoming something that flickers.
     app_.start_timer(kRefreshIntervalNanos, true, [this] { refresh(); });
 
-    widgets::install_about_help(app_, *desktop_, roles_, "ckVision SysInfo example",
-                                "What this machine is, and how fast it is, read through one injected probe.");
+    // F1 answers with the topic for whatever the reader is looking at --
+    // the pane, or the benchmark -- rather than with one page about the
+    // program. A number nobody can interpret is not information, and the
+    // interpretation is what these topics are.
+    app_.set_help_provider([this](const std::string& key) {
+        auto presentation = widgets::present_help_viewer(help_, key, app_, *desktop_, roles_);
+        presentation.set_completion_handler([](widgets::HelpViewerResult) {});
+    });
 }
 
 void SysInfoApp::build_chrome() {
@@ -56,6 +70,12 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId volumes_command = app_.commands().declare(
         {.key = std::string(kVolumesWindowKey), .title = "&Disks", .category = "System",
          .handler = [this] { open_volumes_window(); }});
+    const ui::CommandId save_text_command = app_.commands().declare(
+        {.key = std::string(kSaveTextKey), .title = "Save as &text...", .category = "Report",
+         .handler = [this] { save_report_with_dialog(ReportFormat::Text); }});
+    const ui::CommandId save_markdown_command = app_.commands().declare(
+        {.key = std::string(kSaveMarkdownKey), .title = "Save as &Markdown...", .category = "Report",
+         .handler = [this] { save_report_with_dialog(ReportFormat::Markdown); }});
     const ui::CommandId terminal_command = app_.commands().declare(
         {.key = std::string(kTerminalWindowKey), .title = "&Terminal", .category = "System",
          .handler = [this] { open_terminal_window(); }});
@@ -98,6 +118,12 @@ void SysInfoApp::build_chrome() {
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{plot_command}),
         }};
+    widgets::MenuBarItem report_menu{
+        "&Report",
+        {
+            widgets::MenuItem::command(widgets::CommandPresentation{save_text_command}),
+            widgets::MenuItem::command(widgets::CommandPresentation{save_markdown_command}),
+        }};
     widgets::MenuBarItem window_menu{
         "&Window",
         {
@@ -113,8 +139,8 @@ void SysInfoApp::build_chrome() {
 
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
-               .menus = {std::move(system_menu), std::move(benchmarks_menu), std::move(window_menu),
-                         std::move(help_menu)},
+               .menus = {std::move(system_menu), std::move(benchmarks_menu), std::move(report_menu),
+                         std::move(window_menu), std::move(help_menu)},
                .status_items = {
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{refresh_command}},
@@ -139,6 +165,7 @@ void SysInfoApp::open_system_window() {
     auto table = std::make_unique<widgets::Table>();
     table->set_columns({widgets::TableColumn{"Field", 22, 10}, widgets::TableColumn{"Value", 34, 12}});
     table->on_selection_changed = [this](widgets::TableCellRef reference) { system_cursor_ = reference.row; };
+    table->set_help_context_key("sysinfo.system");
     system_table_ = table.get();
     window->set_content(std::move(table));
 
@@ -172,6 +199,7 @@ void SysInfoApp::open_memory_window() {
     auto table = std::make_unique<widgets::Table>();
     table->set_columns({widgets::TableColumn{"Category", 20, 10}, widgets::TableColumn{"Size", 16, 10}});
     table->on_selection_changed = [this](widgets::TableCellRef reference) { memory_cursor_ = reference.row; };
+    table->set_help_context_key("sysinfo.memory");
     memory_table_ = table.get();
     column->add_item(std::move(table), ui::LayoutSpec{ui::SizePolicy::Expanding});
     window->set_content(std::move(column));
@@ -208,6 +236,7 @@ void SysInfoApp::open_volumes_window() {
                         // clips "not reported" to "not re" has turned a
                         // stated absence into a typographical accident.
                         widgets::TableColumn{"Used", 12, 5}});
+    table->set_help_context_key("sysinfo.volumes");
     volumes_table_ = table.get();
     // The bar follows the cursor, so the number under it is always the
     // volume the reader is looking at rather than the one that happened to
@@ -271,6 +300,7 @@ void SysInfoApp::open_latency_plot_window() {
         for (int row = 0; row < area.height && static_cast<std::size_t>(row) < rows.size(); ++row)
             painter.draw_text(Point{0, row}, rows[static_cast<std::size_t>(row)], style);
     });
+    canvas->set_help_context_key("sysinfo.latency");
     latency_canvas_ = canvas.get();
     column->add_item(std::move(canvas), ui::LayoutSpec{ui::SizePolicy::Expanding});
 
@@ -335,6 +365,7 @@ void SysInfoApp::open_terminal_window() {
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
 
     auto report = std::make_unique<widgets::TextView>();
+    report->set_help_context_key("sysinfo.terminal");
     terminal_report_ = report.get();
     window->set_content(std::move(report));
 
@@ -393,6 +424,7 @@ void SysInfoApp::open_benchmarks_window() {
     auto picker = std::make_unique<widgets::CheckGroup>(std::move(labels));
     picker->set_group_label("Measure  (F9 runs, Esc cancels)");
     for (std::size_t index = 0; index < benchmark_catalogue().size(); ++index) picker->set_checked(index, true);
+    picker->set_help_context_key("sysinfo.benchmarks");
     benchmark_picker_ = picker.get();
     column->add_item(std::move(picker), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
@@ -413,6 +445,7 @@ void SysInfoApp::open_benchmarks_window() {
 
     auto chart = std::make_unique<BarChartView>();
     chart->set_placeholder("No measurements yet - press F9 to run.");
+    chart->set_help_context_key("sysinfo.benchmarks");
     chart_ = chart.get();
     column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Expanding});
 
@@ -605,6 +638,97 @@ const BenchmarkResult* SysInfoApp::result_for(const std::vector<BenchmarkResult>
     for (const BenchmarkResult& result : results)
         if (result.id == id) return &result;
     return nullptr;
+}
+
+// One topic per pane and one per benchmark, keyed by the same strings the
+// views carry as their help context. Written here rather than in a file:
+// this is what the numbers mean, and it belongs beside the code that
+// produces them, where it goes stale visibly rather than quietly.
+void SysInfoApp::install_help() {
+    help_.add_topic("sysinfo.system",
+                    widgets::HelpTopic{"System summary",
+                                       "Everything this program could read about the machine and about its own "
+                                       "build. A field the host did not answer reads \"not reported\": a plausible "
+                                       "zero would be indistinguishable from a measurement.\n\nAll of it arrives "
+                                       "through one interface, SystemProbe, which is the only part of this example "
+                                       "that touches the platform.",
+                                       {{"sysinfo.memory", "Memory"}, {"sysinfo.benchmarks", "Benchmarks"}}});
+    help_.add_topic("sysinfo.memory",
+                    widgets::HelpTopic{"Memory",
+                                       "Total and available, then the host's own accounting in the host's own "
+                                       "words. Operating systems disagree deeply about what \"used\" means, so this "
+                                       "pane does not translate their categories into a common vocabulary it would "
+                                       "have had to invent.\n\nThe bar shows total minus available.",
+                                       {{"sysinfo.system", "System summary"}}});
+    help_.add_topic("sysinfo.volumes",
+                    widgets::HelpTopic{"Disks",
+                                       "Every mounted filesystem with a capacity worth showing; the kernel's own "
+                                       "pseudo-filesystems and Time Machine's local snapshots are left out.\n\nA "
+                                       "volume can report more free space than capacity -- on a shared APFS "
+                                       "container it routinely does, because the capacity is the volume's and the "
+                                       "free space is the container's. There is no used share to compute then, so "
+                                       "none is shown.",
+                                       {{"sysinfo.system", "System summary"}}});
+    help_.add_topic("sysinfo.terminal",
+                    widgets::HelpTopic{"Terminal",
+                                       "What the terminal on the other end can do: colour depth, mouse protocol, "
+                                       "the pixel size of one character cell, and whether it decodes pictures.\n\n"
+                                       "This is the report a ckVision application reads to decide whether to draw "
+                                       "a Canvas in pixels or fall back to cells -- and it is about the terminal, "
+                                       "not about the machine.",
+                                       {{"sysinfo.benchmarks", "Benchmarks"}}});
+    help_.add_topic("sysinfo.benchmarks",
+                    widgets::HelpTopic{"Benchmarks",
+                                       "Select what to measure, press F9, and press Esc to stop. Each kernel runs "
+                                       "a fixed quantum of work several times and the fastest pass is reported: "
+                                       "the slow passes are the ones something else on the machine interrupted."
+                                       "\n\nThe index is this program's own scale, printed under the chart. Bars "
+                                       "drawn solid were measured here; shaded bars are published ceilings or "
+                                       "perfect results, which nobody measured. An unoptimized build marks every "
+                                       "bar it measured with an asterisk, because its numbers describe the build.",
+                                       {{"sysinfo.integer", "Integer mix"},
+                                        {"sysinfo.float", "Floating point"},
+                                        {"sysinfo.memory-bandwidth", "Memory bandwidth"},
+                                        {"sysinfo.latency", "Cache latency"},
+                                        {"sysinfo.scaling", "Thread scaling"}}});
+    for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
+        help_.add_topic("sysinfo." + std::string(descriptor.key),
+                        widgets::HelpTopic{std::string(descriptor.title),
+                                           std::string(descriptor.explanation) + "\n\nMeasured in " +
+                                               std::string(descriptor.rate_unit) + ".",
+                                           {{"sysinfo.benchmarks", "Benchmarks"}}});
+}
+
+std::string SysInfoApp::report_text(ReportFormat format) const {
+    // The terminal section comes from the application because only the
+    // application has a terminal; everything else the document composes
+    // from the same functions the panes use.
+    return compose_report(probe_, current_results_, app_.terminal_capability_report_text(), format);
+}
+
+bool SysInfoApp::save_report(const std::string& path, ReportFormat format) {
+    const FileWriteResult written = files_.write_file_atomic(path, report_text(format));
+    if (written.status != FileWriteStatus::Ok) return false;
+    last_saved_report_ = path;
+    return true;
+}
+
+void SysInfoApp::save_report_with_dialog(ReportFormat format) {
+    // Non-blocking, from a command handler: the dialog is presented and
+    // this returns, and the write happens when the reader has chosen.
+    auto dialog = widgets::present_file_dialog(widgets::FileDialogMode::Save, report_directory_, files_, app_,
+                                               *desktop_, roles_);
+    dialog.set_completion_handler([this, format](widgets::FileDialogResult result) {
+        if (!result.accepted || result.path.empty()) return;
+        const bool written = save_report(result.path, format);
+        auto message = widgets::present_message_box(
+            app_, *desktop_, roles_,
+            {written ? widgets::MessageBoxKind::Info : widgets::MessageBoxKind::Error,
+             written ? "Report saved" : "Report not saved",
+             written ? result.path : "This program could not write " + result.path,
+             widgets::MessageBoxButtons::Ok});
+        message.set_completion_handler([](widgets::MessageBoxResult) {});
+    });
 }
 
 void SysInfoApp::refresh() {
