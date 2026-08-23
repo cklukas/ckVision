@@ -170,13 +170,25 @@ endif()
 # a host with no probe implementation still builds and tests everything
 # except the reading of that host.
 add_library(sysinfo_app STATIC
+    sysinfo/bar_chart_view.cpp
+    sysinfo/benchmark.cpp
+    sysinfo/benchmark_service.cpp
     sysinfo/build_report.cpp
+    sysinfo/fixed_benchmark_runner.cpp
     sysinfo/fixed_system_probe.cpp
     sysinfo/report_format.cpp
     sysinfo/sysinfo_app.cpp)
 target_link_libraries(sysinfo_app PRIVATE ckvision::cvision)
+# The benchmark service runs its measurements on a worker thread; this is
+# the second example target (after spin) that needs one.
+find_package(Threads REQUIRED)
+target_link_libraries(sysinfo_app PUBLIC Threads::Threads)
 target_include_directories(sysinfo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sysinfo)
 ckvision_strict(sysinfo_app)
+# The one fact about this binary that the compiler does not know, and that a
+# program reporting benchmark scores must not omit: an unoptimized build
+# measures itself rather than the machine.
+target_compile_definitions(sysinfo_app PRIVATE CKV_SYSINFO_BUILD_TYPE="$<CONFIG>")
 
 if(UNIX)
     target_sources(sysinfo_app PRIVATE sysinfo/posix_system_probe.cpp)

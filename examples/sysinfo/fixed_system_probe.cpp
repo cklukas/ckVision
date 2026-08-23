@@ -52,6 +52,7 @@ FixedSystemProbe::FixedSystemProbe() {
     build_report.compiler = "Demo C++ 1.0";
     build_report.standard_library = "Demo Standard Library";
     build_report.cxx_standard = "C++20";
+    build_report.build_type = "Release";
     build_report.pointer_bits = 64;
     build_report.little_endian = true;
 }

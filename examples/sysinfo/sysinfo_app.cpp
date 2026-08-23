@@ -10,6 +10,9 @@
 
 #include "cvision/ui/layout.hpp"
 #include "cvision/widgets/application_shell.hpp"
+#include "cvision/widgets/button.hpp"
+#include "cvision/widgets/option_group.hpp"
+#include "cvision/widgets/static_text.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/progress.hpp"
@@ -21,8 +24,8 @@
 
 namespace ckv::sysinfo {
 
-SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe)
-    : app_(app), probe_(probe), roles_(ui::intern_standard_roles(app.roles())) {
+SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const BenchmarkRunner& runner)
+    : app_(app), probe_(probe), roles_(ui::intern_standard_roles(app.roles())), benchmarks_(app, runner) {
     build_chrome();
 
     open_system_window();
@@ -63,6 +66,24 @@ void SysInfoApp::build_chrome() {
             widgets::MenuItem::separator(),
             widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit, "E&xit"}),
         }};
+    const ui::CommandId benchmarks_command = app_.commands().declare(
+        {.key = std::string(kBenchmarksWindowKey), .title = "&Benchmarks", .category = "Benchmarks",
+         .handler = [this] { open_benchmarks_window(); }});
+    const ui::CommandId run_command = app_.commands().declare(
+        {.key = std::string(kRunBenchmarksKey), .title = "&Run selected", .category = "Benchmarks", .chord = "F9",
+         .handler = [this] { start_benchmarks(); }});
+    const ui::CommandId cancel_command = app_.commands().declare(
+        {.key = std::string(kCancelBenchmarksKey), .title = "&Cancel run", .category = "Benchmarks",
+         .handler = [this] { cancel_benchmarks(); }});
+
+    widgets::MenuBarItem benchmarks_menu{
+        "&Benchmarks",
+        {
+            widgets::MenuItem::command(widgets::CommandPresentation{benchmarks_command}),
+            widgets::MenuItem::separator(),
+            widgets::MenuItem::command(widgets::CommandPresentation{run_command}),
+            widgets::MenuItem::command(widgets::CommandPresentation{cancel_command}),
+        }};
     widgets::MenuBarItem window_menu{
         "&Window",
         {
@@ -78,10 +99,12 @@ void SysInfoApp::build_chrome() {
 
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
-               .menus = {std::move(system_menu), std::move(window_menu), std::move(help_menu)},
+               .menus = {std::move(system_menu), std::move(benchmarks_menu), std::move(window_menu),
+                         std::move(help_menu)},
                .status_items = {
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{refresh_command}},
+                   widgets::StatusLineItem{widgets::CommandPresentation{run_command}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}}});
     desktop_ = &shell.desktop();
@@ -167,7 +190,10 @@ void SysInfoApp::open_volumes_window() {
     auto table = std::make_unique<widgets::Table>();
     table->set_columns({widgets::TableColumn{"Mounted on", 22, 10}, widgets::TableColumn{"Filesystem", 10, 6},
                         widgets::TableColumn{"Capacity", 11, 8}, widgets::TableColumn{"Free", 11, 8},
-                        widgets::TableColumn{"Used", 6, 5}});
+                        // Wide enough for the absence text: a column that
+                        // clips "not reported" to "not re" has turned a
+                        // stated absence into a typographical accident.
+                        widgets::TableColumn{"Used", 12, 5}});
     volumes_table_ = table.get();
     // The bar follows the cursor, so the number under it is always the
     // volume the reader is looking at rather than the one that happened to
@@ -195,6 +221,150 @@ void SysInfoApp::open_volumes_window() {
     volumes_window_ = desktop_->add_window(std::move(window));
     fill_volumes_table();
     app_.set_focus(volumes_table_);
+}
+
+void SysInfoApp::open_benchmarks_window() {
+    if (benchmarks_window_ != nullptr) {
+        desktop_->activate(benchmarks_window_);
+        return;
+    }
+    auto window = std::make_unique<widgets::Window>("Benchmarks");
+    window->set_bounds(Rect{4, 2, 68, 19});
+    window->set_min_size(Size{40, 12});
+    window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
+
+    auto column = std::make_unique<ui::Column>();
+    column->set_spacing(1);
+
+    std::vector<std::string> labels;
+    for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
+        labels.emplace_back(descriptor.title);
+    auto picker = std::make_unique<widgets::CheckGroup>(std::move(labels));
+    picker->set_group_label("Measure");
+    for (std::size_t index = 0; index < benchmark_catalogue().size(); ++index) picker->set_checked(index, true);
+    benchmark_picker_ = picker.get();
+    column->add_item(std::move(picker), ui::LayoutSpec{ui::SizePolicy::Fixed});
+
+    auto buttons = std::make_unique<ui::Row>();
+    buttons->set_spacing(2);
+    auto run = std::make_unique<widgets::Button>("&Run");
+    run->on_press = [this] { start_benchmarks(); };
+    auto stop = std::make_unique<widgets::Button>("&Cancel");
+    stop->on_press = [this] { cancel_benchmarks(); };
+    buttons->add_item(std::move(run), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    buttons->add_item(std::move(stop), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    column->add_item(std::move(buttons), ui::LayoutSpec{ui::SizePolicy::Fixed});
+
+    auto progress = std::make_unique<widgets::Progress>();
+    progress->set_label("idle");
+    benchmark_progress_ = progress.get();
+    column->add_item(std::move(progress), ui::LayoutSpec{ui::SizePolicy::Fixed});
+
+    auto note = std::make_unique<widgets::StaticText>(measurement_caveat_text(probe_.build()));
+    benchmark_note_ = note.get();
+    column->add_item(std::move(note), ui::LayoutSpec{ui::SizePolicy::Fixed});
+
+    auto chart = std::make_unique<BarChartView>();
+    chart->set_placeholder("No measurements yet - press Run.");
+    chart_ = chart.get();
+    column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Expanding});
+
+    window->set_content(std::move(column));
+
+    // Esc stops a run rather than closing the window: a reader who wants
+    // out of a measurement that is taking too long presses the key that
+    // means "stop", and losing the results already charted would be a
+    // second surprise on top of the first.
+    window->cancel_request = [this] {
+        if (!benchmarks_.running()) return false;
+        cancel_benchmarks();
+        return true;
+    };
+
+    widgets::Window* const opened = window.get();
+    window->on_closed = [this, opened] {
+        // The run keeps its own subscriber token, so a run in flight stops
+        // delivering to a chart that no longer exists; cancelling as well
+        // means it also stops measuring for nobody.
+        cancel_benchmarks();
+        benchmarks_window_ = nullptr;
+        benchmark_picker_ = nullptr;
+        benchmark_progress_ = nullptr;
+        benchmark_note_ = nullptr;
+        chart_ = nullptr;
+        widgets::schedule_self_detach(*opened, app_);
+    };
+    benchmarks_window_ = desktop_->add_window(std::move(window));
+    update_chart();
+    app_.set_focus(benchmark_picker_);
+}
+
+void SysInfoApp::start_benchmarks() {
+    open_benchmarks_window();
+    if (benchmarks_.running() || chart_ == nullptr) return;
+
+    std::vector<BenchmarkId> plan;
+    const std::vector<BenchmarkDescriptor>& catalogue = benchmark_catalogue();
+    for (std::size_t index = 0; index < catalogue.size(); ++index)
+        if (benchmark_picker_ == nullptr || benchmark_picker_->checked(index)) plan.push_back(catalogue[index].id);
+    if (plan.empty()) {
+        if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("nothing selected");
+        return;
+    }
+
+    // The completed run becomes the comparison, and the new one starts
+    // empty. A machine compared against itself an hour ago is the only
+    // comparison this program can make honestly.
+    if (!current_results_.empty() && !last_run_cancelled_) previous_results_ = current_results_;
+    current_results_.clear();
+    last_run_cancelled_ = false;
+    update_chart();
+
+    const std::size_t total = plan.size();
+    benchmarks_.start(
+        std::move(plan), chart_->lifetime_token(),
+        [this, total](BenchmarkService::Progress progress) {
+            if (benchmark_progress_ == nullptr) return;
+            benchmark_progress_->set_fraction(total == 0 ? 0.0
+                                                         : static_cast<double>(progress.completed) /
+                                                               static_cast<double>(total));
+            benchmark_progress_->set_label(std::string(describe(progress.current).title) + " (" +
+                                           std::to_string(progress.completed + 1) + " of " +
+                                           std::to_string(total) + ") - Esc cancels");
+        },
+        [this](BenchmarkResult result) {
+            current_results_.push_back(result);
+            if (benchmark_note_ != nullptr)
+                benchmark_note_->set_text(std::string(describe(result.id).title) + ": " + result.rate_text +
+                                          " = index " + result.index_text);
+            update_chart();
+        },
+        [this](bool cancelled) {
+            last_run_cancelled_ = cancelled;
+            // The caveat is the last word, not the first: it is what the
+            // reader should be looking at while they read the chart.
+            if (benchmark_note_ != nullptr) benchmark_note_->set_text(measurement_caveat_text(probe_.build()));
+            if (benchmark_progress_ == nullptr) return;
+            benchmark_progress_->set_fraction(cancelled ? benchmark_progress_->fraction() : 1.0);
+            benchmark_progress_->set_label(cancelled ? "cancelled" : "done");
+        });
+}
+
+void SysInfoApp::cancel_benchmarks() { benchmarks_.cancel(); }
+
+void SysInfoApp::update_chart() {
+    if (chart_ == nullptr) return;
+    std::vector<ChartBar> bars;
+    bars.reserve(current_results_.size() + previous_results_.size());
+    for (const BenchmarkResult& result : current_results_)
+        bars.push_back(ChartBar{std::string(describe(result.id).title), result.index_text, result.index, true});
+    for (const BenchmarkResult& result : previous_results_)
+        bars.push_back(ChartBar{std::string(describe(result.id).title) + " (previous)", result.index_text,
+                                result.index, false});
+    chart_->set_bars(std::move(bars));
+    // The scale, spelled out under the chart, because an index whose
+    // definition is somewhere else is a number nobody can check.
+    chart_->set_caption("index scale: 10 M steps/s, 100 MFLOPS or 1 GB/s = 1.0");
 }
 
 void SysInfoApp::refresh() {

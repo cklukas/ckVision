@@ -78,9 +78,9 @@ dependent row's package prerequisite; `Blocked` does not.
 | 29 | WP-47 — TerminalView interaction, resize, and nested ckVision sessions | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-46 | Full terminal usability; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 30 | WP-48 — Contained child Sixel and terminal hardening | 5–7 pw | **Implementation complete — Mac current-host gate passed** | WP-47 | Raster no-spill guarantee; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 31 | WP-49 — Terminal example, documentation, and end-to-end acceptance | 4–6 pw | **Implementation complete — Mac current-host gate passed** | WP-48 | Client proof point; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 32 | WP-51 — SysInfo probe boundary and machine report panes | 1–2 pw | **Implementation complete — Mac current-host gate passed** | WP-49 | Example coverage: a second injected platform service; [SysInfo plan](sysinfo-example.md) |
-| 33 | WP-52 — Bar chart view, benchmark kernels, and the threaded run | 1–2 pw | Ready | WP-51 | Example coverage: comparative visualization and cancellable background work; [SysInfo plan](sysinfo-example.md) |
-| 34 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | Blocked | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
+| 32 | WP-51 — SysInfo probe boundary and machine report panes | 1–2 pw | **Implementation complete — Mac and Linux gates passed** | WP-49 | Example coverage: a second injected platform service; [SysInfo plan](sysinfo-example.md) |
+| 33 | WP-52 — Bar chart view, benchmark kernels, and the threaded run | 1–2 pw | **Implementation complete — Mac current-host gate passed** | WP-51 | Example coverage: comparative visualization and cancellable background work; [SysInfo plan](sysinfo-example.md) |
+| 34 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | Ready | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
 | 35 | WP-54 — SysInfo report export, help, and documentation | 1 pw | Blocked | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
 | 36 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 37 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
@@ -2317,8 +2317,13 @@ cancellable background work that fills it.
 - Add `BenchmarkService`: one worker, queued run, per-kernel progress, a
   cancel flag observed between kernels, results returned through
   `Application::post`.
-- Add the Benchmarks window with picker, progress, Esc-cancel and the chart
-  drawn against a documented reference-machine table.
+- Add the Benchmarks window with picker, progress, Esc-cancel and the chart,
+  comparing kernel against kernel on one stated scale and this run against the
+  one before it. Reference bars from published figures are WP-55's, under the
+  rule stated there: a bar this program did not measure is never presented as
+  a measurement.
+- Report the build configuration that took the measurements, and say plainly
+  when it was not an optimized one.
 
 **Acceptance.**
 
@@ -2327,8 +2332,8 @@ cancellable background work that fills it.
 - A scripted run reports non-decreasing progress, terminates, and delivers one
   result per selected kernel.
 - Cancel is proven deterministically, not by timing.
-- The chart has a golden capture, and the reference rows are documented as
-  reference data with stated provenance.
+- The chart states its scale, and every bar on it was measured by this program
+  on this machine.
 
 ### WP-53 — Cache hierarchy, multicore scaling, and host capabilities
 

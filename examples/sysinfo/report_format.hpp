@@ -73,6 +73,11 @@ std::string memory_usage_text(const MemoryReport& memory);
 double used_fraction(const std::optional<std::uint64_t>& total,
                      const std::optional<std::uint64_t>& free_bytes);
 
+// What a benchmark window must say before it says a number. An
+// unoptimized build measures the compiler's idleness; an unknown one
+// cannot promise otherwise.
+std::string measurement_caveat_text(const BuildReport& build);
+
 // Field/value rows. A row of two empty strings is a group separator.
 std::vector<std::vector<std::string>> system_rows(const SystemProbe& probe);
 std::vector<std::vector<std::string>> memory_rows(const MemoryReport& memory);

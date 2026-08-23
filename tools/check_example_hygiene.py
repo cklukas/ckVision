@@ -24,7 +24,13 @@ PATTERNS = [
     ("redundant focus-policy defaults", re.compile(r"set_focus_policy\s*\(")),
 ]
 
-COMMAND_ID = re.compile(r"\.id\s*=\s*([^,\n}]+)")
+# The field a command's identity is actually declared in. It was `.id` when
+# this gate was written and is `.key` now, and the old spelling matched every
+# `.id =` in an example -- including an ordinary struct field, which is how
+# this rule came to reject correct code while no longer covering a single
+# command in the tree. Matching `.key` restores what it was for: two examples
+# claiming the same command identity.
+COMMAND_KEY = re.compile(r"\.key\s*=\s*([^,\n}]+)")
 COMMAND_CHORD = re.compile(r"\.chord\s*=\s*\"([^\"]+)\"")
 
 
@@ -43,11 +49,11 @@ def main() -> int:
             for match in pattern.finditer(text):
                 line = text.count("\n", 0, match.start()) + 1
                 failures.append(f"{rel}:{line}: forbidden {label}")
-        for match in COMMAND_ID.finditer(text):
-            command_id = match.group(1).strip()
-            previous = ids.setdefault(command_id, rel)
+        for match in COMMAND_KEY.finditer(text):
+            command_key = match.group(1).strip()
+            previous = ids.setdefault(command_key, rel)
             if previous != rel:
-                failures.append(f"{rel}: duplicate command id {command_id} also declared in {previous}")
+                failures.append(f"{rel}: duplicate command key {command_key} also declared in {previous}")
         for match in COMMAND_CHORD.finditer(text):
             chord = match.group(1)
             previous = chords.setdefault(chord, rel)

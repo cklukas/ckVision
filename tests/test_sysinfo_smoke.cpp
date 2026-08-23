@@ -13,10 +13,12 @@
 #include "cvision/core/key.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/progress.hpp"
 #include "cvision/widgets/table.hpp"
 #include "cvision/widgets/window.hpp"
 
+#include "fixed_benchmark_runner.hpp"
 #include "fixed_system_probe.hpp"
 #include "report_format.hpp"
 #include "sysinfo_app.hpp"
@@ -25,6 +27,7 @@ using ckv::Key;
 using ckv::KeyChord;
 using ckv::ManualClock;
 using ckv::Modifier;
+using ckv::sysinfo::FixedBenchmarkRunner;
 using ckv::sysinfo::FixedSystemProbe;
 using ckv::sysinfo::kNotReported;
 using ckv::sysinfo::SysInfoApp;
@@ -37,7 +40,8 @@ struct Fixture {
     ManualClock clock;
     Application app{term, clock};
     FixedSystemProbe probe;
-    SysInfoApp sysinfo{app, probe};
+    FixedBenchmarkRunner runner;
+    SysInfoApp sysinfo{app, probe, runner};
 
     // By key, the way the menu asks for it: a command's numeric id is the
     // registry's business and a test that knew one would be asserting
@@ -52,6 +56,14 @@ struct Fixture {
     void tick() {
         clock.advance(SysInfoApp::kRefreshIntervalNanos);
         app.step(0);
+    }
+
+    // A benchmark run, start to finish, with the worker's posted results
+    // delivered on this thread the way step() delivers them.
+    void run_benchmarks() {
+        run_command(SysInfoApp::kRunBenchmarksKey);
+        sysinfo.benchmarks().wait_until_idle();
+        for (int turn = 0; turn < 8; ++turn) app.step(0);
     }
 };
 
@@ -95,6 +107,7 @@ CK_TEST(the_summary_names_every_report_it_read) {
     CK_CHECK(value_of(rows, "L2 cache") == "4.0 MiB");
     CK_CHECK(value_of(rows, "Power source") == "battery");
     CK_CHECK(value_of(rows, "Language") == "C++20");
+    CK_CHECK(value_of(rows, "Build") == "Release");
     // The fixture's processor genuinely has no level-3 cache to report.
     CK_CHECK(value_of(rows, "L3 cache") == std::string(kNotReported));
 }
@@ -213,4 +226,86 @@ CK_TEST(the_disk_bar_follows_the_cursor_rather_than_the_first_row) {
     // And a refresh does not quietly move it back to the top.
     f.tick();
     CK_CHECK(bar->label() == "/Volumes/Archive: 96.0 GiB free of 2.0 TiB");
+}
+
+CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    CK_CHECK(f.sysinfo.benchmarks_window() != nullptr);
+    CK_CHECK(f.sysinfo.chart() != nullptr);
+    // Nothing measured yet, and the chart says that rather than drawing an
+    // empty axis.
+    CK_CHECK(f.sysinfo.chart()->bars().empty());
+
+    f.run_benchmarks();
+
+    CK_CHECK(f.sysinfo.current_results().size() == ckv::sysinfo::benchmark_catalogue().size());
+    CK_CHECK(!f.sysinfo.last_run_cancelled());
+    CK_CHECK(f.sysinfo.chart()->bars().size() == f.sysinfo.current_results().size());
+    CK_CHECK(f.sysinfo.chart()->bars().front().highlighted);
+    // The scale is named under the chart, because an index whose definition
+    // is somewhere else is a number nobody can check.
+    CK_CHECK(f.sysinfo.chart()->caption().find("MFLOPS") != std::string::npos);
+    CK_CHECK(f.sysinfo.chart()->caption().find("1.0") != std::string::npos);
+    CK_CHECK(f.sysinfo.benchmark_progress()->label() == "done");
+    CK_CHECK(f.sysinfo.benchmark_progress()->fraction() == 1.0);
+}
+
+CK_TEST(a_debug_build_says_so_in_the_window_that_shows_the_numbers) {
+    Fixture f;
+    f.probe.build_report.build_type = "Debug";
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    f.app.step(0);
+    const std::string bytes(f.term.written_bytes());
+    CK_CHECK(bytes.find("Debug build") != std::string::npos);
+}
+
+CK_TEST(the_run_before_this_one_stays_on_the_chart_to_be_compared_against) {
+    Fixture f;
+    f.run_benchmarks();
+    const std::size_t kernels = f.sysinfo.current_results().size();
+    f.run_benchmarks();
+
+    CK_CHECK(f.sysinfo.previous_results().size() == kernels);
+    CK_CHECK(f.sysinfo.chart()->bars().size() == kernels * 2);
+    // The newest run leads and is the row the eye is sent to.
+    CK_CHECK(f.sysinfo.chart()->bars().front().highlighted);
+    CK_CHECK(!f.sysinfo.chart()->bars().back().highlighted);
+    CK_CHECK(f.sysinfo.chart()->bars().back().label.find("(previous)") != std::string::npos);
+}
+
+CK_TEST(a_pane_the_reader_did_not_ask_for_is_not_measured) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    for (std::size_t index = 0; index < ckv::sysinfo::benchmark_catalogue().size(); ++index)
+        f.sysinfo.benchmark_picker()->set_checked(index, index == 1);
+
+    f.run_benchmarks();
+    CK_CHECK(f.sysinfo.current_results().size() == 1);
+    CK_CHECK(f.sysinfo.current_results().front().id == ckv::sysinfo::benchmark_catalogue()[1].id);
+}
+
+CK_TEST(cancelling_a_run_leaves_the_application_running_and_the_chart_honest) {
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    f.runner.hold();
+    CK_CHECK(f.run_command(SysInfoApp::kRunBenchmarksKey));
+    f.runner.wait_until_entered(1);
+
+    CK_CHECK(f.run_command(SysInfoApp::kCancelBenchmarksKey));
+    f.runner.release();
+    f.sysinfo.benchmarks().wait_until_idle();
+    for (int turn = 0; turn < 8; ++turn) f.app.step(0);
+
+    CK_CHECK(f.sysinfo.last_run_cancelled());
+    CK_CHECK(f.sysinfo.current_results().empty());
+    CK_CHECK(f.sysinfo.benchmark_progress()->label() == "cancelled");
+    // And the rest of the application is untouched by it.
+    f.tick();
+    CK_CHECK(f.sysinfo.system_window() != nullptr);
+    CK_CHECK(f.sysinfo.refresh_count() > 0);
 }

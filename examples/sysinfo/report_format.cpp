@@ -189,6 +189,17 @@ double used_fraction(const std::optional<std::uint64_t>& total,
     return static_cast<double>(*total - *free_bytes) / static_cast<double>(*total);
 }
 
+std::string measurement_caveat_text(const BuildReport& build) {
+    if (build_is_optimized(build))
+        return "Measurements are indicative: they describe this machine as it is right now, "
+               "not as a certification.";
+    if (build.build_type.empty())
+        return "This build does not say how it was compiled, so its measurements cannot be "
+               "attributed to this machine rather than to the build.";
+    return "This is a " + build.build_type +
+           " build: the numbers below measure an unoptimized binary, not this machine.";
+}
+
 std::vector<std::vector<std::string>> system_rows(const SystemProbe& probe) {
     const HostReport host = probe.host();
     const ProcessorReport processor = probe.processor();
@@ -220,6 +231,7 @@ std::vector<std::vector<std::string>> system_rows(const SystemProbe& probe) {
     rows.push_back(field_row("Compiler", build.compiler));
     rows.push_back(field_row("Standard library", build.standard_library));
     rows.push_back(field_row("Language", build.cxx_standard));
+    rows.push_back(field_row("Build", text_or_absent(build.build_type)));
     rows.push_back(field_row("Pointer size", count_or_absent(build.pointer_bits) + " bit"));
     rows.push_back(field_row("Byte order", build.little_endian ? "little endian" : "big endian"));
     return rows;

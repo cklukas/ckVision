@@ -138,6 +138,25 @@ CK_TEST(a_read_only_volume_says_so_where_its_name_is) {
     CK_CHECK(ckv::sysinfo::volume_rows({volume}).at(0).at(0) == "/Volumes/Archive (ro)");
 }
 
+// The sentence a benchmark window leads with, and the reason it is not one
+// fixed sentence: a Debug build's numbers are about the build.
+CK_TEST(an_unoptimized_build_says_so_before_it_shows_a_number) {
+    ckv::sysinfo::BuildReport build;
+    build.build_type = "Release";
+    CK_CHECK(ckv::sysinfo::build_is_optimized(build));
+    CK_CHECK(ckv::sysinfo::measurement_caveat_text(build).find("indicative") != std::string::npos);
+
+    build.build_type = "Debug";
+    CK_CHECK(!ckv::sysinfo::build_is_optimized(build));
+    CK_CHECK(ckv::sysinfo::measurement_caveat_text(build) ==
+             "This is a Debug build: the numbers below measure an unoptimized binary, not this machine.");
+
+    build.build_type.clear();
+    CK_CHECK(!ckv::sysinfo::build_is_optimized(build));
+    CK_CHECK(ckv::sysinfo::measurement_caveat_text(build).find("does not say how it was compiled") !=
+             std::string::npos);
+}
+
 CK_TEST(a_battery_reports_what_it_knows_and_no_more) {
     ckv::sysinfo::PowerReport power;
     CK_CHECK(battery_text(power) == std::string(kNotReported));

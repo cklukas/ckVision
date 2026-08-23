@@ -115,8 +115,8 @@ the application: what the machine *is*.
   completed kernel, a cancel flag observed between kernels, results delivered
   through `Application::post`.
 - Add the Benchmarks window: a kernel picker, a `Progress` bar, Esc-cancel,
-  and the chart, with a table of reference machines the measured result is
-  drawn against.
+  and the chart, which compares the kernels against each other on one stated
+  scale and this run against the one before it.
 
 **Acceptance.**
 
@@ -127,9 +127,10 @@ the application: what the machine *is*.
 - A cancel between kernels stops the run, leaves the application responsive,
   and is proven by a test that cancels deterministically rather than by
   timing.
-- The chart's cell rendering is pinned by a golden capture; the reference rows
-  are documented as reference *data*, with their provenance stated in the
-  source, and are never presented as measurements taken by this program.
+- The chart states its scale on the chart, and every bar on it was measured by
+  this program on this machine.
+- The window says which build measured the numbers, and says so differently
+  when that build was not an optimized one.
 
 ### WP-53 — Cache hierarchy, multicore scaling, and the host's own capabilities
 
@@ -193,6 +194,17 @@ teachable.
   user's machine, and a meaningful result needs cache defeat that differs per
   platform and filesystem. It is a candidate for a later package, not part of
   this one.
+- **Reference bars, in this package.** The tools this example takes its shape
+  from drew your computer against a fixed table — an XT at 1.0, a 386 at 34.7.
+  Those bars are worth having, and WP-55 adds them, under one rule that keeps
+  them honest: a bar this program did not measure must not be presented as a
+  measurement. What a reference row may carry is a published figure or one
+  computed from a published standard — a memory generation's peak transfer
+  rate, an interface's ceiling, a core's peak floating-point throughput — with
+  its provenance stated and its status marked on the chart. What this package
+  ships is the comparison that needs no outside source: kernel against kernel
+  on one stated scale, and this run against the last one.
+
 - **A library chart widget.** If the chart proves generally useful, promoting
   it into `include/cvision/widgets` is a DECISIONS.md matter with its own
   catalog, golden and documentation obligations.

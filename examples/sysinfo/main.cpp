@@ -9,6 +9,7 @@
 #include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
 
+#include "benchmark.hpp"
 #include "posix_system_probe.hpp"
 #include "sysinfo_app.hpp"
 
@@ -18,8 +19,12 @@ int main() {
     ckv::term::TerminalClipboardWriter clipboard(terminal);
 
     ckv::sysinfo::PosixSystemProbe probe;
+    // The benchmark runner takes the same clock the application does. A
+    // measurement that reached for a clock of its own would be the one
+    // place in this example that broke the rule the rest of it teaches.
+    ckv::sysinfo::MeasuredBenchmarkRunner runner(clock);
     ckv::ui::Application app(terminal, clock, clipboard);
-    ckv::sysinfo::SysInfoApp sysinfo(app, probe);
+    ckv::sysinfo::SysInfoApp sysinfo(app, probe, runner);
     app.run();
     return 0;
 }

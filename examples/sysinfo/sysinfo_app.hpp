@@ -22,10 +22,14 @@
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/table.hpp"
 
+#include "bar_chart_view.hpp"
+#include "benchmark_service.hpp"
 #include "system_probe.hpp"
 
 namespace ckv::widgets {
+class CheckGroup;
 class Progress;
+class StaticText;
 class Window;
 }  // namespace ckv::widgets
 
@@ -33,8 +37,9 @@ namespace ckv::sysinfo {
 
 class SysInfoApp {
 public:
-    // `probe` must outlive the application; it is read on every refresh.
-    SysInfoApp(ui::Application& app, const SystemProbe& probe);
+    // `probe` and `runner` must outlive the application: the probe is read
+    // on every refresh, and the runner on every benchmark run.
+    SysInfoApp(ui::Application& app, const SystemProbe& probe, const BenchmarkRunner& runner);
 
     // Command keys, named here so a test asks for a command the way the
     // menu does — by key — rather than by where it happens to sit.
@@ -42,6 +47,9 @@ public:
     static constexpr std::string_view kMemoryWindowKey = "sysinfo.memory-window";
     static constexpr std::string_view kVolumesWindowKey = "sysinfo.volumes-window";
     static constexpr std::string_view kRefreshKey = "sysinfo.refresh";
+    static constexpr std::string_view kBenchmarksWindowKey = "sysinfo.benchmarks-window";
+    static constexpr std::string_view kRunBenchmarksKey = "sysinfo.run-benchmarks";
+    static constexpr std::string_view kCancelBenchmarksKey = "sysinfo.cancel-benchmarks";
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
 
@@ -53,6 +61,17 @@ public:
     widgets::Window* volumes_window() const noexcept { return volumes_window_; }
     widgets::Table* volumes_table() const noexcept { return volumes_table_; }
     widgets::Progress* volumes_bar() const noexcept { return volumes_bar_; }
+    widgets::Window* benchmarks_window() const noexcept { return benchmarks_window_; }
+    widgets::CheckGroup* benchmark_picker() const noexcept { return benchmark_picker_; }
+    widgets::Progress* benchmark_progress() const noexcept { return benchmark_progress_; }
+    BarChartView* chart() const noexcept { return chart_; }
+    BenchmarkService& benchmarks() noexcept { return benchmarks_; }
+
+    // The run being charted, and the one before it.
+    const std::vector<BenchmarkResult>& current_results() const noexcept { return current_results_; }
+    const std::vector<BenchmarkResult>& previous_results() const noexcept { return previous_results_; }
+    // True once a run has ended, whether it completed or was cancelled.
+    bool last_run_cancelled() const noexcept { return last_run_cancelled_; }
 
     // Re-reads the live reports and repopulates whichever panes are open.
     // The refresh timer calls this; so does the Refresh command, so a
@@ -76,6 +95,11 @@ private:
     // wrong key.
     void refill(widgets::Table& table, widgets::TableRowId cursor,
                 std::vector<std::vector<std::string>> rows);
+
+    void open_benchmarks_window();
+    void start_benchmarks();
+    void cancel_benchmarks();
+    void update_chart();
 
     void fill_system_table();
     void fill_memory_pane();
@@ -101,8 +125,23 @@ private:
     widgets::TableRowId memory_cursor_ = widgets::kInvalidTableRowId;
     widgets::TableRowId volumes_cursor_ = widgets::kInvalidTableRowId;
 
+    widgets::Window* benchmarks_window_ = nullptr;
+    widgets::CheckGroup* benchmark_picker_ = nullptr;
+    widgets::Progress* benchmark_progress_ = nullptr;
+    widgets::StaticText* benchmark_note_ = nullptr;
+    BarChartView* chart_ = nullptr;
+
+    std::vector<BenchmarkResult> current_results_;
+    std::vector<BenchmarkResult> previous_results_;
+    bool last_run_cancelled_ = false;
+
     std::vector<VolumeReport> volumes_;
     int refresh_count_ = 0;
+
+    // Declared last, so it is destroyed first: its destructor cancels any
+    // run and joins the worker, which must happen before anything the
+    // handlers reach for goes away.
+    BenchmarkService benchmarks_;
 };
 
 }  // namespace ckv::sysinfo

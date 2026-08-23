@@ -93,9 +93,20 @@ struct BuildReport {
     std::string compiler;
     std::string standard_library;
     std::string cxx_standard;
+    // The build's own configuration name ("Debug", "Release"), passed in
+    // by the build system because the compiler does not know it. It
+    // belongs in a program that measures speed: an unoptimized build's
+    // benchmark numbers describe the build and not the machine, and the
+    // difference is a factor of several.
+    std::string build_type;
     int pointer_bits = 0;
     bool little_endian = true;
 };
+
+// Whether `build_type` names a configuration whose measurements are about
+// the machine. An empty or unrecognized name is not a promise either way,
+// so it answers false and the pane says what it does not know.
+bool build_is_optimized(const BuildReport& build) noexcept;
 
 // Facts the compiler knows about its own output. No host access at all,
 // which is why it is portable code that every probe can share rather than

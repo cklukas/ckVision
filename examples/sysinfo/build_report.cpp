@@ -56,11 +56,19 @@ std::string cxx_standard_name() {
 
 }  // namespace
 
+bool build_is_optimized(const BuildReport& build) noexcept {
+    return build.build_type == "Release" || build.build_type == "RelWithDebInfo" ||
+           build.build_type == "MinSizeRel";
+}
+
 BuildReport current_build_report() {
     BuildReport report;
     report.compiler = compiler_name();
     report.standard_library = standard_library_name();
     report.cxx_standard = cxx_standard_name();
+#if defined(CKV_SYSINFO_BUILD_TYPE)
+    report.build_type = CKV_SYSINFO_BUILD_TYPE;
+#endif
     report.pointer_bits = static_cast<int>(sizeof(void*) * 8);
     report.little_endian = std::endian::native == std::endian::little;
     return report;
