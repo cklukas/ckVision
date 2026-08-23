@@ -14,7 +14,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/widgets/canvas.hpp"
-#include "cvision/widgets/directory_picker.hpp"
+#include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/option_group.hpp"
@@ -492,6 +492,14 @@ void SysInfoApp::open_benchmarks_window() {
     chart_ = chart.get();
     column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Expanding});
 
+    // The page that measures has no chart, and without something to take
+    // the slack the Column packs everything against the top and leaves the
+    // buttons floating in the middle of the window. This is the chart's
+    // stand-in on that page: it draws nothing and holds the space.
+    auto spacer = std::make_unique<ui::View>();
+    benchmark_spacer_ = spacer.get();
+    column->add_item(std::move(spacer), ui::LayoutSpec{ui::SizePolicy::Expanding});
+
     // Under the chart, where a footnote belongs and where the asterisk on
     // every measured bar is answered.
     auto footnote = std::make_unique<widgets::StaticText>(measurement_caveat_text(probe_.build()));
@@ -538,6 +546,7 @@ void SysInfoApp::open_benchmarks_window() {
         compare_picker_ = nullptr;
         benchmark_progress_ = nullptr;
         benchmark_footnote_ = nullptr;
+        benchmark_spacer_ = nullptr;
         chart_ = nullptr;
         widgets::schedule_self_detach(*opened, app_);
     };
@@ -640,31 +649,46 @@ RunOptions SysInfoApp::run_options() const {
     return options;
 }
 
+// Asks where, in one dialog, and enumerates nothing.
+//
+// This asked with a directory PICKER until the owner pressed Ok and the
+// application stopped answering. The picker's own header says why: its tree
+// is materialized eagerly and in full from the root down, and is "only
+// appropriate for directory trees of a size a TUI dialog would reasonably
+// show, not an entire real filesystem root". Pointed at a home directory it
+// walks every file the reader owns before it draws anything. The widget was
+// not wrong; using it on $HOME was.
+//
+// A Note field says what will happen, a Text field takes the directory, and
+// its validator asks the injected filesystem the one question that matters:
+// is this a directory. Nothing is read until the reader presses Ok.
 void SysInfoApp::ask_for_scratch_directory() {
-    // Says how much it will write before it asks where, because "choose a
-    // directory" is not a question a reader can answer without that.
-    pending_message_ = widgets::present_message_box(
-        app_, *desktop_, roles_,
-        {widgets::MessageBoxKind::Confirm, "Measure disk throughput?",
-         "This writes " + format_bytes(RunOptions::kDiskBytes) +
-             " to a directory you choose, reads it back, and removes it. Choose the directory next.",
-         widgets::MessageBoxButtons::OkCancel});
-    pending_message_->set_completion_handler([this](widgets::MessageBoxResult answer) {
-        if (answer != widgets::MessageBoxResult::Ok) {
-            if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("disk measurement declined");
+    widgets::DialogDescriptor descriptor;
+    descriptor.title = "Measure disk throughput";
+    descriptor.fields.push_back(widgets::FieldDescriptor{
+        .label = "This writes " + format_bytes(RunOptions::kDiskBytes) +
+                 " to the directory below, reads it back, and removes it.",
+        .kind = widgets::FieldKind::Note});
+    descriptor.fields.push_back(widgets::FieldDescriptor{
+        .label = "&Directory:",
+        .initial_text = report_directory_,
+        .validate = [this](const std::string& text) { return !text.empty() && files_.is_directory(text); },
+    });
+    descriptor.buttons.push_back(widgets::ButtonDescriptor{"O&K", widgets::ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
+
+    pending_scratch_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    pending_scratch_dialog_->set_completion_handler([this](widgets::DialogResult result) {
+        if (!result.accepted || result.values.size() < 2 || result.values[1].empty()) {
+            if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("no directory chosen");
             return;
         }
-        pending_directory_ = widgets::present_directory_picker(files_, report_directory_, app_, *desktop_, roles_);
-        pending_directory_->set_completion_handler([this](widgets::DirectoryPickerResult chosen) {
-            if (!chosen.accepted || chosen.path.empty()) {
-                if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("no directory chosen");
-                return;
-            }
-            scratch_directory_ = chosen.path;
-            // The reader answered the question they were asked; running is
-            // what they asked for.
-            start_benchmarks();
-        });
+        scratch_directory_ = result.values[1];
+        // The reader answered the question they were asked; running is what
+        // they asked for. Posted rather than called: this handler runs
+        // inside the dialog's own completion, and starting a run from there
+        // would present the next window while this one is still unwinding.
+        app_.post([this] { start_benchmarks(); });
     });
 }
 
@@ -787,6 +811,7 @@ void SysInfoApp::show_benchmark_page(std::size_t page) {
     if (compare_picker_ != nullptr) compare_picker_->set_visible(setup);
     if (benchmark_progress_ != nullptr) benchmark_progress_->set_visible(setup);
     chart_->set_visible(!setup);
+    if (benchmark_spacer_ != nullptr) benchmark_spacer_->set_visible(setup);
 
     if (setup) {
         benchmark_page_title_ = chart_groups_.empty() ? "Measure" : "Measure  (1 of " +

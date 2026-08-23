@@ -23,7 +23,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
-#include "cvision/widgets/directory_picker.hpp"
+#include "cvision/widgets/dialog.hpp"
 #include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/help_viewer.hpp"
 #include "cvision/widgets/message_box.hpp"
@@ -131,7 +131,7 @@ public:
     // Whether the directory question has actually reached a picker. The
     // dialog chain that asks it broke silently once; this is how a test
     // sees that it is still connected.
-    bool pending_directory_open() const noexcept { return pending_directory_.has_value(); }
+    bool pending_directory_open() const noexcept { return pending_scratch_dialog_.has_value(); }
 
     // Writes `format` to `path` through the injected filesystem, without a
     // dialog. The dialog path calls this; a test can too.
@@ -212,7 +212,7 @@ private:
     // outlived its owner would be called from Application's teardown into
     // a dead frame, which is the failure that destructor is guarding.
     std::optional<widgets::MessageBoxPresentation> pending_message_;
-    std::optional<widgets::DirectoryPickerPresentation> pending_directory_;
+    std::optional<widgets::DescriptorDialogPresentation> pending_scratch_dialog_;
     std::optional<widgets::FileDialogPresentation> pending_save_;
     ui::StandardRoles roles_;
 
@@ -245,6 +245,7 @@ private:
     widgets::Progress* benchmark_progress_ = nullptr;
     widgets::StaticText* benchmark_note_ = nullptr;
     widgets::StaticText* benchmark_footnote_ = nullptr;
+    ui::View* benchmark_spacer_ = nullptr;
     BarChartView* chart_ = nullptr;
 
     // Every group the current results would draw, in order: the topics the
