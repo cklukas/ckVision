@@ -3,6 +3,8 @@
 #include "cvision/widgets/minimized_window_stub.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <memory>
 
 #include "cvision/core/text.hpp"
 #include "cvision/widgets/window.hpp"
@@ -107,7 +109,7 @@ void MinimizedWindowStub::draw(scene::Painter& painter) {
     // from maximized", a question about SIZE, and a parked window's size is
     // whatever it was and is not what this control changes.
     const int restore_x = restore_control_x();
-    const bool restore_armed = held_ == Held::Restore && held_inside_;
+    const bool restore_armed = (held_ == Held::Restore && held_inside_) || key_armed_ || key_flash_;
     painter.draw_text(Point{restore_x, 0}, "[", restore_armed ? pressed : frame);
     painter.draw_text(Point{restore_x + 1, 0}, "↑", restore_armed ? pressed : control);
     painter.draw_text(Point{restore_x + 2, 0}, "]", restore_armed ? pressed : frame);
@@ -198,11 +200,77 @@ bool MinimizedWindowStub::on_mouse(const MouseEvent& event) {
     return true;
 }
 
+namespace {
+// How long a keyboard press that cannot report its release stays visibly
+// down before it acts — Button's figure, for the same reason.
+constexpr std::int64_t kKeyPressFeedbackNanos = 90'000'000;
+}  // namespace
+
 bool MinimizedWindowStub::on_key(const KeyEvent& event) {
-    if (!enabled() || !activation_chord(event.chord)) return false;
+    if (!enabled()) return false;
+    if (!activation_chord(event.chord)) {
+        // Escape takes back a keyboard press in flight without restoring —
+        // consumed here exactly when it cancelled something.
+        if (key_armed_ && event.chord.key == Key::Escape && event.action == KeyAction::Press) {
+            key_armed_ = false;
+            invalidate();
+            return true;
+        }
+        return false;
+    }
+    // Releases have their own route (on_key_release); one handed here is not
+    // a press and must not act like one.
+    if (event.action == KeyAction::Release) return false;
+    // A held key under a release-reporting protocol repeats while it stays
+    // down: one press being held, not many. A legacy terminal's auto-repeat
+    // is a fresh keystroke each time, and acting again is right for it.
+    if (event.action == KeyAction::Repeat && event.reports_release) return true;
+
+    if (event.reports_release) {
+        // Stay armed until the key comes back up; on_key_release commits the
+        // press, or finds it already taken back.
+        key_armed_ = true;
+        invalidate();
+        return true;
+    }
+    // No release will arrive: acknowledge the keystroke visibly, then act.
+    // The flash outlives this stub only as a timer on the Application, and
+    // the liveness token keeps it from touching a row that restoring took
+    // off the desktop — the timer simply finds nobody home.
+    key_flash_ = true;
+    invalidate();
+    if (context().app != nullptr) {
+        const std::weak_ptr<void> liveness = lifetime_token();
+        context().app->start_timer(kKeyPressFeedbackNanos, /*repeating=*/false, [this, liveness] {
+            if (liveness.expired()) return;
+            key_flash_ = false;
+            invalidate();
+        });
+    }
+    // Ends this stub — see on_mouse for why the callable is copied and
+    // nothing on `this` is touched afterwards.
     const std::function<void()> restore = on_restore;
     if (restore) restore();
     return true;
+}
+
+bool MinimizedWindowStub::on_key_release(const KeyEvent& event) {
+    if (!activation_chord(event.chord) || !key_armed_) return false;
+    key_armed_ = false;
+    invalidate();
+    // Releasing is what commits the press — and it was never taken back in
+    // between (Escape, or focus moving away), or key_armed_ would be false.
+    const std::function<void()> restore = on_restore;
+    if (restore) restore();
+    return true;
+}
+
+void MinimizedWindowStub::on_focus(const FocusEvent& event) {
+    // Focus moving away takes back a keyboard press in flight: the key that
+    // eventually comes up is no longer this row's, so it must neither look
+    // pressed nor act.
+    if (!event.gained && key_armed_) key_armed_ = false;
+    invalidate();
 }
 
 }  // namespace ckv::widgets

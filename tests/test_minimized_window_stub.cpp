@@ -583,3 +583,111 @@ CK_TEST(a_release_the_row_never_saw_disarms_it_when_the_pointer_comes_back) {
     CK_CHECK(click_at(f.app, on_caption));
     CK_CHECK(!window->minimized());
 }
+
+// --- The keyboard half of the same grammar ---------------------------------
+
+namespace {
+ckv::KeyEvent enter_press(bool reports_release) {
+    ckv::KeyEvent event{ckv::KeyChord{ckv::Key::Enter, Modifier::None, ""}};
+    event.action = ckv::KeyAction::Press;
+    event.reports_release = reports_release;
+    return event;
+}
+ckv::KeyEvent enter_release() {
+    ckv::KeyEvent event{ckv::KeyChord{ckv::Key::Enter, Modifier::None, ""}};
+    event.action = ckv::KeyAction::Release;
+    event.reports_release = true;
+    return event;
+}
+}  // namespace
+
+CK_TEST(on_a_session_that_reports_releases_enter_restores_when_the_key_comes_up) {
+    // Button's rule (D-055), on the stub: the press arms, the release commits.
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    f.app.set_focus(stub);
+    CK_CHECK(f.app.dispatch(enter_press(/*reports_release=*/true)));
+    CK_CHECK(window->minimized());  // armed, not restored
+    CK_CHECK(f.app.dispatch(enter_release()));
+    CK_CHECK(!window->minimized());
+    CK_CHECK(f.desktop->parked_windows().empty());
+}
+
+CK_TEST(escape_takes_back_a_keyboard_press_in_flight_on_the_stub) {
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    f.app.set_focus(stub);
+    CK_CHECK(f.app.dispatch(enter_press(true)));
+    ckv::KeyEvent escape{ckv::KeyChord{ckv::Key::Escape, Modifier::None, ""}};
+    escape.action = ckv::KeyAction::Press;
+    CK_CHECK(f.app.dispatch(escape));  // consumed, because it cancelled something
+    CK_CHECK(f.app.dispatch(enter_release()) == false);  // nothing left to commit
+    CK_CHECK(window->minimized());
+    CK_CHECK(f.desktop->parked_windows().size() == 1U);
+    // And Escape with nothing in flight is not this row's to consume.
+    CK_CHECK(f.app.dispatch(escape) == false);
+}
+
+CK_TEST(focus_moving_away_takes_back_a_keyboard_press_in_flight_on_the_stub) {
+    Fixture f;
+    Window* const first = f.open("config.yaml");
+    Window* const second = f.open("notes.md", Rect{20, 5, 30, 8});
+    first->set_minimized(true);
+    second->set_minimized(true);
+    CK_CHECK(f.desktop->parked_windows().size() == 2U);
+    MinimizedWindowStub* const stub_a = f.desktop->parked_windows()[0];
+    MinimizedWindowStub* const stub_b = f.desktop->parked_windows()[1];
+    f.app.set_focus(stub_a);
+    CK_CHECK(f.app.dispatch(enter_press(true)));
+    f.app.set_focus(stub_b);  // Tab, or anything else, moves focus away
+    CK_CHECK(f.app.dispatch(enter_release()) == false);
+    CK_CHECK(first->minimized());
+    CK_CHECK(second->minimized());
+    CK_CHECK(f.desktop->parked_windows().size() == 2U);
+}
+
+CK_TEST(on_a_session_that_cannot_report_a_release_enter_acts_at_once_and_is_seen_to) {
+    // Legacy bytes never report a release: waiting would wait forever. The
+    // press acts immediately — and is acknowledged visibly, so an accepted
+    // keystroke does not look exactly like an ignored one.
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    f.app.set_focus(stub);
+    CK_CHECK(f.app.dispatch(enter_press(/*reports_release=*/false)));
+    CK_CHECK(!window->minimized());
+    CK_CHECK(f.desktop->parked_windows().empty());
+    // The flash timer then finds the row gone, and must be harmless about it.
+    f.clock.advance(200'000'000);
+    f.app.step(0);
+    CK_CHECK(!window->minimized());
+}
+
+CK_TEST(a_keyboard_armed_stub_wears_the_pressed_face_on_its_restore_control) {
+    Fixture f;
+    Window* const window = f.open("config.yaml");
+    window->set_minimized(true);
+    MinimizedWindowStub* const stub = f.desktop->parked_windows().front();
+    const Rect where = stub->bounds();
+    int restore_x = -1;
+    for (int x = 0; x < where.width; ++x)
+        if (stub->point_in_restore_control(Point{x, 0})) restore_x = x;
+    const Point on_restore{where.x + restore_x, where.y};
+    const ckv::ui::RoleId pressed_role = f.app.roles().find("ckv.window.control.pressed");
+    const ckv::Style pressed = f.app.theme().resolve(pressed_role);
+    f.app.set_focus(stub);
+    f.app.step(0);
+    const ckv::Style at_rest = f.app.current_frame().at(on_restore).style();
+    CK_CHECK(f.app.dispatch(enter_press(true)));
+    f.app.step(0);
+    const ckv::Style armed = f.app.current_frame().at(on_restore).style();
+    CK_CHECK(armed.fg == pressed.fg);
+    CK_CHECK(armed.fg != at_rest.fg || armed.bg != at_rest.bg);
+    CK_CHECK(f.app.dispatch(enter_release()));
+    CK_CHECK(!window->minimized());
+}
