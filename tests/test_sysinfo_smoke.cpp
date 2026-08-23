@@ -578,6 +578,43 @@ CK_TEST(a_curve_is_charted_as_a_curve_and_never_as_an_index) {
 // The one kernel that writes to the reader's machine does not start until
 // they have said where. A run that quietly picked a directory would be a
 // program writing to somebody's disk because they pressed "measure".
+// The bug this test exists for: both dialog chains asked a question and
+// then threw the answer away. A DialogPresentation IS its handler's
+// lifetime -- dropping the handle withdraws the handler -- so a completion
+// installed on a local that dies at the end of the function never runs. The
+// confirm box appeared, the reader pressed Ok, and nothing happened.
+//
+// Found by running the application, not by the suite: every test here
+// called save_report() and set_scratch_directory() directly, which is
+// exactly the shape of a suite that cannot see a dialog chain break.
+CK_TEST(pressing_ok_on_the_disk_question_actually_opens_the_directory_picker) {
+    Fixture f;
+    f.sysinfo.set_scratch_directory("");
+    f.files.add_directory("/");
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+
+    CK_CHECK(f.run_command(SysInfoApp::kRunBenchmarksKey));
+    f.app.step(0);
+    const std::size_t asked = f.sysinfo.desktop().windows().size();
+
+    // Enter accepts the box's default button; the handler that survives it
+    // is what presents the picker.
+    f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
+    for (int turn = 0; turn < 4; ++turn) f.app.step(0);
+
+    bool picker_open = false;
+    for (const ckv::widgets::Window* const window : f.sysinfo.desktop().windows())
+        if (window->title().find("Director") != std::string::npos ||
+            window->title().find("Choose") != std::string::npos ||
+            window->title().find("Folder") != std::string::npos)
+            picker_open = true;
+    // Whatever the picker is titled, a second dialog is now on the desktop
+    // where the first one was, and that is the link that was broken.
+    CK_CHECK(picker_open || f.sysinfo.desktop().windows().size() >= asked);
+    CK_CHECK(f.sysinfo.pending_directory_open());
+}
+
 CK_TEST(a_disk_measurement_asks_before_it_writes_anywhere) {
     Fixture f;
     f.sysinfo.set_scratch_directory("");

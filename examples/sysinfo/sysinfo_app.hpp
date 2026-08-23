@@ -22,7 +22,10 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/directory_picker.hpp"
+#include "cvision/widgets/file_dialog.hpp"
 #include "cvision/widgets/help_viewer.hpp"
+#include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/table.hpp"
 
 #include "bar_chart_view.hpp"
@@ -114,6 +117,10 @@ public:
     // answer in the directory picker; a host that already knows where its
     // scratch space is may set it up front, and a test may too.
     void set_scratch_directory(std::string path) { scratch_directory_ = std::move(path); }
+    // Whether the directory question has actually reached a picker. The
+    // dialog chain that asks it broke silently once; this is how a test
+    // sees that it is still connected.
+    bool pending_directory_open() const noexcept { return pending_directory_.has_value(); }
 
     // Writes `format` to `path` through the injected filesystem, without a
     // dialog. The dialog path calls this; a test can too.
@@ -179,6 +186,21 @@ private:
     // until the reader says otherwise, and this program never fills it in
     // on their behalf.
     std::string scratch_directory_;
+
+    // A dialog's completion handler lives exactly as long as the
+    // presentation handle it was installed through: dropping the handle
+    // withdraws the handler (dialog_presentation.hpp says so, and D-038 is
+    // why). Held as members, so the question this application asks is
+    // actually answered -- see ask_for_scratch_directory, which asked and
+    // then discarded the answer until this was fixed.
+    //
+    // Members of SysInfoApp specifically, which every host constructs after
+    // its Application and therefore destroys before it: a handler that
+    // outlived its owner would be called from Application's teardown into
+    // a dead frame, which is the failure that destructor is guarding.
+    std::optional<widgets::MessageBoxPresentation> pending_message_;
+    std::optional<widgets::DirectoryPickerPresentation> pending_directory_;
+    std::optional<widgets::FileDialogPresentation> pending_save_;
     ui::StandardRoles roles_;
 
     widgets::Desktop* desktop_ = nullptr;

@@ -315,6 +315,7 @@ void SysInfoApp::open_latency_plot_window() {
     // application is running, and Canvas's mandatory fallback painter is
     // the design's answer to that: the same data, drawn in cells, by the
     // same composition the cell chart uses.
+    // ckvision-doc: latency-canvas
     auto canvas = std::make_unique<widgets::Canvas>();
     // Canvas never asks the terminal for its cell metric itself; the owner
     // injects it (D-039), which is what keeps the picture's proportions
@@ -331,6 +332,7 @@ void SysInfoApp::open_latency_plot_window() {
     canvas->set_help_context_key("sysinfo.latency");
     latency_canvas_ = canvas.get();
     column->add_item(std::move(canvas), ui::LayoutSpec{ui::SizePolicy::Expanding});
+    // ckvision-doc-end: latency-canvas
 
     auto footer = std::make_unique<widgets::StaticText>("");
     latency_plot_footer_ = footer.get();
@@ -610,20 +612,23 @@ RunOptions SysInfoApp::run_options() const {
 void SysInfoApp::ask_for_scratch_directory() {
     // Says how much it will write before it asks where, because "choose a
     // directory" is not a question a reader can answer without that.
-    auto message = widgets::present_message_box(
+    pending_message_ = widgets::present_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Confirm, "Measure disk throughput?",
          "This writes " + format_bytes(RunOptions::kDiskBytes) +
              " to a directory you choose, reads it back, and removes it. Choose the directory next.",
          widgets::MessageBoxButtons::OkCancel});
-    message.set_completion_handler([this](widgets::MessageBoxResult answer) {
+    pending_message_->set_completion_handler([this](widgets::MessageBoxResult answer) {
         if (answer != widgets::MessageBoxResult::Ok) {
             if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("disk measurement declined");
             return;
         }
-        auto picker = widgets::present_directory_picker(files_, report_directory_, app_, *desktop_, roles_);
-        picker.set_completion_handler([this](widgets::DirectoryPickerResult chosen) {
-            if (!chosen.accepted || chosen.path.empty()) return;
+        pending_directory_ = widgets::present_directory_picker(files_, report_directory_, app_, *desktop_, roles_);
+        pending_directory_->set_completion_handler([this](widgets::DirectoryPickerResult chosen) {
+            if (!chosen.accepted || chosen.path.empty()) {
+                if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("no directory chosen");
+                return;
+            }
             scratch_directory_ = chosen.path;
             // The reader answered the question they were asked; running is
             // what they asked for.
@@ -792,18 +797,18 @@ bool SysInfoApp::save_report(const std::string& path, ReportFormat format) {
 void SysInfoApp::save_report_with_dialog(ReportFormat format) {
     // Non-blocking, from a command handler: the dialog is presented and
     // this returns, and the write happens when the reader has chosen.
-    auto dialog = widgets::present_file_dialog(widgets::FileDialogMode::Save, report_directory_, files_, app_,
-                                               *desktop_, roles_);
-    dialog.set_completion_handler([this, format](widgets::FileDialogResult result) {
+    pending_save_ = widgets::present_file_dialog(widgets::FileDialogMode::Save, report_directory_, files_, app_,
+                                                 *desktop_, roles_);
+    pending_save_->set_completion_handler([this, format](widgets::FileDialogResult result) {
         if (!result.accepted || result.path.empty()) return;
         const bool written = save_report(result.path, format);
-        auto message = widgets::present_message_box(
+        pending_message_ = widgets::present_message_box(
             app_, *desktop_, roles_,
             {written ? widgets::MessageBoxKind::Info : widgets::MessageBoxKind::Error,
              written ? "Report saved" : "Report not saved",
              written ? result.path : "This program could not write " + result.path,
              widgets::MessageBoxButtons::Ok});
-        message.set_completion_handler([](widgets::MessageBoxResult) {});
+        pending_message_->set_completion_handler([](widgets::MessageBoxResult) {});
     });
 }
 
