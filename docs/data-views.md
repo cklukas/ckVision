@@ -5,6 +5,7 @@ date: 2026-08-11
 format: guide
 description: Provider-backed lists and tables with stable identities and typed editing.
 ---
+{% raw %}
 
 # Provider-backed data views
 
@@ -89,3 +90,4 @@ replaced with `clear_model()` first. Calls occur on the owning UI thread.
 This leaves cache size, cancellation, query scheduling, transaction policy,
 and domain types to applications while retaining deterministic interaction and
 testability in ckVision.
+{% endraw %}
