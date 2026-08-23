@@ -5,6 +5,7 @@ date: 2026-08-11
 format: guide
 description: Wrapped styled flow content with links and inline raster atoms.
 ---
+{% raw %}
 
 # Flow content
 
@@ -52,3 +53,4 @@ An image occupies complete flow rows rather than allowing text to wrap around
 its sides. That makes resize, scrolling, fallback, and raster clipping
 deterministic on every terminal size. Applications choose their own image
 generation, refresh, loading placeholder, and semantic layout policy.
+{% endraw %}

@@ -1,3 +1,4 @@
+{% raw %}
 <!-- Copyright (c) 2026 C. Klukas. All rights reserved. -->
 
 # Embedded terminal
@@ -348,3 +349,4 @@ ctest --test-dir build -R 'suite_test_(terminal_emulator|terminal_view|posix_ter
 The Windows ConPTY adapter and its host matrix are a separate platform
 acceptance requirement. A deterministic failure state is used on a build where
 that adapter is unavailable; it is not a substitute for Windows evidence.
+{% endraw %}
