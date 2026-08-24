@@ -451,10 +451,11 @@ void Application::cancel_timer(TimerId id) {
 }
 
 std::optional<std::int64_t> Application::next_timer_deadline_nanos() const noexcept {
-    if (timers_.empty()) return std::nullopt;
-    std::int64_t deadline = timers_.front().next_fire_nanos;
+    std::optional<std::int64_t> deadline =
+        presenter_.next_cursor_blink_deadline_nanos();
     for (const Timer& timer : timers_)
-        deadline = std::min(deadline, timer.next_fire_nanos);
+        deadline = deadline ? std::min(*deadline, timer.next_fire_nanos)
+                            : timer.next_fire_nanos;
     return deadline;
 }
 
@@ -942,8 +943,8 @@ bool Application::step(std::int64_t deadline_nanos) {
             wake_requested_ = false;
         }
         std::int64_t effective_deadline = wake_now ? clock_.now_nanos() : deadline_nanos;
-        for (const Timer& timer : timers_)
-            effective_deadline = std::min(effective_deadline, timer.next_fire_nanos);
+        if (const auto timer_deadline = next_timer_deadline_nanos())
+            effective_deadline = std::min(effective_deadline, *timer_deadline);
 
         // Sessions released since the last step leave empty slots behind —
         // erasing one inside the loop that was notifying about it would pull
@@ -1046,6 +1047,7 @@ bool Application::step(std::int64_t deadline_nanos) {
                                                     frames_awaiting_terminal() > 0 &&
                                                     presenter_.last_frame_carried_rasters();
         if (!waiting_on_a_host_that_answers) paint_and_present();
+        if (presenter_.advance_cursor_blink(now)) did_work = true;
         return did_work;
     } catch (...) {
         terminal_.terminate_after_callback_failure();
@@ -1150,7 +1152,7 @@ void Application::paint_and_present() {
         cursor = CursorState{};
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
-                       compositor_.visible_rasters());
+                       clock_.now_nanos(), compositor_.visible_rasters());
     // The clock starts when the question goes out, not when the next step
     // notices it did: an application that paces against the terminal is
     // asking how long the terminal took, not how long we took to look.

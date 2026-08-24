@@ -66,6 +66,17 @@ public:
     }
 };
 
+class CursorProbeView final : public ProbeView {
+public:
+    using ProbeView::ProbeView;
+
+    std::optional<ckv::CursorState> cursor;
+
+    std::optional<ckv::CursorState> cursor_state() const override {
+        return cursor;
+    }
+};
+
 class WaitableTerminal final : public ckv::term::Terminal {
 public:
     ckv::term::Capabilities capabilities() const noexcept override { return ckv::term::baseline_capabilities(); }
@@ -233,6 +244,47 @@ private:
 };
 
 }  // namespace
+
+CK_TEST(application_schedules_software_cursor_blink_at_the_declared_rate) {
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 6});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* view = static_cast<CursorProbeView*>(
+        app.root().add_child(std::make_unique<CursorProbeView>(Rect{0, 0, 5, 3})));
+    view->set_focus_policy(FocusPolicy::TabStop);
+    view->cursor = ckv::CursorState{true, {1, 1}, ckv::CursorShape::Underline,
+                                    true, 17};
+    app.set_focus(view);
+
+    (void)app.step(0);
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(!term.display().cursor().blink);
+    CK_CHECK(app.next_timer_deadline_nanos() == 17);
+
+    term.clear_written();
+    clock.advance(16);
+    CK_CHECK(!app.step(clock.now_nanos()));
+    CK_CHECK(term.written_bytes().empty());
+
+    clock.advance(1);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(term.written_bytes() == "\x1B[?25l");
+    CK_CHECK(!term.display().cursor().visible);
+    CK_CHECK(app.next_timer_deadline_nanos() == 34);
+
+    term.clear_written();
+    clock.advance(17);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(term.written_bytes().find("\x1B[4 q") != std::string_view::npos);
+
+    view->cursor->blink = false;
+    view->invalidate();
+    term.clear_written();
+    (void)app.step(clock.now_nanos());
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(!app.next_timer_deadline_nanos());
+}
 
 // --- Focus traversal -------------------------------------------------------
 

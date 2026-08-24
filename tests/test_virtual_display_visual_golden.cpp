@@ -138,7 +138,7 @@ std::string presenter_occlusion_manifest() {
 
     // The two higher layers leave a two-cell middle slice of the four-cell
     // source anchor; Presenter must crop the source proportionally.
-    presenter.present(compositor.frame().view(), CursorState{}, compositor.visible_rasters());
+    presenter.present(compositor.frame().view(), CursorState{}, 0, compositor.visible_rasters());
     if (terminal.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos) return {};
     std::string result = plane_manifest("proportional-partial-occlusion", terminal.display());
 
@@ -148,9 +148,9 @@ std::string presenter_occlusion_manifest() {
     auto red = std::make_shared<Image>(9, 18);
     for (int y = 0; y < red->height(); ++y)
         for (int x = 0; x < red->width(); ++x) red->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
-    moved_presenter.present(moved_surface.view(), CursorState{},
+    moved_presenter.present(moved_surface.view(), CursorState{}, 0,
                             {{8, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, red, true}});
-    moved_presenter.present(moved_surface.view(), CursorState{},
+    moved_presenter.present(moved_surface.view(), CursorState{}, 0,
                             {{8, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, red, true}});
     result += plane_manifest("move-stale-clear", moved_terminal.display());
     return result;

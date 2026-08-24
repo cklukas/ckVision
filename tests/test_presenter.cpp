@@ -33,7 +33,7 @@ CK_TEST(first_present_writes_every_cell) {
     HeadlessTerminal term(Size{3, 1});
     Presenter presenter(term);
     Surface s = make_surface(3, 1, "x");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().find("xxx") != std::string_view::npos);
 }
 
@@ -41,10 +41,10 @@ CK_TEST(second_present_with_no_changes_writes_no_bytes) {
     HeadlessTerminal term(Size{3, 1});
     Presenter presenter(term);
     Surface s = make_surface(3, 1, "x");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     term.clear_written();
 
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().empty());
     CK_CHECK(presenter.last_bytes_emitted() == 0);
 }
@@ -53,11 +53,11 @@ CK_TEST(only_the_changed_cell_is_rewritten) {
     HeadlessTerminal term(Size{5, 1});
     Presenter presenter(term);
     Surface s = make_surface(5, 1, ".");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     term.clear_written();
 
     s.set_cell(Point{2, 0}, Cell::from_grapheme("Z", Style{}));
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().find('Z') != std::string_view::npos);
     // Cursor move to column 2 (0-based) -> "3" in 1-based CUP.
     CK_CHECK(term.written_bytes().find("\x1B[1;3H") != std::string_view::npos);
@@ -67,11 +67,11 @@ CK_TEST(invalidate_forces_the_next_present_to_rewrite_everything) {
     HeadlessTerminal term(Size{3, 1});
     Presenter presenter(term);
     Surface s = make_surface(3, 1, "x");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     term.clear_written();
 
     presenter.invalidate();
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().find("xxx") != std::string_view::npos);
 }
 
@@ -79,11 +79,11 @@ CK_TEST(resize_between_presents_forces_a_full_repaint) {
     HeadlessTerminal term(Size{3, 1});
     Presenter presenter(term);
     Surface s3 = make_surface(3, 1, "x");
-    presenter.present(s3.view(), CursorState{});
+    presenter.present(s3.view(), CursorState{}, 0);
     term.clear_written();
 
     Surface s5 = make_surface(5, 1, "y");
-    presenter.present(s5.view(), CursorState{});
+    presenter.present(s5.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().find("yyyyy") != std::string_view::npos);
 }
 
@@ -95,7 +95,7 @@ CK_TEST(continuation_cells_contribute_no_text_of_their_own) {
     Surface s = make_surface(4, 1, ".");
     s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE4\xB8\xAD", Style{}));  // 中, width 2
     s.set_cell(Point{1, 0}, Cell::continuation(Style{}));
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
 
     // The wide glyph's 3-byte UTF-8 encoding must appear exactly once
     // in the written output, not duplicated for its continuation cell.
@@ -227,7 +227,7 @@ CK_TEST(repeated_same_style_in_a_run_emits_the_style_escape_only_once) {
     s.set_cell(Point{0, 0}, Cell::from_grapheme("a", red));
     s.set_cell(Point{1, 0}, Cell::from_grapheme("b", red));
     s.set_cell(Point{2, 0}, Cell::from_grapheme("c", red));
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
 
     std::size_t count = 0;
     std::size_t pos = 0;
@@ -250,12 +250,12 @@ CK_TEST(width_unsafe_glyph_forces_readdress_even_for_a_genuinely_adjacent_next_c
     HeadlessTerminal term(Size{6, 1});
     Presenter presenter(term);
     Surface s = make_surface(6, 1, " ");
-    presenter.present(s.view(), CursorState{});  // stable baseline
+    presenter.present(s.view(), CursorState{}, 0);  // stable baseline
     term.clear_written();
 
     s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE2\x80\x8D", Style{}));  // lone ZWJ, width 0
     s.set_cell(Point{1, 0}, Cell::from_grapheme("Q", Style{}));
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
 
     // Two explicit CUP escapes: one for column 0 (1-based col 1), one
     // for column 1 (1-based col 2) — not one run written straight
@@ -273,12 +273,12 @@ CK_TEST(width_unsafe_run_still_correctly_stops_at_a_genuine_unchanged_gap) {
     HeadlessTerminal term(Size{6, 1});
     Presenter presenter(term);
     Surface s = make_surface(6, 1, " ");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     term.clear_written();
 
     s.set_cell(Point{0, 0}, Cell::from_grapheme("\xE2\x80\x8D", Style{}));
     s.set_cell(Point{4, 0}, Cell::from_grapheme("Q", Style{}));
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().find(";5H") != std::string_view::npos);
 }
 
@@ -291,7 +291,7 @@ CK_TEST(an_ambiguous_width_profile_reestablishes_the_cursor_after_non_ascii_text
     s.set_cell(Point{0, 0}, Cell::from_grapheme("\xC2\xB1", Style{}));  // ±, East-Asian Ambiguous
     s.set_cell(Point{1, 0}, Cell::from_grapheme("Q", Style{}));
 
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
 
     // The profile changes no logical Cell width. It does ensure an alternate
     // terminal convention cannot displace the following cell: the next write
@@ -307,7 +307,7 @@ CK_TEST(the_baseline_width_agreement_boundary_readdresses_after_cjk_text) {
     s.set_cell(Point{1, 0}, Cell::continuation(Style{}));
     s.set_cell(Point{2, 0}, Cell::from_grapheme("Q", Style{}));
 
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
 
     // CJK's logical width is two cells, but output must not assume that a
     // particular terminal agrees. The trailing cell is addressed explicitly.
@@ -320,24 +320,72 @@ CK_TEST(visible_cursor_moves_there_and_shows_it) {
     HeadlessTerminal term(Size{5, 5});
     Presenter presenter(term);
     Surface s = make_surface(5, 5);
-    presenter.present(s.view(), CursorState{true, Point{2, 3}, CursorShape::Block});
+    presenter.present(s.view(),
+                      CursorState{true, Point{2, 3}, CursorShape::Block}, 0);
     CK_CHECK(term.written_bytes().find("\x1B[4;3H") != std::string_view::npos);  // row3+1;col2+1
     CK_CHECK(term.written_bytes().find("\x1B[?25h") != std::string_view::npos);
 }
 
-CK_TEST(visible_cursor_declares_a_blinking_shape_to_the_host_terminal) {
+CK_TEST(blinking_cursor_uses_a_steady_host_shape_and_software_visibility_phases) {
     HeadlessTerminal term(Size{5, 5});
     Presenter presenter(term);
     Surface s = make_surface(5, 5);
-    presenter.present(s.view(), CursorState{true, Point{1, 1}, CursorShape::Block, true});
-    CK_CHECK(term.written_bytes().find("\x1B[1 q") != std::string_view::npos);
+    presenter.present(
+        s.view(), CursorState{true, Point{1, 1}, CursorShape::Block, true}, 0);
+    CK_CHECK(term.written_bytes().find("\x1B[2 q") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1B[1 q") == std::string_view::npos);
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(!term.display().cursor().blink);
+    CK_CHECK(presenter.next_cursor_blink_deadline_nanos() ==
+             kCursorBlinkHalfPeriodNanos);
+
+    term.clear_written();
+    CK_CHECK(!presenter.advance_cursor_blink(kCursorBlinkHalfPeriodNanos - 1));
+    CK_CHECK(term.written_bytes().empty());
+
+    CK_CHECK(presenter.advance_cursor_blink(kCursorBlinkHalfPeriodNanos));
+    CK_CHECK(term.written_bytes() == "\x1B[?25l");
+    CK_CHECK(!term.display().cursor().visible);
+
+    term.clear_written();
+    CK_CHECK(presenter.advance_cursor_blink(2 * kCursorBlinkHalfPeriodNanos));
+    CK_CHECK(term.written_bytes().find("\x1B[2;2H") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1B[2 q") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1B[?25h") != std::string_view::npos);
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(!term.display().cursor().blink);
+}
+
+CK_TEST(moving_a_hidden_blinking_cursor_restarts_with_a_full_visible_phase) {
+    HeadlessTerminal term(Size{5, 5});
+    Presenter presenter(term);
+    Surface s = make_surface(5, 5);
+    const CursorState first{true, Point{1, 1}, CursorShape::Underline, true,
+                            10};
+    presenter.present(s.view(), first, 0);
+    CK_CHECK(presenter.advance_cursor_blink(10));
+    CK_CHECK(!term.display().cursor().visible);
+
+    term.clear_written();
+    CursorState moved = first;
+    moved.position = Point{3, 2};
+    presenter.present(s.view(), moved, 12);
+
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK((term.display().cursor().position == Point{3, 2}));
+    CK_CHECK(!term.display().cursor().blink);
+    CK_CHECK(presenter.next_cursor_blink_deadline_nanos() == 22);
+    CK_CHECK(term.written_bytes().find("\x1B[3;4H") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1B[4 q") != std::string_view::npos);
+    CK_CHECK(term.written_bytes().find("\x1B[?25h") != std::string_view::npos);
 }
 
 CK_TEST(hidden_cursor_is_explicitly_hidden) {
     HeadlessTerminal term(Size{5, 5});
     Presenter presenter(term);
     Surface s = make_surface(5, 5);
-    presenter.present(s.view(), CursorState{false, Point{0, 0}, CursorShape::Block});
+    presenter.present(s.view(),
+                      CursorState{false, Point{0, 0}, CursorShape::Block}, 0);
     CK_CHECK(term.written_bytes().find("\x1B[?25l") != std::string_view::npos);
 }
 
@@ -349,7 +397,7 @@ CK_TEST(synchronized_output_wraps_the_frame_when_supported) {
     HeadlessTerminal term(Size{3, 1}, caps);
     Presenter presenter(term);
     Surface s = make_surface(3, 1, "x");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().substr(0, 8) == "\x1B[?2026h");
     CK_CHECK(term.written_bytes().find("\x1B[?2026l") != std::string_view::npos);
 }
@@ -358,7 +406,7 @@ CK_TEST(no_synchronized_output_wrapping_when_unsupported) {
     HeadlessTerminal term(Size{3, 1});  // baseline: synchronized_output = false
     Presenter presenter(term);
     Surface s = make_surface(3, 1, "x");
-    presenter.present(s.view(), CursorState{});
+    presenter.present(s.view(), CursorState{}, 0);
     CK_CHECK(term.written_bytes().find("?2026") == std::string_view::npos);
 }
 
@@ -370,7 +418,7 @@ CK_TEST(raster_slices_are_not_emitted_without_graphics_capability) {
     Surface s = make_surface(5, 5);
     const auto image = std::make_shared<Image>(8, 8);
     std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 2}, Rect{0, 0, 2, 2}, image, true}};
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
 }
 
@@ -385,11 +433,11 @@ CK_TEST(an_unchanged_picture_on_untouched_cells_is_not_sent_again) {
     for (int x = 0; x < image->width(); ++x) image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
     const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image, true}};
 
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") != std::string_view::npos);
 
     std::size_t mark = term.written_bytes().size();
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") == std::string_view::npos);
 
     // ...but a picture's pixels reach one cell past the cells it was given
@@ -399,7 +447,7 @@ CK_TEST(an_unchanged_picture_on_untouched_cells_is_not_sent_again) {
     // at all, which is why the case that matters is the one beside it.)
     s.set_cell(Point{7, 0}, Cell::from_grapheme("X", Style{}));
     mark = term.written_bytes().size();
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") != std::string_view::npos);
 }
 
@@ -420,16 +468,16 @@ CK_TEST(a_picture_that_moves_is_sent_again_at_every_position) {
         return std::vector<RasterSlice>{{1, r, r, image, true}};
     };
 
-    presenter.present(s.view(), CursorState{}, at(0));
+    presenter.present(s.view(), CursorState{}, 0, at(0));
     for (int step = 1; step <= 4; ++step) {
         const std::size_t mark = term.written_bytes().size();
-        presenter.present(s.view(), CursorState{}, at(step));
+        presenter.present(s.view(), CursorState{}, 0, at(step));
         CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") != std::string_view::npos);
     }
     // Standing still is the one case that needs nothing: the pixels are
     // already there and no cell was repainted over them.
     const std::size_t mark = term.written_bytes().size();
-    presenter.present(s.view(), CursorState{}, at(4));
+    presenter.present(s.view(), CursorState{}, 0, at(4));
     CK_CHECK(term.written_bytes().substr(mark).find("\x1BP0;0;0q") == std::string_view::npos);
 }
 
@@ -447,7 +495,7 @@ CK_TEST(sixel_presentation_replaces_fallback_text_with_clean_background_cells) {
     for (int x = 0; x < image->width(); ++x)
         image->set_pixel(x, 0, Image::Rgba{255, 0, 0, 255});
     const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 7, 1}, Rect{0, 0, 7, 1}, image, true}};
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
 
     CK_CHECK(term.written_bytes().find(fallback) == std::string_view::npos);
     for (int x = 0; x < 7; ++x) {
@@ -470,7 +518,7 @@ CK_TEST(sixel_geometry_limit_preserves_the_mandatory_text_fallback) {
 
     const auto image = std::make_shared<Image>(8, 8);  // exceeds the verified 4×4 geometry limit
     const std::vector<RasterSlice> rasters{{1, Rect{0, 0, 5, 1}, Rect{0, 0, 5, 1}, image, true}};
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
 
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") == std::string_view::npos);
     CK_CHECK(term.written_bytes().find(fallback) != std::string_view::npos);
@@ -486,7 +534,7 @@ CK_TEST(unoccluded_raster_slice_emits_the_full_image_cropped_to_itself) {
     image->set_pixel(0, 0, Image::Rgba{200, 0, 0, 255});
     // visible_rect == full_anchor: unoccluded, the whole image applies.
     std::vector<RasterSlice> rasters{{1, Rect{1, 1, 2, 2}, Rect{1, 1, 2, 2}, image, true}};
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("\x1BP0;0;0q") != std::string_view::npos);
     CK_CHECK(term.written_bytes().find("#0;2;78;0;0") != std::string_view::npos);  // 200/255 ~ 78%
 }
@@ -505,7 +553,7 @@ CK_TEST(occluded_slice_crops_to_its_sub_rect_not_the_whole_image) {
             image->set_pixel(x, y, x < 4 ? Image::Rgba{255, 0, 0, 255} : Image::Rgba{0, 0, 255, 255});
     // Occlusion left only the LEFT half of the anchor visible.
     std::vector<RasterSlice> rasters{{1, Rect{0, 0, 2, 4}, Rect{0, 0, 4, 4}, image, true}};
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     CK_CHECK(term.written_bytes().find("#0;2;100;0;0") != std::string_view::npos);  // red present
     CK_CHECK(term.written_bytes().find("0;0;100") == std::string_view::npos);        // blue absent: cropped out
 }
@@ -518,7 +566,7 @@ CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
     Surface s = make_surface(10, 10);
     const auto image = std::make_shared<Image>(4, 4);
     std::vector<RasterSlice> rasters{{1, Rect{3, 2, 2, 2}, Rect{3, 2, 2, 2}, image, true}};
-    presenter.present(s.view(), CursorState{}, rasters);
+    presenter.present(s.view(), CursorState{}, 0, rasters);
     // Cursor move to row2+1;col3+1 = "3;4H" must precede the sixel DCS.
     const std::size_t move_pos = term.written_bytes().find(";4H");
     const std::size_t dcs_pos = term.written_bytes().find("\x1BP0;0;0q");
@@ -535,12 +583,12 @@ CK_TEST(moving_an_active_raster_repaints_its_old_cells_and_removes_stale_virtual
     for (int y = 0; y < image->height(); ++y)
         for (int x = 0; x < image->width(); ++x) image->set_pixel(x, y, Image::Rgba{255, 0, 0, 255});
 
-    presenter.present(surface.view(), CursorState{},
+    presenter.present(surface.view(), CursorState{}, 0,
                       {{1, Rect{0, 0, 1, 1}, Rect{0, 0, 1, 1}, image, true}});
     CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 255);
     term.clear_written();
 
-    presenter.present(surface.view(), CursorState{},
+    presenter.present(surface.view(), CursorState{}, 0,
                       {{1, Rect{2, 0, 1, 1}, Rect{2, 0, 1, 1}, image, true}});
     CK_CHECK(!term.written_bytes().empty());
     CK_CHECK(term.display().raster_plane().pixel(0, 0).a == 0);
@@ -579,10 +627,10 @@ CK_TEST(a_raster_moved_left_repaints_every_cell_it_vacated) {
     Surface s = make_surface(20, 4, ".");
     auto image = solid_image(40, 40);  // 4 cells x 2 rows at 10x20
 
-    presenter.present(s.view(), CursorState{}, one_raster(Rect{8, 1, 4, 2}, image));
+    presenter.present(s.view(), CursorState{}, 0, one_raster(Rect{8, 1, 4, 2}, image));
     term.clear_written();
 
-    presenter.present(s.view(), CursorState{}, one_raster(Rect{6, 1, 4, 2}, image));
+    presenter.present(s.view(), CursorState{}, 0, one_raster(Rect{6, 1, 4, 2}, image));
     const std::string out{term.written_bytes()};
 
     // Columns 10 and 11 are no longer under the image and must be painted
@@ -599,10 +647,10 @@ CK_TEST(a_raster_that_disappears_repaints_the_cells_it_held) {
     Surface s = make_surface(20, 4, ".");
     auto image = solid_image(40, 40);
 
-    presenter.present(s.view(), CursorState{}, one_raster(Rect{8, 1, 4, 2}, image));
+    presenter.present(s.view(), CursorState{}, 0, one_raster(Rect{8, 1, 4, 2}, image));
     term.clear_written();
 
-    presenter.present(s.view(), CursorState{}, {});
+    presenter.present(s.view(), CursorState{}, 0, {});
     const std::string out{term.written_bytes()};
     CK_CHECK(out.find("....") != std::string::npos);
 }
@@ -618,9 +666,9 @@ CK_TEST(a_moved_raster_also_repaints_the_cell_row_its_pixels_could_bleed_into) {
     Surface s = make_surface(20, 6, ".");
     auto image = solid_image(40, 45);
 
-    presenter.present(s.view(), CursorState{}, one_raster(Rect{8, 1, 4, 2}, image));
+    presenter.present(s.view(), CursorState{}, 0, one_raster(Rect{8, 1, 4, 2}, image));
     term.clear_written();
-    presenter.present(s.view(), CursorState{}, one_raster(Rect{2, 1, 4, 2}, image));
+    presenter.present(s.view(), CursorState{}, 0, one_raster(Rect{2, 1, 4, 2}, image));
     const std::string out{term.written_bytes()};
 
     // Row 3 (1-based row 4) must appear in the repaint, for the columns the
@@ -639,12 +687,12 @@ CK_TEST(a_visible_cursor_is_put_back_after_every_frame_that_painted) {
     Presenter presenter(term);
     Surface s = make_surface(10, 3, " ");
     const CursorState cursor{true, Point{2, 1}, CursorShape::Block};
-    presenter.present(s.view(), cursor);
+    presenter.present(s.view(), cursor, 0);
     term.clear_written();
 
     // Paint far from the cursor without changing the cursor state at all.
     s.set_cell(Point{9, 2}, Cell::from_grapheme("X", Style{}));
-    presenter.present(s.view(), cursor);
+    presenter.present(s.view(), cursor, 0);
     const std::string out{term.written_bytes()};
     CK_CHECK(out.find("X") != std::string::npos);
     CK_CHECK(out.find("\x1B[2;3H") != std::string::npos);
@@ -659,10 +707,10 @@ CK_TEST(a_frame_that_paints_nothing_still_costs_nothing) {
     Presenter presenter(term);
     Surface s = make_surface(10, 3, " ");
     const CursorState cursor{true, Point{2, 1}, CursorShape::Block};
-    presenter.present(s.view(), cursor);
+    presenter.present(s.view(), cursor, 0);
     term.clear_written();
 
-    presenter.present(s.view(), cursor);
+    presenter.present(s.view(), cursor, 0);
     CK_CHECK(term.written_bytes().empty());
     CK_CHECK(presenter.last_bytes_emitted() == 0);
 }
@@ -672,11 +720,11 @@ CK_TEST(a_hidden_cursor_is_hidden_once_and_not_chased_around) {
     Presenter presenter(term);
     Surface s = make_surface(10, 3, " ");
     const CursorState hidden{false, Point{0, 0}, CursorShape::Block};
-    presenter.present(s.view(), hidden);
+    presenter.present(s.view(), hidden, 0);
     term.clear_written();
 
     s.set_cell(Point{5, 1}, Cell::from_grapheme("Y", Style{}));
-    presenter.present(s.view(), hidden);
+    presenter.present(s.view(), hidden, 0);
     const std::string out{term.written_bytes()};
     CK_CHECK(out.find("Y") != std::string::npos);
     CK_CHECK(out.find("\x1B[?25l") == std::string::npos);  // already hidden; said once
@@ -697,7 +745,7 @@ CK_TEST(replacing_a_picture_in_place_does_not_reclear_the_cells_beneath_it) {
         return std::vector<RasterSlice>{
             RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}};
     };
-    presenter.present(surface.view(), CursorState{}, frame_with(10));
+    presenter.present(surface.view(), CursorState{}, 0, frame_with(10));
     const std::size_t first = presenter.last_bytes_emitted();
 
     // The same footprint, new pixels: the picture is re-sent — it must be —
@@ -705,7 +753,7 @@ CK_TEST(replacing_a_picture_in_place_does_not_reclear_the_cells_beneath_it) {
     // every pixel of the old one. Re-clearing them is what a host renders
     // as a flash of bare surface under an animation, once per frame.
     const std::size_t before = term.written_bytes().size();
-    presenter.present(surface.view(), CursorState{}, frame_with(200));
+    presenter.present(surface.view(), CursorState{}, 0, frame_with(200));
     const std::string second(term.written_bytes().substr(before));
     CK_CHECK(second.find("\x1B" "P") != std::string::npos);
     CK_CHECK(presenter.last_bytes_emitted() < first / 2);
@@ -734,7 +782,7 @@ CK_TEST(every_presented_frame_keeps_the_synchronized_update_bracket) {
     // for them once, on a theory about one host's snapshotting; the field
     // evidence did not bear the theory out, and an unverified reason to
     // deviate from a protocol is no reason at all.
-    presenter.present(surface.view(), CursorState{},
+    presenter.present(surface.view(), CursorState{}, 0,
                       {RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}});
     CK_CHECK(term.written_bytes().find("\x1B[?2026h") != std::string::npos);
     CK_CHECK(term.written_bytes().find("\x1B" "P") != std::string::npos);

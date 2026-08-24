@@ -96,11 +96,11 @@ CK_TEST(warmed_compositor_and_presenter_allocate_nothing_for_an_unchanged_frame)
 
     ckv::term::HeadlessTerminal terminal(ckv::Size{8, 4});
     ckv::term::Presenter presenter(terminal);
-    presenter.present(compositor.frame().view(), ckv::CursorState{});
+    presenter.present(compositor.frame().view(), ckv::CursorState{}, 0);
     terminal.clear_written();
     {
         AllocationScope allocations;
-        presenter.present(compositor.frame().view(), ckv::CursorState{});
+        presenter.present(compositor.frame().view(), ckv::CursorState{}, 0);
         CK_CHECK(allocations.count() == 0);
         CK_CHECK(presenter.last_bytes_emitted() == 0);
     }
