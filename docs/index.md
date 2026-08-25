@@ -18,6 +18,8 @@ graphics — with deterministic, headless-testable behaviour.
 - [Example applications](example-apps.md) — the `examples/` tree as a guided tour
 - [SysInfo example](sysinfo-example.md) — injected host facts, benchmarks,
   charts, help, and report export
+- [TODO example](todo-example.md) — a complete persistent Kanban application,
+  custom views, editor notes, and multi-instance conflicts
 - [Hello example verification appendix](hello-example.md)
 
 ## Concepts

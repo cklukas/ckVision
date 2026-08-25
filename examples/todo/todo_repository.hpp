@@ -66,6 +66,7 @@ using TodoRevisionResult = RepositoryResult<RepositoryRevision>;
 using TodoCommitResult = RepositoryResult<RepositoryMutation>;
 using TodoArchiveResult = RepositoryResult<RepositoryMutation>;
 
+// ckvision-doc: todo-repository
 class TodoRepository {
 public:
     virtual ~TodoRepository() = default;
@@ -77,5 +78,6 @@ public:
                                     IsoDate mutation_date) = 0;
     virtual TodoArchiveResult store_archive(const ArchivedTask& record) = 0;
 };
+// ckvision-doc-end: todo-repository
 
 }  // namespace ckv::todo

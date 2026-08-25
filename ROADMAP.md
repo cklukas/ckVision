@@ -388,6 +388,10 @@ and [plans/embedded-terminal-delivery-target.md](plans/embedded-terminal-deliver
 The [SysInfo example](plans/sysinfo-example.md) demonstrates an injected
 host-information service, live refresh, comparative charts, cancellable
 background benchmarks, contextual help, and injected-filesystem report export.
+The [TODO example](plans/todo-example.md) demonstrates a complete persistent
+Kanban product: custom Board/lane views, editor-backed modeless notes, full
+keyboard/pointer/window grammar, atomic storage, and visible multi-instance
+conflict resolution.
 Further M11 scope: graphics polish (kitty-graphics secondary encoder, Sixel palette optimization);
 scheme polish; the theme-editor standard dialog; release documentation and
 examples; fuzz/benchmark hardening.

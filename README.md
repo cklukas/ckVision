@@ -121,6 +121,7 @@ documentation describes — they are the fastest way in.
 | `editor` | The document editor: profiles, search/replace, file workflow |
 | `terminal` | An embedded terminal in a window |
 | `workbench` | A larger multi-window application |
+| `todo` | Persistent Kanban, editor notes, drag/drop, Boards, and conflict resolution |
 
 ## Documentation
 
@@ -151,6 +152,7 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [api-index.md](docs/api-index.md) | Curated public-header index |
 | [example-apps.md](docs/example-apps.md) | What each example demonstrates and how it is tested |
 | [hello-example.md](docs/hello-example.md) | Hello verification appendix and golden evidence |
+| [todo-example.md](docs/todo-example.md) | Complete TODO tour, architecture, persistence, keys, and evidence |
 | [golden-format.md](docs/golden-format.md) | The golden capture format |
 | [performance.md](docs/performance.md) | Allocation and cost gates, and the p99 procedure |
 | [fuzzing.md](docs/fuzzing.md) | Fuzz targets and corpora |

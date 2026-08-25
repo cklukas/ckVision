@@ -182,42 +182,42 @@ void TodoApp::declare_commands() {
          .handler = [this] { open_note_editor(); }});
     note_undo_command_ = app_.commands().declare(
         {.key = "todo.note.undo", .title = "&Undo", .category = "Note", .context = "todo.note",
-         .chord = "Ctrl+Z", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->document->undo();
          }});
     note_redo_command_ = app_.commands().declare(
         {.key = "todo.note.redo", .title = "&Redo", .category = "Note", .context = "todo.note",
-         .chord = "Ctrl+Y", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->document->redo();
          }});
     note_cut_command_ = app_.commands().declare(
         {.key = "todo.note.cut", .title = "Cu&t", .category = "Note", .context = "todo.note",
-         .chord = "Ctrl+X", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->cut_selection_to_clipboard();
          }});
     note_copy_command_ = app_.commands().declare(
         {.key = "todo.note.copy", .title = "&Copy", .category = "Note", .context = "todo.note",
-         .chord = "Ctrl+C", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->copy_selection_to_clipboard();
          }});
     note_paste_command_ = app_.commands().declare(
         {.key = "todo.note.paste", .title = "&Paste", .category = "Note", .context = "todo.note",
-         .chord = "Ctrl+V", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->paste_from_clipboard();
          }});
     note_find_selection_command_ = app_.commands().declare(
         {.key = "todo.note.find-selection", .title = "&Find selection", .category = "Note",
-         .context = "todo.note", .chord = "Ctrl+F", .handler = [this] {
+         .context = "todo.note", .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->use_selection_as_search_query();
          }});
     note_find_next_command_ = app_.commands().declare(
         {.key = "todo.note.find-next", .title = "Find &next", .category = "Note", .context = "todo.note",
-         .chord = "Ctrl+G", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->find_next();
          }});
     note_wrap_command_ = app_.commands().declare(
         {.key = "todo.note.wrap", .title = "&Word wrap", .category = "Note", .context = "todo.note",
-         .chord = "Alt+W", .handler = [this] {
+         .handler = [this] {
              if (NoteSession* note = focused_note()) {
                  const bool wrapped = note->editor->wrap_mode() == widgets::WrapMode::Word;
                  note->editor->set_wrap_mode(wrapped ? widgets::WrapMode::None : widgets::WrapMode::Word);
@@ -378,6 +378,14 @@ void TodoApp::bind_board_aliases() {
     bind(Key::Char, "h", board_help_command_);
     bind(Key::Char, "?", board_help_command_);
     bind(Key::Char, "q", board_quit_command_);
+    bind(Key::Char, "z", note_undo_command_, Modifier::Ctrl);
+    bind(Key::Char, "y", note_redo_command_, Modifier::Ctrl);
+    bind(Key::Char, "x", note_cut_command_, Modifier::Ctrl);
+    bind(Key::Char, "c", note_copy_command_, Modifier::Ctrl);
+    bind(Key::Char, "v", note_paste_command_, Modifier::Ctrl);
+    bind(Key::Char, "f", note_find_selection_command_, Modifier::Ctrl);
+    bind(Key::Char, "g", note_find_next_command_, Modifier::Ctrl);
+    bind(Key::Char, "w", note_wrap_command_, Modifier::Alt);
 }
 
 std::vector<widgets::MenuBarItem> TodoApp::build_menus() {

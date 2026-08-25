@@ -22,6 +22,16 @@ Estimated scope: **5–8 person-weeks**, delivered as `TODO-WP-01` through
 `TODO-WP-08`. The `TODO-` prefix deliberately avoids colliding with the
 repository's existing numeric WP sequences.
 
+## Delivery status
+
+Implemented on `main` through TODO-WP-08 on 2026-08-26. The shipped object
+graph, POSIX executable, deterministic/real repositories, conflict UI, full
+note editor, workflow goldens and SVG captures, codec fuzzer, real
+two-process poll proof, focused benchmarks, and client guide are registered in
+the build and test manifests. The acceptance authority is the implementation
+plus the executable evidence mapped at the end of this plan; the original
+person-week estimate is retained as planning history.
+
 ## Authority and provenance
 
 The behavior specified below is now the self-contained ckVision requirement.

@@ -100,6 +100,7 @@ private:
     ControllerResult<CalendarReading> mutation_reading() const;
     ControllerResult<Mutation> complete_archive(ModelResult<ArchivePlan> plan, const CalendarReading& reading);
 
+    // ckvision-doc: todo-controller-commit
     template <class T>
     ControllerResult<T> complete(TodoWorkspace candidate,
                                  ModelResult<T> model_result,
@@ -111,6 +112,7 @@ private:
         revision_ = committed.value->revision;
         return ControllerResult<T>::success(std::move(*model_result.value));
     }
+    // ckvision-doc-end: todo-controller-commit
 
     static ControllerError model_error(ModelError error);
     static ControllerError repository_error(RepositoryError error);
