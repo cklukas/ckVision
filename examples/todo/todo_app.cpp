@@ -93,6 +93,13 @@ struct TodoApp::NoteSession {
     std::string last_saved;
 };
 
+struct TodoApp::PendingUiConflict {
+    std::string title;
+    std::string message;
+    std::function<void()> retry;
+    std::function<void()> use_remote;
+};
+
 TodoApp::TodoApp(ui::Application& app,
                  TodoRepository& repository,
                  CalendarClock& calendar,
@@ -164,6 +171,7 @@ TodoApp::~TodoApp() {
     app_.commands().withdraw(new_board_command_);
     app_.commands().withdraw(keyboard_help_command_);
     app_.commands().withdraw(about_command_);
+    app_.commands().withdraw(resolve_conflict_command_);
     app_.commands().withdraw(board_help_command_);
     app_.commands().withdraw(board_quit_command_);
 }
@@ -229,6 +237,9 @@ void TodoApp::declare_commands() {
     about_command_ = app_.commands().declare(
         {.key = "todo.about", .title = "&About ckVision TODO", .category = "Help",
          .handler = [this] { show_about(); }});
+    resolve_conflict_command_ = app_.commands().declare(
+        {.key = "todo.resolve-conflict", .title = "&Resolve conflict...", .category = "File",
+         .handler = [this] { present_conflict_resolution(); }});
     board_help_command_ = app_.commands().declare(
         {.key = "todo.board-help", .title = "Board help", .category = "Help", .context = "todo.board",
          .visibility = ui::CommandVisibility::Hidden,
@@ -268,6 +279,9 @@ void TodoApp::declare_commands() {
     });
     app_.commands().set_enabled_predicate(new_board_command_, [this] {
         return controller_.workspace() != nullptr && !move_;
+    });
+    app_.commands().set_enabled_predicate(resolve_conflict_command_, [this] {
+        return pending_conflict_ != nullptr;
     });
     bind_board_aliases();
 }
@@ -353,6 +367,7 @@ std::vector<widgets::MenuBarItem> TodoApp::build_menus() {
         "&File", {widgets::MenuItem::command(board_manager_command_), widgets::MenuItem::command(new_board_command_),
                   widgets::MenuItem::command(
                       widgets::CommandPresentation{about_command_, "Workspace &information..."}),
+                  widgets::MenuItem::command(resolve_conflict_command_),
                   widgets::MenuItem::separator(),
                   widgets::MenuItem::command(
                       widgets::CommandPresentation{app_.commands().standard().quit, "E&xit"})}};
@@ -560,9 +575,29 @@ void TodoApp::accept_task_dialog(bool editing,
     draft.color = color_from_selection(result.selected[4]);
 
     if (editing && task_id) {
+        const Task* current = controller_.workspace() != nullptr ? controller_.workspace()->find_task(*task_id) : nullptr;
+        if (current == nullptr) return;
+        const Task original = *current;
+        const TaskDraft retry_draft = draft;
         const auto changed = controller_.edit_task(*task_id, std::move(draft));
         if (!changed) {
-            show_error("Cannot edit task", changed.error);
+            const TaskId edited_task_id = *task_id;
+            handle_conflict(
+                "Task edit conflict", changed.error,
+                [edited_task_id, original](const TodoWorkspace& remote) {
+                    const Task* remote_task = remote.find_task(edited_task_id);
+                    return remote_task != nullptr && *remote_task == original;
+                },
+                [this, edited_task_id, retry_draft] {
+                    const auto retried = controller_.edit_task(edited_task_id, retry_draft);
+                    if (!retried) {
+                        show_error("Cannot retry task edit", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    board_view_->select_task(edited_task_id);
+                    set_status("Task edit rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -572,9 +607,22 @@ void TodoApp::accept_task_dialog(bool editing,
     }
     const auto lane = active_lane();
     if (!lane) return;
+    const TaskDraft retry_draft = draft;
     const auto added = controller_.add_task(*lane, std::move(draft));
     if (!added) {
-        show_error("Cannot add task", added.error);
+        handle_conflict(
+            "Task add conflict", added.error,
+            [lane_id = *lane](const TodoWorkspace& remote) { return remote.find_lane(lane_id) != nullptr; },
+            [this, lane_id = *lane, retry_draft] {
+                const auto retried = controller_.add_task(lane_id, retry_draft);
+                if (!retried) {
+                    show_error("Cannot retry task add", retried.error);
+                    return;
+                }
+                refresh_board();
+                board_view_->select_task(*retried.value);
+                set_status("Task add rebased and saved.");
+            });
         return;
     }
     refresh_board();
@@ -586,15 +634,30 @@ void TodoApp::present_archive_confirmation() {
     const Task* task = selected_task();
     if (task == nullptr) return;
     const TaskId task_id = task->id;
+    const Task original = *task;
     archive_confirmation_ = widgets::present_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Confirm, "Archive task", "Archive ‘" + task->title + "’?",
          widgets::MessageBoxButtons::YesNo});
-    archive_confirmation_->set_completion_handler([this, task_id](widgets::MessageBoxResult result) {
+    archive_confirmation_->set_completion_handler([this, task_id, original](widgets::MessageBoxResult result) {
         if (result != widgets::MessageBoxResult::Yes) return;
         const auto archived = controller_.archive_task(task_id);
         if (!archived) {
-            show_error("Cannot archive task", archived.error);
+            handle_conflict(
+                "Task archive conflict", archived.error,
+                [task_id, original](const TodoWorkspace& remote) {
+                    const Task* remote_task = remote.find_task(task_id);
+                    return remote_task != nullptr && *remote_task == original;
+                },
+                [this, task_id] {
+                    const auto retried = controller_.archive_task(task_id);
+                    if (!retried) {
+                        show_error("Cannot retry task archive", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Task archive rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -606,16 +669,31 @@ void TodoApp::present_delete_confirmation() {
     const Task* task = selected_task();
     if (task == nullptr) return;
     const TaskId task_id = task->id;
+    const Task original = *task;
     delete_confirmation_ = widgets::present_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Delete task permanently",
          "Permanently delete ‘" + task->title + "’? This does not create an archive.",
          widgets::MessageBoxButtons::YesNo});
-    delete_confirmation_->set_completion_handler([this, task_id](widgets::MessageBoxResult result) {
+    delete_confirmation_->set_completion_handler([this, task_id, original](widgets::MessageBoxResult result) {
         if (result != widgets::MessageBoxResult::Yes) return;
         const auto removed = controller_.delete_task(task_id);
         if (!removed) {
-            show_error("Cannot delete task", removed.error);
+            handle_conflict(
+                "Task delete conflict", removed.error,
+                [task_id, original](const TodoWorkspace& remote) {
+                    const Task* remote_task = remote.find_task(task_id);
+                    return remote_task != nullptr && *remote_task == original;
+                },
+                [this, task_id] {
+                    const auto retried = controller_.delete_task(task_id);
+                    if (!retried) {
+                        show_error("Cannot retry task delete", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Task delete rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -685,11 +763,31 @@ bool TodoApp::flush_note(TaskId task_id) {
     }
     TaskDraft draft = draft_from(*task);
     draft.note = current_text;
+    const Task original = *task;
     const auto saved = controller_.edit_task(task_id, std::move(draft));
     if (!saved) {
         note.window->set_footer("Not saved: " + saved.error.diagnostic);
         set_status("Note not saved: " + saved.error.diagnostic);
-        return false;
+        handle_conflict(
+            "Note edit conflict", saved.error,
+            [task_id, original_note = original.note](const TodoWorkspace& remote) {
+                const Task* remote_task = remote.find_task(task_id);
+                return remote_task != nullptr && remote_task->note == original_note;
+            },
+            [this, task_id] { flush_note(task_id); },
+            [this, task_id] {
+                const auto session_it = std::find_if(notes_.begin(), notes_.end(), [task_id](const auto& session) {
+                    return session->task_id == task_id;
+                });
+                const Task* remote_task = controller_.workspace() != nullptr
+                                              ? controller_.workspace()->find_task(task_id)
+                                              : nullptr;
+                if (session_it == notes_.end() || remote_task == nullptr) return;
+                (*session_it)->memo->set_text(remote_task->note);
+                (*session_it)->last_saved = remote_task->note;
+                (*session_it)->window->set_footer("Saved — external version");
+            });
+        return note.last_saved == current_text;
     }
     note.last_saved = current_text;
     note.window->set_footer("Saved");
@@ -736,6 +834,7 @@ void TodoApp::present_lane_rename() {
     const Lane* lane = active_lane_record();
     if (lane == nullptr) return;
     const LaneId lane_id = lane->id;
+    const Lane original = *lane;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Rename lane";
     descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -744,11 +843,26 @@ void TodoApp::present_lane_rename() {
     descriptor.buttons.push_back({"&Rename", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
-    lane_edit_dialog_->set_completion_handler([this, lane_id](widgets::DialogResult result) {
+    lane_edit_dialog_->set_completion_handler([this, lane_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
-        const auto renamed = controller_.rename_lane(lane_id, result.values[0]);
+        const std::string name = result.values[0];
+        const auto renamed = controller_.rename_lane(lane_id, name);
         if (!renamed) {
-            show_error("Cannot rename lane", renamed.error);
+            handle_conflict(
+                "Lane rename conflict", renamed.error,
+                [lane_id, original](const TodoWorkspace& remote) {
+                    const Lane* remote_lane = remote.find_lane(lane_id);
+                    return remote_lane != nullptr && *remote_lane == original;
+                },
+                [this, lane_id, name] {
+                    const auto retried = controller_.rename_lane(lane_id, name);
+                    if (!retried) {
+                        show_error("Cannot retry lane rename", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Lane rename rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -760,17 +874,33 @@ void TodoApp::present_lane_color() {
     const Lane* lane = active_lane_record();
     if (lane == nullptr) return;
     const LaneId lane_id = lane->id;
+    const Lane original = *lane;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Lane color — " + lane->title;
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(lane->color)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
-    lane_edit_dialog_->set_completion_handler([this, lane_id](widgets::DialogResult result) {
+    lane_edit_dialog_->set_completion_handler([this, lane_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.selected.empty()) return;
-        const auto changed = controller_.set_lane_color(lane_id, color_from_selection(result.selected[0]));
+        const std::optional<TodoColor> color = color_from_selection(result.selected[0]);
+        const auto changed = controller_.set_lane_color(lane_id, color);
         if (!changed) {
-            show_error("Cannot change lane color", changed.error);
+            handle_conflict(
+                "Lane color conflict", changed.error,
+                [lane_id, original](const TodoWorkspace& remote) {
+                    const Lane* remote_lane = remote.find_lane(lane_id);
+                    return remote_lane != nullptr && *remote_lane == original;
+                },
+                [this, lane_id, color] {
+                    const auto retried = controller_.set_lane_color(lane_id, color);
+                    if (!retried) {
+                        show_error("Cannot retry lane color", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Lane color rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -816,9 +946,24 @@ void TodoApp::present_lane_insert(bool before_active) {
     lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, board_id, before](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
-        const auto inserted = controller_.insert_lane(board_id, result.values[0], before);
+        const std::string name = result.values[0];
+        const auto inserted = controller_.insert_lane(board_id, name, before);
         if (!inserted) {
-            show_error("Cannot insert lane", inserted.error);
+            handle_conflict(
+                "Lane insertion conflict", inserted.error,
+                [board_id, before](const TodoWorkspace& remote) {
+                    return remote.find_board(board_id) != nullptr && (!before || remote.find_lane(*before) != nullptr);
+                },
+                [this, board_id, before, name] {
+                    const auto retried = controller_.insert_lane(board_id, name, before);
+                    if (!retried) {
+                        show_error("Cannot retry lane insertion", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    if (TodoLaneView* lane = board_view_->lane_view(*retried.value)) app_.set_focus(lane);
+                    set_status("Lane insertion rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -831,6 +976,9 @@ void TodoApp::present_lane_merge() {
     const Board* board = active_board();
     const auto source_id = active_lane();
     if (board == nullptr || !source_id || board->lanes.size() < 2) return;
+    const Lane* source = controller_.workspace()->find_lane(*source_id);
+    if (source == nullptr) return;
+    const Lane source_original = *source;
     std::vector<LaneId> targets;
     std::vector<std::string> labels;
     for (const Lane& lane : board->lanes) {
@@ -845,15 +993,35 @@ void TodoApp::present_lane_merge() {
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler(
-        [this, captured_source_id = *source_id,
+        [this, captured_source_id = *source_id, source_original,
          captured_targets = std::move(targets)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
                 static_cast<std::size_t>(result.selected[0]) >= captured_targets.size())
                 return;
             const LaneId target_id = captured_targets[static_cast<std::size_t>(result.selected[0])];
+            const Lane* target = controller_.workspace()->find_lane(target_id);
+            if (target == nullptr) return;
+            const Lane target_original = *target;
             const auto merged = controller_.merge_lane(captured_source_id, target_id);
             if (!merged) {
-                show_error("Cannot merge lane", merged.error);
+                handle_conflict(
+                    "Lane merge conflict", merged.error,
+                    [captured_source_id, target_id, source_original, target_original](const TodoWorkspace& remote) {
+                        const Lane* remote_source = remote.find_lane(captured_source_id);
+                        const Lane* remote_target = remote.find_lane(target_id);
+                        return remote_source != nullptr && remote_target != nullptr &&
+                               *remote_source == source_original && *remote_target == target_original;
+                    },
+                    [this, captured_source_id, target_id] {
+                        const auto retried = controller_.merge_lane(captured_source_id, target_id);
+                        if (!retried) {
+                            show_error("Cannot retry lane merge", retried.error);
+                            return;
+                        }
+                        refresh_board();
+                        if (TodoLaneView* lane = board_view_->lane_view(target_id)) app_.set_focus(lane);
+                        set_status("Lane merge rebased and saved.");
+                    });
                 return;
             }
             refresh_board();
@@ -866,17 +1034,32 @@ void TodoApp::present_lane_archive() {
     const Lane* lane = active_lane_record();
     if (lane == nullptr) return;
     const LaneId lane_id = lane->id;
+    const Lane original = *lane;
     lane_confirmation_ = widgets::present_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Archive lane",
          "Archive all " + std::to_string(lane->task_ids.size()) + " task(s) in ‘" + lane->title +
              "’ and remove the lane?",
          widgets::MessageBoxButtons::YesNo});
-    lane_confirmation_->set_completion_handler([this, lane_id](widgets::MessageBoxResult result) {
+    lane_confirmation_->set_completion_handler([this, lane_id, original](widgets::MessageBoxResult result) {
         if (result != widgets::MessageBoxResult::Yes) return;
         const auto archived = controller_.archive_lane(lane_id);
         if (!archived) {
-            show_error("Cannot archive lane", archived.error);
+            handle_conflict(
+                "Lane archive conflict", archived.error,
+                [lane_id, original](const TodoWorkspace& remote) {
+                    const Lane* remote_lane = remote.find_lane(lane_id);
+                    return remote_lane != nullptr && *remote_lane == original;
+                },
+                [this, lane_id] {
+                    const auto retried = controller_.archive_lane(lane_id);
+                    if (!retried) {
+                        show_error("Cannot retry lane archive", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Lane archive rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -887,9 +1070,26 @@ void TodoApp::present_lane_archive() {
 void TodoApp::set_lane_sort(SortMode sort) {
     const auto lane_id = active_lane();
     if (!lane_id) return;
+    const Lane* lane = controller_.workspace() != nullptr ? controller_.workspace()->find_lane(*lane_id) : nullptr;
+    if (lane == nullptr) return;
+    const Lane original = *lane;
     const auto changed = controller_.set_lane_sort(*lane_id, sort);
     if (!changed) {
-        show_error("Cannot change lane sorting", changed.error);
+        handle_conflict(
+            "Lane sorting conflict", changed.error,
+            [captured_lane_id = *lane_id, original](const TodoWorkspace& remote) {
+                const Lane* remote_lane = remote.find_lane(captured_lane_id);
+                return remote_lane != nullptr && *remote_lane == original;
+            },
+            [this, captured_lane_id = *lane_id, sort] {
+                const auto retried = controller_.set_lane_sort(captured_lane_id, sort);
+                if (!retried) {
+                    show_error("Cannot retry lane sorting", retried.error);
+                    return;
+                }
+                refresh_board();
+                set_status("Lane sorting rebased and saved.");
+            });
         return;
     }
     refresh_board();
@@ -946,9 +1146,24 @@ void TodoApp::present_new_board() {
     board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
-        const auto added = controller_.add_board(result.values[0]);
+        const std::string name = result.values[0];
+        const auto added = controller_.add_board(name);
         if (!added) {
-            show_error("Cannot create board", added.error);
+            handle_conflict(
+                "Board creation conflict", added.error,
+                [name](const TodoWorkspace& remote) {
+                    return std::none_of(remote.snapshot().boards.begin(), remote.snapshot().boards.end(),
+                                        [&name](const Board& board) { return board.name == name; });
+                },
+                [this, name] {
+                    const auto retried = controller_.add_board(name);
+                    if (!retried) {
+                        show_error("Cannot retry board creation", retried.error);
+                        return;
+                    }
+                    switch_board(*retried.value);
+                    set_status("Board creation rebased and saved.");
+                });
             return;
         }
         switch_board(*added.value);
@@ -960,6 +1175,7 @@ void TodoApp::present_board_rename(BoardId board_id) {
     const TodoWorkspace* workspace = controller_.workspace();
     const Board* board = workspace != nullptr ? workspace->find_board(board_id) : nullptr;
     if (board == nullptr) return;
+    const Board original = *board;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Rename Board";
     descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -968,11 +1184,26 @@ void TodoApp::present_board_rename(BoardId board_id) {
     descriptor.buttons.push_back({"&Rename", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
-    board_edit_dialog_->set_completion_handler([this, board_id](widgets::DialogResult result) {
+    board_edit_dialog_->set_completion_handler([this, board_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
-        const auto renamed = controller_.rename_board(board_id, result.values[0]);
+        const std::string name = result.values[0];
+        const auto renamed = controller_.rename_board(board_id, name);
         if (!renamed) {
-            show_error("Cannot rename board", renamed.error);
+            handle_conflict(
+                "Board rename conflict", renamed.error,
+                [board_id, original](const TodoWorkspace& remote) {
+                    const Board* remote_board = remote.find_board(board_id);
+                    return remote_board != nullptr && *remote_board == original;
+                },
+                [this, board_id, name] {
+                    const auto retried = controller_.rename_board(board_id, name);
+                    if (!retried) {
+                        show_error("Cannot retry board rename", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Board rename rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -983,6 +1214,9 @@ void TodoApp::present_board_rename(BoardId board_id) {
 void TodoApp::present_board_merge(BoardId source_id) {
     const TodoWorkspace* workspace = controller_.workspace();
     if (workspace == nullptr || workspace->snapshot().boards.size() < 2) return;
+    const Board* source = workspace->find_board(source_id);
+    if (source == nullptr) return;
+    const Board source_original = *source;
     std::vector<BoardId> targets;
     std::vector<std::string> labels;
     for (const Board& board : workspace->snapshot().boards) {
@@ -997,14 +1231,33 @@ void TodoApp::present_board_merge(BoardId source_id) {
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler(
-        [this, source_id, captured_targets = std::move(targets)](widgets::DialogResult result) {
+        [this, source_id, source_original, captured_targets = std::move(targets)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
                 static_cast<std::size_t>(result.selected[0]) >= captured_targets.size())
                 return;
-            const auto merged =
-                controller_.merge_board(source_id, captured_targets[static_cast<std::size_t>(result.selected[0])]);
+            const BoardId target_id = captured_targets[static_cast<std::size_t>(result.selected[0])];
+            const Board* target = controller_.workspace()->find_board(target_id);
+            if (target == nullptr) return;
+            const Board target_original = *target;
+            const auto merged = controller_.merge_board(source_id, target_id);
             if (!merged) {
-                show_error("Cannot merge board", merged.error);
+                handle_conflict(
+                    "Board merge conflict", merged.error,
+                    [source_id, target_id, source_original, target_original](const TodoWorkspace& remote) {
+                        const Board* remote_source = remote.find_board(source_id);
+                        const Board* remote_target = remote.find_board(target_id);
+                        return remote_source != nullptr && remote_target != nullptr &&
+                               *remote_source == source_original && *remote_target == target_original;
+                    },
+                    [this, source_id, target_id] {
+                        const auto retried = controller_.merge_board(source_id, target_id);
+                        if (!retried) {
+                            show_error("Cannot retry board merge", retried.error);
+                            return;
+                        }
+                        refresh_board();
+                        set_status("Board merge rebased and saved.");
+                    });
                 return;
             }
             refresh_board();
@@ -1016,6 +1269,7 @@ void TodoApp::present_board_archive(BoardId board_id) {
     const TodoWorkspace* workspace = controller_.workspace();
     const Board* board = workspace != nullptr ? workspace->find_board(board_id) : nullptr;
     if (board == nullptr) return;
+    const Board original = *board;
     std::size_t task_count = 0;
     for (const Lane& lane : board->lanes) task_count += lane.task_ids.size();
     board_confirmation_ = widgets::present_message_box(
@@ -1023,11 +1277,25 @@ void TodoApp::present_board_archive(BoardId board_id) {
         {widgets::MessageBoxKind::Warning, "Archive Board",
          "Archive all " + std::to_string(task_count) + " task(s) in ‘" + board->name + "’ and remove the board?",
          widgets::MessageBoxButtons::YesNo});
-    board_confirmation_->set_completion_handler([this, board_id](widgets::MessageBoxResult result) {
+    board_confirmation_->set_completion_handler([this, board_id, original](widgets::MessageBoxResult result) {
         if (result != widgets::MessageBoxResult::Yes) return;
         const auto archived = controller_.archive_board(board_id);
         if (!archived) {
-            show_error("Cannot archive board", archived.error);
+            handle_conflict(
+                "Board archive conflict", archived.error,
+                [board_id, original](const TodoWorkspace& remote) {
+                    const Board* remote_board = remote.find_board(board_id);
+                    return remote_board != nullptr && *remote_board == original;
+                },
+                [this, board_id] {
+                    const auto retried = controller_.archive_board(board_id);
+                    if (!retried) {
+                        show_error("Cannot retry board archive", retried.error);
+                        return;
+                    }
+                    refresh_board();
+                    set_status("Board archive rebased and saved.");
+                });
             return;
         }
         refresh_board();
@@ -1038,7 +1306,18 @@ void TodoApp::present_board_archive(BoardId board_id) {
 void TodoApp::switch_board(BoardId board_id) {
     const auto switched = controller_.switch_board(board_id);
     if (!switched) {
-        show_error("Cannot switch board", switched.error);
+        handle_conflict(
+            "Board switch conflict", switched.error,
+            [board_id](const TodoWorkspace& remote) { return remote.find_board(board_id) != nullptr; },
+            [this, board_id] {
+                const auto retried = controller_.switch_board(board_id);
+                if (!retried) {
+                    show_error("Cannot retry board switch", retried.error);
+                    return;
+                }
+                refresh_board();
+                set_status("Board switch rebased and remembered.");
+            });
         return;
     }
     refresh_board();
@@ -1071,9 +1350,46 @@ void TodoApp::toggle_move() {
         return;
     }
     const TaskId task_id = move_->task_id;
+    const LaneId source_lane_id = move_->source_lane_id;
+    const LaneId target_lane_id = *lane;
+    const Task* current_task = controller_.workspace() != nullptr ? controller_.workspace()->find_task(task_id) : nullptr;
+    if (current_task == nullptr) return;
+    const Task original = *current_task;
     const auto committed = controller_.commit_task_move(*staged.value);
     if (!committed) {
-        show_error("Cannot move task", committed.error);
+        move_.reset();
+        handle_conflict(
+            "Task move conflict", committed.error,
+            [task_id, source_lane_id, target_lane_id, before, original](const TodoWorkspace& remote) {
+                const Task* task = remote.find_task(task_id);
+                return task != nullptr && *task == original && remote.lane_of(task_id) == source_lane_id &&
+                       remote.find_lane(target_lane_id) != nullptr &&
+                       (!before || (remote.find_task(*before) != nullptr && remote.lane_of(*before) == target_lane_id));
+            },
+            [this, task_id, target_lane_id, before] {
+                const auto restarted = controller_.begin_task_move(task_id);
+                if (!restarted) {
+                    show_error("Cannot restart task move", restarted.error);
+                    return;
+                }
+                std::optional<TaskId> rebased_before = before;
+                if (rebased_before == task_id) rebased_before = restarted.value->original_before_task_id;
+                const Lane* target = controller_.workspace()->find_lane(target_lane_id);
+                if (target != nullptr && target->sort != SortMode::Manual) rebased_before.reset();
+                const auto restaged = controller_.stage_task_move(*restarted.value, target_lane_id, rebased_before);
+                if (!restaged) {
+                    show_error("Cannot restage task move", restaged.error);
+                    return;
+                }
+                const auto retried = controller_.commit_task_move(*restaged.value);
+                if (!retried) {
+                    show_error("Cannot retry task move", retried.error);
+                    return;
+                }
+                refresh_board();
+                board_view_->select_task(task_id);
+                set_status("Task move rebased and saved.");
+            });
         return;
     }
     move_.reset();
@@ -1109,6 +1425,10 @@ void TodoApp::drop_task(TaskId task_id, LaneId target_lane_id, std::optional<Tas
         before_task_id.reset();
     }
     if (before_task_id == task_id) before_task_id = started.value->original_before_task_id;
+    const LaneId source_lane_id = started.value->source_lane_id;
+    const Task* current_task = workspace->find_task(task_id);
+    if (current_task == nullptr) return;
+    const Task original = *current_task;
     const auto staged = controller_.stage_task_move(*started.value, target_lane_id, before_task_id);
     if (!staged) {
         show_error("Cannot stage dragged task", staged.error);
@@ -1116,7 +1436,40 @@ void TodoApp::drop_task(TaskId task_id, LaneId target_lane_id, std::optional<Tas
     }
     const auto committed = controller_.commit_task_move(*staged.value);
     if (!committed) {
-        show_error("Cannot drop task", committed.error);
+        handle_conflict(
+            "Task drag conflict", committed.error,
+            [task_id, source_lane_id, target_lane_id, before_task_id, original](const TodoWorkspace& remote) {
+                const Task* task = remote.find_task(task_id);
+                return task != nullptr && *task == original && remote.lane_of(task_id) == source_lane_id &&
+                       remote.find_lane(target_lane_id) != nullptr &&
+                       (!before_task_id || (remote.find_task(*before_task_id) != nullptr &&
+                                            remote.lane_of(*before_task_id) == target_lane_id));
+            },
+            [this, task_id, target_lane_id, before_task_id] {
+                const auto restarted = controller_.begin_task_move(task_id);
+                if (!restarted) {
+                    show_error("Cannot restart dragged task", restarted.error);
+                    return;
+                }
+                std::optional<TaskId> rebased_before = before_task_id;
+                if (rebased_before == task_id) rebased_before = restarted.value->original_before_task_id;
+                const Lane* rebased_target = controller_.workspace()->find_lane(target_lane_id);
+                if (rebased_target != nullptr && rebased_target->sort != SortMode::Manual)
+                    rebased_before.reset();
+                const auto restaged = controller_.stage_task_move(*restarted.value, target_lane_id, rebased_before);
+                if (!restaged) {
+                    show_error("Cannot restage dragged task", restaged.error);
+                    return;
+                }
+                const auto retried = controller_.commit_task_move(*restaged.value);
+                if (!retried) {
+                    show_error("Cannot retry dragged task", retried.error);
+                    return;
+                }
+                refresh_board();
+                board_view_->select_task(task_id);
+                set_status("Dragged task rebased and saved.");
+            });
         return;
     }
     refresh_board();
@@ -1183,6 +1536,8 @@ void TodoApp::refresh_status_items() {
         widgets::StatusLineItem{widgets::CommandPresentation{lane_actions_command_}, 80},
         widgets::StatusLineItem{std::move(board_label), board_manager_command_, 95},
     };
+    if (pending_conflict_)
+        items.emplace_back(widgets::CommandPresentation{resolve_conflict_command_}, 110);
     if (!calendar_label.empty()) items.emplace_back(std::move(calendar_label), ui::kInvalidCommand, 5);
     items.emplace_back(widgets::CommandPresentation{app_.commands().standard().quit}, 100);
     status_line_->set_items(std::move(items));
@@ -1194,6 +1549,66 @@ void TodoApp::show_error(std::string title, const ControllerError& error) {
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Error, std::move(title), error.diagnostic, widgets::MessageBoxButtons::Ok});
     message_box_->set_completion_handler([](widgets::MessageBoxResult) {});
+}
+
+bool TodoApp::handle_conflict(std::string title,
+                              const ControllerError& error,
+                              std::function<bool(const TodoWorkspace&)> can_rebase,
+                              std::function<void()> retry,
+                              std::function<void()> use_remote) {
+    if (error.code != ControllerErrorCode::Conflict) {
+        show_error(std::move(title), error);
+        return false;
+    }
+    const auto reloaded = controller_.reload_if_changed();
+    if (!reloaded) {
+        show_error("Cannot load the external TODO change", reloaded.error);
+        return false;
+    }
+    refresh_board();
+    if (controller_.workspace() != nullptr && can_rebase(*controller_.workspace())) {
+        set_status("External changes loaded; retrying your non-overlapping change once.");
+        retry();
+        return true;
+    }
+    pending_conflict_ = std::make_unique<PendingUiConflict>(
+        PendingUiConflict{std::move(title), error.diagnostic, std::move(retry), std::move(use_remote)});
+    if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+    refresh_status_items();
+    present_conflict_resolution();
+    return true;
+}
+
+void TodoApp::present_conflict_resolution() {
+    if (!pending_conflict_) return;
+    widgets::DialogDescriptor descriptor;
+    descriptor.title = pending_conflict_->title;
+    widgets::FieldDescriptor note;
+    note.kind = widgets::FieldKind::Note;
+    note.label = pending_conflict_->message +
+                 "\nThe latest workspace is loaded. Choose exactly which version should win.";
+    descriptor.fields.push_back(std::move(note));
+    descriptor.fields.push_back(
+        radio_field("&Resolution", {"Retry my change over the latest workspace", "Use the external version"}, 0));
+    descriptor.buttons.push_back({"&Resolve", widgets::ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back({"&Later", widgets::ButtonRole::Dismiss, nullptr});
+    conflict_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    conflict_dialog_->set_completion_handler([this](widgets::DialogResult result) {
+        if (!result.accepted || result.selected.size() < 2 || result.selected[1] < 0) {
+            set_status("Conflict kept pending; use File → Resolve conflict when ready.");
+            return;
+        }
+        std::unique_ptr<PendingUiConflict> pending = std::move(pending_conflict_);
+        if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+        refresh_status_items();
+        if (result.selected[1] == 0) {
+            pending->retry();
+            return;
+        }
+        if (pending->use_remote) pending->use_remote();
+        refresh_board();
+        set_status("External version kept.");
+    });
 }
 
 void TodoApp::set_status(std::string message) {

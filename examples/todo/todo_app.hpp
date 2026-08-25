@@ -3,6 +3,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -77,6 +78,7 @@ public:
 
 private:
     struct NoteSession;
+    struct PendingUiConflict;
 
     void declare_commands();
     void bind_board_aliases();
@@ -122,6 +124,12 @@ private:
     void set_theme(TodoTheme theme);
     void refresh_status_items();
     void show_error(std::string title, const ControllerError& error);
+    bool handle_conflict(std::string title,
+                         const ControllerError& error,
+                         std::function<bool(const TodoWorkspace&)> can_rebase,
+                         std::function<void()> retry,
+                         std::function<void()> use_remote = {});
+    void present_conflict_resolution();
     void set_status(std::string message);
 
     const Task* selected_task() const noexcept;
@@ -163,10 +171,12 @@ private:
     ui::CommandId new_board_command_ = ui::kInvalidCommand;
     ui::CommandId keyboard_help_command_ = ui::kInvalidCommand;
     ui::CommandId about_command_ = ui::kInvalidCommand;
+    ui::CommandId resolve_conflict_command_ = ui::kInvalidCommand;
     ui::CommandId board_help_command_ = ui::kInvalidCommand;
     ui::CommandId board_quit_command_ = ui::kInvalidCommand;
 
     std::optional<PendingTaskMove> move_;
+    std::unique_ptr<PendingUiConflict> pending_conflict_;
     TodoTheme theme_ = TodoTheme::Classic;
     std::vector<std::unique_ptr<NoteSession>> notes_;
     ui::Application::TimerId poll_timer_ = 0;
@@ -184,6 +194,7 @@ private:
     std::optional<widgets::MessageBoxPresentation> board_confirmation_;
     std::optional<widgets::MessageBoxPresentation> message_box_;
     std::optional<widgets::MessageBoxPresentation> about_box_;
+    std::optional<widgets::DescriptorDialogPresentation> conflict_dialog_;
     std::optional<widgets::HelpViewerPresentation> help_viewer_;
 };
 

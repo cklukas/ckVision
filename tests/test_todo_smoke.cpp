@@ -26,6 +26,35 @@ TodoWorkspace smoke_workspace() {
     return *TodoWorkspace::guided({IsoTimestamp{"2026-08-25T11:00:00Z"}, "fixture"}).value;
 }
 
+TaskDraft draft_from(const Task& task) {
+    return TaskDraft{task.title, task.details, task.note, task.priority, task.due_date, task.color};
+}
+
+void commit_external_task(MemoryTodoRepository& repository, std::string title) {
+    auto external = repository.load();
+    CK_CHECK(external);
+    if (!external) return;
+    TaskDraft draft;
+    draft.title = std::move(title);
+    CK_CHECK(external.value->workspace.add_task(
+        LaneId{2}, std::move(draft), {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external"}));
+    CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
+}
+
+void commit_external_task_edit(MemoryTodoRepository& repository, TaskId task_id, std::string title) {
+    auto external = repository.load();
+    CK_CHECK(external);
+    if (!external) return;
+    const Task* task = external.value->workspace.find_task(task_id);
+    CK_CHECK(task != nullptr);
+    if (task == nullptr) return;
+    TaskDraft draft = draft_from(*task);
+    draft.title = std::move(title);
+    CK_CHECK(external.value->workspace.edit_task(
+        task_id, std::move(draft), {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external"}));
+    CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
+}
+
 KeyEvent key(Key value, std::string text = {}) {
     return KeyEvent{KeyChord{value, Modifier::None, std::move(text)}};
 }
@@ -288,6 +317,73 @@ CK_TEST(todo_poll_adopts_an_external_committed_revision) {
     fixture.todo.poll_repository();
     CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{4}) != nullptr);
     CK_CHECK(fixture.todo.board_view()->lane_view(LaneId{1})->lane().task_ids.size() == 2);
+}
+
+CK_TEST(todo_non_overlapping_conflict_reloads_and_retries_once_automatically) {
+    SmokeFixture fixture;
+    commit_external_task(fixture.repository, "Remote task");
+
+    const auto archive = fixture.app.commands().id_for(TodoApp::kArchiveTaskKey);
+    CK_CHECK(archive);
+    if (!archive) return;
+    CK_CHECK(fixture.app.execute_command(*archive));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+
+    const TodoWorkspace* workspace = fixture.todo.controller().workspace();
+    CK_CHECK(workspace != nullptr);
+    if (workspace == nullptr) return;
+    CK_CHECK(workspace->find_task(TaskId{1}) == nullptr);
+    CK_CHECK(workspace->find_task(TaskId{4}) != nullptr);
+    CK_CHECK(fixture.repository.archives().size() == 1);
+    CK_CHECK(!fixture.app.is_modal());
+}
+
+CK_TEST(todo_overlapping_conflict_waits_for_explicit_resolution) {
+    SmokeFixture fixture;
+    commit_external_task_edit(fixture.repository, TaskId{1}, "Externally renamed");
+
+    const auto remove = fixture.app.commands().id_for(TodoApp::kDeleteTaskKey);
+    CK_CHECK(remove);
+    if (!remove) return;
+    CK_CHECK(fixture.app.execute_command(*remove));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+
+    const auto resolve = fixture.app.commands().id_for("todo.resolve-conflict");
+    CK_CHECK(resolve);
+    if (!resolve) return;
+    CK_CHECK(fixture.app.commands().is_enabled(*resolve));
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1}) != nullptr);
+    CK_CHECK(fixture.app.is_modal());
+
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1}) == nullptr);
+    CK_CHECK(!fixture.app.commands().is_enabled(*resolve));
+    CK_CHECK(!fixture.app.is_modal());
+}
+
+CK_TEST(todo_conflict_can_keep_the_external_version) {
+    SmokeFixture fixture;
+    commit_external_task_edit(fixture.repository, TaskId{1}, "Externally renamed");
+
+    const auto remove = fixture.app.commands().id_for(TodoApp::kDeleteTaskKey);
+    CK_CHECK(remove);
+    if (!remove) return;
+    CK_CHECK(fixture.app.execute_command(*remove));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.app.is_modal());
+
+    CK_CHECK(fixture.app.dispatch(key(Key::Down)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    const Task* task = fixture.todo.controller().workspace()->find_task(TaskId{1});
+    CK_CHECK(task != nullptr);
+    if (task == nullptr) return;
+    CK_CHECK(task->title == "Externally renamed");
+    CK_CHECK(!fixture.app.is_modal());
 }
 
 CK_TEST(todo_app_destruction_detaches_ui_and_withdraws_private_commands) {
