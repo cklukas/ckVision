@@ -945,6 +945,21 @@ TodoEncodeResult encode_workspace(const TodoWorkspace& workspace) {
     return {out.take(), {}};
 }
 
+TodoEncodeResult encode_archive_record(const ArchivedTask& record) {
+    OutputBuilder out;
+    if (!out.append("{\n  \"schema_version\": 1,\n  \"archived_at\": ") ||
+        !out.append_string(record.archived.timestamp.value) || !out.append(",\n  \"archived_by\": ") ||
+        !out.append_string(record.archived.identity) || !out.append(",\n  \"origin_board_id\": ") ||
+        !out.append_uint(record.origin_board_id.value) || !out.append(",\n  \"origin_board_name\": ") ||
+        !out.append_string(record.origin_board_name) || !out.append(",\n  \"origin_lane_id\": ") ||
+        !out.append_uint(record.origin_lane_id.value) || !out.append(",\n  \"origin_lane_title\": ") ||
+        !out.append_string(record.origin_lane_title) || !out.append(",\n  \"task\": ") ||
+        !encode_task(out, record.task, 2) || !out.append("\n}\n")) {
+        return {std::nullopt, output_error()};
+    }
+    return {out.take(), {}};
+}
+
 TodoDecodeResult decode_workspace(std::string_view json) {
     if (json.size() > TodoCodecLimits::max_input_bytes) {
         return {std::nullopt,

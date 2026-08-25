@@ -60,5 +60,6 @@ struct TodoEncodeResult {
 
 TodoDecodeResult decode_workspace(std::string_view json);
 TodoEncodeResult encode_workspace(const TodoWorkspace& workspace);
+TodoEncodeResult encode_archive_record(const ArchivedTask& record);
 
 }  // namespace ckv::todo
