@@ -120,6 +120,18 @@ void TodoBoardView::rebuild(const TodoWorkspace& workspace, const Board& board) 
         };
         observer->on_lane_step = [this](LaneId lane_id, int direction) { step_lane(lane_id, direction); };
         observer->on_focused = [this](LaneId lane_id) { activate_lane(lane_id); };
+        observer->on_drag = [this](TaskId task_id, MouseAction action, Point screen_cell) {
+            handle_drag(task_id, action, screen_cell);
+        };
+        observer->on_task_context_menu = [this](TaskId task_id, Point screen_cell) {
+            select_task(task_id);
+            if (on_task_context_menu) on_task_context_menu(task_id, screen_cell);
+        };
+        observer->on_lane_context_menu = [this](LaneId lane_id, Point screen_cell) {
+            activate_lane(lane_id);
+            if (context().app != nullptr) context().app->set_focus(lane_view(lane_id));
+            if (on_lane_context_menu) on_lane_context_menu(lane_id, screen_cell);
+        };
         lanes_.push_back(add(std::move(view)));
     }
 
@@ -182,6 +194,53 @@ void TodoBoardView::ensure_lane_visible(std::size_t index) {
     if (left < scrollbar_->position()) scrollbar_->set_position(left);
     else if (right > scrollbar_->position() + bounds().width)
         scrollbar_->set_position(right - bounds().width);
+}
+
+TodoLaneView* TodoBoardView::lane_at(Point screen_cell) const noexcept {
+    const auto found = std::find_if(lanes_.begin(), lanes_.end(), [screen_cell](const TodoLaneView* lane) {
+        return lane->absolute_bounds().contains(screen_cell);
+    });
+    return found != lanes_.end() ? *found : nullptr;
+}
+
+void TodoBoardView::handle_drag(TaskId task_id, MouseAction action, Point screen_cell) {
+    if (action == MouseAction::Down) {
+        drag_ = DragState{task_id, screen_cell, false, std::nullopt, std::nullopt};
+        return;
+    }
+    if (!drag_ || drag_->task_id != task_id) return;
+    if (action == MouseAction::Move && !drag_->started && screen_cell != drag_->origin) {
+        drag_->started = true;
+        set_move_source(task_id);
+    }
+    if (action == MouseAction::Move && drag_->started) {
+        TodoLaneView* target = lane_at(screen_cell);
+        for (TodoLaneView* lane : lanes_) lane->set_drop_marker(std::nullopt, false);
+        drag_->target_lane.reset();
+        drag_->before_task.reset();
+        if (target == nullptr) {
+            set_move_target(std::nullopt);
+            return;
+        }
+        activate_lane(target->lane_id());
+        drag_->target_lane = target->lane_id();
+        drag_->before_task = target->task_at(screen_cell);
+        set_move_target(target->lane_id());
+        target->set_drop_marker(drag_->before_task, !drag_->before_task.has_value());
+        return;
+    }
+    if (action != MouseAction::Up) return;
+    const std::optional<DragState> completed = drag_;
+    clear_drag_feedback();
+    if (completed->started && completed->target_lane && on_task_drop)
+        on_task_drop(completed->task_id, *completed->target_lane, completed->before_task);
+}
+
+void TodoBoardView::clear_drag_feedback() {
+    drag_.reset();
+    set_move_source(std::nullopt);
+    set_move_target(std::nullopt);
+    for (TodoLaneView* lane : lanes_) lane->set_drop_marker(std::nullopt, false);
 }
 
 }  // namespace ckv::todo

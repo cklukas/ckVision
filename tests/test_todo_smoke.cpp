@@ -10,6 +10,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace {
@@ -54,6 +55,16 @@ CK_TEST(todo_app_builds_a_windowed_board_with_menu_status_and_focus) {
     CK_CHECK(fixture.todo.board_window()->resizable());
     CK_CHECK(fixture.todo.board_view()->lane_count() == 3);
     CK_CHECK(fixture.todo.status_line() != nullptr);
+    bool found_board = false;
+    bool found_calendar = false;
+    for (const widgets::StatusLineItem& item : fixture.todo.status_line()->items()) {
+        if (item.label == "Board: main" &&
+            item.command == fixture.app.commands().id_for(TodoApp::kBoardManagerKey).value_or(ui::kInvalidCommand))
+            found_board = true;
+        if (item.label == "2026-08-25 12:00Z") found_calendar = true;
+    }
+    CK_CHECK(found_board);
+    CK_CHECK(found_calendar);
     CK_CHECK(fixture.app.focused() == fixture.todo.board_view()->lane_view(LaneId{1}));
     CK_CHECK(fixture.app.commands().id_for(TodoApp::kAddTaskKey).has_value());
     CK_CHECK(fixture.app.commands().command_for_key(KeyChord{Key::F2, Modifier::None, {}}) ==
@@ -171,6 +182,10 @@ CK_TEST(todo_board_creation_selects_and_persists_the_new_board) {
     CK_CHECK(workspace->snapshot().last_board_id == BoardId{2});
     CK_CHECK(fixture.todo.board_view()->board_id() == BoardId{2});
     CK_CHECK(fixture.todo.board_window()->title() == "TODO — Release");
+    bool found_board = false;
+    for (const widgets::StatusLineItem& item : fixture.todo.status_line()->items())
+        if (item.label == "Board: Release") found_board = true;
+    CK_CHECK(found_board);
 }
 
 CK_TEST(todo_lane_and_board_manager_shortcuts_are_board_scoped) {
@@ -185,6 +200,68 @@ CK_TEST(todo_lane_and_board_manager_shortcuts_are_board_scoped) {
     CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
     fixture.app.step(fixture.monotonic.now_nanos());
     CK_CHECK(!fixture.app.is_modal());
+
+    CK_CHECK(fixture.app.dispatch(
+        KeyEvent{KeyChord{Key::F10, Modifier::Shift, {}}, KeyAction::Press, false}));
+    CK_CHECK(fixture.app.input_capture() != nullptr);
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+}
+
+CK_TEST(todo_pointer_drag_moves_through_the_same_durable_controller_path) {
+    SmokeFixture fixture;
+    const Rect source_lane = fixture.todo.board_view()->lane_view(LaneId{1})->absolute_bounds();
+    const Rect target_lane = fixture.todo.board_view()->lane_view(LaneId{2})->absolute_bounds();
+    const Point source{source_lane.x + 3, source_lane.y + 1};
+    const Point target{target_lane.x + 3, target_lane.y + 1};
+    CK_CHECK(fixture.app.dispatch(
+        MouseEvent{MouseAction::Down, MouseButton::Left, source, std::nullopt, Modifier::None}));
+    CK_CHECK(fixture.app.dispatch(
+        MouseEvent{MouseAction::Move, MouseButton::None, target, std::nullopt, Modifier::None}));
+    CK_CHECK(fixture.app.dispatch(
+        MouseEvent{MouseAction::Up, MouseButton::Left, target, std::nullopt, Modifier::None}));
+    CK_CHECK(fixture.todo.controller().workspace()->lane_of(TaskId{1}) == LaneId{2});
+}
+
+CK_TEST(todo_task_right_click_opens_command_context_menu_and_escape_dismisses_it) {
+    SmokeFixture fixture;
+    const Rect lane = fixture.todo.board_view()->lane_view(LaneId{1})->absolute_bounds();
+    CK_CHECK(fixture.app.dispatch(MouseEvent{MouseAction::Down, MouseButton::Right,
+                                             Point{lane.x + 3, lane.y + 1}, std::nullopt, Modifier::None}));
+    CK_CHECK(fixture.app.input_capture() != nullptr);
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+    CK_CHECK(fixture.app.input_capture() == nullptr);
+}
+
+CK_TEST(todo_about_reports_build_and_workspace_facts) {
+    SmokeFixture fixture;
+    const auto about = fixture.app.commands().id_for("todo.about");
+    CK_CHECK(about && fixture.app.execute_command(*about));
+    CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(!fixture.app.is_modal());
+}
+
+CK_TEST(todo_transient_status_expires_to_context_and_move_guidance) {
+    SmokeFixture fixture;
+    const auto move = fixture.app.commands().id_for(TodoApp::kMoveTaskKey);
+    CK_CHECK(move && fixture.app.execute_command(*move));
+    fixture.monotonic.advance(3'000'000'000);
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.status_line()->current_hint() == "Arrow keys move; Enter commits; Esc cancels.");
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+}
+
+CK_TEST(todo_q_alias_is_scoped_to_the_board) {
+    SmokeFixture fixture;
+    const auto edit = fixture.app.commands().id_for(TodoApp::kEditTaskKey);
+    CK_CHECK(edit && fixture.app.execute_command(*edit));
+    CK_CHECK(fixture.app.dispatch(key(Key::Char, "q")));
+    CK_CHECK(!fixture.app.quit_requested());
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.app.dispatch(key(Key::Char, "q")));
+    CK_CHECK(fixture.app.quit_requested());
 }
 
 CK_TEST(todo_first_workspace_option_creates_without_a_modal_prompt) {

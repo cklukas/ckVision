@@ -181,3 +181,50 @@ CK_TEST(todo_board_rejects_unknown_board_without_losing_current_content) {
     CK_CHECK(board.board_id() == BoardId{1});
     CK_CHECK(board.lane_count() == 3);
 }
+
+CK_TEST(todo_board_pointer_drag_reports_stable_drop_ids_and_clears_feedback) {
+    term::HeadlessTerminal terminal(Size{80, 16});
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    app.theme() = ui::make_classic_theme(app.roles(), ui::intern_standard_roles(app.roles()));
+    auto board = std::make_unique<TodoBoardView>();
+    TodoBoardView* observer = app.root().add(std::move(board));
+    observer->set_bounds(Rect{0, 0, 80, 16});
+    CK_CHECK(observer->set_board(board_workspace(1), BoardId{1}));
+    std::optional<TaskId> dropped_task;
+    std::optional<LaneId> dropped_lane;
+    std::optional<TaskId> dropped_before;
+    observer->on_task_drop = [&](TaskId task_id, LaneId lane_id, std::optional<TaskId> before) {
+        dropped_task = task_id;
+        dropped_lane = lane_id;
+        dropped_before = before;
+    };
+
+    CK_CHECK(app.dispatch(
+        MouseEvent{MouseAction::Down, MouseButton::Left, Point{3, 1}, std::nullopt, Modifier::None}));
+    CK_CHECK(app.dispatch(
+        MouseEvent{MouseAction::Move, MouseButton::None, Point{30, 1}, std::nullopt, Modifier::None}));
+    CK_CHECK(observer->lane_view(LaneId{2})->move_target());
+    CK_CHECK(app.dispatch(
+        MouseEvent{MouseAction::Up, MouseButton::Left, Point{30, 1}, std::nullopt, Modifier::None}));
+    CK_CHECK(dropped_task == TaskId{1});
+    CK_CHECK(dropped_lane == LaneId{2});
+    CK_CHECK(!dropped_before.has_value());
+    CK_CHECK(!observer->lane_view(LaneId{2})->move_target());
+}
+
+CK_TEST(todo_lane_right_click_distinguishes_lane_header_and_task_card) {
+    TodoLaneView lane;
+    lane.set_bounds(Rect{5, 4, 26, 8});
+    lane.set_lane(board_workspace(1), LaneId{1});
+    std::optional<LaneId> lane_menu;
+    std::optional<TaskId> task_menu;
+    lane.on_lane_context_menu = [&](LaneId lane_id, Point) { lane_menu = lane_id; };
+    lane.on_task_context_menu = [&](TaskId task_id, Point) { task_menu = task_id; };
+    CK_CHECK(lane.on_mouse(
+        MouseEvent{MouseAction::Down, MouseButton::Right, Point{8, 4}, std::nullopt, Modifier::None}));
+    CK_CHECK(lane_menu == LaneId{1});
+    CK_CHECK(lane.on_mouse(
+        MouseEvent{MouseAction::Down, MouseButton::Right, Point{8, 5}, std::nullopt, Modifier::None}));
+    CK_CHECK(task_menu == TaskId{1});
+}

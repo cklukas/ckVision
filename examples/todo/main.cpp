@@ -64,7 +64,8 @@ int run_demo(const ckv::todo::TodoLaunchOptions& options) {
     }
     ckv::todo::MemoryTodoRepository repository(*guided.value);
     ckv::todo::TodoApp todo(app, repository, calendar, "demo",
-                            {.initial_board_name = options.board_name});
+                            {.initial_board_name = options.board_name,
+                             .workspace_description = "in-memory demo workspace"});
     app.run();
     return 0;
 }
@@ -84,7 +85,8 @@ int run_persistent(const ckv::todo::TodoLaunchOptions& options) {
     ckv::todo::SystemCalendarClock calendar;
     ckv::todo::JsonTodoRepository repository(filesystem, directory);
     ckv::todo::TodoApp todo(app, repository, calendar, user.name,
-                            {.initial_board_name = options.board_name});
+                            {.initial_board_name = options.board_name,
+                             .workspace_description = "persistent workspace: " + directory});
     app.run();
     return 0;
 }

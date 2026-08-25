@@ -34,6 +34,7 @@ enum class TodoTheme { Classic, Dark, Light, Mono, HighContrast };
 struct TodoAppOptions {
     std::optional<InitialWorkspace> first_workspace;
     std::optional<std::string> initial_board_name;
+    std::string workspace_description = "persistent local workspace";
 };
 
 class TodoApp {
@@ -83,6 +84,8 @@ private:
     void build_chrome();
     void build_board_window();
     void install_help();
+    void show_help_topic(std::string key);
+    void show_about();
     void present_welcome();
 
     void present_task_dialog(bool editing);
@@ -113,7 +116,11 @@ private:
 
     void toggle_move();
     void cancel_move();
+    void drop_task(TaskId task_id, LaneId target_lane_id, std::optional<TaskId> before_task_id);
+    void show_task_context_menu(Point screen_cell);
+    void show_lane_context_menu(Point screen_cell);
     void set_theme(TodoTheme theme);
+    void refresh_status_items();
     void show_error(std::string title, const ControllerError& error);
     void set_status(std::string message);
 
@@ -125,6 +132,7 @@ private:
     TaskDraft draft_from(const Task& task) const;
 
     ui::Application& app_;
+    CalendarClock& calendar_;
     TodoController controller_;
     TodoAppOptions options_;
     ui::StandardRoles roles_;
@@ -153,12 +161,16 @@ private:
     std::array<ui::CommandId, 6> lane_sort_commands_{};
     ui::CommandId board_manager_command_ = ui::kInvalidCommand;
     ui::CommandId new_board_command_ = ui::kInvalidCommand;
+    ui::CommandId keyboard_help_command_ = ui::kInvalidCommand;
+    ui::CommandId about_command_ = ui::kInvalidCommand;
     ui::CommandId board_help_command_ = ui::kInvalidCommand;
+    ui::CommandId board_quit_command_ = ui::kInvalidCommand;
 
     std::optional<PendingTaskMove> move_;
     TodoTheme theme_ = TodoTheme::Classic;
     std::vector<std::unique_ptr<NoteSession>> notes_;
     ui::Application::TimerId poll_timer_ = 0;
+    ui::Application::TimerId status_timer_ = 0;
 
     std::optional<widgets::DescriptorDialogPresentation> welcome_dialog_;
     std::optional<widgets::DescriptorDialogPresentation> task_dialog_;
@@ -171,6 +183,7 @@ private:
     std::optional<widgets::DescriptorDialogPresentation> board_edit_dialog_;
     std::optional<widgets::MessageBoxPresentation> board_confirmation_;
     std::optional<widgets::MessageBoxPresentation> message_box_;
+    std::optional<widgets::MessageBoxPresentation> about_box_;
     std::optional<widgets::HelpViewerPresentation> help_viewer_;
 };
 

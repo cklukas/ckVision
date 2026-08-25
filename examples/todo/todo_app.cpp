@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "cvision/core/text.hpp"
+#include "cvision/core/version.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/memo.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -21,6 +22,7 @@ namespace {
 
 constexpr std::int64_t kNoteSaveDelayNanos = 150'000'000;
 constexpr std::int64_t kRepositoryPollNanos = 1'000'000'000;
+constexpr std::int64_t kStatusHintNanos = 3'000'000'000;
 
 const std::array<std::string, 4> kPriorityNames = {"High", "Normal", "Low", "Idle"};
 const std::array<std::string, 6> kSortNames = {"Manual", "Color", "Due", "Created", "Modified", "Priority"};
@@ -97,6 +99,7 @@ TodoApp::TodoApp(ui::Application& app,
                  std::string identity,
                  TodoAppOptions options)
     : app_(app),
+      calendar_(calendar),
       controller_(repository, calendar, std::move(identity)),
       options_(std::move(options)),
       roles_(ui::intern_standard_roles(app.roles())) {
@@ -127,6 +130,7 @@ TodoApp::TodoApp(ui::Application& app,
 
 TodoApp::~TodoApp() {
     if (poll_timer_ != 0) app_.cancel_timer(poll_timer_);
+    if (status_timer_ != 0) app_.cancel_timer(status_timer_);
     while (!notes_.empty()) {
         std::unique_ptr<NoteSession> note = std::move(notes_.back());
         notes_.pop_back();
@@ -158,7 +162,10 @@ TodoApp::~TodoApp() {
     for (const ui::CommandId command : lane_sort_commands_) app_.commands().withdraw(command);
     app_.commands().withdraw(board_manager_command_);
     app_.commands().withdraw(new_board_command_);
+    app_.commands().withdraw(keyboard_help_command_);
+    app_.commands().withdraw(about_command_);
     app_.commands().withdraw(board_help_command_);
+    app_.commands().withdraw(board_quit_command_);
 }
 
 void TodoApp::declare_commands() {
@@ -216,10 +223,20 @@ void TodoApp::declare_commands() {
     new_board_command_ = app_.commands().declare(
         {.key = std::string(kNewBoardKey), .title = "&New Board...", .category = "Boards",
          .context = "todo.board", .handler = [this] { present_new_board(); }});
+    keyboard_help_command_ = app_.commands().declare(
+        {.key = "todo.keyboard-help", .title = "&Keyboard reference", .category = "Help",
+         .handler = [this] { show_help_topic("todo.keyboard"); }});
+    about_command_ = app_.commands().declare(
+        {.key = "todo.about", .title = "&About ckVision TODO", .category = "Help",
+         .handler = [this] { show_about(); }});
     board_help_command_ = app_.commands().declare(
         {.key = "todo.board-help", .title = "Board help", .category = "Help", .context = "todo.board",
          .visibility = ui::CommandVisibility::Hidden,
          .handler = [this] { app_.execute_command(app_.commands().standard().help); }});
+    board_quit_command_ = app_.commands().declare(
+        {.key = "todo.board-quit", .title = "Board quit", .category = "File", .context = "todo.board",
+         .visibility = ui::CommandVisibility::Hidden,
+         .handler = [this] { app_.execute_command(app_.commands().standard().quit); }});
 
     app_.commands().set_enabled_predicate(add_task_command_, [this] { return active_lane().has_value() && !move_; });
     const auto task_available = [this] { return selected_task() != nullptr && !move_; };
@@ -279,6 +296,7 @@ void TodoApp::bind_board_aliases() {
     bind(Key::Char, "m", board_manager_command_);
     bind(Key::Char, "h", board_help_command_);
     bind(Key::Char, "?", board_help_command_);
+    bind(Key::Char, "q", board_quit_command_);
 }
 
 std::vector<widgets::MenuBarItem> TodoApp::build_menus() {
@@ -326,11 +344,18 @@ std::vector<widgets::MenuBarItem> TodoApp::build_menus() {
               widgets::MenuItem::command(app_.commands().standard().window_list),
               widgets::MenuItem::separator(), widgets::MenuItem::command(app_.commands().standard().tile_grid),
               widgets::MenuItem::command(app_.commands().standard().cascade)})}};
-    widgets::MenuBarItem help{"&Help", {widgets::MenuItem::command(app_.commands().standard().help)}};
+    widgets::MenuBarItem help{
+        "&Help", {widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help,
+                                                                           "&Context Help"}),
+                  widgets::MenuItem::command(keyboard_help_command_), widgets::MenuItem::separator(),
+                  widgets::MenuItem::command(about_command_)}};
     widgets::MenuBarItem file{
         "&File", {widgets::MenuItem::command(board_manager_command_), widgets::MenuItem::command(new_board_command_),
-                  widgets::MenuItem::separator(), widgets::MenuItem::command(widgets::CommandPresentation{
-                                                      app_.commands().standard().quit, "E&xit"})}};
+                  widgets::MenuItem::command(
+                      widgets::CommandPresentation{about_command_, "Workspace &information..."}),
+                  widgets::MenuItem::separator(),
+                  widgets::MenuItem::command(
+                      widgets::CommandPresentation{app_.commands().standard().quit, "E&xit"})}};
     return {std::move(file), std::move(tasks), std::move(lane), std::move(view), std::move(help)};
 }
 
@@ -341,21 +366,14 @@ void TodoApp::build_chrome() {
 
     auto status = std::make_unique<widgets::StatusLine>();
     status_line_ = status.get();
-    status->set_items({
-        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().help}, 100},
-        widgets::StatusLineItem{widgets::CommandPresentation{add_task_command_}, 95},
-        widgets::StatusLineItem{widgets::CommandPresentation{edit_task_command_}, 70},
-        widgets::StatusLineItem{widgets::CommandPresentation{edit_note_command_}, 60},
-        widgets::StatusLineItem{widgets::CommandPresentation{archive_task_command_}, 50},
-        widgets::StatusLineItem{widgets::CommandPresentation{move_task_command_}, 90},
-        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}, 100},
-    });
-    status->set_hint_provider([](const std::string& key) {
+    status->set_hint_provider([this](const std::string& key) {
+        if (move_) return std::string{"Arrow keys move; Enter commits; Esc cancels."};
         if (key == "todo.board") return std::string{"Arrows select tasks and lanes; Enter starts or finishes a move."};
         if (key == "todo.note") return std::string{"Notes autosave after a short pause and flush on close."};
         return std::string{};
     });
     desktop_->dock_bottom(std::move(status));
+    refresh_status_items();
 }
 
 void TodoApp::build_board_window() {
@@ -371,6 +389,11 @@ void TodoApp::build_board_window() {
     board_view_ = board.get();
     board->on_task_activate = [this](TaskId) { present_task_dialog(true); };
     board->on_move_toggle = [this](TaskId) { toggle_move(); };
+    board->on_task_drop = [this](TaskId task_id, LaneId lane_id, std::optional<TaskId> before) {
+        drop_task(task_id, lane_id, before);
+    };
+    board->on_task_context_menu = [this](TaskId, Point screen_cell) { show_task_context_menu(screen_cell); };
+    board->on_lane_context_menu = [this](LaneId, Point screen_cell) { show_lane_context_menu(screen_cell); };
     board->on_active_lane_changed = [this](LaneId lane_id) {
         if (move_) board_view_->set_move_target(lane_id);
         if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
@@ -384,18 +407,46 @@ void TodoApp::install_help() {
                                       "TODO board",
                                       "Use Up/Down to select a task and Left/Right to change lanes. F2 adds, F3 edits, "
                                       "F4 opens a note, F8 archives, and F9 or Enter starts and finishes move mode.",
-                                      {{"todo.tasks", "Tasks"}, {"todo.moving", "Moving"}, {"todo.persistence", "Persistence"}}});
+                                      {{"todo.tasks", "Tasks"}, {"todo.moving", "Moving"},
+                                       {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"},
+                                       {"todo.keyboard", "Keyboard"}, {"todo.persistence", "Persistence"}}});
     help_.add_topic("todo.tasks", widgets::HelpTopic{"Tasks", "Task changes are durable before the board reports success.",
                                                        {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
     help_.add_topic("todo.moving", widgets::HelpTopic{"Moving", "Start move mode, choose a lane and insertion task with arrows, then press Enter. Escape cancels.",
                                                         {{"todo.board", "Board"}}});
     help_.add_topic("todo.persistence", widgets::HelpTopic{"Persistence", "There is no Save command. Changes are atomically committed with daily backups; archive data is written before removal.",
-                                                             {{"todo.board", "Board"}}});
+                                                             {{"todo.board", "Board"}, {"todo.boards", "Boards"}}});
     help_.add_topic("todo.note", widgets::HelpTopic{"Notes", "Note windows are modeless. Editing coalesces for 150 ms and closing flushes pending text.",
                                                      {{"todo.board", "Board"}}});
+    help_.add_topic("todo.lanes", widgets::HelpTopic{
+                                      "Lanes",
+                                      "F7 opens lane actions. Lanes can be renamed, colored, sorted, inserted, merged, or archived. Only Manual sorting permits reordering.",
+                                      {{"todo.board", "Board"}, {"todo.keyboard", "Keyboard"}}});
+    help_.add_topic("todo.boards", widgets::HelpTopic{
+                                       "Boards",
+                                       "Press m or click the Board status item to create, switch, rename, merge, or archive Boards. The main Board is protected.",
+                                       {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
+    help_.add_topic("todo.keyboard", widgets::HelpTopic{
+                                         "Keyboard reference",
+                                         "F1 Help; F2 Add; F3 Edit; F4 Note; F5 Zoom; F6 Next window; F7 Lane actions; F8 Archive; F9 Move; F10 Menu. Delete removes permanently. m selects a Board; Esc cancels.",
+                                         {{"todo.board", "Board"}, {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"}}});
     app_.set_help_provider([this](const std::string& key) {
-        help_viewer_ = widgets::present_help_viewer(help_, key.empty() ? "todo.board" : key, app_, *desktop_, roles_);
+        show_help_topic(key.empty() ? "todo.board" : key);
     });
+}
+
+void TodoApp::show_help_topic(std::string key) {
+    help_viewer_ = widgets::present_help_viewer(help_, std::move(key), app_, *desktop_, roles_);
+}
+
+void TodoApp::show_about() {
+    about_box_ = widgets::present_message_box(
+        app_, *desktop_, roles_,
+        {widgets::MessageBoxKind::Info, "About ckVision TODO",
+         "ckVision TODO " + std::string(ckv::version_string()) + "\n" + options_.workspace_description +
+             "\n\nChanges save automatically. F1 opens contextual help.",
+         widgets::MessageBoxButtons::Ok});
+    about_box_->set_completion_handler([](widgets::MessageBoxResult) {});
 }
 
 void TodoApp::present_welcome() {
@@ -443,12 +494,14 @@ void TodoApp::refresh_board() {
     board_view_->set_move_target(move_ ? board_view_->active_lane() : std::nullopt);
     if (const Board* board = workspace->find_board(board_id)) board_window_->set_title("TODO — " + board->name);
     if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+    refresh_status_items();
     if (app_.focused() == nullptr && board_view_->active_lane())
         app_.set_focus(board_view_->lane_view(*board_view_->active_lane()));
 }
 
 void TodoApp::poll_repository() {
     if (!controller_.is_open() || move_) return;
+    refresh_status_items();
     const auto reloaded = controller_.reload_if_changed();
     if (!reloaded) {
         set_status("Reload failed: " + reloaded.error.diagnostic);
@@ -1039,6 +1092,64 @@ void TodoApp::cancel_move() {
     set_status("Move cancelled; original position restored.");
 }
 
+void TodoApp::drop_task(TaskId task_id, LaneId target_lane_id, std::optional<TaskId> before_task_id) {
+    const TodoWorkspace* workspace = controller_.workspace();
+    const Lane* target = workspace != nullptr ? workspace->find_lane(target_lane_id) : nullptr;
+    if (target == nullptr) return;
+    const auto started = controller_.begin_task_move(task_id);
+    if (!started) {
+        show_error("Cannot drag task", started.error);
+        return;
+    }
+    if (target->sort != SortMode::Manual) {
+        if (started.value->source_lane_id == target_lane_id) {
+            set_status("This lane is sorted automatically; choose Manual before reordering it.");
+            return;
+        }
+        before_task_id.reset();
+    }
+    if (before_task_id == task_id) before_task_id = started.value->original_before_task_id;
+    const auto staged = controller_.stage_task_move(*started.value, target_lane_id, before_task_id);
+    if (!staged) {
+        show_error("Cannot stage dragged task", staged.error);
+        return;
+    }
+    const auto committed = controller_.commit_task_move(*staged.value);
+    if (!committed) {
+        show_error("Cannot drop task", committed.error);
+        return;
+    }
+    refresh_board();
+    board_view_->select_task(task_id);
+    set_status(committed.value->changed ? "Task moved by drag and saved." : "Task stayed in its original position.");
+}
+
+void TodoApp::show_task_context_menu(Point screen_cell) {
+    widgets::show_context_menu(
+        {widgets::MenuItem::command(edit_task_command_), widgets::MenuItem::command(edit_note_command_),
+         widgets::MenuItem::command(move_task_command_), widgets::MenuItem::separator(),
+         widgets::MenuItem::command(archive_task_command_), widgets::MenuItem::command(delete_task_command_)},
+        screen_cell, app_, *desktop_);
+}
+
+void TodoApp::show_lane_context_menu(Point screen_cell) {
+    const SortMode active_sort = active_lane_record() != nullptr ? active_lane_record()->sort : SortMode::Manual;
+    std::vector<widgets::MenuItem> sort_items;
+    for (std::size_t index = 0; index < lane_sort_commands_.size(); ++index) {
+        sort_items.push_back(widgets::MenuItem::command(lane_sort_commands_[index])
+                                 .with_mark(static_cast<SortMode>(index) == active_sort
+                                                ? widgets::MenuMark::RadioOn
+                                                : widgets::MenuMark::RadioOff));
+    }
+    widgets::show_context_menu(
+        {widgets::MenuItem::submenu("&Sort", std::move(sort_items)),
+         widgets::MenuItem::command(lane_color_command_), widgets::MenuItem::command(lane_rename_command_),
+         widgets::MenuItem::command(lane_insert_left_command_),
+         widgets::MenuItem::command(lane_insert_right_command_), widgets::MenuItem::separator(),
+         widgets::MenuItem::command(lane_merge_command_), widgets::MenuItem::command(lane_archive_command_)},
+        screen_cell, app_, *desktop_);
+}
+
 void TodoApp::set_theme(TodoTheme theme) {
     theme_ = theme;
     switch (theme_) {
@@ -1052,6 +1163,31 @@ void TodoApp::set_theme(TodoTheme theme) {
     app_.invalidate_all();
 }
 
+void TodoApp::refresh_status_items() {
+    if (status_line_ == nullptr) return;
+    std::string board_label = "Board";
+    if (const Board* board = active_board()) board_label = "Board: " + board->name;
+    std::string calendar_label;
+    if (const CalendarReadResult reading = calendar_.read(); reading) {
+        calendar_label = reading.value->local_date.value;
+        if (reading.value->utc_timestamp.value.size() >= 16)
+            calendar_label += " " + reading.value->utc_timestamp.value.substr(11, 5) + "Z";
+    }
+    std::vector<widgets::StatusLineItem> items{
+        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().help}, 100},
+        widgets::StatusLineItem{widgets::CommandPresentation{add_task_command_}, 95},
+        widgets::StatusLineItem{widgets::CommandPresentation{edit_task_command_}, 70},
+        widgets::StatusLineItem{widgets::CommandPresentation{edit_note_command_}, 60},
+        widgets::StatusLineItem{widgets::CommandPresentation{archive_task_command_}, 50},
+        widgets::StatusLineItem{widgets::CommandPresentation{move_task_command_}, 90},
+        widgets::StatusLineItem{widgets::CommandPresentation{lane_actions_command_}, 80},
+        widgets::StatusLineItem{std::move(board_label), board_manager_command_, 95},
+    };
+    if (!calendar_label.empty()) items.emplace_back(std::move(calendar_label), ui::kInvalidCommand, 5);
+    items.emplace_back(widgets::CommandPresentation{app_.commands().standard().quit}, 100);
+    status_line_->set_items(std::move(items));
+}
+
 void TodoApp::show_error(std::string title, const ControllerError& error) {
     set_status(error.diagnostic);
     message_box_ = widgets::present_message_box(
@@ -1061,7 +1197,16 @@ void TodoApp::show_error(std::string title, const ControllerError& error) {
 }
 
 void TodoApp::set_status(std::string message) {
-    if (status_line_ != nullptr) status_line_->set_transient_hint(std::move(message));
+    if (status_line_ == nullptr) return;
+    if (status_timer_ != 0) {
+        app_.cancel_timer(status_timer_);
+        status_timer_ = 0;
+    }
+    status_line_->set_transient_hint(std::move(message));
+    status_timer_ = app_.start_timer(kStatusHintNanos, false, [this] {
+        status_timer_ = 0;
+        if (status_line_ != nullptr) status_line_->set_transient_hint({});
+    });
 }
 
 const Task* TodoApp::selected_task() const noexcept {

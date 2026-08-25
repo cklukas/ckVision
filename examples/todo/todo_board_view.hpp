@@ -32,6 +32,9 @@ public:
     std::function<void(TaskId)> on_task_activate;
     std::function<void(TaskId)> on_move_toggle;
     std::function<void(LaneId)> on_active_lane_changed;
+    std::function<void(TaskId, LaneId, std::optional<TaskId>)> on_task_drop;
+    std::function<void(TaskId, Point)> on_task_context_menu;
+    std::function<void(LaneId, Point)> on_lane_context_menu;
 
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
@@ -44,12 +47,24 @@ private:
     void activate_lane(LaneId lane_id);
     void step_lane(LaneId lane_id, int direction);
     void ensure_lane_visible(std::size_t index);
+    void handle_drag(TaskId task_id, MouseAction action, Point screen_cell);
+    TodoLaneView* lane_at(Point screen_cell) const noexcept;
+    void clear_drag_feedback();
+
+    struct DragState {
+        TaskId task_id;
+        Point origin;
+        bool started = false;
+        std::optional<LaneId> target_lane;
+        std::optional<TaskId> before_task;
+    };
 
     BoardId board_id_;
     std::vector<TodoLaneView*> lanes_;
     std::size_t active_lane_index_ = 0;
     std::optional<TaskId> move_source_;
     std::optional<LaneId> move_target_;
+    std::optional<DragState> drag_;
     widgets::Scrollbar* scrollbar_ = nullptr;
 };
 

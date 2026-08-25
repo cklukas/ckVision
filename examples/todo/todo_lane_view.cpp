@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "cvision/core/text.hpp"
+#include "cvision/widgets/menu.hpp"
 
 namespace ckv::todo {
 namespace {
@@ -75,6 +76,15 @@ std::optional<TaskId> TodoLaneView::selected_task() const noexcept {
     return tasks_[static_cast<std::size_t>(selected_)].id;
 }
 
+std::optional<TaskId> TodoLaneView::task_at(Point screen_cell) const noexcept {
+    const Rect absolute = absolute_bounds();
+    const int row = screen_cell.y - absolute.y - 1;
+    if (row < 0 || row >= bounds().height - 2) return std::nullopt;
+    const int index = scrollbar_->position() + row / kCardRows;
+    if (index < 0 || static_cast<std::size_t>(index) >= tasks_.size()) return std::nullopt;
+    return tasks_[static_cast<std::size_t>(index)].id;
+}
+
 void TodoLaneView::select_task(TaskId task_id) {
     const auto found = std::find_if(tasks_.begin(), tasks_.end(),
                                     [task_id](const Task& task) { return task.id == task_id; });
@@ -91,6 +101,13 @@ void TodoLaneView::set_move_source(std::optional<TaskId> task_id) {
 void TodoLaneView::set_move_target(bool target) {
     if (move_target_ == target) return;
     move_target_ = target;
+    invalidate();
+}
+
+void TodoLaneView::set_drop_marker(std::optional<TaskId> before, bool at_end) {
+    if (drop_before_ == before && drop_at_end_ == at_end) return;
+    drop_before_ = before;
+    drop_at_end_ = at_end;
     invalidate();
 }
 
@@ -148,6 +165,16 @@ void TodoLaneView::ensure_selection_visible() {
 }
 
 bool TodoLaneView::on_key(const KeyEvent& event) {
+    if (widgets::is_keyboard_context_menu_request(event)) {
+        const Rect absolute = absolute_bounds();
+        if (const auto task = selected_task(); task && on_task_context_menu) {
+            const int row = std::max(1, 1 + (selected_ - scrollbar_->position()) * kCardRows);
+            on_task_context_menu(*task, Point{absolute.x + 2, absolute.y + row});
+        } else if (on_lane_context_menu) {
+            on_lane_context_menu(lane_.id, Point{absolute.x + 2, absolute.y});
+        }
+        return true;
+    }
     switch (event.chord.key) {
         case Key::Up: move_selection(selected_ - 1); return true;
         case Key::Down: move_selection(selected_ + 1); return true;
@@ -181,15 +208,44 @@ bool TodoLaneView::on_mouse(const MouseEvent& event) {
         else return false;
         return true;
     }
-    if (event.action != MouseAction::Down && event.action != MouseAction::DoubleClick) return false;
     const Rect absolute = absolute_bounds();
+    if (event.action == MouseAction::Move && pressed_task_) {
+        if (on_drag) on_drag(*pressed_task_, event.action, event.cell);
+        return true;
+    }
+    if (event.action == MouseAction::Up && pressed_task_) {
+        const TaskId released_task = *pressed_task_;
+        pressed_task_.reset();
+        if (on_drag) on_drag(released_task, event.action, event.cell);
+        return true;
+    }
+    if (event.action != MouseAction::Down && event.action != MouseAction::DoubleClick) return false;
+    if (event.button == MouseButton::Right && event.cell.y == absolute.y) {
+        if (on_lane_context_menu) on_lane_context_menu(lane_.id, event.cell);
+        return true;
+    }
+    if (event.button != MouseButton::Left && event.button != MouseButton::Right) return false;
     const int row = event.cell.y - absolute.y - 1;
     if (row < 0 || row >= bounds().height - 2) return false;
     const int index = scrollbar_->position() + row / kCardRows;
     if (index < 0 || static_cast<std::size_t>(index) >= tasks_.size()) return false;
     move_selection(index);
+    if (event.button == MouseButton::Right) {
+        if (on_task_context_menu) on_task_context_menu(tasks_[index].id, event.cell);
+        return true;
+    }
+    if (event.action == MouseAction::Down) {
+        pressed_task_ = tasks_[index].id;
+        if (on_drag) on_drag(*pressed_task_, event.action, event.cell);
+    }
     if (event.action == MouseAction::DoubleClick && on_activate) on_activate(tasks_[index].id);
     return true;
+}
+
+std::optional<PointerShape> TodoLaneView::pointer_shape_at(Point cell) const {
+    if (pressed_task_) return PointerShape::Grabbing;
+    if (cell.y == 0 || (cell.y > 0 && cell.y < bounds().height - 1)) return PointerShape::Grab;
+    return PointerShape::Default;
 }
 
 Style TodoLaneView::lane_style() const {
@@ -251,6 +307,23 @@ void TodoLaneView::draw(scene::Painter& painter) {
         }
         if (y + 1 < bounds().height - 1)
             painter.draw_text(Point{3, y + 1}, text::elide_to_width(task.details, std::max(0, content_width - 2)), card);
+    }
+
+    if (move_target_ && (drop_before_ || drop_at_end_)) {
+        int marker_y = bounds().height - 2;
+        if (drop_before_) {
+            const auto found = std::find_if(tasks_.begin(), tasks_.end(), [this](const Task& task) {
+                return task.id == *drop_before_;
+            });
+            if (found != tasks_.end()) {
+                const int index = static_cast<int>(found - tasks_.begin());
+                marker_y = 1 + (index - scrollbar_->position()) * kCardRows;
+            }
+        } else {
+            marker_y = 1 + (static_cast<int>(tasks_.size()) - scrollbar_->position()) * kCardRows;
+        }
+        if (marker_y >= 1 && marker_y < bounds().height - 1)
+            painter.fill(Rect{1, marker_y, std::max(0, bounds().width - 2), 1}, Cell::from_grapheme("─", frame));
     }
 }
 
