@@ -172,7 +172,9 @@ add_library(todo_app STATIC
     todo/memory_todo_repository.cpp
     todo/json_todo_repository.cpp
     todo/system_calendar_clock.cpp
-    todo/todo_controller.cpp)
+    todo/todo_controller.cpp
+    todo/todo_lane_view.cpp
+    todo/todo_board_view.cpp)
 target_link_libraries(todo_app PRIVATE ckvision::cvision)
 target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
 ckvision_strict(todo_app)

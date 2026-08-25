@@ -234,10 +234,10 @@ endif()
 if(TARGET todo_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES
         test_todo_model.cpp test_todo_codec.cpp test_todo_repository.cpp
-        test_todo_calendar_clock.cpp test_todo_controller.cpp)
+        test_todo_calendar_clock.cpp test_todo_controller.cpp test_todo_board.cpp)
     target_sources(cvision_tests PRIVATE
         test_todo_model.cpp test_todo_codec.cpp test_todo_repository.cpp
-        test_todo_calendar_clock.cpp test_todo_controller.cpp)
+        test_todo_calendar_clock.cpp test_todo_controller.cpp test_todo_board.cpp)
     target_link_libraries(cvision_tests PRIVATE todo_app)
 endif()
 
