@@ -118,13 +118,73 @@ CK_TEST(todo_archive_confirmation_removes_only_after_yes) {
 
 CK_TEST(todo_theme_menu_is_radio_marked_and_rebuilds_after_selection) {
     SmokeFixture fixture;
-    const widgets::MenuBarItem* options = menu_named(*fixture.todo.menu_bar(), "&Options");
-    CK_CHECK(options != nullptr);
-    if (options == nullptr) return;
-    const auto& choices = options->items.front().children();
+    const widgets::MenuBarItem* view = menu_named(*fixture.todo.menu_bar(), "&View");
+    CK_CHECK(view != nullptr);
+    if (view == nullptr) return;
+    const auto& choices = view->items.front().children();
     CK_CHECK(choices[0].mark() == widgets::MenuMark::RadioOn);
     choices[1].action()();
     CK_CHECK(fixture.todo.theme() == TodoTheme::Dark);
+}
+
+CK_TEST(todo_task_delete_is_distinct_from_archive_and_requires_confirmation) {
+    SmokeFixture fixture;
+    const auto remove = fixture.app.commands().id_for(TodoApp::kDeleteTaskKey);
+    CK_CHECK(remove && fixture.app.execute_command(*remove));
+    CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1}) == nullptr);
+    CK_CHECK(fixture.repository.archives().empty());
+}
+
+CK_TEST(todo_lane_commands_insert_sort_and_expose_checked_menu_state) {
+    SmokeFixture fixture;
+    const auto insert = fixture.app.commands().id_for("todo.insert-lane-right");
+    CK_CHECK(insert && fixture.app.execute_command(*insert));
+    CK_CHECK(fixture.app.dispatch(TextEvent{"Review", false, false}));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.board_view()->lane_count() == 4);
+    const Lane* review = fixture.todo.controller().workspace()->find_lane(LaneId{4});
+    CK_CHECK(review != nullptr);
+    if (review == nullptr) return;
+    CK_CHECK(review->title == "Review");
+
+    const auto priority_sort = fixture.app.commands().id_for("todo.lane-sort.priority");
+    CK_CHECK(priority_sort && fixture.app.execute_command(*priority_sort));
+    CK_CHECK(fixture.todo.controller().workspace()->find_lane(LaneId{4})->sort == SortMode::Priority);
+    const widgets::MenuBarItem* lane = menu_named(*fixture.todo.menu_bar(), "&Lane");
+    CK_CHECK(lane != nullptr);
+    if (lane != nullptr) CK_CHECK(lane->items.front().children()[5].mark() == widgets::MenuMark::RadioOn);
+}
+
+CK_TEST(todo_board_creation_selects_and_persists_the_new_board) {
+    SmokeFixture fixture;
+    const auto add = fixture.app.commands().id_for(TodoApp::kNewBoardKey);
+    CK_CHECK(add && fixture.app.execute_command(*add));
+    CK_CHECK(fixture.app.dispatch(TextEvent{"Release", false, false}));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    const TodoWorkspace* workspace = fixture.todo.controller().workspace();
+    CK_CHECK(workspace->snapshot().boards.size() == 2);
+    CK_CHECK(workspace->snapshot().last_board_id == BoardId{2});
+    CK_CHECK(fixture.todo.board_view()->board_id() == BoardId{2});
+    CK_CHECK(fixture.todo.board_window()->title() == "TODO — Release");
+}
+
+CK_TEST(todo_lane_and_board_manager_shortcuts_are_board_scoped) {
+    SmokeFixture fixture;
+    CK_CHECK(fixture.app.commands().command_for_key(KeyChord{Key::F7, Modifier::None, {}}) ==
+             fixture.app.commands().id_for(TodoApp::kLaneActionsKey));
+    CK_CHECK(fixture.app.commands().command_for_key(KeyChord{Key::Char, Modifier::None, "m"}) ==
+             fixture.app.commands().id_for(TodoApp::kBoardManagerKey));
+    const auto manager = fixture.app.commands().id_for(TodoApp::kBoardManagerKey);
+    CK_CHECK(manager && fixture.app.execute_command(*manager));
+    CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(!fixture.app.is_modal());
 }
 
 CK_TEST(todo_first_workspace_option_creates_without_a_modal_prompt) {

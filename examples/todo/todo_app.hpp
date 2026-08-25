@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -51,8 +52,12 @@ public:
     static constexpr std::string_view kEditTaskKey = "todo.edit-task";
     static constexpr std::string_view kEditNoteKey = "todo.edit-note";
     static constexpr std::string_view kArchiveTaskKey = "todo.archive-task";
+    static constexpr std::string_view kDeleteTaskKey = "todo.delete-task";
     static constexpr std::string_view kMoveTaskKey = "todo.move-task";
     static constexpr std::string_view kCancelMoveKey = "todo.cancel-move";
+    static constexpr std::string_view kLaneActionsKey = "todo.lane-actions";
+    static constexpr std::string_view kBoardManagerKey = "todo.board-manager";
+    static constexpr std::string_view kNewBoardKey = "todo.new-board";
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::Window* board_window() const noexcept { return board_window_; }
@@ -84,10 +89,27 @@ private:
     void accept_task_dialog(bool editing, std::optional<TaskId> task_id,
                             std::string preserved_note, const widgets::DialogResult& result);
     void present_archive_confirmation();
+    void present_delete_confirmation();
     void open_note_editor();
     void schedule_note_save(TaskId task_id);
     bool flush_note(TaskId task_id);
     void close_note_session(NoteSession* session);
+
+    void present_lane_actions();
+    void present_lane_rename();
+    void present_lane_color();
+    void present_lane_sort();
+    void present_lane_insert(bool before_active);
+    void present_lane_merge();
+    void present_lane_archive();
+    void set_lane_sort(SortMode sort);
+
+    void present_board_manager();
+    void present_new_board();
+    void present_board_rename(BoardId board_id);
+    void present_board_merge(BoardId board_id);
+    void present_board_archive(BoardId board_id);
+    void switch_board(BoardId board_id);
 
     void toggle_move();
     void cancel_move();
@@ -97,6 +119,8 @@ private:
 
     const Task* selected_task() const noexcept;
     std::optional<LaneId> active_lane() const noexcept;
+    const Lane* active_lane_record() const noexcept;
+    const Board* active_board() const noexcept;
     std::optional<BoardId> board_named(std::string_view name) const noexcept;
     TaskDraft draft_from(const Task& task) const;
 
@@ -116,8 +140,19 @@ private:
     ui::CommandId edit_task_command_ = ui::kInvalidCommand;
     ui::CommandId edit_note_command_ = ui::kInvalidCommand;
     ui::CommandId archive_task_command_ = ui::kInvalidCommand;
+    ui::CommandId delete_task_command_ = ui::kInvalidCommand;
     ui::CommandId move_task_command_ = ui::kInvalidCommand;
     ui::CommandId cancel_move_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_actions_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_rename_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_color_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_insert_left_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_insert_right_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_merge_command_ = ui::kInvalidCommand;
+    ui::CommandId lane_archive_command_ = ui::kInvalidCommand;
+    std::array<ui::CommandId, 6> lane_sort_commands_{};
+    ui::CommandId board_manager_command_ = ui::kInvalidCommand;
+    ui::CommandId new_board_command_ = ui::kInvalidCommand;
     ui::CommandId board_help_command_ = ui::kInvalidCommand;
 
     std::optional<PendingTaskMove> move_;
@@ -128,6 +163,13 @@ private:
     std::optional<widgets::DescriptorDialogPresentation> welcome_dialog_;
     std::optional<widgets::DescriptorDialogPresentation> task_dialog_;
     std::optional<widgets::MessageBoxPresentation> archive_confirmation_;
+    std::optional<widgets::MessageBoxPresentation> delete_confirmation_;
+    std::optional<widgets::DescriptorDialogPresentation> lane_actions_dialog_;
+    std::optional<widgets::DescriptorDialogPresentation> lane_edit_dialog_;
+    std::optional<widgets::MessageBoxPresentation> lane_confirmation_;
+    std::optional<widgets::DescriptorDialogPresentation> board_manager_dialog_;
+    std::optional<widgets::DescriptorDialogPresentation> board_edit_dialog_;
+    std::optional<widgets::MessageBoxPresentation> board_confirmation_;
     std::optional<widgets::MessageBoxPresentation> message_box_;
     std::optional<widgets::HelpViewerPresentation> help_viewer_;
 };
