@@ -76,3 +76,23 @@ For resizing, choose a layout container or a `DesktopGrowPolicy` before using
 manual bounds. Manual bounds are appropriate for the fixed placements in a
 small dialog; `Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, `Overlay`, and
 `Splitter` express the intended relationship under changing terminal sizes.
+
+## Custom focusable views
+
+A custom control declares tab focus in its base initializer and implements the
+event hooks it consumes. Construction makes the policy true from the start, so
+the view cannot be attached briefly with the wrong traversal behavior.
+
+```cpp
+class ItemSurface final : public ckv::ui::View {
+public:
+    ItemSurface() : View({}, ckv::ui::FocusPolicy::TabStop) {}
+
+    bool on_key(const ckv::KeyEvent& event) override;
+    void draw(ckv::scene::Painter& painter) override;
+};
+```
+
+Leave the second constructor argument at its `None` default for layout and
+decorative views. Runtime state may still use `set_focus_policy` when a view's
+role genuinely changes after construction.

@@ -64,7 +64,11 @@ enum class InvalidationKind {
 
 class View {
 public:
-    explicit View(Rect bounds = {}) : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}) {}
+    // Custom controls declare their traversal policy at construction, just as
+    // stock widgets do internally. The default preserves a plain View as a
+    // non-focusable layout/container surface.
+    explicit View(Rect bounds = {}, FocusPolicy focus_policy = FocusPolicy::None)
+        : bounds_(bounds), preferred_size_(Size{bounds.width, bounds.height}), focus_policy_(focus_policy) {}
     virtual ~View();
 
     View(const View&) = delete;
