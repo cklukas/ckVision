@@ -262,15 +262,28 @@ void wire_dismiss_buttons(const DialogDescriptor& descriptor, const std::vector<
 }
 
 bool validate_inputs(const std::vector<InputLine*>& inputs, const DialogDescriptor& descriptor,
-                      ui::Application& app) {
+                     const std::vector<DatePicker*>& dates, ui::Application& app) {
     CKV_ASSERT(inputs.size() == descriptor.fields.size());
-    InputLine* first_invalid = nullptr;
+    CKV_ASSERT(dates.size() == descriptor.fields.size());
+    ui::View* first_invalid = nullptr;
     bool all_valid = true;
     for (std::size_t i = 0; i < inputs.size(); ++i) {
-        // A checkbox has no text to validate and no invalid state to show;
-        // its slot in the parallel array is empty by construction.
-        if (inputs[i] == nullptr) continue;
         const FieldDescriptor& field = descriptor.fields[i];
+        if (dates[i] != nullptr) {
+            const std::optional<DateValue> value = dates[i]->value();
+            const std::string text = value ? format_iso_date(*value) : std::string{};
+            const bool valid = (field.date_optional || value.has_value()) &&
+                               (!field.validate || field.validate(text));
+            dates[i]->set_valid(valid);
+            if (!valid) {
+                all_valid = false;
+                if (first_invalid == nullptr) first_invalid = dates[i];
+            }
+            continue;
+        }
+        // A checkbox, radio, combo, or note has no InputLine validation
+        // state. Its slot in the parallel array is empty by construction.
+        if (inputs[i] == nullptr) continue;
         const auto& validate = field.validate;
         // A Number is a number before it is anything else. Its own validator
         // still runs, and runs second, so it never has to parse the text
@@ -312,19 +325,24 @@ struct BuiltDescriptorDialog {
 DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vector<InputLine*>& inputs,
                               const std::vector<CheckGroup*>& checks,
                               const std::vector<RadioGroup*>& radios,
-                              const std::vector<ComboBox*>& combos) {
+                              const std::vector<ComboBox*>& combos,
+                              const std::vector<DatePicker*>& dates) {
     CKV_ASSERT(inputs.size() == checks.size());
     CKV_ASSERT(inputs.size() == radios.size());
     CKV_ASSERT(inputs.size() == combos.size());
+    CKV_ASSERT(inputs.size() == dates.size());
     DialogResult result;
     result.accepted = true;
     result.values.reserve(inputs.size());
     result.checked.reserve(checks.size());
     result.selected.reserve(inputs.size());
     result.numbers.reserve(inputs.size());
+    result.dates.reserve(inputs.size());
     for (std::size_t i = 0; i < inputs.size(); ++i) {
         std::string text = inputs[i] != nullptr ? inputs[i]->text() : std::string{};
         if (combos[i] != nullptr) text = combos[i]->text();
+        const std::optional<DateValue> date = dates[i] != nullptr ? dates[i]->value() : std::nullopt;
+        if (date) text = format_iso_date(*date);
         int selected = -1;
         if (radios[i] != nullptr) selected = radios[i]->selected();
         if (combos[i] != nullptr && combos[i]->selected_index())
@@ -337,6 +355,7 @@ DialogResult accepted_result(const DialogDescriptor& descriptor, const std::vect
         result.checked.push_back(checks[i] != nullptr && checks[i]->checked(0));
         result.selected.push_back(selected);
         result.numbers.push_back(number);
+        result.dates.push_back(date);
     }
     return result;
 }
@@ -373,10 +392,13 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     std::vector<CheckGroup*> checks = materialized.checks;
     std::vector<RadioGroup*> radios = materialized.radios;
     std::vector<ComboBox*> combos = materialized.combos;
+    std::vector<DatePicker*> dates = materialized.dates;
     Button* const default_button = materialized.default_button;
     ui::View* const initial_focus = materialized.initial_focus;
 
     auto window = std::make_unique<Window>(retained_descriptor->title);
+    if (!retained_descriptor->help_context_key.empty())
+        window->set_help_context_key(retained_descriptor->help_context_key);
     window->set_role_override(roles.dialog_frame, roles.dialog_background, roles.dialog_frame,
                               roles.dialog_background);
     if (retained_descriptor->minimum_window_size.width > 0 ||
@@ -399,7 +421,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     // button itself must run the accept path.
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
-    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, checks, radios, combos,
+    window->accept_request = [window_ptr, completion, retained_descriptor, inputs, checks, radios, combos, dates,
                               accept_press, &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
@@ -407,12 +429,12 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         // destroys this std::function while it is executing.
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         Window* const held_window = window_ptr;
-        if (!validate_inputs(inputs, *retained_descriptor, app)) return;
+        if (!validate_inputs(inputs, *retained_descriptor, dates, app)) return;
         // Record before application code runs: a descriptor button handler
         // may detach or destroy this Window synchronously, but its successful
         // acceptance still has one stable typed result after detachment.
         held_completion->selected_result =
-            accepted_result(*retained_descriptor, inputs, checks, radios, combos);
+            accepted_result(*retained_descriptor, inputs, checks, radios, combos, dates);
         if (accept_press) accept_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
@@ -507,6 +529,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                 result.checks.push_back(nullptr);
                 result.radios.push_back(nullptr);
                 result.combos.push_back(nullptr);
+                result.dates.push_back(nullptr);
                 ++lines;
             }
             --index;  // the loop's own ++ takes us past the last note
@@ -532,6 +555,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.checks.push_back(check_ptr);
             result.radios.push_back(nullptr);
             result.combos.push_back(nullptr);
+            result.dates.push_back(nullptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
@@ -551,6 +575,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.checks.push_back(nullptr);
             result.radios.push_back(radio_ptr);
             result.combos.push_back(nullptr);
+            result.dates.push_back(nullptr);
             const int rows = static_cast<int>(field.options.size()) + (field.label.empty() ? 0 : 1);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, std::max(1, rows)});
             continue;
@@ -579,6 +604,25 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.checks.push_back(nullptr);
             result.radios.push_back(nullptr);
             result.combos.push_back(combo_ptr);
+            result.dates.push_back(nullptr);
+            column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
+            continue;
+        }
+
+        if (field.kind == FieldKind::Date) {
+            auto date = std::make_unique<DatePicker>();
+            if (field.date_seed) date->set_seed(*field.date_seed);
+            date->set_empty_allowed(field.date_optional);
+            date->set_value(field.initial_date);
+            auto* date_ptr = static_cast<DatePicker*>(
+                row->add_item(std::move(date), LayoutSpec{SizePolicy::Expanding, 1}));
+            if (label_ptr != nullptr) label_ptr->set_buddy(date_ptr);
+            result.labels.push_back(label_ptr);
+            result.inputs.push_back(nullptr);
+            result.checks.push_back(nullptr);
+            result.radios.push_back(nullptr);
+            result.combos.push_back(nullptr);
+            result.dates.push_back(date_ptr);
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
             continue;
         }
@@ -597,6 +641,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         result.checks.push_back(nullptr);
         result.radios.push_back(nullptr);
         result.combos.push_back(nullptr);
+        result.dates.push_back(nullptr);
 
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }
@@ -639,7 +684,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 }
 
 bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descriptor, ui::Application& app) {
-    return validate_inputs(dialog.inputs, descriptor, app);
+    return validate_inputs(dialog.inputs, descriptor, dialog.dates, app);
 }
 
 void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogDescriptor& descriptor,
@@ -652,9 +697,11 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     // so cannot be captured into a std::function at all.
     std::vector<InputLine*> inputs = dialog.inputs;
     std::vector<Button*> buttons = dialog.buttons;
+    std::vector<DatePicker*> dates = dialog.dates;
     Button* default_button = dialog.default_button;
 
     window.set_content(std::move(dialog.root));
+    if (!descriptor.help_context_key.empty()) window.set_help_context_key(descriptor.help_context_key);
     window.set_resizable(descriptor.resizable);
 
     // A default-button callback may close, detach, or destroy its hosting
@@ -670,10 +717,10 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
-    window.accept_request = [&window, &app, inputs, &descriptor, accept_press, close_state]() {
+    window.accept_request = [&window, &app, inputs, dates, &descriptor, accept_press, close_state]() {
         const std::shared_ptr<CloseState> held_close_state = close_state;
         Window* const held_window = &window;
-        if (!validate_inputs(inputs, descriptor, app)) return;  // veto: invalid field already took focus
+        if (!validate_inputs(inputs, descriptor, dates, app)) return;  // veto: invalid field already took focus
         if (accept_press) accept_press();
         if (!held_close_state->closed && !held_close_state->window_liveness.expired()) held_window->close();
     };

@@ -298,8 +298,18 @@ second value used by TimePicker; it has no implicit system-clock behavior.
 ## DatePicker
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a compact
-date field. Keyboard editing and arrows adjust the focused portion; choose it
-over CalendarView when screen space is tight.
+optional date field. Left/Right selects year, month, or day; Up/Down adjusts
+that portion; Delete clears an optional value. Pointer clicks select a portion
+and the wheel adjusts it. The caller supplies a deterministic seed (normally
+its injected notion of today), so the control never reads a clock or locale.
+`format_iso_date()` and `parse_iso_date()` provide the strict typed
+`YYYY-MM-DD` boundary.
+
+Declarative forms can request the same control with `FieldKind::Date`,
+`initial_date`, `date_seed`, and `date_optional`. Accepted `DialogResult`s
+carry the answer in the parallel `dates` vector and canonical text in
+`values`. Set `DialogDescriptor::help_context_key` to make every field and
+button inherit the form's contextual F1 topic.
 
 ## TimePicker
 

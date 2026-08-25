@@ -46,7 +46,8 @@ CK_TEST(forms_example_renders_form_controls_and_chrome) {
     CK_CHECK(f.forms.options()->check_state(1) == ckv::widgets::CheckState::Mixed);
     CK_CHECK(f.forms.mode()->selected() == 0);
     CK_CHECK(f.forms.country()->text() == "DE");
-    CK_CHECK(f.forms.date_picker()->value() == (ckv::widgets::DateValue{2026, 8, 9}));
+    CK_CHECK((f.forms.date_picker()->value() ==
+              std::optional<ckv::widgets::DateValue>{ckv::widgets::DateValue{2026, 8, 9}}));
     CK_CHECK(f.forms.time_picker()->value() == (ckv::widgets::TimeValue{14, 30, 0}));
     CK_CHECK(f.forms.spin_box()->value() == 3);
     CK_CHECK(f.forms.slider()->value() == 40);

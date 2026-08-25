@@ -7,6 +7,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cvision/ui/application.hpp"
@@ -43,6 +44,12 @@ inline constexpr int kLastCalendarYear = 9999;
 constexpr bool is_drawable_year(int year) noexcept {
     return year >= kFirstCalendarYear && year <= kLastCalendarYear;
 }
+
+// The explicit, locale-free interchange form used by DatePicker and typed
+// dialog results. Parsing is strict: exactly YYYY-MM-DD, a drawable Gregorian
+// year, and a real day in that month.
+std::string format_iso_date(DateValue date);
+std::optional<DateValue> parse_iso_date(std::string_view text) noexcept;
 
 struct TimeValue {
     int hour = 0;
@@ -301,22 +308,40 @@ CalendarDropdown* show_calendar_dropdown(const ui::View& anchor, ui::Application
 class DatePicker : public ui::View {
 public:
     DatePicker();
-    CalendarView& calendar() noexcept { return calendar_; }
-    const CalendarView& calendar() const noexcept { return calendar_; }
-    void set_value(DateValue value);
-    DateValue value() const noexcept { return value_; }
-    std::function<void(DateValue)> on_change;
+    // A date picker is often used for an optional fact (a due date, an end
+    // date, a filter bound). Empty is therefore a first-class value rather
+    // than a sentinel date. `seed` is the deterministic value materialized
+    // by the first Up/Down edit while empty; callers normally supply their
+    // injected notion of today.
+    void set_value(std::optional<DateValue> value);
+    std::optional<DateValue> value() const noexcept { return value_; }
+    void set_seed(DateValue seed);
+    DateValue seed() const noexcept { return seed_; }
+    void set_empty_allowed(bool allowed);
+    bool empty_allowed() const noexcept { return empty_allowed_; }
+    void set_valid(bool valid);
+    bool valid() const noexcept { return valid_; }
+    std::function<void(std::optional<DateValue>)> on_change;
 
     void draw(scene::Painter& painter) override;
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
+    void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 
 private:
-    CalendarView calendar_;
-    DateValue value_{2026, 1, 1};
-    bool open_ = false;
-    ui::RoleId role_ = ui::kInvalidRole;
+    void adjust_active(int delta);
+    void select_field_at(int x);
+
+    std::optional<DateValue> value_{};
+    DateValue seed_{2026, 1, 1};
+    int active_field_ = 0;  // 0 year, 1 month, 2 day
+    bool empty_allowed_ = true;
+    bool valid_ = true;
+    bool focused_ = false;
+    ui::RoleId normal_role_ = ui::kInvalidRole;
+    ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId invalid_role_ = ui::kInvalidRole;
 };
 
 class TimePicker : public ui::View {

@@ -67,12 +67,45 @@ CK_TEST(date_and_time_pickers_change_only_from_caller_supplied_values) {
     date.set_value(DateValue{2026, 12, 24});
     time.set_value(TimeValue{23, 58, 59});
 
-    CK_CHECK(date.value() == (DateValue{2026, 12, 24}));
+    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2026, 12, 24}}));
     CK_CHECK(time.on_key(key(Key::Up)));
     CK_CHECK(time.value() == (TimeValue{0, 58, 59}));
     CK_CHECK(time.on_key(key(Key::Right)));
     CK_CHECK(time.on_key(key(Key::Up)));
     CK_CHECK(time.value() == (TimeValue{0, 59, 59}));
+}
+
+CK_TEST(date_picker_supports_strict_optional_segmented_editing_without_a_clock) {
+    Standalone s;
+    DatePicker date;
+    attach_standalone(date, s);
+    date.set_seed(DateValue{2024, 2, 29});
+    CK_CHECK(!date.value());
+
+    CK_CHECK(date.on_key(key(Key::Up)));
+    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2025, 2, 28}}));
+    CK_CHECK(date.on_key(key(Key::Right)));
+    CK_CHECK(date.on_key(key(Key::Up)));
+    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2025, 3, 28}}));
+    CK_CHECK(date.on_key(key(Key::Right)));
+    CK_CHECK(date.on_key(key(Key::Down)));
+    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2025, 3, 27}}));
+    CK_CHECK(date.on_key(key(Key::Delete)));
+    CK_CHECK(!date.value());
+
+    date.set_empty_allowed(false);
+    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2025, 3, 27}}));
+    CK_CHECK(date.on_key(key(Key::Delete)));
+    CK_CHECK(date.value().has_value());
+}
+
+CK_TEST(date_values_have_a_strict_locale_free_iso_boundary) {
+    CK_CHECK(format_iso_date(DateValue{2024, 2, 29}) == "2024-02-29");
+    CK_CHECK((parse_iso_date("2024-02-29") == std::optional<DateValue>{DateValue{2024, 2, 29}}));
+    CK_CHECK(!parse_iso_date("2025-02-29"));
+    CK_CHECK(!parse_iso_date("2026-8-09"));
+    CK_CHECK(!parse_iso_date("1582-12-31"));
+    CK_CHECK(!parse_iso_date("2026-08-09 trailing"));
 }
 
 CK_TEST(spinbox_and_slider_clamp_and_respond_to_keyboard_and_mouse) {
