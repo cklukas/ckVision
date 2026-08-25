@@ -90,6 +90,7 @@ private:
     void show_help_topic(std::string key);
     void show_about();
     void present_welcome();
+    void request_quit();
 
     void present_task_dialog(bool editing);
     void accept_task_dialog(bool editing, std::optional<TaskId> task_id,

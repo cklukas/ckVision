@@ -102,6 +102,7 @@ TodoApp::TodoApp(ui::Application& app,
     app_.root().add(std::move(desktop));
 
     declare_commands();
+    app_.commands().set_handler(app_.commands().standard().quit, [this] { request_quit(); });
     build_chrome();
     build_board_window();
     install_help();
@@ -168,6 +169,8 @@ TodoApp::~TodoApp() {
     app_.commands().withdraw(resolve_conflict_command_);
     app_.commands().withdraw(board_help_command_);
     app_.commands().withdraw(board_quit_command_);
+    ui::Application* const app = &app_;
+    app_.commands().set_handler(app_.commands().standard().quit, [app] { app->request_quit(); });
 }
 
 void TodoApp::declare_commands() {
@@ -501,6 +504,10 @@ void TodoApp::build_board_window() {
         if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
     };
     window->set_content(std::move(board));
+    window->close_request = [this] {
+        request_quit();
+        return false;
+    };
     board_window_ = desktop_->add_window(std::move(window));
 }
 
@@ -565,12 +572,25 @@ void TodoApp::present_welcome() {
     welcome_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     welcome_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted) {
-            app_.request_quit();
+            request_quit();
             return;
         }
         initialize_workspace(!result.selected.empty() && result.selected[0] == 1 ? InitialWorkspace::Empty
                                                                                  : InitialWorkspace::Guided);
     });
+}
+
+void TodoApp::request_quit() {
+    std::vector<TaskId> note_tasks;
+    note_tasks.reserve(notes_.size());
+    for (const auto& note : notes_) note_tasks.push_back(note->task_id);
+    for (const TaskId task_id : note_tasks) {
+        if (!flush_note(task_id)) {
+            set_status("Quit paused until the unsaved note is resolved.");
+            return;
+        }
+    }
+    app_.request_quit();
 }
 
 void TodoApp::initialize_workspace(InitialWorkspace initial) {
@@ -587,8 +607,12 @@ void TodoApp::refresh_board() {
     const TodoWorkspace* workspace = controller_.workspace();
     if (workspace == nullptr || board_view_ == nullptr) return;
     BoardId board_id = workspace->snapshot().last_board_id;
+    std::optional<std::string> missing_board;
     if (options_.initial_board_name) {
-        if (const auto requested = board_named(*options_.initial_board_name)) board_id = *requested;
+        if (const auto requested = board_named(*options_.initial_board_name))
+            board_id = *requested;
+        else
+            missing_board = *options_.initial_board_name;
         options_.initial_board_name.reset();
     }
     if (!board_view_->set_board(*workspace, board_id)) return;
@@ -598,6 +622,7 @@ void TodoApp::refresh_board() {
     if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
     refresh_status_items();
     sync_note_sessions_after_reload();
+    if (missing_board) set_status("Board ‘" + *missing_board + "’ was not found; opened the last Board.");
     if (app_.focused() == nullptr && board_view_->active_lane())
         app_.set_focus(board_view_->lane_view(*board_view_->active_lane()));
 }
@@ -638,6 +663,17 @@ void TodoApp::present_task_dialog(bool editing) {
         }});
     descriptor.fields.push_back(combo_field("&Priority:", strings(kPriorityNames), static_cast<int>(initial.priority) - 1));
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(initial.color)));
+    if (task != nullptr) {
+        widgets::FieldDescriptor created;
+        created.kind = widgets::FieldKind::Note;
+        created.label = "Created " + task->created_at.value + " by " + task->created_by;
+        descriptor.fields.push_back(std::move(created));
+        widgets::FieldDescriptor modified;
+        modified.kind = widgets::FieldKind::Note;
+        modified.label = "Modified " + task->modified_at.value + " by " + task->modified_by;
+        descriptor.fields.push_back(std::move(modified));
+        descriptor.minimum_window_size.height += 2;
+    }
     descriptor.buttons.push_back({editing ? "&Apply" : "&Add", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     const std::optional<TaskId> task_id = task ? std::optional<TaskId>(task->id) : std::nullopt;

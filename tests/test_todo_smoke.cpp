@@ -167,6 +167,26 @@ CK_TEST(todo_note_window_is_modeless_and_autosaves_after_150ms) {
     CK_CHECK(fixture.todo.note_window_count() == 0);
 }
 
+CK_TEST(todo_quit_flushes_an_open_note_before_requesting_exit) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    CK_CHECK(fixture.app.dispatch(TextEvent{"saved by quit", false, false}));
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().quit));
+    CK_CHECK(fixture.app.quit_requested());
+    const auto stored = fixture.repository.load();
+    CK_CHECK(stored && stored.value->workspace.find_task(TaskId{1})->note == "saved by quit");
+}
+
+CK_TEST(todo_board_close_uses_the_same_safe_quit_path_and_keeps_the_view_alive) {
+    SmokeFixture fixture;
+    widgets::Window* const board = fixture.todo.board_window();
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().close));
+    CK_CHECK(fixture.app.quit_requested());
+    CK_CHECK(fixture.todo.board_window() == board);
+    CK_CHECK(fixture.todo.board_view()->lane_count() == 3);
+}
+
 CK_TEST(todo_note_window_uses_the_revisioned_editor_with_undo_redo_and_wrap) {
     SmokeFixture fixture;
     const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
@@ -239,6 +259,23 @@ CK_TEST(todo_overlapping_note_edit_can_choose_the_external_text) {
     fixture.app.step(fixture.monotonic.now_nanos());
     CK_CHECK(editor->document()->text() == "external note");
     CK_CHECK(!fixture.app.is_modal());
+}
+
+CK_TEST(todo_quit_pauses_for_an_overlapping_note_conflict) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    CK_CHECK(fixture.app.dispatch(TextEvent{"local note", false, false}));
+    commit_external_note(fixture.repository, TaskId{1}, "external note");
+
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().quit));
+    CK_CHECK(!fixture.app.quit_requested());
+    CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(fixture.app.dispatch(key(Key::Down)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().quit));
+    CK_CHECK(fixture.app.quit_requested());
 }
 
 CK_TEST(todo_archive_confirmation_removes_only_after_yes) {
@@ -400,6 +437,18 @@ CK_TEST(todo_first_workspace_option_creates_without_a_modal_prompt) {
     CK_CHECK(todo.controller().is_open());
     CK_CHECK(todo.controller().workspace()->snapshot().tasks.empty());
     CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(todo_missing_initial_board_is_reported_and_the_last_board_opens) {
+    term::HeadlessTerminal terminal(Size{80, 24});
+    ManualClock monotonic;
+    ui::Application app(terminal, monotonic);
+    MemoryTodoRepository repository(smoke_workspace());
+    FixedCalendarClock calendar(smoke_reading());
+    TodoApp todo(app, repository, calendar, "missing-board",
+                 TodoAppOptions{std::nullopt, std::string{"Does not exist"}});
+    CK_CHECK(todo.board_view()->board_id() == BoardId{1});
+    CK_CHECK(todo.status_line()->current_hint().find("was not found") != std::string::npos);
 }
 
 CK_TEST(todo_poll_adopts_an_external_committed_revision) {
