@@ -367,7 +367,7 @@ if(TARGET capture_hello_screenshots)
     set_tests_properties(hello_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
-foreach(example_name IN ITEMS layouts forms workbench graphics spin)
+foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
     if(TARGET capture_${example_name}_screenshots)
         add_test(NAME ${example_name}_visual_capture
             COMMAND capture_${example_name}_screenshots

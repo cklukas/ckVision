@@ -45,3 +45,9 @@ spin-initial
 spin-menu
 spin-desktop
 spin-no-graphics
+sysinfo-summary
+sysinfo-benchmarks
+sysinfo-latency-sixel
+sysinfo-latency-no-graphics
+sysinfo-help
+sysinfo-report-save

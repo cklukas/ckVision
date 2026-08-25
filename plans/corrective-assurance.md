@@ -82,7 +82,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 33 | WP-52 — Bar chart view, benchmark kernels, and the threaded run | 1–2 pw | **Implementation complete — Mac and Linux gates passed** | WP-51 | Example coverage: comparative visualization and cancellable background work; [SysInfo plan](sysinfo-example.md) |
 | 34 | WP-55 — Comparison bars from published figures | 0.5–1 pw | **Implementation complete — Mac and Linux gates passed** | WP-52 | Example coverage: a score against something, without a fabricated bar; [SysInfo plan](sysinfo-example.md) |
 | 35 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | **Implementation complete — Mac and Linux gates passed** | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
-| 36 | WP-54 — SysInfo report export, help, and documentation | 1 pw | **In progress — export and help landed, documentation open** | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
+| 36 | WP-54 — SysInfo report export, help, and documentation | 1 pw | **Implementation complete — gate pending** | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
 | 37 | WP-56 — Storage throughput and its interface ceilings | 0.5–1 pw | **Implementation complete — Mac and Linux gates passed** | WP-54 | Example coverage: the disk question, measured and compared; [SysInfo plan](sysinfo-example.md) |
 | 38 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 39 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
@@ -2424,6 +2424,25 @@ teachable to a client reading it as reference code.
   that no topic is missing.
 - The guide is source-backed by the shared snippet mechanism and its
   screenshots are generated.
+
+**Implementation complete — gate pending (2026-08-25).** The text and Markdown
+documents are composed from the same `system_rows`, `memory_rows`,
+`volume_rows`, terminal report, and `BenchmarkResult` values used by the panes,
+then written through the injected `FileSystem`. `test_sysinfo_report.cpp` is a
+registered portable suite covering the complete document, both formats,
+`MemoryFileSystem` export, failed writes, and every pane/benchmark help topic.
+`docs/sysinfo-example.md` contains source-synchronized regions from the shipped
+example; `capture_sysinfo_screenshots` drives `SysInfoApp` with
+`FixedSystemProbe`, `FixedBenchmarkRunner`, and `MemoryFileSystem` to generate
+summary, benchmark, help, report-dialog, Sixel-latency, and fallback-latency
+figures. The example tour, documentation index, capture manifest, generator,
+and `plans/example-coverage.md` consume those artifacts. On the current Mac
+host, all eight SysInfo/POSIX suites (85 cases), `sysinfo_visual_capture`,
+example hygiene, snippet synchronization, local-link checking, and both
+mandatory provenance gates pass. A focused Homebrew Clang 22.1.8 ASan/UBSan
+run passes the same eight suites plus the visual capture (9/9). This package
+adds no parser or hot-path algorithm requiring a new fuzz target or benchmark.
+Final cross-platform/global promotion remains WP-37/WP-38 work.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

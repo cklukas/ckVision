@@ -120,7 +120,7 @@ endif()
 # public Application + HeadlessTerminal path as their interactive binaries.
 # This keeps every client-facing guide visually grounded in the actual app
 # object graph rather than in illustrative mockups.
-foreach(example_name IN ITEMS layouts forms workbench graphics spin)
+foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
     if(TARGET ${example_name}_app)
         if(NOT TARGET docgen_frame_svg)
             add_library(docgen_frame_svg STATIC frame_svg.cpp)

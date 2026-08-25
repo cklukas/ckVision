@@ -48,7 +48,7 @@ status authority.
 | M8 | **Reopened** — corrected WP-24…WP-26 implementations still require example integration and the global matrix | WP-35, WP-38 |
 | M9 | **Reopened** — WP-10 is unfinished and theme, modality, command-context, and remaining example exits are unmet | WP-27, WP-35, WP-38 |
 | M10 | **Reopened** — WP-18…WP-22 landed code but the specified visible/script/golden/reference acceptance is incomplete | WP-36, WP-38 |
-| M11 | **Open** — editor/language-profile and contained-terminal delivery are queued; release remains blocked until they and the M7/global gates hold | WP-39…WP-50, WP-37, WP-38 |
+| M11 | **Open** — editor/language-profile, contained-terminal, and SysInfo proof-point implementations have current-host evidence; release remains blocked until the M7/global gates hold | WP-39…WP-56, WP-37, WP-38 |
 
 ## M0 — Bootstrap (≈1 pw)
 
@@ -365,8 +365,9 @@ reference-documented.
 
 ## M11 — editor, embedded terminal, graphics polish, themes, docs, release (≈48–74 pw)
 
-**Entry status: Mac-first finishing active.** WP-39…WP-49 have implementation
-evidence on the current Mac host. The active finishing sequence is defined in
+**Entry status: Mac-first finishing active.** WP-39…WP-49 and the SysInfo
+WP-51…WP-56 proof point have implementation evidence on the current Mac host.
+The active finishing sequence is defined in
 [plans/mac-first-delivery-target.md](plans/mac-first-delivery-target.md): close
 the observable release gates, finish interaction and visual polish, harden
 performance and resilience, stabilize packaging, and perform the final Mac
@@ -384,8 +385,10 @@ and decoded Sixel content re-composited with no escape beyond the window. The
 binding design and delivery target are
 [plans/embedded-terminal-architecture.md](plans/embedded-terminal-architecture.md)
 and [plans/embedded-terminal-delivery-target.md](plans/embedded-terminal-delivery-target.md).
-Also:
-graphics polish (kitty-graphics secondary encoder, Sixel palette optimization);
+The [SysInfo example](plans/sysinfo-example.md) demonstrates an injected
+host-information service, live refresh, comparative charts, cancellable
+background benchmarks, contextual help, and injected-filesystem report export.
+Further M11 scope: graphics polish (kitty-graphics secondary encoder, Sixel palette optimization);
 scheme polish; the theme-editor standard dialog; release documentation and
 examples; fuzz/benchmark hardening.
 
@@ -393,8 +396,8 @@ Entry gate — WP-34A…WP-34C have closed or formally re-scoped every catalog
 row, WP-36A has a complete executable example coverage matrix, WP-36B has
 closed or explicitly deferred the common modern components, WP-36C has produced
 source-backed client tutorials, screenshots, widget/API coverage docs, and
-doc-generation gates, WP-39…WP-49 have met their current-host delivery
-targets, and WP-38-MAC has a traceability report with no unexplained Mac
+doc-generation gates, WP-39…WP-49 and WP-51…WP-56 have met their current-host
+delivery targets, and WP-38-MAC has a traceability report with no unexplained Mac
 acceptance gap. Release work does not inherit known corrective debt.
 
 **Exit — 0.1 Mac release criteria:** every VISION.md non-negotiable

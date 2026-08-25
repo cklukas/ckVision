@@ -91,7 +91,7 @@ is a compact historical index for WP-1…WP-22. The corrective audit found that
 several mechanisms landed without their specified end-to-end acceptance and
 exposed additional lifetime, modality, provenance, Unicode, performance,
 portability, fuzzing, Sixel visual-capture, catalog, and documentation gaps.
-WP-23…WP-50 now own those repairs explicitly.
+WP-23…WP-56 now own those repairs and added release proof points explicitly.
 
 ## Internal document map
 
@@ -109,7 +109,7 @@ Plans in this directory (not published):
 
 | Document | Content |
 |---|---|
-| [corrective-assurance.md](corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-50 corrective acceptance |
+| [corrective-assurance.md](corrective-assurance.md) | Authoritative current queue: reopened WP mapping and WP-23…WP-56 corrective acceptance |
 | [widgets.md](widgets.md) | Widget catalog plus the current corrective feature ledger |
 | [api-ergonomics-review-2.md](api-ergonomics-review-2.md) | Historical 2026-08-07 findings and landing record for WP-1…WP-22 |
 | [documentation-revamp.md](documentation-revamp.md) | WP-36C plan for source-backed tutorials, widget gallery, screenshots, and documentation gates |
@@ -120,6 +120,7 @@ Plans in this directory (not published):
 | [data-flow-architecture.md](data-flow-architecture.md) | Data view and flow architecture |
 | [clean-room-derivation.md](clean-room-derivation.md) | D-012 clean-room derivation record for rewritten material |
 | [example-coverage.md](example-coverage.md) | Example-to-widget coverage matrix |
+| [sysinfo-example.md](sysinfo-example.md) | WP-51…WP-56 system-information, benchmark, comparison, export, help, and documentation target |
 | [mac-first-delivery-target.md](mac-first-delivery-target.md) | Mac-first delivery scope |
 | [mac-first-traceability.md](mac-first-traceability.md) | Mac-first traceability matrix |
 | [mac-performance-baseline.md](mac-performance-baseline.md) | Pinned-host performance baseline |
