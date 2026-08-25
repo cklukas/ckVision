@@ -18,7 +18,7 @@ endif()
 list(JOIN CKVISION_FUZZ_SANITIZERS "," CKVISION_FUZZ_SANITIZER_FLAGS)
 
 function(ckvision_add_fuzzer name source corpus)
-    add_executable(${name} ${source})
+    add_executable(${name} ${source} ${ARGN})
     target_link_libraries(${name} PRIVATE ckvision::cvision)
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     ckvision_strict(${name})
@@ -45,3 +45,7 @@ ckvision_add_fuzzer(fuzz_virtual_display fuzz_virtual_display.cpp virtual_displa
 ckvision_add_fuzzer(fuzz_terminal_emulator fuzz_terminal_emulator.cpp terminal_emulator)
 ckvision_add_fuzzer(fuzz_editor_document fuzz_editor_document.cpp editor_document)
 ckvision_add_fuzzer(fuzz_syntax_profile fuzz_syntax_profile.cpp syntax_profile)
+ckvision_add_fuzzer(fuzz_todo_codec fuzz_todo_codec.cpp todo_codec
+    ../examples/todo/todo_model.cpp
+    ../examples/todo/todo_codec.cpp)
+target_include_directories(fuzz_todo_codec PRIVATE ${PROJECT_SOURCE_DIR}/examples/todo)

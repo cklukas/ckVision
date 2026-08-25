@@ -11,7 +11,9 @@ parsers whose ordinary unit tests cannot cover their input space:
 - `fuzz_virtual_display`: the bounded incremental VT/Sixel output decoder;
 - `fuzz_terminal_emulator`: the private child VT/DCS/Sixel emulator;
 - `fuzz_editor_document`: revisioned document mutations; and
-- `fuzz_syntax_profile`: syntax-profile parsing and compilation.
+- `fuzz_syntax_profile`: syntax-profile parsing and compilation; and
+- `fuzz_todo_codec`: bounded TODO workspace JSON decoding and canonical
+  round trips over raw input bytes.
 
 The checked-in files under `fuzz/corpus/` are permanent regression seeds. They
 use `\e`, `\a`, and `\xNN` spelling for ESC, BEL, and arbitrary bytes; the
@@ -33,7 +35,7 @@ installed LLVM toolchain rather than Xcode's AppleClang):
 ```sh
 cmake -B build-fuzz -DCMAKE_CXX_COMPILER=clang++ \
   -DCKVISION_BUILD_FUZZERS=ON -DCKVISION_SANITIZE=address,undefined
-cmake --build build-fuzz --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile
+cmake --build build-fuzz --target fuzz_input_decoder fuzz_text fuzz_golden fuzz_osc fuzz_virtual_display fuzz_terminal_emulator fuzz_editor_document fuzz_syntax_profile fuzz_todo_codec
 ctest --test-dir build-fuzz --output-on-failure -L fuzz-corpus
 ```
 
