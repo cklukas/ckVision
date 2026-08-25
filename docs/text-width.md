@@ -66,6 +66,11 @@ of segmentation and width. This provides deterministic forward progress and
 matches `utf8::decode`; callers that are crossing into a rendered Cell use
 `sanitize_display_text` to materialize replacement characters.
 
+Callers that must reject malformed data before display processing can use
+`utf8::is_valid`. It accepts only well-formed encodings of Unicode scalar
+values and distinguishes malformed input from a legitimate encoded U+FFFD
+replacement character.
+
 ## Column width
 
 `codepoint_width` returns zero for grapheme-control code points (`Control`,

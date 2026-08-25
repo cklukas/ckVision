@@ -10,6 +10,12 @@ namespace ckv::utf8 {
 
 inline constexpr char32_t replacement_char = 0xFFFD;
 
+// Returns true when every byte in `text` is part of a well-formed UTF-8
+// encoding of a Unicode scalar value. The empty string is valid. Unlike
+// `decode`, this function distinguishes malformed input from an encoded
+// U+FFFD replacement character.
+bool is_valid(std::string_view text) noexcept;
+
 // Decodes the codepoint starting at `text[pos]`. Returns the codepoint
 // and advances `pos` past it. On malformed or truncated input, returns
 // `replacement_char` and advances `pos` by exactly one byte (so callers

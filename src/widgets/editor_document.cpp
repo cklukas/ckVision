@@ -28,55 +28,8 @@ struct NormalizedText {
     bool utf8_bom = false;
 };
 
-bool decode_valid(std::string_view value, std::size_t& position, char32_t& codepoint) noexcept {
-    const auto byte = [&value](std::size_t at) { return static_cast<unsigned char>(value[at]); };
-    const unsigned char first = byte(position);
-    if (first < 0x80U) {
-        codepoint = first;
-        ++position;
-        return true;
-    }
-    int count = 0;
-    char32_t result = 0;
-    char32_t minimum = 0;
-    if (first >= 0xC2U && first <= 0xDFU) {
-        count = 2;
-        result = static_cast<char32_t>(first & 0x1FU);
-        minimum = 0x80;
-    } else if (first >= 0xE0U && first <= 0xEFU) {
-        count = 3;
-        result = static_cast<char32_t>(first & 0x0FU);
-        minimum = 0x800;
-    } else if (first >= 0xF0U && first <= 0xF4U) {
-        count = 4;
-        result = static_cast<char32_t>(first & 0x07U);
-        minimum = 0x10000;
-    } else {
-        ++position;
-        return false;
-    }
-    if (position + static_cast<std::size_t>(count) > value.size()) {
-        ++position;
-        return false;
-    }
-    for (int index = 1; index < count; ++index) {
-        const unsigned char next = byte(position + static_cast<std::size_t>(index));
-        if ((next & 0xC0U) != 0x80U) {
-            ++position;
-            return false;
-        }
-        result = static_cast<char32_t>((result << 6U) | (next & 0x3FU));
-    }
-    if (result < minimum || result > 0x10FFFF || (result >= 0xD800 && result <= 0xDFFF)) {
-        ++position;
-        return false;
-    }
-    position += static_cast<std::size_t>(count);
-    codepoint = result;
-    return true;
-}
-
 std::optional<NormalizedText> normalize(std::string_view value, InvalidUtf8Policy policy) {
+    if (policy == InvalidUtf8Policy::Reject && !utf8::is_valid(value)) return std::nullopt;
     NormalizedText result;
     result.text.reserve(value.size());
     std::optional<DocumentNewline> first_newline;
@@ -88,9 +41,9 @@ std::optional<NormalizedText> normalize(std::string_view value, InvalidUtf8Polic
     }
     for (; position < value.size();) {
         const std::size_t start = position;
-        char32_t codepoint = 0;
-        if (!decode_valid(value, position, codepoint)) {
-            if (policy == InvalidUtf8Policy::Reject) return std::nullopt;
+        const char32_t codepoint = utf8::decode(value, position);
+        const std::string_view encoded = value.substr(start, position - start);
+        if (codepoint == utf8::replacement_char && !utf8::is_valid(encoded)) {
             utf8::encode(utf8::replacement_char, result.text);
             continue;
         }
@@ -104,7 +57,7 @@ std::optional<NormalizedText> normalize(std::string_view value, InvalidUtf8Polic
             result.text.push_back('\n');
         } else {
             if (codepoint == U'\n' && !first_newline) first_newline = DocumentNewline::Lf;
-            result.text.append(value.substr(start, position - start));
+            result.text.append(encoded);
         }
     }
     result.newline = first_newline.value_or(DocumentNewline::Lf);
