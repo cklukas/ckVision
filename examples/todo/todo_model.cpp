@@ -272,6 +272,12 @@ Lane* mutable_lane(WorkspaceSnapshot& snapshot, LaneId id) noexcept {
     return nullptr;
 }
 
+Board* mutable_board(WorkspaceSnapshot& snapshot, BoardId id) noexcept {
+    const auto found = std::find_if(snapshot.boards.begin(), snapshot.boards.end(),
+                                    [id](const Board& board) { return board.id == id; });
+    return found == snapshot.boards.end() ? nullptr : &*found;
+}
+
 Task* mutable_task(WorkspaceSnapshot& snapshot, TaskId id) noexcept {
     const auto found =
         std::find_if(snapshot.tasks.begin(), snapshot.tasks.end(), [id](const Task& task) { return task.id == id; });
@@ -305,6 +311,42 @@ bool content_matches(const Task& task, const TaskDraft& draft) noexcept {
 
 ModelResult<WorkspaceSnapshot> checked_candidate(WorkspaceSnapshot candidate) {
     return validate_snapshot(std::move(candidate));
+}
+
+std::optional<ModelError> validate_stamp(const AuditStamp& stamp) {
+    if (!valid_timestamp(stamp.timestamp.value)) {
+        return ModelError{ModelErrorCode::InvalidTimestamp, "archive timestamp is invalid"};
+    }
+    return validate_text(stamp.identity, TodoLimits::max_identity_bytes, true, false, "archive identity");
+}
+
+const Board* board_containing(const WorkspaceSnapshot& snapshot, LaneId lane_id) noexcept {
+    for (const Board& board : snapshot.boards) {
+        if (std::any_of(board.lanes.begin(), board.lanes.end(),
+                        [lane_id](const Lane& lane) { return lane.id == lane_id; })) {
+            return &board;
+        }
+    }
+    return nullptr;
+}
+
+ArchivedTask archived_task(const WorkspaceSnapshot& snapshot,
+                           const Board& board,
+                           const Lane& lane,
+                           TaskId task_id,
+                           const AuditStamp& stamp) {
+    const auto found = std::find_if(snapshot.tasks.begin(), snapshot.tasks.end(),
+                                    [task_id](const Task& task) { return task.id == task_id; });
+    return ArchivedTask{*found, board.id, board.name, lane.id, lane.title, stamp};
+}
+
+void erase_archived_tasks(WorkspaceSnapshot& snapshot, const std::vector<ArchivedTask>& records) {
+    std::unordered_set<std::uint64_t> archived_ids;
+    for (const ArchivedTask& record : records) archived_ids.insert(record.task.id.value);
+    snapshot.tasks.erase(std::remove_if(snapshot.tasks.begin(), snapshot.tasks.end(), [&](const Task& task) {
+                             return archived_ids.contains(task.id.value);
+                         }),
+                         snapshot.tasks.end());
 }
 
 }  // namespace
@@ -549,6 +591,298 @@ ModelResult<Mutation> TodoWorkspace::commit_task_move(const PendingTaskMove& mov
                               : candidate_target->task_ids.end();
     candidate_target->task_ids.insert(position, move.task_id);
     if (candidate == snapshot_) return ModelResult<Mutation>::success(Mutation{});
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<LaneId> TodoWorkspace::insert_lane(BoardId board_id,
+                                               std::string title,
+                                               std::optional<LaneId> before) {
+    const Board* board = find_board(board_id);
+    if (board == nullptr) return failure<LaneId>(ModelErrorCode::BoardNotFound, "board does not exist");
+    if (board->lanes.size() >= TodoLimits::max_lanes_per_board) {
+        return failure<LaneId>(ModelErrorCode::WorkspaceLimit, "board lane limit exceeded");
+    }
+    if (before && std::find_if(board->lanes.begin(), board->lanes.end(), [before](const Lane& lane) {
+                      return lane.id == *before;
+                  }) == board->lanes.end()) {
+        return failure<LaneId>(ModelErrorCode::InvalidInsertionAnchor, "lane insertion anchor is not in the board");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    const LaneId id{candidate.next_lane_id};
+    ++candidate.next_lane_id;
+    Board* candidate_board = mutable_board(candidate, board_id);
+    const auto position = before ? std::find_if(candidate_board->lanes.begin(), candidate_board->lanes.end(),
+                                                [before](const Lane& lane) { return lane.id == *before; })
+                                 : candidate_board->lanes.end();
+    candidate_board->lanes.insert(position, Lane{id, std::move(title), std::nullopt, SortMode::Manual, {}});
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<LaneId>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<LaneId>::success(id);
+}
+
+ModelResult<Mutation> TodoWorkspace::rename_lane(LaneId lane_id, std::string title) {
+    const Lane* existing = find_lane(lane_id);
+    if (existing == nullptr) return failure<Mutation>(ModelErrorCode::LaneNotFound, "lane does not exist");
+    if (existing->title == title) return ModelResult<Mutation>::success(Mutation{});
+    WorkspaceSnapshot candidate = snapshot_;
+    mutable_lane(candidate, lane_id)->title = std::move(title);
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<Mutation> TodoWorkspace::set_lane_color(LaneId lane_id, std::optional<TodoColor> color) {
+    const Lane* existing = find_lane(lane_id);
+    if (existing == nullptr) return failure<Mutation>(ModelErrorCode::LaneNotFound, "lane does not exist");
+    if (existing->color == color) return ModelResult<Mutation>::success(Mutation{});
+    WorkspaceSnapshot candidate = snapshot_;
+    mutable_lane(candidate, lane_id)->color = color;
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<Mutation> TodoWorkspace::set_lane_sort(LaneId lane_id, SortMode sort) {
+    const Lane* existing = find_lane(lane_id);
+    if (existing == nullptr) return failure<Mutation>(ModelErrorCode::LaneNotFound, "lane does not exist");
+    if (existing->sort == sort) return ModelResult<Mutation>::success(Mutation{});
+    WorkspaceSnapshot candidate = snapshot_;
+    mutable_lane(candidate, lane_id)->sort = sort;
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<Mutation> TodoWorkspace::merge_lane(LaneId source_lane_id, LaneId target_lane_id) {
+    if (source_lane_id == target_lane_id) {
+        return failure<Mutation>(ModelErrorCode::SameSourceAndTarget, "source and target lanes are identical");
+    }
+    const Lane* source = find_lane(source_lane_id);
+    const Lane* target = find_lane(target_lane_id);
+    if (source == nullptr || target == nullptr) {
+        return failure<Mutation>(ModelErrorCode::LaneNotFound, "source or target lane does not exist");
+    }
+    const std::optional<BoardId> source_board_id = board_of(source_lane_id);
+    if (source_board_id != board_of(target_lane_id)) {
+        return failure<Mutation>(ModelErrorCode::CrossBoardLaneMerge, "lanes on different boards cannot merge");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    Board* board = mutable_board(candidate, *source_board_id);
+    Lane* candidate_target = mutable_lane(candidate, target_lane_id);
+    candidate_target->task_ids.insert(candidate_target->task_ids.end(), source->task_ids.begin(), source->task_ids.end());
+    board->lanes.erase(std::find_if(board->lanes.begin(), board->lanes.end(),
+                                    [source_lane_id](const Lane& lane) { return lane.id == source_lane_id; }));
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<BoardId> TodoWorkspace::add_board(std::string name) {
+    if (snapshot_.boards.size() >= TodoLimits::max_boards) {
+        return failure<BoardId>(ModelErrorCode::WorkspaceLimit, "workspace board or lane limit exceeded");
+    }
+    WorkspaceSnapshot candidate = snapshot_;
+    const BoardId board_id{candidate.next_board_id};
+    ++candidate.next_board_id;
+    const LaneId todo_id{candidate.next_lane_id++};
+    const LaneId doing_id{candidate.next_lane_id++};
+    const LaneId done_id{candidate.next_lane_id++};
+    candidate.boards.push_back(
+        Board{board_id,
+              std::move(name),
+              {Lane{todo_id, "To Do", std::nullopt, SortMode::Manual, {}},
+               Lane{doing_id, "Doing", std::nullopt, SortMode::Manual, {}},
+               Lane{done_id, "Done", std::nullopt, SortMode::Manual, {}}}});
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<BoardId>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<BoardId>::success(board_id);
+}
+
+ModelResult<Mutation> TodoWorkspace::rename_board(BoardId board_id, std::string name) {
+    const Board* board = find_board(board_id);
+    if (board == nullptr) return failure<Mutation>(ModelErrorCode::BoardNotFound, "board does not exist");
+    if (board_id == BoardId{1} && name != "main") {
+        return failure<Mutation>(ModelErrorCode::ProtectedMainBoard, "main board cannot be renamed");
+    }
+    if (board->name == name) return ModelResult<Mutation>::success(Mutation{});
+    WorkspaceSnapshot candidate = snapshot_;
+    mutable_board(candidate, board_id)->name = std::move(name);
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<Mutation> TodoWorkspace::switch_board(BoardId board_id) {
+    if (find_board(board_id) == nullptr) {
+        return failure<Mutation>(ModelErrorCode::BoardNotFound, "board does not exist");
+    }
+    if (snapshot_.last_board_id == board_id) return ModelResult<Mutation>::success(Mutation{});
+    snapshot_.last_board_id = board_id;
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<Mutation> TodoWorkspace::merge_board(BoardId source_board_id, BoardId target_board_id) {
+    if (source_board_id == target_board_id) {
+        return failure<Mutation>(ModelErrorCode::SameSourceAndTarget, "source and target boards are identical");
+    }
+    if (source_board_id == BoardId{1}) {
+        return failure<Mutation>(ModelErrorCode::ProtectedMainBoard, "main board cannot be removed by merge");
+    }
+    const Board* source = find_board(source_board_id);
+    const Board* target = find_board(target_board_id);
+    if (source == nullptr || target == nullptr) {
+        return failure<Mutation>(ModelErrorCode::BoardNotFound, "source or target board does not exist");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    Board* candidate_target = mutable_board(candidate, target_board_id);
+    const std::size_t original_target_lane_count = candidate_target->lanes.size();
+    for (const Lane& source_lane : source->lanes) {
+        auto match = std::find_if(candidate_target->lanes.begin(),
+                                  candidate_target->lanes.begin() +
+                                      static_cast<std::ptrdiff_t>(original_target_lane_count),
+                                  [&](const Lane& target_lane) { return target_lane.title == source_lane.title; });
+        if (match == candidate_target->lanes.begin() + static_cast<std::ptrdiff_t>(original_target_lane_count)) {
+            candidate_target->lanes.push_back(source_lane);
+        } else {
+            match->task_ids.insert(match->task_ids.end(), source_lane.task_ids.begin(), source_lane.task_ids.end());
+        }
+    }
+    candidate.boards.erase(std::find_if(candidate.boards.begin(), candidate.boards.end(),
+                                        [source_board_id](const Board& board) { return board.id == source_board_id; }));
+    if (candidate.last_board_id == source_board_id) candidate.last_board_id = target_board_id;
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<ArchivePlan> TodoWorkspace::prepare_task_archive(TaskId task_id, const AuditStamp& stamp) const {
+    if (const auto error = validate_stamp(stamp)) {
+        return failure<ArchivePlan>(error->code, error->diagnostic);
+    }
+    const std::optional<LaneId> lane_id = lane_of(task_id);
+    if (!lane_id) return failure<ArchivePlan>(ModelErrorCode::TaskNotFound, "task does not exist");
+    const Lane& lane = *find_lane(*lane_id);
+    const Board& board = *board_containing(snapshot_, *lane_id);
+    ArchivePlan plan;
+    plan.scope = ArchiveScope::Task;
+    plan.generation = generation_;
+    plan.archived = stamp;
+    plan.task_id = task_id;
+    plan.records.push_back(archived_task(snapshot_, board, lane, task_id, stamp));
+    return ModelResult<ArchivePlan>::success(std::move(plan));
+}
+
+ModelResult<ArchivePlan> TodoWorkspace::prepare_lane_archive(LaneId lane_id, const AuditStamp& stamp) const {
+    if (const auto error = validate_stamp(stamp)) {
+        return failure<ArchivePlan>(error->code, error->diagnostic);
+    }
+    const Lane* lane = find_lane(lane_id);
+    if (lane == nullptr) return failure<ArchivePlan>(ModelErrorCode::LaneNotFound, "lane does not exist");
+    const Board& board = *board_containing(snapshot_, lane_id);
+    if (board.lanes.size() == 1U) {
+        return failure<ArchivePlan>(ModelErrorCode::FinalLane, "final lane cannot be removed");
+    }
+    ArchivePlan plan;
+    plan.scope = ArchiveScope::Lane;
+    plan.generation = generation_;
+    plan.archived = stamp;
+    plan.lane_id = lane_id;
+    plan.board_id = board.id;
+    for (TaskId task_id : lane->task_ids) {
+        plan.records.push_back(archived_task(snapshot_, board, *lane, task_id, stamp));
+    }
+    return ModelResult<ArchivePlan>::success(std::move(plan));
+}
+
+ModelResult<ArchivePlan> TodoWorkspace::prepare_board_archive(BoardId board_id, const AuditStamp& stamp) const {
+    if (const auto error = validate_stamp(stamp)) {
+        return failure<ArchivePlan>(error->code, error->diagnostic);
+    }
+    if (board_id == BoardId{1}) {
+        return failure<ArchivePlan>(ModelErrorCode::ProtectedMainBoard, "main board cannot be archived");
+    }
+    const Board* board = find_board(board_id);
+    if (board == nullptr) return failure<ArchivePlan>(ModelErrorCode::BoardNotFound, "board does not exist");
+    ArchivePlan plan;
+    plan.scope = ArchiveScope::Board;
+    plan.generation = generation_;
+    plan.archived = stamp;
+    plan.board_id = board_id;
+    for (const Lane& lane : board->lanes) {
+        for (TaskId task_id : lane.task_ids) {
+            plan.records.push_back(archived_task(snapshot_, *board, lane, task_id, stamp));
+        }
+    }
+    return ModelResult<ArchivePlan>::success(std::move(plan));
+}
+
+ModelResult<Mutation> TodoWorkspace::apply_archive(const ArchivePlan& plan) {
+    if (plan.generation != generation_) {
+        return failure<Mutation>(ModelErrorCode::StaleTransaction, "archive plan is stale");
+    }
+    ModelResult<ArchivePlan> expected;
+    switch (plan.scope) {
+        case ArchiveScope::Task:
+            if (!plan.task_id) {
+                return failure<Mutation>(ModelErrorCode::InvalidArchivePlan, "task archive plan has no task id");
+            }
+            expected = prepare_task_archive(*plan.task_id, plan.archived);
+            break;
+        case ArchiveScope::Lane:
+            if (!plan.lane_id) {
+                return failure<Mutation>(ModelErrorCode::InvalidArchivePlan, "lane archive plan has no lane id");
+            }
+            expected = prepare_lane_archive(*plan.lane_id, plan.archived);
+            break;
+        case ArchiveScope::Board:
+            if (!plan.board_id) {
+                return failure<Mutation>(ModelErrorCode::InvalidArchivePlan, "board archive plan has no board id");
+            }
+            expected = prepare_board_archive(*plan.board_id, plan.archived);
+            break;
+    }
+    if (!expected || *expected.value != plan) {
+        return failure<Mutation>(ModelErrorCode::InvalidArchivePlan, "archive plan no longer matches the workspace");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    erase_archived_tasks(candidate, plan.records);
+    if (plan.scope == ArchiveScope::Task) {
+        Lane* lane = mutable_lane(candidate, plan.records.front().origin_lane_id);
+        lane->task_ids.erase(std::find(lane->task_ids.begin(), lane->task_ids.end(), *plan.task_id));
+    } else if (plan.scope == ArchiveScope::Lane) {
+        Board* board = mutable_board(candidate, *plan.board_id);
+        board->lanes.erase(std::find_if(board->lanes.begin(), board->lanes.end(),
+                                        [&](const Lane& lane) { return lane.id == *plan.lane_id; }));
+    } else {
+        candidate.boards.erase(std::find_if(candidate.boards.begin(), candidate.boards.end(),
+                                            [&](const Board& board) { return board.id == *plan.board_id; }));
+        if (candidate.last_board_id == *plan.board_id) candidate.last_board_id = BoardId{1};
+    }
     auto validated = checked_candidate(std::move(candidate));
     if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
     snapshot_ = std::move(*validated.value);

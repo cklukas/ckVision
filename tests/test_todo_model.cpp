@@ -87,6 +87,38 @@ TaskDraft draft(std::string title = "New task") {
     return TaskDraft{std::move(title), "Details", "Note", Priority::Normal, std::nullopt, std::nullopt};
 }
 
+WorkspaceSnapshot board_merge_snapshot() {
+    WorkspaceSnapshot snapshot = valid_snapshot();
+    snapshot.boards.front().lanes[0].color = TodoColor::Green;
+    snapshot.boards.front().lanes[0].sort = SortMode::Due;
+    snapshot.boards.front().lanes[2].title = "To Do";
+    snapshot.boards.push_back(
+        Board{BoardId{2},
+              "project",
+              {Lane{LaneId{4}, "To Do", TodoColor::Red, SortMode::Priority, {TaskId{3}}},
+               Lane{LaneId{5}, "Later", std::nullopt, SortMode::Manual, {TaskId{4}}},
+               Lane{LaneId{6}, "Later", TodoColor::Blue, SortMode::Color, {TaskId{5}}}}});
+    snapshot.tasks = {
+        task_with(TaskId{1}, "target todo", Priority::Normal, std::nullopt, std::nullopt,
+                  "2026-08-25T10:00:00Z", "2026-08-25T10:00:00Z"),
+        task_with(TaskId{2}, "target doing", Priority::Normal, std::nullopt, std::nullopt,
+                  "2026-08-25T10:01:00Z", "2026-08-25T10:01:00Z"),
+        task_with(TaskId{3}, "source todo", Priority::Normal, std::nullopt, std::nullopt,
+                  "2026-08-25T10:02:00Z", "2026-08-25T10:02:00Z"),
+        task_with(TaskId{4}, "source later one", Priority::Normal, std::nullopt, std::nullopt,
+                  "2026-08-25T10:03:00Z", "2026-08-25T10:03:00Z"),
+        task_with(TaskId{5}, "source later two", Priority::Normal, std::nullopt, std::nullopt,
+                  "2026-08-25T10:04:00Z", "2026-08-25T10:04:00Z"),
+    };
+    snapshot.boards[0].lanes[0].task_ids = {TaskId{1}};
+    snapshot.boards[0].lanes[1].task_ids = {TaskId{2}};
+    snapshot.last_board_id = BoardId{2};
+    snapshot.next_board_id = 3;
+    snapshot.next_lane_id = 7;
+    snapshot.next_task_id = 6;
+    return snapshot;
+}
+
 }  // namespace
 
 CK_TEST(todo_empty_factory_has_main_and_three_default_lanes) {
@@ -437,4 +469,203 @@ CK_TEST(todo_task_move_rejects_sorted_reorder_invalid_anchor_and_stale_token) {
     CK_CHECK(edited);
     const auto stale = workspace.commit_task_move(*begun.value);
     CK_CHECK(!stale && stale.error.code == ModelErrorCode::StaleTransaction);
+}
+
+CK_TEST(todo_lane_insert_rename_color_and_sort_are_validated_transitions) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    const auto inserted = workspace.insert_lane(BoardId{1}, "Review", LaneId{2});
+    CK_CHECK(inserted && *inserted.value == LaneId{4});
+    CK_CHECK(workspace.snapshot().boards.front().lanes[1].id == LaneId{4});
+    CK_CHECK(workspace.snapshot().next_lane_id == 5);
+
+    auto mutation = workspace.rename_lane(LaneId{4}, "Ready");
+    CK_CHECK(mutation && mutation.value->changed);
+    mutation = workspace.set_lane_color(LaneId{4}, TodoColor::DarkCyan);
+    CK_CHECK(mutation && mutation.value->changed);
+    mutation = workspace.set_lane_sort(LaneId{4}, SortMode::Modified);
+    CK_CHECK(mutation && mutation.value->changed);
+    CK_CHECK(workspace.find_lane(LaneId{4})->title == "Ready");
+    CK_CHECK(workspace.find_lane(LaneId{4})->color == TodoColor::DarkCyan);
+    CK_CHECK(workspace.find_lane(LaneId{4})->sort == SortMode::Modified);
+
+    const std::uint64_t generation = workspace.generation();
+    mutation = workspace.rename_lane(LaneId{4}, "Ready");
+    CK_CHECK(mutation && !mutation.value->changed);
+    CK_CHECK(workspace.generation() == generation);
+    const auto invalid = workspace.insert_lane(BoardId{1}, "Bad", LaneId{99});
+    CK_CHECK(!invalid && invalid.error.code == ModelErrorCode::InvalidInsertionAnchor);
+    CK_CHECK(workspace.snapshot().next_lane_id == 5);
+}
+
+CK_TEST(todo_lane_merge_appends_stored_order_and_preserves_target_metadata) {
+    WorkspaceSnapshot snapshot = sortable_snapshot();
+    snapshot.boards.front().lanes[0].task_ids = {TaskId{1}, TaskId{2}, TaskId{3}};
+    snapshot.boards.front().lanes[1].task_ids = {TaskId{4}};
+    snapshot.boards.front().lanes[1].color = TodoColor::Yellow;
+    snapshot.boards.front().lanes[1].sort = SortMode::Priority;
+    TodoWorkspace workspace = workspace_from(std::move(snapshot));
+    const auto merged = workspace.merge_lane(LaneId{1}, LaneId{2});
+    CK_CHECK(merged && merged.value->changed);
+    CK_CHECK(workspace.find_lane(LaneId{1}) == nullptr);
+    const Lane* target = workspace.find_lane(LaneId{2});
+    CK_CHECK(target != nullptr);
+    if (target == nullptr) return;
+    CK_CHECK(target->task_ids == std::vector<TaskId>({TaskId{4}, TaskId{1}, TaskId{2}, TaskId{3}}));
+    CK_CHECK(target->color == TodoColor::Yellow);
+    CK_CHECK(target->sort == SortMode::Priority);
+}
+
+CK_TEST(todo_lane_merge_rejects_same_and_cross_board_sources) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    auto result = workspace.merge_lane(LaneId{1}, LaneId{1});
+    CK_CHECK(!result && result.error.code == ModelErrorCode::SameSourceAndTarget);
+    const auto board = workspace.add_board("project");
+    CK_CHECK(board);
+    result = workspace.merge_lane(LaneId{1}, LaneId{4});
+    CK_CHECK(!result && result.error.code == ModelErrorCode::CrossBoardLaneMerge);
+}
+
+CK_TEST(todo_board_add_rename_and_switch_preserve_protected_main) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    const auto added = workspace.add_board("project");
+    CK_CHECK(added && *added.value == BoardId{2});
+    const Board* project = workspace.find_board(BoardId{2});
+    CK_CHECK(project != nullptr);
+    if (project == nullptr) return;
+    CK_CHECK(project->lanes.size() == 3);
+    CK_CHECK(project->lanes[0].id == LaneId{4});
+    CK_CHECK(workspace.snapshot().next_lane_id == 7);
+
+    auto mutation = workspace.rename_board(BoardId{2}, "release");
+    CK_CHECK(mutation && mutation.value->changed);
+    mutation = workspace.switch_board(BoardId{2});
+    CK_CHECK(mutation && mutation.value->changed);
+    CK_CHECK(workspace.snapshot().last_board_id == BoardId{2});
+    mutation = workspace.switch_board(BoardId{2});
+    CK_CHECK(mutation && !mutation.value->changed);
+
+    mutation = workspace.rename_board(BoardId{1}, "renamed-main");
+    CK_CHECK(!mutation && mutation.error.code == ModelErrorCode::ProtectedMainBoard);
+    const auto duplicate = workspace.add_board("release");
+    CK_CHECK(!duplicate && duplicate.error.code == ModelErrorCode::DuplicateBoardName);
+    CK_CHECK(workspace.snapshot().next_board_id == 3);
+}
+
+CK_TEST(todo_board_merge_uses_original_first_title_match_and_exact_order) {
+    TodoWorkspace workspace = workspace_from(board_merge_snapshot());
+    const auto merged = workspace.merge_board(BoardId{2}, BoardId{1});
+    CK_CHECK(merged && merged.value->changed);
+    CK_CHECK(workspace.find_board(BoardId{2}) == nullptr);
+    CK_CHECK(workspace.snapshot().last_board_id == BoardId{1});
+    const Board* main = workspace.find_board(BoardId{1});
+    CK_CHECK(main != nullptr);
+    if (main == nullptr) return;
+    CK_CHECK(main->lanes.size() == 5);
+    CK_CHECK(main->lanes[0].id == LaneId{1});
+    CK_CHECK(main->lanes[0].task_ids == std::vector<TaskId>({TaskId{1}, TaskId{3}}));
+    CK_CHECK(main->lanes[0].color == TodoColor::Green);
+    CK_CHECK(main->lanes[0].sort == SortMode::Due);
+    CK_CHECK(main->lanes[2].id == LaneId{3});
+    CK_CHECK(main->lanes[2].task_ids.empty());
+    CK_CHECK(main->lanes[3].id == LaneId{5});
+    CK_CHECK(main->lanes[4].id == LaneId{6});
+    CK_CHECK(workspace.find_task(TaskId{3}) != nullptr);
+    CK_CHECK(workspace.lane_of(TaskId{3}) == LaneId{1});
+}
+
+CK_TEST(todo_board_merge_rejects_protected_main_and_identical_target) {
+    TodoWorkspace workspace = workspace_from(board_merge_snapshot());
+    auto merged = workspace.merge_board(BoardId{1}, BoardId{2});
+    CK_CHECK(!merged && merged.error.code == ModelErrorCode::ProtectedMainBoard);
+    merged = workspace.merge_board(BoardId{2}, BoardId{2});
+    CK_CHECK(!merged && merged.error.code == ModelErrorCode::SameSourceAndTarget);
+}
+
+CK_TEST(todo_task_archive_plan_is_complete_and_apply_is_explicit) {
+    TodoWorkspace workspace = workspace_from(snapshot_with_task());
+    const WorkspaceSnapshot before = workspace.snapshot();
+    const auto plan = workspace.prepare_task_archive(TaskId{1}, stamp());
+    CK_CHECK(plan);
+    if (!plan) return;
+    CK_CHECK(plan.value->scope == ArchiveScope::Task);
+    CK_CHECK(plan.value->records.size() == 1);
+    CK_CHECK(plan.value->records.front().task == one_task());
+    CK_CHECK(plan.value->records.front().origin_board_name == "main");
+    CK_CHECK(plan.value->records.front().origin_lane_title == "To Do");
+    CK_CHECK(plan.value->records.front().archived == stamp());
+    CK_CHECK(workspace.snapshot() == before);
+
+    const auto applied = workspace.apply_archive(*plan.value);
+    CK_CHECK(applied && applied.value->changed);
+    CK_CHECK(workspace.find_task(TaskId{1}) == nullptr);
+    CK_CHECK(workspace.find_lane(LaneId{1})->task_ids.empty());
+}
+
+CK_TEST(todo_archive_rejects_tampered_stale_and_invalid_plans_without_mutation) {
+    TodoWorkspace workspace = workspace_from(snapshot_with_task());
+    auto plan = workspace.prepare_task_archive(TaskId{1}, stamp());
+    CK_CHECK(plan);
+    const WorkspaceSnapshot before = workspace.snapshot();
+    plan.value->records.front().origin_lane_title = "tampered";
+    auto applied = workspace.apply_archive(*plan.value);
+    CK_CHECK(!applied && applied.error.code == ModelErrorCode::InvalidArchivePlan);
+    CK_CHECK(workspace.snapshot() == before);
+
+    plan = workspace.prepare_task_archive(TaskId{1}, stamp());
+    const auto renamed = workspace.rename_lane(LaneId{1}, "Inbox");
+    CK_CHECK(renamed);
+    applied = workspace.apply_archive(*plan.value);
+    CK_CHECK(!applied && applied.error.code == ModelErrorCode::StaleTransaction);
+    CK_CHECK(workspace.find_task(TaskId{1}) != nullptr);
+
+    const auto invalid_stamp = workspace.prepare_task_archive(TaskId{1}, {IsoTimestamp{"invalid"}, "user"});
+    CK_CHECK(!invalid_stamp && invalid_stamp.error.code == ModelErrorCode::InvalidTimestamp);
+}
+
+CK_TEST(todo_lane_archive_removes_tasks_and_rejects_the_final_lane) {
+    TodoWorkspace workspace = workspace_from(snapshot_with_task());
+    const auto plan = workspace.prepare_lane_archive(LaneId{1}, stamp());
+    CK_CHECK(plan && plan.value->records.size() == 1);
+    const auto applied = workspace.apply_archive(*plan.value);
+    CK_CHECK(applied && applied.value->changed);
+    CK_CHECK(workspace.find_lane(LaneId{1}) == nullptr);
+    CK_CHECK(workspace.find_task(TaskId{1}) == nullptr);
+
+    WorkspaceSnapshot single = valid_snapshot();
+    single.boards.front().lanes.resize(1);
+    TodoWorkspace final_lane = workspace_from(std::move(single));
+    const auto rejected = final_lane.prepare_lane_archive(LaneId{1}, stamp());
+    CK_CHECK(!rejected && rejected.error.code == ModelErrorCode::FinalLane);
+}
+
+CK_TEST(todo_board_archive_removes_all_tasks_and_selected_board_falls_back_to_main) {
+    TodoWorkspace workspace = workspace_from(board_merge_snapshot());
+    const auto plan = workspace.prepare_board_archive(BoardId{2}, stamp());
+    CK_CHECK(plan && plan.value->records.size() == 3);
+    CK_CHECK(workspace.find_board(BoardId{2}) != nullptr);
+    const auto applied = workspace.apply_archive(*plan.value);
+    CK_CHECK(applied && applied.value->changed);
+    CK_CHECK(workspace.find_board(BoardId{2}) == nullptr);
+    CK_CHECK(workspace.snapshot().last_board_id == BoardId{1});
+    CK_CHECK(workspace.find_task(TaskId{3}) == nullptr);
+    CK_CHECK(workspace.find_task(TaskId{4}) == nullptr);
+    CK_CHECK(workspace.find_task(TaskId{5}) == nullptr);
+    CK_CHECK(workspace.find_task(TaskId{1}) != nullptr);
+
+    const auto protected_main = workspace.prepare_board_archive(BoardId{1}, stamp());
+    CK_CHECK(!protected_main && protected_main.error.code == ModelErrorCode::ProtectedMainBoard);
+}
+
+CK_TEST(todo_empty_lane_and_board_archive_plans_apply_without_task_records) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    const auto lane_plan = workspace.prepare_lane_archive(LaneId{3}, stamp());
+    CK_CHECK(lane_plan && lane_plan.value->records.empty());
+    CK_CHECK(workspace.apply_archive(*lane_plan.value));
+    CK_CHECK(workspace.find_lane(LaneId{3}) == nullptr);
+
+    CK_CHECK(workspace.add_board("empty"));
+    const auto board_plan = workspace.prepare_board_archive(BoardId{2}, stamp());
+    CK_CHECK(board_plan && board_plan.value->records.empty());
+    CK_CHECK(workspace.apply_archive(*board_plan.value));
+    CK_CHECK(workspace.find_board(BoardId{2}) == nullptr);
 }

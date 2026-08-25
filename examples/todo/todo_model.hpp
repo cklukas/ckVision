@@ -161,6 +161,7 @@ enum class ModelErrorCode {
     InvalidInsertionAnchor,
     ManualOrderRequired,
     StaleTransaction,
+    InvalidArchivePlan,
 };
 
 struct ModelError {
@@ -182,6 +183,29 @@ struct PendingTaskMove {
     std::optional<TaskId> before_task_id;
     std::uint64_t generation = 0;
     friend bool operator==(const PendingTaskMove&, const PendingTaskMove&) = default;
+};
+
+enum class ArchiveScope : std::uint8_t { Task, Lane, Board };
+
+struct ArchivedTask {
+    Task task;
+    BoardId origin_board_id;
+    std::string origin_board_name;
+    LaneId origin_lane_id;
+    std::string origin_lane_title;
+    AuditStamp archived;
+    friend bool operator==(const ArchivedTask&, const ArchivedTask&) = default;
+};
+
+struct ArchivePlan {
+    ArchiveScope scope = ArchiveScope::Task;
+    std::uint64_t generation = 0;
+    AuditStamp archived;
+    std::optional<TaskId> task_id;
+    std::optional<LaneId> lane_id;
+    std::optional<BoardId> board_id;
+    std::vector<ArchivedTask> records;
+    friend bool operator==(const ArchivePlan&, const ArchivePlan&) = default;
 };
 
 template <class T>
@@ -215,6 +239,24 @@ public:
                                                  LaneId target_lane_id,
                                                  std::optional<TaskId> before) const;
     ModelResult<Mutation> commit_task_move(const PendingTaskMove& move);
+
+    ModelResult<LaneId> insert_lane(BoardId board_id,
+                                    std::string title,
+                                    std::optional<LaneId> before = std::nullopt);
+    ModelResult<Mutation> rename_lane(LaneId lane_id, std::string title);
+    ModelResult<Mutation> set_lane_color(LaneId lane_id, std::optional<TodoColor> color);
+    ModelResult<Mutation> set_lane_sort(LaneId lane_id, SortMode sort);
+    ModelResult<Mutation> merge_lane(LaneId source_lane_id, LaneId target_lane_id);
+
+    ModelResult<BoardId> add_board(std::string name);
+    ModelResult<Mutation> rename_board(BoardId board_id, std::string name);
+    ModelResult<Mutation> switch_board(BoardId board_id);
+    ModelResult<Mutation> merge_board(BoardId source_board_id, BoardId target_board_id);
+
+    ModelResult<ArchivePlan> prepare_task_archive(TaskId task_id, const AuditStamp& stamp) const;
+    ModelResult<ArchivePlan> prepare_lane_archive(LaneId lane_id, const AuditStamp& stamp) const;
+    ModelResult<ArchivePlan> prepare_board_archive(BoardId board_id, const AuditStamp& stamp) const;
+    ModelResult<Mutation> apply_archive(const ArchivePlan& plan);
 
 private:
     explicit TodoWorkspace(WorkspaceSnapshot snapshot) : snapshot_(std::move(snapshot)) {}
