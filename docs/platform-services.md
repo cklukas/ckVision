@@ -28,8 +28,10 @@ It never lets TreeView or ListView query the disk themselves.
 `fingerprint()`, and `write_file_atomic()`. A save supplies the fingerprint it
 loaded; a changed-on-disk file returns a conflict rather than being silently
 overwritten. `MemoryFileSystem` implements these operations for deterministic
-editor lifecycle tests. See [Editor](editor.md) for the document/controller
-composition.
+editor lifecycle tests. Applications that own a directory tree can call
+`create_directories()`; it creates missing parents idempotently and remains
+behind the same injected platform boundary. See [Editor](editor.md) for the
+document/controller composition.
 
 <!-- ckvision-snippet source="examples/filebrowser/filebrowser_app.cpp" lines="101-140" -->
 ```cpp

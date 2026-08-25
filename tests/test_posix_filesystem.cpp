@@ -129,6 +129,24 @@ CK_TEST(is_directory_on_a_nonexistent_path_is_false_not_an_error) {
     CK_CHECK(!fs.is_directory("/this/path/should/never/exist/on/any/machine"));
 }
 
+CK_TEST(create_directories_builds_missing_parents_and_is_idempotent) {
+    ScratchDir scratch;
+    PosixFileSystem fs;
+    const std::string nested = scratch.root + "/one/two/three";
+    CK_CHECK(fs.create_directories(nested));
+    CK_CHECK(fs.is_directory(scratch.root + "/one"));
+    CK_CHECK(fs.is_directory(scratch.root + "/one/two"));
+    CK_CHECK(fs.is_directory(nested));
+    CK_CHECK(fs.create_directories(nested));
+}
+
+CK_TEST(create_directories_rejects_an_existing_file_segment) {
+    ScratchDir scratch;
+    scratch.make_file("plain");
+    PosixFileSystem fs;
+    CK_CHECK(!fs.create_directories(scratch.root + "/plain/child"));
+}
+
 CK_TEST(join_and_parent_still_use_the_base_classs_default_slash_joining) {
     // PosixFileSystem doesn't override join()/parent() — verifying the
     // inherited default still behaves sanely for real filesystem paths

@@ -87,6 +87,10 @@ public:
     virtual bool exists(std::string_view path) const noexcept = 0;
     virtual bool is_directory(std::string_view path) const noexcept = 0;
 
+    // Creates `path` and every missing parent directory. Existing directories
+    // are success; a conflicting file or platform error is failure.
+    virtual bool create_directories(std::string_view path);
+
     virtual std::string normalize_path(std::string_view path) const;
     virtual bool is_absolute_path(std::string_view path) const noexcept;
 
@@ -119,6 +123,7 @@ public:
     std::vector<FileEntry> list_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;
+    bool create_directories(std::string_view path) override;
     std::optional<FileReadResult> read_file(std::string_view path) const override;
     FileWriteResult write_file_atomic(std::string_view path, std::string_view contents,
                                       FileWriteExpectation expectation = {}) override;

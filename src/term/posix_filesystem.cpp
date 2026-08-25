@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstring>
 #include <vector>
 
@@ -80,6 +81,22 @@ bool PosixFileSystem::is_directory(std::string_view path) const noexcept {
     struct stat st{};
     if (::stat(path_str.c_str(), &st) != 0) return false;
     return S_ISDIR(st.st_mode);
+}
+
+bool PosixFileSystem::create_directories(std::string_view path) {
+    const std::string normalized = normalize_path(path);
+    if (normalized.empty() || normalized.front() != '/') return false;
+    if (normalized == "/") return true;
+    std::size_t position = 1;
+    while (position <= normalized.size()) {
+        const std::size_t separator = normalized.find('/', position);
+        const std::string prefix = normalized.substr(0, separator);
+        if (::mkdir(prefix.c_str(), 0755) != 0 && errno != EEXIST) return false;
+        if (!is_directory(prefix)) return false;
+        if (separator == std::string::npos) break;
+        position = separator + 1;
+    }
+    return true;
 }
 
 std::optional<FileReadResult> PosixFileSystem::read_file(std::string_view path) const {
