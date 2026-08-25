@@ -163,6 +163,16 @@ if(UNIX)
     install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# TODO: deterministic workspace semantics and its bounded JSON format. The
+# object graph grows on this portable target as later work packages add the
+# controller and views; host filesystem/time services remain outside it.
+add_library(todo_app STATIC
+    todo/todo_model.cpp
+    todo/todo_codec.cpp)
+target_link_libraries(todo_app PRIVATE ckvision::cvision)
+target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
+ckvision_strict(todo_app)
+
 # SysInfo: what this machine is and how fast it is, read through a single
 # injected probe (plans/sysinfo-example.md). Same split as every example
 # above, with one addition: the POSIX probe is a source of the otherwise
