@@ -168,7 +168,9 @@ endif()
 # controller and views; host filesystem/time services remain outside it.
 add_library(todo_app STATIC
     todo/todo_model.cpp
-    todo/todo_codec.cpp)
+    todo/todo_codec.cpp
+    todo/memory_todo_repository.cpp
+    todo/json_todo_repository.cpp)
 target_link_libraries(todo_app PRIVATE ckvision::cvision)
 target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
 ckvision_strict(todo_app)
