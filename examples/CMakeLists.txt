@@ -163,14 +163,16 @@ if(UNIX)
     install(TARGETS ckvision_spin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-# TODO: deterministic workspace semantics and its bounded JSON format. The
-# object graph grows on this portable target as later work packages add the
-# controller and views; host filesystem/time services remain outside it.
+# TODO: deterministic workspace, persistence, and transaction semantics. Only
+# the SystemCalendarClock implementation below reads host time; model,
+# repository, controller, and tests receive time through CalendarClock.
 add_library(todo_app STATIC
     todo/todo_model.cpp
     todo/todo_codec.cpp
     todo/memory_todo_repository.cpp
-    todo/json_todo_repository.cpp)
+    todo/json_todo_repository.cpp
+    todo/system_calendar_clock.cpp
+    todo/todo_controller.cpp)
 target_link_libraries(todo_app PRIVATE ckvision::cvision)
 target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
 ckvision_strict(todo_app)
