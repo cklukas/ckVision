@@ -66,6 +66,12 @@ bool TodoBoardView::select_task(TaskId task_id) {
     return false;
 }
 
+void TodoBoardView::set_today(std::optional<IsoDate> today) {
+    if (today_ == today) return;
+    today_ = std::move(today);
+    for (TodoLaneView* lane : lanes_) lane->set_today(today_);
+}
+
 void TodoBoardView::set_move_source(std::optional<TaskId> task_id) {
     move_source_ = task_id;
     for (TodoLaneView* lane : lanes_) lane->set_move_source(task_id);
@@ -104,6 +110,7 @@ void TodoBoardView::rebuild(const TodoWorkspace& workspace, const Board& board) 
         auto view = std::make_unique<TodoLaneView>();
         TodoLaneView* observer = view.get();
         observer->set_lane(workspace, lane.id);
+        observer->set_today(today_);
         if (const auto found = selections.find(lane.id); found != selections.end() && found->second)
             observer->select_task(*found->second);
         observer->set_move_source(move_source_);

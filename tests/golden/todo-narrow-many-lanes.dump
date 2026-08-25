@@ -16,7 +16,7 @@ grid
 |  File  Tasks  Note  Lane  View  Help                                   |
 |░░╔═[■]══════════════════════ TODO — main ════════════════════[_][↑]═╗░░|
 |░░║┌─To Do (1)─────────┐ ┌─Doing (1)─────────┐ ┌─Done (1)──────────┐ ║░░|
-|░░║│* Add your first t…│ │* Open contextual …│ │* Try move mode    │ ║░░|
+|░░║│• Add your first t…│ │• Open contextual …│ │• Try move mode    │ ║░░|
 |░░║│  Press F2 or Inse…│ │  Press F1 anywhere│ │  Select a task an…│ ║░░|
 |░░║│                   │ │                   │ │                   │ ║░░|
 |░░║│                   │ │                   │ │                   │ ║░░|

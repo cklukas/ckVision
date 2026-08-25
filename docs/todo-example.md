@@ -55,10 +55,12 @@ optional named color, stable id, creator/updater, and timestamps. The two-row
 cards keep their height while selection moves. Priority and due state use text
 and glyph shape as well as color, so Mono remains understandable.
 
-F2 adds a task and F3 edits every short field. Dates use explicit ISO
-`YYYY-MM-DD` input rather than process locale. Delete is a permanent,
-confirmed operation; Archive first writes a separate durable record and only
-then removes the task.
+F2 adds a task and F3 edits every short field. Due dates use ckVision's typed,
+optional DatePicker rather than process locale: Left/Right selects year,
+month, or day, Up/Down adjusts it, and Delete clears it. Cards label overdue,
+today, and tomorrow from the injected calendar date before falling back to a
+future ISO date. Delete is a permanent, confirmed operation; Archive first
+writes a separate durable record and only then removes the task.
 
 ![Editing a task](generated/screenshots/todo-task-editor.svg)
 

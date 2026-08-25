@@ -9,6 +9,7 @@
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
 #include "cvision/widgets/text_editor.hpp"
@@ -133,6 +134,30 @@ CK_TEST(todo_board_only_aliases_do_not_run_while_a_task_dialog_has_focus) {
     CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
     fixture.app.step(fixture.monotonic.now_nanos());
     CK_CHECK(!fixture.app.is_modal());
+}
+
+CK_TEST(todo_task_dialog_uses_the_typed_date_picker_and_round_trips_a_due_date) {
+    SmokeFixture fixture;
+    const auto edit = fixture.app.commands().id_for(TodoApp::kEditTaskKey);
+    CK_CHECK(edit && fixture.app.execute_command(*edit));
+    CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(fixture.app.dispatch(key(Key::Tab)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Tab)));
+    auto* due = dynamic_cast<widgets::DatePicker*>(fixture.app.focused());
+    CK_CHECK(due != nullptr);
+    if (due == nullptr) return;
+    CK_CHECK(!due->value());
+    CK_CHECK(fixture.app.dispatch(key(Key::Right)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Right)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Up)));
+    CK_CHECK((due->value() ==
+              std::optional<widgets::DateValue>{widgets::DateValue{2026, 8, 26}}));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    const Task* task = fixture.todo.controller().workspace()->find_task(TaskId{1});
+    CK_CHECK(task != nullptr);
+    if (task != nullptr)
+        CK_CHECK(task->due_date == std::optional<IsoDate>{IsoDate{"2026-08-26"}});
 }
 
 CK_TEST(todo_move_mode_commits_across_lanes_and_escape_cancels) {

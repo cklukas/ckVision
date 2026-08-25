@@ -881,7 +881,7 @@ void DatePicker::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     if (!value_) {
-        painter.draw_text(Point{0, 0}, text::clip_to_width("-- no date --", bounds().width), style);
+        painter.draw_text(Point{0, 0}, text::clip_to_width("— no date —", bounds().width), style);
         return;
     }
 

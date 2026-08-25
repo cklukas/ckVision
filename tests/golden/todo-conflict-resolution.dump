@@ -23,7 +23,7 @@ grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|
 |░░░░┌─[■]────────────────────────────────── TODO — main ────────────────────────────────[_][↑]─┐░░░░|
 |░░░░│┌─To Do (1)─────────────────┐ ┌─Doing (1)─────────────────┐ ┌─Done (1)──────────────────┐ │░░░░|
-|░░░░││* Changed in another insta…│ │* Open contextual help     │ │* Try move mode            │ │░░░░|
+|░░░░││• Changed in another insta…│ │• Open contextual help     │ │• Try move mode            │ │░░░░|
 |░░░░││  Press F2 or Insert       │ │  Press F1 anywhere        │ │  Select a task and press …│ │░░░░|
 |░░░░││                           │ │                           │ │                           │ │░░░░|
 |░░░░││                           │ │                           │ │                           │ │░░░░|

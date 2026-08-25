@@ -19,6 +19,7 @@ public:
     TodoLaneView();
 
     void set_lane(const TodoWorkspace& workspace, LaneId lane_id);
+    void set_today(std::optional<IsoDate> today);
     LaneId lane_id() const noexcept { return lane_.id; }
     const Lane& lane() const noexcept { return lane_; }
     std::optional<TaskId> selected_task() const noexcept;
@@ -56,6 +57,7 @@ private:
     Style lane_style() const;
     Style frame_style() const;
     Style task_marker_style(const Task& task, Style base) const;
+    std::string due_badge(const Task& task) const;
 
     Lane lane_;
     std::vector<Task> tasks_;
@@ -65,6 +67,8 @@ private:
     std::optional<TaskId> move_source_;
     std::optional<TaskId> pressed_task_;
     std::optional<TaskId> drop_before_;
+    std::optional<IsoDate> today_;
+    std::optional<IsoDate> tomorrow_;
     bool drop_at_end_ = false;
     widgets::Scrollbar* scrollbar_ = nullptr;
     ui::RoleId normal_role_ = ui::kInvalidRole;

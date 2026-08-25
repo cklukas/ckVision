@@ -25,6 +25,7 @@ public:
     std::size_t lane_count() const noexcept { return lanes_.size(); }
 
     bool select_task(TaskId task_id);
+    void set_today(std::optional<IsoDate> today);
     void set_move_source(std::optional<TaskId> task_id);
     void set_move_target(std::optional<LaneId> lane_id);
 
@@ -65,6 +66,7 @@ private:
     std::optional<TaskId> move_source_;
     std::optional<LaneId> move_target_;
     std::optional<DragState> drag_;
+    std::optional<IsoDate> today_;
     widgets::Scrollbar* scrollbar_ = nullptr;
 };
 

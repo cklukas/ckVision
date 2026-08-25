@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "todo_board_view.hpp"
 
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -123,10 +124,43 @@ CK_TEST(todo_lane_draws_counted_frame_and_two_row_cards) {
     scene::Painter painter(surface, Rect{0, 0, 30, 8});
     lane.draw(painter);
     CK_CHECK(surface_row(surface, 0).find("To Do (4)") != std::string::npos);
-    CK_CHECK(surface_row(surface, 1).find("!") != std::string::npos);
+    CK_CHECK(surface_row(surface, 1).find("↑") != std::string::npos);
     CK_CHECK(surface_row(surface, 1).find("Task 1") != std::string::npos);
     CK_CHECK(surface_row(surface, 1).find("2026-09-01") != std::string::npos);
     CK_CHECK(surface_row(surface, 2).find("Details 1") != std::string::npos);
+}
+
+CK_TEST(todo_lane_derives_overdue_today_tomorrow_and_future_badges_from_injected_date) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    const std::array<std::pair<std::string, std::string>, 4> dates{{
+        {"Overdue", "2026-08-24"}, {"Today", "2026-08-25"},
+        {"Tomorrow", "2026-08-26"}, {"Future", "2026-09-01"},
+    }};
+    for (std::size_t index = 0; index < dates.size(); ++index) {
+        TaskDraft draft = board_draft(dates[index].first);
+        draft.priority = static_cast<Priority>(index + 1);
+        draft.due_date = IsoDate{dates[index].second};
+        CK_CHECK(workspace.add_task(LaneId{1}, std::move(draft), board_stamp()));
+    }
+
+    ThemeFixture fixture;
+    TodoLaneView lane;
+    lane.set_context(ui::Context{&fixture.theme, &fixture.registry, nullptr});
+    lane.set_bounds(Rect{0, 0, 40, 10});
+    lane.set_lane(workspace, LaneId{1});
+    lane.set_today(IsoDate{"2026-08-25"});
+    scene::Surface surface(Size{40, 10}, Cell::from_grapheme(" ", Style{}));
+    scene::Painter painter(surface, Rect{0, 0, 40, 10});
+    lane.draw(painter);
+
+    CK_CHECK(surface_row(surface, 1).find("↑ Overdue") != std::string::npos);
+    CK_CHECK(surface_row(surface, 1).find("! overdue") != std::string::npos);
+    CK_CHECK(surface_row(surface, 3).find("• Today") != std::string::npos);
+    CK_CHECK(surface_row(surface, 3).find("! today") != std::string::npos);
+    CK_CHECK(surface_row(surface, 5).find("↓ Tomorrow") != std::string::npos);
+    CK_CHECK(surface_row(surface, 5).find("tomorrow") != std::string::npos);
+    CK_CHECK(surface_row(surface, 7).find("⌛ Future") != std::string::npos);
+    CK_CHECK(surface_row(surface, 7).find("2026-09-01") != std::string::npos);
 }
 
 CK_TEST(todo_lane_move_source_has_a_shape_not_only_a_color) {

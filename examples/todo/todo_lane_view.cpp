@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "cvision/core/text.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/menu.hpp"
 
 namespace ckv::todo {
@@ -16,10 +17,10 @@ constexpr int kCardRows = 2;
 
 std::string priority_mark(Priority priority) {
     switch (priority) {
-        case Priority::High: return "!";
-        case Priority::Normal: return "*";
-        case Priority::Low: return "v";
-        case Priority::Idle: return ".";
+        case Priority::High: return "↑";
+        case Priority::Normal: return "•";
+        case Priority::Low: return "↓";
+        case Priority::Idle: return "⌛";
     }
     return "?";
 }
@@ -49,6 +50,20 @@ TodoLaneView::TodoLaneView() : ui::View({}, ui::FocusPolicy::TabStop) {
     scrollbar_ = make<widgets::Scrollbar>(widgets::Orientation::Vertical);
     scrollbar_->set_policy(widgets::ScrollbarPolicy::Auto);
     scrollbar_->on_position_changed = [this](int) { invalidate(); };
+}
+
+void TodoLaneView::set_today(std::optional<IsoDate> today) {
+    if (today_ == today) return;
+    today_ = std::move(today);
+    tomorrow_.reset();
+    if (today_) {
+        const auto parsed = widgets::parse_iso_date(today_->value);
+        if (parsed) {
+            const auto next = widgets::add_calendar_days(*parsed, 1);
+            if (next) tomorrow_ = IsoDate{widgets::format_iso_date(*next)};
+        }
+    }
+    invalidate();
 }
 
 void TodoLaneView::set_lane(const TodoWorkspace& workspace, LaneId lane_id) {
@@ -271,6 +286,15 @@ Style TodoLaneView::task_marker_style(const Task& task, Style base) const {
     return base;
 }
 
+std::string TodoLaneView::due_badge(const Task& task) const {
+    if (!task.due_date) return {};
+    if (!today_) return task.due_date->value;
+    if (task.due_date->value < today_->value) return "! overdue";
+    if (task.due_date == today_) return "! today";
+    if (task.due_date == tomorrow_) return "tomorrow";
+    return task.due_date->value;
+}
+
 void TodoLaneView::draw(scene::Painter& painter) {
     if (bounds().width <= 0 || bounds().height <= 0 || !context().valid()) return;
     const Style normal = lane_style();
@@ -297,16 +321,21 @@ void TodoLaneView::draw(scene::Painter& painter) {
                      Cell::from_grapheme(" ", card));
 
         const std::string marker = priority_mark(task.priority);
-        const std::string badge = task.due_date ? " " + task.due_date->value : std::string{};
-        const int title_width = std::max(0, content_width - 2 - text::text_width(badge));
+        const std::string badge_text = due_badge(task);
+        const std::string badge = badge_text.empty() ? std::string{} : " " + badge_text;
+        const int marker_width = text::text_width(marker);
+        const int title_x = 1 + marker_width + 1;
+        const int title_width = std::max(0, content_width - marker_width - 1 - text::text_width(badge));
         painter.draw_text(Point{1, y}, marker, task_marker_style(task, card));
-        painter.draw_text(Point{3, y}, text::elide_to_width(task.title, title_width), card);
+        painter.draw_text(Point{title_x, y}, text::elide_to_width(task.title, title_width), card);
         if (!badge.empty()) {
             const int x = 1 + content_width - text::text_width(badge);
             painter.draw_text(Point{x, y}, badge, card);
         }
         if (y + 1 < bounds().height - 1)
-            painter.draw_text(Point{3, y + 1}, text::elide_to_width(task.details, std::max(0, content_width - 2)), card);
+            painter.draw_text(Point{title_x, y + 1},
+                              text::elide_to_width(task.details, std::max(0, content_width - marker_width - 1)),
+                              card);
     }
 
     if (move_target_ && (drop_before_ || drop_at_end_)) {

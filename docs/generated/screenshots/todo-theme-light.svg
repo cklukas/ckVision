@@ -591,7 +591,7 @@
 <g data-box-drawing="single">
 <path d="M 49.5 71.5 L 49.5 81 L 49.5 90.5" fill="none" stroke="#141414" stroke-width="3" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="54" y="86" xml:space="preserve" fill="#141414">*</text>
+<text x="54" y="86" xml:space="preserve" fill="#141414">•</text>
 <text x="72" y="86" xml:space="preserve" fill="#141414">A</text>
 <text x="81" y="86" xml:space="preserve" fill="#141414">d</text>
 <text x="90" y="86" xml:space="preserve" fill="#141414">d</text>
@@ -614,7 +614,7 @@
 <g data-box-drawing="single">
 <path d="M 319.5 71.5 L 319.5 81 L 319.5 90.5" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="324" y="86" xml:space="preserve" fill="#141414">*</text>
+<text x="324" y="86" xml:space="preserve" fill="#141414">•</text>
 <text x="342" y="86" xml:space="preserve" fill="#141414">O</text>
 <text x="351" y="86" xml:space="preserve" fill="#141414">p</text>
 <text x="360" y="86" xml:space="preserve" fill="#141414">e</text>
@@ -639,7 +639,7 @@
 <g data-box-drawing="single">
 <path d="M 589.5 71.5 L 589.5 81 L 589.5 90.5" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="594" y="86" xml:space="preserve" fill="#141414">*</text>
+<text x="594" y="86" xml:space="preserve" fill="#141414">•</text>
 <text x="612" y="86" xml:space="preserve" fill="#141414">T</text>
 <text x="621" y="86" xml:space="preserve" fill="#141414">r</text>
 <text x="630" y="86" xml:space="preserve" fill="#141414">y</text>

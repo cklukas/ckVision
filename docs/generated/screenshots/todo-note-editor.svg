@@ -635,7 +635,7 @@
 <g data-box-drawing="single">
 <path d="M 589.5 71.5 L 589.5 81 L 589.5 90.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="594" y="86" xml:space="preserve" fill="#000000">*</text>
+<text x="594" y="86" xml:space="preserve" fill="#000000">•</text>
 <text x="612" y="86" xml:space="preserve" fill="#000000">T</text>
 <text x="621" y="86" xml:space="preserve" fill="#000000">r</text>
 <text x="630" y="86" xml:space="preserve" fill="#000000">y</text>

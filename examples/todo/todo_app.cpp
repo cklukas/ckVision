@@ -11,6 +11,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/core/version.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/editor_document.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -63,6 +64,15 @@ std::optional<TodoColor> color_from_selection(int selection) {
 
 int color_selection(std::optional<TodoColor> color) {
     return color ? static_cast<int>(*color) + 1 : 0;
+}
+
+std::optional<widgets::DateValue> date_value(const std::optional<IsoDate>& date) {
+    return date ? widgets::parse_iso_date(date->value) : std::nullopt;
+}
+
+std::optional<widgets::DateValue> local_date_value(CalendarClock& calendar) {
+    const CalendarReadResult reading = calendar.read();
+    return reading ? widgets::parse_iso_date(reading.value->local_date.value) : std::nullopt;
 }
 
 }  // namespace
@@ -651,16 +661,20 @@ void TodoApp::present_task_dialog(bool editing) {
     const TaskDraft initial = task ? draft_from(*task) : TaskDraft{};
     widgets::DialogDescriptor descriptor;
     descriptor.title = editing ? "Edit task" : "Add task";
+    descriptor.help_context_key = "todo.tasks";
     descriptor.resizable = true;
     descriptor.minimum_window_size = Size{46, 15};
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Title:", initial.title, [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_title_bytes; }});
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Details:", initial.details, [](const std::string& value) { return value.size() <= TodoLimits::max_details_bytes; }});
-    descriptor.fields.push_back(widgets::FieldDescriptor{
-        "&Due (YYYY-MM-DD):", initial.due_date ? initial.due_date->value : std::string{}, [](const std::string& value) {
-            return value.empty() || is_valid(IsoDate{value});
-        }});
+    widgets::FieldDescriptor due;
+    due.label = "&Due:";
+    due.kind = widgets::FieldKind::Date;
+    due.initial_date = date_value(initial.due_date);
+    due.date_seed = local_date_value(calendar_);
+    due.date_optional = true;
+    descriptor.fields.push_back(std::move(due));
     descriptor.fields.push_back(combo_field("&Priority:", strings(kPriorityNames), static_cast<int>(initial.priority) - 1));
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(initial.color)));
     if (task != nullptr) {
@@ -688,12 +702,12 @@ void TodoApp::accept_task_dialog(bool editing,
                                  std::optional<TaskId> task_id,
                                  std::string preserved_note,
                                  const widgets::DialogResult& result) {
-    if (result.values.size() < 5 || result.selected.size() < 5) return;
+    if (result.values.size() < 5 || result.selected.size() < 5 || result.dates.size() < 5) return;
     TaskDraft draft;
     draft.title = result.values[0];
     draft.details = result.values[1];
     draft.note = std::move(preserved_note);
-    if (!result.values[2].empty()) draft.due_date = IsoDate{result.values[2]};
+    if (result.dates[2]) draft.due_date = IsoDate{widgets::format_iso_date(*result.dates[2])};
     const int priority = result.selected[3] >= 0 ? result.selected[3] : 1;
     draft.priority = static_cast<Priority>(std::clamp(priority + 1, 1, 4));
     draft.color = color_from_selection(result.selected[4]);
@@ -1719,8 +1733,11 @@ void TodoApp::refresh_status_items() {
     std::string calendar_label;
     if (const CalendarReadResult reading = calendar_.read(); reading) {
         calendar_label = reading.value->local_date.value;
+        if (board_view_ != nullptr) board_view_->set_today(reading.value->local_date);
         if (reading.value->utc_timestamp.value.size() >= 16)
             calendar_label += " " + reading.value->utc_timestamp.value.substr(11, 5) + "Z";
+    } else if (board_view_ != nullptr) {
+        board_view_->set_today(std::nullopt);
     }
     std::vector<widgets::StatusLineItem> items{
         widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().help}, 100},
