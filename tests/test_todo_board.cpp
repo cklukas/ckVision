@@ -1,0 +1,183 @@
+// Copyright (c) 2026 C. Klukas. All rights reserved.
+// SPDX-License-Identifier: MIT
+#include "todo_board_view.hpp"
+
+#include <optional>
+#include <string>
+#include <utility>
+
+#include "cvision/core/text.hpp"
+#include "cvision/testing/cktest.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
+#include "cvision/ui/standard_roles.hpp"
+
+namespace {
+
+using namespace ckv;
+using namespace ckv::todo;
+
+AuditStamp board_stamp() { return {IsoTimestamp{"2026-08-25T12:00:00Z"}, "board-test"}; }
+
+TaskDraft board_draft(std::string title, std::string details = {}) {
+    TaskDraft draft;
+    draft.title = std::move(title);
+    draft.details = std::move(details);
+    return draft;
+}
+
+TodoWorkspace board_workspace(int tasks = 4, int extra_lanes = 0) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    for (int index = 0; index < tasks; ++index) {
+        TaskDraft draft = board_draft("Task " + std::to_string(index + 1), "Details " + std::to_string(index + 1));
+        if (index == 0) {
+            draft.priority = Priority::High;
+            draft.due_date = IsoDate{"2026-09-01"};
+            draft.color = TodoColor::Red;
+        }
+        if (!workspace.add_task(LaneId{1}, std::move(draft), board_stamp())) return TodoWorkspace::empty();
+    }
+    for (int index = 0; index < extra_lanes; ++index) {
+        if (!workspace.insert_lane(BoardId{1}, "Lane " + std::to_string(index + 4)))
+            return TodoWorkspace::empty();
+    }
+    return workspace;
+}
+
+KeyEvent key(Key value, std::string text = {}) {
+    return KeyEvent{KeyChord{value, Modifier::None, std::move(text)}};
+}
+
+std::string surface_row(const scene::Surface& surface, int row) {
+    std::string result;
+    for (int x = 0; x < surface.size().width; ++x) result += surface.at(Point{x, row}).grapheme();
+    return result;
+}
+
+struct ThemeFixture {
+    ui::RoleRegistry registry;
+    ui::StandardRoles roles = ui::intern_standard_roles(registry);
+    ui::Theme theme = ui::make_classic_theme(registry, roles);
+};
+
+}  // namespace
+
+CK_TEST(todo_lane_keeps_stable_selection_across_model_refresh) {
+    TodoWorkspace workspace = board_workspace();
+    TodoLaneView lane;
+    lane.set_lane(workspace, LaneId{1});
+    lane.select_task(TaskId{3});
+    CK_CHECK(lane.selected_task() == TaskId{3});
+    CK_CHECK(workspace.edit_task(TaskId{1}, board_draft("Renamed"), board_stamp()));
+    lane.set_lane(workspace, LaneId{1});
+    CK_CHECK(lane.selected_task() == TaskId{3});
+}
+
+CK_TEST(todo_lane_keyboard_navigation_reports_stable_task_ids) {
+    TodoLaneView lane;
+    lane.set_bounds(Rect{0, 0, 26, 8});
+    lane.set_lane(board_workspace(), LaneId{1});
+    TaskId selected;
+    lane.on_selection_changed = [&](TaskId task_id) { selected = task_id; };
+    CK_CHECK(lane.on_key(key(Key::Down)));
+    CK_CHECK(lane.selected_task() == TaskId{2});
+    CK_CHECK(selected == TaskId{2});
+    CK_CHECK(lane.on_key(key(Key::End)));
+    CK_CHECK(lane.selected_task() == TaskId{4});
+    CK_CHECK(lane.on_key(key(Key::Home)));
+    CK_CHECK(lane.selected_task() == TaskId{1});
+}
+
+CK_TEST(todo_lane_enter_and_space_submit_the_same_move_intent) {
+    TodoLaneView lane;
+    lane.set_lane(board_workspace(), LaneId{1});
+    int toggles = 0;
+    lane.on_move_toggle = [&](TaskId task_id) {
+        CK_CHECK(task_id == TaskId{1});
+        ++toggles;
+    };
+    CK_CHECK(lane.on_key(key(Key::Enter)));
+    CK_CHECK(lane.on_key(key(Key::Char, " ")));
+    CK_CHECK(toggles == 2);
+}
+
+CK_TEST(todo_lane_double_click_activates_the_pointed_card) {
+    TodoLaneView lane;
+    lane.set_bounds(Rect{5, 4, 26, 8});
+    lane.set_lane(board_workspace(), LaneId{1});
+    std::optional<TaskId> activated;
+    lane.on_activate = [&](TaskId task_id) { activated = task_id; };
+    const MouseEvent event{MouseAction::DoubleClick, MouseButton::Left, Point{8, 7}, std::nullopt, Modifier::None};
+    CK_CHECK(lane.on_mouse(event));
+    CK_CHECK(activated == TaskId{2});
+    CK_CHECK(lane.selected_task() == TaskId{2});
+}
+
+CK_TEST(todo_lane_draws_counted_frame_and_two_row_cards) {
+    ThemeFixture fixture;
+    TodoLaneView lane;
+    lane.set_context(ui::Context{&fixture.theme, &fixture.registry, nullptr});
+    lane.set_bounds(Rect{0, 0, 30, 8});
+    lane.set_lane(board_workspace(), LaneId{1});
+    scene::Surface surface(Size{30, 8}, Cell::from_grapheme(" ", Style{}));
+    scene::Painter painter(surface, Rect{0, 0, 30, 8});
+    lane.draw(painter);
+    CK_CHECK(surface_row(surface, 0).find("To Do (4)") != std::string::npos);
+    CK_CHECK(surface_row(surface, 1).find("!") != std::string::npos);
+    CK_CHECK(surface_row(surface, 1).find("Task 1") != std::string::npos);
+    CK_CHECK(surface_row(surface, 1).find("2026-09-01") != std::string::npos);
+    CK_CHECK(surface_row(surface, 2).find("Details 1") != std::string::npos);
+}
+
+CK_TEST(todo_lane_move_source_has_a_shape_not_only_a_color) {
+    ThemeFixture fixture;
+    TodoLaneView lane;
+    lane.set_context(ui::Context{&fixture.theme, &fixture.registry, nullptr});
+    lane.set_bounds(Rect{0, 0, 26, 8});
+    lane.set_lane(board_workspace(), LaneId{1});
+    lane.set_move_source(TaskId{1});
+    scene::Surface surface(Size{26, 8}, Cell::from_grapheme(" ", Style{}));
+    scene::Painter painter(surface, Rect{0, 0, 26, 8});
+    lane.draw(painter);
+    CK_CHECK(has_attr(surface.at(Point{3, 1}).style().attrs, Attr::Underline));
+    CK_CHECK(has_attr(surface.at(Point{3, 1}).style().attrs, Attr::Bold));
+}
+
+CK_TEST(todo_board_materializes_every_lane_and_preserves_active_lane) {
+    TodoWorkspace workspace = board_workspace(2, 2);
+    TodoBoardView board;
+    board.set_bounds(Rect{0, 0, 80, 16});
+    CK_CHECK(board.set_board(workspace, BoardId{1}));
+    CK_CHECK(board.lane_count() == 5);
+    CK_CHECK(board.active_lane() == LaneId{1});
+    board.lane_view(LaneId{3})->on_focus(FocusEvent{true});
+    CK_CHECK(board.active_lane() == LaneId{3});
+    CK_CHECK(board.set_board(workspace, BoardId{1}));
+    CK_CHECK(board.active_lane() == LaneId{3});
+}
+
+CK_TEST(todo_board_left_right_navigation_moves_focus_and_reveals_lanes) {
+    term::HeadlessTerminal terminal(Size{50, 16});
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    app.theme() = ui::make_classic_theme(app.roles(), ui::intern_standard_roles(app.roles()));
+    auto board = std::make_unique<TodoBoardView>();
+    board->set_fills_root(false);
+    TodoBoardView* observer = app.root().add(std::move(board));
+    observer->set_bounds(Rect{0, 0, 50, 16});
+    CK_CHECK(observer->set_board(board_workspace(0, 4), BoardId{1}));
+    app.set_focus(observer->lane_view(LaneId{1}));
+    for (int step = 0; step < 6; ++step) app.focused()->on_key(key(Key::Right));
+    CK_CHECK(observer->active_lane() == LaneId{7});
+    CK_CHECK(app.focused() == observer->lane_view(LaneId{7}));
+    CK_CHECK(observer->lane_view(LaneId{7})->bounds().x + observer->lane_view(LaneId{7})->bounds().width <= 50);
+}
+
+CK_TEST(todo_board_rejects_unknown_board_without_losing_current_content) {
+    TodoBoardView board;
+    TodoWorkspace workspace = board_workspace();
+    CK_CHECK(board.set_board(workspace, BoardId{1}));
+    CK_CHECK(!board.set_board(workspace, BoardId{99}));
+    CK_CHECK(board.board_id() == BoardId{1});
+    CK_CHECK(board.lane_count() == 3);
+}
