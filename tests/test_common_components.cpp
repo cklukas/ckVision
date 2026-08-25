@@ -106,6 +106,14 @@ CK_TEST(date_values_have_a_strict_locale_free_iso_boundary) {
     CK_CHECK(!parse_iso_date("2026-8-09"));
     CK_CHECK(!parse_iso_date("1582-12-31"));
     CK_CHECK(!parse_iso_date("2026-08-09 trailing"));
+    CK_CHECK((add_calendar_days(DateValue{2024, 2, 28}, 1) ==
+              std::optional<DateValue>{DateValue{2024, 2, 29}}));
+    CK_CHECK((add_calendar_days(DateValue{2024, 2, 29}, 1) ==
+              std::optional<DateValue>{DateValue{2024, 3, 1}}));
+    CK_CHECK((add_calendar_days(DateValue{2026, 12, 31}, 1) ==
+              std::optional<DateValue>{DateValue{2027, 1, 1}}));
+    CK_CHECK(!add_calendar_days(DateValue{kLastCalendarYear, 12, 31}, 1));
+    CK_CHECK(!add_calendar_days(DateValue{2025, 2, 29}, 1));
 }
 
 CK_TEST(spinbox_and_slider_clamp_and_respond_to_keyboard_and_mouse) {

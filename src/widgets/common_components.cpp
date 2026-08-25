@@ -129,6 +129,11 @@ std::string format_iso_date(DateValue date) {
     return std::to_string(date.year) + "-" + two_digit(date.month) + "-" + two_digit(date.day);
 }
 
+bool is_valid_date(DateValue date) noexcept {
+    return is_drawable_year(date.year) && date.month >= 1 && date.month <= 12 && date.day >= 1 &&
+           date.day <= days_in_month(date.year, date.month);
+}
+
 std::optional<DateValue> parse_iso_date(std::string_view text) noexcept {
     if (text.size() != 10 || text[4] != '-' || text[7] != '-') return std::nullopt;
     const auto digit = [text](std::size_t index) -> std::optional<int> {
@@ -142,10 +147,17 @@ std::optional<DateValue> parse_iso_date(std::string_view text) noexcept {
     const int year = *digit(0) * 1000 + *digit(1) * 100 + *digit(2) * 10 + *digit(3);
     const int month = *digit(5) * 10 + *digit(6);
     const int day = *digit(8) * 10 + *digit(9);
-    if (!is_drawable_year(year) || month < 1 || month > 12 || day < 1 ||
-        day > days_in_month(year, month))
-        return std::nullopt;
-    return DateValue{year, month, day};
+    const DateValue date{year, month, day};
+    return is_valid_date(date) ? std::optional<DateValue>{date} : std::nullopt;
+}
+
+std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept {
+    if (!is_valid_date(date)) return std::nullopt;
+    const int first = serial(DateValue{kFirstCalendarYear, 1, 1});
+    const int last = serial(DateValue{kLastCalendarYear, 12, 31});
+    const long long shifted = static_cast<long long>(serial(date)) + days;
+    if (shifted < first || shifted > last) return std::nullopt;
+    return from_serial(static_cast<int>(shifted));
 }
 
 CalendarView::CalendarView() {
@@ -959,9 +971,7 @@ void DatePicker::adjust_active(int delta) {
         adjusted.month = changed % 12 + 1;
         adjusted = clamp_day(adjusted);
     } else {
-        const int first = serial(DateValue{kFirstCalendarYear, 1, 1});
-        const int last = serial(DateValue{kLastCalendarYear, 12, 31});
-        adjusted = from_serial(std::clamp(serial(adjusted) + delta, first, last));
+        adjusted = add_calendar_days(adjusted, delta).value_or(adjusted);
     }
     set_value(adjusted);
 }

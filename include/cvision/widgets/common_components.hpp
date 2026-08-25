@@ -50,6 +50,8 @@ constexpr bool is_drawable_year(int year) noexcept {
 // year, and a real day in that month.
 std::string format_iso_date(DateValue date);
 std::optional<DateValue> parse_iso_date(std::string_view text) noexcept;
+bool is_valid_date(DateValue date) noexcept;
+std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept;
 
 struct TimeValue {
     int hour = 0;

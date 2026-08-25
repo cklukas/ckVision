@@ -303,7 +303,8 @@ that portion; Delete clears an optional value. Pointer clicks select a portion
 and the wheel adjusts it. The caller supplies a deterministic seed (normally
 its injected notion of today), so the control never reads a clock or locale.
 `format_iso_date()` and `parse_iso_date()` provide the strict typed
-`YYYY-MM-DD` boundary.
+`YYYY-MM-DD` boundary; `add_calendar_days()` performs bounded Gregorian date
+arithmetic without reading a clock.
 
 Declarative forms can request the same control with `FieldKind::Date`,
 `initial_date`, `date_seed`, and `date_optional`. Accepted `DialogResult`s
