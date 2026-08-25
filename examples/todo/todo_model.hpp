@@ -169,6 +169,21 @@ struct ModelError {
     friend bool operator==(const ModelError&, const ModelError&) = default;
 };
 
+struct Mutation {
+    bool changed = false;
+    friend bool operator==(const Mutation&, const Mutation&) = default;
+};
+
+struct PendingTaskMove {
+    TaskId task_id;
+    LaneId source_lane_id;
+    std::optional<TaskId> original_before_task_id;
+    LaneId target_lane_id;
+    std::optional<TaskId> before_task_id;
+    std::uint64_t generation = 0;
+    friend bool operator==(const PendingTaskMove&, const PendingTaskMove&) = default;
+};
+
 template <class T>
 struct ModelResult;
 
@@ -186,6 +201,20 @@ public:
     const Task* find_task(TaskId id) const noexcept;
     std::optional<BoardId> board_of(LaneId id) const noexcept;
     std::optional<LaneId> lane_of(TaskId id) const noexcept;
+
+    ModelResult<std::vector<TaskId>> ordered_tasks(LaneId id) const;
+    ModelResult<TaskId> add_task(LaneId lane_id,
+                                 TaskDraft draft,
+                                 const AuditStamp& stamp,
+                                 std::optional<TaskId> before = std::nullopt);
+    ModelResult<Mutation> edit_task(TaskId task_id, TaskDraft draft, const AuditStamp& stamp);
+    ModelResult<Mutation> delete_task(TaskId task_id);
+
+    ModelResult<PendingTaskMove> begin_task_move(TaskId task_id) const;
+    ModelResult<PendingTaskMove> stage_task_move(const PendingTaskMove& move,
+                                                 LaneId target_lane_id,
+                                                 std::optional<TaskId> before) const;
+    ModelResult<Mutation> commit_task_move(const PendingTaskMove& move);
 
 private:
     explicit TodoWorkspace(WorkspaceSnapshot snapshot) : snapshot_(std::move(snapshot)) {}

@@ -42,6 +42,51 @@ WorkspaceSnapshot snapshot_with_task() {
     return snapshot;
 }
 
+Task task_with(TaskId id,
+               std::string title,
+               Priority priority,
+               std::optional<IsoDate> due,
+               std::optional<TodoColor> color,
+               std::string created,
+               std::string modified) {
+    Task task = one_task();
+    task.id = id;
+    task.title = std::move(title);
+    task.priority = priority;
+    task.due_date = std::move(due);
+    task.color = color;
+    task.created_at = IsoTimestamp{std::move(created)};
+    task.modified_at = IsoTimestamp{std::move(modified)};
+    return task;
+}
+
+WorkspaceSnapshot sortable_snapshot() {
+    WorkspaceSnapshot snapshot = valid_snapshot();
+    snapshot.tasks = {
+        task_with(TaskId{1}, "one", Priority::Low, IsoDate{"2026-08-31"}, TodoColor::Blue,
+                  "2026-08-25T10:00:00Z", "2026-08-25T10:04:00Z"),
+        task_with(TaskId{2}, "two", Priority::High, IsoDate{"2026-08-30"}, std::nullopt,
+                  "2026-08-25T10:01:00Z", "2026-08-25T10:03:00Z"),
+        task_with(TaskId{3}, "three", Priority::Normal, std::nullopt, TodoColor::DarkRed,
+                  "2026-08-25T10:02:00Z", "2026-08-25T10:02:00Z"),
+        task_with(TaskId{4}, "four", Priority::High, IsoDate{"2026-08-30"}, TodoColor::Blue,
+                  "2026-08-25T10:03:00Z", "2026-08-25T10:05:00Z"),
+    };
+    snapshot.boards.front().lanes.front().task_ids = {TaskId{1}, TaskId{2}, TaskId{3}, TaskId{4}};
+    snapshot.next_task_id = 5;
+    return snapshot;
+}
+
+TodoWorkspace workspace_from(WorkspaceSnapshot snapshot) {
+    auto result = TodoWorkspace::from_snapshot(std::move(snapshot));
+    if (!result) return TodoWorkspace::empty();
+    return std::move(*result.value);
+}
+
+TaskDraft draft(std::string title = "New task") {
+    return TaskDraft{std::move(title), "Details", "Note", Priority::Normal, std::nullopt, std::nullopt};
+}
+
 }  // namespace
 
 CK_TEST(todo_empty_factory_has_main_and_three_default_lanes) {
@@ -222,4 +267,174 @@ CK_TEST(todo_snapshot_allows_duplicate_lane_titles_but_not_board_names) {
     snapshot.next_board_id = 3;
     snapshot.next_lane_id = 5;
     CK_CHECK(error_for(snapshot) == ModelErrorCode::DuplicateBoardName);
+}
+
+CK_TEST(todo_task_add_uses_stable_ids_anchors_and_audit_facts) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    auto first = workspace.add_task(LaneId{1}, draft("first"), stamp());
+    CK_CHECK(first && *first.value == TaskId{1});
+    CK_CHECK(workspace.generation() == 1);
+    const Task* stored = workspace.find_task(TaskId{1});
+    CK_CHECK(stored != nullptr);
+    if (stored == nullptr) return;
+    CK_CHECK(stored->created_at == stamp().timestamp);
+    CK_CHECK(stored->modified_at == stamp().timestamp);
+    CK_CHECK(stored->created_by == stamp().identity);
+
+    auto second = workspace.add_task(LaneId{1}, draft("before first"), stamp(), TaskId{1});
+    CK_CHECK(second && *second.value == TaskId{2});
+    CK_CHECK(workspace.find_lane(LaneId{1})->task_ids == std::vector<TaskId>({TaskId{2}, TaskId{1}}));
+    CK_CHECK(workspace.snapshot().next_task_id == 3);
+}
+
+CK_TEST(todo_task_add_failure_preserves_ids_generation_and_snapshot) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    const WorkspaceSnapshot before = workspace.snapshot();
+    TaskDraft invalid = draft();
+    invalid.title.clear();
+    const auto rejected = workspace.add_task(LaneId{1}, invalid, stamp());
+    CK_CHECK(!rejected && rejected.error.code == ModelErrorCode::EmptyText);
+    CK_CHECK(workspace.snapshot() == before);
+    CK_CHECK(workspace.generation() == 0);
+
+    const auto missing_lane = workspace.add_task(LaneId{99}, draft(), stamp());
+    CK_CHECK(!missing_lane && missing_lane.error.code == ModelErrorCode::LaneNotFound);
+    CK_CHECK(workspace.snapshot().next_task_id == 1);
+}
+
+CK_TEST(todo_task_edit_updates_only_modified_facts_and_noop_is_free) {
+    TodoWorkspace workspace = workspace_from(snapshot_with_task());
+    const Task original = *workspace.find_task(TaskId{1});
+    TaskDraft same{original.title, original.details, original.note, original.priority, original.due_date, original.color};
+    const auto no_op = workspace.edit_task(TaskId{1}, same, {IsoTimestamp{"invalid"}, ""});
+    CK_CHECK(no_op && !no_op.value->changed);
+    CK_CHECK(workspace.generation() == 0);
+
+    same.title = "Updated title";
+    const AuditStamp update{IsoTimestamp{"2026-08-25T10:32:00Z"}, "second-editor"};
+    const auto changed = workspace.edit_task(TaskId{1}, same, update);
+    CK_CHECK(changed && changed.value->changed);
+    const Task* edited = workspace.find_task(TaskId{1});
+    CK_CHECK(edited != nullptr);
+    if (edited == nullptr) return;
+    CK_CHECK(edited->created_at == original.created_at);
+    CK_CHECK(edited->created_by == original.created_by);
+    CK_CHECK(edited->modified_at == update.timestamp);
+    CK_CHECK(edited->modified_by == update.identity);
+    CK_CHECK(workspace.generation() == 1);
+}
+
+CK_TEST(todo_task_edit_rejects_regression_and_invalid_content_atomically) {
+    TodoWorkspace workspace = workspace_from(snapshot_with_task());
+    const WorkspaceSnapshot before = workspace.snapshot();
+    TaskDraft changed = draft("changed");
+    auto result = workspace.edit_task(
+        TaskId{1}, changed, {IsoTimestamp{"2026-08-25T10:30:30Z"}, "editor"});
+    CK_CHECK(!result && result.error.code == ModelErrorCode::TimestampRegression);
+    CK_CHECK(workspace.snapshot() == before);
+
+    changed.title = std::string("bad\xFF", 4);
+    result = workspace.edit_task(
+        TaskId{1}, changed, {IsoTimestamp{"2026-08-25T10:32:00Z"}, "editor"});
+    CK_CHECK(!result && result.error.code == ModelErrorCode::InvalidUtf8);
+    CK_CHECK(workspace.snapshot() == before);
+}
+
+CK_TEST(todo_task_delete_removes_membership_without_reusing_the_id) {
+    TodoWorkspace workspace = workspace_from(snapshot_with_task());
+    const auto result = workspace.delete_task(TaskId{1});
+    CK_CHECK(result && result.value->changed);
+    CK_CHECK(workspace.find_task(TaskId{1}) == nullptr);
+    CK_CHECK(workspace.find_lane(LaneId{1})->task_ids.empty());
+    CK_CHECK(workspace.snapshot().next_task_id == 2);
+    CK_CHECK(workspace.generation() == 1);
+    const auto missing = workspace.delete_task(TaskId{1});
+    CK_CHECK(!missing && missing.error.code == ModelErrorCode::TaskNotFound);
+    CK_CHECK(workspace.generation() == 1);
+}
+
+CK_TEST(todo_task_ordering_is_stable_for_every_sort_mode) {
+    struct Case {
+        SortMode mode;
+        std::vector<TaskId> expected;
+    };
+    const std::vector<Case> cases = {
+        {SortMode::Manual, {TaskId{1}, TaskId{2}, TaskId{3}, TaskId{4}}},
+        {SortMode::Color, {TaskId{3}, TaskId{1}, TaskId{4}, TaskId{2}}},
+        {SortMode::Due, {TaskId{2}, TaskId{4}, TaskId{1}, TaskId{3}}},
+        {SortMode::Created, {TaskId{1}, TaskId{2}, TaskId{3}, TaskId{4}}},
+        {SortMode::Modified, {TaskId{3}, TaskId{2}, TaskId{1}, TaskId{4}}},
+        {SortMode::Priority, {TaskId{2}, TaskId{4}, TaskId{3}, TaskId{1}}},
+    };
+    for (const Case& item : cases) {
+        WorkspaceSnapshot snapshot = sortable_snapshot();
+        snapshot.boards.front().lanes.front().sort = item.mode;
+        TodoWorkspace workspace = workspace_from(std::move(snapshot));
+        const auto ordered = workspace.ordered_tasks(LaneId{1});
+        CK_CHECK(ordered && *ordered.value == item.expected);
+        CK_CHECK(workspace.find_lane(LaneId{1})->task_ids ==
+                 std::vector<TaskId>({TaskId{1}, TaskId{2}, TaskId{3}, TaskId{4}}));
+    }
+    CK_CHECK(TodoWorkspace::empty().ordered_tasks(LaneId{99}).error.code == ModelErrorCode::LaneNotFound);
+}
+
+CK_TEST(todo_task_move_stages_without_mutation_and_commit_uses_stable_anchor) {
+    TodoWorkspace workspace = workspace_from(sortable_snapshot());
+    const WorkspaceSnapshot original = workspace.snapshot();
+    const auto begun = workspace.begin_task_move(TaskId{2});
+    CK_CHECK(begun && begun.value->original_before_task_id == TaskId{3});
+    const auto staged = workspace.stage_task_move(*begun.value, LaneId{1}, TaskId{1});
+    CK_CHECK(staged);
+    CK_CHECK(workspace.snapshot() == original);
+    const auto committed = workspace.commit_task_move(*staged.value);
+    CK_CHECK(committed && committed.value->changed);
+    CK_CHECK(workspace.find_lane(LaneId{1})->task_ids ==
+             std::vector<TaskId>({TaskId{2}, TaskId{1}, TaskId{3}, TaskId{4}}));
+    CK_CHECK(workspace.generation() == 1);
+}
+
+CK_TEST(todo_task_move_cancel_and_same_position_commit_are_noops) {
+    TodoWorkspace workspace = workspace_from(sortable_snapshot());
+    const WorkspaceSnapshot original = workspace.snapshot();
+    const auto begun = workspace.begin_task_move(TaskId{2});
+    CK_CHECK(begun);
+    CK_CHECK(workspace.snapshot() == original);
+    CK_CHECK(workspace.generation() == 0);
+
+    const auto committed = workspace.commit_task_move(*begun.value);
+    CK_CHECK(committed && !committed.value->changed);
+    CK_CHECK(workspace.snapshot() == original);
+    CK_CHECK(workspace.generation() == 0);
+}
+
+CK_TEST(todo_task_move_crosses_lanes_and_sorted_targets_append) {
+    WorkspaceSnapshot snapshot = sortable_snapshot();
+    snapshot.boards.front().lanes[1].sort = SortMode::Due;
+    TodoWorkspace workspace = workspace_from(std::move(snapshot));
+    const auto begun = workspace.begin_task_move(TaskId{2});
+    const auto staged = workspace.stage_task_move(*begun.value, LaneId{2}, std::nullopt);
+    CK_CHECK(staged);
+    const auto committed = workspace.commit_task_move(*staged.value);
+    CK_CHECK(committed && committed.value->changed);
+    CK_CHECK(workspace.lane_of(TaskId{2}) == LaneId{2});
+    CK_CHECK(workspace.find_lane(LaneId{1})->task_ids == std::vector<TaskId>({TaskId{1}, TaskId{3}, TaskId{4}}));
+    CK_CHECK(workspace.find_lane(LaneId{2})->task_ids == std::vector<TaskId>{TaskId{2}});
+}
+
+CK_TEST(todo_task_move_rejects_sorted_reorder_invalid_anchor_and_stale_token) {
+    WorkspaceSnapshot snapshot = sortable_snapshot();
+    snapshot.boards.front().lanes.front().sort = SortMode::Priority;
+    TodoWorkspace workspace = workspace_from(std::move(snapshot));
+    const auto begun = workspace.begin_task_move(TaskId{2});
+    auto staged = workspace.stage_task_move(*begun.value, LaneId{1}, TaskId{1});
+    CK_CHECK(!staged && staged.error.code == ModelErrorCode::ManualOrderRequired);
+    staged = workspace.stage_task_move(*begun.value, LaneId{2}, TaskId{99});
+    CK_CHECK(!staged && staged.error.code == ModelErrorCode::InvalidInsertionAnchor);
+
+    TaskDraft changed = draft("changed after move began");
+    const auto edited = workspace.edit_task(
+        TaskId{1}, changed, {IsoTimestamp{"2026-08-25T10:06:00Z"}, "editor"});
+    CK_CHECK(edited);
+    const auto stale = workspace.commit_task_move(*begun.value);
+    CK_CHECK(!stale && stale.error.code == ModelErrorCode::StaleTransaction);
 }

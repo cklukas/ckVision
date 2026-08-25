@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <iterator>
 #include <limits>
 #include <string_view>
 #include <unordered_map>
@@ -243,6 +244,8 @@ ModelResult<WorkspaceSnapshot> validate_snapshot(WorkspaceSnapshot snapshot) {
         return failure<WorkspaceSnapshot>(ModelErrorCode::InvalidCounter,
                                           "next id counters must exceed all stored ids");
     }
+    std::sort(snapshot.tasks.begin(), snapshot.tasks.end(),
+              [](const Task& left, const Task& right) { return left.id < right.id; });
     return ModelResult<WorkspaceSnapshot>::success(std::move(snapshot));
 }
 
@@ -258,6 +261,50 @@ Task guided_task(TaskId id, std::string title, std::string details, const AuditS
                 stamp.identity,
                 stamp.timestamp,
                 stamp.identity};
+}
+
+Lane* mutable_lane(WorkspaceSnapshot& snapshot, LaneId id) noexcept {
+    for (Board& board : snapshot.boards) {
+        const auto found =
+            std::find_if(board.lanes.begin(), board.lanes.end(), [id](const Lane& lane) { return lane.id == id; });
+        if (found != board.lanes.end()) return &*found;
+    }
+    return nullptr;
+}
+
+Task* mutable_task(WorkspaceSnapshot& snapshot, TaskId id) noexcept {
+    const auto found =
+        std::find_if(snapshot.tasks.begin(), snapshot.tasks.end(), [id](const Task& task) { return task.id == id; });
+    return found == snapshot.tasks.end() ? nullptr : &*found;
+}
+
+std::optional<TaskId> task_after(const Lane& lane, TaskId id) noexcept {
+    const auto found = std::find(lane.task_ids.begin(), lane.task_ids.end(), id);
+    if (found == lane.task_ids.end() || std::next(found) == lane.task_ids.end()) return std::nullopt;
+    return *std::next(found);
+}
+
+Task make_task(TaskId id, TaskDraft draft, const AuditStamp& stamp) {
+    return Task{id,
+                std::move(draft.title),
+                std::move(draft.details),
+                std::move(draft.note),
+                draft.priority,
+                std::move(draft.due_date),
+                draft.color,
+                stamp.timestamp,
+                stamp.identity,
+                stamp.timestamp,
+                stamp.identity};
+}
+
+bool content_matches(const Task& task, const TaskDraft& draft) noexcept {
+    return task.title == draft.title && task.details == draft.details && task.note == draft.note &&
+           task.priority == draft.priority && task.due_date == draft.due_date && task.color == draft.color;
+}
+
+ModelResult<WorkspaceSnapshot> checked_candidate(WorkspaceSnapshot candidate) {
+    return validate_snapshot(std::move(candidate));
 }
 
 }  // namespace
@@ -331,6 +378,182 @@ std::optional<LaneId> TodoWorkspace::lane_of(TaskId id) const noexcept {
         }
     }
     return std::nullopt;
+}
+
+ModelResult<std::vector<TaskId>> TodoWorkspace::ordered_tasks(LaneId id) const {
+    const Lane* lane = find_lane(id);
+    if (lane == nullptr) return failure<std::vector<TaskId>>(ModelErrorCode::LaneNotFound, "lane does not exist");
+    std::vector<TaskId> ordered = lane->task_ids;
+    if (lane->sort == SortMode::Manual) return ModelResult<std::vector<TaskId>>::success(std::move(ordered));
+
+    const auto task_for = [this](TaskId task_id) -> const Task& { return *find_task(task_id); };
+    std::stable_sort(ordered.begin(), ordered.end(), [&](TaskId left_id, TaskId right_id) {
+        const Task& left = task_for(left_id);
+        const Task& right = task_for(right_id);
+        switch (lane->sort) {
+            case SortMode::Manual: return false;
+            case SortMode::Color:
+                if (left.color.has_value() != right.color.has_value()) return left.color.has_value();
+                return left.color && right.color && *left.color < *right.color;
+            case SortMode::Due:
+                if (left.due_date.has_value() != right.due_date.has_value()) return left.due_date.has_value();
+                return left.due_date && right.due_date && left.due_date->value < right.due_date->value;
+            case SortMode::Created: return left.created_at.value < right.created_at.value;
+            case SortMode::Modified: return left.modified_at.value < right.modified_at.value;
+            case SortMode::Priority: return left.priority < right.priority;
+        }
+        return false;
+    });
+    return ModelResult<std::vector<TaskId>>::success(std::move(ordered));
+}
+
+ModelResult<TaskId> TodoWorkspace::add_task(LaneId lane_id,
+                                            TaskDraft draft,
+                                            const AuditStamp& stamp,
+                                            std::optional<TaskId> before) {
+    const Lane* existing_lane = find_lane(lane_id);
+    if (existing_lane == nullptr) return failure<TaskId>(ModelErrorCode::LaneNotFound, "lane does not exist");
+    if (snapshot_.tasks.size() >= TodoLimits::max_tasks) {
+        return failure<TaskId>(ModelErrorCode::WorkspaceLimit, "workspace task limit exceeded");
+    }
+    if (before && std::find(existing_lane->task_ids.begin(), existing_lane->task_ids.end(), *before) ==
+                      existing_lane->task_ids.end()) {
+        return failure<TaskId>(ModelErrorCode::InvalidInsertionAnchor, "task insertion anchor is not in the lane");
+    }
+    if (before && existing_lane->sort != SortMode::Manual) {
+        return failure<TaskId>(ModelErrorCode::ManualOrderRequired,
+                               "positioned insertion requires manual lane sorting");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    const TaskId id{candidate.next_task_id};
+    ++candidate.next_task_id;
+    candidate.tasks.push_back(make_task(id, std::move(draft), stamp));
+    Lane* lane = mutable_lane(candidate, lane_id);
+    const auto position = before ? std::find(lane->task_ids.begin(), lane->task_ids.end(), *before) : lane->task_ids.end();
+    lane->task_ids.insert(position, id);
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<TaskId>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<TaskId>::success(id);
+}
+
+ModelResult<Mutation> TodoWorkspace::edit_task(TaskId task_id, TaskDraft draft, const AuditStamp& stamp) {
+    const Task* existing = find_task(task_id);
+    if (existing == nullptr) return failure<Mutation>(ModelErrorCode::TaskNotFound, "task does not exist");
+    if (content_matches(*existing, draft)) return ModelResult<Mutation>::success(Mutation{});
+    if (stamp.timestamp.value < existing->modified_at.value) {
+        return failure<Mutation>(ModelErrorCode::TimestampRegression, "task modification timestamp regressed");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    Task* task = mutable_task(candidate, task_id);
+    task->title = std::move(draft.title);
+    task->details = std::move(draft.details);
+    task->note = std::move(draft.note);
+    task->priority = draft.priority;
+    task->due_date = std::move(draft.due_date);
+    task->color = draft.color;
+    task->modified_at = stamp.timestamp;
+    task->modified_by = stamp.identity;
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<Mutation> TodoWorkspace::delete_task(TaskId task_id) {
+    if (find_task(task_id) == nullptr) return failure<Mutation>(ModelErrorCode::TaskNotFound, "task does not exist");
+    WorkspaceSnapshot candidate = snapshot_;
+    Lane* owner = mutable_lane(candidate, *lane_of(task_id));
+    owner->task_ids.erase(std::find(owner->task_ids.begin(), owner->task_ids.end(), task_id));
+    candidate.tasks.erase(std::find_if(candidate.tasks.begin(), candidate.tasks.end(),
+                                       [task_id](const Task& task) { return task.id == task_id; }));
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
+}
+
+ModelResult<PendingTaskMove> TodoWorkspace::begin_task_move(TaskId task_id) const {
+    const std::optional<LaneId> source_id = lane_of(task_id);
+    if (!source_id) return failure<PendingTaskMove>(ModelErrorCode::TaskNotFound, "task does not exist");
+    const Lane& source = *find_lane(*source_id);
+    const std::optional<TaskId> before = task_after(source, task_id);
+    return ModelResult<PendingTaskMove>::success(
+        PendingTaskMove{task_id, *source_id, before, *source_id, before, generation_});
+}
+
+ModelResult<PendingTaskMove> TodoWorkspace::stage_task_move(const PendingTaskMove& move,
+                                                            LaneId target_lane_id,
+                                                            std::optional<TaskId> before) const {
+    if (move.generation != generation_) {
+        return failure<PendingTaskMove>(ModelErrorCode::StaleTransaction, "task move is stale");
+    }
+    if (lane_of(move.task_id) != move.source_lane_id) {
+        return failure<PendingTaskMove>(ModelErrorCode::StaleTransaction, "task move source changed");
+    }
+    const Lane* target = find_lane(target_lane_id);
+    if (target == nullptr) return failure<PendingTaskMove>(ModelErrorCode::LaneNotFound, "target lane does not exist");
+    if (before == move.task_id ||
+        (before && std::find(target->task_ids.begin(), target->task_ids.end(), *before) == target->task_ids.end())) {
+        return failure<PendingTaskMove>(ModelErrorCode::InvalidInsertionAnchor,
+                                       "task move anchor is not in the target lane");
+    }
+    if (target_lane_id == move.source_lane_id && target->sort != SortMode::Manual &&
+        before != move.original_before_task_id) {
+        return failure<PendingTaskMove>(ModelErrorCode::ManualOrderRequired,
+                                       "reordering requires manual lane sorting");
+    }
+    if (target_lane_id != move.source_lane_id && target->sort != SortMode::Manual && before) {
+        return failure<PendingTaskMove>(ModelErrorCode::ManualOrderRequired,
+                                       "sorted target lanes accept moved tasks without a manual position");
+    }
+    PendingTaskMove staged = move;
+    staged.target_lane_id = target_lane_id;
+    staged.before_task_id = before;
+    return ModelResult<PendingTaskMove>::success(std::move(staged));
+}
+
+ModelResult<Mutation> TodoWorkspace::commit_task_move(const PendingTaskMove& move) {
+    if (move.generation != generation_ || lane_of(move.task_id) != move.source_lane_id) {
+        return failure<Mutation>(ModelErrorCode::StaleTransaction, "task move is stale");
+    }
+    const Lane* target = find_lane(move.target_lane_id);
+    if (target == nullptr) return failure<Mutation>(ModelErrorCode::LaneNotFound, "target lane does not exist");
+    if (move.before_task_id == move.task_id ||
+        (move.before_task_id &&
+         std::find(target->task_ids.begin(), target->task_ids.end(), *move.before_task_id) == target->task_ids.end())) {
+        return failure<Mutation>(ModelErrorCode::InvalidInsertionAnchor,
+                                 "task move anchor is not in the target lane");
+    }
+    if (move.target_lane_id == move.source_lane_id && target->sort != SortMode::Manual &&
+        move.before_task_id != move.original_before_task_id) {
+        return failure<Mutation>(ModelErrorCode::ManualOrderRequired, "reordering requires manual lane sorting");
+    }
+    if (move.target_lane_id != move.source_lane_id && target->sort != SortMode::Manual && move.before_task_id) {
+        return failure<Mutation>(ModelErrorCode::ManualOrderRequired,
+                                 "sorted target lanes accept moved tasks without a manual position");
+    }
+
+    WorkspaceSnapshot candidate = snapshot_;
+    Lane* source = mutable_lane(candidate, move.source_lane_id);
+    source->task_ids.erase(std::find(source->task_ids.begin(), source->task_ids.end(), move.task_id));
+    Lane* candidate_target = mutable_lane(candidate, move.target_lane_id);
+    const auto position = move.before_task_id
+                              ? std::find(candidate_target->task_ids.begin(), candidate_target->task_ids.end(),
+                                          *move.before_task_id)
+                              : candidate_target->task_ids.end();
+    candidate_target->task_ids.insert(position, move.task_id);
+    if (candidate == snapshot_) return ModelResult<Mutation>::success(Mutation{});
+    auto validated = checked_candidate(std::move(candidate));
+    if (!validated) return failure<Mutation>(validated.error.code, std::move(validated.error.diagnostic));
+    snapshot_ = std::move(*validated.value);
+    ++generation_;
+    return ModelResult<Mutation>::success(Mutation{true});
 }
 
 }  // namespace ckv::todo
