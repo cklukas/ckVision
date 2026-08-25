@@ -7,10 +7,13 @@
 #include <string>
 #include <utility>
 
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/posix_filesystem.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "todo_app.hpp"
 
 namespace {
 
@@ -43,6 +46,18 @@ TodoWorkspace posix_workspace() {
     const auto added = workspace.add_task(LaneId{1}, std::move(task), posix_stamp());
     if (!added) return TodoWorkspace::empty();
     return workspace;
+}
+
+int commit_task_from_child_process(const std::string& data) {
+    ckv::term::PosixFileSystem filesystem;
+    JsonTodoRepository repository(filesystem, data);
+    auto loaded = repository.load();
+    if (!loaded) return 10;
+    TaskDraft task;
+    task.title = "Committed by another process";
+    if (!loaded.value->workspace.add_task(LaneId{2}, std::move(task), posix_stamp())) return 11;
+    if (!repository.commit(loaded.value->revision, loaded.value->workspace, IsoDate{"2026-08-25"})) return 12;
+    return 0;
 }
 
 }  // namespace
@@ -107,4 +122,40 @@ CK_TEST(todo_posix_repository_detects_external_atomic_replacement) {
     const auto final = repository.load();
     CK_CHECK(final);
     if (final) CK_CHECK(final.value->workspace.find_task(TaskId{1}) != nullptr);
+}
+
+CK_TEST(todo_app_displays_a_task_committed_by_another_process_on_the_next_poll) {
+    ScratchDirectory scratch;
+    CK_CHECK(!scratch.path.empty());
+    if (scratch.path.empty()) return;
+    const std::string data = scratch.path + "/data";
+    ckv::term::PosixFileSystem filesystem;
+    JsonTodoRepository repository(filesystem, data);
+    const auto guided = TodoWorkspace::guided(posix_stamp());
+    CK_CHECK(guided);
+    if (!guided) return;
+    CK_CHECK(repository.commit({}, *guided.value, IsoDate{"2026-08-25"}));
+
+    ckv::term::HeadlessTerminal terminal(ckv::Size{100, 30});
+    ckv::ManualClock monotonic;
+    ckv::ui::Application app(terminal, monotonic);
+    FixedCalendarClock calendar({IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}});
+    TodoApp todo(app, repository, calendar, "parent-process");
+    CK_CHECK(todo.controller().workspace()->find_task(TaskId{4}) == nullptr);
+
+    const pid_t child = ::fork();
+    CK_CHECK(child >= 0);
+    if (child < 0) return;
+    if (child == 0) ::_exit(commit_task_from_child_process(data));
+
+    int status = 0;
+    CK_CHECK(::waitpid(child, &status, 0) == child);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return;
+
+    monotonic.advance(1'000'000'000);
+    app.step(monotonic.now_nanos());
+    CK_CHECK(todo.controller().workspace()->find_task(TaskId{4}) != nullptr);
+    CK_CHECK(todo.board_view()->lane_view(LaneId{2})->lane().task_ids.back() == TaskId{4});
 }
