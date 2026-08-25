@@ -79,6 +79,9 @@ struct AuditStamp {
     friend bool operator==(const AuditStamp&, const AuditStamp&) = default;
 };
 
+bool is_valid(IsoDate date) noexcept;
+bool is_valid(IsoTimestamp timestamp) noexcept;
+
 struct TaskDraft {
     std::string title;
     std::string details;

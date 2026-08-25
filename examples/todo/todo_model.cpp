@@ -357,6 +357,10 @@ ModelResult<TodoWorkspace> TodoWorkspace::from_snapshot(WorkspaceSnapshot snapsh
     return ModelResult<TodoWorkspace>::success(TodoWorkspace(std::move(*validated.value)));
 }
 
+bool is_valid(IsoDate date) noexcept { return valid_date(date.value); }
+
+bool is_valid(IsoTimestamp timestamp) noexcept { return valid_timestamp(timestamp.value); }
+
 TodoWorkspace TodoWorkspace::empty() {
     WorkspaceSnapshot snapshot;
     snapshot.last_board_id = BoardId{1};
