@@ -11,6 +11,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
+#include "cvision/widgets/text_editor.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace {
@@ -52,6 +53,28 @@ void commit_external_task_edit(MemoryTodoRepository& repository, TaskId task_id,
     draft.title = std::move(title);
     CK_CHECK(external.value->workspace.edit_task(
         task_id, std::move(draft), {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external"}));
+    CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
+}
+
+void commit_external_note(MemoryTodoRepository& repository, TaskId task_id, std::string note) {
+    auto external = repository.load();
+    CK_CHECK(external);
+    if (!external) return;
+    const Task* task = external.value->workspace.find_task(task_id);
+    CK_CHECK(task != nullptr);
+    if (task == nullptr) return;
+    TaskDraft draft = draft_from(*task);
+    draft.note = std::move(note);
+    CK_CHECK(external.value->workspace.edit_task(
+        task_id, std::move(draft), {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external"}));
+    CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
+}
+
+void commit_external_delete(MemoryTodoRepository& repository, TaskId task_id) {
+    auto external = repository.load();
+    CK_CHECK(external);
+    if (!external) return;
+    CK_CHECK(external.value->workspace.delete_task(task_id));
     CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
 }
 
@@ -142,6 +165,80 @@ CK_TEST(todo_note_window_is_modeless_and_autosaves_after_150ms) {
     CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1})->note == "autosaved note");
     CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().close));
     CK_CHECK(fixture.todo.note_window_count() == 0);
+}
+
+CK_TEST(todo_note_window_uses_the_revisioned_editor_with_undo_redo_and_wrap) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    auto* editor = dynamic_cast<widgets::TextEditor*>(fixture.app.focused());
+    CK_CHECK(editor != nullptr);
+    if (editor == nullptr) return;
+    CK_CHECK(editor->wrap_mode() == widgets::WrapMode::Word);
+    CK_CHECK(fixture.app.dispatch(TextEvent{"draft", false, false}));
+    CK_CHECK(editor->document()->text() == "draft");
+
+    const auto undo = fixture.app.commands().id_for("todo.note.undo");
+    const auto redo = fixture.app.commands().id_for("todo.note.redo");
+    const auto wrap = fixture.app.commands().id_for("todo.note.wrap");
+    CK_CHECK(undo && redo && wrap);
+    if (!undo || !redo || !wrap) return;
+    CK_CHECK(fixture.app.execute_command(*undo));
+    CK_CHECK(editor->document()->text().empty());
+    CK_CHECK(fixture.app.execute_command(*redo));
+    CK_CHECK(editor->document()->text() == "draft");
+    CK_CHECK(fixture.app.execute_command(*wrap));
+    CK_CHECK(editor->wrap_mode() == widgets::WrapMode::None);
+}
+
+CK_TEST(todo_clean_open_note_adopts_an_external_edit) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    auto* editor = dynamic_cast<widgets::TextEditor*>(fixture.app.focused());
+    CK_CHECK(editor != nullptr);
+    if (editor == nullptr) return;
+
+    commit_external_note(fixture.repository, TaskId{1}, "external note");
+    fixture.todo.poll_repository();
+    CK_CHECK(editor->document()->text() == "external note");
+    CK_CHECK(!editor->read_only());
+}
+
+CK_TEST(todo_open_note_retains_local_text_when_the_task_is_removed_externally) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    auto* editor = dynamic_cast<widgets::TextEditor*>(fixture.app.focused());
+    CK_CHECK(editor != nullptr);
+    if (editor == nullptr) return;
+    CK_CHECK(fixture.app.dispatch(TextEvent{"local unsaved text", false, false}));
+
+    commit_external_delete(fixture.repository, TaskId{1});
+    fixture.todo.poll_repository();
+    CK_CHECK(editor->document()->text() == "local unsaved text");
+    CK_CHECK(editor->read_only());
+}
+
+CK_TEST(todo_overlapping_note_edit_can_choose_the_external_text) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    auto* editor = dynamic_cast<widgets::TextEditor*>(fixture.app.focused());
+    CK_CHECK(editor != nullptr);
+    if (editor == nullptr) return;
+    CK_CHECK(fixture.app.dispatch(TextEvent{"local note", false, false}));
+    commit_external_note(fixture.repository, TaskId{1}, "external note");
+
+    fixture.monotonic.advance(150'000'000);
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(editor->document()->text() == "local note");
+    CK_CHECK(fixture.app.dispatch(key(Key::Down)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(editor->document()->text() == "external note");
+    CK_CHECK(!fixture.app.is_modal());
 }
 
 CK_TEST(todo_archive_confirmation_removes_only_after_yes) {

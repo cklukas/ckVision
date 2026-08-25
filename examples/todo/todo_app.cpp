@@ -12,9 +12,10 @@
 #include "cvision/core/text.hpp"
 #include "cvision/core/version.hpp"
 #include "cvision/widgets/desktop.hpp"
-#include "cvision/widgets/memo.hpp"
+#include "cvision/widgets/editor_document.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/status_line.hpp"
+#include "cvision/widgets/text_editor.hpp"
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::todo {
@@ -32,25 +33,6 @@ const std::array<std::string_view, 6> kSortCommandKeys = {
 const std::array<std::string, 17> kColorNames = {
     "None", "Black", "Dark blue", "Dark green", "Dark cyan", "Dark red", "Dark magenta", "Brown",
     "Light gray", "Dark gray", "Blue", "Green", "Cyan", "Red", "Magenta", "Yellow", "White"};
-
-class ObservedMemo final : public widgets::Memo {
-public:
-    std::function<void()> on_changed;
-
-    bool on_key(const KeyEvent& event) override {
-        const std::string before = text();
-        const bool handled = Memo::on_key(event);
-        if (text() != before && on_changed) on_changed();
-        return handled;
-    }
-
-    bool on_text(const TextEvent& event) override {
-        const std::string before = text();
-        const bool handled = Memo::on_text(event);
-        if (text() != before && on_changed) on_changed();
-        return handled;
-    }
-};
 
 widgets::FieldDescriptor combo_field(std::string label, std::vector<std::string> options, int selection) {
     widgets::FieldDescriptor field;
@@ -88,9 +70,13 @@ int color_selection(std::optional<TodoColor> color) {
 struct TodoApp::NoteSession {
     TaskId task_id;
     widgets::Window* window = nullptr;
-    ObservedMemo* memo = nullptr;
+    std::shared_ptr<widgets::EditorDocument> document;
+    widgets::EditorDocument::ObserverId observer = 0;
+    widgets::TextEditor* editor = nullptr;
     ui::Application::TimerId timer = 0;
     std::string last_saved;
+    std::string save_state = "Saved";
+    bool applying_remote = false;
 };
 
 struct TodoApp::PendingUiConflict {
@@ -142,7 +128,7 @@ TodoApp::~TodoApp() {
         std::unique_ptr<NoteSession> note = std::move(notes_.back());
         notes_.pop_back();
         if (note->timer != 0) app_.cancel_timer(note->timer);
-        if (note->memo != nullptr) note->memo->on_changed = {};
+        if (note->document != nullptr && note->observer != 0) note->document->unsubscribe(note->observer);
         if (note->window != nullptr) {
             note->window->close_request = {};
             note->window->on_closed = {};
@@ -155,6 +141,14 @@ TodoApp::~TodoApp() {
     app_.commands().withdraw(add_task_command_);
     app_.commands().withdraw(edit_task_command_);
     app_.commands().withdraw(edit_note_command_);
+    app_.commands().withdraw(note_undo_command_);
+    app_.commands().withdraw(note_redo_command_);
+    app_.commands().withdraw(note_cut_command_);
+    app_.commands().withdraw(note_copy_command_);
+    app_.commands().withdraw(note_paste_command_);
+    app_.commands().withdraw(note_find_selection_command_);
+    app_.commands().withdraw(note_find_next_command_);
+    app_.commands().withdraw(note_wrap_command_);
     app_.commands().withdraw(archive_task_command_);
     app_.commands().withdraw(delete_task_command_);
     app_.commands().withdraw(move_task_command_);
@@ -186,6 +180,50 @@ void TodoApp::declare_commands() {
     edit_note_command_ = app_.commands().declare(
         {.key = std::string(kEditNoteKey), .title = "Edit &note", .category = "Tasks", .context = "todo.board",
          .handler = [this] { open_note_editor(); }});
+    note_undo_command_ = app_.commands().declare(
+        {.key = "todo.note.undo", .title = "&Undo", .category = "Note", .context = "todo.note",
+         .chord = "Ctrl+Z", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->document->undo();
+         }});
+    note_redo_command_ = app_.commands().declare(
+        {.key = "todo.note.redo", .title = "&Redo", .category = "Note", .context = "todo.note",
+         .chord = "Ctrl+Y", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->document->redo();
+         }});
+    note_cut_command_ = app_.commands().declare(
+        {.key = "todo.note.cut", .title = "Cu&t", .category = "Note", .context = "todo.note",
+         .chord = "Ctrl+X", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->editor->cut_selection_to_clipboard();
+         }});
+    note_copy_command_ = app_.commands().declare(
+        {.key = "todo.note.copy", .title = "&Copy", .category = "Note", .context = "todo.note",
+         .chord = "Ctrl+C", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->editor->copy_selection_to_clipboard();
+         }});
+    note_paste_command_ = app_.commands().declare(
+        {.key = "todo.note.paste", .title = "&Paste", .category = "Note", .context = "todo.note",
+         .chord = "Ctrl+V", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->editor->paste_from_clipboard();
+         }});
+    note_find_selection_command_ = app_.commands().declare(
+        {.key = "todo.note.find-selection", .title = "&Find selection", .category = "Note",
+         .context = "todo.note", .chord = "Ctrl+F", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->editor->use_selection_as_search_query();
+         }});
+    note_find_next_command_ = app_.commands().declare(
+        {.key = "todo.note.find-next", .title = "Find &next", .category = "Note", .context = "todo.note",
+         .chord = "Ctrl+G", .handler = [this] {
+             if (NoteSession* note = focused_note()) (void)note->editor->find_next();
+         }});
+    note_wrap_command_ = app_.commands().declare(
+        {.key = "todo.note.wrap", .title = "&Word wrap", .category = "Note", .context = "todo.note",
+         .chord = "Alt+W", .handler = [this] {
+             if (NoteSession* note = focused_note()) {
+                 const bool wrapped = note->editor->wrap_mode() == widgets::WrapMode::Word;
+                 note->editor->set_wrap_mode(wrapped ? widgets::WrapMode::None : widgets::WrapMode::Word);
+                 if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+             }
+         }});
     archive_task_command_ = app_.commands().declare(
         {.key = std::string(kArchiveTaskKey), .title = "&Archive task...", .category = "Tasks", .context = "todo.board",
          .handler = [this] { present_archive_confirmation(); }});
@@ -253,6 +291,35 @@ void TodoApp::declare_commands() {
     const auto task_available = [this] { return selected_task() != nullptr && !move_; };
     app_.commands().set_enabled_predicate(edit_task_command_, task_available);
     app_.commands().set_enabled_predicate(edit_note_command_, task_available);
+    app_.commands().set_enabled_predicate(note_undo_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && note->document->can_undo();
+    });
+    app_.commands().set_enabled_predicate(note_redo_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && note->document->can_redo();
+    });
+    app_.commands().set_enabled_predicate(note_cut_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && !note->editor->read_only() && note->editor->selection().has_value();
+    });
+    app_.commands().set_enabled_predicate(note_copy_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && note->editor->selection().has_value();
+    });
+    app_.commands().set_enabled_predicate(note_paste_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && !note->editor->read_only();
+    });
+    app_.commands().set_enabled_predicate(note_find_selection_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && note->editor->selection().has_value();
+    });
+    app_.commands().set_enabled_predicate(note_find_next_command_, [this] {
+        const NoteSession* note = focused_note();
+        return note != nullptr && note->editor->search_match_count() != 0U;
+    });
+    app_.commands().set_enabled_predicate(note_wrap_command_, [this] { return focused_note() != nullptr; });
     app_.commands().set_enabled_predicate(archive_task_command_, task_available);
     app_.commands().set_enabled_predicate(delete_task_command_, task_available);
     app_.commands().set_enabled_predicate(move_task_command_,
@@ -322,6 +389,18 @@ std::vector<widgets::MenuBarItem> TodoApp::build_menus() {
                                 widgets::MenuItem::command(archive_task_command_),
                                 widgets::MenuItem::command(delete_task_command_),
                                 widgets::MenuItem::command(move_task_command_)}};
+    const NoteSession* active_note = focused_note();
+    widgets::MenuBarItem note{
+        "&Note",
+        {widgets::MenuItem::command(note_undo_command_), widgets::MenuItem::command(note_redo_command_),
+         widgets::MenuItem::separator(), widgets::MenuItem::command(note_cut_command_),
+         widgets::MenuItem::command(note_copy_command_), widgets::MenuItem::command(note_paste_command_),
+         widgets::MenuItem::separator(), widgets::MenuItem::command(note_find_selection_command_),
+         widgets::MenuItem::command(note_find_next_command_), widgets::MenuItem::separator(),
+         widgets::MenuItem::command(note_wrap_command_)
+             .with_mark(active_note != nullptr && active_note->editor->wrap_mode() == widgets::WrapMode::Word
+                            ? widgets::MenuMark::Checked
+                            : widgets::MenuMark::Unchecked)}};
     const SortMode active_sort = active_lane_record() != nullptr ? active_lane_record()->sort : SortMode::Manual;
     std::vector<widgets::MenuItem> sort_items;
     for (std::size_t index = 0; index < lane_sort_commands_.size(); ++index) {
@@ -371,7 +450,7 @@ std::vector<widgets::MenuBarItem> TodoApp::build_menus() {
                   widgets::MenuItem::separator(),
                   widgets::MenuItem::command(
                       widgets::CommandPresentation{app_.commands().standard().quit, "E&xit"})}};
-    return {std::move(file), std::move(tasks), std::move(lane), std::move(view), std::move(help)};
+    return {std::move(file), std::move(tasks), std::move(note), std::move(lane), std::move(view), std::move(help)};
 }
 
 void TodoApp::build_chrome() {
@@ -510,6 +589,7 @@ void TodoApp::refresh_board() {
     if (const Board* board = workspace->find_board(board_id)) board_window_->set_title("TODO — " + board->name);
     if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
     refresh_status_items();
+    sync_note_sessions_after_reload();
     if (app_.focused() == nullptr && board_view_->active_lane())
         app_.set_focus(board_view_->lane_view(*board_view_->active_lane()));
 }
@@ -707,30 +787,39 @@ void TodoApp::open_note_editor() {
     for (const auto& note : notes_) {
         if (note->task_id != task->id) continue;
         desktop_->activate(note->window);
-        app_.set_focus(note->memo);
+        app_.set_focus(note->editor);
         return;
     }
 
     auto session = std::make_unique<NoteSession>();
     session->task_id = task->id;
     session->last_saved = task->note;
+    session->document = std::make_shared<widgets::EditorDocument>(
+        task->note, widgets::EditorDocumentOptions{.max_document_bytes = TodoLimits::max_note_bytes});
     NoteSession* observer = session.get();
     auto window = std::make_unique<widgets::Window>("Note — " + task->title);
     const int offset = static_cast<int>(notes_.size()) * 2;
     window->set_bounds(Rect{6 + offset, 4 + offset, 58, 16});
     window->set_min_size(Size{30, 8});
-    window->set_footer("Saved");
-    auto memo = std::make_unique<ObservedMemo>();
-    memo->set_text(task->note);
-    memo->set_help_context_key("todo.note");
-    observer->memo = memo.get();
-    memo->on_changed = [this, task_id = task->id] { schedule_note_save(task_id); };
-    window->set_content(std::move(memo));
+    auto editor = std::make_unique<widgets::TextEditor>(session->document);
+    editor->set_help_context_key("todo.note");
+    editor->set_command_context("todo.note");
+    editor->set_wrap_mode(widgets::WrapMode::Word);
+    observer->editor = editor.get();
+    editor->set_status_changed_handler([this, observer](const widgets::EditorStatus&) {
+        refresh_note_footer(*observer);
+    });
+    observer->observer = session->document->subscribe([this, observer](const widgets::DocumentChange&) {
+        if (!observer->applying_remote) schedule_note_save(observer->task_id);
+    });
+    window->set_content(std::move(editor));
     window->close_request = [this, task_id = task->id] { return flush_note(task_id); };
     window->on_closed = [this, observer] { close_note_session(observer); };
     observer->window = desktop_->add_window(std::move(window));
     notes_.push_back(std::move(session));
-    app_.set_focus(observer->memo);
+    refresh_note_footer(*observer);
+    if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+    app_.set_focus(observer->editor);
 }
 
 void TodoApp::schedule_note_save(TaskId task_id) {
@@ -740,7 +829,8 @@ void TodoApp::schedule_note_save(TaskId task_id) {
     if (found == notes_.end()) return;
     NoteSession& note = **found;
     if (note.timer != 0) app_.cancel_timer(note.timer);
-    note.window->set_footer("Saving...");
+    note.save_state = "Saving...";
+    refresh_note_footer(note);
     note.timer = app_.start_timer(kNoteSaveDelayNanos, false, [this, task_id] { flush_note(task_id); });
 }
 
@@ -755,10 +845,16 @@ bool TodoApp::flush_note(TaskId task_id) {
         note.timer = 0;
     }
     const Task* task = controller_.workspace() ? controller_.workspace()->find_task(task_id) : nullptr;
-    if (task == nullptr) return true;
-    const std::string current_text = note.memo->text();
+    if (task == nullptr) {
+        note.editor->set_read_only(true);
+        note.save_state = "Removed externally — local text retained";
+        refresh_note_footer(note);
+        return true;
+    }
+    const std::string current_text = note.document->text();
     if (current_text == note.last_saved) {
-        note.window->set_footer("Saved");
+        note.save_state = "Saved";
+        refresh_note_footer(note);
         return true;
     }
     TaskDraft draft = draft_from(*task);
@@ -766,7 +862,8 @@ bool TodoApp::flush_note(TaskId task_id) {
     const Task original = *task;
     const auto saved = controller_.edit_task(task_id, std::move(draft));
     if (!saved) {
-        note.window->set_footer("Not saved: " + saved.error.diagnostic);
+        note.save_state = "Not saved: " + saved.error.diagnostic;
+        refresh_note_footer(note);
         set_status("Note not saved: " + saved.error.diagnostic);
         handle_conflict(
             "Note edit conflict", saved.error,
@@ -782,15 +879,29 @@ bool TodoApp::flush_note(TaskId task_id) {
                 const Task* remote_task = controller_.workspace() != nullptr
                                               ? controller_.workspace()->find_task(task_id)
                                               : nullptr;
-                if (session_it == notes_.end() || remote_task == nullptr) return;
-                (*session_it)->memo->set_text(remote_task->note);
-                (*session_it)->last_saved = remote_task->note;
-                (*session_it)->window->set_footer("Saved — external version");
+                if (session_it == notes_.end()) return;
+                NoteSession& session = **session_it;
+                if (remote_task == nullptr) {
+                    session.editor->set_read_only(true);
+                    session.save_state = "Removed externally — local text retained";
+                    refresh_note_footer(session);
+                    return;
+                }
+                session.applying_remote = true;
+                (void)session.document->set_text(remote_task->note);
+                session.document->clear_history();
+                session.document->mark_clean();
+                session.applying_remote = false;
+                session.last_saved = remote_task->note;
+                session.save_state = "Saved — external version";
+                refresh_note_footer(session);
             });
         return note.last_saved == current_text;
     }
     note.last_saved = current_text;
-    note.window->set_footer("Saved");
+    note.document->mark_clean();
+    note.save_state = "Saved";
+    refresh_note_footer(note);
     refresh_board();
     return true;
 }
@@ -798,10 +909,51 @@ bool TodoApp::flush_note(TaskId task_id) {
 void TodoApp::close_note_session(NoteSession* session) {
     if (session == nullptr) return;
     if (session->timer != 0) app_.cancel_timer(session->timer);
+    if (session->document != nullptr && session->observer != 0) session->document->unsubscribe(session->observer);
     notes_.erase(std::remove_if(notes_.begin(), notes_.end(), [session](const auto& item) {
                      return item.get() == session;
                  }),
                  notes_.end());
+    if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+}
+
+void TodoApp::sync_note_sessions_after_reload() {
+    const TodoWorkspace* workspace = controller_.workspace();
+    if (workspace == nullptr) return;
+    for (const auto& item : notes_) {
+        NoteSession& note = *item;
+        const Task* remote = workspace->find_task(note.task_id);
+        if (remote == nullptr) {
+            note.editor->set_read_only(true);
+            note.save_state = "Removed externally — local text retained";
+            refresh_note_footer(note);
+            continue;
+        }
+        if (note.document->text() != note.last_saved || remote->note == note.last_saved) continue;
+        note.applying_remote = true;
+        (void)note.document->set_text(remote->note);
+        note.document->clear_history();
+        note.document->mark_clean();
+        note.applying_remote = false;
+        note.last_saved = remote->note;
+        note.save_state = "Saved — external update";
+        refresh_note_footer(note);
+    }
+}
+
+void TodoApp::refresh_note_footer(NoteSession& session) {
+    if (session.window == nullptr || session.editor == nullptr) return;
+    const widgets::EditorStatus status = session.editor->status();
+    session.window->set_footer("Ln " + std::to_string(status.line) + ", Col " +
+                               std::to_string(status.column) + " · " + session.save_state);
+}
+
+TodoApp::NoteSession* TodoApp::focused_note() const noexcept {
+    const ui::View* focused = app_.focused();
+    const auto found = std::find_if(notes_.begin(), notes_.end(), [focused](const auto& note) {
+        return note->editor == focused;
+    });
+    return found == notes_.end() ? nullptr : found->get();
 }
 
 void TodoApp::present_lane_actions() {

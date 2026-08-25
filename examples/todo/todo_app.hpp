@@ -21,10 +21,11 @@
 
 namespace ckv::widgets {
 class Desktop;
-class Memo;
+class EditorDocument;
 class MenuBar;
 struct MenuBarItem;
 class StatusLine;
+class TextEditor;
 class Window;
 }  // namespace ckv::widgets
 
@@ -99,6 +100,9 @@ private:
     void schedule_note_save(TaskId task_id);
     bool flush_note(TaskId task_id);
     void close_note_session(NoteSession* session);
+    void sync_note_sessions_after_reload();
+    void refresh_note_footer(NoteSession& session);
+    NoteSession* focused_note() const noexcept;
 
     void present_lane_actions();
     void present_lane_rename();
@@ -155,6 +159,14 @@ private:
     ui::CommandId add_task_command_ = ui::kInvalidCommand;
     ui::CommandId edit_task_command_ = ui::kInvalidCommand;
     ui::CommandId edit_note_command_ = ui::kInvalidCommand;
+    ui::CommandId note_undo_command_ = ui::kInvalidCommand;
+    ui::CommandId note_redo_command_ = ui::kInvalidCommand;
+    ui::CommandId note_cut_command_ = ui::kInvalidCommand;
+    ui::CommandId note_copy_command_ = ui::kInvalidCommand;
+    ui::CommandId note_paste_command_ = ui::kInvalidCommand;
+    ui::CommandId note_find_selection_command_ = ui::kInvalidCommand;
+    ui::CommandId note_find_next_command_ = ui::kInvalidCommand;
+    ui::CommandId note_wrap_command_ = ui::kInvalidCommand;
     ui::CommandId archive_task_command_ = ui::kInvalidCommand;
     ui::CommandId delete_task_command_ = ui::kInvalidCommand;
     ui::CommandId move_task_command_ = ui::kInvalidCommand;
