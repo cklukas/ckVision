@@ -137,3 +137,13 @@ foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
         ckvision_strict(capture_${example_name}_screenshots)
     endif()
 endforeach()
+
+if(TARGET todo_app)
+    add_executable(capture_todo_screenshots capture_todo_screenshots.cpp)
+    target_link_libraries(capture_todo_screenshots PRIVATE
+        docgen_frame_svg todo_app ckvision::cvision)
+    target_include_directories(capture_todo_screenshots PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/todo)
+    ckvision_strict(capture_todo_screenshots)
+endif()

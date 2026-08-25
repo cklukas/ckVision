@@ -1737,23 +1737,26 @@ void TodoApp::present_conflict_resolution() {
     descriptor.title = pending_conflict_->title;
     widgets::FieldDescriptor note;
     note.kind = widgets::FieldKind::Note;
-    note.label = pending_conflict_->message +
-                 "\nThe latest workspace is loaded. Choose exactly which version should win.";
+    note.label = pending_conflict_->message;
     descriptor.fields.push_back(std::move(note));
+    widgets::FieldDescriptor explanation;
+    explanation.kind = widgets::FieldKind::Note;
+    explanation.label = "The latest workspace is loaded. Choose exactly which version should win.";
+    descriptor.fields.push_back(std::move(explanation));
     descriptor.fields.push_back(
         radio_field("&Resolution", {"Retry my change over the latest workspace", "Use the external version"}, 0));
     descriptor.buttons.push_back({"&Resolve", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Later", widgets::ButtonRole::Dismiss, nullptr});
     conflict_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     conflict_dialog_->set_completion_handler([this](widgets::DialogResult result) {
-        if (!result.accepted || result.selected.size() < 2 || result.selected[1] < 0) {
+        if (!result.accepted || result.selected.size() < 3 || result.selected[2] < 0) {
             set_status("Conflict kept pending; use File → Resolve conflict when ready.");
             return;
         }
         std::unique_ptr<PendingUiConflict> pending = std::move(pending_conflict_);
         if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
         refresh_status_items();
-        if (result.selected[1] == 0) {
+        if (result.selected[2] == 0) {
             pending->retry();
             return;
         }
