@@ -239,6 +239,11 @@ if(TARGET todo_app)
     target_link_libraries(cvision_tests PRIVATE todo_app)
 endif()
 
+if(UNIX AND TARGET todo_app)
+    list(APPEND CKVISION_POSIX_TEST_SOURCES test_todo_repository_posix.cpp)
+    target_sources(cvision_tests PRIVATE test_todo_repository_posix.cpp)
+endif()
+
 if(TARGET sysinfo_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
         test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
