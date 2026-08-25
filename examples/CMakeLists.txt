@@ -175,10 +175,18 @@ add_library(todo_app STATIC
     todo/todo_controller.cpp
     todo/todo_lane_view.cpp
     todo/todo_board_view.cpp
-    todo/todo_app.cpp)
+    todo/todo_app.cpp
+    todo/todo_host.cpp)
 target_link_libraries(todo_app PRIVATE ckvision::cvision)
 target_include_directories(todo_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/todo)
 ckvision_strict(todo_app)
+
+if(UNIX)
+    add_executable(ckvision_todo todo/main.cpp)
+    target_link_libraries(ckvision_todo PRIVATE todo_app ckvision::cvision)
+    ckvision_strict(ckvision_todo)
+    install(TARGETS ckvision_todo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 # SysInfo: what this machine is and how fast it is, read through a single
 # injected probe (plans/sysinfo-example.md). Same split as every example
