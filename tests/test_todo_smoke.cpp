@@ -180,9 +180,11 @@ CK_TEST(todo_move_mode_commits_across_lanes_and_escape_cancels) {
 
 CK_TEST(todo_note_window_is_modeless_and_autosaves_after_150ms) {
     SmokeFixture fixture;
+    CK_CHECK(fixture.todo.desktop().windows().size() == 1U);
     const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
     CK_CHECK(note && fixture.app.execute_command(*note));
     CK_CHECK(fixture.todo.note_window_count() == 1);
+    CK_CHECK(fixture.todo.desktop().windows().size() == 2U);
     CK_CHECK(!fixture.app.is_modal());
     CK_CHECK(fixture.app.dispatch(TextEvent{"autosaved note", false, false}));
     fixture.monotonic.advance(150'000'000);
@@ -190,6 +192,31 @@ CK_TEST(todo_note_window_is_modeless_and_autosaves_after_150ms) {
     CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1})->note == "autosaved note");
     CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().close));
     CK_CHECK(fixture.todo.note_window_count() == 0);
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.desktop().windows().size() == 1U);
+    CK_CHECK(fixture.app.focused() == fixture.todo.board_view()->lane_view(LaneId{1}));
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().next_window));
+}
+
+CK_TEST(todo_closing_notes_detaches_each_window_and_activates_the_remaining_note) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    CK_CHECK(fixture.todo.board_view()->select_task(TaskId{2}));
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    CK_CHECK(fixture.todo.note_window_count() == 2U);
+    CK_CHECK(fixture.todo.desktop().windows().size() == 3U);
+
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().close));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.note_window_count() == 1U);
+    CK_CHECK(fixture.todo.desktop().windows().size() == 2U);
+    CK_CHECK(dynamic_cast<widgets::TextEditor*>(fixture.app.focused()) != nullptr);
+
+    CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().close));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.note_window_count() == 0U);
+    CK_CHECK(fixture.todo.desktop().windows().size() == 1U);
 }
 
 CK_TEST(todo_quit_flushes_an_open_note_before_requesting_exit) {

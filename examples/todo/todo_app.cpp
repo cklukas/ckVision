@@ -968,6 +968,26 @@ void TodoApp::close_note_session(NoteSession* session) {
     if (session == nullptr) return;
     if (session->timer != 0) app_.cancel_timer(session->timer);
     if (session->document != nullptr && session->observer != 0) session->document->unsubscribe(session->observer);
+    if (session->editor != nullptr) session->editor->set_status_changed_handler({});
+    NoteSession* fallback_note = nullptr;
+    for (auto it = notes_.rbegin(); it != notes_.rend(); ++it) {
+        if (it->get() != session) {
+            fallback_note = it->get();
+            break;
+        }
+    }
+    if (fallback_note != nullptr) {
+        desktop_->activate(fallback_note->window);
+        app_.set_focus(fallback_note->editor);
+    } else if (board_window_ != nullptr) {
+        desktop_->activate(board_window_);
+        if (const auto lane = board_view_->active_lane()) app_.set_focus(board_view_->lane_view(*lane));
+    }
+    if (session->window != nullptr) {
+        session->window->close_request = {};
+        session->window->on_closed = {};
+        widgets::schedule_self_detach(*session->window, app_);
+    }
     notes_.erase(std::remove_if(notes_.begin(), notes_.end(), [session](const auto& item) {
                      return item.get() == session;
                  }),
