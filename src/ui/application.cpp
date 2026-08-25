@@ -291,6 +291,22 @@ void Application::set_focus(View* view) {
     }
 }
 
+Application::FocusBookmark Application::save_focus() const noexcept {
+    FocusBookmark bookmark;
+    bookmark.view_ = focused_;
+    if (focused_ != nullptr) bookmark.liveness_ = focused_->liveness_;
+    return bookmark;
+}
+
+void Application::restore_focus(const FocusBookmark& bookmark) {
+    if (bookmark.view_ == nullptr || bookmark.liveness_.expired() ||
+        !tree_contains(root_, bookmark.view_) || !bookmark.view_->focusable()) {
+        set_focus(nullptr);
+        return;
+    }
+    set_focus(bookmark.view_);
+}
+
 void Application::set_input_capture(View* view) {
     input_capture_ = view;
 }
@@ -735,6 +751,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             mouse_capture_ = nullptr;
                         return false;
                     }
+                    View* const focus_before_delivery = focused_;
                     // `target_handled`, not `handled`: the visit's own result
                     // at the top of this dispatch is already called that, and
                     // GCC's -Wshadow is right that two of them is one too many.
@@ -766,10 +783,10 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // focused before" via its own bookkeeping) must see
                     // the TRUE prior focus, not one this dispatch already
                     // reassigned out from under it. set_focus is a no-op
-                    // when the widget already focused itself during
-                    // delivery, so this never fights a widget's own
-                    // choice — it only fills in when nothing did.
-                    if (press && !had_input_capture) {
+                    // A focus change during delivery is the widget's own
+                    // choice; the equality guard leaves it alone and only
+                    // fills in when delivery kept focus where it was.
+                    if (press && !had_input_capture && focused_ == focus_before_delivery) {
                         for (View* v = resolve_attached_view(target_handle); v != nullptr;
                              v = v->parent()) {
                             if (v->focusable()) {

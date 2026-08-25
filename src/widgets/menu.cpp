@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
+#include <utility>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
@@ -148,7 +150,7 @@ bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
 // --- DropdownMenu ------------------------------------------------------
 
 DropdownMenu::DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu)
-    : items_(std::move(items)), parent_menu_(parent_menu) {}
+    : ui::View({}, ui::FocusPolicy::TabStop), items_(std::move(items)), parent_menu_(parent_menu) {}
 
 DropdownMenu::~DropdownMenu() { dismiss(); }
 
@@ -767,7 +769,7 @@ void MenuBar::activate() {
         invalidate();
         return;
     }
-    previously_focused_ = app_->focused();
+    previously_focused_ = app_->save_focus();
     app_->set_focus(this);  // on_focus(true) below flips active_
 }
 
@@ -775,12 +777,10 @@ void MenuBar::deactivate() {
     if (!active_) return;
     if (MenuBarAccessory* const accessory = trailing_accessory()) accessory->set_menu_highlighted(false);
     close_dropdown();
-    ui::View* restore = previously_focused_;
-    previously_focused_ = nullptr;
-    if (restore != nullptr && restore->focusable())
-        app_->set_focus(restore);
-    else
-        app_->set_focus(nullptr);
+    const std::optional<ui::Application::FocusBookmark> restore = previously_focused_;
+    previously_focused_.reset();
+    if (restore) app_->restore_focus(*restore);
+    else app_->set_focus(nullptr);
 }
 
 void MenuBar::on_focus(const FocusEvent& event) {
@@ -1114,6 +1114,7 @@ bool MenuBar::navigate_pointer(const MouseEvent& event) {
 
 DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop) {
+    const ui::Application::FocusBookmark previous_focus = app.save_focus();
     auto menu = std::make_unique<DropdownMenu>(std::move(items));
     const Rect desktop_abs = desktop.absolute_bounds();
     auto* raw = desktop.add_popup(std::move(menu));
@@ -1123,11 +1124,20 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
         Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred, h.preferred},
         desktop.bounds()));
 
-    raw->on_dismiss = [&app, &desktop, raw](MenuDismissReason) {
-        if (app.input_capture() == raw) app.clear_input_capture();
-        desktop.remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
+    auto dismissed = std::make_shared<bool>(false);
+    raw->on_dismiss = [&app, &desktop, raw, previous_focus, dismissed](MenuDismissReason) {
+        const std::shared_ptr<bool> state = dismissed;
+        if (std::exchange(*state, true)) return;
+        const ui::Application::FocusBookmark restore = previous_focus;
+        ui::Application* const application = &app;
+        Desktop* const host = &desktop;
+        if (application->input_capture() == raw) application->clear_input_capture();
+        if (application->focused() == raw) application->set_focus(nullptr);
+        host->remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
+        application->restore_focus(restore);
     };
     app.set_input_capture(raw);
+    app.set_focus(raw);
     return raw;
 }
 

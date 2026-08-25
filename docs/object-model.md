@@ -96,3 +96,11 @@ public:
 Leave the second constructor argument at its `None` default for layout and
 decorative views. Runtime state may still use `set_focus_policy` when a view's
 role genuinely changes after construction.
+
+Temporary UI such as a context menu should retain
+`Application::save_focus()` rather than a raw `View*`, then pass that bookmark
+to `Application::restore_focus()` after removing itself. The bookmark carries
+the view's lifetime token: restoration succeeds only while the same focusable
+view remains attached, and otherwise clears focus without dereferencing stale
+memory. `show_context_menu()` applies this protocol automatically and makes
+the popup the focused keyboard recipient until it is dismissed.

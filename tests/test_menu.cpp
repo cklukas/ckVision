@@ -1510,6 +1510,27 @@ CK_TEST(show_context_menu_self_removes_and_clears_capture_on_escape) {
     CK_CHECK(mf.app.input_capture() == nullptr);
 }
 
+CK_TEST(a_context_menu_receives_dispatched_keys_and_restores_focus) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+    Desktop* host = desktop.get();
+    app.root().add(std::move(desktop));
+    auto origin = std::make_unique<ckv::ui::View>(Rect{2, 2, 10, 2}, ckv::ui::FocusPolicy::TabStop);
+    ckv::ui::View* previous = host->add(std::move(origin));
+    app.set_focus(previous);
+
+    DropdownMenu* popup = show_context_menu({MenuItem::action("&Copy", {})},
+                                            ckv::Point{10, 10}, app, *host);
+    CK_CHECK(app.focused() == popup);
+    CK_CHECK(app.dispatch(key(Key::Escape)));
+    CK_CHECK(host->popups().empty());
+    CK_CHECK(app.input_capture() == nullptr);
+    CK_CHECK(app.focused() == previous);
+}
+
 CK_TEST(show_context_menu_activating_an_item_closes_it_and_runs_the_action) {
     MenuBarFixture mf;
     bool ran = false;

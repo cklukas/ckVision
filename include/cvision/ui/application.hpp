@@ -396,6 +396,22 @@ public:
 
     View* focused() const noexcept { return focused_; }
 
+    // A lifetime-checked place to return focus after temporary UI is removed.
+    // Unlike retaining a raw View pointer, a bookmark cannot mistake a
+    // destroyed control for a valid restoration target.
+    class FocusBookmark {
+    public:
+        FocusBookmark() = default;
+
+    private:
+        friend class Application;
+        View* view_ = nullptr;
+        std::weak_ptr<void> liveness_;
+    };
+
+    FocusBookmark save_focus() const noexcept;
+    void restore_focus(const FocusBookmark& bookmark);
+
     // Sets focus directly. `view` must be nullptr or focusable()
     // (CKV_ASSERT) — a caller wanting to focus a disabled/hidden view
     // must fix that view's state first, not silently no-op here.

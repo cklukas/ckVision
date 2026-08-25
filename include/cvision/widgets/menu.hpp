@@ -482,7 +482,7 @@ private:
     // the moment one is opened until the reader closes it or leaves the bar.
     bool menus_follow_walk_ = false;
     bool active_ = false;
-    ui::View* previously_focused_ = nullptr;
+    std::optional<ui::Application::FocusBookmark> previously_focused_;
     DropdownMenu* open_dropdown_ = nullptr;  // observer into desktop_'s popup list
 
     ui::RoleId normal_role_ = ui::kInvalidRole;

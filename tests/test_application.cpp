@@ -328,6 +328,35 @@ CK_TEST(focus_previous_wraps_backward) {
     CK_CHECK(app.focused() == a);
 }
 
+CK_TEST(a_focus_bookmark_restores_a_live_view) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    b->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(a);
+    const Application::FocusBookmark bookmark = app.save_focus();
+    app.set_focus(b);
+    app.restore_focus(bookmark);
+    CK_CHECK(app.focused() == a);
+}
+
+CK_TEST(a_focus_bookmark_never_restores_a_destroyed_view) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* view = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    view->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(view);
+    const Application::FocusBookmark bookmark = app.save_focus();
+    std::unique_ptr<View> removed = app.root().remove_child(view);
+    removed.reset();
+    app.restore_focus(bookmark);
+    CK_CHECK(app.focused() == nullptr);
+}
+
 // --- Default keymap: Tab/Shift-Tab traversal (M9/WP-13, D-029) ------------
 
 CK_TEST(tab_traverses_focus_out_of_the_box_with_no_app_side_setup) {
