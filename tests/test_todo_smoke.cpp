@@ -503,6 +503,25 @@ CK_TEST(todo_missing_initial_board_is_reported_and_the_last_board_opens) {
     CK_CHECK(todo.status_line()->current_hint().find("was not found") != std::string::npos);
 }
 
+CK_TEST(todo_existing_initial_board_is_selected_durably_and_survives_refresh) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    CK_CHECK(workspace.add_board("Release"));
+    term::HeadlessTerminal terminal(Size{80, 24});
+    ManualClock monotonic;
+    ui::Application app(terminal, monotonic);
+    MemoryTodoRepository repository(std::move(workspace));
+    FixedCalendarClock calendar(smoke_reading());
+    TodoApp todo(app, repository, calendar, "requested-board",
+                 TodoAppOptions{std::nullopt, std::string{"Release"}});
+
+    CK_CHECK(todo.board_view()->board_id() == BoardId{2});
+    CK_CHECK(todo.controller().workspace()->snapshot().last_board_id == BoardId{2});
+    const auto stored = repository.load();
+    CK_CHECK(stored && stored.value->workspace.snapshot().last_board_id == BoardId{2});
+    todo.refresh_board();
+    CK_CHECK(todo.board_view()->board_id() == BoardId{2});
+}
+
 CK_TEST(todo_poll_adopts_an_external_committed_revision) {
     SmokeFixture fixture;
     auto external = fixture.repository.load();

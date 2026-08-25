@@ -619,11 +619,22 @@ void TodoApp::refresh_board() {
     BoardId board_id = workspace->snapshot().last_board_id;
     std::optional<std::string> missing_board;
     if (options_.initial_board_name) {
-        if (const auto requested = board_named(*options_.initial_board_name))
-            board_id = *requested;
-        else
-            missing_board = *options_.initial_board_name;
+        const std::string requested_name = std::move(*options_.initial_board_name);
         options_.initial_board_name.reset();
+        if (const auto requested = board_named(requested_name)) {
+            if (*requested != board_id) {
+                const auto switched = controller_.switch_board(*requested);
+                if (!switched) {
+                    show_error("Cannot select requested Board", switched.error);
+                } else {
+                    workspace = controller_.workspace();
+                    if (workspace == nullptr) return;
+                    board_id = workspace->snapshot().last_board_id;
+                }
+            }
+        } else {
+            missing_board = requested_name;
+        }
     }
     if (!board_view_->set_board(*workspace, board_id)) return;
     board_view_->set_move_source(move_ ? std::optional<TaskId>(move_->task_id) : std::nullopt);
