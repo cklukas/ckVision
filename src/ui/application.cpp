@@ -173,6 +173,20 @@ Application::~Application() {
     }
     terminal_.restore();
     diagnostics_.flush_after_terminal_restore(terminal_);
+
+    // Tear down direct children while root_'s storage is still intact. If the
+    // children_ vector destroys them itself, unique_ptr clears an element
+    // before entering that child's destructor. A still-open context menu may
+    // restore its focus bookmark from there, and tree_contains() would then
+    // walk the null slot belonging to the Desktop currently being destroyed.
+    // Detaching first removes the slot and clears Application-held pointers;
+    // the returned owner then destroys the subtree while every service a View
+    // destructor may reach is still alive.
+    while (!root_.children().empty()) {
+        View* const child = root_.children().back().get();
+        std::unique_ptr<View> owned = root_.remove_child(child);
+        CKV_ASSERT(owned != nullptr);
+    }
 }
 
 DiagnosticsSink& Application::diagnostics() noexcept { return diagnostics_; }
