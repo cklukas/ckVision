@@ -137,9 +137,12 @@ wall clock, locale, or filesystem directly.
 - Task editing, destructive confirmations, lane operations, board management,
   conflict resolution and first-run choice are modal and restore the prior
   focus on completion.
+- Initial Board and Note bounds are clamped to the desktop content area, so a
+  narrow terminal never starts with unreachable window chrome.
 - Help opens through the standard HelpViewer with Board, Tasks, Moving,
   Lanes, Boards, Persistence and Keyboard topics. About is a normal info
-  dialog, not the only place shortcuts are documented.
+  dialog, not the only place shortcuts are documented. Every descriptor-built
+  modal carries the relevant topic through all of its controls.
 
 ### Task cards
 
@@ -485,6 +488,9 @@ reference product's intended but unreachable mode-removal workflow.
   selection, invalid name, rename, merge/remove, protected `main`, and another
   instance currently showing a removed board.
 - No destructive operation can strand zero boards or zero lanes.
+- Dialog action lists omit operations that current lane/Board limits or the
+  protected `main` Board make impossible; non-main Board operations use an
+  explicit eligible-source chooser.
 
 ### TODO-WP-06 — Commands, menus, status, help, themes and desktop polish
 

@@ -37,6 +37,36 @@ const std::array<std::string, 17> kColorNames = {
     "None", "Black", "Dark blue", "Dark green", "Dark cyan", "Dark red", "Dark magenta", "Brown",
     "Light gray", "Dark gray", "Blue", "Green", "Cyan", "Red", "Magenta", "Yellow", "White"};
 
+enum class LaneDialogAction { Rename, Color, Sort, InsertLeft, InsertRight, Merge, Archive };
+enum class BoardDialogAction { Switch, Create, Rename, Merge, Archive };
+
+int fitted_extent(int available, int preferred, int minimum, int margin) {
+    available = std::max(0, available);
+    const int lower = std::min(minimum, available);
+    const int upper = std::min(preferred, available);
+    return std::clamp(available - margin, lower, upper);
+}
+
+Rect centered_window_bounds(Rect area, Size preferred, Size minimum, Size margin) {
+    const int width = fitted_extent(area.width, preferred.width, minimum.width, margin.width);
+    const int height = fitted_extent(area.height, preferred.height, minimum.height, margin.height);
+    return Rect{std::clamp((area.width - width) / 2, area.x, area.right() - width),
+                std::clamp((area.height - height) / 2, area.y, area.bottom() - height), width, height};
+}
+
+Rect cascaded_window_bounds(Rect area, Size preferred, Size minimum, Point requested) {
+    const int width = fitted_extent(area.width, preferred.width, minimum.width, 0);
+    const int height = fitted_extent(area.height, preferred.height, minimum.height, 0);
+    return Rect{std::clamp(requested.x, area.x, area.right() - width),
+                std::clamp(requested.y, area.y, area.bottom() - height), width, height};
+}
+
+std::size_t lane_count(const TodoWorkspace& workspace) {
+    std::size_t count = 0;
+    for (const Board& board : workspace.snapshot().boards) count += board.lanes.size();
+    return count;
+}
+
 widgets::FieldDescriptor combo_field(std::string label, std::vector<std::string> options, int selection) {
     widgets::FieldDescriptor field;
     field.label = std::move(label);
@@ -523,11 +553,8 @@ void TodoApp::build_chrome() {
 void TodoApp::build_board_window() {
     auto window = std::make_unique<widgets::Window>("TODO");
     const Rect area = desktop_->content_area();
-    const int width = std::max(40, std::min(92, area.width - 4));
-    const int height = std::max(12, std::min(24, area.height - 2));
-    window->set_bounds(Rect{std::max(0, (area.width - width) / 2), std::max(0, (area.height - height) / 2),
-                            width, height});
-    window->set_min_size(Size{30, 8});
+    window->set_bounds(centered_window_bounds(area, Size{92, 24}, Size{30, 8}, Size{4, 2}));
+    window->set_min_size(Size{std::min(30, area.width), std::min(8, area.height)});
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
     auto board = std::make_unique<TodoBoardView>();
     board_view_ = board.get();
@@ -603,6 +630,7 @@ void TodoApp::show_about() {
 void TodoApp::present_welcome() {
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Welcome to ckVision TODO";
+    descriptor.help_context_key = "todo.board";
     widgets::FieldDescriptor choice;
     choice.label = "&Start with";
     choice.kind = widgets::FieldKind::Radio;
@@ -904,8 +932,9 @@ void TodoApp::open_note_editor() {
     NoteSession* observer = session.get();
     auto window = std::make_unique<widgets::Window>("Note — " + task->title);
     const int offset = static_cast<int>(notes_.size()) * 2;
-    window->set_bounds(Rect{6 + offset, 4 + offset, 58, 16});
-    window->set_min_size(Size{30, 8});
+    const Rect area = desktop_->content_area();
+    window->set_bounds(cascaded_window_bounds(area, Size{58, 16}, Size{30, 8}, Point{6 + offset, 4 + offset}));
+    window->set_min_size(Size{std::min(30, area.width), std::min(8, area.height)});
     auto editor = std::make_unique<widgets::TextEditor>(session->document);
     editor->set_help_context_key("todo.note");
     editor->set_command_context("todo.note");
@@ -1117,28 +1146,46 @@ TodoApp::NoteSession* TodoApp::focused_note() const noexcept {
 
 void TodoApp::present_lane_actions() {
     const Lane* lane = active_lane_record();
-    if (lane == nullptr) return;
+    const Board* board = active_board();
+    const TodoWorkspace* workspace = controller_.workspace();
+    if (lane == nullptr || board == nullptr || workspace == nullptr) return;
+    std::vector<LaneDialogAction> actions{
+        LaneDialogAction::Rename, LaneDialogAction::Color, LaneDialogAction::Sort};
+    std::vector<std::string> labels{"Rename", "Color", "Sort"};
+    if (board->lanes.size() < TodoLimits::max_lanes_per_board && lane_count(*workspace) < TodoLimits::max_lanes) {
+        actions.push_back(LaneDialogAction::InsertLeft);
+        actions.push_back(LaneDialogAction::InsertRight);
+        labels.push_back("Insert left");
+        labels.push_back("Insert right");
+    }
+    if (board->lanes.size() > 1) {
+        actions.push_back(LaneDialogAction::Merge);
+        actions.push_back(LaneDialogAction::Archive);
+        labels.push_back("Merge into another lane");
+        labels.push_back("Archive lane");
+    }
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Lane actions — " + lane->title;
-    descriptor.fields.push_back(radio_field("&Action", {"Rename", "Color", "Sort", "Insert left",
-                                                          "Insert right", "Merge into another lane", "Archive lane"},
-                                                   0));
+    descriptor.help_context_key = "todo.lanes";
+    descriptor.fields.push_back(radio_field("&Action", std::move(labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     lane_actions_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
-    lane_actions_dialog_->set_completion_handler([this](widgets::DialogResult result) {
-        if (!result.accepted || result.selected.empty()) return;
-        switch (result.selected[0]) {
-            case 0: present_lane_rename(); break;
-            case 1: present_lane_color(); break;
-            case 2: present_lane_sort(); break;
-            case 3: present_lane_insert(true); break;
-            case 4: present_lane_insert(false); break;
-            case 5: present_lane_merge(); break;
-            case 6: present_lane_archive(); break;
-            default: break;
-        }
-    });
+    lane_actions_dialog_->set_completion_handler(
+        [this, captured_actions = std::move(actions)](widgets::DialogResult result) {
+            if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
+                static_cast<std::size_t>(result.selected[0]) >= captured_actions.size())
+                return;
+            switch (captured_actions[static_cast<std::size_t>(result.selected[0])]) {
+                case LaneDialogAction::Rename: present_lane_rename(); break;
+                case LaneDialogAction::Color: present_lane_color(); break;
+                case LaneDialogAction::Sort: present_lane_sort(); break;
+                case LaneDialogAction::InsertLeft: present_lane_insert(true); break;
+                case LaneDialogAction::InsertRight: present_lane_insert(false); break;
+                case LaneDialogAction::Merge: present_lane_merge(); break;
+                case LaneDialogAction::Archive: present_lane_archive(); break;
+            }
+        });
 }
 
 void TodoApp::present_lane_rename() {
@@ -1148,6 +1195,7 @@ void TodoApp::present_lane_rename() {
     const Lane original = *lane;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Rename lane";
+    descriptor.help_context_key = "todo.lanes";
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Name:", lane->title,
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
@@ -1188,6 +1236,7 @@ void TodoApp::present_lane_color() {
     const Lane original = *lane;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Lane color — " + lane->title;
+    descriptor.help_context_key = "todo.lanes";
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(lane->color)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
@@ -1224,6 +1273,7 @@ void TodoApp::present_lane_sort() {
     if (lane == nullptr) return;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Sort lane — " + lane->title;
+    descriptor.help_context_key = "todo.lanes";
     descriptor.fields.push_back(combo_field("&Sort by:", strings(kSortNames), static_cast<int>(lane->sort)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
@@ -1249,6 +1299,7 @@ void TodoApp::present_lane_insert(bool before_active) {
 
     widgets::DialogDescriptor descriptor;
     descriptor.title = before_active ? "Insert lane left" : "Insert lane right";
+    descriptor.help_context_key = "todo.lanes";
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Name:", {},
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
@@ -1299,6 +1350,7 @@ void TodoApp::present_lane_merge() {
     }
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Merge lane";
+    descriptor.help_context_key = "todo.lanes";
     descriptor.fields.push_back(combo_field("Merge &into:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Merge", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
@@ -1412,6 +1464,8 @@ void TodoApp::present_board_manager() {
     if (workspace == nullptr) return;
     std::vector<BoardId> boards;
     std::vector<std::string> labels;
+    std::vector<BoardDialogAction> actions{BoardDialogAction::Switch};
+    std::vector<std::string> action_labels{"Switch selected Board"};
     int selected = 0;
     for (std::size_t index = 0; index < workspace->snapshot().boards.size(); ++index) {
         const Board& board = workspace->snapshot().boards[index];
@@ -1419,36 +1473,82 @@ void TodoApp::present_board_manager() {
         labels.push_back(board.name);
         if (board.id == workspace->snapshot().last_board_id) selected = static_cast<int>(index);
     }
+    if (workspace->snapshot().boards.size() < TodoLimits::max_boards &&
+        lane_count(*workspace) + 3 <= TodoLimits::max_lanes) {
+        actions.push_back(BoardDialogAction::Create);
+        action_labels.push_back("Create new Board");
+    }
+    const bool has_non_main = std::any_of(boards.begin(), boards.end(), [](BoardId id) { return id != BoardId{1}; });
+    if (has_non_main) {
+        actions.push_back(BoardDialogAction::Rename);
+        actions.push_back(BoardDialogAction::Merge);
+        actions.push_back(BoardDialogAction::Archive);
+        action_labels.push_back("Rename Board...");
+        action_labels.push_back("Merge Board into...");
+        action_labels.push_back("Archive Board...");
+    }
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Board Manager";
+    descriptor.help_context_key = "todo.boards";
     descriptor.fields.push_back(combo_field("&Board:", std::move(labels), selected));
-    descriptor.fields.push_back(radio_field("&Action", {"Switch", "Create new", "Rename", "Merge into", "Archive"}, 0));
+    descriptor.fields.push_back(radio_field("&Action", std::move(action_labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     board_manager_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_manager_dialog_->set_completion_handler(
-        [this, captured_boards = std::move(boards)](widgets::DialogResult result) {
-            if (!result.accepted || result.selected.size() < 2 || result.selected[1] < 0) return;
-            if (result.selected[1] == 1) {
-                present_new_board();
-                return;
-            }
-            if (result.selected[0] < 0 || static_cast<std::size_t>(result.selected[0]) >= captured_boards.size())
+        [this, captured_boards = std::move(boards),
+         captured_actions = std::move(actions)](widgets::DialogResult result) {
+            if (!result.accepted || result.selected.size() < 2 || result.selected[0] < 0 ||
+                result.selected[1] < 0 || static_cast<std::size_t>(result.selected[0]) >= captured_boards.size() ||
+                static_cast<std::size_t>(result.selected[1]) >= captured_actions.size())
                 return;
             const BoardId board_id = captured_boards[static_cast<std::size_t>(result.selected[0])];
-            switch (result.selected[1]) {
-                case 0: switch_board(board_id); break;
-                case 2: present_board_rename(board_id); break;
-                case 3: present_board_merge(board_id); break;
-                case 4: present_board_archive(board_id); break;
-                default: break;
+            switch (captured_actions[static_cast<std::size_t>(result.selected[1])]) {
+                case BoardDialogAction::Switch: switch_board(board_id); break;
+                case BoardDialogAction::Create: present_new_board(); break;
+                case BoardDialogAction::Rename: present_board_action_source(true, false); break;
+                case BoardDialogAction::Merge: present_board_action_source(false, true); break;
+                case BoardDialogAction::Archive: present_board_action_source(false, false); break;
             }
+        });
+}
+
+void TodoApp::present_board_action_source(bool rename, bool merge) {
+    const TodoWorkspace* workspace = controller_.workspace();
+    if (workspace == nullptr) return;
+    std::vector<BoardId> boards;
+    std::vector<std::string> labels;
+    for (const Board& board : workspace->snapshot().boards) {
+        if (board.id == BoardId{1}) continue;
+        boards.push_back(board.id);
+        labels.push_back(board.name);
+    }
+    if (boards.empty()) return;
+
+    const std::string action = rename ? "rename" : merge ? "merge" : "archive";
+    widgets::DialogDescriptor descriptor;
+    descriptor.title = "Choose Board to " + action;
+    descriptor.help_context_key = "todo.boards";
+    descriptor.fields.push_back(combo_field("&Board:", std::move(labels), 0));
+    descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
+    descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
+    board_action_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_action_dialog_->set_completion_handler(
+        [this, rename, merge, captured_boards = std::move(boards)](widgets::DialogResult result) {
+            if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
+                static_cast<std::size_t>(result.selected[0]) >= captured_boards.size())
+                return;
+            const BoardId board_id = captured_boards[static_cast<std::size_t>(result.selected[0])];
+            if (rename) present_board_rename(board_id);
+            else if (merge) present_board_merge(board_id);
+            else present_board_archive(board_id);
         });
 }
 
 void TodoApp::present_new_board() {
     widgets::DialogDescriptor descriptor;
     descriptor.title = "New Board";
+    descriptor.help_context_key = "todo.boards";
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Name:", {},
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
@@ -1489,6 +1589,7 @@ void TodoApp::present_board_rename(BoardId board_id) {
     const Board original = *board;
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Rename Board";
+    descriptor.help_context_key = "todo.boards";
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Name:", board->name,
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
@@ -1537,6 +1638,7 @@ void TodoApp::present_board_merge(BoardId source_id) {
     }
     widgets::DialogDescriptor descriptor;
     descriptor.title = "Merge Board";
+    descriptor.help_context_key = "todo.boards";
     descriptor.fields.push_back(combo_field("Merge &into:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Merge", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
@@ -1897,6 +1999,7 @@ void TodoApp::present_conflict_resolution() {
     if (!pending_conflict_) return;
     widgets::DialogDescriptor descriptor;
     descriptor.title = pending_conflict_->title;
+    descriptor.help_context_key = "todo.persistence";
     widgets::FieldDescriptor note;
     note.kind = widgets::FieldKind::Note;
     note.label = pending_conflict_->message;

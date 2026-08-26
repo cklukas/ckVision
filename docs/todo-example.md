@@ -101,7 +101,8 @@ retains the local text so it can still be copied.
 F7 opens Lane actions. A lane can be renamed, colored, sorted by Manual,
 Color, Due, Created, Modified, or Priority, inserted on either side, merged
 into a chosen lane, or archived with all its tasks. The final lane cannot be
-removed.
+removed, and actions that cannot succeed at the current lane or workspace
+limit are omitted instead of leading to an error-only workflow.
 
 ![Lane lifecycle actions](generated/screenshots/todo-lane-actions.svg)
 
@@ -109,6 +110,8 @@ Press `m` or click `Board: name` in the status line for Board Manager. Boards
 can be created, switched, renamed, merged, or archived. Merge preserves global
 ids, combines same-title lanes in target order, and appends unmatched lanes.
 The protected `main` Board ensures the workspace can never have zero Boards.
+Rename, merge, and archive first choose from eligible non-main Boards; until
+one exists, Board Manager shows only switch and create.
 
 ![Board Manager](generated/screenshots/todo-board-manager.svg)
 
@@ -123,7 +126,8 @@ and reveals the focused lane automatically.
 The Board is an ordinary ckVision `Window`: move, resize, zoom, minimize,
 cycle, list, tile, and cascade all remain available. The menu bar is reached
 with F10 or Alt+mnemonic; visible status commands are clickable; task and lane
-context menus open with right-click or Shift+F10.
+context menus open with right-click or Shift+F10. Initial Board and Note
+windows are fitted inside the available desktop even on a small terminal.
 
 The View menu switches the whole application through ckVision's theme
 service. State remains distinguishable in all schemes:
@@ -140,6 +144,8 @@ service. State remains distinguishable in all schemes:
 
 Bare-letter aliases belong to the `todo.board` command context. Typing in a
 dialog or note therefore never archives, moves, or quits the Board.
+Every descriptor-built dialog inherits a Board, task, lane, Board-management,
+or persistence help topic, so F1 remains contextual throughout a workflow.
 
 | Intent | Keys |
 |---|---|

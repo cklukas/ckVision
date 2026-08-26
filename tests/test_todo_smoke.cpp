@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -53,6 +54,20 @@ TodoWorkspace movement_workspace(bool sorted_target = false, bool empty_target =
     }
     if (sorted_target && !workspace.set_lane_sort(LaneId{2}, SortMode::Priority))
         return TodoWorkspace::empty();
+    return workspace;
+}
+
+TodoWorkspace one_lane_workspace() {
+    TodoWorkspace workspace = smoke_workspace();
+    if (!workspace.merge_lane(LaneId{2}, LaneId{1})) return TodoWorkspace::empty();
+    if (!workspace.merge_lane(LaneId{3}, LaneId{1})) return TodoWorkspace::empty();
+    return workspace;
+}
+
+TodoWorkspace two_board_workspace() {
+    TodoWorkspace workspace = smoke_workspace();
+    if (!workspace.add_board("Release")) return TodoWorkspace::empty();
+    if (!workspace.switch_board(BoardId{1})) return TodoWorkspace::empty();
     return workspace;
 }
 
@@ -110,6 +125,20 @@ void commit_external_delete(MemoryTodoRepository& repository, TaskId task_id) {
 
 KeyEvent key(Key value, std::string text = {}) {
     return KeyEvent{KeyChord{value, Modifier::None, std::move(text)}};
+}
+
+bool is_inside(Rect inner, Rect outer) {
+    return inner.left() >= outer.left() && inner.top() >= outer.top() &&
+           inner.right() <= outer.right() && inner.bottom() <= outer.bottom();
+}
+
+std::string frame_text(ui::Application& app) {
+    app.step(0);
+    const auto frame = app.current_frame();
+    std::string text;
+    for (int y = 0; y < frame.size().height; ++y)
+        for (int x = 0; x < frame.size().width; ++x) text += frame.at(Point{x, y}).grapheme();
+    return text;
 }
 
 struct SmokeFixture {
@@ -529,6 +558,92 @@ CK_TEST(todo_lane_and_board_manager_shortcuts_are_board_scoped) {
         KeyEvent{KeyChord{Key::F10, Modifier::Shift, {}}, KeyAction::Press, false}));
     CK_CHECK(fixture.app.input_capture() != nullptr);
     CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+}
+
+CK_TEST(todo_descriptor_dialogs_inherit_contextual_help_topics) {
+    SmokeFixture fixture;
+    for (const auto [command_key, help_key] : {
+             std::pair{TodoApp::kEditTaskKey, std::string_view{"todo.tasks"}},
+             std::pair{TodoApp::kLaneActionsKey, std::string_view{"todo.lanes"}},
+             std::pair{TodoApp::kBoardManagerKey, std::string_view{"todo.boards"}},
+             std::pair{TodoApp::kNewBoardKey, std::string_view{"todo.boards"}}}) {
+        const auto command = fixture.app.commands().id_for(command_key);
+        CK_CHECK(command && fixture.app.execute_command(*command));
+        CK_CHECK(fixture.app.focused() != nullptr);
+        const std::string* context = fixture.app.focused() != nullptr
+                                         ? fixture.app.focused()->resolve_help_context_key()
+                                         : nullptr;
+        CK_CHECK(context != nullptr);
+        if (context != nullptr) CK_CHECK(*context == help_key);
+        CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+        fixture.app.step(fixture.monotonic.now_nanos());
+    }
+}
+
+CK_TEST(todo_action_dialogs_hide_operations_that_the_model_cannot_accept) {
+    term::HeadlessTerminal terminal{Size{100, 30}};
+    ManualClock monotonic;
+    ui::Application app{terminal, monotonic};
+    MemoryTodoRepository repository{one_lane_workspace()};
+    FixedCalendarClock calendar{smoke_reading()};
+    TodoApp todo{app, repository, calendar, "one-lane"};
+
+    const auto lane_actions = app.commands().id_for(TodoApp::kLaneActionsKey);
+    CK_CHECK(lane_actions && app.execute_command(*lane_actions));
+    std::string rendered = frame_text(app);
+    CK_CHECK(rendered.find("Merge into another lane") == std::string::npos);
+    CK_CHECK(rendered.find("Archive lane") == std::string::npos);
+    CK_CHECK(app.dispatch(key(Key::Escape)));
+    app.step(monotonic.now_nanos());
+
+    const auto board_manager = app.commands().id_for(TodoApp::kBoardManagerKey);
+    CK_CHECK(board_manager && app.execute_command(*board_manager));
+    rendered = frame_text(app);
+    CK_CHECK(rendered.find("Rename Board...") == std::string::npos);
+    CK_CHECK(rendered.find("Merge Board into...") == std::string::npos);
+    CK_CHECK(rendered.find("Archive Board...") == std::string::npos);
+}
+
+CK_TEST(todo_board_management_chooses_a_valid_non_main_source_explicitly) {
+    term::HeadlessTerminal terminal{Size{100, 30}};
+    ManualClock monotonic;
+    ui::Application app{terminal, monotonic};
+    MemoryTodoRepository repository{two_board_workspace()};
+    FixedCalendarClock calendar{smoke_reading()};
+    TodoApp todo{app, repository, calendar, "two-boards"};
+
+    const auto manager = app.commands().id_for(TodoApp::kBoardManagerKey);
+    CK_CHECK(manager && app.execute_command(*manager));
+    CK_CHECK(app.dispatch(key(Key::Tab)));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    app.step(monotonic.now_nanos());
+    auto* source = dynamic_cast<widgets::ComboBox*>(app.focused());
+    CK_CHECK(source != nullptr);
+    if (source != nullptr) {
+        CK_CHECK(source->items().size() == 1);
+        CK_CHECK(source->text() == "Release");
+    }
+    CK_CHECK(todo.desktop().active_window()->title() == "Choose Board to rename");
+}
+
+CK_TEST(todo_initial_board_and_note_windows_fit_a_small_desktop) {
+    term::HeadlessTerminal terminal{Size{24, 10}};
+    ManualClock monotonic;
+    ui::Application app{terminal, monotonic};
+    MemoryTodoRepository repository{smoke_workspace()};
+    FixedCalendarClock calendar{smoke_reading()};
+    TodoApp todo{app, repository, calendar, "small-desktop"};
+    const Rect area = todo.desktop().content_area();
+    CK_CHECK(is_inside(todo.board_window()->bounds(), area));
+
+    const auto note = app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && app.execute_command(*note));
+    CK_CHECK(todo.note_window_count() == 1);
+    CK_CHECK(todo.desktop().active_window() != nullptr);
+    if (todo.desktop().active_window() != nullptr)
+        CK_CHECK(is_inside(todo.desktop().active_window()->bounds(), area));
 }
 
 CK_TEST(todo_pointer_drag_moves_through_the_same_durable_controller_path) {

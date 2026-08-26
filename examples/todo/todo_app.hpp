@@ -120,6 +120,7 @@ private:
     void set_lane_sort(SortMode sort);
 
     void present_board_manager();
+    void present_board_action_source(bool rename, bool merge);
     void present_new_board();
     void present_board_rename(BoardId board_id);
     void present_board_merge(BoardId board_id);
@@ -209,6 +210,7 @@ private:
     std::optional<widgets::DescriptorDialogPresentation> lane_edit_dialog_;
     std::optional<widgets::MessageBoxPresentation> lane_confirmation_;
     std::optional<widgets::DescriptorDialogPresentation> board_manager_dialog_;
+    std::optional<widgets::DescriptorDialogPresentation> board_action_dialog_;
     std::optional<widgets::DescriptorDialogPresentation> board_edit_dialog_;
     std::optional<widgets::MessageBoxPresentation> board_confirmation_;
     std::optional<widgets::MessageBoxPresentation> message_box_;
