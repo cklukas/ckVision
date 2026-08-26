@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "workbench_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <memory>
 #include <vector>
 
@@ -51,11 +53,15 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision Workbench example",
-                                "An application template with text, data and utility tabs.");
+                                ckv::examples::about_text(
+                                    "An application template with text, data and utility tabs."));
 }
 
 void WorkbenchApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
     widgets::MenuBarItem window_menu{"&Window", {}};
     window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().next_window}));

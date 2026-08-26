@@ -709,6 +709,8 @@ CK_TEST(todo_about_reports_build_and_workspace_facts) {
     const auto about = fixture.app.commands().id_for("todo.about");
     CK_CHECK(about && fixture.app.execute_command(*about));
     CK_CHECK(fixture.app.is_modal());
+    CK_CHECK(frame_text(fixture.app).find(
+                 "Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
     CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
     fixture.app.step(fixture.monotonic.now_nanos());
     CK_CHECK(!fixture.app.is_modal());

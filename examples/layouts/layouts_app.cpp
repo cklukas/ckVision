@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "layouts_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <memory>
 #include <vector>
 
@@ -36,11 +38,15 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision Layouts example",
-                                "Layout containers and a splitter, shown responding to resize.");
+                                ckv::examples::about_text(
+                                    "Layout containers and a splitter, shown responding to resize."));
 }
 
 void LayoutsApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
 
     widgets::MenuBarItem window_menu{"&Window", {}};

@@ -17,6 +17,14 @@ also what the headless test suite drives — a documentation screenshot
 or a test failure both describe the real application, never a
 simplified stand-in.
 
+Every interactive example exposes an **About** command from its menu bar and
+shows `Copyright (c) 2026 C. Klukas. All rights reserved.` in the resulting
+dialog. Examples whose F1 key is contextual keep that help route separate from
+About; smaller examples may use the same standard Help command for both. The
+shared example-only formatter in `examples/example_about.hpp` keeps the legal
+line exact without assigning ckVision's copyright to applications built by
+library users.
+
 ## Start with the pattern you need
 
 This page is a visual tour. For construction and ownership, begin with the
@@ -532,7 +540,9 @@ surface-specific wording for the same command.
 1. `examples/<name>/<name>_app.{hpp,cpp}` — the object graph, taking
    `ui::Application&` in its constructor, exposing whatever accessors
    a headless test needs (see `gallery_app.hpp`'s own accessor list for
-   the pattern).
+   the pattern). Give every interactive example a visible About command and
+   build its body with `examples::about_text(...)` so the project copyright
+   notice remains present and exact.
 2. `examples/<name>/main.cpp` — a `PosixTerminal` + `PosixClock` +
    `Application`, a `step()` loop, nothing else.
 3. `examples/CMakeLists.txt` — one more `add_library(<name>_app

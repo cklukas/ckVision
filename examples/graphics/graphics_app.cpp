@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "graphics_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -34,11 +36,15 @@ GraphicsApp::GraphicsApp(ui::Application& app) : app_(app), roles_(ui::intern_st
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision Graphics example",
-                                "ImageView and Canvas, with the fallback a terminal without graphics gets.");
+                                ckv::examples::about_text(
+                                    "ImageView and Canvas, with the fallback a terminal without graphics gets."));
 }
 
 void GraphicsApp::build_chrome() {
     widgets::MenuBarItem file_menu{"&File", {}};
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{std::move(file_menu)}));
 

@@ -88,6 +88,19 @@ CK_TEST(alt_g_opens_the_greeting_dialog) {
     app.step(0);
 }
 
+CK_TEST(hello_about_dialog_carries_the_project_copyright) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::hello::HelloApp hello(app);
+
+    CK_CHECK(app.execute_command(app.commands().standard().help));
+    app.step(0);
+    const std::string frame =
+        ckv::golden::serialize(ckv::scene::capture(app.composed_surface(), app.current_cursor()));
+    CK_CHECK(frame.find("Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
+}
+
 CK_TEST(while_the_greeting_dialog_is_open_background_accelerators_are_scoped_out) {
     // The greeting box is a real modal (M9/WP-15, D-021) — Alt+X
     // (kQuit) is a BACKGROUND accelerator while it's open, and Esc

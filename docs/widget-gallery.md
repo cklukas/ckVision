@@ -417,7 +417,7 @@ contextual help. Show it at an explicit point; it is not a focusable dialog.
 The Forms example's exact setup supplies DatePicker, TimePicker, SpinBox,
 Slider, and Wizard with real values and ownership.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="113-150" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="119-156" -->
 ```cpp
     content->add_child(std::move(options));
 
@@ -1547,7 +1547,7 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="72-171" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="78-177" -->
 ```cpp
 }
 

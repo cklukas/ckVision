@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "sysinfo_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -90,6 +92,17 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId refresh_command = app_.commands().declare(
         {.key = std::string(kRefreshKey), .title = "&Refresh", .category = "System", .chord = "F2",
          .handler = [this] { refresh(); }});
+    const ui::CommandId about_command = app_.commands().declare(
+        {.key = "sysinfo.about", .title = "&About ckVision SysInfo", .category = "Help",
+         .handler = [this] {
+             auto presentation = widgets::present_message_box(
+                 app_, *desktop_, roles_,
+                 {widgets::MessageBoxKind::Info, "About ckVision SysInfo",
+                  ckv::examples::about_text(
+                      "ckVision SysInfo example\n\nLive system facts, deterministic benchmark views, and exportable reports."),
+                  widgets::MessageBoxButtons::Ok});
+             presentation.set_completion_handler([](widgets::MessageBoxResult) {});
+         }});
 
     widgets::MenuBarItem system_menu{
         "&System",
@@ -153,7 +166,10 @@ void SysInfoApp::build_chrome() {
         }};
     widgets::MenuBarItem help_menu{
         "&Help",
-        {widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help, "&About..."})}};
+        {widgets::MenuItem::command(
+             widgets::CommandPresentation{app_.commands().standard().help, "Context &Help"}),
+         widgets::MenuItem::separator(),
+         widgets::MenuItem::command(widgets::CommandPresentation{about_command})}};
 
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),

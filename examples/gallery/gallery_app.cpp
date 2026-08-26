@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "gallery_app.hpp"
 
+#include "../example_about.hpp"
+
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/image_view.hpp"
 #include "cvision/widgets/input_line.hpp"
@@ -59,23 +61,16 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision Gallery example",
-                                "An ordinary application shell carrying a form, a window and an image.");
+                                ckv::examples::about_text(
+                                    "An ordinary application shell carrying a form, a window and an image."));
 }
 
 void GalleryApp::build_menu_bar() {
     std::vector<widgets::MenuBarItem> menus;
 
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem::action("&About...",
-                                                  [this] {
-                                                      widgets::MessageBoxDescriptor descriptor{
-                                                          widgets::MessageBoxKind::Info, "About Gallery",
-                                                          "ckVision Gallery — a demonstration application.",
-                                                          widgets::MessageBoxButtons::Ok};
-                                                      auto presentation =
-                                                          widgets::present_message_box(app_, *desktop_, roles_, descriptor);
-                                                      presentation.set_completion_handler([](widgets::MessageBoxResult) {});
-                                                  }));
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().help, "&About..."}));
     file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(
         widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));

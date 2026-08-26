@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "editor_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <memory>
 #include <vector>
 
@@ -92,6 +94,9 @@ EditorApp::EditorApp(ui::Application& application)
                                                              widgets::MenuItem::command(widgets::CommandPresentation{open_bash}),
                                                              widgets::MenuItem::command(widgets::CommandPresentation{open_plain})}),
                                           widgets::MenuItem::separator(),
+                                          widgets::MenuItem::command(widgets::CommandPresentation{
+                                              commands.standard().help, "&About..."}),
+                                          widgets::MenuItem::separator(),
                                           widgets::MenuItem::command(widgets::CommandPresentation{commands.standard().quit})}};
     widgets::MenuBarItem edit{"&Edit", {widgets::MenuItem::command(widgets::CommandPresentation{undo}),
                                           widgets::MenuItem::command(widgets::CommandPresentation{redo}),
@@ -139,7 +144,8 @@ EditorApp::EditorApp(ui::Application& application)
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(application_, *desktop_, roles_,
                                 "ckVision Editor example",
-                                "A shared document with a gutter and an editable source view.");
+                                ckv::examples::about_text(
+                                    "A shared document with a gutter and an editable source view."));
 }
 
 void EditorApp::refresh_status() {

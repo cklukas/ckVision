@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "filebrowser_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <algorithm>
 #include <any>
 
@@ -71,7 +73,8 @@ FileBrowserApp::FileBrowserApp(ui::Application& app, FileSystem& fs, std::string
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision File Browser example",
-                                "Master and detail panes over an injected filesystem.");
+                                ckv::examples::about_text(
+                                    "Master and detail panes over an injected filesystem."));
 }
 
 void FileBrowserApp::build_menu_bar() {
@@ -80,6 +83,9 @@ void FileBrowserApp::build_menu_bar() {
     // all render live from the registration above.
     std::vector<widgets::MenuBarItem> menus;
     widgets::MenuBarItem file_menu{"&File", {}};
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(
         widgets::MenuItem::command(app_.commands().standard().quit));
     menus.push_back(std::move(file_menu));

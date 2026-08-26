@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "todo_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -630,8 +632,10 @@ void TodoApp::show_about() {
     about_box_ = widgets::present_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Info, "About ckVision TODO",
-         "ckVision TODO " + std::string(ckv::version_string()) + "\n" + options_.workspace_description +
-             "\n\nChanges save automatically. F1 opens contextual help.",
+         ckv::examples::about_text(
+             "ckVision TODO " + std::string(ckv::version_string()) + "\n" +
+             options_.workspace_description +
+             "\n\nChanges save automatically. F1 opens contextual help."),
          widgets::MessageBoxButtons::Ok});
     about_box_->set_completion_handler([](widgets::MessageBoxResult) {});
 }

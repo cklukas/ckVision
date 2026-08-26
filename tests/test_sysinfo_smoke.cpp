@@ -92,6 +92,15 @@ std::string value_of(const std::vector<std::vector<std::string>>& rows, std::str
 
 }  // namespace
 
+CK_TEST(sysinfo_about_is_separate_from_context_help_and_carries_the_project_copyright) {
+    Fixture f;
+    CK_CHECK(f.run_command("sysinfo.about"));
+    f.app.step(0);
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.term.written_bytes().find(
+                 "Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
+}
+
 CK_TEST(sysinfo_opens_on_the_summary_of_the_machine_it_was_given) {
     Fixture f;
     f.app.step(0);

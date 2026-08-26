@@ -53,6 +53,14 @@ std::string capture(const Fixture& fixture) {
 }
 }  // namespace
 
+CK_TEST(the_editor_about_dialog_carries_the_project_copyright) {
+    Fixture f;
+    CK_CHECK(f.app.execute_command(f.app.commands().standard().help));
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(),
+                              "Copyright (c) 2026 C. Klukas. All rights reserved."));
+}
+
 CK_TEST(the_editor_example_initial_frame_matches_its_pinned_visual_contract) {
     Fixture f;
     f.app.step(0);

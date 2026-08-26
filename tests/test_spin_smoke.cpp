@@ -556,6 +556,20 @@ CK_TEST(spin_about_box_reports_what_this_terminal_said_about_pictures) {
     CK_CHECK(without.spin.graphics_summary().find("no Sixel graphics") != std::string::npos);
 }
 
+CK_TEST(spin_about_dialog_carries_the_project_copyright) {
+    Fixture f;
+    f.settle();
+    CK_CHECK(f.app.execute_command(f.app.commands().standard().help));
+    f.app.step(f.clock.now_nanos());
+
+    bool found = false;
+    for (int row = 0; row < 30; ++row)
+        found = found || f.display_row(row).find(
+                               "Copyright (c) 2026 C. Klukas. All rights reserved.") !=
+                               std::string::npos;
+    CK_CHECK(found);
+}
+
 CK_TEST(spin_example_runs_the_same_object_graph_without_terminal_graphics) {
     Fixture f{ckv::term::headless_no_graphics_profile()};
     f.settle();

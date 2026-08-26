@@ -221,6 +221,8 @@ CK_TEST(the_help_command_answers_with_an_about_box) {
     CK_CHECK(f.app.commands().execute(standard(f.app).help));
     f.app.step(0);
     CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.terminal.written_bytes().find(
+                 "Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
 }
 
 CK_TEST(the_clock_sits_at_the_right_end_of_the_menu_bar_and_stays_there_on_resize) {
