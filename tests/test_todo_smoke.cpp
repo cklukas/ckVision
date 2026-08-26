@@ -681,6 +681,8 @@ CK_TEST(todo_task_right_click_opens_command_context_menu_and_escape_dismisses_it
     CK_CHECK(fixture.app.dispatch(MouseEvent{MouseAction::Down, MouseButton::Right,
                                              Point{lane.x + 3, lane.y + 1}, std::nullopt, Modifier::None}));
     CK_CHECK(fixture.app.input_capture() != nullptr);
+    auto* menu = dynamic_cast<widgets::DropdownMenu*>(fixture.app.input_capture());
+    CK_CHECK(menu != nullptr && menu->highlight().enabled);
     CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
     CK_CHECK(fixture.app.input_capture() == nullptr);
 }
@@ -728,6 +730,29 @@ CK_TEST(todo_first_workspace_option_creates_without_a_modal_prompt) {
     CK_CHECK(todo.controller().is_open());
     CK_CHECK(todo.controller().workspace()->snapshot().tasks.empty());
     CK_CHECK(!app.is_modal());
+    const auto add = app.commands().id_for(TodoApp::kAddTaskKey);
+    CK_CHECK(add && app.command_available(*add));
+    CK_CHECK(app.dispatch(KeyEvent{KeyChord{Key::Char, Modifier::Alt, "t"}}));
+    auto* tasks_menu = dynamic_cast<widgets::DropdownMenu*>(app.input_capture());
+    CK_CHECK(tasks_menu != nullptr && tasks_menu->highlight().enabled);
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK(app.is_modal());
+    CK_CHECK(app.dispatch(key(Key::Escape)));
+}
+
+CK_TEST(todo_tasks_menu_opens_the_selected_tasks_note_editor) {
+    SmokeFixture fixture;
+    CK_CHECK(fixture.app.dispatch(KeyEvent{KeyChord{Key::Char, Modifier::Alt, "t"}}));
+    auto* tasks_menu = dynamic_cast<widgets::DropdownMenu*>(fixture.app.input_capture());
+    CK_CHECK(tasks_menu != nullptr);
+    if (tasks_menu == nullptr) return;
+    CK_CHECK(fixture.app.dispatch(key(Key::Down)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Down)));
+    CK_CHECK(tasks_menu->highlight().command ==
+             fixture.app.commands().id_for(TodoApp::kEditNoteKey).value_or(ui::kInvalidCommand));
+    CK_CHECK(tasks_menu->highlight().enabled);
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    CK_CHECK(fixture.todo.note_window_count() == 1);
 }
 
 CK_TEST(todo_missing_initial_board_is_reported_and_the_last_board_opens) {
