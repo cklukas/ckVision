@@ -320,6 +320,23 @@ CK_TEST(todo_note_window_is_modeless_and_autosaves_after_150ms) {
     CK_CHECK(fixture.app.execute_command(fixture.app.commands().standard().next_window));
 }
 
+CK_TEST(todo_note_editor_accepts_shifted_character_input_through_application_routing) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+
+    CK_CHECK(fixture.app.dispatch(KeyEvent{KeyChord{Key::Char, Modifier::Shift, "U"}}));
+    CK_CHECK(fixture.app.dispatch(KeyEvent{KeyChord{Key::Char, Modifier::None, "ppercase"}}));
+    auto* editor = dynamic_cast<widgets::TextEditor*>(fixture.app.focused());
+    CK_CHECK(editor != nullptr);
+    if (editor == nullptr) return;
+    CK_CHECK(editor->document()->text() == "Uppercase");
+
+    fixture.monotonic.advance(150'000'000);
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1})->note == "Uppercase");
+}
+
 CK_TEST(todo_closing_notes_detaches_each_window_and_activates_the_remaining_note) {
     SmokeFixture fixture;
     const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
