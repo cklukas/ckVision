@@ -1553,6 +1553,38 @@ CK_TEST(a_context_menu_receives_dispatched_keys_and_restores_focus) {
     CK_CHECK(app.focused() == previous);
 }
 
+CK_TEST(application_teardown_safely_closes_an_open_context_menu) {
+    struct TeardownProbe final : ckv::ui::View {
+        explicit TeardownProbe(bool& destroyed)
+            : View(Rect{2, 2, 10, 2}, ckv::ui::FocusPolicy::TabStop), destroyed_(destroyed) {}
+        ~TeardownProbe() override { destroyed_ = true; }
+        bool& destroyed_;
+    };
+
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    bool origin_destroyed = false;
+    {
+        Application app(term, clock);
+        app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+        auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+        Desktop* host = desktop.get();
+        app.root().add(std::move(desktop));
+        auto origin = std::make_unique<TeardownProbe>(origin_destroyed);
+        ckv::ui::View* previous = host->add(std::move(origin));
+        app.set_focus(previous);
+
+        DropdownMenu* popup = show_context_menu(
+            {MenuItem::action("&Copy", {})}, ckv::Point{10, 10}, app, *host);
+        CK_CHECK(app.focused() == popup);
+        CK_CHECK(host->popups().size() == 1);
+        // Leave the menu open. Application owns the root teardown, so the
+        // popup's ordinary dismissal and focus restoration must be safe even
+        // while its Desktop subtree is being destroyed.
+    }
+    CK_CHECK(origin_destroyed);
+}
+
 CK_TEST(a_context_menu_keeps_the_invoking_views_command_context_while_open) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
