@@ -14,7 +14,7 @@ namespace {
 using namespace ckv::todo;
 
 constexpr std::string_view empty_json = R"json({
-  "schema_version": 1,
+  "schema_version": 2,
   "last_board_id": 1,
   "next_board_id": 2,
   "next_lane_id": 4,
@@ -127,7 +127,7 @@ CK_TEST(todo_codec_accepts_reordered_fields_whitespace_and_nested_unknowns) {
         {"id": 3, "title": "Done", "color": null, "sort": "manual", "task_ids": []}
       ], "name": "main", "id": 1, "ignored": 7}],
       "next_lane_id": 4,
-      "schema_version": 1,
+      "schema_version": 2,
       "next_board_id": 2,
       "last_board_id": 1
     })json";
@@ -181,8 +181,8 @@ CK_TEST(todo_codec_rejects_malformed_json_utf8_and_surrogates_without_a_value) {
 
 CK_TEST(todo_codec_rejects_duplicate_missing_wrong_type_and_overflow_fields) {
     std::string json = replace_once(encoded_empty(),
-                                    "\"schema_version\": 1",
-                                    "\"schema_version\": 1,\n  \"schema_version\": 1");
+                                    "\"schema_version\": 2",
+                                    "\"schema_version\": 2,\n  \"schema_version\": 2");
     CK_CHECK(decode_error(json) == TodoCodecErrorCode::DuplicateField);
 
     json = replace_once(encoded_empty(), "  \"last_board_id\": 1,\n", "");
@@ -196,10 +196,10 @@ CK_TEST(todo_codec_rejects_duplicate_missing_wrong_type_and_overflow_fields) {
     CK_CHECK(decode_error(json) == TodoCodecErrorCode::IntegerOutOfRange);
 }
 
-CK_TEST(todo_codec_future_schema_wins_over_v1_shape_validation) {
+CK_TEST(todo_codec_future_schema_wins_over_v2_shape_validation) {
     const std::string json = R"json({
       "boards": 17,
-      "schema_version": 2,
+      "schema_version": 3,
       "last_board_id": "not an id"
     })json";
     const auto decoded = decode_workspace(json);
@@ -215,11 +215,20 @@ CK_TEST(todo_codec_reports_invalid_enums_dates_and_workspace_references) {
     TaskDraft task;
     task.title = "dated";
     task.due_date = IsoDate{"2026-08-31"};
+    task.due_time = IsoTime{"14:30"};
     CK_CHECK(workspace.add_task(LaneId{1}, std::move(task), codec_stamp()));
-    json = replace_once(*encode_workspace(workspace).value, "2026-08-31", "2026-02-30");
+    const std::string dated_json = *encode_workspace(workspace).value;
+    CK_CHECK(dated_json.find("\"due_time\": \"14:30\"") != std::string::npos);
+    json = replace_once(dated_json, "2026-08-31", "2026-02-30");
     CK_CHECK(decode_error(json) == TodoCodecErrorCode::InvalidWorkspace);
 
-    json = replace_once(*encode_workspace(workspace).value, "\"task_ids\": [1]", "\"task_ids\": [99]");
+    json = replace_once(dated_json, "14:30", "24:00");
+    CK_CHECK(decode_error(json) == TodoCodecErrorCode::InvalidWorkspace);
+
+    json = replace_once(dated_json, "\"due_date\": \"2026-08-31\"", "\"due_date\": null");
+    CK_CHECK(decode_error(json) == TodoCodecErrorCode::InvalidWorkspace);
+
+    json = replace_once(dated_json, "\"task_ids\": [1]", "\"task_ids\": [99]");
     CK_CHECK(decode_error(json) == TodoCodecErrorCode::InvalidWorkspace);
 }
 
@@ -234,7 +243,7 @@ CK_TEST(todo_codec_enforces_exact_string_input_and_nesting_limits) {
     CK_CHECK(decode_error(oversized) == TodoCodecErrorCode::StringTooLong);
 
     const auto nested_document = [](std::size_t arrays) {
-        return std::string("{\"schema_version\":1,\"unknown\":") + std::string(arrays, '[') + "0" +
+        return std::string("{\"schema_version\":2,\"unknown\":") + std::string(arrays, '[') + "0" +
                std::string(arrays, ']') +
                ",\"last_board_id\":1,\"next_board_id\":2,\"next_lane_id\":4,\"next_task_id\":1," +
                "\"boards\":[{\"id\":1,\"name\":\"main\",\"lanes\":[" +

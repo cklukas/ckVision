@@ -22,7 +22,7 @@ using namespace ckv;
 using namespace ckv::todo;
 
 CalendarReading smoke_reading() {
-    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}};
+    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}};
 }
 
 TodoWorkspace smoke_workspace() {
@@ -72,7 +72,8 @@ TodoWorkspace two_board_workspace() {
 }
 
 TaskDraft draft_from(const Task& task) {
-    return TaskDraft{task.title, task.details, task.note, task.priority, task.due_date, task.color};
+    return TaskDraft{
+        task.title, task.details, task.note, task.priority, task.due_date, task.due_time, task.color};
 }
 
 void commit_external_task(MemoryTodoRepository& repository, std::string title) {
@@ -194,7 +195,7 @@ CK_TEST(todo_board_only_aliases_do_not_run_while_a_task_dialog_has_focus) {
     CK_CHECK(!fixture.app.is_modal());
 }
 
-CK_TEST(todo_task_dialog_uses_the_typed_date_picker_and_round_trips_a_due_date) {
+CK_TEST(todo_task_dialog_uses_typed_date_and_time_pickers_and_round_trips_both) {
     SmokeFixture fixture;
     const auto edit = fixture.app.commands().id_for(TodoApp::kEditTaskKey);
     CK_CHECK(edit && fixture.app.execute_command(*edit));
@@ -205,17 +206,30 @@ CK_TEST(todo_task_dialog_uses_the_typed_date_picker_and_round_trips_a_due_date) 
     CK_CHECK(due != nullptr);
     if (due == nullptr) return;
     CK_CHECK(!due->value());
+    CK_CHECK(fixture.app.dispatch(key(Key::Char, " ")));
+    CK_CHECK(dynamic_cast<widgets::CalendarDropdown*>(fixture.app.input_capture()) != nullptr);
     CK_CHECK(fixture.app.dispatch(key(Key::Right)));
-    CK_CHECK(fixture.app.dispatch(key(Key::Right)));
-    CK_CHECK(fixture.app.dispatch(key(Key::Up)));
     CK_CHECK((due->value() ==
               std::optional<widgets::DateValue>{widgets::DateValue{2026, 8, 26}}));
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Tab)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Char, " ")));
+    CK_CHECK(fixture.app.dispatch(key(Key::Tab)));
+    auto* due_time = dynamic_cast<widgets::TimePicker*>(fixture.app.focused());
+    CK_CHECK(due_time != nullptr);
+    if (due_time == nullptr) return;
+    CK_CHECK((due_time->value() == widgets::TimeValue{14, 30, 0}));
+    CK_CHECK(fixture.app.dispatch(key(Key::Up)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Right)));
+    CK_CHECK(fixture.app.dispatch(key(Key::Up)));
     CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
     fixture.app.step(fixture.monotonic.now_nanos());
     const Task* task = fixture.todo.controller().workspace()->find_task(TaskId{1});
     CK_CHECK(task != nullptr);
-    if (task != nullptr)
+    if (task != nullptr) {
         CK_CHECK(task->due_date == std::optional<IsoDate>{IsoDate{"2026-08-26"}});
+        CK_CHECK(task->due_time == std::optional<IsoTime>{IsoTime{"15:31"}});
+    }
 }
 
 CK_TEST(todo_move_mode_commits_across_lanes_and_escape_cancels) {

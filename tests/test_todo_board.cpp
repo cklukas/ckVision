@@ -140,6 +140,7 @@ CK_TEST(todo_lane_derives_overdue_today_tomorrow_and_future_badges_from_injected
         TaskDraft draft = board_draft(dates[index].first);
         draft.priority = static_cast<Priority>(index + 1);
         draft.due_date = IsoDate{dates[index].second};
+        if (index == 1) draft.due_time = IsoTime{"09:15"};
         CK_CHECK(workspace.add_task(LaneId{1}, std::move(draft), board_stamp()));
     }
 
@@ -156,7 +157,7 @@ CK_TEST(todo_lane_derives_overdue_today_tomorrow_and_future_badges_from_injected
     CK_CHECK(surface_row(surface, 1).find("↑ Overdue") != std::string::npos);
     CK_CHECK(surface_row(surface, 1).find("! overdue") != std::string::npos);
     CK_CHECK(surface_row(surface, 3).find("• Today") != std::string::npos);
-    CK_CHECK(surface_row(surface, 3).find("! today") != std::string::npos);
+    CK_CHECK(surface_row(surface, 3).find("! today 09:15") != std::string::npos);
     CK_CHECK(surface_row(surface, 5).find("↓ Tomorrow") != std::string::npos);
     CK_CHECK(surface_row(surface, 5).find("tomorrow") != std::string::npos);
     CK_CHECK(surface_row(surface, 7).find("⌛ Future") != std::string::npos);

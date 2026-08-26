@@ -179,6 +179,12 @@ bool encode_task(OutputBuilder& out, const Task& task, std::size_t indent) {
     } else if (!out.append("null")) {
         return false;
     }
+    if (!out.append(",\n") || !out.append(inner) || !out.append("\"due_time\": ")) return false;
+    if (task.due_time) {
+        if (!out.append_string(task.due_time->value)) return false;
+    } else if (!out.append("null")) {
+        return false;
+    }
     return out.append(",\n") && out.append(inner) && out.append("\"color\": ") &&
            append_optional_color(out, task.color) && out.append(",\n") && out.append(inner) &&
            out.append("\"created_at\": ") && out.append_string(task.created_at.value) && out.append(",\n") &&
@@ -759,7 +765,7 @@ private:
     std::optional<Task> parse_task() {
         Task task;
         std::uint32_t fields = 0;
-        constexpr std::uint32_t required = 0x7FFU;
+        constexpr std::uint32_t required = 0xFFFU;
         const bool parsed = reader_.object(3, "$.tasks[]", [&](const std::string& key) {
             if (key == "id") return parse_task_id(fields, key, task.id);
             if (key == "title") return parse_task_string(fields, 1U << 1U, key, task.title,
@@ -770,15 +776,16 @@ private:
                                                           TodoLimits::max_note_bytes);
             if (key == "priority") return parse_priority(fields, key, task.priority);
             if (key == "due_date") return parse_due(fields, key, task.due_date);
+            if (key == "due_time") return parse_due_time(fields, key, task.due_time);
             if (key == "color") {
-                if (!claim_field(reader_, fields, 1U << 6U, key, "$.tasks[].color")) return false;
+                if (!claim_field(reader_, fields, 1U << 7U, key, "$.tasks[].color")) return false;
                 return parse_color(task.color, "$.tasks[].color");
             }
-            if (key == "created_at") return parse_timestamp(fields, 1U << 7U, key, task.created_at);
-            if (key == "created_by") return parse_task_string(fields, 1U << 8U, key, task.created_by,
+            if (key == "created_at") return parse_timestamp(fields, 1U << 8U, key, task.created_at);
+            if (key == "created_by") return parse_task_string(fields, 1U << 9U, key, task.created_by,
                                                                 TodoLimits::max_identity_bytes);
-            if (key == "modified_at") return parse_timestamp(fields, 1U << 9U, key, task.modified_at);
-            if (key == "modified_by") return parse_task_string(fields, 1U << 10U, key, task.modified_by,
+            if (key == "modified_at") return parse_timestamp(fields, 1U << 10U, key, task.modified_at);
+            if (key == "modified_by") return parse_task_string(fields, 1U << 11U, key, task.modified_by,
                                                                  TodoLimits::max_identity_bytes);
             return reader_.skip_value(4, "$.tasks[].*");
         });
@@ -827,6 +834,15 @@ private:
         auto value = reader_.string(10, "$.tasks[].due_date");
         if (!value) return false;
         due = IsoDate{std::move(*value)};
+        return true;
+    }
+
+    bool parse_due_time(std::uint32_t& fields, std::string_view key, std::optional<IsoTime>& due) {
+        if (!claim_field(reader_, fields, 1U << 6U, key, "$.tasks[].due_time")) return false;
+        if (reader_.peek() == 'n') return reader_.null("$.tasks[].due_time");
+        auto value = reader_.string(5, "$.tasks[].due_time");
+        if (!value) return false;
+        due = IsoTime{std::move(*value)};
         return true;
     }
 

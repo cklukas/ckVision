@@ -13,7 +13,7 @@ namespace {
 using namespace ckv::todo;
 
 CalendarReading controller_reading() {
-    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}};
+    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}};
 }
 
 TaskDraft draft(std::string title) {
@@ -78,9 +78,14 @@ CK_TEST(todo_controller_rejects_bad_identity_and_clock_without_writes) {
     CK_CHECK(failed.error.diagnostic == "time source failed");
     CK_CHECK(!repository.revision().value->exists());
 
-    clock.set({IsoTimestamp{"not-a-time"}, IsoDate{"2026-08-25"}});
+    clock.set({IsoTimestamp{"not-a-time"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}});
     const auto malformed = failed_clock.create(InitialWorkspace::Empty);
     CK_CHECK(!malformed && malformed.error.code == ControllerErrorCode::ClockFailure);
+    CK_CHECK(!repository.revision().value->exists());
+
+    clock.set({IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"25:00"}});
+    const auto malformed_local_time = failed_clock.create(InitialWorkspace::Empty);
+    CK_CHECK(!malformed_local_time && malformed_local_time.error.code == ControllerErrorCode::ClockFailure);
     CK_CHECK(!repository.revision().value->exists());
 }
 

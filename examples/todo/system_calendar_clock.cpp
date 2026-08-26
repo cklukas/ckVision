@@ -76,7 +76,14 @@ CalendarReadResult SystemCalendarClock::read() const {
     if (!append_date(reading.local_date.value, local)) {
         return CalendarReadResult::failure("system local calendar value is outside supported range");
     }
-    if (!is_valid(reading.utc_timestamp) || !is_valid(reading.local_date)) {
+    reading.local_time.value.reserve(5);
+    if (local.tm_hour < 0 || local.tm_hour > 23 || local.tm_min < 0 || local.tm_min > 59) {
+        return CalendarReadResult::failure("system local clock value is outside supported range");
+    }
+    append_two(reading.local_time.value, local.tm_hour);
+    reading.local_time.value.push_back(':');
+    append_two(reading.local_time.value, local.tm_min);
+    if (!is_valid(reading.utc_timestamp) || !is_valid(reading.local_date) || !is_valid(reading.local_time)) {
         return CalendarReadResult::failure("system calendar produced an invalid reading");
     }
     return CalendarReadResult::success(std::move(reading));

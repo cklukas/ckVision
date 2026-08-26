@@ -50,17 +50,22 @@ personal data.
 
 ### Tasks and movement
 
-Each task has a title, details, long note, due date, four-level priority,
+Each task has a title, details, long note, due date with an optional due time, four-level priority,
 optional named color, stable id, creator/updater, and timestamps. The two-row
 cards keep their height while selection moves. Priority and due state use text
 and glyph shape as well as color, so Mono remains understandable.
 
 F2 adds a task and F3 edits every short field. Due dates use ckVision's typed,
-optional DatePicker rather than process locale: Left/Right selects year,
-month, or day, Up/Down adjusts it, and Delete clears it. Cards label overdue,
-today, and tomorrow from the injected calendar date before falling back to a
-future ISO date. Delete is a permanent, confirmed operation; Archive first
-writes a separate durable record and only then removes the task.
+optional `DatePicker` rather than process locale: Left/Right selects year,
+month, or day, Up/Down adjusts it, and Delete clears it. Space or the visible
+dropdown affordance opens ckVision's full `CalendarDropdown`/`CalendarView` for
+grid selection. The adjacent optional due-time control is a `TimePicker`;
+Left/Right selects hour or minute and
+Up/Down adjusts it. New times seed from the injected local clock and persist
+as canonical 24-hour `HH:MM`. Cards label overdue, today, and tomorrow from
+the injected calendar date before falling back to a future ISO date, and append
+the due time when one is set. Delete is a permanent, confirmed operation;
+Archive first writes a separate durable record and only then removes the task.
 
 ![Editing a task](generated/screenshots/todo-task-editor.svg)
 

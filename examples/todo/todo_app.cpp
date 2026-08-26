@@ -107,6 +107,15 @@ std::optional<widgets::DateValue> local_date_value(CalendarClock& calendar) {
     return reading ? widgets::parse_iso_date(reading.value->local_date.value) : std::nullopt;
 }
 
+std::optional<widgets::TimeValue> time_value(const std::optional<IsoTime>& time) {
+    return time ? widgets::parse_iso_time(time->value) : std::nullopt;
+}
+
+std::optional<widgets::TimeValue> local_time_value(CalendarClock& calendar) {
+    const CalendarReadResult reading = calendar.read();
+    return reading ? widgets::parse_iso_time(reading.value->local_time.value) : std::nullopt;
+}
+
 bool same_status_items(const std::vector<widgets::StatusLineItem>& left,
                        const std::vector<widgets::StatusLineItem>& right) {
     if (left.size() != right.size()) return false;
@@ -727,7 +736,7 @@ void TodoApp::poll_repository() {
 }
 
 TaskDraft TodoApp::draft_from(const Task& task) const {
-    return TaskDraft{task.title, task.details, task.note, task.priority, task.due_date, task.color};
+    return TaskDraft{task.title, task.details, task.note, task.priority, task.due_date, task.due_time, task.color};
 }
 
 void TodoApp::present_task_dialog(bool editing) {
@@ -738,7 +747,7 @@ void TodoApp::present_task_dialog(bool editing) {
     descriptor.title = editing ? "Edit task" : "Add task";
     descriptor.help_context_key = "todo.tasks";
     descriptor.resizable = true;
-    descriptor.minimum_window_size = Size{46, 15};
+    descriptor.minimum_window_size = Size{46, 17};
     descriptor.fields.push_back(widgets::FieldDescriptor{
         "&Title:", initial.title, [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_title_bytes; }});
     descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -750,6 +759,19 @@ void TodoApp::present_task_dialog(bool editing) {
     due.date_seed = local_date_value(calendar_);
     due.date_optional = true;
     descriptor.fields.push_back(std::move(due));
+    widgets::FieldDescriptor include_time;
+    include_time.label = "Set due &time";
+    include_time.kind = widgets::FieldKind::Check;
+    include_time.initial_checked = initial.due_time.has_value();
+    descriptor.fields.push_back(std::move(include_time));
+    widgets::FieldDescriptor due_time;
+    due_time.label = "Due ti&me:";
+    due_time.kind = widgets::FieldKind::Time;
+    due_time.initial_time = time_value(initial.due_time).value_or(
+        local_time_value(calendar_).value_or(widgets::TimeValue{}));
+    due_time.time_show_seconds = false;
+    due_time.time_24_hour = true;
+    descriptor.fields.push_back(std::move(due_time));
     descriptor.fields.push_back(combo_field("&Priority:", strings(kPriorityNames), static_cast<int>(initial.priority) - 1));
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(initial.color)));
     if (task != nullptr) {
@@ -777,15 +799,21 @@ void TodoApp::accept_task_dialog(bool editing,
                                  std::optional<TaskId> task_id,
                                  std::string preserved_note,
                                  const widgets::DialogResult& result) {
-    if (result.values.size() < 5 || result.selected.size() < 5 || result.dates.size() < 5) return;
+    if (result.values.size() < 7 || result.checked.size() < 7 || result.selected.size() < 7 ||
+        result.dates.size() < 7 || result.times.size() < 7) {
+        return;
+    }
     TaskDraft draft;
     draft.title = result.values[0];
     draft.details = result.values[1];
     draft.note = std::move(preserved_note);
     if (result.dates[2]) draft.due_date = IsoDate{widgets::format_iso_date(*result.dates[2])};
-    const int priority = result.selected[3] >= 0 ? result.selected[3] : 1;
+    if (draft.due_date && result.checked[3] && result.times[4]) {
+        draft.due_time = IsoTime{widgets::format_iso_time(*result.times[4], false)};
+    }
+    const int priority = result.selected[5] >= 0 ? result.selected[5] : 1;
     draft.priority = static_cast<Priority>(std::clamp(priority + 1, 1, 4));
-    draft.color = color_from_selection(result.selected[4]);
+    draft.color = color_from_selection(result.selected[6]);
 
     if (editing && task_id) {
         const Task* current = controller_.workspace() != nullptr ? controller_.workspace()->find_task(*task_id) : nullptr;

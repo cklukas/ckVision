@@ -32,7 +32,7 @@ using namespace ckv::todo;
 }
 
 CalendarReading fixed_reading() {
-    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}};
+    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}};
 }
 
 AuditStamp external_stamp() { return {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external-instance"}; }
@@ -99,7 +99,8 @@ void commit_external_title(Scene& scene, TaskId task_id, std::string title) {
     if (!loaded) fail("could not load the external workspace");
     const Task* task = loaded.value->workspace.find_task(task_id);
     if (task == nullptr) fail("external task was unavailable");
-    TaskDraft draft{task->title, task->details, task->note, task->priority, task->due_date, task->color};
+    TaskDraft draft{
+        task->title, task->details, task->note, task->priority, task->due_date, task->due_time, task->color};
     draft.title = std::move(title);
     if (!loaded.value->workspace.edit_task(task_id, std::move(draft), external_stamp()))
         fail("could not edit the external task");

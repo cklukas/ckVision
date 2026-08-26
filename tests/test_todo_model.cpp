@@ -27,6 +27,7 @@ Task one_task() {
                 "A note\nwith two lines.",
                 Priority::High,
                 IsoDate{"2026-08-31"},
+                std::nullopt,
                 TodoColor::Blue,
                 IsoTimestamp{"2026-08-25T10:30:00Z"},
                 "creator",
@@ -84,7 +85,8 @@ TodoWorkspace workspace_from(WorkspaceSnapshot snapshot) {
 }
 
 TaskDraft draft(std::string title = "New task") {
-    return TaskDraft{std::move(title), "Details", "Note", Priority::Normal, std::nullopt, std::nullopt};
+    return TaskDraft{
+        std::move(title), "Details", "Note", Priority::Normal, std::nullopt, std::nullopt, std::nullopt};
 }
 
 WorkspaceSnapshot board_merge_snapshot() {
@@ -180,7 +182,7 @@ CK_TEST(todo_snapshot_round_trip_preserves_every_field_and_lookup) {
 
 CK_TEST(todo_snapshot_rejects_schema_main_and_selection_errors) {
     auto snapshot = valid_snapshot();
-    snapshot.schema_version = 2;
+    snapshot.schema_version = 3;
     CK_CHECK(error_for(snapshot) == ModelErrorCode::UnknownSchema);
 
     snapshot = valid_snapshot();
@@ -263,6 +265,20 @@ CK_TEST(todo_snapshot_accepts_real_leap_day_and_rejects_invalid_dates) {
     CK_CHECK(error_for(snapshot) == ModelErrorCode::InvalidDate);
 }
 
+CK_TEST(todo_snapshot_accepts_canonical_due_times_and_requires_a_due_date) {
+    auto snapshot = snapshot_with_task();
+    snapshot.tasks.front().due_time = IsoTime{"14:30"};
+    CK_CHECK(TodoWorkspace::from_snapshot(snapshot));
+
+    snapshot.tasks.front().due_time = IsoTime{"24:00"};
+    CK_CHECK(error_for(snapshot) == ModelErrorCode::InvalidValue);
+    snapshot.tasks.front().due_time = IsoTime{"2:30"};
+    CK_CHECK(error_for(snapshot) == ModelErrorCode::InvalidValue);
+    snapshot.tasks.front().due_time = IsoTime{"14:30"};
+    snapshot.tasks.front().due_date.reset();
+    CK_CHECK(error_for(snapshot) == ModelErrorCode::InvalidValue);
+}
+
 CK_TEST(todo_snapshot_rejects_invalid_and_regressing_timestamps) {
     auto snapshot = snapshot_with_task();
     snapshot.tasks.front().modified_at = IsoTimestamp{"2026-08-25T25:00:00Z"};
@@ -337,7 +353,13 @@ CK_TEST(todo_task_add_failure_preserves_ids_generation_and_snapshot) {
 CK_TEST(todo_task_edit_updates_only_modified_facts_and_noop_is_free) {
     TodoWorkspace workspace = workspace_from(snapshot_with_task());
     const Task original = *workspace.find_task(TaskId{1});
-    TaskDraft same{original.title, original.details, original.note, original.priority, original.due_date, original.color};
+    TaskDraft same{original.title,
+                   original.details,
+                   original.note,
+                   original.priority,
+                   original.due_date,
+                   original.due_time,
+                   original.color};
     const auto no_op = workspace.edit_task(TaskId{1}, same, {IsoTimestamp{"invalid"}, ""});
     CK_CHECK(no_op && !no_op.value->changed);
     CK_CHECK(workspace.generation() == 0);
@@ -408,6 +430,25 @@ CK_TEST(todo_task_ordering_is_stable_for_every_sort_mode) {
                  std::vector<TaskId>({TaskId{1}, TaskId{2}, TaskId{3}, TaskId{4}}));
     }
     CK_CHECK(TodoWorkspace::empty().ordered_tasks(LaneId{99}).error.code == ModelErrorCode::LaneNotFound);
+}
+
+CK_TEST(todo_due_order_places_all_day_tasks_before_timed_tasks_on_the_same_date) {
+    WorkspaceSnapshot snapshot = valid_snapshot();
+    Task all_day = task_with(TaskId{1}, "all day", Priority::Normal, IsoDate{"2026-08-30"},
+                             std::nullopt, "2026-08-25T10:00:00Z", "2026-08-25T10:00:00Z");
+    Task late = task_with(TaskId{2}, "late", Priority::Normal, IsoDate{"2026-08-30"},
+                          std::nullopt, "2026-08-25T10:00:00Z", "2026-08-25T10:00:00Z");
+    late.due_time = IsoTime{"17:00"};
+    Task early = task_with(TaskId{3}, "early", Priority::Normal, IsoDate{"2026-08-30"},
+                           std::nullopt, "2026-08-25T10:00:00Z", "2026-08-25T10:00:00Z");
+    early.due_time = IsoTime{"08:30"};
+    snapshot.tasks = {all_day, late, early};
+    snapshot.boards.front().lanes.front().sort = SortMode::Due;
+    snapshot.boards.front().lanes.front().task_ids = {TaskId{2}, TaskId{1}, TaskId{3}};
+    snapshot.next_task_id = 4;
+    TodoWorkspace workspace = workspace_from(std::move(snapshot));
+    const auto ordered = workspace.ordered_tasks(LaneId{1});
+    CK_CHECK(ordered && *ordered.value == std::vector<TaskId>({TaskId{1}, TaskId{3}, TaskId{2}}));
 }
 
 CK_TEST(todo_task_move_stages_without_mutation_and_commit_uses_stable_anchor) {

@@ -75,6 +75,16 @@ CK_TEST(date_and_time_pickers_change_only_from_caller_supplied_values) {
     CK_CHECK(time.value() == (TimeValue{0, 59, 59}));
 }
 
+CK_TEST(typed_time_interchange_is_canonical_and_strict) {
+    CK_CHECK(format_iso_time(TimeValue{7, 8, 9}) == "07:08:09");
+    CK_CHECK(format_iso_time(TimeValue{7, 8, 9}, false) == "07:08");
+    CK_CHECK((parse_iso_time("23:59") == std::optional<TimeValue>{TimeValue{23, 59, 0}}));
+    CK_CHECK((parse_iso_time("23:59:58") == std::optional<TimeValue>{TimeValue{23, 59, 58}}));
+    CK_CHECK(!parse_iso_time("24:00"));
+    CK_CHECK(!parse_iso_time("7:08"));
+    CK_CHECK(!parse_iso_time("12:60:00"));
+}
+
 CK_TEST(date_picker_supports_strict_optional_segmented_editing_without_a_clock) {
     Standalone s;
     DatePicker date;
@@ -606,6 +616,28 @@ CK_TEST(a_calendar_dropdown_hangs_right_aligned_under_its_anchor_and_closes_outs
     app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 10},
                                   std::nullopt, ckv::Modifier::None});
     app.step(0);
+    CK_CHECK(app.input_capture() == nullptr);
+}
+
+CK_TEST(a_hosted_date_picker_opens_the_calendar_and_tracks_its_typed_selection) {
+    ckv::term::HeadlessTerminal term(ckv::Size{60, 20});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<ckv::widgets::Desktop*>(
+        app.root().add_child(std::make_unique<ckv::widgets::Desktop>(app.root().bounds())));
+    auto* picker = static_cast<DatePicker*>(desktop->add_child(std::make_unique<DatePicker>()));
+    picker->set_bounds(ckv::Rect{4, 2, 14, 1});
+    picker->set_seed(DateValue{2026, 8, 25});
+    picker->set_calendar_host(app, *desktop);
+    app.step(0);
+
+    CK_CHECK(picker->on_key(ckv::KeyEvent{ckv::KeyChord{Key::Char, Modifier::None, " "}}));
+    CK_CHECK(dynamic_cast<CalendarDropdown*>(app.input_capture()) != nullptr);
+    CK_CHECK(app.dispatch(key(Key::Right)));
+    CK_CHECK((picker->value() == std::optional<DateValue>{DateValue{2026, 8, 26}}));
+    CK_CHECK(app.dispatch(key(Key::Escape)));
     CK_CHECK(app.input_capture() == nullptr);
 }
 

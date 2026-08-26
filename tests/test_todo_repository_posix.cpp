@@ -139,7 +139,8 @@ CK_TEST(todo_app_displays_a_task_committed_by_another_process_on_the_next_poll) 
     ckv::term::HeadlessTerminal terminal(ckv::Size{100, 30});
     ckv::ManualClock monotonic;
     ckv::ui::Application app(terminal, monotonic);
-    FixedCalendarClock calendar({IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}});
+    FixedCalendarClock calendar(
+        {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}});
     TodoApp todo(app, repository, calendar, "parent-process");
     CK_CHECK(todo.controller().workspace()->find_task(TaskId{4}) == nullptr);
 

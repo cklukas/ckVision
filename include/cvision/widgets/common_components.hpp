@@ -61,6 +61,12 @@ struct TimeValue {
     friend bool operator==(const TimeValue&, const TimeValue&) = default;
 };
 
+// Locale-free interchange for typed time controls. Parsing accepts canonical
+// HH:MM and HH:MM:SS forms only; formatting includes seconds when requested.
+bool is_valid_time(TimeValue time) noexcept;
+std::string format_iso_time(TimeValue time, bool include_seconds = true);
+std::optional<TimeValue> parse_iso_time(std::string_view text) noexcept;
+
 // Whether an hour reads 0..23 or 1..12 with a meridiem word. Which one a
 // reader expects is a property of where they are, not of the clock, so the
 // host chooses it along with the words -- ckVision carries no locale data.
@@ -323,6 +329,11 @@ public:
     bool empty_allowed() const noexcept { return empty_allowed_; }
     void set_valid(bool valid);
     bool valid() const noexcept { return valid_; }
+    // Supplies the explicit popup host used by Space or the dropdown
+    // affordance. Without a host, DatePicker remains a standalone segmented
+    // editor and performs no hidden application or desktop lookup.
+    void set_calendar_host(ui::Application& app, Desktop& desktop) noexcept;
+    bool open_calendar();
     std::function<void(std::optional<DateValue>)> on_change;
 
     void draw(scene::Painter& painter) override;
@@ -341,6 +352,9 @@ private:
     bool empty_allowed_ = true;
     bool valid_ = true;
     bool focused_ = false;
+    ui::Application* calendar_app_ = nullptr;
+    Desktop* calendar_desktop_ = nullptr;
+    CalendarDropdown* calendar_dropdown_ = nullptr;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
@@ -353,6 +367,8 @@ public:
     TimeValue value() const noexcept { return value_; }
     void set_show_seconds(bool show);
     void set_24_hour(bool enabled);
+    void set_valid(bool valid) { valid_ = valid; invalidate(); }
+    bool valid() const noexcept { return valid_; }
     bool show_seconds() const noexcept { return show_seconds_; }
     bool twenty_four_hour() const noexcept { return twenty_four_hour_; }
     std::function<void(TimeValue)> on_change;
@@ -369,9 +385,11 @@ private:
     int field_ = 0;
     bool show_seconds_ = true;
     bool twenty_four_hour_ = true;
+    bool valid_ = true;
     bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId invalid_role_ = ui::kInvalidRole;
 };
 
 class SpinBox : public ui::View {

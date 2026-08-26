@@ -250,7 +250,8 @@ ControllerResult<CalendarReading> TodoController::read_calendar() const {
             ControllerError{ControllerErrorCode::ClockFailure, ModelErrorCode::None, RepositoryErrorCode::None,
                             std::move(reading.diagnostic)});
     }
-    if (!is_valid(reading.value->utc_timestamp) || !is_valid(reading.value->local_date)) {
+    if (!is_valid(reading.value->utc_timestamp) || !is_valid(reading.value->local_date) ||
+        !is_valid(reading.value->local_time)) {
         return ControllerResult<CalendarReading>::failure(
             ControllerError{ControllerErrorCode::ClockFailure, ModelErrorCode::None, RepositoryErrorCode::None,
                             "calendar clock returned a non-canonical reading"});

@@ -12,7 +12,7 @@
 
 namespace ckv::todo {
 
-inline constexpr std::uint32_t todo_schema_version = 1;
+inline constexpr std::uint32_t todo_schema_version = 2;
 
 struct BoardId {
     std::uint64_t value = 0;
@@ -73,6 +73,11 @@ struct IsoTimestamp {
     friend bool operator==(const IsoTimestamp&, const IsoTimestamp&) = default;
 };
 
+struct IsoTime {
+    std::string value;
+    friend bool operator==(const IsoTime&, const IsoTime&) = default;
+};
+
 struct AuditStamp {
     IsoTimestamp timestamp;
     std::string identity;
@@ -80,6 +85,7 @@ struct AuditStamp {
 };
 
 bool is_valid(IsoDate date) noexcept;
+bool is_valid(IsoTime time) noexcept;
 bool is_valid(IsoTimestamp timestamp) noexcept;
 
 struct TaskDraft {
@@ -88,6 +94,7 @@ struct TaskDraft {
     std::string note;
     Priority priority = Priority::Normal;
     std::optional<IsoDate> due_date;
+    std::optional<IsoTime> due_time;
     std::optional<TodoColor> color;
     friend bool operator==(const TaskDraft&, const TaskDraft&) = default;
 };
@@ -99,6 +106,7 @@ struct Task {
     std::string note;
     Priority priority = Priority::Normal;
     std::optional<IsoDate> due_date;
+    std::optional<IsoTime> due_time;
     std::optional<TodoColor> color;
     IsoTimestamp created_at;
     std::string created_by;

@@ -55,7 +55,9 @@ int run_demo(const ckv::todo::TodoLaunchOptions& options) {
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock, clipboard);
     ckv::todo::FixedCalendarClock calendar(
-        {ckv::todo::IsoTimestamp{"2026-08-25T12:00:00Z"}, ckv::todo::IsoDate{"2026-08-25"}});
+        {ckv::todo::IsoTimestamp{"2026-08-25T12:00:00Z"},
+         ckv::todo::IsoDate{"2026-08-25"},
+         ckv::todo::IsoTime{"14:30"}});
     const auto guided = ckv::todo::TodoWorkspace::guided(
         {ckv::todo::IsoTimestamp{"2026-08-25T12:00:00Z"}, "demo"});
     if (!guided) {

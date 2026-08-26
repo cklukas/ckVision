@@ -162,6 +162,26 @@ CK_TEST(a_required_date_materializes_its_seed_while_an_optional_date_may_be_empt
     CK_CHECK(validate_dialog(optional, descriptor, app));
 }
 
+CK_TEST(a_time_field_materializes_as_a_typed_picker_with_its_own_buddy) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&At:",
+        .kind = ckv::widgets::FieldKind::Time,
+        .initial_time = ckv::widgets::TimeValue{14, 30, 0},
+        .time_show_seconds = false,
+    });
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.times.size() == 1);
+    CK_CHECK(dialog.times[0] != nullptr);
+    CK_CHECK(dialog.inputs[0] == nullptr);
+    CK_CHECK(dialog.labels[0]->buddy() == dialog.times[0]);
+    CK_CHECK(dialog.initial_focus == dialog.times[0]);
+    CK_CHECK(dialog.times[0]->value() == (ckv::widgets::TimeValue{14, 30, 0}));
+    CK_CHECK(!dialog.times[0]->show_seconds());
+}
+
 CK_TEST(the_button_marked_default_is_reported_as_the_default_button) {
     Fixture f;
     DialogDescriptor descriptor;

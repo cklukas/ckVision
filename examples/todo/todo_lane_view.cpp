@@ -315,11 +315,20 @@ Style TodoLaneView::task_marker_style(const Task& task, Style base) const {
 
 std::string TodoLaneView::due_badge(const Task& task) const {
     if (!task.due_date) return {};
-    if (!today_) return task.due_date->value;
-    if (task.due_date->value < today_->value) return "! overdue";
-    if (task.due_date == today_) return "! today";
-    if (task.due_date == tomorrow_) return "tomorrow";
-    return task.due_date->value;
+    std::string label;
+    if (!today_) {
+        label = task.due_date->value;
+    } else if (task.due_date->value < today_->value) {
+        label = "! overdue";
+    } else if (task.due_date == today_) {
+        label = "! today";
+    } else if (task.due_date == tomorrow_) {
+        label = "tomorrow";
+    } else {
+        label = task.due_date->value;
+    }
+    if (task.due_time) label += " " + task.due_time->value;
+    return label;
 }
 
 void TodoLaneView::draw(scene::Painter& painter) {

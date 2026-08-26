@@ -103,9 +103,9 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 ## Fields that are not text
 
 `FieldDescriptor::kind` selects what a field materializes as. `Text` is the
-default and is what every descriptor written before the enum existed still
-gets; `Check` is a single checkbox carrying `label` as its own text; `Note` is
-text the form states rather than asks.
+default; `Check` is a single checkbox carrying `label` as its own text; `Note`
+is text the form states rather than asks. `Radio`, `Combo`, `Number`, `Date`,
+and `Time` materialize their corresponding typed ckVision controls.
 
 ```cpp
 descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -117,12 +117,14 @@ descriptor.fields.push_back(widgets::FieldDescriptor{
     .kind = widgets::FieldKind::Note});
 ```
 
-`MaterializedDialog::labels`, `inputs` and `checks`, and `DialogResult::values`
-and `checked`, are all parallel to `descriptor.fields`: field *i*'s widget and
-answer sit at index *i* whatever kind it is, so a caller never counts kinds to
-find its own value. The slots a field did not fill are null (or empty), and a
-`Check` field is skipped by validation — it has no text to validate and no
-invalid state to show.
+`MaterializedDialog::labels`, `inputs`, `checks`, `radios`, `combos`, `numbers`,
+`dates`, and `times`, and the corresponding typed `DialogResult` vectors, are
+all parallel to `descriptor.fields`: field *i*'s widget and answer sit at index
+*i* whatever kind it is, so a caller never counts kinds to find its own value.
+The slots a field did not fill are null (or empty), and a `Check` field is
+skipped by validation — it has no text to validate and no invalid state to
+show. Date and time answers remain typed values; their canonical ISO strings in
+`values` are a convenience for persistence and general validators.
 
 A checkbox is ticked with `Space`. `Enter` is left to the form, so it reaches
 the default button from anywhere in the dialog, a focused checkbox or radio
@@ -132,8 +134,12 @@ Notes take no focus, so `Tab` still moves between the fields a reader answers.
 Consecutive notes lay out as one paragraph with no blank row between them: the
 form's own spacing separates questions, not the lines of a sentence.
 
-`Radio`, `Combo` and `Number` field kinds are not implemented; a form needing
-those is still built by hand.
+`Date` can be optional and carries an explicit deterministic seed. `Time`
+supports 24-hour or 12-hour display and optional seconds. Both controls use
+arrow-key segmented editing and remain ordinary labeled tab stops. A Date
+field presented by the standard dialog host also opens ckVision's full
+`CalendarDropdown` with Space or its visible dropdown affordance; calendar
+selection updates the same typed `DateValue` returned by the dialog.
 
 ## Standard message boxes and strings
 

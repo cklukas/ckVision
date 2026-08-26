@@ -174,7 +174,13 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     // The self-detach is deferred until the button callback unwinds, then
     // drained by this same step's ordinary posted-work phase.
     CK_CHECK((presentation.result() ==
-              DialogResult{true, {"localhost"}, {false}, {-1}, {std::nullopt}, {std::nullopt}}));
+              DialogResult{true,
+                           {"localhost"},
+                           {false},
+                           {-1},
+                           {std::nullopt},
+                           {std::nullopt},
+                           {std::nullopt}}));
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(f.desktop->windows().empty());
 }
@@ -359,7 +365,13 @@ CK_TEST(descriptor_dialog_acceptance_survives_a_default_callback_that_destroys_i
     f.terminal.inject_bytes("\r", 0);
     CK_CHECK(f.app.step(0));
     CK_CHECK((presentation.result() ==
-              DialogResult{true, {"value"}, {false}, {-1}, {std::nullopt}, {std::nullopt}}));
+              DialogResult{true,
+                           {"value"},
+                           {false},
+                           {-1},
+                           {std::nullopt},
+                           {std::nullopt},
+                           {std::nullopt}}));
     CK_CHECK(!f.app.is_modal());
 }
 
@@ -527,8 +539,13 @@ CK_TEST(an_accepted_dialog_reports_each_check_field_beside_its_text_fields) {
 
     CK_CHECK(presentation.completed());
     CK_CHECK((presentation.result() ==
-              DialogResult{true, {"kept", ""}, {false, true}, {-1, -1},
-                           {std::nullopt, std::nullopt}, {std::nullopt, std::nullopt}}));
+              DialogResult{true,
+                           {"kept", ""},
+                           {false, true},
+                           {-1, -1},
+                           {std::nullopt, std::nullopt},
+                           {std::nullopt, std::nullopt},
+                           {std::nullopt, std::nullopt}}));
 }
 
 CK_TEST(a_cancelled_dialog_reports_no_check_state_either) {
@@ -696,6 +713,12 @@ CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_ind
         .initial_date = ckv::widgets::DateValue{2026, 8, 25},
     });
     descriptor.fields.push_back(FieldDescriptor{
+        .label = "Run &time:",
+        .kind = ckv::widgets::FieldKind::Time,
+        .initial_time = ckv::widgets::TimeValue{14, 30, 0},
+        .time_show_seconds = false,
+    });
+    descriptor.fields.push_back(FieldDescriptor{
         .label = "Nothing is ever sent to a device.", .kind = ckv::widgets::FieldKind::Note});
     descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
 
@@ -705,12 +728,13 @@ CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_ind
     CK_CHECK(presentation.completed());
     const DialogResult result = *presentation.result();
     CK_CHECK(result.accepted);
-    CK_CHECK(result.values.size() == 7U);
-    CK_CHECK(result.checked.size() == 7U);
-    CK_CHECK(result.selected.size() == 7U);
-    CK_CHECK(result.numbers.size() == 7U);
-    CK_CHECK(result.dates.size() == 7U);
-    if (result.values.size() == 7U) {
+    CK_CHECK(result.values.size() == 8U);
+    CK_CHECK(result.checked.size() == 8U);
+    CK_CHECK(result.selected.size() == 8U);
+    CK_CHECK(result.numbers.size() == 8U);
+    CK_CHECK(result.dates.size() == 8U);
+    CK_CHECK(result.times.size() == 8U);
+    if (result.values.size() == 8U) {
         CK_CHECK(result.values[0] == "/tmp");
         CK_CHECK(result.checked[1]);
         CK_CHECK(result.selected[2] == 0);
@@ -718,15 +742,19 @@ CK_TEST(a_typed_form_mixes_every_field_kind_and_keeps_each_answer_at_its_own_ind
         CK_CHECK(result.values[5] == "2026-08-25");
         CK_CHECK((result.dates[5] ==
                   std::optional<ckv::widgets::DateValue>{ckv::widgets::DateValue{2026, 8, 25}}));
+        CK_CHECK(result.values[6] == "14:30");
+        CK_CHECK((result.times[6] ==
+                  std::optional<ckv::widgets::TimeValue>{ckv::widgets::TimeValue{14, 30, 0}}));
         CK_CHECK(result.values[3] == "ansi");
         CK_CHECK(result.numbers[4].has_value());
         if (result.numbers[4]) CK_CHECK(*result.numbers[4] == 1024);
         // The note answered nothing, and said so in every vector.
-        CK_CHECK(result.values[6].empty());
-        CK_CHECK(!result.checked[6]);
-        CK_CHECK(result.selected[6] == -1);
-        CK_CHECK(!result.numbers[6].has_value());
-        CK_CHECK(!result.dates[6].has_value());
+        CK_CHECK(result.values[7].empty());
+        CK_CHECK(!result.checked[7]);
+        CK_CHECK(result.selected[7] == -1);
+        CK_CHECK(!result.numbers[7].has_value());
+        CK_CHECK(!result.dates[7].has_value());
+        CK_CHECK(!result.times[7].has_value());
     }
 }
 

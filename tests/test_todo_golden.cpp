@@ -24,7 +24,7 @@ using namespace ckv;
 using namespace ckv::todo;
 
 CalendarReading golden_reading() {
-    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}};
+    return {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}};
 }
 
 AuditStamp golden_stamp(std::string identity = "demo") {
@@ -97,7 +97,8 @@ void commit_external_title(GoldenScene& scene) {
     const Task* task = loaded.value->workspace.find_task(TaskId{1});
     CK_CHECK(task != nullptr);
     if (task == nullptr) return;
-    TaskDraft draft{task->title, task->details, task->note, task->priority, task->due_date, task->color};
+    TaskDraft draft{
+        task->title, task->details, task->note, task->priority, task->due_date, task->due_time, task->color};
     draft.title = "Changed in another instance";
     CK_CHECK(loaded.value->workspace.edit_task(
         TaskId{1}, std::move(draft), {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external-instance"}));

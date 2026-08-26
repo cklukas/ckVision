@@ -13,6 +13,7 @@ namespace ckv::todo {
 struct CalendarReading {
     IsoTimestamp utc_timestamp;
     IsoDate local_date;
+    IsoTime local_time;
     friend bool operator==(const CalendarReading&, const CalendarReading&) = default;
 };
 

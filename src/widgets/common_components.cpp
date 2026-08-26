@@ -151,6 +151,32 @@ std::optional<DateValue> parse_iso_date(std::string_view text) noexcept {
     return is_valid_date(date) ? std::optional<DateValue>{date} : std::nullopt;
 }
 
+bool is_valid_time(TimeValue time) noexcept {
+    return time.hour >= 0 && time.hour <= 23 && time.minute >= 0 && time.minute <= 59 &&
+           time.second >= 0 && time.second <= 59;
+}
+
+std::string format_iso_time(TimeValue time, bool include_seconds) {
+    return two_digit(time.hour) + ":" + two_digit(time.minute) +
+           (include_seconds ? ":" + two_digit(time.second) : std::string{});
+}
+
+std::optional<TimeValue> parse_iso_time(std::string_view text) noexcept {
+    if ((text.size() != 5 && text.size() != 8) || text[2] != ':' || (text.size() == 8 && text[5] != ':'))
+        return std::nullopt;
+    const auto pair = [text](std::size_t index) -> std::optional<int> {
+        if (text[index] < '0' || text[index] > '9' || text[index + 1] < '0' || text[index + 1] > '9')
+            return std::nullopt;
+        return (text[index] - '0') * 10 + (text[index + 1] - '0');
+    };
+    const auto hour = pair(0);
+    const auto minute = pair(3);
+    const auto second = text.size() == 8 ? pair(6) : std::optional<int>{0};
+    if (!hour || !minute || !second) return std::nullopt;
+    const TimeValue value{*hour, *minute, *second};
+    return is_valid_time(value) ? std::optional<TimeValue>{value} : std::nullopt;
+}
+
 std::optional<DateValue> add_calendar_days(DateValue date, int days) noexcept {
     if (!is_valid_date(date)) return std::nullopt;
     const int first = serial(DateValue{kFirstCalendarYear, 1, 1});
@@ -841,7 +867,7 @@ bool CalendarView::within_marked_span(DateValue date) const noexcept {
 
 DatePicker::DatePicker() {
     set_focus_policy(ui::FocusPolicy::TabStop);
-    set_preferred_size(Size{12, 1});
+    set_preferred_size(Size{14, 1});
 }
 
 void DatePicker::set_value(std::optional<DateValue> value) {
@@ -876,26 +902,55 @@ void DatePicker::set_valid(bool valid) {
     invalidate();
 }
 
+void DatePicker::set_calendar_host(ui::Application& app, Desktop& desktop) noexcept {
+    calendar_app_ = &app;
+    calendar_desktop_ = &desktop;
+}
+
+bool DatePicker::open_calendar() {
+    if (calendar_app_ == nullptr || calendar_desktop_ == nullptr) return false;
+    if (calendar_dropdown_ != nullptr) return true;
+    CalendarDropdown* const dropdown =
+        show_calendar_dropdown(*this, *calendar_app_, *calendar_desktop_);
+    calendar_dropdown_ = dropdown;
+    const DateValue selected = value_.value_or(seed_);
+    dropdown->show_month(selected);
+    dropdown->calendar().set_selected(selected);
+    dropdown->calendar().set_today(seed_);
+    const std::weak_ptr<void> liveness = lifetime_token();
+    dropdown->calendar().on_select = [this, liveness](DateValue date) {
+        if (!liveness.expired()) set_value(date);
+    };
+    dropdown->on_closed = [this, liveness] {
+        if (!liveness.expired()) calendar_dropdown_ = nullptr;
+    };
+    return true;
+}
+
 void DatePicker::draw(scene::Painter& painter) {
     const ui::RoleId role = !valid_ ? invalid_role_ : (focused_ ? focused_role_ : normal_role_);
     const Style style = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
+    const bool has_dropdown = calendar_app_ != nullptr && calendar_desktop_ != nullptr && bounds().width >= 2;
+    const int value_width = std::max(0, bounds().width - (has_dropdown ? 2 : 0));
     if (!value_) {
-        painter.draw_text(Point{0, 0}, text::clip_to_width("— no date —", bounds().width), style);
+        painter.draw_text(Point{0, 0}, text::clip_to_width("— no date —", value_width), style);
+        if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
         return;
     }
 
     const std::string rendered = format_iso_date(*value_);
-    painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, bounds().width), style);
+    painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, value_width), style);
+    if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
     if (!focused_) return;
     const int start = active_field_ == 0 ? 0 : (active_field_ == 1 ? 5 : 8);
     const int width = active_field_ == 0 ? 4 : 2;
-    if (start >= bounds().width) return;
+    if (start >= value_width) return;
     Style active = style;
     active.attrs |= Attr::Reverse;
     painter.draw_text(Point{start, 0}, text::clip_to_width(rendered.substr(static_cast<std::size_t>(start),
                                                                            static_cast<std::size_t>(width)),
-                                                   std::min(width, bounds().width - start)),
+                                                   std::min(width, value_width - start)),
                       active);
 }
 
@@ -924,13 +979,20 @@ bool DatePicker::on_key(const KeyEvent& event) {
         case Key::Backspace:
             if (empty_allowed_) set_value(std::nullopt);
             return true;
+        case Key::Char:
+            if (event.chord.text == " ") return open_calendar();
+            return false;
         default: return false;
     }
 }
 
 bool DatePicker::on_mouse(const MouseEvent& event) {
     if (event.action == MouseAction::Down && event.button == MouseButton::Left) {
-        select_field_at(event.cell.x - absolute_bounds().x);
+        const int local_x = event.cell.x - absolute_bounds().x;
+        if (calendar_app_ != nullptr && calendar_desktop_ != nullptr && local_x >= bounds().width - 2) {
+            return open_calendar();
+        }
+        select_field_at(local_x);
         invalidate();
         return true;
     }
@@ -1022,7 +1084,7 @@ void TimePicker::adjust(int delta) {
 }
 
 void TimePicker::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(has_focus_ ? focused_role_ : role_);
+    const Style style = context().theme->resolve(!valid_ ? invalid_role_ : has_focus_ ? focused_role_ : role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     painter.draw_text(Point{0, 0}, text::clip_to_width(time_text(value_, show_seconds_, twenty_four_hour_), bounds().width), style);
 }
@@ -1059,6 +1121,7 @@ void TimePicker::on_focus(const FocusEvent& event) { has_focus_ = event.gained; 
 void TimePicker::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
+    if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.input.invalid");
 }
 
 SpinBox::SpinBox() {

@@ -108,6 +108,10 @@ enum class FieldKind {
     // first adjusted. The accepted DialogResult carries both the typed date
     // and its canonical YYYY-MM-DD text.
     Date,
+    // A typed TimePicker. `initial_time` is explicit and deterministic;
+    // `time_show_seconds` controls both presentation and the canonical
+    // HH:MM or HH:MM:SS text returned on acceptance.
+    Time,
 };
 
 struct FieldDescriptor {
@@ -159,6 +163,11 @@ struct FieldDescriptor {
     std::optional<DateValue> initial_date{};
     std::optional<DateValue> date_seed{};
     bool date_optional = true;
+    // Time only. TimePicker has no implicit clock or locale; the caller
+    // supplies the initial value and presentation choices.
+    TimeValue initial_time{};
+    bool time_show_seconds = true;
+    bool time_24_hour = true;
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -237,6 +246,7 @@ struct MaterializedDialog {
     std::vector<RadioGroup*> radios;
     std::vector<ComboBox*> combos;
     std::vector<DatePicker*> dates;
+    std::vector<TimePicker*> times;
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     ui::View* initial_focus = nullptr;
     Button* default_button = nullptr;
@@ -275,6 +285,9 @@ struct DialogResult {
     // field of another kind. `values[i]` simultaneously carries canonical
     // YYYY-MM-DD text so generic form consumers retain a uniform text view.
     std::vector<std::optional<DateValue>> dates{};
+    // Time: the typed value. Empty for every other field; `values[i]`
+    // simultaneously carries canonical HH:MM or HH:MM:SS text.
+    std::vector<std::optional<TimeValue>> times{};
 
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
 };

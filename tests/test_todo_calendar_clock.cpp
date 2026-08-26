@@ -9,7 +9,7 @@ namespace {
 using namespace ckv::todo;
 
 CalendarReading fixed_reading() {
-    return {IsoTimestamp{"2026-08-25T12:34:56Z"}, IsoDate{"2026-08-25"}};
+    return {IsoTimestamp{"2026-08-25T12:34:56Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:34"}};
 }
 
 }  // namespace
@@ -17,7 +17,8 @@ CalendarReading fixed_reading() {
 CK_TEST(todo_fixed_calendar_clock_is_deterministic_and_replaceable) {
     FixedCalendarClock clock(fixed_reading());
     CK_CHECK(clock.read().value == fixed_reading());
-    const CalendarReading later{IsoTimestamp{"2026-08-26T00:02:03Z"}, IsoDate{"2026-08-26"}};
+    const CalendarReading later{
+        IsoTimestamp{"2026-08-26T00:02:03Z"}, IsoDate{"2026-08-26"}, IsoTime{"02:02"}};
     clock.set(later);
     CK_CHECK(clock.read().value == later);
 }
@@ -39,4 +40,5 @@ CK_TEST(todo_system_calendar_clock_returns_canonical_values) {
     if (!reading) return;
     CK_CHECK(is_valid(reading.value->utc_timestamp));
     CK_CHECK(is_valid(reading.value->local_date));
+    CK_CHECK(is_valid(reading.value->local_time));
 }

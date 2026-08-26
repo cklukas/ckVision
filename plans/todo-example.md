@@ -62,14 +62,14 @@ works around it.
 | Area | Audited behavior | ckVision TODO requirement |
 |---|---|---|
 | Board | Equal-width bordered Kanban lanes; defaults to `To Do`, `Doing`, `Done` | One resizable Board window containing horizontally scrollable lane panes; same three defaults |
-| Tasks | Title, second detail line, long note, stable GUID, priority, due date, color, creator/updater and timestamps | Preserve every user-visible fact; represent archive/origin and board membership structurally; use deterministic workspace-scoped numeric ids and explicit injected identity/time sources |
-| Task creation/editing | Centered form; title, details, due date, four priorities, 16 task colors; edit shows creation/modification facts | Rich ckVision dialog using InputLine, DatePicker, ComboBox/RadioGroup, StaticText and standard accept/cancel behavior |
+| Tasks | Title, second detail line, long note, stable GUID, priority, due date, color, creator/updater and timestamps | Preserve every user-visible fact and add an optional due time; represent archive/origin and board membership structurally; use deterministic workspace-scoped numeric ids and explicit injected identity/time sources |
+| Task creation/editing | Centered form; title, details, due date, four priorities, 16 task colors; edit shows creation/modification facts | Rich ckVision dialog using InputLine, DatePicker, TimePicker, ComboBox/RadioGroup, StaticText and standard accept/cancel behavior |
 | Notes | Suspends the TUI and invokes `$VISUAL`, `$EDITOR`, vim, or Notepad on a temporary file | A modeless, resizable ckVision TextEditor window with undo/redo, search, clipboard, wrap and automatic persistence |
 | Navigation | Up/Down selects tasks; Tab/Shift-Tab or Left/Right changes lane | Preserve the grammar; focus and visibility are handled by ckVision, with mouse equivalents |
 | Moving | Enter/Space/F6 enters a visibly distinct move mode; arrows reorder or move the task; Enter/Space/Esc finishes | Preserve two-stage move mode; add direct pointer drag with an insertion marker |
 | Delete/archive | Delete removes after confirmation; Archive writes a separate item JSON then removes after confirmation | Preserve both and make archive failure non-destructive; no archive browser/restore is implied |
 | Priority | 1 high (`↑`), 2 normal, 3 low (`↓`), 4 idle (`⌛`) | Preserve values and visible marks; labels remain understandable without glyph color |
-| Due dates | Locale-shaped input; current rendering marks today and tomorrow | Store ISO dates; show overdue, due today and tomorrow badges using an injected calendar clock |
+| Due dates | Locale-shaped input; current rendering marks today and tomorrow | Store ISO dates with optional 24-hour `HH:MM`; use typed DatePicker and TimePicker controls; show overdue, due today and tomorrow badges using an injected calendar clock |
 | Colors | Optional task foreground and optional lane background from a 16-color named palette | Preserve named choices with contrast-safe rendering in every ckVision theme |
 | Lane sorting | Stable manual, color, due, created, modified, and priority modes | Preserve all six; manual reorder is enabled only in Manual mode and disabled with an explanatory hint otherwise |
 | Lane management | Rename, color, insert left/right, sort, or merge/remove into another lane or archive | Preserve all operations; forbid deleting the final lane; keep operations atomic |
@@ -251,7 +251,8 @@ one optimistic transaction:
 - Lanes with stable id, title, named optional color, SortMode and ordered
   Task ids;
 - Tasks with stable id, title, details, note, priority 1–4, optional ISO due
-  date, optional named color, created/modified timestamps and identities.
+  date and optional 24-hour `HH:MM` due time, optional named color,
+  created/modified timestamps and identities.
 
 IDs are workspace-scoped counters stored in the document. They need no random
 source, remain deterministic in tests, and stay unique through board/lane
@@ -263,7 +264,8 @@ merge/remove board. Each validates first and returns a typed result. UI code
 does not edit vectors directly.
 
 Stable sort semantics are explicit: color by stored palette key; due ascending
-with missing dates last; created/modified oldest first; priority 1→4; Manual
+with missing dates last, all-day items before timed items on the same date,
+then due time ascending; created/modified oldest first; priority 1→4; Manual
 preserves the stored order. Moving into a sorted lane changes ownership but
 not its derived display order. Removing the final lane or `main` board is
 rejected.
@@ -274,7 +276,7 @@ rejected.
 plain workspace/archive/revision/result values and has no view dependency.
 `JsonTodoRepository` is the sole real filesystem implementation;
 `MemoryTodoRepository` scripts tests and captures. `CalendarClock` supplies an
-ISO timestamp and local calendar date; `FixedCalendarClock` is deterministic.
+ISO timestamp, local calendar date, and local `HH:MM`; `FixedCalendarClock` is deterministic.
 The executable supplies the real clock and current identity explicitly.
 
 The on-disk root contains:
@@ -581,7 +583,7 @@ as the library it demonstrates.
 
 | Capability | Primary executable evidence | Visual/reference evidence |
 |---|---|---|
-| Task fields, ids, sorts, due/priority/color | `test_todo_model`, `test_todo_codec` | Task-dialog and all-theme board captures |
+| Task fields, ids, sorts, due date/time, priority/color | `test_todo_model`, `test_todo_codec`; typed CalendarDropdown/DatePicker/TimePicker smoke | Task-dialog and all-theme board captures |
 | Atomic persistence and daily backup | `test_todo_repository` | Persistence section in `docs/todo-example.md` |
 | Archive/delete safety | repository + smoke failure-path cases | Archive/delete confirmation captures |
 | Lane navigation and moving | `test_todo_board`, smoke keyboard scripts | Initial and move-mode captures |

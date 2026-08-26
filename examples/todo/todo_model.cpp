@@ -90,6 +90,12 @@ bool valid_timestamp(std::string_view value) noexcept {
     return decimal(value, 11, 13) <= 23 && decimal(value, 14, 16) <= 59 && decimal(value, 17, 19) <= 59;
 }
 
+bool valid_time(std::string_view value) noexcept {
+    return value.size() == 5 && value[2] == ':' && all_digits(value, 0, 2) &&
+           all_digits(value, 3, 5) && decimal(value, 0, 2) <= 23 &&
+           decimal(value, 3, 5) <= 59;
+}
+
 bool valid_priority(Priority value) noexcept {
     return value >= Priority::High && value <= Priority::Idle;
 }
@@ -148,6 +154,12 @@ ModelResult<WorkspaceSnapshot> validate_snapshot(WorkspaceSnapshot snapshot) {
         if (task.due_date && !valid_date(task.due_date->value)) {
             return failure<WorkspaceSnapshot>(ModelErrorCode::InvalidDate, "task due date is not YYYY-MM-DD");
         }
+        if (task.due_time && !valid_time(task.due_time->value)) {
+            return failure<WorkspaceSnapshot>(ModelErrorCode::InvalidValue, "task due time is not HH:MM");
+        }
+        if (task.due_time && !task.due_date) {
+            return failure<WorkspaceSnapshot>(ModelErrorCode::InvalidValue, "task due time requires a due date");
+        }
         if (!valid_timestamp(task.created_at.value) || !valid_timestamp(task.modified_at.value)) {
             return failure<WorkspaceSnapshot>(ModelErrorCode::InvalidTimestamp, "task audit timestamp is invalid");
         }
@@ -165,7 +177,8 @@ ModelResult<WorkspaceSnapshot> validate_snapshot(WorkspaceSnapshot snapshot) {
         }
         known_string_bytes += task.title.size() + task.details.size() + task.note.size() +
                               task.created_at.value.size() + task.created_by.size() + task.modified_at.value.size() +
-                              task.modified_by.size() + (task.due_date ? task.due_date->value.size() : 0U);
+                              task.modified_by.size() + (task.due_date ? task.due_date->value.size() : 0U) +
+                              (task.due_time ? task.due_time->value.size() : 0U);
     }
 
     for (const Board& board : snapshot.boards) {
@@ -257,6 +270,7 @@ Task guided_task(TaskId id, std::string title, std::string details, const AuditS
                 Priority::Normal,
                 std::nullopt,
                 std::nullopt,
+                std::nullopt,
                 stamp.timestamp,
                 stamp.identity,
                 stamp.timestamp,
@@ -297,6 +311,7 @@ Task make_task(TaskId id, TaskDraft draft, const AuditStamp& stamp) {
                 std::move(draft.note),
                 draft.priority,
                 std::move(draft.due_date),
+                std::move(draft.due_time),
                 draft.color,
                 stamp.timestamp,
                 stamp.identity,
@@ -306,7 +321,8 @@ Task make_task(TaskId id, TaskDraft draft, const AuditStamp& stamp) {
 
 bool content_matches(const Task& task, const TaskDraft& draft) noexcept {
     return task.title == draft.title && task.details == draft.details && task.note == draft.note &&
-           task.priority == draft.priority && task.due_date == draft.due_date && task.color == draft.color;
+           task.priority == draft.priority && task.due_date == draft.due_date &&
+           task.due_time == draft.due_time && task.color == draft.color;
 }
 
 ModelResult<WorkspaceSnapshot> checked_candidate(WorkspaceSnapshot candidate) {
@@ -358,6 +374,8 @@ ModelResult<TodoWorkspace> TodoWorkspace::from_snapshot(WorkspaceSnapshot snapsh
 }
 
 bool is_valid(IsoDate date) noexcept { return valid_date(date.value); }
+
+bool is_valid(IsoTime time) noexcept { return valid_time(time.value); }
 
 bool is_valid(IsoTimestamp timestamp) noexcept { return valid_timestamp(timestamp.value); }
 
@@ -443,7 +461,12 @@ ModelResult<std::vector<TaskId>> TodoWorkspace::ordered_tasks(LaneId id) const {
                 return left.color && right.color && *left.color < *right.color;
             case SortMode::Due:
                 if (left.due_date.has_value() != right.due_date.has_value()) return left.due_date.has_value();
-                return left.due_date && right.due_date && left.due_date->value < right.due_date->value;
+                if (!left.due_date || !right.due_date) return false;
+                if (left.due_date->value != right.due_date->value) {
+                    return left.due_date->value < right.due_date->value;
+                }
+                if (left.due_time.has_value() != right.due_time.has_value()) return !left.due_time.has_value();
+                return left.due_time && right.due_time && left.due_time->value < right.due_time->value;
             case SortMode::Created: return left.created_at.value < right.created_at.value;
             case SortMode::Modified: return left.modified_at.value < right.modified_at.value;
             case SortMode::Priority: return left.priority < right.priority;
@@ -500,6 +523,7 @@ ModelResult<Mutation> TodoWorkspace::edit_task(TaskId task_id, TaskDraft draft, 
     task->note = std::move(draft.note);
     task->priority = draft.priority;
     task->due_date = std::move(draft.due_date);
+    task->due_time = std::move(draft.due_time);
     task->color = draft.color;
     task->modified_at = stamp.timestamp;
     task->modified_by = stamp.identity;

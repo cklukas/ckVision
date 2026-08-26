@@ -86,7 +86,7 @@ int main() {
     ManualClock monotonic;
     ui::Application app(terminal, monotonic);
     FixedCalendarClock calendar(
-        {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}});
+        {IsoTimestamp{"2026-08-25T12:00:00Z"}, IsoDate{"2026-08-25"}, IsoTime{"14:30"}});
     TodoApp todo(app, repository, calendar, "benchmark",
                  {.workspace_description = "in-memory benchmark workspace"});
     app.step(0);
