@@ -100,6 +100,8 @@ private:
     void open_note_editor();
     void schedule_note_save(TaskId task_id);
     bool flush_note(TaskId task_id);
+    void retry_note_over_external(TaskId task_id);
+    void adopt_external_note(TaskId task_id);
     void close_note_session(NoteSession* session);
     void sync_note_sessions_after_reload();
     void refresh_note_footer(NoteSession& session);

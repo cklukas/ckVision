@@ -75,6 +75,21 @@ std::optional<widgets::DateValue> local_date_value(CalendarClock& calendar) {
     return reading ? widgets::parse_iso_date(reading.value->local_date.value) : std::nullopt;
 }
 
+bool same_status_items(const std::vector<widgets::StatusLineItem>& left,
+                       const std::vector<widgets::StatusLineItem>& right) {
+    if (left.size() != right.size()) return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        const auto& a = left[index];
+        const auto& b = right[index];
+        if (a.label != b.label || a.command != b.command || a.priority != b.priority ||
+            a.presentation.command != b.presentation.command ||
+            a.presentation.label != b.presentation.label ||
+            a.presentation.chord != b.presentation.chord)
+            return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 struct TodoApp::NoteSession {
@@ -663,8 +678,8 @@ void TodoApp::refresh_board() {
 }
 
 void TodoApp::poll_repository() {
-    if (!controller_.is_open() || move_) return;
     refresh_status_items();
+    if (!controller_.is_open() || move_ || pending_conflict_ || app_.is_modal()) return;
     const auto reloaded = controller_.reload_if_changed();
     if (!reloaded) {
         set_status("Reload failed: " + reloaded.error.diagnostic);
@@ -940,6 +955,18 @@ bool TodoApp::flush_note(TaskId task_id) {
         refresh_note_footer(note);
         return true;
     }
+    if (task->note != note.last_saved) {
+        note.save_state = "External update pending — local text retained";
+        refresh_note_footer(note);
+        const ControllerError conflict{ControllerErrorCode::Conflict, ModelErrorCode::None,
+                                       RepositoryErrorCode::Conflict,
+                                       "the note changed in another TODO instance"};
+        handle_conflict(
+            "Note edit conflict", conflict, [](const TodoWorkspace&) { return false; },
+            [this, task_id] { retry_note_over_external(task_id); },
+            [this, task_id] { adopt_external_note(task_id); });
+        return false;
+    }
     TaskDraft draft = draft_from(*task);
     draft.note = current_text;
     const Task original = *task;
@@ -954,31 +981,8 @@ bool TodoApp::flush_note(TaskId task_id) {
                 const Task* remote_task = remote.find_task(task_id);
                 return remote_task != nullptr && remote_task->note == original_note;
             },
-            [this, task_id] { flush_note(task_id); },
-            [this, task_id] {
-                const auto session_it = std::find_if(notes_.begin(), notes_.end(), [task_id](const auto& session) {
-                    return session->task_id == task_id;
-                });
-                const Task* remote_task = controller_.workspace() != nullptr
-                                              ? controller_.workspace()->find_task(task_id)
-                                              : nullptr;
-                if (session_it == notes_.end()) return;
-                NoteSession& session = **session_it;
-                if (remote_task == nullptr) {
-                    session.editor->set_read_only(true);
-                    session.save_state = "Removed externally — local text retained";
-                    refresh_note_footer(session);
-                    return;
-                }
-                session.applying_remote = true;
-                (void)session.document->set_text(remote_task->note);
-                session.document->clear_history();
-                session.document->mark_clean();
-                session.applying_remote = false;
-                session.last_saved = remote_task->note;
-                session.save_state = "Saved — external version";
-                refresh_note_footer(session);
-            });
+            [this, task_id] { retry_note_over_external(task_id); },
+            [this, task_id] { adopt_external_note(task_id); });
         return note.last_saved == current_text;
     }
     note.last_saved = current_text;
@@ -987,6 +991,44 @@ bool TodoApp::flush_note(TaskId task_id) {
     refresh_note_footer(note);
     refresh_board();
     return true;
+}
+
+void TodoApp::retry_note_over_external(TaskId task_id) {
+    const auto session_it = std::find_if(notes_.begin(), notes_.end(), [task_id](const auto& session) {
+        return session->task_id == task_id;
+    });
+    const Task* remote_task = controller_.workspace() != nullptr
+                                  ? controller_.workspace()->find_task(task_id)
+                                  : nullptr;
+    if (session_it == notes_.end() || remote_task == nullptr) return;
+    NoteSession& session = **session_it;
+    session.last_saved = remote_task->note;
+    (void)flush_note(task_id);
+}
+
+void TodoApp::adopt_external_note(TaskId task_id) {
+    const auto session_it = std::find_if(notes_.begin(), notes_.end(), [task_id](const auto& session) {
+        return session->task_id == task_id;
+    });
+    const Task* remote_task = controller_.workspace() != nullptr
+                                  ? controller_.workspace()->find_task(task_id)
+                                  : nullptr;
+    if (session_it == notes_.end()) return;
+    NoteSession& session = **session_it;
+    if (remote_task == nullptr) {
+        session.editor->set_read_only(true);
+        session.save_state = "Removed externally — local text retained";
+        refresh_note_footer(session);
+        return;
+    }
+    session.applying_remote = true;
+    (void)session.document->set_text(remote_task->note);
+    session.document->clear_history();
+    session.document->mark_clean();
+    session.applying_remote = false;
+    session.last_saved = remote_task->note;
+    session.save_state = "Saved — external version";
+    refresh_note_footer(session);
 }
 
 void TodoApp::close_note_session(NoteSession* session) {
@@ -1032,7 +1074,14 @@ void TodoApp::sync_note_sessions_after_reload() {
             refresh_note_footer(note);
             continue;
         }
-        if (note.document->text() != note.last_saved || remote->note == note.last_saved) continue;
+        if (note.document->text() != note.last_saved) {
+            if (remote->note != note.last_saved) {
+                note.save_state = "External update pending — local text retained";
+                refresh_note_footer(note);
+            }
+            continue;
+        }
+        if (remote->note == note.last_saved) continue;
         note.applying_remote = true;
         (void)note.document->set_text(remote->note);
         note.document->clear_history();
@@ -1798,7 +1847,7 @@ void TodoApp::refresh_status_items() {
         items.emplace_back(widgets::CommandPresentation{resolve_conflict_command_}, 110);
     if (!calendar_label.empty()) items.emplace_back(std::move(calendar_label), ui::kInvalidCommand, 5);
     items.emplace_back(widgets::CommandPresentation{app_.commands().standard().quit}, 100);
-    status_line_->set_items(std::move(items));
+    if (!same_status_items(status_line_->items(), items)) status_line_->set_items(std::move(items));
 }
 
 void TodoApp::show_error(std::string title, const ControllerError& error) {

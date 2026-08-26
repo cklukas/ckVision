@@ -85,7 +85,8 @@ void commit_external_task_edit(MemoryTodoRepository& repository, TaskId task_id,
     CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
 }
 
-void commit_external_note(MemoryTodoRepository& repository, TaskId task_id, std::string note) {
+void commit_external_note(MemoryTodoRepository& repository, TaskId task_id, std::string note,
+                          std::string timestamp = "2026-08-25T12:01:00Z") {
     auto external = repository.load();
     CK_CHECK(external);
     if (!external) return;
@@ -95,7 +96,7 @@ void commit_external_note(MemoryTodoRepository& repository, TaskId task_id, std:
     TaskDraft draft = draft_from(*task);
     draft.note = std::move(note);
     CK_CHECK(external.value->workspace.edit_task(
-        task_id, std::move(draft), {IsoTimestamp{"2026-08-25T12:01:00Z"}, "external"}));
+        task_id, std::move(draft), {IsoTimestamp{std::move(timestamp)}, "external"}));
     CK_CHECK(repository.commit(external.value->revision, external.value->workspace, IsoDate{"2026-08-25"}));
 }
 
@@ -353,6 +354,34 @@ CK_TEST(todo_clean_open_note_adopts_an_external_edit) {
     fixture.todo.poll_repository();
     CK_CHECK(editor->document()->text() == "external note");
     CK_CHECK(!editor->read_only());
+}
+
+CK_TEST(todo_dirty_open_note_requires_explicit_resolution_after_a_poll) {
+    SmokeFixture fixture;
+    const auto note = fixture.app.commands().id_for(TodoApp::kEditNoteKey);
+    CK_CHECK(note && fixture.app.execute_command(*note));
+    auto* editor = dynamic_cast<widgets::TextEditor*>(fixture.app.focused());
+    CK_CHECK(editor != nullptr);
+    if (editor == nullptr) return;
+    CK_CHECK(fixture.app.dispatch(TextEvent{"local note", false, false}));
+    commit_external_note(fixture.repository, TaskId{1}, "external note", "2026-08-25T11:30:00Z");
+
+    fixture.todo.poll_repository();
+    CK_CHECK(editor->document()->text() == "local note");
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1})->note == "external note");
+    fixture.monotonic.advance(150'000'000);
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.app.is_modal());
+    const auto before_resolution = fixture.repository.load();
+    CK_CHECK(before_resolution &&
+             before_resolution.value->workspace.find_task(TaskId{1})->note == "external note");
+
+    CK_CHECK(fixture.app.dispatch(key(Key::Enter)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(!fixture.app.is_modal());
+    const auto after_resolution = fixture.repository.load();
+    CK_CHECK(after_resolution &&
+             after_resolution.value->workspace.find_task(TaskId{1})->note == "local note");
 }
 
 CK_TEST(todo_open_note_retains_local_text_when_the_task_is_removed_externally) {
@@ -613,6 +642,32 @@ CK_TEST(todo_poll_adopts_an_external_committed_revision) {
     fixture.todo.poll_repository();
     CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{4}) != nullptr);
     CK_CHECK(fixture.todo.board_view()->lane_view(LaneId{1})->lane().task_ids.size() == 2);
+}
+
+CK_TEST(todo_poll_defers_external_reload_while_a_modal_edit_is_open) {
+    SmokeFixture fixture;
+    const auto edit = fixture.app.commands().id_for(TodoApp::kEditTaskKey);
+    CK_CHECK(edit && fixture.app.execute_command(*edit));
+    CK_CHECK(fixture.app.is_modal());
+    commit_external_task_edit(fixture.repository, TaskId{1}, "Externally renamed");
+
+    fixture.todo.poll_repository();
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1})->title !=
+             "Externally renamed");
+    CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
+    fixture.app.step(fixture.monotonic.now_nanos());
+    fixture.todo.poll_repository();
+    CK_CHECK(fixture.todo.controller().workspace()->find_task(TaskId{1})->title ==
+             "Externally renamed");
+}
+
+CK_TEST(todo_unchanged_poll_does_not_redraw_the_terminal) {
+    SmokeFixture fixture;
+    fixture.app.step(fixture.monotonic.now_nanos());
+    fixture.terminal.clear_written();
+    fixture.todo.poll_repository();
+    fixture.app.step(fixture.monotonic.now_nanos());
+    CK_CHECK(fixture.terminal.written_bytes().empty());
 }
 
 CK_TEST(todo_non_overlapping_conflict_reloads_and_retries_once_automatically) {
