@@ -6,8 +6,9 @@
 #include <optional>
 #include <vector>
 
+#include "cvision/ui/layout.hpp"
 #include "cvision/ui/view.hpp"
-#include "cvision/widgets/scrollbar.hpp"
+#include "cvision/widgets/scroll_viewport.hpp"
 
 #include "todo_lane_view.hpp"
 
@@ -82,7 +83,8 @@ private:
     };
     std::optional<KeyboardMoveState> keyboard_move_;
     std::optional<IsoDate> today_;
-    widgets::Scrollbar* scrollbar_ = nullptr;
+    widgets::ScrollViewport* viewport_ = nullptr;
+    ui::Row* row_ = nullptr;
 };
 
 }  // namespace ckv::todo

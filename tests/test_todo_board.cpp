@@ -182,7 +182,13 @@ CK_TEST(todo_board_materializes_every_lane_and_preserves_active_lane) {
     TodoBoardView board;
     board.set_bounds(Rect{0, 0, 80, 16});
     CK_CHECK(board.set_board(workspace, BoardId{1}));
+    CK_CHECK(board.children().size() == 1U);
+    auto* viewport = dynamic_cast<widgets::ScrollViewport*>(board.children().front().get());
+    CK_CHECK(viewport != nullptr);
+    auto* row = viewport != nullptr ? dynamic_cast<ui::Row*>(viewport->content()) : nullptr;
+    CK_CHECK(row != nullptr);
     CK_CHECK(board.lane_count() == 5);
+    CK_CHECK(board.lane_view(LaneId{1})->parent() == row);
     CK_CHECK(board.active_lane() == LaneId{1});
     board.lane_view(LaneId{3})->on_focus(FocusEvent{true});
     CK_CHECK(board.active_lane() == LaneId{3});
@@ -204,7 +210,9 @@ CK_TEST(todo_board_left_right_navigation_moves_focus_and_reveals_lanes) {
     for (int step = 0; step < 6; ++step) app.focused()->on_key(key(Key::Right));
     CK_CHECK(observer->active_lane() == LaneId{7});
     CK_CHECK(app.focused() == observer->lane_view(LaneId{7}));
-    CK_CHECK(observer->lane_view(LaneId{7})->bounds().x + observer->lane_view(LaneId{7})->bounds().width <= 50);
+    const Rect revealed = observer->lane_view(LaneId{7})->absolute_bounds();
+    CK_CHECK(revealed.x >= 0);
+    CK_CHECK(revealed.right() <= 50);
     CK_CHECK(app.focused()->on_key(key(Key::Right)));
     CK_CHECK(observer->active_lane() == LaneId{1});
     CK_CHECK(app.focused()->on_key(key(Key::Left)));

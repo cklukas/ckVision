@@ -15,15 +15,20 @@ namespace {
 constexpr int kLaneGap = 1;
 constexpr int kMinimumLaneWidth = 20;
 constexpr int kPreferredLaneWidth = 26;
-constexpr int kMaximumLaneWidth = 34;
 
 }  // namespace
 
 TodoBoardView::TodoBoardView() {
     set_help_context_key("todo.board");
-    scrollbar_ = make<widgets::Scrollbar>(widgets::Orientation::Horizontal);
-    scrollbar_->set_policy(widgets::ScrollbarPolicy::Auto);
-    scrollbar_->on_position_changed = [this](int) { layout_lanes(); };
+    auto viewport = std::make_unique<widgets::ScrollViewport>();
+    viewport_ = viewport.get();
+    viewport_->set_vertical_scrollbar_policy(widgets::ScrollbarPolicy::Hidden);
+    viewport_->set_horizontal_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
+    auto row = std::make_unique<ui::Row>();
+    row_ = row.get();
+    row_->set_spacing(kLaneGap);
+    viewport_->set_content(std::move(row));
+    add(std::move(viewport));
 }
 
 bool TodoBoardView::set_board(const TodoWorkspace& workspace, BoardId board_id) {
@@ -110,11 +115,13 @@ ui::SizeHint TodoBoardView::vertical_size_hint() const { return {6, 18, ui::kUnb
 void TodoBoardView::on_resized() { layout_lanes(); }
 
 bool TodoBoardView::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Wheel) return false;
-    if (event.button == MouseButton::WheelLeft) scrollbar_->set_position(scrollbar_->position() - kPreferredLaneWidth);
+    if (event.action != MouseAction::Wheel || viewport_ == nullptr) return false;
+    if (event.button == MouseButton::WheelLeft)
+        viewport_->set_scroll(viewport_->scroll_x() - kPreferredLaneWidth, viewport_->scroll_y());
     else if (event.button == MouseButton::WheelRight)
-        scrollbar_->set_position(scrollbar_->position() + kPreferredLaneWidth);
-    else return false;
+        viewport_->set_scroll(viewport_->scroll_x() + kPreferredLaneWidth, viewport_->scroll_y());
+    else
+        return false;
     return true;
 }
 
@@ -122,7 +129,9 @@ void TodoBoardView::rebuild(const TodoWorkspace& workspace, const Board& board) 
     std::map<LaneId, std::optional<TaskId>> selections;
     for (TodoLaneView* lane : lanes_) selections.emplace(lane->lane_id(), lane->selected_task());
     const std::optional<LaneId> previous_active = active_lane();
-    for (TodoLaneView* lane : lanes_) remove_child(lane);
+    auto row = std::make_unique<ui::Row>();
+    row_ = row.get();
+    row_->set_spacing(kLaneGap);
     lanes_.clear();
 
     for (const Lane& lane : board.lanes) {
@@ -159,8 +168,11 @@ void TodoBoardView::rebuild(const TodoWorkspace& workspace, const Board& board) 
             if (context().app != nullptr) context().app->set_focus(lane_view(lane_id));
             if (on_lane_context_menu) on_lane_context_menu(lane_id, screen_cell);
         };
-        lanes_.push_back(add(std::move(view)));
+        lanes_.push_back(static_cast<TodoLaneView*>(
+            row_->add_item(std::move(view), ui::LayoutSpec{ui::SizePolicy::Expanding, 1})));
     }
+
+    viewport_->set_content(std::move(row));
 
     active_lane_index_ = 0;
     if (previous_active) {
@@ -172,22 +184,8 @@ void TodoBoardView::rebuild(const TodoWorkspace& workspace, const Board& board) 
 }
 
 void TodoBoardView::layout_lanes() {
-    if (scrollbar_ == nullptr) return;
-    const int width = std::max(0, bounds().width);
-    const int count = static_cast<int>(lanes_.size());
-    const int visible_columns = std::max(1, std::min(3, count));
-    const int distributed = count == 0 ? kPreferredLaneWidth : (width - kLaneGap * (visible_columns - 1)) / visible_columns;
-    const int lane_width = std::clamp(distributed, kMinimumLaneWidth, kMaximumLaneWidth);
-    const int extent = count == 0 ? 0 : count * lane_width + (count - 1) * kLaneGap;
-    scrollbar_->set_range(extent, std::max(1, width));
-    const bool show_scrollbar = scrollbar_->should_show();
-    const int lane_height = std::max(0, bounds().height - (show_scrollbar ? 1 : 0));
-    scrollbar_->set_bounds(Rect{0, std::max(0, bounds().height - 1), width,
-                                show_scrollbar ? std::min(1, bounds().height) : 0});
-    for (int index = 0; index < count; ++index) {
-        const int x = index * (lane_width + kLaneGap) - scrollbar_->position();
-        lanes_[static_cast<std::size_t>(index)]->set_bounds(Rect{x, 0, lane_width, lane_height});
-    }
+    if (viewport_ == nullptr) return;
+    viewport_->set_bounds(Rect{0, 0, std::max(0, bounds().width), std::max(0, bounds().height)});
 }
 
 void TodoBoardView::activate_lane(LaneId lane_id) {
@@ -264,13 +262,8 @@ void TodoBoardView::update_keyboard_drop_marker() {
 }
 
 void TodoBoardView::ensure_lane_visible(std::size_t index) {
-    if (index >= lanes_.size() || scrollbar_ == nullptr) return;
-    const Rect lane = lanes_[index]->bounds();
-    const int left = lane.x + scrollbar_->position();
-    const int right = left + lane.width;
-    if (left < scrollbar_->position()) scrollbar_->set_position(left);
-    else if (right > scrollbar_->position() + bounds().width)
-        scrollbar_->set_position(right - bounds().width);
+    if (index >= lanes_.size() || viewport_ == nullptr) return;
+    viewport_->ensure_visible(*lanes_[index]);
 }
 
 TodoLaneView* TodoBoardView::lane_at(Point screen_cell) const noexcept {
