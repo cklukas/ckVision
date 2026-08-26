@@ -283,7 +283,9 @@ archive/YYYY-MM-DDTHH-MM-SS--task-ID.json
 ```
 
 `todo.json` is one versioned workspace document. Writes use a temporary file,
-flush, and atomic replace with an expected revision. The daily backup copies
+flush, a per-directory advisory lock spanning the expected-revision check and
+atomic replace, and a parent-directory sync. Reads pair bytes and revision from
+one opened descriptor. The daily backup copies
 the previously persisted workspace before the first successful mutation of
 that date and uses create-if-absent semantics. Archive writes the complete task
 snapshot plus origin board/lane and archival facts before the primary document

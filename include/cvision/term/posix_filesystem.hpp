@@ -11,6 +11,13 @@
 // library before — MemoryFileSystem existed for tests, but no
 // interactive application could construct a working file browser
 // without writing this itself from scratch.
+//
+// Conditional atomic writes serialize through one persistent advisory lock
+// file per target directory. The expectation check, temporary-file sync,
+// publication, and parent-directory sync therefore form one critical section
+// across cooperating PosixFileSystem processes. Reads fingerprint the opened
+// descriptor rather than the replaceable path, so bytes and revision always
+// describe the same inode snapshot.
 #pragma once
 
 #include "cvision/core/filesystem.hpp"

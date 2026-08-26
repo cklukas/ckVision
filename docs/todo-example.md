@@ -224,7 +224,11 @@ temporary sibling, syncs it, and atomically replaces `todo.json`. Before the
 first mutation on a calendar day it writes the previous valid workspace to
 `backup/YYYY-MM-DD.json` and never overwrites that day's backup. Archives live
 under `archive/` with timestamp and task id in the file name. A failed archive
-write leaves its task live.
+write leaves its task live. POSIX writes use a persistent hidden advisory lock
+per directory so the expected-revision check and rename are one critical
+section across cooperating TODO processes; the containing directory is synced
+after publication. Reads derive both bytes and revision from the same opened
+file descriptor.
 
 The library layers never read the filesystem, environment, locale, or wall
 clock. `main.cpp` resolves the POSIX home/user, constructs
