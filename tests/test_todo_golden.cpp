@@ -125,6 +125,30 @@ CK_TEST(todo_move_mode_matches_its_pinned_golden) {
     expect_golden("todo-move-mode", scene);
 }
 
+CK_TEST(todo_pointer_drag_insertion_matches_its_pinned_golden) {
+    GoldenScene scene;
+    scene.app.step(scene.monotonic.now_nanos());
+    const Rect source = scene.todo.board_view()->lane_view(LaneId{1})->absolute_bounds();
+    const Rect target = scene.todo.board_view()->lane_view(LaneId{2})->absolute_bounds();
+    CK_CHECK(scene.app.dispatch(MouseEvent{MouseAction::Down, MouseButton::Left,
+                                           Point{source.x + 3, source.y + 1},
+                                           std::nullopt, Modifier::None}));
+    CK_CHECK(scene.app.dispatch(MouseEvent{MouseAction::Move, MouseButton::None,
+                                           Point{target.x + 3, target.y + 1},
+                                           std::nullopt, Modifier::None}));
+    expect_golden("todo-drag-insertion", scene);
+}
+
+CK_TEST(todo_destructive_confirmations_match_their_pinned_goldens) {
+    GoldenScene archive;
+    CK_CHECK(execute(archive, TodoApp::kArchiveTaskKey));
+    expect_golden("todo-archive-confirmation", archive);
+
+    GoldenScene remove;
+    CK_CHECK(execute(remove, TodoApp::kDeleteTaskKey));
+    expect_golden("todo-delete-confirmation", remove);
+}
+
 CK_TEST(todo_lane_actions_match_their_pinned_golden) {
     GoldenScene scene;
     CK_CHECK(execute(scene, TodoApp::kLaneActionsKey));
@@ -157,4 +181,15 @@ CK_TEST(todo_conflict_resolution_matches_its_pinned_golden) {
     CK_CHECK(scene.app.dispatch(key(Key::Enter)));
     scene.app.step(scene.monotonic.now_nanos());
     expect_golden("todo-conflict-resolution", scene);
+}
+
+CK_TEST(todo_themes_match_their_pinned_goldens) {
+    for (const auto [theme, name] : {std::pair{TodoTheme::Dark, "todo-theme-dark"},
+                                    std::pair{TodoTheme::Light, "todo-theme-light"},
+                                    std::pair{TodoTheme::Mono, "todo-theme-mono"},
+                                    std::pair{TodoTheme::HighContrast, "todo-theme-high-contrast"}}) {
+        GoldenScene scene;
+        CK_CHECK(execute(scene, TodoApp::kThemeKeys[static_cast<std::size_t>(theme)]));
+        expect_golden(name, scene);
+    }
 }

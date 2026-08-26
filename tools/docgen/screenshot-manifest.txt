@@ -56,6 +56,9 @@ sysinfo-report-save
 todo-guided
 todo-task-editor
 todo-move-mode
+todo-drag-insertion
+todo-archive-confirmation
+todo-delete-confirmation
 todo-lane-actions
 todo-board-manager
 todo-note-editor

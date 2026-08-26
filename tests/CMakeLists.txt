@@ -388,6 +388,14 @@ foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
     endif()
 endforeach()
 
+if(TARGET capture_todo_screenshots)
+    add_test(NAME todo_visual_capture
+        COMMAND capture_todo_screenshots
+                ${CMAKE_BINARY_DIR}/test-artifacts/todo)
+    set_tests_properties(todo_visual_capture PROPERTIES
+        LABELS "golden;visual;artifact;todo" TIMEOUT 60)
+endif()
+
 if(TARGET capture_terminal_screenshots)
     add_test(NAME terminal_visual_capture
         COMMAND capture_terminal_screenshots

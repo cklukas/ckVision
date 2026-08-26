@@ -64,6 +64,13 @@ writes a separate durable record and only then removes the task.
 
 ![Editing a task](generated/screenshots/todo-task-editor.svg)
 
+Archive and permanent Delete are deliberately distinct, and both show the
+exact task before asking for confirmation:
+
+| Archive to the durable history | Delete permanently |
+|---|---|
+| ![Archive task confirmation](generated/screenshots/todo-archive-confirmation.svg) | ![Permanent task deletion confirmation](generated/screenshots/todo-delete-confirmation.svg) |
+
 F9, Enter, or Space starts move mode. Arrow keys choose the target lane and
 insertion point; Enter/Space commits and Escape cancels. Pointer drag/drop
 uses the same controller transaction and visible insertion marker. A lane
@@ -71,6 +78,8 @@ with automatic sorting accepts cross-lane moves but explains why manual
 reordering is unavailable.
 
 ![A task being moved across lanes](generated/screenshots/todo-move-mode.svg)
+
+![Pointer drag with a visible insertion target](generated/screenshots/todo-drag-insertion.svg)
 
 ### Full note editor
 
@@ -254,7 +263,7 @@ the external version.
 | `test_todo_controller.cpp` | injected time/identity and durable controller outcomes |
 | `test_todo_board.cpp` | navigation, responsive lanes, move/drag geometry and Unicode cards |
 | `test_todo_smoke.cpp` | dialogs, commands, menus, status, themes, editor, pointer, conflicts, lifecycle |
-| `test_todo_golden.cpp` | eight pinned workflow frames |
+| `test_todo_golden.cpp` | fifteen pinned workflow and theme frames |
 | `fuzz_todo_codec` | empty, guided, Unicode, malformed, oversized and future-schema corpus |
 | `todo_bench` | 1,000-task codec/load/refresh/render, movement and unchanged polling |
 

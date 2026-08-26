@@ -135,6 +135,31 @@ void capture_product_scenes(const std::filesystem::path& screenshot_directory,
     if (!moving.app.dispatch(key(Key::Right))) fail("Move target could not change lanes");
     write_scene(screenshot_directory, golden_directory, "todo-move-mode", moving, true);
 
+    Scene dragging;
+    dragging.app.step(dragging.monotonic.now_nanos());
+    const Rect drag_source = dragging.todo.board_view()->lane_view(LaneId{1})->absolute_bounds();
+    const Rect drag_target = dragging.todo.board_view()->lane_view(LaneId{2})->absolute_bounds();
+    if (!dragging.app.dispatch(MouseEvent{MouseAction::Down, MouseButton::Left,
+                                          Point{drag_source.x + 3, drag_source.y + 1},
+                                          std::nullopt, Modifier::None}) ||
+        !dragging.app.dispatch(MouseEvent{MouseAction::Move, MouseButton::None,
+                                          Point{drag_target.x + 3, drag_target.y + 1},
+                                          std::nullopt, Modifier::None}))
+        fail("pointer drag insertion could not be staged");
+    write_scene(screenshot_directory, golden_directory, "todo-drag-insertion", dragging, true);
+
+    Scene archive_confirmation;
+    if (!execute(archive_confirmation, TodoApp::kArchiveTaskKey))
+        fail("Archive command was unavailable");
+    write_scene(screenshot_directory, golden_directory, "todo-archive-confirmation",
+                archive_confirmation, true);
+
+    Scene delete_confirmation;
+    if (!execute(delete_confirmation, TodoApp::kDeleteTaskKey))
+        fail("Delete command was unavailable");
+    write_scene(screenshot_directory, golden_directory, "todo-delete-confirmation",
+                delete_confirmation, true);
+
     Scene lane_actions;
     if (!execute(lane_actions, TodoApp::kLaneActionsKey)) fail("Lane actions command was unavailable");
     write_scene(screenshot_directory, golden_directory, "todo-lane-actions", lane_actions, true);
@@ -161,14 +186,15 @@ void capture_product_scenes(const std::filesystem::path& screenshot_directory,
     write_scene(screenshot_directory, golden_directory, "todo-conflict-resolution", conflict, true);
 }
 
-void capture_themes(const std::filesystem::path& screenshot_directory) {
+void capture_themes(const std::filesystem::path& screenshot_directory,
+                    const std::optional<std::filesystem::path>& golden_directory) {
     for (const auto [theme, name] : {std::pair{TodoTheme::Dark, "todo-theme-dark"},
                                     std::pair{TodoTheme::Light, "todo-theme-light"},
                                     std::pair{TodoTheme::Mono, "todo-theme-mono"},
                                     std::pair{TodoTheme::HighContrast, "todo-theme-high-contrast"}}) {
         Scene scene;
         select_theme(scene, theme);
-        write_scene(screenshot_directory, std::nullopt, name, scene, false);
+        write_scene(screenshot_directory, golden_directory, name, scene, true);
     }
 }
 
@@ -187,6 +213,6 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(*golden_directory);
     }
     capture_product_scenes(screenshot_directory, golden_directory);
-    capture_themes(screenshot_directory);
+    capture_themes(screenshot_directory, golden_directory);
     return 0;
 }
