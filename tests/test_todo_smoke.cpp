@@ -31,7 +31,7 @@ TodoWorkspace smoke_workspace() {
 
 TodoWorkspace movement_workspace(bool sorted_target = false, bool empty_target = false) {
     TodoWorkspace workspace = TodoWorkspace::empty();
-    for (const std::string& title : {"First", "Second", "Third"}) {
+    for (const char* title : {"First", "Second", "Third"}) {
         TaskDraft draft;
         draft.title = title;
         if (!workspace.add_task(LaneId{1}, std::move(draft),
@@ -593,7 +593,7 @@ CK_TEST(todo_lane_and_board_manager_shortcuts_are_board_scoped) {
 
 CK_TEST(todo_descriptor_dialogs_inherit_contextual_help_topics) {
     SmokeFixture fixture;
-    for (const auto [command_key, help_key] : {
+    for (const auto& [command_key, help_key] : {
              std::pair{TodoApp::kEditTaskKey, std::string_view{"todo.tasks"}},
              std::pair{TodoApp::kLaneActionsKey, std::string_view{"todo.lanes"}},
              std::pair{TodoApp::kBoardManagerKey, std::string_view{"todo.boards"}},

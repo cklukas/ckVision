@@ -185,7 +185,7 @@ CK_TEST(todo_conflict_resolution_matches_its_pinned_golden) {
 }
 
 CK_TEST(todo_themes_match_their_pinned_goldens) {
-    for (const auto [theme, name] : {std::pair{TodoTheme::Dark, "todo-theme-dark"},
+    for (const auto& [theme, name] : {std::pair{TodoTheme::Dark, "todo-theme-dark"},
                                     std::pair{TodoTheme::Light, "todo-theme-light"},
                                     std::pair{TodoTheme::Mono, "todo-theme-mono"},
                                     std::pair{TodoTheme::HighContrast, "todo-theme-high-contrast"}}) {
