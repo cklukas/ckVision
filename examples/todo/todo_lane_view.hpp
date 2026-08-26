@@ -34,6 +34,7 @@ public:
     std::function<void(TaskId)> on_selection_changed;
     std::function<void(TaskId)> on_activate;
     std::function<void(TaskId)> on_move_toggle;
+    std::function<void(LaneId, int)> on_move_step;
     std::function<void(LaneId, int)> on_lane_step;
     std::function<void(LaneId)> on_focused;
     std::function<void(TaskId, MouseAction, Point)> on_drag;

@@ -28,6 +28,34 @@ TodoWorkspace smoke_workspace() {
     return *TodoWorkspace::guided({IsoTimestamp{"2026-08-25T11:00:00Z"}, "fixture"}).value;
 }
 
+TodoWorkspace movement_workspace(bool sorted_target = false, bool empty_target = false) {
+    TodoWorkspace workspace = TodoWorkspace::empty();
+    for (const std::string& title : {"First", "Second", "Third"}) {
+        TaskDraft draft;
+        draft.title = title;
+        if (!workspace.add_task(LaneId{1}, std::move(draft),
+                                {IsoTimestamp{"2026-08-25T11:00:00Z"}, "fixture"}))
+            return TodoWorkspace::empty();
+    }
+    if (!empty_target) {
+        TaskDraft lower;
+        lower.title = "Lower";
+        lower.priority = Priority::Low;
+        if (!workspace.add_task(LaneId{2}, std::move(lower),
+                                {IsoTimestamp{"2026-08-25T11:00:00Z"}, "fixture"}))
+            return TodoWorkspace::empty();
+        TaskDraft higher;
+        higher.title = "Higher";
+        higher.priority = Priority::High;
+        if (!workspace.add_task(LaneId{2}, std::move(higher),
+                                {IsoTimestamp{"2026-08-25T11:00:00Z"}, "fixture"}))
+            return TodoWorkspace::empty();
+    }
+    if (sorted_target && !workspace.set_lane_sort(LaneId{2}, SortMode::Priority))
+        return TodoWorkspace::empty();
+    return workspace;
+}
+
 TaskDraft draft_from(const Task& task) {
     return TaskDraft{task.title, task.details, task.note, task.priority, task.due_date, task.color};
 }
@@ -176,6 +204,56 @@ CK_TEST(todo_move_mode_commits_across_lanes_and_escape_cancels) {
     CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
     CK_CHECK(!fixture.todo.move_active());
     CK_CHECK(fixture.todo.controller().workspace()->lane_of(TaskId{1}) == LaneId{2});
+}
+
+CK_TEST(todo_move_mode_moves_one_slot_down_with_one_down_key) {
+    term::HeadlessTerminal terminal(Size{100, 30});
+    ManualClock monotonic;
+    ui::Application app(terminal, monotonic);
+    MemoryTodoRepository repository(movement_workspace());
+    FixedCalendarClock calendar(smoke_reading());
+    TodoApp todo(app, repository, calendar, "move-within-lane");
+    const auto move = app.commands().id_for(TodoApp::kMoveTaskKey);
+    CK_CHECK(todo.board_view()->select_task(TaskId{2}));
+    CK_CHECK(move && app.execute_command(*move));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.execute_command(*move));
+    const Lane* lane = todo.controller().workspace()->find_lane(LaneId{1});
+    CK_CHECK(lane != nullptr);
+    if (lane != nullptr)
+        CK_CHECK(lane->task_ids == std::vector<TaskId>({TaskId{1}, TaskId{3}, TaskId{2}}));
+}
+
+CK_TEST(todo_move_mode_accepts_sorted_and_empty_target_lanes) {
+    {
+        term::HeadlessTerminal terminal(Size{100, 30});
+        ManualClock monotonic;
+        ui::Application app(terminal, monotonic);
+        MemoryTodoRepository repository(movement_workspace(true));
+        FixedCalendarClock calendar(smoke_reading());
+        TodoApp todo(app, repository, calendar, "move-to-sorted");
+        const auto move = app.commands().id_for(TodoApp::kMoveTaskKey);
+        CK_CHECK(move && app.execute_command(*move));
+        CK_CHECK(app.dispatch(key(Key::Right)));
+        CK_CHECK(app.dispatch(key(Key::Down)));
+        CK_CHECK(app.execute_command(*move));
+        CK_CHECK(!todo.move_active());
+        CK_CHECK(todo.controller().workspace()->lane_of(TaskId{1}) == LaneId{2});
+    }
+    {
+        term::HeadlessTerminal terminal(Size{100, 30});
+        ManualClock monotonic;
+        ui::Application app(terminal, monotonic);
+        MemoryTodoRepository repository(movement_workspace(false, true));
+        FixedCalendarClock calendar(smoke_reading());
+        TodoApp todo(app, repository, calendar, "move-to-empty");
+        const auto move = app.commands().id_for(TodoApp::kMoveTaskKey);
+        CK_CHECK(move && app.execute_command(*move));
+        CK_CHECK(app.dispatch(key(Key::Right)));
+        CK_CHECK(app.dispatch(key(Key::Enter)));
+        CK_CHECK(!todo.move_active());
+        CK_CHECK(todo.controller().workspace()->lane_of(TaskId{1}) == LaneId{2});
+    }
 }
 
 CK_TEST(todo_note_window_is_modeless_and_autosaves_after_150ms) {
@@ -463,7 +541,8 @@ CK_TEST(todo_transient_status_expires_to_context_and_move_guidance) {
     CK_CHECK(move && fixture.app.execute_command(*move));
     fixture.monotonic.advance(3'000'000'000);
     fixture.app.step(fixture.monotonic.now_nanos());
-    CK_CHECK(fixture.todo.status_line()->current_hint() == "Arrow keys move; Enter commits; Esc cancels.");
+    CK_CHECK(fixture.todo.status_line()->current_hint() ==
+             "Arrows choose the insertion point; Enter commits; Esc cancels.");
     CK_CHECK(fixture.app.dispatch(key(Key::Escape)));
 }
 

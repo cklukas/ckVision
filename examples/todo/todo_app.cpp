@@ -482,7 +482,14 @@ void TodoApp::build_chrome() {
     auto status = std::make_unique<widgets::StatusLine>();
     status_line_ = status.get();
     status->set_hint_provider([this](const std::string& key) {
-        if (move_) return std::string{"Arrow keys move; Enter commits; Esc cancels."};
+        if (move_) {
+            const auto lane_id = active_lane();
+            const TodoWorkspace* workspace = controller_.workspace();
+            const Lane* lane = lane_id && workspace != nullptr ? workspace->find_lane(*lane_id) : nullptr;
+            if (lane != nullptr && lane->sort != SortMode::Manual)
+                return std::string{"Sorted lane: Left/Right changes lane; displayed order follows its sort."};
+            return std::string{"Arrows choose the insertion point; Enter commits; Esc cancels."};
+        }
         if (key == "todo.board") return std::string{"Arrows select tasks and lanes; Enter starts or finishes a move."};
         if (key == "todo.note") return std::string{"Notes autosave after a short pause and flush on close."};
         return std::string{};
@@ -512,6 +519,9 @@ void TodoApp::build_board_window() {
     board->on_active_lane_changed = [this](LaneId lane_id) {
         if (move_) board_view_->set_move_target(lane_id);
         if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
+    };
+    board->on_move_position_blocked = [this] {
+        set_status("This lane is sorted automatically; Left/Right changes lanes, and its sort chooses the position.");
     };
     window->set_content(std::move(board));
     window->close_request = [this] {
@@ -637,8 +647,12 @@ void TodoApp::refresh_board() {
         }
     }
     if (!board_view_->set_board(*workspace, board_id)) return;
-    board_view_->set_move_source(move_ ? std::optional<TaskId>(move_->task_id) : std::nullopt);
-    board_view_->set_move_target(move_ ? board_view_->active_lane() : std::nullopt);
+    if (move_) {
+        board_view_->begin_keyboard_move(move_->task_id, move_->source_lane_id,
+                                         move_->original_before_task_id);
+    } else {
+        board_view_->end_keyboard_move();
+    }
     if (const Board* board = workspace->find_board(board_id)) board_window_->set_title("TODO — " + board->name);
     if (menu_bar_ != nullptr) menu_bar_->set_menus(build_menus());
     refresh_status_items();
@@ -1575,16 +1589,15 @@ void TodoApp::toggle_move() {
             return;
         }
         move_ = *started.value;
-        board_view_->set_move_source(task->id);
-        board_view_->set_move_target(board_view_->active_lane());
+        board_view_->begin_keyboard_move(task->id, move_->source_lane_id,
+                                         move_->original_before_task_id);
         set_status("Move mode: arrows choose lane and position; Enter commits; Esc cancels.");
         return;
     }
 
     const auto lane = active_lane();
     if (!lane) return;
-    std::optional<TaskId> before = board_view_->selected_task();
-    if (before == move_->task_id) before = move_->original_before_task_id;
+    const std::optional<TaskId> before = board_view_->keyboard_move_before();
     const auto staged = controller_.stage_task_move(*move_, *lane, before);
     if (!staged) {
         show_error("Cannot stage task move", staged.error);
@@ -1599,6 +1612,7 @@ void TodoApp::toggle_move() {
     const auto committed = controller_.commit_task_move(*staged.value);
     if (!committed) {
         move_.reset();
+        board_view_->end_keyboard_move();
         handle_conflict(
             "Task move conflict", committed.error,
             [task_id, source_lane_id, target_lane_id, before, original](const TodoWorkspace& remote) {
@@ -1634,6 +1648,7 @@ void TodoApp::toggle_move() {
         return;
     }
     move_.reset();
+    board_view_->end_keyboard_move();
     refresh_board();
     board_view_->select_task(task_id);
     set_status(committed.value->changed ? "Task moved and saved." : "Task stayed in its original position.");
@@ -1643,8 +1658,7 @@ void TodoApp::cancel_move() {
     if (!move_) return;
     const TaskId task_id = move_->task_id;
     move_.reset();
-    board_view_->set_move_source(std::nullopt);
-    board_view_->set_move_target(std::nullopt);
+    board_view_->end_keyboard_move();
     board_view_->select_task(task_id);
     set_status("Move cancelled; original position restored.");
 }

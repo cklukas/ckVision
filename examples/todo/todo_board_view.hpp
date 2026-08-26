@@ -28,6 +28,10 @@ public:
     void set_today(std::optional<IsoDate> today);
     void set_move_source(std::optional<TaskId> task_id);
     void set_move_target(std::optional<LaneId> lane_id);
+    void begin_keyboard_move(TaskId task_id, LaneId source_lane,
+                             std::optional<TaskId> original_before);
+    void end_keyboard_move();
+    std::optional<TaskId> keyboard_move_before() const noexcept;
 
     std::function<void(TaskId)> on_selection_changed;
     std::function<void(TaskId)> on_task_activate;
@@ -36,6 +40,7 @@ public:
     std::function<void(TaskId, LaneId, std::optional<TaskId>)> on_task_drop;
     std::function<void(TaskId, Point)> on_task_context_menu;
     std::function<void(LaneId, Point)> on_lane_context_menu;
+    std::function<void()> on_move_position_blocked;
 
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
@@ -47,6 +52,9 @@ private:
     void layout_lanes();
     void activate_lane(LaneId lane_id);
     void step_lane(LaneId lane_id, int direction);
+    void step_move_position(LaneId lane_id, int delta);
+    void reset_move_position_for_active_lane();
+    void update_keyboard_drop_marker();
     void ensure_lane_visible(std::size_t index);
     void handle_drag(TaskId task_id, MouseAction action, Point screen_cell);
     TodoLaneView* lane_at(Point screen_cell) const noexcept;
@@ -66,6 +74,13 @@ private:
     std::optional<TaskId> move_source_;
     std::optional<LaneId> move_target_;
     std::optional<DragState> drag_;
+    struct KeyboardMoveState {
+        TaskId task_id;
+        LaneId source_lane;
+        std::optional<TaskId> original_before;
+        std::optional<TaskId> before;
+    };
+    std::optional<KeyboardMoveState> keyboard_move_;
     std::optional<IsoDate> today_;
     widgets::Scrollbar* scrollbar_ = nullptr;
 };

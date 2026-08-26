@@ -82,6 +82,25 @@ void TodoBoardView::set_move_target(std::optional<LaneId> lane_id) {
     for (TodoLaneView* lane : lanes_) lane->set_move_target(lane_id == lane->lane_id());
 }
 
+void TodoBoardView::begin_keyboard_move(TaskId task_id, LaneId source_lane,
+                                        std::optional<TaskId> original_before) {
+    keyboard_move_ = KeyboardMoveState{task_id, source_lane, original_before, original_before};
+    set_move_source(task_id);
+    set_move_target(source_lane);
+    update_keyboard_drop_marker();
+}
+
+void TodoBoardView::end_keyboard_move() {
+    keyboard_move_.reset();
+    for (TodoLaneView* lane : lanes_) lane->set_drop_marker(std::nullopt, false);
+    set_move_source(std::nullopt);
+    set_move_target(std::nullopt);
+}
+
+std::optional<TaskId> TodoBoardView::keyboard_move_before() const noexcept {
+    return keyboard_move_ ? keyboard_move_->before : std::nullopt;
+}
+
 ui::SizeHint TodoBoardView::horizontal_size_hint() const {
     return {kMinimumLaneWidth, kPreferredLaneWidth * 3 + kLaneGap * 2, ui::kUnboundedExtent};
 }
@@ -125,6 +144,7 @@ void TodoBoardView::rebuild(const TodoWorkspace& workspace, const Board& board) 
         observer->on_move_toggle = [this](TaskId task_id) {
             if (on_move_toggle) on_move_toggle(task_id);
         };
+        observer->on_move_step = [this](LaneId lane_id, int delta) { step_move_position(lane_id, delta); };
         observer->on_lane_step = [this](LaneId lane_id, int direction) { step_lane(lane_id, direction); };
         observer->on_focused = [this](LaneId lane_id) { activate_lane(lane_id); };
         observer->on_drag = [this](TaskId task_id, MouseAction action, Point screen_cell) {
@@ -186,11 +206,61 @@ void TodoBoardView::step_lane(LaneId lane_id, int direction) {
                                     [lane_id](const TodoLaneView* lane) { return lane->lane_id() == lane_id; });
     if (found == lanes_.end() || lanes_.empty()) return;
     const int index = static_cast<int>(found - lanes_.begin());
-    const int target = std::clamp(index + direction, 0, static_cast<int>(lanes_.size()) - 1);
+    const int count = static_cast<int>(lanes_.size());
+    const int target = ((index + direction) % count + count) % count;
     active_lane_index_ = static_cast<std::size_t>(target);
+    if (keyboard_move_) reset_move_position_for_active_lane();
     ensure_lane_visible(active_lane_index_);
     if (context().app != nullptr) context().app->set_focus(lanes_[active_lane_index_]);
     if (on_active_lane_changed) on_active_lane_changed(lanes_[active_lane_index_]->lane_id());
+}
+
+void TodoBoardView::step_move_position(LaneId lane_id, int delta) {
+    if (!keyboard_move_ || active_lane() != lane_id) return;
+    TodoLaneView* lane = lane_view(lane_id);
+    if (lane == nullptr) return;
+    if (lane->lane().sort != SortMode::Manual) {
+        if (on_move_position_blocked) on_move_position_blocked();
+        return;
+    }
+    std::vector<TaskId> anchors;
+    anchors.reserve(lane->lane().task_ids.size());
+    for (const TaskId task_id : lane->lane().task_ids)
+        if (task_id != keyboard_move_->task_id) anchors.push_back(task_id);
+    int slot = static_cast<int>(anchors.size());
+    if (keyboard_move_->before) {
+        const auto found = std::find(anchors.begin(), anchors.end(), *keyboard_move_->before);
+        if (found != anchors.end()) slot = static_cast<int>(found - anchors.begin());
+    }
+    slot = std::clamp(slot + delta, 0, static_cast<int>(anchors.size()));
+    keyboard_move_->before = slot < static_cast<int>(anchors.size())
+                                 ? std::optional<TaskId>{anchors[static_cast<std::size_t>(slot)]}
+                                 : std::nullopt;
+    update_keyboard_drop_marker();
+}
+
+void TodoBoardView::reset_move_position_for_active_lane() {
+    if (!keyboard_move_) return;
+    const auto lane_id = active_lane();
+    TodoLaneView* lane = lane_id ? lane_view(*lane_id) : nullptr;
+    if (lane == nullptr) return;
+    if (*lane_id == keyboard_move_->source_lane) {
+        keyboard_move_->before = keyboard_move_->original_before;
+    } else if (lane->lane().sort == SortMode::Manual) {
+        keyboard_move_->before = lane->selected_task();
+    } else {
+        keyboard_move_->before.reset();
+    }
+    update_keyboard_drop_marker();
+}
+
+void TodoBoardView::update_keyboard_drop_marker() {
+    for (TodoLaneView* lane : lanes_) lane->set_drop_marker(std::nullopt, false);
+    if (!keyboard_move_) return;
+    const auto lane_id = active_lane();
+    TodoLaneView* lane = lane_id ? lane_view(*lane_id) : nullptr;
+    if (lane == nullptr) return;
+    lane->set_drop_marker(keyboard_move_->before, !keyboard_move_->before.has_value());
 }
 
 void TodoBoardView::ensure_lane_visible(std::size_t index) {

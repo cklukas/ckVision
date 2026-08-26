@@ -191,24 +191,51 @@ bool TodoLaneView::on_key(const KeyEvent& event) {
         return true;
     }
     switch (event.chord.key) {
-        case Key::Up: move_selection(selected_ - 1); return true;
-        case Key::Down: move_selection(selected_ + 1); return true;
-        case Key::PageUp: move_selection(selected_ - visible_cards()); return true;
-        case Key::PageDown: move_selection(selected_ + visible_cards()); return true;
-        case Key::Home: move_selection(0); return true;
-        case Key::End: move_selection(static_cast<int>(tasks_.size()) - 1); return true;
+        case Key::Up:
+            if (move_source_ && on_move_step) on_move_step(lane_.id, -1);
+            else move_selection(selected_ - 1);
+            return true;
+        case Key::Down:
+            if (move_source_ && on_move_step) on_move_step(lane_.id, 1);
+            else move_selection(selected_ + 1);
+            return true;
+        case Key::PageUp:
+            if (move_source_ && on_move_step) on_move_step(lane_.id, -visible_cards());
+            else move_selection(selected_ - visible_cards());
+            return true;
+        case Key::PageDown:
+            if (move_source_ && on_move_step) on_move_step(lane_.id, visible_cards());
+            else move_selection(selected_ + visible_cards());
+            return true;
+        case Key::Home:
+            if (move_source_ && on_move_step) on_move_step(lane_.id, -static_cast<int>(tasks_.size()) - 1);
+            else move_selection(0);
+            return true;
+        case Key::End:
+            if (move_source_ && on_move_step) on_move_step(lane_.id, static_cast<int>(tasks_.size()) + 1);
+            else move_selection(static_cast<int>(tasks_.size()) - 1);
+            return true;
         case Key::Left:
             if (on_lane_step) on_lane_step(lane_.id, -1);
             return true;
         case Key::Right:
             if (on_lane_step) on_lane_step(lane_.id, 1);
             return true;
-        case Key::Enter:
-            if (const auto task = selected_task(); task && on_move_toggle) on_move_toggle(*task);
+        case Key::Tab:
+            if (on_lane_step)
+                on_lane_step(lane_.id, has_modifier(event.chord.modifiers, Modifier::Shift) ? -1 : 1);
             return true;
+        case Key::Enter: {
+            std::optional<TaskId> task = selected_task();
+            if (!task) task = move_source_;
+            if (task && on_move_toggle) on_move_toggle(*task);
+            return true;
+        }
         case Key::Char:
             if (event.chord.text == " ") {
-                if (const auto task = selected_task(); task && on_move_toggle) on_move_toggle(*task);
+                std::optional<TaskId> task = selected_task();
+                if (!task) task = move_source_;
+                if (task && on_move_toggle) on_move_toggle(*task);
                 return true;
             }
             return false;
@@ -351,8 +378,11 @@ void TodoLaneView::draw(scene::Painter& painter) {
         } else {
             marker_y = 1 + (static_cast<int>(tasks_.size()) - scrollbar_->position()) * kCardRows;
         }
-        if (marker_y >= 1 && marker_y < bounds().height - 1)
-            painter.fill(Rect{1, marker_y, std::max(0, bounds().width - 2), 1}, Cell::from_grapheme("─", frame));
+        if (marker_y >= 1 && marker_y < bounds().height - 1) {
+            const std::string marker = drop_before_ ? "▶" : "▶ drop here";
+            painter.draw_text(Point{1, marker_y},
+                              text::elide_to_width(marker, std::max(0, bounds().width - 2)), frame);
+        }
     }
 }
 

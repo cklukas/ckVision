@@ -205,6 +205,38 @@ CK_TEST(todo_board_left_right_navigation_moves_focus_and_reveals_lanes) {
     CK_CHECK(observer->active_lane() == LaneId{7});
     CK_CHECK(app.focused() == observer->lane_view(LaneId{7}));
     CK_CHECK(observer->lane_view(LaneId{7})->bounds().x + observer->lane_view(LaneId{7})->bounds().width <= 50);
+    CK_CHECK(app.focused()->on_key(key(Key::Right)));
+    CK_CHECK(observer->active_lane() == LaneId{1});
+    CK_CHECK(app.focused()->on_key(key(Key::Left)));
+    CK_CHECK(observer->active_lane() == LaneId{7});
+    CK_CHECK(app.focused()->on_key(key(Key::Tab)));
+    CK_CHECK(observer->active_lane() == LaneId{1});
+    CK_CHECK(app.focused()->on_key(
+        KeyEvent{KeyChord{Key::Tab, Modifier::Shift, {}}}));
+    CK_CHECK(observer->active_lane() == LaneId{7});
+}
+
+CK_TEST(todo_board_keyboard_move_tracks_explicit_insertion_slots) {
+    term::HeadlessTerminal terminal(Size{80, 16});
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    app.theme() = ui::make_classic_theme(app.roles(), ui::intern_standard_roles(app.roles()));
+    auto board = std::make_unique<TodoBoardView>();
+    TodoBoardView* observer = app.root().add(std::move(board));
+    observer->set_bounds(Rect{0, 0, 80, 16});
+    CK_CHECK(observer->set_board(board_workspace(), BoardId{1}));
+    CK_CHECK(observer->select_task(TaskId{2}));
+    observer->begin_keyboard_move(TaskId{2}, LaneId{1}, TaskId{3});
+    CK_CHECK(observer->keyboard_move_before() == TaskId{3});
+    CK_CHECK(app.focused()->on_key(key(Key::Down)));
+    CK_CHECK(observer->keyboard_move_before() == TaskId{4});
+    CK_CHECK(app.focused()->on_key(key(Key::Up)));
+    CK_CHECK(observer->keyboard_move_before() == TaskId{3});
+    CK_CHECK(app.focused()->on_key(key(Key::Home)));
+    CK_CHECK(observer->keyboard_move_before() == TaskId{1});
+    CK_CHECK(app.focused()->on_key(key(Key::End)));
+    CK_CHECK(!observer->keyboard_move_before());
+    observer->end_keyboard_move();
 }
 
 CK_TEST(todo_board_rejects_unknown_board_without_losing_current_content) {
