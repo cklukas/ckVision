@@ -8,23 +8,20 @@ add_custom_target(bench_smoke_run
     COMMAND cvision_bench
     COMMENT "ckVision benchmark smoke")
 
-# Unlike a printed benchmark target, this deterministic scene budget gate is
-# a CTest failure when the checked cells-touched limits regress.
+# Unlike printed benchmark targets, the deterministic budget gates below are
+# CTest failures when their checked work, size, or redraw limits regress.
 add_test(NAME scene_budget_gate COMMAND cvision_bench)
-# What this gate asserts is deterministic — cells touched, not time — so it stays
-# meaningful under a sanitizer; only its wall-clock cost changes, and ASan/TSan
-# make it an order of magnitude slower. A 60s ceiling was enough for an ordinary
-# build and not for an instrumented one, so the sanitizer lanes failed on the
-# clock while the budget itself was never in question. The ceiling follows the
-# instrumentation rather than the gate being skipped, which would drop a real
-# regression check from exactly the lanes that run it most carefully.
+# What these gates assert is deterministic rather than wall-clock based, so they
+# stay meaningful under a sanitizer; only their runtime changes, and ASan/TSan
+# make it an order of magnitude slower. The ceiling follows the instrumentation
+# rather than skipping real regression checks from the sanitizer lanes.
 if(CKVISION_SANITIZE)
-    set(ckvision_budget_gate_timeout 600)
+    set(ckvision_benchmark_gate_timeout 600)
 else()
-    set(ckvision_budget_gate_timeout 60)
+    set(ckvision_benchmark_gate_timeout 60)
 endif()
 set_tests_properties(scene_budget_gate PROPERTIES LABELS "benchmark;budget"
-    TIMEOUT ${ckvision_budget_gate_timeout})
+    TIMEOUT ${ckvision_benchmark_gate_timeout})
 
 if(TARGET todo_app)
     add_executable(todo_bench bench_todo.cpp)
@@ -34,5 +31,6 @@ if(TARGET todo_app)
 
     add_custom_target(todo_bench_run COMMAND todo_bench COMMENT "ckVision TODO benchmarks")
     add_test(NAME todo_benchmark_smoke COMMAND todo_bench)
-    set_tests_properties(todo_benchmark_smoke PROPERTIES LABELS "benchmark;budget;example" TIMEOUT 60)
+    set_tests_properties(todo_benchmark_smoke PROPERTIES LABELS "benchmark;budget;example"
+        TIMEOUT ${ckvision_benchmark_gate_timeout})
 endif()
