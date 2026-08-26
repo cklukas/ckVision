@@ -86,26 +86,32 @@ std::string format_rate(BenchmarkId id, double rate) {
 const std::vector<BenchmarkDescriptor>& benchmark_catalogue() {
     static const std::vector<BenchmarkDescriptor> catalogue = {
         {BenchmarkId::IntegerMix, "integer", "Integer mix", "mix steps per second",
+         "one dependent operation after another, on a single core",
          "A dependent chain of shifts and folds: how fast this machine does one "
          "small thing after another. It says nothing about how many cores you have "
          "-- it uses one -- and little about wide vector work."},
         {BenchmarkId::FloatingPoint, "float", "Floating point", "floating-point operations per second",
+         "a naive 256x256 double-precision matrix multiply",
          "A naive 256x256 double-precision matrix multiply. Deliberately naive: a "
          "tuned kernel would measure how well it was written for one cache size "
          "rather than what the machine can do."},
         {BenchmarkId::MemoryBandwidth, "memory", "Memory bandwidth", "bytes per second",
+         "STREAM's triad, on arrays larger than any cache",
          "STREAM's triad over arrays far larger than any cache, so what it measures "
          "is the road to memory rather than the caches beside it. It allocates "
          "about 96 MiB while it runs."},
         {BenchmarkId::CacheLatency, "latency", "Cache latency", "nanoseconds per access",
+         "a pointer chase through growing working sets",
          "A dependent walk through working sets from 4 KiB to 64 MiB, in an order no "
          "prefetcher can follow. The steps in the chart are this machine's cache "
          "boundaries: each one is a level the walk has just fallen out of."},
         {BenchmarkId::ThreadScaling, "scaling", "Thread scaling", "speedup over one thread",
+         "the integer kernel on 1, 2, 4 ... all cores",
          "The integer kernel on one thread, then two, then four, up to this machine's "
          "core count, each doing the same work per thread. Where the measured bar "
          "falls short of the shaded one is where the cores stopped being independent."},
         {BenchmarkId::DiskThroughput, "disk", "Disk throughput", "bytes per second",
+         "64 MiB written and read back, where you choose",
          "Writes 64 MiB to a directory you choose, reads it back, and removes it. The "
          "read is the headline. It does not defeat the operating system's page cache, "
          "which needs a different platform call on every platform -- so a very fast "

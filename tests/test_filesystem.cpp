@@ -88,6 +88,15 @@ CK_TEST(add_directory_creates_every_missing_ancestor) {
     CK_CHECK(fs.is_directory("/a/b/c"));
 }
 
+CK_TEST(create_directories_is_idempotent_and_rejects_a_conflicting_file) {
+    MemoryFileSystem fs;
+    CK_CHECK(fs.create_directories("/a/b/c"));
+    CK_CHECK(fs.is_directory("/a/b/c"));
+    CK_CHECK(fs.create_directories("/a/b/c"));
+    fs.add_file("/a/file");
+    CK_CHECK(!fs.create_directories("/a/file"));
+}
+
 CK_TEST(add_file_creates_its_parent_directories_but_the_file_itself_is_not_a_directory) {
     MemoryFileSystem fs;
     fs.add_file("/a/b/readme.txt");

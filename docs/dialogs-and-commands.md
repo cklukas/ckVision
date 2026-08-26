@@ -24,7 +24,7 @@ Hello declares its own application commands, while the larger examples attach
 a handler to the framework's standard Quit command, `commands().standard().quit`.
 The menu/status chrome is then simple data that references a command id.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="12-25" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="14-30" -->
 ```cpp
 HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     // Each command names itself; the registry hands back the id this
@@ -38,6 +38,9 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     widgets::ApplicationShell shell(app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
                                            .menus = {{"&File",
                                                       {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
+                                                       widgets::MenuItem::separator(),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{
+                                                           app_.commands().standard().help, "&About..."}),
                                                        widgets::MenuItem::separator(),
                                                        widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
 ```
@@ -67,7 +70,7 @@ Apply, Browse…, Reset. A Cancel button is therefore written `ButtonRole::Dismi
 and needs no handler of its own — the role is the behaviour, and a button whose
 only instruction was "not the default" used to be an inert control.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="175-200" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="181-206" -->
 ```cpp
     help->set_bounds(Rect{33, 14, 12, 2});
     help->on_press = [this] { present_help(); };
@@ -103,9 +106,9 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 ## Fields that are not text
 
 `FieldDescriptor::kind` selects what a field materializes as. `Text` is the
-default and is what every descriptor written before the enum existed still
-gets; `Check` is a single checkbox carrying `label` as its own text; `Note` is
-text the form states rather than asks.
+default; `Check` is a single checkbox carrying `label` as its own text; `Note`
+is text the form states rather than asks. `Radio`, `Combo`, `Number`, `Date`,
+and `Time` materialize their corresponding typed ckVision controls.
 
 ```cpp
 descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -117,12 +120,14 @@ descriptor.fields.push_back(widgets::FieldDescriptor{
     .kind = widgets::FieldKind::Note});
 ```
 
-`MaterializedDialog::labels`, `inputs` and `checks`, and `DialogResult::values`
-and `checked`, are all parallel to `descriptor.fields`: field *i*'s widget and
-answer sit at index *i* whatever kind it is, so a caller never counts kinds to
-find its own value. The slots a field did not fill are null (or empty), and a
-`Check` field is skipped by validation — it has no text to validate and no
-invalid state to show.
+`MaterializedDialog::labels`, `inputs`, `checks`, `radios`, `combos`, `numbers`,
+`dates`, and `times`, and the corresponding typed `DialogResult` vectors, are
+all parallel to `descriptor.fields`: field *i*'s widget and answer sit at index
+*i* whatever kind it is, so a caller never counts kinds to find its own value.
+The slots a field did not fill are null (or empty), and a `Check` field is
+skipped by validation — it has no text to validate and no invalid state to
+show. Date and time answers remain typed values; their canonical ISO strings in
+`values` are a convenience for persistence and general validators.
 
 A checkbox is ticked with `Space`. `Enter` is left to the form, so it reaches
 the default button from anywhere in the dialog, a focused checkbox or radio
@@ -132,8 +137,12 @@ Notes take no focus, so `Tab` still moves between the fields a reader answers.
 Consecutive notes lay out as one paragraph with no blank row between them: the
 form's own spacing separates questions, not the lines of a sentence.
 
-`Radio`, `Combo` and `Number` field kinds are not implemented; a form needing
-those is still built by hand.
+`Date` can be optional and carries an explicit deterministic seed. `Time`
+supports 24-hour or 12-hour display and optional seconds. Both controls use
+arrow-key segmented editing and remain ordinary labeled tab stops. A Date
+field presented by the standard dialog host also opens ckVision's full
+`CalendarDropdown` with Space or its visible dropdown affordance; calendar
+selection updates the same typed `DateValue` returned by the dialog.
 
 ## Standard message boxes and strings
 
@@ -169,7 +178,7 @@ currently permitted. Here Step 1 is unavailable until Name has text; entering
 `Ada` produces the enabled state shown below. The predicate is reevaluated from
 the actual control state, so a caller does not manually synchronize a button.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="145-150" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="151-156" -->
 ```cpp
     spin_box_ = spin.get();
     content->add_child(std::move(spin));

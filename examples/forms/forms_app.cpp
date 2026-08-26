@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "forms_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -55,7 +57,8 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision Forms example",
-                                "Field controls, validation, context help and a wizard flow.");
+                                ckv::examples::about_text(
+                                    "Field controls, validation, context help and a wizard flow."));
 }
 
 void FormsApp::build_chrome() {
@@ -64,6 +67,9 @@ void FormsApp::build_chrome() {
 
     widgets::MenuBarItem help_menu{"&Help", {}};
     help_menu.items.push_back(widgets::MenuItem::action("&Forms help", [this] { present_help(); }));
+    help_menu.items.push_back(widgets::MenuItem::separator());
+    help_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().help, "&About..."}));
 
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(help_menu)}));

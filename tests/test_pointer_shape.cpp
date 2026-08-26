@@ -366,7 +366,7 @@ CK_TEST(a_pointer_that_merely_moved_does_not_become_a_frame) {
     Presenter presenter{term};
     presenter.set_frame_completion_tracking(true);
     std::vector<Cell> cells(static_cast<std::size_t>(20 * 4), Cell::from_grapheme(" ", Style{}));
-    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, {});
+    presenter.present(FrameView(cells.data(), Size{20, 4}), CursorState{}, 0, {});
     const std::size_t marked_before = presenter.frames_marked();
     const std::size_t frame_bytes = presenter.last_bytes_emitted();
     term.clear_written();

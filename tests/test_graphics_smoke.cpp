@@ -14,6 +14,18 @@ using ckv::MouseButton;
 using ckv::Point;
 using ckv::ui::Application;
 
+CK_TEST(graphics_about_dialog_carries_the_project_copyright) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile());
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::graphics::GraphicsApp graphics(app);
+
+    CK_CHECK(app.execute_command(app.commands().standard().help));
+    app.step(0);
+    CK_CHECK(term.written_bytes().find(
+                 "Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
+}
+
 CK_TEST(graphics_example_emits_sixel_when_the_terminal_supports_raster_graphics) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24}, ckv::term::headless_sixel_profile());
     ManualClock clock;

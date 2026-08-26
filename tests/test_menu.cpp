@@ -520,6 +520,28 @@ CK_TEST(choosing_an_item_hands_focus_back_before_the_command_runs) {
     CK_CHECK(mf.app.focused() == other);
 }
 
+CK_TEST(a_menu_bar_keeps_the_invoking_views_command_context_while_open) {
+    MenuBarFixture mf;
+    auto* editor = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    editor->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    editor->set_command_context("document");
+    mf.app.set_focus(editor);
+
+    const ui::CommandId save = mf.app.commands().declare(
+        {.key = "test.contextual-save", .title = "Save", .context = "document"});
+    bool ran = false;
+    mf.app.set_command_handler(save, [&] { ran = true; });
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&File", {MenuItem::command(save)}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+
+    bar->activate();
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    CK_CHECK(mf.app.dispatch(key(Key::Enter)));
+    CK_CHECK(ran);
+    CK_CHECK(mf.app.focused() == editor);
+}
+
 // Regression (M8/WP-2): Application::dispatch's new click-to-focus must
 // not corrupt MenuBar's own previously_focused_ bookkeeping. A mouse
 // click on the bar (not a direct activate() call) drives MenuBar's
@@ -1508,6 +1530,52 @@ CK_TEST(show_context_menu_self_removes_and_clears_capture_on_escape) {
     popup->on_key(key(Key::Escape));
     CK_CHECK(mf.desktop.popups().empty());
     CK_CHECK(mf.app.input_capture() == nullptr);
+}
+
+CK_TEST(a_context_menu_receives_dispatched_keys_and_restores_focus) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+    Desktop* host = desktop.get();
+    app.root().add(std::move(desktop));
+    auto origin = std::make_unique<ckv::ui::View>(Rect{2, 2, 10, 2}, ckv::ui::FocusPolicy::TabStop);
+    ckv::ui::View* previous = host->add(std::move(origin));
+    app.set_focus(previous);
+
+    DropdownMenu* popup = show_context_menu({MenuItem::action("&Copy", {})},
+                                            ckv::Point{10, 10}, app, *host);
+    CK_CHECK(app.focused() == popup);
+    CK_CHECK(app.dispatch(key(Key::Escape)));
+    CK_CHECK(host->popups().empty());
+    CK_CHECK(app.input_capture() == nullptr);
+    CK_CHECK(app.focused() == previous);
+}
+
+CK_TEST(a_context_menu_keeps_the_invoking_views_command_context_while_open) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    app.theme() = make_classic_theme(app.roles(), intern_standard_roles(app.roles()));
+    auto desktop = std::make_unique<Desktop>(Rect{0, 0, 80, 24});
+    Desktop* host = desktop.get();
+    app.root().add(std::move(desktop));
+    auto origin = std::make_unique<ckv::ui::View>(Rect{2, 2, 10, 2}, ckv::ui::FocusPolicy::TabStop);
+    origin->set_command_context("document");
+    ckv::ui::View* previous = host->add(std::move(origin));
+    app.set_focus(previous);
+    const ui::CommandId save = app.commands().declare(
+        {.key = "test.context-menu-save", .title = "Save", .context = "document"});
+    bool ran = false;
+    app.set_command_handler(save, [&] { ran = true; });
+
+    DropdownMenu* popup = show_context_menu(
+        {MenuItem::command(save)}, ckv::Point{10, 10}, app, *host);
+    CK_CHECK(popup->highlight().enabled);
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK(ran);
+    CK_CHECK(app.focused() == previous);
 }
 
 CK_TEST(show_context_menu_activating_an_item_closes_it_and_runs_the_action) {

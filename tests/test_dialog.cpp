@@ -119,6 +119,69 @@ CK_TEST(a_labeled_fields_mnemonic_buddy_is_wired_to_its_own_input) {
     CK_CHECK(dialog.labels[0]->buddy() == dialog.inputs[0]);
 }
 
+CK_TEST(a_date_field_materializes_as_a_typed_optional_picker_with_its_own_buddy) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Due:",
+        .kind = ckv::widgets::FieldKind::Date,
+        .initial_date = ckv::widgets::DateValue{2026, 8, 25},
+        .date_seed = ckv::widgets::DateValue{2026, 8, 26},
+    });
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.dates.size() == 1);
+    CK_CHECK(dialog.dates[0] != nullptr);
+    CK_CHECK(dialog.inputs[0] == nullptr);
+    CK_CHECK(dialog.labels[0]->buddy() == dialog.dates[0]);
+    CK_CHECK(dialog.initial_focus == dialog.dates[0]);
+    CK_CHECK((dialog.dates[0]->value() ==
+              std::optional<ckv::widgets::DateValue>{ckv::widgets::DateValue{2026, 8, 25}}));
+}
+
+CK_TEST(a_required_date_materializes_its_seed_while_an_optional_date_may_be_empty) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Start:",
+        .kind = ckv::widgets::FieldKind::Date,
+        .date_seed = ckv::widgets::DateValue{2026, 8, 25},
+        .date_optional = false,
+    });
+    auto dialog = materialize_dialog(descriptor);
+    // Mandatory fields materialize their deterministic seed immediately.
+    CK_CHECK(validate_dialog(dialog, descriptor, app));
+    CK_CHECK((dialog.dates[0]->value() ==
+              std::optional<ckv::widgets::DateValue>{ckv::widgets::DateValue{2026, 8, 25}}));
+
+    descriptor.fields[0].date_optional = true;
+    auto optional = materialize_dialog(descriptor);
+    optional.dates[0]->set_value(std::nullopt);
+    CK_CHECK(validate_dialog(optional, descriptor, app));
+}
+
+CK_TEST(a_time_field_materializes_as_a_typed_picker_with_its_own_buddy) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&At:",
+        .kind = ckv::widgets::FieldKind::Time,
+        .initial_time = ckv::widgets::TimeValue{14, 30, 0},
+        .time_show_seconds = false,
+    });
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(dialog.times.size() == 1);
+    CK_CHECK(dialog.times[0] != nullptr);
+    CK_CHECK(dialog.inputs[0] == nullptr);
+    CK_CHECK(dialog.labels[0]->buddy() == dialog.times[0]);
+    CK_CHECK(dialog.initial_focus == dialog.times[0]);
+    CK_CHECK(dialog.times[0]->value() == (ckv::widgets::TimeValue{14, 30, 0}));
+    CK_CHECK(!dialog.times[0]->show_seconds());
+}
+
 CK_TEST(the_button_marked_default_is_reported_as_the_default_button) {
     Fixture f;
     DialogDescriptor descriptor;

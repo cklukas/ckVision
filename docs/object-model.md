@@ -38,7 +38,7 @@ Application
 The layouts example shows the ordinary explicit construction style: make a
 Desktop, transfer it to the root, then build chrome and windows.
 
-<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="21-33" -->
+<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="23-35" -->
 ```cpp
 
 LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
@@ -76,3 +76,31 @@ For resizing, choose a layout container or a `DesktopGrowPolicy` before using
 manual bounds. Manual bounds are appropriate for the fixed placements in a
 small dialog; `Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, `Overlay`, and
 `Splitter` express the intended relationship under changing terminal sizes.
+
+## Custom focusable views
+
+A custom control declares tab focus in its base initializer and implements the
+event hooks it consumes. Construction makes the policy true from the start, so
+the view cannot be attached briefly with the wrong traversal behavior.
+
+```cpp
+class ItemSurface final : public ckv::ui::View {
+public:
+    ItemSurface() : View({}, ckv::ui::FocusPolicy::TabStop) {}
+
+    bool on_key(const ckv::KeyEvent& event) override;
+    void draw(ckv::scene::Painter& painter) override;
+};
+```
+
+Leave the second constructor argument at its `None` default for layout and
+decorative views. Runtime state may still use `set_focus_policy` when a view's
+role genuinely changes after construction.
+
+Temporary UI such as a context menu should retain
+`Application::save_focus()` rather than a raw `View*`, then pass that bookmark
+to `Application::restore_focus()` after removing itself. The bookmark carries
+the view's lifetime token: restoration succeeds only while the same focusable
+view remains attached, and otherwise clears focus without dereferencing stale
+memory. `show_context_menu()` applies this protocol automatically and makes
+the popup the focused keyboard recipient until it is dismissed.

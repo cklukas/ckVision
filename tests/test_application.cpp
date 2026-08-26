@@ -66,6 +66,17 @@ public:
     }
 };
 
+class CursorProbeView final : public ProbeView {
+public:
+    using ProbeView::ProbeView;
+
+    std::optional<ckv::CursorState> cursor;
+
+    std::optional<ckv::CursorState> cursor_state() const override {
+        return cursor;
+    }
+};
+
 class WaitableTerminal final : public ckv::term::Terminal {
 public:
     ckv::term::Capabilities capabilities() const noexcept override { return ckv::term::baseline_capabilities(); }
@@ -234,6 +245,47 @@ private:
 
 }  // namespace
 
+CK_TEST(application_schedules_software_cursor_blink_at_the_declared_rate) {
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 6});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* view = static_cast<CursorProbeView*>(
+        app.root().add_child(std::make_unique<CursorProbeView>(Rect{0, 0, 5, 3})));
+    view->set_focus_policy(FocusPolicy::TabStop);
+    view->cursor = ckv::CursorState{true, {1, 1}, ckv::CursorShape::Underline,
+                                    true, 17};
+    app.set_focus(view);
+
+    (void)app.step(0);
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(!term.display().cursor().blink);
+    CK_CHECK(app.next_timer_deadline_nanos() == 17);
+
+    term.clear_written();
+    clock.advance(16);
+    CK_CHECK(!app.step(clock.now_nanos()));
+    CK_CHECK(term.written_bytes().empty());
+
+    clock.advance(1);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(term.written_bytes() == "\x1B[?25l");
+    CK_CHECK(!term.display().cursor().visible);
+    CK_CHECK(app.next_timer_deadline_nanos() == 34);
+
+    term.clear_written();
+    clock.advance(17);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(term.written_bytes().find("\x1B[4 q") != std::string_view::npos);
+
+    view->cursor->blink = false;
+    view->invalidate();
+    term.clear_written();
+    (void)app.step(clock.now_nanos());
+    CK_CHECK(term.display().cursor().visible);
+    CK_CHECK(!app.next_timer_deadline_nanos());
+}
+
 // --- Focus traversal -------------------------------------------------------
 
 CK_TEST(focus_next_on_an_empty_tree_returns_false) {
@@ -274,6 +326,35 @@ CK_TEST(focus_previous_wraps_backward) {
     CK_CHECK(app.focused() == b);  // starts at the last one, going backward
     CK_CHECK(app.focus_previous());
     CK_CHECK(app.focused() == a);
+}
+
+CK_TEST(a_focus_bookmark_restores_a_live_view) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* a = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* b = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    a->set_focus_policy(FocusPolicy::TabStop);
+    b->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(a);
+    const Application::FocusBookmark bookmark = app.save_focus();
+    app.set_focus(b);
+    app.restore_focus(bookmark);
+    CK_CHECK(app.focused() == a);
+}
+
+CK_TEST(a_focus_bookmark_never_restores_a_destroyed_view) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* view = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    view->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(view);
+    const Application::FocusBookmark bookmark = app.save_focus();
+    std::unique_ptr<View> removed = app.root().remove_child(view);
+    removed.reset();
+    app.restore_focus(bookmark);
+    CK_CHECK(app.focused() == nullptr);
 }
 
 // --- Default keymap: Tab/Shift-Tab traversal (M9/WP-13, D-029) ------------

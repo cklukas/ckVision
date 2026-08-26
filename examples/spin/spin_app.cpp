@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "spin_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <algorithm>
 #include <string>
 #include <utility>
@@ -326,11 +328,12 @@ std::string SpinApp::graphics_summary() const {
 void SpinApp::show_about() {
     widgets::MessageBoxDescriptor descriptor{
         widgets::MessageBoxKind::Info, "About",
-        "ckVision Spin example\n\nA window per rotating solid. Every frame is drawn on a worker "
-        "thread, handed back through Application::post, and shown by invalidating one view — no "
-        "polling, and no forced redraw. Drag a window's corner to resize it: the next frame is "
-        "rendered at the new pixel size, on the window's own background.\n\n" +
-            graphics_summary(),
+        ckv::examples::about_text(
+            "ckVision Spin example\n\nA window per rotating solid. Every frame is drawn on a worker "
+            "thread, handed back through Application::post, and shown by invalidating one view — no "
+            "polling, and no forced redraw. Drag a window's corner to resize it: the next frame is "
+            "rendered at the new pixel size, on the window's own background.\n\n" +
+            graphics_summary()),
         widgets::MessageBoxButtons::Ok};
     descriptor.emphasized_leading_lines = 1;
     auto presentation = widgets::present_message_box(app_, *desktop_, roles_, descriptor);

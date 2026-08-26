@@ -36,6 +36,14 @@ bool display_contains(const ckv::term::VirtualDisplay& display, std::string_view
 }
 }  // namespace
 
+CK_TEST(forms_about_dialog_carries_the_project_copyright) {
+    Fixture f;
+    CK_CHECK(f.app.execute_command(f.app.commands().standard().help));
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(),
+                              "Copyright (c) 2026 C. Klukas. All rights reserved."));
+}
+
 CK_TEST(forms_example_renders_form_controls_and_chrome) {
     Fixture f;
     f.app.step(0);
@@ -46,7 +54,8 @@ CK_TEST(forms_example_renders_form_controls_and_chrome) {
     CK_CHECK(f.forms.options()->check_state(1) == ckv::widgets::CheckState::Mixed);
     CK_CHECK(f.forms.mode()->selected() == 0);
     CK_CHECK(f.forms.country()->text() == "DE");
-    CK_CHECK(f.forms.date_picker()->value() == (ckv::widgets::DateValue{2026, 8, 9}));
+    CK_CHECK((f.forms.date_picker()->value() ==
+              std::optional<ckv::widgets::DateValue>{ckv::widgets::DateValue{2026, 8, 9}}));
     CK_CHECK(f.forms.time_picker()->value() == (ckv::widgets::TimeValue{14, 30, 0}));
     CK_CHECK(f.forms.spin_box()->value() == 3);
     CK_CHECK(f.forms.slider()->value() == 40);

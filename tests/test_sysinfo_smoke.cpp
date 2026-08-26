@@ -92,6 +92,15 @@ std::string value_of(const std::vector<std::vector<std::string>>& rows, std::str
 
 }  // namespace
 
+CK_TEST(sysinfo_about_is_separate_from_context_help_and_carries_the_project_copyright) {
+    Fixture f;
+    CK_CHECK(f.run_command("sysinfo.about"));
+    f.app.step(0);
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.term.written_bytes().find(
+                 "Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
+}
+
 CK_TEST(sysinfo_opens_on_the_summary_of_the_machine_it_was_given) {
     Fixture f;
     f.app.step(0);
@@ -285,6 +294,75 @@ CK_TEST(the_disk_bar_follows_the_cursor_rather_than_the_first_row) {
     // And a refresh does not quietly move it back to the top.
     f.tick();
     CK_CHECK(bar->label() == "/Volumes/Archive: 96.0 GiB free of 2.0 TiB");
+}
+
+CK_TEST(the_benchmarks_page_is_one_surface_and_the_reading_windows_keep_their_own) {
+    // The one page in this application built out of dialog furniture. A
+    // Button paints `ckv.button.shadow`'s background into the cells around
+    // its face, and that role is the DIALOG surface — so on a window wearing
+    // the desktop's own palette every button sat in a rectangle of the wrong
+    // colour with its shadow falling on nothing.
+    //
+    // Asserted as cells agreeing with each other rather than against a
+    // resolved role: what was wrong was that two colours met on one window,
+    // and a test that named either colour would be asserting about the theme
+    // instead of about the defect.
+    Fixture f;
+    CK_CHECK(f.run_command(SysInfoApp::kSystemWindowKey));
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    const ckv::widgets::Window* const benchmarks = f.sysinfo.benchmarks_window();
+    const ckv::widgets::Window* const system = f.sysinfo.system_window();
+    CK_CHECK(benchmarks != nullptr);
+    CK_CHECK(system != nullptr);
+
+    const ckv::Rect b = benchmarks->bounds();
+    const auto bg_at = [&](int x, int y) {
+        return f.term.display().frame().at(ckv::Point{x, y}).style().bg;
+    };
+    // The button row is found by its text, not by counting back from the
+    // frame: this test is not about how many rows the page has.
+    int buttons_row = -1;
+    for (int y = b.y; y < b.y + b.height; ++y) {
+        std::string row;
+        for (int x = b.x; x < b.x + b.width; ++x)
+            row += f.term.display().frame().at(ckv::Point{x, y}).grapheme();
+        if (row.find("Next") != std::string::npos) buttons_row = y;
+    }
+    CK_CHECK(buttons_row > 0);
+
+    // One surface, from the frame through the interior to the cells beside
+    // and beneath the buttons — the last two are where the shadow's grey
+    // used to meet the window's blue.
+    const ckv::Color surface = bg_at(b.x, b.y);
+    CK_CHECK(bg_at(b.x + 1, b.y + 1) == surface);
+    CK_CHECK(bg_at(b.x + 1, buttons_row) == surface);
+    CK_CHECK(bg_at(b.x + 1, buttons_row + 1) == surface);
+    CK_CHECK(bg_at(b.x + b.width - 2, buttons_row) == surface);
+
+    // A button is still a button: its face stands out from the surface it is
+    // drawn on. Without this the whole test would pass on a page that had
+    // gone one flat colour.
+    ckv::Color face = surface;
+    for (int x = b.x + 1; x < b.x + b.width - 1; ++x)
+        if (!(bg_at(x, buttons_row) == surface)) face = bg_at(x, buttons_row);
+    CK_CHECK(!(face == surface));
+
+    // And the change is scoped: a window that only reads numbers keeps the
+    // desktop's palette, so this is a page dressed as a dialog rather than an
+    // application that has gone grey.
+    const ckv::Rect s = system->bounds();
+    // Read off its own top frame, and checked to BE its own top frame: a
+    // corner glyph is how this test knows the benchmarks window is not lying
+    // over the cell it is about to draw a conclusion from.
+    const std::string corner = std::string(f.term.display().frame().at(ckv::Point{s.x, s.y}).grapheme());
+    CK_CHECK(corner == "\u2554" || corner == "\u250c");
+    CK_CHECK(!(bg_at(s.x, s.y) == surface));
+
+    // Dressed as a dialog, still a window: the reader can resize it, and the
+    // frame keeps the controls a dialog does not have.
+    CK_CHECK(benchmarks->resizable());
+    CK_CHECK(benchmarks->minimizable());
 }
 
 CK_TEST(a_benchmark_run_charts_one_bar_per_kernel_and_names_the_scale) {

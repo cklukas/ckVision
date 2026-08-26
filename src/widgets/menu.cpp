@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
+#include <utility>
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
@@ -143,12 +145,19 @@ bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
     return false;
 }
 
+std::vector<std::string> command_contexts_for(const ui::View* view) {
+    std::vector<std::string> contexts;
+    for (const ui::View* current = view; current != nullptr; current = current->parent())
+        if (current->command_context()) contexts.push_back(*current->command_context());
+    return contexts;
+}
+
 }  // namespace
 
 // --- DropdownMenu ------------------------------------------------------
 
 DropdownMenu::DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu)
-    : items_(std::move(items)), parent_menu_(parent_menu) {}
+    : ui::View({}, ui::FocusPolicy::TabStop), items_(std::move(items)), parent_menu_(parent_menu) {}
 
 DropdownMenu::~DropdownMenu() { dismiss(); }
 
@@ -227,8 +236,12 @@ bool DropdownMenu::item_enabled(std::size_t index) const {
     // down too, and app_ outlives the application it points at. A row
     // nobody is there to adjudicate reads as available, which is what it
     // looked like before anyone asked.
-    if (item.kind() == MenuItemKind::Command)
-        return context().app == nullptr || context().app->command_available(item.command());
+    if (item.kind() == MenuItemKind::Command) {
+        if (context().app == nullptr) return true;
+        if (has_invocation_contexts_)
+            return context().app->commands().is_available(item.command(), invocation_contexts_);
+        return context().app->command_available(item.command());
+    }
     return item.enabled_flag();
 }
 
@@ -338,6 +351,7 @@ void DropdownMenu::open_submenu(int index) {
     close_submenu(false);
 
     auto submenu = std::make_unique<DropdownMenu>(item.children(), this);
+    if (has_invocation_contexts_) submenu->set_invocation_contexts(invocation_contexts_);
     auto* raw = desktop_->add_popup(std::move(submenu));
     const SizeHint w = raw->horizontal_size_hint();
     const SizeHint h = raw->vertical_size_hint();
@@ -767,7 +781,8 @@ void MenuBar::activate() {
         invalidate();
         return;
     }
-    previously_focused_ = app_->focused();
+    invocation_contexts_ = command_contexts_for(app_->focused());
+    previously_focused_ = app_->save_focus();
     app_->set_focus(this);  // on_focus(true) below flips active_
 }
 
@@ -775,12 +790,11 @@ void MenuBar::deactivate() {
     if (!active_) return;
     if (MenuBarAccessory* const accessory = trailing_accessory()) accessory->set_menu_highlighted(false);
     close_dropdown();
-    ui::View* restore = previously_focused_;
-    previously_focused_ = nullptr;
-    if (restore != nullptr && restore->focusable())
-        app_->set_focus(restore);
-    else
-        app_->set_focus(nullptr);
+    const std::optional<ui::Application::FocusBookmark> restore = previously_focused_;
+    previously_focused_.reset();
+    if (restore) app_->restore_focus(*restore);
+    else app_->set_focus(nullptr);
+    invocation_contexts_.clear();
 }
 
 void MenuBar::on_focus(const FocusEvent& event) {
@@ -800,6 +814,7 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     sync_trailing_highlight();
 
     auto dropdown = std::make_unique<DropdownMenu>(menus_[menu_index].items);
+    dropdown->set_invocation_contexts(invocation_contexts_);
     // Before add_popup(): on_attached() decides the initial selection from it.
     dropdown->set_open_reason(reason);
     const Rect abs = absolute_bounds();
@@ -1114,7 +1129,10 @@ bool MenuBar::navigate_pointer(const MouseEvent& event) {
 
 DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop) {
+    const ui::Application::FocusBookmark previous_focus = app.save_focus();
+    const std::vector<std::string> invocation_contexts = command_contexts_for(app.focused());
     auto menu = std::make_unique<DropdownMenu>(std::move(items));
+    menu->set_invocation_contexts(invocation_contexts);
     const Rect desktop_abs = desktop.absolute_bounds();
     auto* raw = desktop.add_popup(std::move(menu));
     const SizeHint w = raw->horizontal_size_hint();
@@ -1123,11 +1141,20 @@ DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_positi
         Rect{screen_position.x - desktop_abs.x, screen_position.y - desktop_abs.y, w.preferred, h.preferred},
         desktop.bounds()));
 
-    raw->on_dismiss = [&app, &desktop, raw](MenuDismissReason) {
-        if (app.input_capture() == raw) app.clear_input_capture();
-        desktop.remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
+    auto dismissed = std::make_shared<bool>(false);
+    raw->on_dismiss = [&app, &desktop, raw, previous_focus, dismissed](MenuDismissReason) {
+        const std::shared_ptr<bool> state = dismissed;
+        if (std::exchange(*state, true)) return;
+        const ui::Application::FocusBookmark restore = previous_focus;
+        ui::Application* const application = &app;
+        Desktop* const host = &desktop;
+        if (application->input_capture() == raw) application->clear_input_capture();
+        if (application->focused() == raw) application->set_focus(nullptr);
+        host->remove_popup(raw);  // discards ownership -> destroys the DropdownMenu
+        application->restore_focus(restore);
     };
     app.set_input_capture(raw);
+    app.set_focus(raw);
     return raw;
 }
 

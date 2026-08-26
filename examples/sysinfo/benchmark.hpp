@@ -67,6 +67,9 @@ struct BenchmarkDescriptor {
     std::string_view key;       // stable, for commands and reports
     std::string_view title;     // as a chart row names it
     std::string_view rate_unit;  // what the measured rate is counted in
+    // One line, for a list of six of them. The explanation below is what a
+    // reader gets when they ask about this one in particular.
+    std::string_view synopsis;
     // What the number means, and what it does not. Shown as help (WP-54)
     // and written into the exported report.
     std::string_view explanation;

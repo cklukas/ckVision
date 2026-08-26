@@ -93,11 +93,13 @@ title, chord, enablement and mnemonic from that one declaration. The menu
 override changes only its visible title to `Exit`; it does not create a second
 quit command.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-29" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="1-34" -->
 ```cpp
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 #include "hello_app.hpp"
+
+#include "../example_about.hpp"
 
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -119,6 +121,9 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                            .menus = {{"&File",
                                                       {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
                                                        widgets::MenuItem::separator(),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{
+                                                           app_.commands().standard().help, "&About..."}),
+                                                       widgets::MenuItem::separator(),
                                                        widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
                                            .status_items = {
                                                widgets::StatusLineItem{widgets::CommandPresentation{quit_command, "&Quit"}},
@@ -131,7 +136,7 @@ The greeting handler returns immediately after presenting the dialog. Its
 typed completion handler observes the result without capturing a raw dialog
 window pointer, so close/removal remains owned by the presentation API.
 
-<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="38-45" -->
+<!-- ckvision-snippet source="examples/hello/hello_app.cpp" lines="44-51" -->
 ```cpp
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.

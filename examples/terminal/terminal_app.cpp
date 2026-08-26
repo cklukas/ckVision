@@ -3,6 +3,8 @@
 #include "cvision/widgets/message_box.hpp"
 #include "terminal_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <cstdlib>
 #include "cvision/widgets/common_components.hpp"
 #include <ctime>
@@ -150,7 +152,8 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, ui::intern_standard_roles(app_.roles()),
                                 "ckVision Terminal example",
-                                "Child processes in contained windows, with scrollback and Sixel graphics.");
+                                ckv::examples::about_text(
+                                    "Child processes in contained windows, with scrollback and Sixel graphics."));
 }
 
 widgets::Window* TerminalApp::new_terminal() {

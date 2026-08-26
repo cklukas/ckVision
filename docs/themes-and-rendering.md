@@ -27,7 +27,7 @@ widget state changes
 You normally set a theme once during application construction, as every
 example does:
 
-<!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" lines="21-26" -->
+<!-- ckvision-snippet source="examples/gallery/gallery_app.cpp" lines="23-28" -->
 ```cpp
 GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_standard_roles(app.roles())) {
     app_.theme() = ui::make_classic_theme(app_.roles(), roles_);

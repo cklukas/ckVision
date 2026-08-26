@@ -137,14 +137,14 @@ CK_TEST(flow_view_raster_uses_sixel_when_available_and_its_text_fallback_when_no
 
     ckv::term::HeadlessTerminal sixel(ckv::Size{8, 2}, ckv::term::headless_sixel_profile());
     ckv::term::Presenter sixel_presenter(sixel);
-    sixel_presenter.present(surface.view(), ckv::CursorState{}, raster_slices);
+    sixel_presenter.present(surface.view(), ckv::CursorState{}, 0, raster_slices);
     CK_CHECK(sixel.written_bytes().find("\x1B" "P") != std::string::npos);
     CK_CHECK(sixel.written_bytes().find("chart") == std::string::npos);
     CK_CHECK(sixel.display().has_raster_pixels());
 
     ckv::term::HeadlessTerminal fallback(ckv::Size{8, 2}, ckv::term::headless_no_graphics_profile());
     ckv::term::Presenter fallback_presenter(fallback);
-    fallback_presenter.present(surface.view(), ckv::CursorState{}, raster_slices);
+    fallback_presenter.present(surface.view(), ckv::CursorState{}, 0, raster_slices);
     CK_CHECK(fallback.written_bytes().find("\x1B" "P") == std::string::npos);
     CK_CHECK(!fallback.display().has_raster_pixels());
 }

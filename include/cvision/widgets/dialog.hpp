@@ -54,6 +54,7 @@
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
@@ -100,6 +101,17 @@ enum class FieldKind {
     // middle. A field's own `validate` still runs, after the number itself
     // has been established, so it never has to parse the text again.
     Number,
+    // A typed DatePicker. Unlike a Text field with a date-looking validator,
+    // this cannot publish a malformed calendar date and exposes segmented
+    // keyboard/pointer editing. `initial_date` is the optional answer;
+    // `date_seed` is the deterministic date used when an empty picker is
+    // first adjusted. The accepted DialogResult carries both the typed date
+    // and its canonical YYYY-MM-DD text.
+    Date,
+    // A typed TimePicker. `initial_time` is explicit and deterministic;
+    // `time_show_seconds` controls both presentation and the canonical
+    // HH:MM or HH:MM:SS text returned on acceptance.
+    Time,
 };
 
 struct FieldDescriptor {
@@ -145,6 +157,17 @@ struct FieldDescriptor {
     // and no maximum still has to be a number; these narrow it further.
     std::optional<long long> minimum{};
     std::optional<long long> maximum{};
+    // Date only. Empty is permitted by default because optional bounds and
+    // due dates are ordinary form facts; set `date_optional` false for a
+    // mandatory date. No clock or locale is consulted by the control.
+    std::optional<DateValue> initial_date{};
+    std::optional<DateValue> date_seed{};
+    bool date_optional = true;
+    // Time only. TimePicker has no implicit clock or locale; the caller
+    // supplies the initial value and presentation choices.
+    TimeValue initial_time{};
+    bool time_show_seconds = true;
+    bool time_24_hour = true;
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -203,6 +226,11 @@ struct DialogDescriptor {
     // the bottom rather than treating that intentional space as a trailing
     // blank area. Defaults preserve existing compact descriptor dialogs.
     bool anchor_buttons_to_bottom = false;
+    // Contextual F1 topic inherited by every field and button through the
+    // hosting Window. Keeping this on the descriptor prevents declarative
+    // forms from losing help merely because their callers do not hand-build
+    // the Window that presents them.
+    std::string help_context_key{};
 };
 
 struct MaterializedDialog {
@@ -217,6 +245,8 @@ struct MaterializedDialog {
     std::vector<CheckGroup*> checks;
     std::vector<RadioGroup*> radios;
     std::vector<ComboBox*> combos;
+    std::vector<DatePicker*> dates;
+    std::vector<TimePicker*> times;
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     ui::View* initial_focus = nullptr;
     Button* default_button = nullptr;
@@ -251,6 +281,13 @@ struct DialogResult {
     // Number: the value, already parsed, so no caller has to parse the text a
     // validator has just proved is a number. Empty for every other kind.
     std::vector<std::optional<long long>> numbers{};
+    // Date: the typed answer, empty for an optional blank date and for every
+    // field of another kind. `values[i]` simultaneously carries canonical
+    // YYYY-MM-DD text so generic form consumers retain a uniform text view.
+    std::vector<std::optional<DateValue>> dates{};
+    // Time: the typed value. Empty for every other field; `values[i]`
+    // simultaneously carries canonical HH:MM or HH:MM:SS text.
+    std::vector<std::optional<TimeValue>> times{};
 
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
 };

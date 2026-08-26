@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "sysinfo_app.hpp"
 
+#include "../example_about.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -90,6 +92,17 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId refresh_command = app_.commands().declare(
         {.key = std::string(kRefreshKey), .title = "&Refresh", .category = "System", .chord = "F2",
          .handler = [this] { refresh(); }});
+    const ui::CommandId about_command = app_.commands().declare(
+        {.key = "sysinfo.about", .title = "&About ckVision SysInfo", .category = "Help",
+         .handler = [this] {
+             auto presentation = widgets::present_message_box(
+                 app_, *desktop_, roles_,
+                 {widgets::MessageBoxKind::Info, "About ckVision SysInfo",
+                  ckv::examples::about_text(
+                      "ckVision SysInfo example\n\nLive system facts, deterministic benchmark views, and exportable reports."),
+                  widgets::MessageBoxButtons::Ok});
+             presentation.set_completion_handler([](widgets::MessageBoxResult) {});
+         }});
 
     widgets::MenuBarItem system_menu{
         "&System",
@@ -153,7 +166,10 @@ void SysInfoApp::build_chrome() {
         }};
     widgets::MenuBarItem help_menu{
         "&Help",
-        {widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().help, "&About..."})}};
+        {widgets::MenuItem::command(
+             widgets::CommandPresentation{app_.commands().standard().help, "Context &Help"}),
+         widgets::MenuItem::separator(),
+         widgets::MenuItem::command(widgets::CommandPresentation{about_command})}};
 
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles_),
@@ -449,6 +465,21 @@ void SysInfoApp::open_benchmarks_window() {
         return;
     }
     auto window = std::make_unique<widgets::Window>("Benchmarks");
+    // The dialog palette, on a window that stays a window. This is the only
+    // page in this application built out of dialog FURNITURE — a check group,
+    // a combo box, a progress bar and a row of buttons — and a Button is
+    // drawn for a dialog: `ckv.button.shadow`'s background must match the
+    // surface behind it (see Button's contract), which is the dialog
+    // background and not the window's blue. Left on the window roles the
+    // buttons carried their own grey onto a blue frame, each one a rectangle
+    // of the wrong colour with a shadow falling on nothing.
+    //
+    // Only the four chrome roles move. The frame keeps its controls, its
+    // grips, its minimum size and its grow policy, so this is still a window
+    // the reader can resize, zoom and put away — a dialog's colours, not a
+    // dialog's behaviour.
+    window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
+                              roles_.dialog_background);
     // The chart is the window: it is given whatever height the desktop can
     // spare, because a comparison the reader has to scroll is a comparison
     // they cannot make.
@@ -467,8 +498,15 @@ void SysInfoApp::open_benchmarks_window() {
     picker->set_group_label("Measure  (F9 runs, Esc cancels)");
     for (std::size_t index = 0; index < benchmark_catalogue().size(); ++index) picker->set_checked(index, true);
     picker->set_help_context_key("sysinfo.benchmarks");
+    // The option group's focused colour fills its whole rect, and an item
+    // in a Column is stretched to the page's width unless it is told
+    // otherwise -- which turned a list of six checkboxes into a cyan band
+    // across the window. Aligned to the start, it is as wide as its longest
+    // label and sits ON the page instead of covering it. The same is true
+    // of the combo below.
     benchmark_picker_ = picker.get();
-    column->add_item(std::move(picker), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    column->add_item(std::move(picker),
+                     ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::Start});
 
     // Which metric gets its comparison bars. One at a time on purpose: six
     // reference rows for each of three kernels is a screen of numbers
@@ -478,7 +516,8 @@ void SysInfoApp::open_benchmarks_window() {
     compare->set_selected_index(0);
     compare->on_select = [this](std::size_t) { update_chart(); };
     compare_picker_ = compare.get();
-    column->add_item(std::move(compare), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    column->add_item(std::move(compare),
+                     ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::Start});
 
     auto progress = std::make_unique<widgets::Progress>();
     progress->set_label("idle");
@@ -489,16 +528,30 @@ void SysInfoApp::open_benchmarks_window() {
     auto chart = std::make_unique<BarChartView>();
     chart->set_placeholder("No measurements yet - press F9 to run.");
     chart->set_help_context_key("sysinfo.benchmarks");
+    // Fixed, not Expanding: the chart's paper is its own colour, and a
+    // chart stretched to the height of the window is a rectangle of that
+    // colour with a few bars at the top of it. Sized to its own content it
+    // reads as a panel ON the page, which is what the tools this follows
+    // drew. The slack goes to the item below.
     chart_ = chart.get();
-    column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Expanding});
+    column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
-    // The page that measures has no chart, and without something to take
-    // the slack the Column packs everything against the top and leaves the
-    // buttons floating in the middle of the window. This is the chart's
-    // stand-in on that page: it draws nothing and holds the space.
-    auto spacer = std::make_unique<ui::View>();
-    benchmark_spacer_ = spacer.get();
-    column->add_item(std::move(spacer), ui::LayoutSpec{ui::SizePolicy::Expanding});
+    // The chart's counterpart on the page that measures. It holds the same
+    // space -- without it the Column packs everything against the top and
+    // the buttons float in the middle of the window -- and it holds
+    // something worth reading while it does: what each of these six things
+    // actually measures. An empty expanse of window is not a design.
+    // StaticText, not TextView: this is a paragraph the page says, so it
+    // wraps to the page. A TextView is a reading surface -- it scrolls, and
+    // it brought its own scrollbars and its own colour to a page that
+    // needed neither.
+    auto summary = std::make_unique<widgets::StaticText>(catalogue_summary());
+    // Text on the dialog's own surface rather than a reading panel with a
+    // colour of its own: three full-width bands of three different colours
+    // is what made this page look assembled rather than designed.
+    summary->set_role_override(roles_.dialog_background);
+    benchmark_summary_ = summary.get();
+    column->add_item(std::move(summary), ui::LayoutSpec{ui::SizePolicy::Expanding});
 
     // Under the chart, where a footnote belongs and where the asterisk on
     // every measured bar is answered.
@@ -546,7 +599,7 @@ void SysInfoApp::open_benchmarks_window() {
         compare_picker_ = nullptr;
         benchmark_progress_ = nullptr;
         benchmark_footnote_ = nullptr;
-        benchmark_spacer_ = nullptr;
+        benchmark_summary_ = nullptr;
         chart_ = nullptr;
         widgets::schedule_self_detach(*opened, app_);
     };
@@ -802,6 +855,14 @@ void SysInfoApp::update_chart() {
 // chooses and runs the measurements, and every metric measured has a page of
 // its own. A single scrolling column of every chart at once is a list of
 // numbers; a page with one chart on it is a chart.
+// What the six things are, one line each.
+std::string SysInfoApp::catalogue_summary() {
+    std::string text;
+    for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
+        text += std::string(descriptor.title) + " - " + std::string(descriptor.synopsis) + "\n";
+    return text;
+}
+
 void SysInfoApp::show_benchmark_page(std::size_t page) {
     if (chart_ == nullptr) return;
     benchmark_page_ = std::min(page, chart_groups_.size());
@@ -811,7 +872,11 @@ void SysInfoApp::show_benchmark_page(std::size_t page) {
     if (compare_picker_ != nullptr) compare_picker_->set_visible(setup);
     if (benchmark_progress_ != nullptr) benchmark_progress_->set_visible(setup);
     chart_->set_visible(!setup);
-    if (benchmark_spacer_ != nullptr) benchmark_spacer_->set_visible(setup);
+    // Visible on every page: on the page that measures it says what the six
+    // things are, and on a topic page it is the empty surface between the
+    // chart and the buttons. Hiding it would let the Column collapse and
+    // the buttons would float back up the window.
+    if (benchmark_summary_ != nullptr) benchmark_summary_->set_text(setup ? catalogue_summary() : std::string());
 
     if (setup) {
         benchmark_page_title_ = chart_groups_.empty() ? "Measure" : "Measure  (1 of " +

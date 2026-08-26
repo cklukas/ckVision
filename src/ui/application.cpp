@@ -291,6 +291,22 @@ void Application::set_focus(View* view) {
     }
 }
 
+Application::FocusBookmark Application::save_focus() const noexcept {
+    FocusBookmark bookmark;
+    bookmark.view_ = focused_;
+    if (focused_ != nullptr) bookmark.liveness_ = focused_->liveness_;
+    return bookmark;
+}
+
+void Application::restore_focus(const FocusBookmark& bookmark) {
+    if (bookmark.view_ == nullptr || bookmark.liveness_.expired() ||
+        !tree_contains(root_, bookmark.view_) || !bookmark.view_->focusable()) {
+        set_focus(nullptr);
+        return;
+    }
+    set_focus(bookmark.view_);
+}
+
 void Application::set_input_capture(View* view) {
     input_capture_ = view;
 }
@@ -451,10 +467,11 @@ void Application::cancel_timer(TimerId id) {
 }
 
 std::optional<std::int64_t> Application::next_timer_deadline_nanos() const noexcept {
-    if (timers_.empty()) return std::nullopt;
-    std::int64_t deadline = timers_.front().next_fire_nanos;
+    std::optional<std::int64_t> deadline =
+        presenter_.next_cursor_blink_deadline_nanos();
     for (const Timer& timer : timers_)
-        deadline = std::min(deadline, timer.next_fire_nanos);
+        deadline = deadline ? std::min(*deadline, timer.next_fire_nanos)
+                            : timer.next_fire_nanos;
     return deadline;
 }
 
@@ -734,6 +751,7 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                             mouse_capture_ = nullptr;
                         return false;
                     }
+                    View* const focus_before_delivery = focused_;
                     // `target_handled`, not `handled`: the visit's own result
                     // at the top of this dispatch is already called that, and
                     // GCC's -Wshadow is right that two of them is one too many.
@@ -765,10 +783,10 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // focused before" via its own bookkeeping) must see
                     // the TRUE prior focus, not one this dispatch already
                     // reassigned out from under it. set_focus is a no-op
-                    // when the widget already focused itself during
-                    // delivery, so this never fights a widget's own
-                    // choice — it only fills in when nothing did.
-                    if (press && !had_input_capture) {
+                    // A focus change during delivery is the widget's own
+                    // choice; the equality guard leaves it alone and only
+                    // fills in when delivery kept focus where it was.
+                    if (press && !had_input_capture && focused_ == focus_before_delivery) {
                         for (View* v = resolve_attached_view(target_handle); v != nullptr;
                              v = v->parent()) {
                             if (v->focusable()) {
@@ -942,8 +960,8 @@ bool Application::step(std::int64_t deadline_nanos) {
             wake_requested_ = false;
         }
         std::int64_t effective_deadline = wake_now ? clock_.now_nanos() : deadline_nanos;
-        for (const Timer& timer : timers_)
-            effective_deadline = std::min(effective_deadline, timer.next_fire_nanos);
+        if (const auto timer_deadline = next_timer_deadline_nanos())
+            effective_deadline = std::min(effective_deadline, *timer_deadline);
 
         // Sessions released since the last step leave empty slots behind —
         // erasing one inside the loop that was notifying about it would pull
@@ -1046,6 +1064,7 @@ bool Application::step(std::int64_t deadline_nanos) {
                                                     frames_awaiting_terminal() > 0 &&
                                                     presenter_.last_frame_carried_rasters();
         if (!waiting_on_a_host_that_answers) paint_and_present();
+        if (presenter_.advance_cursor_blink(now)) did_work = true;
         return did_work;
     } catch (...) {
         terminal_.terminate_after_callback_failure();
@@ -1150,7 +1169,7 @@ void Application::paint_and_present() {
         cursor = CursorState{};
     compositor_.set_cursor(cursor);
     presenter_.present(compositor_.frame().view(), compositor_.cursor(),
-                       compositor_.visible_rasters());
+                       clock_.now_nanos(), compositor_.visible_rasters());
     // The clock starts when the question goes out, not when the next step
     // notices it did: an application that paces against the terminal is
     // asking how long the terminal took, not how long we took to look.

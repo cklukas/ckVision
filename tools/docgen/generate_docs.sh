@@ -32,7 +32,8 @@ cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
     --target capture_widget_gallery_screenshots capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots \
         capture_layouts_screenshots capture_forms_screenshots capture_workbench_screenshots \
-        capture_graphics_screenshots capture_spin_screenshots capture_editor_screenshots capture_terminal_screenshots
+        capture_graphics_screenshots capture_spin_screenshots capture_sysinfo_screenshots \
+        capture_editor_screenshots capture_terminal_screenshots capture_todo_screenshots
 
 echo "==> Capturing example-app screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
@@ -47,6 +48,8 @@ mkdir -p "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_workbench_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_graphics_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_spin_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_sysinfo_screenshots" "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_todo_screenshots" "$SCREENSHOTS_DIR"
 
 # ckwrite's LaTeX/PDF path requires a PDF companion for every embedded
 # SVG (no TeX engine reads SVG directly) — the HTML path uses the SVGs

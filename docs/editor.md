@@ -74,6 +74,10 @@ overlay; resizing and reflow therefore do not make the position ambiguous.
 The focused editor also publishes a terminal caret: a bar in insert mode and a
 block in overwrite mode. Arrow keys move by grapheme, Ctrl+Left/Right by word,
 Ctrl+Home/End by document, and Tab inserts four spaces into the document.
+Printable character events insert their terminal-provided UTF-8 text; Shift is
+part of normal text production, so uppercase and shifted symbols insert just
+like unshifted text, while Alt/Ctrl/Super character chords remain available to
+commands.
 Adding Shift extends the primary selection for every cursor movement, including
 Ctrl+Shift+Left/Right/Home/End. Ctrl+C/X/V use the application clipboard;
 Ctrl+Insert/Shift+Insert are equivalent copy/paste bindings, and Shift+Delete

@@ -32,6 +32,21 @@ CK_TEST(text_editor_edits_shared_document_and_reports_status) {
     CK_CHECK(editor.status().column == 12U);
 }
 
+CK_TEST(text_editor_treats_shifted_characters_as_text_and_other_modified_characters_as_chords) {
+    auto document = std::make_shared<EditorDocument>();
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 30, 4});
+
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Char, Modifier::None, "a"}}));
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Char, Modifier::Shift, "B"}}));
+    CK_CHECK(document->text() == "aB");
+
+    CK_CHECK(!editor.on_key(KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}}));
+    CK_CHECK(!editor.on_key(KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "q"}}));
+    CK_CHECK(!editor.on_key(KeyEvent{KeyChord{Key::Char, Modifier::Super, "y"}}));
+    CK_CHECK(document->text() == "aB");
+}
+
 CK_TEST(text_editor_uses_file_name_to_select_a_standard_profile) {
     auto document = std::make_shared<EditorDocument>("name: ckvision\n");
     TextEditor editor(document);

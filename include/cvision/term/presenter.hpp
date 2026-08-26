@@ -23,6 +23,13 @@
 
 namespace ckv::term {
 
+// Cursor blinking is presentation state, not scene animation. The Presenter
+// resolves a blinking CursorState into a steady host cursor whose visibility
+// changes on this deterministic cadence, so terminal profile preferences
+// cannot silently turn a requested blink into a steady cursor.
+inline constexpr std::int64_t kCursorBlinkHalfPeriodNanos =
+    kDefaultCursorBlinkHalfPeriodNanos;
+
 class Presenter {
 public:
     explicit Presenter(Terminal& terminal) : terminal_(terminal) {}
@@ -32,13 +39,29 @@ public:
     // bracket when the terminal supports it. `cursor` positions the
     // real terminal cursor last, after all content; `rasters` are
     // occlusion-sliced raster regions (scene::Compositor's output).
-    // With no sixel_graphics capability, the fallback cells the cell
+    // `now_nanos` is the caller's injected monotonic clock. A blinking cursor
+    // is always emitted as a steady host shape and software-toggled through
+    // advance_cursor_blink(); callers must include the exposed deadline in
+    // their wait set. With no sixel_graphics capability, the fallback cells the cell
     // diff already rendered are the whole story; with it, each visible
     // slice is cropped to its occlusion-sliced sub-rect (never the
     // whole image — a higher layer may be occluding the rest) and
     // emitted as Sixel data on top, per D-017/the architecture §7.
-    void present(FrameView frame, CursorState cursor,
+    void present(FrameView frame, CursorState cursor, std::int64_t now_nanos,
                  const std::vector<RasterSlice>& rasters = {});
+
+    // The next visibility transition for the currently presented blinking
+    // cursor. An application combines this with its other timer deadlines;
+    // no deadline exists while the logical cursor is hidden or steady.
+    std::optional<std::int64_t> next_cursor_blink_deadline_nanos() const noexcept {
+        return next_cursor_blink_nanos_;
+    }
+
+    // Consumes every cursor half-period due at `now_nanos` and emits only the
+    // minimal cursor visibility/shape bytes when the resulting phase changed.
+    // Returns true when a due deadline was consumed, even if an even number of
+    // skipped phases left the visible state unchanged.
+    bool advance_cursor_blink(std::int64_t now_nanos);
 
     // Asks the host's own mouse pointer to take `shape`, writing nothing
     // when it is already the shape this host was last asked for.
@@ -160,6 +183,11 @@ private:
                       bool raster_coverage_changed, std::string& out);
     bool cell_changed(const Cell& cell, Size frame_size, Point p) const noexcept;
     void emit_cursor_move(std::string& out, int x, int y) const;
+    void append_cursor(std::string& out, CursorState cursor,
+                       bool content_was_emitted) const;
+    void set_logical_cursor(CursorState cursor, std::int64_t now_nanos);
+    bool advance_cursor_phase(std::int64_t now_nanos) noexcept;
+    CursorState physical_cursor() const noexcept;
     // Writes the OSC 22 request for `shape` if the host would draw a
     // different pointer than it is already drawing. Degradation happens
     // here, against this terminal's own capabilities, so callers name the
@@ -185,7 +213,10 @@ private:
     std::vector<Cell> presentation_cells_;
     std::string output_buffer_;
     Size previous_size_;
+    std::optional<CursorState> logical_cursor_;
     std::optional<CursorState> previous_cursor_;
+    std::optional<std::int64_t> next_cursor_blink_nanos_;
+    bool cursor_blink_visible_ = true;
     // The pointer-shape name this session last gave the host, or nothing
     // while it has never given one. Held as the name rather than the shape
     // because the name is what the host received: two shapes that degrade

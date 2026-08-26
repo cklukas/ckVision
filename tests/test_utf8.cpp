@@ -24,6 +24,24 @@ CK_TEST(decode_multibyte) {
     CK_CHECK(decode_one("\xF0\x9F\x98\x80") == 0x1F600u);  // 😀, 4 bytes
 }
 
+CK_TEST(is_valid_accepts_empty_ascii_multibyte_and_encoded_replacement) {
+    CK_CHECK(ckv::utf8::is_valid(""));
+    CK_CHECK(ckv::utf8::is_valid("plain ASCII"));
+    CK_CHECK(ckv::utf8::is_valid("Gr\xC3\xBC\xC3\x9F"));
+    CK_CHECK(ckv::utf8::is_valid("\xEF\xBF\xBD"));
+    CK_CHECK(ckv::utf8::is_valid("\xF0\x9F\x98\x80"));
+}
+
+CK_TEST(is_valid_rejects_every_malformed_sequence_class) {
+    CK_CHECK(!ckv::utf8::is_valid("\x80"));
+    CK_CHECK(!ckv::utf8::is_valid("\xC0\x80"));
+    CK_CHECK(!ckv::utf8::is_valid("\xE4\xB8"));
+    CK_CHECK(!ckv::utf8::is_valid("\xE4\x41\xAD"));
+    CK_CHECK(!ckv::utf8::is_valid("\xED\xA0\x80"));
+    CK_CHECK(!ckv::utf8::is_valid("\xF4\x90\x80\x80"));
+    CK_CHECK(!ckv::utf8::is_valid("ok\xFF"));
+}
+
 CK_TEST(decode_advances_pos_by_encoded_length) {
     std::string_view text = "A\xC2\xA9\xE4\xB8\xAD";  // A, ©, 中
     std::size_t pos = 0;
@@ -154,4 +172,3 @@ CK_TEST(encoded_length_of_invalid_scalars_matches_replacement_char_length) {
     CK_CHECK(ckv::utf8::encoded_length(0xD800) == 3);    // surrogate
     CK_CHECK(ckv::utf8::encoded_length(0x110000) == 3);  // above U+10FFFF
 }
-

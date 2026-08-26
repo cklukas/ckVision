@@ -37,6 +37,8 @@ std::string normalize(std::string_view path) {
 
 std::string FileSystem::normalize_path(std::string_view path) const { return normalize(path); }
 
+bool FileSystem::create_directories(std::string_view) { return false; }
+
 bool FileSystem::is_absolute_path(std::string_view path) const noexcept {
     return !path.empty() && (path.front() == '/' || path.front() == '\\' || drive_absolute(path));
 }
@@ -132,6 +134,14 @@ bool MemoryFileSystem::exists(std::string_view path) const noexcept { return fin
 bool MemoryFileSystem::is_directory(std::string_view path) const noexcept {
     const Node* n = find(path);
     return n != nullptr && n->is_directory;
+}
+
+bool MemoryFileSystem::create_directories(std::string_view path) {
+    const std::string normalized = normalize_path(path);
+    const Node* existing = find(normalized);
+    if (existing != nullptr && !existing->is_directory) return false;
+    add_directory(normalized);
+    return true;
 }
 
 std::optional<FileReadResult> MemoryFileSystem::read_file(std::string_view path) const {

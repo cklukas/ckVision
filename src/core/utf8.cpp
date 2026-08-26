@@ -15,24 +15,24 @@ bool is_valid_scalar(char32_t cp) noexcept {
     return true;
 }
 
-}  // namespace
+struct DecodeResult {
+    char32_t codepoint = replacement_char;
+    std::size_t length = 1;
+    bool valid = false;
+};
 
-char32_t decode(std::string_view text, std::size_t& pos) noexcept {
-    CKV_ASSERT(pos < text.size());
+DecodeResult decode_at(std::string_view text, std::size_t start) noexcept {
     const auto byte = [&](std::size_t i) -> unsigned char {
         return static_cast<unsigned char>(text[i]);
     };
-    const std::size_t start = pos;
     const unsigned char b0 = byte(start);
 
     int extra = 0;
     char32_t cp = 0;
     char32_t min_cp = 0;
 
-    if (b0 < 0x80) {
-        pos = start + 1;
-        return b0;
-    } else if ((b0 & 0xE0) == 0xC0) {
+    if (b0 < 0x80) return {b0, 1, true};
+    if ((b0 & 0xE0) == 0xC0) {
         extra = 1;
         cp = b0 & 0x1Fu;
         min_cp = 0x80;
@@ -45,31 +45,37 @@ char32_t decode(std::string_view text, std::size_t& pos) noexcept {
         cp = b0 & 0x07u;
         min_cp = 0x10000;
     } else {
-        pos = start + 1;  // stray continuation or invalid lead byte
-        return replacement_char;
+        return {};
     }
 
-    if (start + 1 + static_cast<std::size_t>(extra) > text.size()) {
-        pos = start + 1;
-        return replacement_char;
-    }
-
+    if (start + 1 + static_cast<std::size_t>(extra) > text.size()) return {};
     for (int i = 1; i <= extra; ++i) {
         const unsigned char b = byte(start + static_cast<std::size_t>(i));
-        if (!is_continuation(b)) {
-            pos = start + 1;
-            return replacement_char;
-        }
+        if (!is_continuation(b)) return {};
         cp = (cp << 6) | (b & 0x3Fu);
     }
+    if (cp < min_cp || !is_valid_scalar(cp)) return {};
+    return {cp, 1 + static_cast<std::size_t>(extra), true};
+}
 
-    if (cp < min_cp || !is_valid_scalar(cp)) {
-        pos = start + 1;
-        return replacement_char;
+}  // namespace
+
+bool is_valid(std::string_view text) noexcept {
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const DecodeResult decoded = decode_at(text, pos);
+        if (!decoded.valid) return false;
+        pos += decoded.length;
     }
+    return true;
+}
 
-    pos = start + 1 + static_cast<std::size_t>(extra);
-    return cp;
+char32_t decode(std::string_view text, std::size_t& pos) noexcept {
+    CKV_ASSERT(pos < text.size());
+    const std::size_t start = pos;
+    const DecodeResult decoded = decode_at(text, start);
+    pos = start + decoded.length;
+    return decoded.codepoint;
 }
 
 int encoded_length(char32_t cp) noexcept {

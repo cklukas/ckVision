@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "hello_app.hpp"
 
+#include "../example_about.hpp"
+
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/message_box.hpp"
@@ -22,6 +24,9 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                            .menus = {{"&File",
                                                       {widgets::MenuItem::command(widgets::CommandPresentation{greeting_command}),
                                                        widgets::MenuItem::separator(),
+                                                       widgets::MenuItem::command(widgets::CommandPresentation{
+                                                           app_.commands().standard().help, "&About..."}),
+                                                       widgets::MenuItem::separator(),
                                                        widgets::MenuItem::command(widgets::CommandPresentation{quit_command, "E&xit"})}}},
                                            .status_items = {
                                                widgets::StatusLineItem{widgets::CommandPresentation{quit_command, "&Quit"}},
@@ -32,7 +37,8 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
     // cannot tell apart from a key that never arrived.
     widgets::install_about_help(app_, *desktop_, roles_,
                                 "ckVision Hello example",
-                                "The smallest complete ckVision application: a shell, a local command, and a dialog.");
+                                ckv::examples::about_text(
+                                    "The smallest complete ckVision application: a shell, a local command, and a dialog."));
 }
 
 // A command handler presents the typed, non-blocking standard dialog and

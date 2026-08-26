@@ -48,6 +48,14 @@ struct Fixture {
 };
 }  // namespace
 
+CK_TEST(file_browser_about_dialog_carries_the_project_copyright) {
+    Fixture f;
+    CK_CHECK(f.app.execute_command(f.app.commands().standard().help));
+    f.app.step(0);
+    CK_CHECK(f.term.written_bytes().find(
+                 "Copyright (c) 2026 C. Klukas. All rights reserved.") != std::string::npos);
+}
+
 CK_TEST(the_tree_starts_with_root_selected_and_the_file_list_showing_its_direct_children) {
     Fixture f;
     // "/root" itself has one file (readme.txt) and two subdirectories

@@ -175,6 +175,12 @@ CK_TEST(default_focus_policy_is_none_and_not_focusable) {
     CK_CHECK(!v.focusable());
 }
 
+CK_TEST(custom_view_can_declare_tabstop_focus_at_construction) {
+    View v({}, FocusPolicy::TabStop);
+    CK_CHECK(v.focus_policy() == FocusPolicy::TabStop);
+    CK_CHECK(v.focusable());
+}
+
 // --- Invalidation propagation to the dirty-rect sink -----------------------
 
 CK_TEST(invalidate_before_any_sink_is_installed_is_a_harmless_no_op) {

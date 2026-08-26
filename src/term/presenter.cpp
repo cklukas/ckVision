@@ -5,8 +5,10 @@
 #include <array>
 #include <chrono>
 #include <climits>
+#include <limits>
 #include <string>
 
+#include "cvision/core/assert.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
 #include "cvision/term/graphics_log.hpp"
@@ -285,6 +287,14 @@ void emit_cursor_shape(std::string& out, CursorShape shape, bool blink) {
     else if (shape == CursorShape::Bar) parameter = blink ? 5 : 6;
     else parameter = blink ? 1 : 2;
     out += "\x1B[" + std::to_string(parameter) + " q";
+}
+
+std::optional<std::int64_t> cursor_deadline_after(
+    std::int64_t now_nanos, std::int64_t half_period_nanos) noexcept {
+    if (now_nanos >
+        std::numeric_limits<std::int64_t>::max() - half_period_nanos)
+        return std::nullopt;
+    return now_nanos + half_period_nanos;
 }
 
 Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64_t fingerprint) const noexcept {
@@ -597,8 +607,100 @@ void Presenter::present_pointer_shape(PointerShape shape) {
     terminal_.write(out);
 }
 
+void Presenter::append_cursor(std::string& out, CursorState cursor,
+                              bool content_was_emitted) const {
+    const bool cursor_changed = force_full_ || !previous_cursor_ ||
+                                cursor != *previous_cursor_;
+    if (cursor.visible) {
+        // Cell/raster output moves the terminal cursor. Cursor-only phase
+        // changes do not, so a stable visible phase remains a zero-byte no-op.
+        if (cursor_changed || content_was_emitted)
+            emit_cursor_move(out, cursor.position.x, cursor.position.y);
+        if (cursor_changed) {
+            emit_cursor_shape(out, cursor.shape, cursor.blink);
+            out += "\x1B[?25h";
+        }
+    } else if (cursor_changed) {
+        out += "\x1B[?25l";
+    }
+}
+
+bool Presenter::advance_cursor_phase(std::int64_t now_nanos) noexcept {
+    if (!next_cursor_blink_nanos_ || now_nanos < *next_cursor_blink_nanos_)
+        return false;
+
+    const std::int64_t elapsed = now_nanos - *next_cursor_blink_nanos_;
+    const std::int64_t half_period_nanos =
+        logical_cursor_->blink_half_period_nanos;
+    const std::int64_t periods =
+        elapsed / half_period_nanos + 1;
+    if ((periods & 1) != 0) cursor_blink_visible_ = !cursor_blink_visible_;
+
+    const std::int64_t room = std::numeric_limits<std::int64_t>::max() -
+                              *next_cursor_blink_nanos_;
+    if (periods > room / half_period_nanos) {
+        next_cursor_blink_nanos_.reset();
+    } else {
+        *next_cursor_blink_nanos_ += periods * half_period_nanos;
+    }
+    return true;
+}
+
+void Presenter::set_logical_cursor(CursorState cursor,
+                                   std::int64_t now_nanos) {
+    CKV_ASSERT(now_nanos >= 0);
+    CKV_ASSERT(!cursor.blink || cursor.blink_half_period_nanos > 0);
+    const bool changed = !logical_cursor_ || cursor != *logical_cursor_;
+    logical_cursor_ = cursor;
+    if (!cursor.visible || !cursor.blink) {
+        cursor_blink_visible_ = true;
+        next_cursor_blink_nanos_.reset();
+        return;
+    }
+    if (changed || !next_cursor_blink_nanos_) {
+        // A newly focused or moved caret is immediately visible for a whole
+        // half-period. Keystrokes therefore cannot make it appear to vanish.
+        cursor_blink_visible_ = true;
+        next_cursor_blink_nanos_ = cursor_deadline_after(
+            now_nanos, cursor.blink_half_period_nanos);
+        return;
+    }
+    (void)advance_cursor_phase(now_nanos);
+}
+
+CursorState Presenter::physical_cursor() const noexcept {
+    if (!logical_cursor_) return {};
+    CursorState cursor = *logical_cursor_;
+    if (cursor.visible && cursor.blink) {
+        if (!cursor_blink_visible_) return {};
+        // The host cursor stays steady. Its user preference can no longer
+        // suppress, slow, or double the cadence ckVision owns.
+        cursor.blink = false;
+    }
+    return cursor;
+}
+
+bool Presenter::advance_cursor_blink(std::int64_t now_nanos) {
+    CKV_ASSERT(now_nanos >= 0);
+    if (!logical_cursor_ || !logical_cursor_->visible ||
+        !logical_cursor_->blink || !advance_cursor_phase(now_nanos))
+        return false;
+
+    const CursorState cursor = physical_cursor();
+    std::string& out = output_buffer_;
+    out.clear();
+    append_cursor(out, cursor, false);
+    last_bytes_emitted_ = out.size();
+    if (!out.empty()) terminal_.write(out);
+    previous_cursor_ = cursor;
+    return true;
+}
+
 void Presenter::present(FrameView frame, CursorState cursor,
+                         std::int64_t now_nanos,
                          const std::vector<RasterSlice>& rasters) {
+    set_logical_cursor(cursor, now_nanos);
+    cursor = physical_cursor();
     // Live timing of one frame, end to end. The interesting number is not the
     // work this process does but how long the host takes to swallow it: a
     // terminal decoding a quarter-megabyte Sixel blocks the write, and that
@@ -666,19 +768,7 @@ void Presenter::present(FrameView frame, CursorState cursor,
     // was repainted, which during a window drag is the window's edge.
     // Putting it back is therefore part of finishing a frame, not something
     // to do only when the application moved it.
-    const bool cursor_changed = force_full_ || !previous_cursor_ || cursor != *previous_cursor_;
-    if (cursor.visible) {
-        // Nothing was painted, so nothing moved it: leave the frame empty
-        // rather than spending bytes to restate where it already is.
-        if (cursor_changed || !out.empty())
-            emit_cursor_move(out, cursor.position.x, cursor.position.y);
-        if (cursor_changed) {
-            emit_cursor_shape(out, cursor.shape, cursor.blink);
-            out += "\x1B[?25h";
-        }
-    } else if (cursor_changed) {
-        out += "\x1B[?25l";
-    }
+    append_cursor(out, cursor, !out.empty());
 
     bool frame_sends_raster = false;
     for (const ActiveRaster& active : active_rasters_)

@@ -231,6 +231,23 @@ if(TARGET spin_app)
     target_link_libraries(cvision_tests PRIVATE spin_app)
 endif()
 
+if(TARGET todo_app)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES
+        test_todo_model.cpp test_todo_codec.cpp test_todo_repository.cpp
+        test_todo_calendar_clock.cpp test_todo_controller.cpp test_todo_board.cpp test_todo_smoke.cpp
+        test_todo_golden.cpp test_todo_host.cpp)
+    target_sources(cvision_tests PRIVATE
+        test_todo_model.cpp test_todo_codec.cpp test_todo_repository.cpp
+        test_todo_calendar_clock.cpp test_todo_controller.cpp test_todo_board.cpp test_todo_smoke.cpp
+        test_todo_golden.cpp test_todo_host.cpp)
+    target_link_libraries(cvision_tests PRIVATE todo_app)
+endif()
+
+if(UNIX AND TARGET todo_app)
+    list(APPEND CKVISION_POSIX_TEST_SOURCES test_todo_repository_posix.cpp)
+    target_sources(cvision_tests PRIVATE test_todo_repository_posix.cpp)
+endif()
+
 if(TARGET sysinfo_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_sysinfo_analysis.cpp test_sysinfo_benchmark.cpp
         test_sysinfo_chart.cpp test_sysinfo_format.cpp test_sysinfo_reference_points.cpp
@@ -361,7 +378,7 @@ if(TARGET capture_hello_screenshots)
     set_tests_properties(hello_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
-foreach(example_name IN ITEMS layouts forms workbench graphics spin)
+foreach(example_name IN ITEMS layouts forms workbench graphics spin sysinfo)
     if(TARGET capture_${example_name}_screenshots)
         add_test(NAME ${example_name}_visual_capture
             COMMAND capture_${example_name}_screenshots
@@ -370,6 +387,14 @@ foreach(example_name IN ITEMS layouts forms workbench graphics spin)
             LABELS "golden;visual;artifact" TIMEOUT 60)
     endif()
 endforeach()
+
+if(TARGET capture_todo_screenshots)
+    add_test(NAME todo_visual_capture
+        COMMAND capture_todo_screenshots
+                ${CMAKE_BINARY_DIR}/test-artifacts/todo)
+    set_tests_properties(todo_visual_capture PROPERTIES
+        LABELS "golden;visual;artifact;todo" TIMEOUT 60)
+endif()
 
 if(TARGET capture_terminal_screenshots)
     add_test(NAME terminal_visual_capture

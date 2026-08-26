@@ -29,7 +29,7 @@ main families in one resizable window.
 The following source-backed slice creates a Row, Column, and Grid. It is part
 of `LayoutsApp::build_window`, so it compiles as the real example.
 
-<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="63-87" -->
+<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="69-93" -->
 ```cpp
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
 
@@ -62,7 +62,7 @@ of `LayoutsApp::build_window`, so it compiles as the real example.
 Dock, Overlay, Splitter, and anchors complete the same window. Frame overlays
 are owned by `Window`, not painted by the content manually.
 
-<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="89-115" -->
+<!-- ckvision-snippet source="examples/layouts/layouts_app.cpp" lines="95-121" -->
 ```cpp
     grid->set_spacing(1);
     grid_ = grid.get();

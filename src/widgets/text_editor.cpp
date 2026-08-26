@@ -676,7 +676,12 @@ bool TextEditor::on_key(const KeyEvent& event) {
         if (event.chord.text == "f" || event.chord.text == "F") return use_selection_as_search_query();
     }
     if (event.chord.key == Key::F3) return find_next(!has_modifier(event.chord.modifiers, Modifier::Shift));
-    if (event.chord.key == Key::Char && !event.chord.text.empty() && event.chord.modifiers == Modifier::None)
+    // Shift participates in producing ordinary text; it does not turn that
+    // text into a command chord. This is the same editing-boundary contract
+    // as InputLine and Memo. Alt/Ctrl/Super remain available to command
+    // routing, while the terminal-provided text stays authoritative for the
+    // shifted or composed character.
+    if (event.chord.key == Key::Char && !event.chord.text.empty() && !has_alt_or_super && !has_ctrl)
         return replace_selection(event.chord.text);
     const auto line_column = document_->line_column(cursor_);
     if (!line_column) return false;

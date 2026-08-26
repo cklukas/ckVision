@@ -83,6 +83,10 @@ std::string measurement_caveat_text(const BuildReport& build);
 // nothing at all where it can.
 std::string measured_bar_marker(const BuildReport& build);
 
+// The first sentence of a longer explanation. What a list of six things can
+// afford to say about each of them.
+std::string first_sentence(std::string_view text);
+
 // Field/value rows. A row of two empty strings is a group separator.
 std::vector<std::vector<std::string>> system_rows(const SystemProbe& probe);
 std::vector<std::vector<std::string>> memory_rows(const MemoryReport& memory);

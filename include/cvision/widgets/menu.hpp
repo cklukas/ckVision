@@ -265,6 +265,10 @@ public:
 
 private:
     friend class MenuBar;
+    friend DropdownMenu* show_context_menu(std::vector<MenuItem> items,
+                                            Point screen_position,
+                                            ui::Application& app,
+                                            Desktop& desktop);
     // Single assignment point for the highlight, so every route that
     // moves it — construction, arrows, the pointer — reports the move
     // exactly once and none can forget to.
@@ -282,6 +286,10 @@ private:
     // changes what renders here without touching the item itself).
     std::optional<std::string> item_chord_hint(const MenuItem& item) const;
     bool item_enabled(std::size_t index) const;
+    void set_invocation_contexts(std::vector<std::string> contexts) {
+        invocation_contexts_ = std::move(contexts);
+        has_invocation_contexts_ = true;
+    }
     // Whether the highlight may rest here at all — separators alone
     // cannot be stood on. A row that is merely unavailable can be.
     bool item_reachable(std::size_t index) const;
@@ -350,6 +358,10 @@ private:
     bool pointer_pressed_ = false;
     MenuOpenReason open_reason_ = MenuOpenReason::Keyboard;
     std::function<bool(const MouseEvent&)> pointer_navigation_;
+    // A popup replaces the view that invoked it in the focus chain. Command
+    // availability must still describe that invoker, not the popup itself.
+    std::vector<std::string> invocation_contexts_;
+    bool has_invocation_contexts_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId highlighted_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
@@ -482,7 +494,8 @@ private:
     // the moment one is opened until the reader closes it or leaves the bar.
     bool menus_follow_walk_ = false;
     bool active_ = false;
-    ui::View* previously_focused_ = nullptr;
+    std::optional<ui::Application::FocusBookmark> previously_focused_;
+    std::vector<std::string> invocation_contexts_;
     DropdownMenu* open_dropdown_ = nullptr;  // observer into desktop_'s popup list
 
     ui::RoleId normal_role_ = ui::kInvalidRole;

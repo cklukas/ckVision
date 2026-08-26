@@ -185,6 +185,11 @@ choices reviewable in one place.
   one of those sources names its context. `CommandRegistry::withdraw`
   removes the command's metadata, handler, enablement predicate, and key
   bindings together so stale menu/status references become inert.
+  Menu-bar dropdowns and context menus preserve the invoking focus ancestry
+  while they are open. Moving focus into temporary menu UI therefore does not
+  grey or block commands that belong to the document, board, or editor from
+  which the menu was opened; choosing a command still restores that focus
+  before its handler runs.
 - **`close`/`quit`'s default handlers** (M9/WP-15) are installed by
   `Desktop::on_attached()` — but only if nothing has claimed the
   command yet (`CommandRegistry::has_handler`), the same guarded pattern

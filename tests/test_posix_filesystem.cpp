@@ -5,7 +5,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "cvision/testing/cktest.hpp"
@@ -129,6 +131,24 @@ CK_TEST(is_directory_on_a_nonexistent_path_is_false_not_an_error) {
     CK_CHECK(!fs.is_directory("/this/path/should/never/exist/on/any/machine"));
 }
 
+CK_TEST(create_directories_builds_missing_parents_and_is_idempotent) {
+    ScratchDir scratch;
+    PosixFileSystem fs;
+    const std::string nested = scratch.root + "/one/two/three";
+    CK_CHECK(fs.create_directories(nested));
+    CK_CHECK(fs.is_directory(scratch.root + "/one"));
+    CK_CHECK(fs.is_directory(scratch.root + "/one/two"));
+    CK_CHECK(fs.is_directory(nested));
+    CK_CHECK(fs.create_directories(nested));
+}
+
+CK_TEST(create_directories_rejects_an_existing_file_segment) {
+    ScratchDir scratch;
+    scratch.make_file("plain");
+    PosixFileSystem fs;
+    CK_CHECK(!fs.create_directories(scratch.root + "/plain/child"));
+}
+
 CK_TEST(join_and_parent_still_use_the_base_classs_default_slash_joining) {
     // PosixFileSystem doesn't override join()/parent() — verifying the
     // inherited default still behaves sanely for real filesystem paths
@@ -137,4 +157,68 @@ CK_TEST(join_and_parent_still_use_the_base_classs_default_slash_joining) {
     ScratchDir scratch;
     PosixFileSystem fs;
     CK_CHECK(fs.join(scratch.root, "child") == scratch.root + "/child");
+}
+
+CK_TEST(conditional_atomic_write_holds_a_cross_process_directory_lock) {
+    ScratchDir scratch;
+    PosixFileSystem fs;
+    const std::string target = scratch.root + "/shared.txt";
+    CK_CHECK(fs.write_file_atomic(target, "base").status == ckv::FileWriteStatus::Ok);
+    const auto loaded = fs.read_file(target);
+    CK_CHECK(loaded);
+    if (!loaded) return;
+
+    const std::string lock_path = scratch.root + "/.ckvision-write.lock";
+    const int lock_descriptor = ::open(lock_path.c_str(), O_CREAT | O_RDWR, 0600);
+    CK_CHECK(lock_descriptor >= 0);
+    if (lock_descriptor < 0) return;
+    struct flock lock{};
+    lock.l_type = F_WRLCK;
+    lock.l_whence = SEEK_SET;
+    CK_CHECK(::fcntl(lock_descriptor, F_SETLK, &lock) == 0);
+
+    int ready[2]{};
+    CK_CHECK(::pipe(ready) == 0);
+    const pid_t child = ::fork();
+    CK_CHECK(child >= 0);
+    if (child == 0) {
+        ::close(ready[0]);
+        const char marker = 'R';
+        if (::write(ready[1], &marker, 1) != 1) ::_exit(30);
+        ::close(ready[1]);
+        PosixFileSystem child_filesystem;
+        const auto result = child_filesystem.write_file_atomic(
+            target, "child", ckv::FileWriteExpectation::matching(loaded->fingerprint));
+        ::_exit(result.status == ckv::FileWriteStatus::Conflict ? 0 : 31);
+    }
+    ::close(ready[1]);
+    if (child < 0) {
+        ::close(ready[0]);
+        ::close(lock_descriptor);
+        return;
+    }
+    char marker = 0;
+    CK_CHECK(::read(ready[0], &marker, 1) == 1 && marker == 'R');
+    ::close(ready[0]);
+    ::usleep(50'000);
+    int status = 0;
+    const pid_t early = ::waitpid(child, &status, WNOHANG);
+    CK_CHECK(early == 0);
+
+    const std::string replacement = target + ".replacement";
+    const int replacement_descriptor = ::open(replacement.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0600);
+    CK_CHECK(replacement_descriptor >= 0);
+    if (replacement_descriptor >= 0) {
+        CK_CHECK(::write(replacement_descriptor, "external", 8) == 8);
+        CK_CHECK(::fsync(replacement_descriptor) == 0);
+        CK_CHECK(::close(replacement_descriptor) == 0);
+        CK_CHECK(::rename(replacement.c_str(), target.c_str()) == 0);
+    }
+    CK_CHECK(::close(lock_descriptor) == 0);
+
+    if (early == 0) CK_CHECK(::waitpid(child, &status, 0) == child);
+    CK_CHECK(WIFEXITED(status));
+    CK_CHECK(WEXITSTATUS(status) == 0);
+    const auto final = fs.read_file(target);
+    CK_CHECK(final && final->contents == "external");
 }

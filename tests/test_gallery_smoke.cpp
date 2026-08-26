@@ -308,5 +308,7 @@ CK_TEST(f1_answers_with_an_about_box) {
     app.dispatch(ckv::KeyEvent{KeyChord{Key::F1, Modifier::None, ""}});
     app.step(0);
     CK_CHECK(app.is_modal());
+    CK_CHECK(display_contains(term.display(),
+                              "Copyright (c) 2026 C. Klukas. All rights reserved."));
     (void)gallery;
 }
