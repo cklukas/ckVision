@@ -34,5 +34,5 @@ if(TARGET todo_app)
 
     add_custom_target(todo_bench_run COMMAND todo_bench COMMENT "ckVision TODO benchmarks")
     add_test(NAME todo_benchmark_smoke COMMAND todo_bench)
-    set_tests_properties(todo_benchmark_smoke PROPERTIES LABELS "benchmark;example" TIMEOUT 60)
+    set_tests_properties(todo_benchmark_smoke PROPERTIES LABELS "benchmark;budget;example" TIMEOUT 60)
 endif()

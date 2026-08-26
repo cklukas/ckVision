@@ -265,7 +265,7 @@ the external version.
 | `test_todo_smoke.cpp` | dialogs, commands, menus, status, themes, editor, pointer, conflicts, lifecycle |
 | `test_todo_golden.cpp` | fifteen pinned workflow and theme frames |
 | `fuzz_todo_codec` | empty, guided, Unicode, malformed, oversized and future-schema corpus |
-| `todo_bench` | 1,000-task codec/load/refresh/render, movement and unchanged polling |
+| `todo_bench` | 1,000-task codec/load/refresh/render, movement and unchanged polling with hard size/work/redraw budgets |
 
 Regenerate and review the TODO figures and goldens together:
 

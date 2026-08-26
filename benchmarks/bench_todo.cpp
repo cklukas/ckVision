@@ -1,8 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Focused TODO example benchmarks. The harness reports timing; correctness and
-// deterministic scene budgets remain enforced by the test suite.
+// Focused TODO example benchmarks. Wall-clock numbers are diagnostic outside
+// the named reference machine; deterministic work, size, and redraw budgets
+// below are hard failures on every machine.
 #include <cstdio>
 #include <string>
 #include <utility>
@@ -41,27 +42,44 @@ TodoWorkspace thousand_task_workspace() {
 }  // namespace
 
 int main() {
+    constexpr std::size_t kTaskCount = 1'000;
+    constexpr std::size_t kEncodedBytesBudget = 1024U * 1024U;
+    constexpr std::size_t kFrameCellsBudget = 140U * 40U;
     const TodoWorkspace workspace = thousand_task_workspace();
     const auto encoded = encode_workspace(workspace);
     if (!encoded) {
         std::fprintf(stderr, "todo benchmark: workspace encoding failed\n");
         return 1;
     }
+    bool budgets_hold = workspace.snapshot().tasks.size() == kTaskCount &&
+                        encoded.value->size() <= kEncodedBytesBudget;
 
     std::size_t sink = 0;
     ckbench::run("todo_codec_encode_1000", 100, [&] {
         const auto result = encode_workspace(workspace);
-        if (result) sink += result.value->size();
+        if (!result || result.value->size() > kEncodedBytesBudget) {
+            budgets_hold = false;
+            return;
+        }
+        sink += result.value->size();
     });
     ckbench::run("todo_codec_decode_1000", 100, [&] {
         const auto result = decode_workspace(*encoded.value);
-        if (result) sink += result.value->snapshot().tasks.size();
+        if (!result || result.value->snapshot().tasks.size() != kTaskCount) {
+            budgets_hold = false;
+            return;
+        }
+        sink += result.value->snapshot().tasks.size();
     });
 
     MemoryTodoRepository repository(workspace);
     ckbench::run("todo_repository_load_1000", 1'000, [&] {
         const auto result = repository.load();
-        if (result) sink += result.value->workspace.snapshot().tasks.size();
+        if (!result || result.value->workspace.snapshot().tasks.size() != kTaskCount) {
+            budgets_hold = false;
+            return;
+        }
+        sink += result.value->workspace.snapshot().tasks.size();
     });
 
     term::HeadlessTerminal terminal(Size{140, 40}, term::headless_no_graphics_profile());
@@ -75,11 +93,20 @@ int main() {
 
     ckbench::run("todo_refresh_1000_tasks", 50, [&] {
         todo.refresh_board();
+        std::size_t visible_tasks = 0;
+        for (const Lane& lane : todo.controller().workspace()->find_board(BoardId{1})->lanes)
+            visible_tasks += lane.task_ids.size();
+        if (todo.board_view()->lane_count() != 3U || visible_tasks != kTaskCount)
+            budgets_hold = false;
         sink += todo.board_view()->lane_count();
     });
     ckbench::run("todo_steady_board_render", 250, [&] {
         app.root().invalidate();
+        terminal.clear_written();
         app.step(monotonic.now_nanos());
+        if (app.last_compose_cells_touched() > kFrameCellsBudget ||
+            !terminal.written_bytes().empty())
+            budgets_hold = false;
         sink += app.composed_surface().size().width;
     });
 
@@ -87,20 +114,39 @@ int main() {
     ckbench::run("todo_lane_move_commit", 100, [&] {
         const auto pending = todo.controller().begin_task_move(TaskId{1});
         const LaneId target = in_second_lane ? LaneId{1} : LaneId{2};
-        if (!pending) return;
+        if (!pending) {
+            budgets_hold = false;
+            return;
+        }
         const auto staged = todo.controller().stage_task_move(*pending.value, target, std::nullopt);
-        if (!staged) return;
+        if (!staged) {
+            budgets_hold = false;
+            return;
+        }
         const auto committed = todo.controller().commit_task_move(*staged.value);
-        if (!committed) return;
+        if (!committed || !committed.value->changed) {
+            budgets_hold = false;
+            return;
+        }
         in_second_lane = !in_second_lane;
         sink += committed.value->changed ? 1U : 0U;
     });
 
     ckbench::run("todo_unchanged_revision_poll", 5'000, [&] {
+        terminal.clear_written();
         todo.poll_repository();
+        app.step(monotonic.now_nanos());
+        if (!terminal.written_bytes().empty()) budgets_hold = false;
         sink += todo.controller().workspace() != nullptr ? 1U : 0U;
     });
 
+    if (todo.controller().workspace()->lane_of(TaskId{1}) != LaneId{1}) budgets_hold = false;
+    std::printf("budgets encoded=%zu/%zu bytes frame=%zu/%zu cells idle-output=0 bytes\n",
+                encoded.value->size(), kEncodedBytesBudget, app.last_compose_cells_touched(),
+                kFrameCellsBudget);
     std::printf("checksum %zu\n", sink);
-    return sink == 0 ? 1 : 0;
+    if (!budgets_hold)
+        std::fputs("todo benchmark budget failure: a deterministic bound or operation contract regressed\n",
+                   stderr);
+    return budgets_hold && sink != 0 ? 0 : 1;
 }
