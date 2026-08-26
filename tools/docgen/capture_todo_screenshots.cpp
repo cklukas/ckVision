@@ -189,7 +189,7 @@ void capture_product_scenes(const std::filesystem::path& screenshot_directory,
 
 void capture_themes(const std::filesystem::path& screenshot_directory,
                     const std::optional<std::filesystem::path>& golden_directory) {
-    for (const auto [theme, name] : {std::pair{TodoTheme::Dark, "todo-theme-dark"},
+    for (const auto& [theme, name] : {std::pair{TodoTheme::Dark, "todo-theme-dark"},
                                     std::pair{TodoTheme::Light, "todo-theme-light"},
                                     std::pair{TodoTheme::Mono, "todo-theme-mono"},
                                     std::pair{TodoTheme::HighContrast, "todo-theme-high-contrast"}}) {
