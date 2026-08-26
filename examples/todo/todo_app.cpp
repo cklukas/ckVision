@@ -31,6 +31,8 @@ const std::array<std::string, 6> kSortNames = {"Manual", "Color", "Due", "Create
 const std::array<std::string_view, 6> kSortCommandKeys = {
     "todo.lane-sort.manual", "todo.lane-sort.color", "todo.lane-sort.due",
     "todo.lane-sort.created", "todo.lane-sort.modified", "todo.lane-sort.priority"};
+const std::array<std::string, 5> kThemeNames = {
+    "&Classic", "&Dark", "&Light", "&Mono", "&High contrast"};
 const std::array<std::string, 17> kColorNames = {
     "None", "Black", "Dark blue", "Dark green", "Dark cyan", "Dark red", "Dark magenta", "Brown",
     "Light gray", "Dark gray", "Blue", "Green", "Cyan", "Red", "Magenta", "Yellow", "White"};
@@ -187,6 +189,7 @@ TodoApp::~TodoApp() {
     app_.commands().withdraw(lane_merge_command_);
     app_.commands().withdraw(lane_archive_command_);
     for (const ui::CommandId command : lane_sort_commands_) app_.commands().withdraw(command);
+    for (const ui::CommandId command : theme_commands_) app_.commands().withdraw(command);
     app_.commands().withdraw(board_manager_command_);
     app_.commands().withdraw(new_board_command_);
     app_.commands().withdraw(keyboard_help_command_);
@@ -290,6 +293,12 @@ void TodoApp::declare_commands() {
         lane_sort_commands_[index] = app_.commands().declare(
             {.key = std::string(kSortCommandKeys[index]), .title = kSortNames[index], .category = "Lanes",
              .context = "todo.board", .handler = [this, sort] { set_lane_sort(sort); }});
+    }
+    for (std::size_t index = 0; index < theme_commands_.size(); ++index) {
+        const TodoTheme theme = static_cast<TodoTheme>(index);
+        theme_commands_[index] = app_.commands().declare(
+            {.key = std::string(kThemeKeys[index]), .title = kThemeNames[index],
+             .category = "View", .handler = [this, theme] { set_theme(theme); }});
     }
     board_manager_command_ = app_.commands().declare(
         {.key = std::string(kBoardManagerKey), .title = "&Board Manager...", .category = "Boards",
@@ -452,18 +461,16 @@ std::vector<widgets::MenuBarItem> TodoApp::build_menus() {
          widgets::MenuItem::command(lane_insert_left_command_),
          widgets::MenuItem::command(lane_insert_right_command_), widgets::MenuItem::separator(),
          widgets::MenuItem::command(lane_merge_command_), widgets::MenuItem::command(lane_archive_command_)}};
-    const auto theme_item = [this](std::string label, TodoTheme theme) {
-        return widgets::MenuItem::action(std::move(label), [this, theme] { set_theme(theme); })
-            .with_mark(theme_ == theme ? widgets::MenuMark::RadioOn : widgets::MenuMark::RadioOff);
-    };
+    std::vector<widgets::MenuItem> theme_items;
+    for (std::size_t index = 0; index < theme_commands_.size(); ++index) {
+        theme_items.push_back(
+            widgets::MenuItem::command(theme_commands_[index])
+                .with_mark(static_cast<TodoTheme>(index) == theme_ ? widgets::MenuMark::RadioOn
+                                                                   : widgets::MenuMark::RadioOff));
+    }
     widgets::MenuBarItem view{
         "&View",
-        {widgets::MenuItem::submenu("&Theme",
-                                    {theme_item("&Classic", TodoTheme::Classic),
-                                     theme_item("&Dark", TodoTheme::Dark),
-                                     theme_item("&Light", TodoTheme::Light),
-                                     theme_item("&Mono", TodoTheme::Mono),
-                                     theme_item("&High contrast", TodoTheme::HighContrast)}),
+        {widgets::MenuItem::submenu("&Theme", std::move(theme_items)),
          widgets::MenuItem::submenu(
              "&Window",
              {widgets::MenuItem::command(app_.commands().standard().next_window),

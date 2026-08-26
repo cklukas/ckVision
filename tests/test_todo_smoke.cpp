@@ -456,7 +456,9 @@ CK_TEST(todo_theme_menu_is_radio_marked_and_rebuilds_after_selection) {
     if (view == nullptr) return;
     const auto& choices = view->items.front().children();
     CK_CHECK(choices[0].mark() == widgets::MenuMark::RadioOn);
-    choices[1].action()();
+    const auto dark = fixture.app.commands().id_for(TodoApp::kThemeKeys[1]);
+    CK_CHECK(dark && choices[1].command() == *dark);
+    CK_CHECK(dark && fixture.app.execute_command(*dark));
     CK_CHECK(fixture.todo.theme() == TodoTheme::Dark);
 }
 

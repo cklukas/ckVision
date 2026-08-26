@@ -61,6 +61,9 @@ public:
     static constexpr std::string_view kLaneActionsKey = "todo.lane-actions";
     static constexpr std::string_view kBoardManagerKey = "todo.board-manager";
     static constexpr std::string_view kNewBoardKey = "todo.new-board";
+    static constexpr std::array<std::string_view, 5> kThemeKeys{
+        "todo.theme-classic", "todo.theme-dark", "todo.theme-light",
+        "todo.theme-mono", "todo.theme-high-contrast"};
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
     widgets::Window* board_window() const noexcept { return board_window_; }
@@ -182,6 +185,7 @@ private:
     ui::CommandId lane_merge_command_ = ui::kInvalidCommand;
     ui::CommandId lane_archive_command_ = ui::kInvalidCommand;
     std::array<ui::CommandId, 6> lane_sort_commands_{};
+    std::array<ui::CommandId, 5> theme_commands_{};
     ui::CommandId board_manager_command_ = ui::kInvalidCommand;
     ui::CommandId new_board_command_ = ui::kInvalidCommand;
     ui::CommandId keyboard_help_command_ = ui::kInvalidCommand;

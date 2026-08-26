@@ -4,7 +4,6 @@
 // Deterministic figures for the TODO example. Every scene runs the shipped
 // TodoApp against the same public headless terminal path as the interactive
 // executable, with fixed repository, identity, and calendar services.
-#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -17,7 +16,6 @@
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
-#include "cvision/widgets/menu.hpp"
 
 #include "frame_svg.hpp"
 #include "memory_todo_repository.hpp"
@@ -91,15 +89,9 @@ void write_scene(const std::filesystem::path& screenshot_directory,
 }
 
 void select_theme(Scene& scene, TodoTheme theme) {
-    const auto& menus = scene.todo.menu_bar()->menus();
-    const auto view = std::find_if(menus.begin(), menus.end(), [](const widgets::MenuBarItem& menu) {
-        return menu.label == "&View";
-    });
-    if (view == menus.end() || view->items.empty()) fail("View theme menu was unavailable");
-    const auto& themes = view->items.front().children();
     const std::size_t index = static_cast<std::size_t>(theme);
-    if (index >= themes.size() || !themes[index].action()) fail("requested theme action was unavailable");
-    themes[index].action()();
+    if (index >= TodoApp::kThemeKeys.size() || !execute(scene, TodoApp::kThemeKeys[index]))
+        fail("requested theme command was unavailable");
 }
 
 void commit_external_title(Scene& scene, TaskId task_id, std::string title) {
