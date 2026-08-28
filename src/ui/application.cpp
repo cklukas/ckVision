@@ -507,6 +507,16 @@ std::optional<std::int64_t> Application::next_timer_deadline_nanos() const noexc
     for (const Timer& timer : timers_)
         deadline = deadline ? std::min(*deadline, timer.next_fire_nanos)
                             : timer.next_fire_nanos;
+    if (presenter_.frame_completion_tracking() && oldest_unanswered_frame_nanos_ &&
+        presenter_.frames_marked() > frames_settled_) {
+        const std::int64_t patience = frame_completion_patience_nanos();
+        const std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
+        const std::int64_t frame_deadline =
+            *oldest_unanswered_frame_nanos_ > maximum - patience
+                ? maximum
+                : *oldest_unanswered_frame_nanos_ + patience;
+        deadline = deadline ? std::min(*deadline, frame_deadline) : frame_deadline;
+    }
     return deadline;
 }
 
@@ -994,7 +1004,12 @@ bool Application::step(std::int64_t deadline_nanos) {
             wake_now = wake_requested_;
             wake_requested_ = false;
         }
-        std::int64_t effective_deadline = wake_now ? clock_.now_nanos() : deadline_nanos;
+        const std::int64_t before_wait = clock_.now_nanos();
+        // Known work is never held behind an input wait. This is what lets a
+        // standalone run loop wait indefinitely while dormant without also
+        // delaying its initial frame or an explicit invalidation.
+        std::int64_t effective_deadline =
+            (wake_now || dirty_) ? before_wait : deadline_nanos;
         if (const auto timer_deadline = next_timer_deadline_nanos())
             effective_deadline = std::min(effective_deadline, *timer_deadline);
 
@@ -1021,6 +1036,10 @@ bool Application::step(std::int64_t deadline_nanos) {
             }
         };
         drain_terminal_subsessions();
+        // A child session may have produced output before the combined wait
+        // began. Deliver that known work in this batch instead of blocking for
+        // a second, unrelated source after it has already arrived.
+        if (did_work) effective_deadline = std::min(effective_deadline, clock_.now_nanos());
         terminal_subsession_wait_handles_.clear();
         for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
             if (session == nullptr) continue;
@@ -1260,7 +1279,13 @@ bool Application::run_until(const std::function<bool()>& done) {
         if (quit_requested()) return false;
         bool finished = done();
         while (!finished && !quit_requested()) {
-            step(clock_.now_nanos() + kDefaultFrameIntervalNanos);
+            // step() clamps this indefinite outer wait to every real internal
+            // deadline (timers, cursor blink and frame-completion patience).
+            // Terminal input, child wait handles, post(), wake() and quit all
+            // interrupt it. An arbitrary externally-owned completion flag
+            // must therefore pair its state transition with wake() or post(),
+            // rather than being rediscovered by periodic predicate polling.
+            step(std::numeric_limits<std::int64_t>::max());
             if (quit_requested()) break;
             finished = done();
         }
