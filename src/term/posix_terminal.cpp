@@ -18,6 +18,7 @@
 #include <cerrno>
 #include <cstring>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -53,6 +54,26 @@ void write_all_signal_safe(int fd, const char* bytes, std::size_t count) noexcep
         bytes += wrote;
         count -= static_cast<std::size_t>(wrote);
     }
+}
+
+// Kept at namespace scope for the same focused-test reach as
+// write_all_signal_safe above. poll(2) accepts milliseconds, while ckVision's
+// deadline contract is nanosecond-precise. A positive fractional millisecond
+// must round up: truncating it to zero turns every near-deadline wait into a
+// non-blocking poll and lets the owning loop spin until the clock catches up.
+int poll_timeout_milliseconds(std::int64_t now_nanos,
+                              std::int64_t deadline_nanos) noexcept {
+    if (deadline_nanos == std::numeric_limits<std::int64_t>::max()) return -1;
+    if (deadline_nanos <= now_nanos) return 0;
+
+    const auto remaining_nanos = static_cast<std::uint64_t>(deadline_nanos) -
+                                 static_cast<std::uint64_t>(now_nanos);
+    const auto remaining_millis = 1U + ((remaining_nanos - 1U) / 1'000'000U);
+    const auto maximum_millis =
+        static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+    return remaining_millis > maximum_millis
+               ? std::numeric_limits<int>::max()
+               : static_cast<int>(remaining_millis);
 }
 
 namespace {
@@ -977,8 +998,7 @@ std::vector<TerminalEvent> PosixTerminal::poll(
     if (!events.empty()) effective_deadline = now;
     if (const auto decoder_deadline = decoder_.next_timeout_nanos())
         effective_deadline = std::min(effective_deadline, *decoder_deadline);
-    const std::int64_t remaining_ns = effective_deadline - now;
-    const int timeout_ms = remaining_ns <= 0 ? 0 : static_cast<int>(remaining_ns / 1'000'000);
+    const int timeout_ms = poll_timeout_milliseconds(now, effective_deadline);
 
     const int rc = ::poll(fds.data(), fds.size(), timeout_ms);
     if (rc > 0) {
