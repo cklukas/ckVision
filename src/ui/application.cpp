@@ -507,16 +507,6 @@ std::optional<std::int64_t> Application::next_timer_deadline_nanos() const noexc
     for (const Timer& timer : timers_)
         deadline = deadline ? std::min(*deadline, timer.next_fire_nanos)
                             : timer.next_fire_nanos;
-    if (presenter_.frame_completion_tracking() && oldest_unanswered_frame_nanos_ &&
-        presenter_.frames_marked() > frames_settled_) {
-        const std::int64_t patience = frame_completion_patience_nanos();
-        const std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
-        const std::int64_t frame_deadline =
-            *oldest_unanswered_frame_nanos_ > maximum - patience
-                ? maximum
-                : *oldest_unanswered_frame_nanos_ + patience;
-        deadline = deadline ? std::min(*deadline, frame_deadline) : frame_deadline;
-    }
     return deadline;
 }
 
@@ -1012,6 +1002,22 @@ bool Application::step(std::int64_t deadline_nanos) {
             (wake_now || dirty_) ? before_wait : deadline_nanos;
         if (const auto timer_deadline = next_timer_deadline_nanos())
             effective_deadline = std::min(effective_deadline, *timer_deadline);
+        // Frame-completion patience is a real deadline only while it protects
+        // raster back-pressure. A dormant text frame needs no periodic wake
+        // merely to age a diagnostic counter; the next genuine event can
+        // reconcile it. A picture holding a newer dirty picture back must,
+        // however, be released at the exact patience boundary.
+        if (presenter_.frame_completion_tracking() && oldest_unanswered_frame_nanos_ &&
+            presenter_.frames_marked() > frames_settled_ &&
+            presenter_.last_frame_carried_rasters()) {
+            const std::int64_t patience = frame_completion_patience_nanos();
+            const std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
+            const std::int64_t frame_deadline =
+                *oldest_unanswered_frame_nanos_ > maximum - patience
+                    ? maximum
+                    : *oldest_unanswered_frame_nanos_ + patience;
+            effective_deadline = std::min(effective_deadline, frame_deadline);
+        }
 
         // Sessions released since the last step leave empty slots behind —
         // erasing one inside the loop that was notifying about it would pull

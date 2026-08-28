@@ -128,8 +128,12 @@ private:
 
 class DeadlineRecordingTerminal final : public ckv::term::Terminal {
 public:
+    explicit DeadlineRecordingTerminal(
+        ckv::term::Capabilities capabilities = ckv::term::baseline_capabilities())
+        : capabilities_(capabilities) {}
+
     ckv::term::Capabilities capabilities() const noexcept override {
-        return ckv::term::baseline_capabilities();
+        return capabilities_;
     }
     ckv::Size size() const noexcept override { return ckv::Size{80, 24}; }
 
@@ -144,6 +148,9 @@ public:
     void write_clipboard(std::string_view) override {}
 
     std::vector<std::int64_t> deadlines;
+
+private:
+    ckv::term::Capabilities capabilities_;
 };
 
 class ForwardingDiagnostics final : public ckv::DiagnosticsSink {
@@ -1939,16 +1946,26 @@ CK_TEST(a_presented_frame_is_outstanding_until_the_terminal_answers_for_it) {
     CK_CHECK(app.last_terminal_round_trip_nanos() == 4'000'000);
 }
 
-CK_TEST(frame_completion_patience_is_an_explicit_application_wait_deadline) {
-    ckv::term::HeadlessTerminal term{ckv::Size{20, 5}};
+CK_TEST(raster_frame_completion_patience_is_an_explicit_application_wait_deadline) {
+    DeadlineRecordingTerminal term{ckv::term::headless_sixel_profile()};
     ManualClock clock(10'000);
     Application app(term, clock);
+    (void)ckv::ui::intern_standard_roles(app.roles());
     app.set_frame_completion_tracking(true);
+
+    auto image = std::make_shared<ckv::Image>(4, 4);
+    image->set_pixel(0, 0, ckv::Image::Rgba{200, 120, 40, 255});
+    auto* view = app.root().make<ckv::widgets::ImageView>();
+    view->set_bounds(ckv::Rect{0, 0, 2, 2});
+    view->set_image(image);
     app.step(clock.now_nanos());
+    term.deadlines.clear();
 
     CK_CHECK(app.frames_awaiting_terminal() == 1U);
-    CK_CHECK(app.next_timer_deadline_nanos() ==
-             std::optional<std::int64_t>{10'000 + ckv::ui::kFrameCompletionTimeoutNanos});
+    app.step(std::numeric_limits<std::int64_t>::max());
+    CK_CHECK(term.deadlines.size() == 1U);
+    CK_CHECK(term.deadlines.front() ==
+             10'000 + ckv::ui::kFrameCompletionTimeoutNanos);
 }
 
 CK_TEST(an_unanswered_frame_is_written_off_rather_than_waited_on_forever) {
