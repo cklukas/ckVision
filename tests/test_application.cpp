@@ -1036,6 +1036,28 @@ CK_TEST(a_repeating_timer_fires_again_after_each_interval) {
     CK_CHECK(fired == 2);
 }
 
+CK_TEST(a_late_repeating_timer_coalesces_missed_ticks_and_preserves_its_phase) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired = 0;
+    app.start_timer(100, true, [&] { ++fired; });
+
+    clock.advance(1'050);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(fired == 1);
+    CK_CHECK(app.next_timer_deadline_nanos() == std::optional<std::int64_t>{1'100});
+
+    // The delayed loop delivers one current-state notification, never ten
+    // historical callbacks through ten immediately-due follow-up steps.
+    CK_CHECK(!app.step(clock.now_nanos()));
+    CK_CHECK(fired == 1);
+
+    clock.advance(50);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(fired == 2);
+}
+
 CK_TEST(cancel_timer_prevents_a_future_fire) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;

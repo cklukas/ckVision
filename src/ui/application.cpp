@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <type_traits>
 
@@ -36,6 +37,26 @@ bool is_modal_scope_command(const StandardCommands& standard, CommandId id) noex
 // having happened correctly.
 constexpr Color kTooSmallFg = Color::rgb(255, 255, 255);
 constexpr Color kTooSmallBg = Color::rgb(170, 0, 0);
+
+std::int64_t next_repeating_timer_deadline(std::int64_t previous_deadline,
+                                           std::int64_t interval_nanos,
+                                           std::int64_t now_nanos) noexcept {
+    CKV_ASSERT(interval_nanos > 0);
+    CKV_ASSERT(previous_deadline <= now_nanos);
+
+    // Preserve the timer's original phase while coalescing every elapsed
+    // interval into the one callback this step is about to deliver. Advancing
+    // by only one interval leaves an overdue timer overdue, so subsequent
+    // zero-wait steps replay the missed ticks as a CPU-bound callback burst.
+    const auto elapsed = static_cast<std::uint64_t>(now_nanos) -
+                         static_cast<std::uint64_t>(previous_deadline);
+    const auto interval = static_cast<std::uint64_t>(interval_nanos);
+    const auto until_next = interval - (elapsed % interval);
+    const auto maximum = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    const auto now = static_cast<std::uint64_t>(now_nanos);
+    if (now > maximum - until_next) return std::numeric_limits<std::int64_t>::max();
+    return static_cast<std::int64_t>(now + until_next);
+}
 
 class ActiveOperation final {
   public:
@@ -1028,7 +1049,8 @@ bool Application::step(std::int64_t deadline_nanos) {
             }
             due_callbacks.push_back(it->callback);
             if (it->repeating) {
-                it->next_fire_nanos += it->interval_nanos;
+                it->next_fire_nanos = next_repeating_timer_deadline(
+                    it->next_fire_nanos, it->interval_nanos, now);
                 ++it;
             } else {
                 it = timers_.erase(it);
