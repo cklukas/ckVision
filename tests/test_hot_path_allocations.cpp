@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdlib>
 #include <new>
+#include <string>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/core/image.hpp"
@@ -18,6 +20,9 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/term/presenter.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/context.hpp"
+#include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/tree_view.hpp"
 
 namespace {
 
@@ -169,4 +174,30 @@ CK_TEST(warmed_application_dispatch_focus_and_post_drain_allocate_nothing) {
     app.focus_next();
     app.step(clock.now_nanos());
     CK_CHECK(allocations.count() == 0);
+}
+
+CK_TEST(warmed_materialized_tree_draw_reuses_its_visible_entry_cache) {
+    ckv::ui::RoleRegistry registry;
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
+    ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
+
+    ckv::widgets::TreeNode root{.label = "large root", .expanded = true};
+    root.children.reserve(2048);
+    for (int index = 0; index < 2048; ++index)
+        root.children.push_back(ckv::widgets::TreeNode{.label = "entry " + std::to_string(index)});
+
+    ckv::widgets::TreeView tree;
+    tree.set_context(ckv::ui::Context{&theme, &registry, nullptr});
+    tree.set_bounds(ckv::Rect{0, 0, 80, 4});
+    tree.set_roots({std::move(root)});
+
+    ckv::scene::Surface surface(ckv::Size{80, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 80, 4});
+    tree.draw(painter);  // Build and warm the materialized visible-entry cache.
+
+    {
+        AllocationScope allocations;
+        tree.draw(painter);
+        CK_CHECK(allocations.count() == 0);
+    }
 }

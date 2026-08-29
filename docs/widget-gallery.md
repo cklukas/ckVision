@@ -2060,7 +2060,10 @@ Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
 children. `reveal_and_select(id)` opens the ancestors of a materialized node
 and selects it, which lets a result list or search controller navigate a tree
 without synthesizing input. File Browser uses the public selection callback to
-update a ListView.
+update a ListView. TreeView retains its flattened visible entries until roots
+or expansion state changes, so repeated draws and navigation do not repeatedly
+walk an unchanged materialized forest. Provider-backed virtualization remains
+post-0.1 scope.
 `TreeConnectorStyle::Outline` provides the compact classic terminal-outline
 appearance: `─+` for groups, `──` for leaves, and `│` ancestry guides.
 

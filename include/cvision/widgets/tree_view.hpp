@@ -10,10 +10,11 @@
 // std::vector<TreeNode> and invalidate them — set_roots() with a
 // freshly built forest is the sanctioned way to change the content).
 //
-// Per D-041, the 0.1 tree model is materialized: the whole forest is flattened
-// to its visible entries on navigation/draw. A virtualized provider is
-// post-0.1 scope; lazy expansion through on_expand_request remains part of the
-// materialized model.
+// Per D-041, the 0.1 tree model is materialized. Its visible entries are
+// flattened after roots or expansion state changes, then retained for drawing
+// and navigation; a steady-state frame never re-walks the whole forest. A
+// virtualized provider is post-0.1 scope; lazy expansion through
+// on_expand_request remains part of the materialized model.
 #pragma once
 
 #include <any>
@@ -152,7 +153,8 @@ private:
 
     void flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,
                        std::vector<VisibleEntry>& out, std::uint32_t stem_mask);
-    std::vector<VisibleEntry> visible_entries();
+    const std::vector<VisibleEntry>& visible_entries();
+    void invalidate_visible_entries() noexcept { visible_entries_valid_ = false; }
     // Columns one nesting level occupies, which is also the width of a
     // branch prefix. The outline convention draws a junction, a rule and
     // a marker; the compact styles draw a two-cell twisty.
@@ -169,6 +171,8 @@ private:
     void ensure_cursor_visible(int cursor_index);
 
     std::vector<TreeNode> roots_;
+    std::vector<VisibleEntry> visible_entries_;
+    bool visible_entries_valid_ = false;
     TreeNode* cursor_node_ = nullptr;
     Scrollbar* scrollbar_ = nullptr;
     TreeConnectorStyle connector_style_ = TreeConnectorStyle::Minimal;

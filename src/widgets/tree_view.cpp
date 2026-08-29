@@ -38,7 +38,8 @@ void TreeView::set_connector_style(TreeConnectorStyle style) {
 
 void TreeView::set_roots(std::vector<TreeNode> roots) {
     roots_ = std::move(roots);
-    auto entries = visible_entries();
+    invalidate_visible_entries();
+    const auto& entries = visible_entries();
     cursor_node_ = entries.empty() ? nullptr : entries.front().node;
     on_resized();
     invalidate();
@@ -65,6 +66,7 @@ bool TreeView::reveal_and_select(std::uint64_t id) {
             revealed = true;
         }
     }
+    if (revealed) invalidate_visible_entries();
 
     TreeNode* const target = path.back();
     if (target != cursor_node_) {
@@ -96,10 +98,13 @@ int TreeView::branch_columns() const noexcept {
     return connector_style_ == TreeConnectorStyle::Outline ? 3 : 2;
 }
 
-std::vector<TreeView::VisibleEntry> TreeView::visible_entries() {
-    std::vector<VisibleEntry> out;
-    flatten_into(roots_, 0, nullptr, out, 0);
-    return out;
+const std::vector<TreeView::VisibleEntry>& TreeView::visible_entries() {
+    if (!visible_entries_valid_) {
+        visible_entries_.clear();
+        flatten_into(roots_, 0, nullptr, visible_entries_, 0);
+        visible_entries_valid_ = true;
+    }
+    return visible_entries_;
 }
 
 void TreeView::on_resized() {
@@ -118,7 +123,7 @@ void TreeView::ensure_cursor_visible(int cursor_index) {
 }
 
 void TreeView::move_cursor(int delta) {
-    auto entries = visible_entries();
+    const auto& entries = visible_entries();
     if (entries.empty()) {
         cursor_node_ = nullptr;
         return;
@@ -147,7 +152,7 @@ void TreeView::select_node(TreeNode* node) {
     TreeNode* const previous = cursor_node_;
     cursor_node_ = node;
     on_resized();
-    auto entries = visible_entries();
+    const auto& entries = visible_entries();
     for (std::size_t i = 0; i < entries.size(); ++i) {
         if (entries[i].node == node) {
             ensure_cursor_visible(static_cast<int>(i));
@@ -160,10 +165,14 @@ void TreeView::select_node(TreeNode* node) {
 
 void TreeView::set_expanded(TreeNode& node, bool expanded) {
     if (expanded && !node.children_known) {
+        // The callback may add children before it returns. Do not allow any
+        // re-entrant layout or draw to consume the old flattened view.
+        invalidate_visible_entries();
         if (on_expand_request) on_expand_request(node);
         node.children_known = true;
     }
     node.expanded = expanded;
+    invalidate_visible_entries();
     on_resized();
     invalidate();
 }
@@ -225,7 +234,7 @@ bool TreeView::on_mouse(const MouseEvent& event) {
     const int row = event.cell.y - abs.y;
     if (row < 0 || row >= bounds().height) return false;
     const int index = scrollbar_->position() + row;
-    auto entries = visible_entries();
+    const auto& entries = visible_entries();
     if (index < 0 || static_cast<std::size_t>(index) >= entries.size()) return false;
 
     VisibleEntry entry = entries[static_cast<std::size_t>(index)];
@@ -250,7 +259,7 @@ bool TreeView::on_mouse(const MouseEvent& event) {
 }
 
 void TreeView::draw(scene::Painter& painter) {
-    auto entries = visible_entries();
+    const auto& entries = visible_entries();
     const int visible_width = std::max(0, bounds().width - 1);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
 
