@@ -71,6 +71,33 @@ CK_TEST(setting_roots_selects_the_first_top_level_node) {
     CK_CHECK(tree.selected()->label == "parent");
 }
 
+CK_TEST(reveal_and_select_opens_ancestors_before_selecting_a_hidden_node) {
+    Fixture f;
+    TreeNode match{.label = "match", .id = 17};
+    TreeNode group{.label = "group", .children = {std::move(match)}, .id = 11};
+    auto tree = make_tree(f);
+    tree.set_roots({std::move(group)});
+
+    int selection_changes = 0;
+    tree.on_selection_changed = [&](TreeNode&) { ++selection_changes; };
+
+    CK_CHECK(tree.reveal_and_select(17));
+    CK_CHECK(tree.selected() != nullptr);
+    CK_CHECK(tree.selected()->label == "match");
+    CK_CHECK(tree.selected()->id == 17);
+    CK_CHECK(selection_changes == 1);
+}
+
+CK_TEST(reveal_and_select_reports_a_missing_id_without_disturbing_selection) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+
+    CK_CHECK(!tree.reveal_and_select(999));
+    CK_CHECK(tree.selected() != nullptr);
+    CK_CHECK(tree.selected()->label == "parent");
+}
+
 CK_TEST(collapsed_children_are_not_reachable_by_down_arrow) {
     Fixture f;
     auto tree = make_tree(f);

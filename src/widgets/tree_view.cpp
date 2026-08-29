@@ -6,6 +6,20 @@
 
 namespace ckv::widgets {
 
+namespace {
+
+bool find_path_by_id(std::vector<TreeNode>& nodes, std::uint64_t id,
+                     std::vector<TreeNode*>& path) {
+    for (TreeNode& node : nodes) {
+        path.push_back(&node);
+        if (node.id == id || find_path_by_id(node.children, id, path)) return true;
+        path.pop_back();
+    }
+    return false;
+}
+
+}  // namespace
+
 TreeView::TreeView() {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
     set_focus_policy(ui::FocusPolicy::TabStop);
@@ -35,6 +49,31 @@ void TreeView::set_roots(std::vector<TreeNode> roots) {
     // replaced, so a master-detail pane must re-resolve against the
     // new tree regardless of whether the label looks unchanged.
     if (cursor_node_ != nullptr && on_selection_changed) on_selection_changed(*cursor_node_);
+}
+
+bool TreeView::reveal_and_select(std::uint64_t id) {
+    std::vector<TreeNode*> path;
+    if (!find_path_by_id(roots_, id, path)) return false;
+
+    bool revealed = false;
+    // The final entry is the node being selected; only its ancestors must
+    // open. Nodes in this materialized tree already exist, so this is not a
+    // lazy-population request and does not invoke on_expand_request.
+    for (std::size_t i = 0; i + 1 < path.size(); ++i) {
+        if (!path[i]->expanded) {
+            path[i]->expanded = true;
+            revealed = true;
+        }
+    }
+
+    TreeNode* const target = path.back();
+    if (target != cursor_node_) {
+        select_node(target);
+    } else if (revealed) {
+        on_resized();
+        invalidate();
+    }
+    return true;
 }
 
 void TreeView::flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,

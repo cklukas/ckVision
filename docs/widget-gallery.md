@@ -2046,7 +2046,10 @@ children, expansion state, and optional client data.
 
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
 Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
-children. File Browser uses the public selection callback to update a ListView.
+children. `reveal_and_select(id)` opens the ancestors of a materialized node
+and selects it, which lets a result list or search controller navigate a tree
+without synthesizing input. File Browser uses the public selection callback to
+update a ListView.
 `TreeConnectorStyle::Outline` provides the compact classic terminal-outline
 appearance: `─+` for groups, `──` for leaves, and `│` ancestry guides.
 

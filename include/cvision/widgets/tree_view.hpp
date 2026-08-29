@@ -92,6 +92,14 @@ public:
     void set_roots(std::vector<TreeNode> roots);
     TreeNode* selected() const noexcept { return cursor_node_; }
 
+    // Selects the first depth-first node with `id`, expanding every ancestor
+    // needed to make it visible. Returns false without changing selection
+    // when no node has that id. Applications that navigate to a result they
+    // have kept outside the view (for example a search match) assign their
+    // own stable, unique TreeNode::id values and call this instead of trying
+    // to manufacture keyboard input or retain pointers across set_roots().
+    bool reveal_and_select(std::uint64_t id);
+
     // Fires whenever the cursor moves to a DIFFERENT node (navigation,
     // mouse click, Left-to-parent, or a set_roots() call whose
     // resulting selection is non-null) — never on a no-op move (e.g.
