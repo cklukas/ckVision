@@ -57,6 +57,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/static_text.hpp` | `StaticText` | [Widget gallery](widget-gallery.md#statictext) |
 | `include/cvision/widgets/button.hpp` | `Button` | [Widget gallery](widget-gallery.md#button) |
 | `include/cvision/widgets/input_line.hpp` | `InputLine` | [Widget gallery](widget-gallery.md#inputline) |
+| `include/cvision/widgets/key_chord_capture.hpp` | `KeyChordCapture` | [Widget gallery](widget-gallery.md#keychordcapture) |
 | `include/cvision/widgets/memo.hpp` | `Memo`, `MemoPosition` | [Widget gallery](widget-gallery.md#memo) |
 | `include/cvision/widgets/editor_document.hpp` | `EditorDocument`, positions, ranges, transactions | [Editor](editor.md) |
 | `include/cvision/widgets/text_editor.hpp` | `TextEditor`, `EditorStatus`, `EditorStatusModel` | [Editor](editor.md) |

@@ -1275,6 +1275,16 @@ port->set_valid(false);  // draws in the invalid role until it validates
 ```
 <!-- /ckvision-snippet -->
 
+## KeyChordCapture
+
+Header: `include/cvision/widgets/key_chord_capture.hpp`. Use for editing a
+single command shortcut without allowing the captured chord to trigger that
+command. Focus the control and press Enter or Space to begin capture; the next
+key press becomes its typed `KeyChord`. Escape abandons capture, while
+Backspace or Delete clears a binding. The application owns conflict analysis,
+rebinding, and persistence through its `CommandRegistry`; this widget has no
+keymap or filesystem policy of its own.
+
 ## Label
 
 Header: `include/cvision/widgets/label.hpp`. Use a mnemonic label next to a

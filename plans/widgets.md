@@ -49,6 +49,7 @@ widgets and dialogs, never per-widget state.
 | Static text | Styled, wrapped | Alignment options |
 | Button | Default/normal, mnemonic, pressed feedback | Repeat-on-hold option |
 | Input line | Editing keys, selection, clipboard, overwrite/insert, scrolling content, validators, input masks, password echo, history cycling | Grapheme-correct editing (never splits clusters); undo within field; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word navigation/deletion, and Shift selection semantics |
+| Key chord capture | Focused, command-safe capture of one normalized `KeyChord`; Enter/Space starts capture, Escape abandons it, Backspace/Delete clears it | Application-owned conflict policy and persistence; the widget only captures a typed input value |
 | Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo; descriptor-form field with accept-time validation | Word wrap toggle; grapheme-correct navigation; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word/document navigation/deletion, and Shift selection semantics |
 | Check group | Multi-select, arrow navigation, mnemonics | Tri-state option |
 | Radio group | Exclusive select, arrow navigation, mnemonics | — |

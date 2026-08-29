@@ -68,6 +68,7 @@ add_library(cvision
     src/widgets/help_viewer.cpp
     src/widgets/image_view.cpp
     src/widgets/input_line.cpp
+    src/widgets/key_chord_capture.cpp
     src/widgets/label.cpp
     src/widgets/list_view.cpp
     src/widgets/menu.cpp

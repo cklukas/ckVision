@@ -40,6 +40,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_image_view.cpp
     test_input_decoder.cpp
     test_key_chord.cpp
+    test_key_chord_capture.cpp
     test_key_event.cpp
     test_layout.cpp
     test_list_view.cpp
