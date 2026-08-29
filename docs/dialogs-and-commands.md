@@ -107,8 +107,10 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 
 `FieldDescriptor::kind` selects what a field materializes as. `Text` is the
 default; `Check` is a single checkbox carrying `label` as its own text; `Note`
-is text the form states rather than asks. `Radio`, `Combo`, `Number`, `Date`,
-and `Time` materialize their corresponding typed ckVision controls.
+is text the form states rather than asks. `Memo` is a multi-line, word-wrapped
+text field; use `memo_rows` to request its visible height (five rows by
+default). `Radio`, `Combo`, `Number`, `Date`, and `Time` materialize their
+corresponding typed ckVision controls.
 
 ```cpp
 descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -120,14 +122,16 @@ descriptor.fields.push_back(widgets::FieldDescriptor{
     .kind = widgets::FieldKind::Note});
 ```
 
-`MaterializedDialog::labels`, `inputs`, `checks`, `radios`, `combos`, `numbers`,
-`dates`, and `times`, and the corresponding typed `DialogResult` vectors, are
+`MaterializedDialog::labels`, `inputs`, `memos`, `checks`, `radios`, `combos`,
+`numbers`, `dates`, and `times`, and the corresponding typed `DialogResult` vectors, are
 all parallel to `descriptor.fields`: field *i*'s widget and answer sit at index
 *i* whatever kind it is, so a caller never counts kinds to find its own value.
 The slots a field did not fill are null (or empty), and a `Check` field is
 skipped by validation — it has no text to validate and no invalid state to
-show. Date and time answers remain typed values; their canonical ISO strings in
-`values` are a convenience for persistence and general validators.
+show. A Memo's complete multi-line text is returned in `values` and receives
+the same accept-time validation and invalid styling as an InputLine. Date and
+time answers remain typed values; their canonical ISO strings in `values` are a
+convenience for persistence and general validators.
 
 A checkbox is ticked with `Space`. `Enter` is left to the form, so it reaches
 the default button from anywhere in the dialog, a focused checkbox or radio
@@ -136,6 +140,10 @@ group included.
 Notes take no focus, so `Tab` still moves between the fields a reader answers.
 Consecutive notes lay out as one paragraph with no blank row between them: the
 form's own spacing separates questions, not the lines of a sentence.
+
+Inside a Memo, `Enter` creates a line break. The form's default action remains
+available by Tab navigation or pointer, rather than making a prose editor lose
+its ordinary newline key.
 
 `Date` can be optional and carries an explicit deterministic seed. `Time`
 supports 24-hour or 12-hour display and optional seconds. Both controls use

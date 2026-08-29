@@ -37,6 +37,7 @@ Memo::Memo() {
 void Memo::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.memo.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.memo.focused");
+    if (invalid_role_ == ui::kInvalidRole) invalid_role_ = context().roles->find("ckv.memo.invalid");
 }
 
 void Memo::set_text(std::string text) {
@@ -56,8 +57,15 @@ void Memo::set_text(std::string text) {
     selection_anchor_.reset();
     undo_stack_.clear();
     dragging_selection_ = false;
+    set_valid(true);
     on_resized();
     ensure_cursor_visible();
+    invalidate();
+}
+
+void Memo::set_valid(bool valid) noexcept {
+    if (valid == valid_) return;
+    valid_ = valid;
     invalidate();
 }
 
@@ -150,6 +158,7 @@ MemoPosition Memo::next_word(MemoPosition from) const noexcept {
 }
 
 void Memo::record_undo_state() {
+    set_valid(true);
     if (undo_stack_.size() == kMaxUndoDepth) undo_stack_.erase(undo_stack_.begin());
     undo_stack_.push_back(EditState{lines_, cursor_, selection_anchor_});
 }
@@ -162,6 +171,7 @@ bool Memo::undo() {
     cursor_ = state.cursor;
     selection_anchor_ = state.selection_anchor;
     dragging_selection_ = false;
+    set_valid(true);
     on_resized();
     ensure_cursor_visible();
     invalidate();
@@ -611,7 +621,7 @@ void Memo::on_focus(const FocusEvent& event) {
 }
 
 void Memo::draw(scene::Painter& painter) {
-    const Style base = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
+    const Style base = context().theme->resolve(!valid_ ? invalid_role_ : (has_focus_ ? focused_role_ : normal_role_));
     const int visible_width = viewport_width_;
     const std::vector<VisualRow> rows = visual_rows(visible_width);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;

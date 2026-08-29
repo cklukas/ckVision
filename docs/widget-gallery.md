@@ -928,8 +928,9 @@ a place to add, remove or activate windows — post that work instead.
 
 Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator
 record used to materialize a descriptor dialog. `kind` selects the control:
-`Text` (an `InputLine`, the default), `Check` (a checkbox carrying the label
-as its own text) or `Note` (text the form states rather than asks). See
+`Text` (an `InputLine`, the default), `Memo` (a multi-line text field whose
+`memo_rows` controls its requested visible height), `Check` (a checkbox carrying
+the label as its own text) or `Note` (text the form states rather than asks). See
 [Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
 
 ## ButtonDescriptor

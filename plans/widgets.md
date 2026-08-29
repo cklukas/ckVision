@@ -19,7 +19,7 @@ superseded below.
 |---|---|---|
 | Desktop | Background fill, owns z-ordered windows, tile/cascade, window cycling, select-by-number, window-list dialog | Background drawing hook; typed snapshot/restore of layout (geometry, z-order, zoom) |
 | Window | Frame (active/inactive styles), title, close control, zoom/restore, move by title-bar drag or keyboard mode, resize by grip/edges or keyboard mode, min/max size limits, **shadow**, vetoable close request on every close path | Backing store (drag never repaints content); double/single/rounded frame sets; optional maximize-to-desktop |
-| Dialog | Explicit modal and modeless presentation, buttons that state their role (accept / dismiss / neutral — D-050), default button (Enter), Esc-cancel, accept-time validation with veto (a failing control blocks accept and takes focus), correct initial focus by construction, focus restore on close | Typed non-blocking completion handle; declarative descriptor construction (labels auto-bind mnemonics to controls); resizable dialogs with layout |
+| Dialog | Explicit modal and modeless presentation, buttons that state their role (accept / dismiss / neutral — D-050), default button (Enter), Esc-cancel, accept-time validation with veto (a failing control blocks accept and takes focus), correct initial focus by construction, focus restore on close | Typed non-blocking completion handle; declarative descriptor construction (labels auto-bind mnemonics to controls, including multi-line Memo fields); resizable dialogs with layout |
 | Message boxes | Info/warning/error/confirm with standard button sets | Localizable via string table; theme-role styled severity accents |
 
 ## Menu system (M5)
@@ -49,7 +49,7 @@ widgets and dialogs, never per-widget state.
 | Static text | Styled, wrapped | Alignment options |
 | Button | Default/normal, mnemonic, pressed feedback | Repeat-on-hold option |
 | Input line | Editing keys, selection, clipboard, overwrite/insert, scrolling content, validators, input masks, password echo, history cycling | Grapheme-correct editing (never splits clusters); undo within field; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word navigation/deletion, and Shift selection semantics |
-| Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo | Word wrap toggle; grapheme-correct navigation; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word/document navigation/deletion, and Shift selection semantics |
+| Memo | Multi-line editing, scrolling, selection, clipboard, bounded undo; descriptor-form field with accept-time validation | Word wrap toggle; grapheme-correct navigation; shared Ctrl/C/V/X, Ctrl+Insert/Shift+Insert, Ctrl word/document navigation/deletion, and Shift selection semantics |
 | Check group | Multi-select, arrow navigation, mnemonics | Tri-state option |
 | Radio group | Exclusive select, arrow navigation, mnemonics | — |
 | List view | Provider-backed scrolling, stable single/multi selection, keyboard search, injected-Clock double-click activate | Application-defined row presentation and asynchronous cache policy; provider contract in D-043 |

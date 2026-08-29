@@ -102,6 +102,7 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.table_header = registry.intern("ckv.table.header", Style{kWhite, kLightGray, Attr{}});
     r.memo_normal = registry.intern("ckv.memo.normal", Style{kBlack, kWhite, Attr{}});
     r.memo_focused = registry.intern("ckv.memo.focused", Style{kBlack, kWhite, Attr::Underline});
+    r.memo_invalid = registry.intern("ckv.memo.invalid", Style{kWhite, kRed, Attr::Bold});
     // Choice groups are a selection surface, not an action button. Keeping
     // their cyan fill distinct from the green button face preserves the
     // classic visual hierarchy in dense preference dialogs.
@@ -187,6 +188,7 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.table_header, Style{kWhite, kLightGray, Attr{}});
     theme.set(roles.memo_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.memo_focused, Style{kBlack, kWhite, Attr::Underline});
+    theme.set(roles.memo_invalid, Style{kWhite, kRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kBlack, kCyan, Attr{}});
     theme.set(roles.option_focused, Style{kWhite, kCyan, Attr{}});
     theme.set(roles.scrollbar_track, Style{kLightCyan, kBlue, Attr{}});
@@ -291,6 +293,7 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.table_header, Style{kDarkFg, kDarkPanel, Attr{}});
     theme.set(roles.memo_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
+    theme.set(roles.memo_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.option_focused, Style{kMonoFg, kDarkAccent, Attr::Reverse});
     // The trough is a colour, not a texture: a blank cell in a shade set
@@ -361,6 +364,7 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.table_header, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.memo_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
+    theme.set(roles.memo_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
     theme.set(roles.option_normal, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.option_focused, Style{kLightFg, kLightAccent, Attr::Reverse});
     theme.set(roles.scrollbar_track, Style{kLightFg, kLightFocus, Attr{}});
@@ -432,6 +436,7 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.table_header, Style{kMonoFg, kMonoBg, Attr::Bold});
     theme.set(roles.memo_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
+    theme.set(roles.memo_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
     theme.set(roles.option_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.option_focused, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.scrollbar_track, Style{kMonoFg, kMonoGray, Attr{}});
@@ -477,6 +482,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
         roles.list_selected_inactive,
         roles.table_header,          roles.memo_normal,              roles.memo_focused,
+        roles.memo_invalid,
         roles.option_normal,         roles.option_focused,           roles.scrollbar_track,
         roles.scrollbar_thumb,       roles.image_fallback,           roles.canvas_fallback,
         roles.text_view_text,        roles.flow_view_text,           roles.status_line_normal,
@@ -520,6 +526,7 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     theme.set(roles.list_selected_inactive, Style{white, black, Attr::Bold});
     theme.set(roles.table_header, Style{black, white, Attr::Bold});
     theme.set(roles.memo_focused, Style{white, black, Attr::Underline});
+    theme.set(roles.memo_invalid, Style{black, white, Attr::Bold});
     theme.set(roles.option_focused, selected);
     // Two colours only: the trough takes the inverted surface so it is
     // visible at all, and the thumb draws onto it in the same pair.
