@@ -55,8 +55,12 @@ complete run of layout rows. Its fallback is always painted before its raster
 region is registered through `Painter::draw_image`.
 
 The widget owns focusable link navigation and ordinary keyboard/mouse
-scrolling. Clients own semantic parsing, streaming append policy, image
-creation, link actions, and any message/document chrome.
+scrolling. Clients own semantic parsing, streaming update policy, image
+creation, link actions, and any message/document chrome. A client may replace
+one numbered block when its semantic document changes in place; out-of-range
+replacement is rejected without changing the document. The view preserves
+block order and ordinary scroll position (subject to its normal range clamp),
+then rebuilds derived layout and link navigation from the new value.
 
 ## Required evidence
 

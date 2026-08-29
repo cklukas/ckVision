@@ -55,6 +55,10 @@ public:
     void set_document(FlowDocument document);
     const FlowDocument& document() const noexcept { return document_; }
     void append_block(FlowBlock block);
+    // Replaces one existing application-owned block. A stale index is rejected
+    // without altering the document; successful replacement invalidates
+    // derived layout and link selection.
+    bool replace_block(std::size_t index, FlowBlock block);
 
     int line_count() const;
     int top_line() const noexcept;

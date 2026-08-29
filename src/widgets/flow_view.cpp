@@ -49,6 +49,14 @@ void FlowView::append_block(FlowBlock block) {
     invalidate_layout();
 }
 
+bool FlowView::replace_block(std::size_t index, FlowBlock block) {
+    if (index >= document_.blocks.size()) return false;
+    document_.blocks[index] = std::move(block);
+    current_link_.reset();
+    invalidate_layout();
+    return true;
+}
+
 void FlowView::invalidate_layout() {
     layout_width_ = -1;
     if (scrollbar_ != nullptr) on_resized();
