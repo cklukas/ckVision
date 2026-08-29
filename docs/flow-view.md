@@ -39,9 +39,12 @@ preview.on_link_activate = [](const std::string& target) { /* client action */ }
 
 When an application-owned semantic record changes, replace only its existing
 flow block instead of rebuilding the document value. A successful replacement
-keeps the block order and ordinary scroll position, then rebuilds the affected
-derived layout and link navigation. Replacing an out-of-range index returns
-`false` and leaves the document unchanged.
+keeps the block order and ordinary scroll position, then rebuilds derived
+layout and link navigation. Replacing the final block after the current layout
+has been realized reflows only that block; other replacements reflow the
+document because the changed height or links can affect following content.
+Replacing an out-of-range index returns `false` and leaves the document
+unchanged.
 
 ```cpp
 const bool replaced = preview.replace_block(1, widgets::FlowBlock{{

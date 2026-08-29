@@ -60,7 +60,9 @@ creation, link actions, and any message/document chrome. A client may replace
 one numbered block when its semantic document changes in place; out-of-range
 replacement is rejected without changing the document. The view preserves
 block order and ordinary scroll position (subject to its normal range clamp),
-then rebuilds derived layout and link navigation from the new value.
+then rebuilds derived layout and link navigation from the new value. Replacing
+the final block after a layout has been realized reflows only that block; a
+replacement before following blocks correctly rebuilds their dependent layout.
 
 ## Required evidence
 
