@@ -760,4 +760,6 @@ layouts (one interface), custom themes and schemes, custom terminal
 backends (implement `Terminal`), event filters at application and window
 scope, and command providers with allocated id ranges (host applications
 map their own command/config systems onto the registry — this is how any
-host application integrates ckVision without ckVision knowing it exists).
+host application integrates ckVision without ckVision knowing it exists),
+and an opt-in `TextEditor` newline handler for application-owned semantic
+editing rules.

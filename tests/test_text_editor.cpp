@@ -65,6 +65,31 @@ CK_TEST(text_editor_backspace_and_undo_operate_on_document_transactions) {
     CK_CHECK(document->text() == "abc");
 }
 
+CK_TEST(text_editor_offers_an_opt_in_newline_handler_with_a_safe_default_fallback) {
+    auto document = std::make_shared<EditorDocument>("- item");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 30, 4});
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::End, Modifier::None, ""}}));
+
+    std::size_t handled = 0U;
+    editor.set_newline_handler([&](TextEditor& callback_editor) {
+        ++handled;
+        auto transaction = document->transaction();
+        transaction.replace({document->end(), document->end()}, "\n- ");
+        if (!document->commit(std::move(transaction))) return false;
+        const auto cursor = document->end();
+        return callback_editor.set_selection({cursor, cursor});
+    });
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(handled == 1U);
+    CK_CHECK(document->text() == "- item\n- ");
+    CK_CHECK(editor.status().line == 2U && editor.status().column == 3U);
+
+    editor.set_newline_handler([](TextEditor&) { return false; });
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(document->text() == "- item\n- \n");
+}
+
 CK_TEST(text_editor_overwrite_replaces_complete_graphemes_without_crossing_a_line) {
     auto document = std::make_shared<EditorDocument>("a🙂b\ncd");
     TextEditor editor(document);

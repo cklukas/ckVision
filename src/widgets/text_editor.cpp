@@ -746,7 +746,10 @@ bool TextEditor::on_key(const KeyEvent& event) {
         }
         case Key::Backspace: return control ? erase_backward_word() : erase_backward();
         case Key::Delete: return control ? erase_forward_word() : erase_forward();
-        case Key::Enter: return replace_selection("\n");
+        case Key::Enter:
+            if (read_only_) return false;
+            if (newline_handler_ && newline_handler_(*this)) return true;
+            return replace_selection("\n");
         // Through set_overwrite, so that the mode reaches the status observers
         // with the keystroke that changed it: a toggle that only invalidated
         // left the frame reading INS until the next cursor move republished it.
