@@ -31,6 +31,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -41,6 +42,14 @@
 
 using namespace ckv;
 using namespace ckv::term;
+
+namespace ckv::term {
+// Internal POSIX deadline conversion, kept at namespace scope in the owning
+// translation unit so this deterministic contract test need not infer a
+// poll(2) timeout from scheduler timing.
+int poll_timeout_milliseconds(std::int64_t now_nanos,
+                              std::int64_t deadline_nanos) noexcept;
+}  // namespace ckv::term
 
 namespace {
 
@@ -303,6 +312,16 @@ std::size_t count_occurrences(std::string_view haystack, std::string_view needle
 }
 
 }  // namespace
+
+CK_TEST(posix_poll_rounds_positive_sub_millisecond_deadlines_up_instead_of_spinning) {
+    CK_CHECK(poll_timeout_milliseconds(1'000, 1'001) == 1);
+    CK_CHECK(poll_timeout_milliseconds(1'000, 1'000'999) == 1);
+    CK_CHECK(poll_timeout_milliseconds(1'000, 1'001'000) == 1);
+    CK_CHECK(poll_timeout_milliseconds(1'000, 1'001'001) == 2);
+    CK_CHECK(poll_timeout_milliseconds(1'000, 999) == 0);
+    CK_CHECK(poll_timeout_milliseconds(
+                 1'000, std::numeric_limits<std::int64_t>::max()) == -1);
+}
 
 CK_TEST(construction_enters_alt_screen_and_raw_mode_sequences) {
     PtyChild child = spawn_pty_child_until_output_acknowledged([](int slave_fd, int acknowledge_fd) {
@@ -1744,6 +1763,11 @@ CK_TEST(callback_failure_restores_every_terminal_state_before_emitting_its_diagn
         ui::Application app(term, clock);
         auto* view = static_cast<ThrowingKeyProbe*>(app.root().add_child(std::make_unique<ThrowingKeyProbe>()));
         app.set_focus(view);
+        // The initial frame is known work and is intentionally presented
+        // without waiting. Enter the long idle poll only after that work has
+        // been delivered, so the parent can deterministically inject the key
+        // into an actually blocked application.
+        app.step(clock.now_nanos());
         app.step(clock.now_nanos() + 2'000'000'000LL);
     }, true);
     ::usleep(100'000);  // let the child enter its terminal poll before input arrives
@@ -2543,6 +2567,12 @@ CK_TEST(two_applications_on_separate_ptys_keep_wake_and_quit_isolated) {
             second_probe->set_focus_policy(ui::FocusPolicy::TabStop);
             first.set_focus(first_probe);
             second.set_focus(second_probe);
+
+            // Known dirty work returns immediately by contract. Establish a
+            // genuinely dormant state before testing that each terminal's
+            // wake channel interrupts only its own blocked step.
+            first.step(first_clock.now_nanos());
+            second.step(second_clock.now_nanos());
 
             std::atomic<bool> second_step_returned = false;
             std::thread first_step([&] { first.step(first_clock.now_nanos() + 2'000'000'000LL); });

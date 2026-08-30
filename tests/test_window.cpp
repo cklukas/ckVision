@@ -680,6 +680,28 @@ CK_TEST(set_role_override_called_before_attachment_is_not_overwritten_by_on_atta
     CK_CHECK(s.at(Point{0, 0}).style() == f.theme.resolve(f.roles.dialog_frame));
 }
 
+CK_TEST(chrome_background_override_recolors_frame_title_and_interior_without_losing_theme_text) {
+    Fixture f;
+    Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    auto w = make_window(f, "DOS");
+    w->set_bounds(Rect{0, 0, 20, 5});
+    w->set_active(true);
+    w->set_chrome_background_override(ckv::Color::indexed(0));
+    Painter painter(s, Rect{0, 0, 20, 5});
+    w->draw(painter);
+
+    const ckv::Style themed_frame = f.theme.resolve(f.roles.window_frame_active);
+    CK_CHECK(s.at(Point{0, 0}).style().fg == themed_frame.fg);
+    CK_CHECK(s.at(Point{0, 0}).style().attrs == themed_frame.attrs);
+    CK_CHECK(s.at(Point{0, 0}).style().bg == ckv::Color::indexed(0));
+    CK_CHECK(s.at(Point{10, 2}).style().bg == ckv::Color::indexed(0));
+    CK_CHECK(w->chrome_background_override() == ckv::Color::indexed(0));
+
+    w->set_chrome_background_override(std::nullopt);
+    w->draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).style() == themed_frame);
+}
+
 CK_TEST(the_close_control_draws_a_filled_square_glyph) {
     Fixture f;
     Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));

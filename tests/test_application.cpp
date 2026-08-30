@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -123,6 +124,33 @@ private:
     bool polling_ = false;
     bool woken_ = false;
     int wake_count_ = 0;
+};
+
+class DeadlineRecordingTerminal final : public ckv::term::Terminal {
+public:
+    explicit DeadlineRecordingTerminal(
+        ckv::term::Capabilities capabilities = ckv::term::baseline_capabilities())
+        : capabilities_(capabilities) {}
+
+    ckv::term::Capabilities capabilities() const noexcept override {
+        return capabilities_;
+    }
+    ckv::Size size() const noexcept override { return ckv::Size{80, 24}; }
+
+    std::vector<ckv::term::TerminalEvent> poll(std::int64_t deadline_nanos) override {
+        deadlines.push_back(deadline_nanos);
+        return {};
+    }
+
+    void write(std::string_view) override {}
+    void set_title(std::string_view) override {}
+    void bell() override {}
+    void write_clipboard(std::string_view) override {}
+
+    std::vector<std::int64_t> deadlines;
+
+private:
+    ckv::term::Capabilities capabilities_;
 };
 
 class ForwardingDiagnostics final : public ckv::DiagnosticsSink {
@@ -1036,6 +1064,28 @@ CK_TEST(a_repeating_timer_fires_again_after_each_interval) {
     CK_CHECK(fired == 2);
 }
 
+CK_TEST(a_late_repeating_timer_coalesces_missed_ticks_and_preserves_its_phase) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    int fired = 0;
+    app.start_timer(100, true, [&] { ++fired; });
+
+    clock.advance(1'050);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(fired == 1);
+    CK_CHECK(app.next_timer_deadline_nanos() == std::optional<std::int64_t>{1'100});
+
+    // The delayed loop delivers one current-state notification, never ten
+    // historical callbacks through ten immediately-due follow-up steps.
+    CK_CHECK(!app.step(clock.now_nanos()));
+    CK_CHECK(fired == 1);
+
+    clock.advance(50);
+    CK_CHECK(app.step(clock.now_nanos()));
+    CK_CHECK(fired == 2);
+}
+
 CK_TEST(cancel_timer_prevents_a_future_fire) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
@@ -1124,6 +1174,56 @@ CK_TEST(run_returns_immediately_without_stepping_if_quit_was_already_requested) 
     app.request_quit();
     app.run();  // must not block, poll, or touch signal disposition beyond install/restore
     CK_CHECK(true);  // reaching this line at all is the assertion
+}
+
+CK_TEST(run_until_uses_no_periodic_deadline_when_the_application_is_dormant) {
+    DeadlineRecordingTerminal term;
+    ManualClock clock(12'345);
+    Application app(term, clock);
+    // Present the initially dirty tree so the next turn is genuinely idle.
+    app.step(clock.now_nanos());
+    term.deadlines.clear();
+
+    int checks = 0;
+    const bool finished = app.run_until([&] { return ++checks == 2; });
+
+    CK_CHECK(finished);
+    CK_CHECK(term.deadlines.size() == 1U);
+    CK_CHECK(term.deadlines.front() == std::numeric_limits<std::int64_t>::max());
+}
+
+CK_TEST(known_dirty_work_is_presented_before_an_indefinite_input_wait) {
+    DeadlineRecordingTerminal term;
+    ManualClock clock(12'345);
+    Application app(term, clock);
+    app.step(clock.now_nanos());
+    term.deadlines.clear();
+
+    app.invalidate_all();
+    app.step(std::numeric_limits<std::int64_t>::max());
+
+    CK_CHECK(term.deadlines.size() == 1U);
+    CK_CHECK(term.deadlines.front() == clock.now_nanos());
+}
+
+CK_TEST(an_external_run_until_completion_wakes_the_dormant_loop_explicitly) {
+    WaitableTerminal term;
+    ManualClock clock;
+    Application app(term, clock);
+    std::atomic<bool> done{false};
+    std::atomic<bool> finished{false};
+
+    std::thread run_thread([&] {
+        finished.store(app.run_until([&] { return done.load(std::memory_order_acquire); }),
+                       std::memory_order_release);
+    });
+    CK_CHECK(term.wait_until_polling());
+    done.store(true, std::memory_order_release);
+    app.wake();
+    run_thread.join();
+
+    CK_CHECK(finished.load(std::memory_order_acquire));
+    CK_CHECK(term.wake_count() == 1);
 }
 
 CK_TEST(run_until_stops_and_returns_true_once_the_predicate_holds) {
@@ -1844,6 +1944,28 @@ CK_TEST(a_presented_frame_is_outstanding_until_the_terminal_answers_for_it) {
     app.step(clock.now_nanos());
     CK_CHECK(app.frames_awaiting_terminal() == 0U);
     CK_CHECK(app.last_terminal_round_trip_nanos() == 4'000'000);
+}
+
+CK_TEST(raster_frame_completion_patience_is_an_explicit_application_wait_deadline) {
+    DeadlineRecordingTerminal term{ckv::term::headless_sixel_profile()};
+    ManualClock clock(10'000);
+    Application app(term, clock);
+    (void)ckv::ui::intern_standard_roles(app.roles());
+    app.set_frame_completion_tracking(true);
+
+    auto image = std::make_shared<ckv::Image>(4, 4);
+    image->set_pixel(0, 0, ckv::Image::Rgba{200, 120, 40, 255});
+    auto* view = app.root().make<ckv::widgets::ImageView>();
+    view->set_bounds(ckv::Rect{0, 0, 2, 2});
+    view->set_image(image);
+    app.step(clock.now_nanos());
+    term.deadlines.clear();
+
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+    app.step(std::numeric_limits<std::int64_t>::max());
+    CK_CHECK(term.deadlines.size() == 1U);
+    CK_CHECK(term.deadlines.front() ==
+             10'000 + ckv::ui::kFrameCompletionTimeoutNanos);
 }
 
 CK_TEST(an_unanswered_frame_is_written_off_rather_than_waited_on_forever) {

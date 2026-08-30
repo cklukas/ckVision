@@ -621,8 +621,12 @@ void Window::draw(scene::Painter& painter) {
     const ui::RoleId frame_role = active_ ? frame_active_role_ : frame_inactive_role_;
     const ui::RoleId title_role = active_ ? title_active_role_ : title_inactive_role_;
     const ui::Theme& theme = *context().theme;
-    const Style frame_style = theme.resolve(frame_role);
-    const Style title_style = theme.resolve(title_role);
+    Style frame_style = theme.resolve(frame_role);
+    Style title_style = theme.resolve(title_role);
+    if (chrome_background_override_) {
+        frame_style.bg = *chrome_background_override_;
+        title_style.bg = *chrome_background_override_;
+    }
     // A control contributes its foreground/attributes only. Its background
     // must remain the active or inactive frame beneath it, including when a
     // dialog overrides the window's chrome roles.

@@ -239,3 +239,124 @@ CK_TEST(virtual_display_svg_has_no_opaque_raster_rects_for_a_cell_only_frame) {
     CK_CHECK(raster_group != std::string::npos);
     CK_CHECK(svg.find("<image", raster_group) == std::string::npos);
 }
+
+// The cut-out (FrameSvgOptions::crop): the widget gallery's figures are
+// sub-rectangles of a full composed screen, so what the crop leaves out has
+// to be genuinely absent — not merely outside a viewBox, where it would
+// still be in the file and still be found by a text search.
+
+CK_TEST(a_crop_sizes_the_svg_to_the_requested_cells_not_the_surface) {
+    Surface surface(Size{20, 10});
+    FrameSvgOptions options;
+    options.cell_width_px = 8;
+    options.cell_height_px = 16;
+    options.crop = ckv::Rect{4, 2, 5, 3};
+    const std::string svg = render_frame_svg(surface.view(), options);
+    CK_CHECK(svg.find("width=\"40\"") != std::string::npos);
+    CK_CHECK(svg.find("height=\"48\"") != std::string::npos);
+    CK_CHECK(svg.find("viewBox=\"0 0 40 48\"") != std::string::npos);
+}
+
+CK_TEST(a_crop_omits_glyphs_outside_it_rather_than_hiding_them) {
+    Surface surface(Size{6, 2});
+    surface.set_cell(Point{0, 0}, Cell::from_grapheme("A", Style{}));  // outside
+    surface.set_cell(Point{4, 1}, Cell::from_grapheme("Z", Style{}));  // inside
+    FrameSvgOptions options;
+    options.crop = ckv::Rect{3, 1, 3, 1};
+    const std::string svg = render_frame_svg(surface.view(), options);
+    CK_CHECK(svg.find(">Z</text>") != std::string::npos);
+    CK_CHECK(svg.find(">A</text>") == std::string::npos);
+}
+
+CK_TEST(a_cropped_glyph_is_positioned_relative_to_the_cut_outs_own_origin) {
+    Surface surface(Size{6, 2});
+    surface.set_cell(Point{4, 1}, Cell::from_grapheme("Z", Style{}));
+    FrameSvgOptions options;
+    options.cell_width_px = 10;
+    options.cell_height_px = 20;
+    options.crop = ckv::Rect{3, 1, 3, 1};
+    const std::string svg = render_frame_svg(surface.view(), options);
+    // Column 4 is the second cell of a cut-out starting at column 3, so it
+    // is drawn at x=10 rather than at its screen x of 40.
+    CK_CHECK(svg.find("<text x=\"10\" ") != std::string::npos);
+    CK_CHECK(svg.find("<text x=\"40\" ") == std::string::npos);
+}
+
+CK_TEST(a_cropped_background_run_stops_at_the_cut_outs_edge) {
+    const Style panel{Color{}, Color::rgb(90, 91, 92), Attr{}};
+    Surface surface(Size{8, 1}, Cell::from_grapheme(" ", panel));
+    FrameSvgOptions options;
+    options.cell_width_px = 9;
+    options.cell_height_px = 18;
+    options.crop = ckv::Rect{2, 0, 3, 1};
+    const std::string svg = render_frame_svg(surface.view(), options);
+    // Three cells of panel, not eight: the run merger works in cut-out
+    // space, so a background that continues past the edge is still cut.
+    CK_CHECK(svg.find("width=\"27\" height=\"18\" fill=\"#5a5b5c\"") != std::string::npos);
+    CK_CHECK(svg.find("width=\"72\"") == std::string::npos);
+}
+
+CK_TEST(an_empty_crop_renders_the_whole_surface) {
+    Surface surface(Size{4, 2});
+    surface.set_cell(Point{0, 0}, Cell::from_grapheme("A", Style{}));
+    FrameSvgOptions options;
+    options.cell_width_px = 9;
+    options.cell_height_px = 18;
+    options.crop = ckv::Rect{};  // the default every existing caller uses
+    const std::string svg = render_frame_svg(surface.view(), options);
+    CK_CHECK(svg.find("viewBox=\"0 0 36 36\"") != std::string::npos);
+    CK_CHECK(svg.find(">A</text>") != std::string::npos);
+}
+
+CK_TEST(a_crop_entirely_off_the_surface_renders_the_whole_surface_not_nothing) {
+    Surface surface(Size{4, 2});
+    surface.set_cell(Point{0, 0}, Cell::from_grapheme("A", Style{}));
+    FrameSvgOptions options;
+    options.cell_width_px = 9;
+    options.cell_height_px = 18;
+    options.crop = ckv::Rect{40, 40, 5, 5};
+    const std::string svg = render_frame_svg(surface.view(), options);
+    // A zero-size SVG is a broken figure on a published page; the whole
+    // screen at least still shows what was composed.
+    CK_CHECK(svg.find("viewBox=\"0 0 36 36\"") != std::string::npos);
+    CK_CHECK(svg.find(">A</text>") != std::string::npos);
+}
+
+CK_TEST(a_crop_is_clamped_to_the_surface_rather_than_reading_past_it) {
+    Surface surface(Size{4, 2});
+    surface.set_cell(Point{3, 1}, Cell::from_grapheme("Z", Style{}));
+    FrameSvgOptions options;
+    options.cell_width_px = 9;
+    options.cell_height_px = 18;
+    options.crop = ckv::Rect{2, 1, 99, 99};
+    const std::string svg = render_frame_svg(surface.view(), options);
+    CK_CHECK(svg.find("viewBox=\"0 0 18 18\"") != std::string::npos);
+    CK_CHECK(svg.find(">Z</text>") != std::string::npos);
+}
+
+CK_TEST(a_crop_clips_the_raster_plane_to_its_own_pixels) {
+    VirtualDisplay display(Size{4, 1}, Size{4, 6});
+    // Sixteen sixel columns: four cells of picture, so a two-cell cut-out
+    // starting at cell 2 contains the right-hand half of it.
+    CK_CHECK(display.write("\x1B[1;1H\x1BPq#0;2;100;0;0~~~~~~~~~~~~~~~~\x1B\\"));
+    FrameSvgOptions options;
+    options.crop = ckv::Rect{2, 0, 2, 1};
+    const std::string svg = render_virtual_display_svg(display, options);
+    // Eight pixels of picture, drawn at the cut-out's own left edge rather
+    // than at its screen x of 8.
+    CK_CHECK(svg.find("<image x=\"0\" y=\"0\" width=\"8\"") != std::string::npos);
+}
+
+CK_TEST(a_crop_that_misses_the_raster_entirely_emits_no_image) {
+    VirtualDisplay display(Size{4, 1}, Size{4, 6});
+    CK_CHECK(display.write("\x1B[1;1H\x1BPq#0;2;100;0;0~~~~\x1B\\"));  // one cell of picture
+    FrameSvgOptions options;
+    options.crop = ckv::Rect{2, 0, 2, 1};
+    const std::string svg = render_virtual_display_svg(display, options);
+    const std::size_t raster_group = svg.find("id=\"raster-plane\"");
+    CK_CHECK(raster_group != std::string::npos);
+    // Not merely positioned off-view: absent. A cut-out that carried the
+    // whole screen's pixels and relied on the viewport to hide them would
+    // pass every geometric check above and still ship the wrong bytes.
+    CK_CHECK(svg.find("<image", raster_group) == std::string::npos);
+}

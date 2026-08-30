@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="153" height="126" viewBox="0 0 153 126">
+<rect x="0" y="0" width="153" height="126" fill="#000000"/>
+<style>text{font-family:ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace;font-size:15px}</style>
+<defs>
+<pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
+</pattern>
+</defs>
+<rect x="0" y="0" width="153" height="126" fill="#c8c8c8"/>
+<rect x="0" y="0" width="153" height="90" fill="url(#dither1-0000aa)"/>
+<g data-box-drawing="double">
+<path d="M -0.5 99 L 4.5 99 L 9.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M -0.5 99 L 4.5 99 L 9.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 8.5 99 L 13.5 99 L 18.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 8.5 99 L 13.5 99 L 18.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 17.5 99 L 22.5 99 L 27.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 17.5 99 L 22.5 99 L 27.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 26.5 99 L 31.5 99 L 36.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 26.5 99 L 31.5 99 L 36.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 35.5 99 L 40.5 99 L 45.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 35.5 99 L 40.5 99 L 45.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="double">
+<path d="M 44.5 99 L 49.5 99 L 54.5 99" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M 44.5 99 L 49.5 99 L 54.5 99" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<text x="63" y="104" xml:space="preserve" fill="#ffffff">B</text>
+<text x="72" y="104" xml:space="preserve" fill="#ffffff">u</text>
+<text x="81" y="104" xml:space="preserve" fill="#ffffff">i</text>
+<text x="90" y="104" xml:space="preserve" fill="#ffffff">l</text>
+<text x="99" y="104" xml:space="preserve" fill="#ffffff">d</text>
+<text x="117" y="104" xml:space="preserve" fill="#ffffff">o</text>
+<text x="126" y="104" xml:space="preserve" fill="#ffffff">p</text>
+<text x="135" y="104" xml:space="preserve" fill="#ffffff">t</text>
+<text x="144" y="104" xml:space="preserve" fill="#ffffff">i</text>
+<g id="raster-plane">
+</g>
+</svg>

@@ -9,6 +9,17 @@ It takes the interaction grammar of the classic desktop-in-a-terminal
 applications of the early 1990s and rebuilds it on modern grounds: modern C++,
 modern terminals, modern library architecture.
 
+## Screenshots
+
+These deterministic SVG captures are rendered from the current shipped example
+applications through ckVision's own headless terminal and presentation pipeline.
+
+| Gallery and Sixel graphics | TODO application |
+|:---:|:---:|
+| ![Overlapping ckVision gallery windows with a Sixel colour grid](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision TODO application showing three task lanes](docs/generated/screenshots/todo-guided.svg) |
+| **Text editor** | **SysInfo benchmark comparison** |
+| ![The ckVision text editor displaying a syntax-highlighted YAML document](docs/generated/screenshots/editor-search.svg) | ![The ckVision SysInfo application comparing memory-bandwidth results](docs/generated/screenshots/sysinfo-benchmarks.svg) |
+
 ```cpp
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
@@ -121,6 +132,7 @@ documentation describes — they are the fastest way in.
 | `editor` | The document editor: profiles, search/replace, file workflow |
 | `terminal` | An embedded terminal in a window |
 | `workbench` | A larger multi-window application |
+| `sysinfo` | Injected host facts, cancellable benchmarks, charts, and reports |
 | `todo` | Persistent Kanban, editor notes, drag/drop, Boards, and conflict resolution |
 
 ## Documentation
@@ -135,7 +147,7 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [tutorial-hello.md](docs/tutorial-hello.md) | Complete Hello source, hierarchy, and walkthrough |
 | [object-model.md](docs/object-model.md) | Application/view/Desktop/window ownership, focus, events, painting |
 | [layout-guide.md](docs/layout-guide.md) | Choosing a layout container, and resize behavior |
-| [widget-gallery.md](docs/widget-gallery.md) | Every public widget with usage and screenshots |
+| [widget-gallery.md](docs/widget-gallery.md) | Every public type: a figure of the widget running, the compiled code that drew it, and what each setting does |
 | [dialogs-and-commands.md](docs/dialogs-and-commands.md) | Commands, dialogs, validation, focus restoration, wizards |
 | [standard-commands.md](docs/standard-commands.md) | The standard command identifiers |
 | [themes-and-rendering.md](docs/themes-and-rendering.md) | Theme roles and the render model |
@@ -152,6 +164,7 @@ Start with [getting started](docs/getting-started.md), then the complete
 | [api-index.md](docs/api-index.md) | Curated public-header index |
 | [example-apps.md](docs/example-apps.md) | What each example demonstrates and how it is tested |
 | [hello-example.md](docs/hello-example.md) | Hello verification appendix and golden evidence |
+| [sysinfo-example.md](docs/sysinfo-example.md) | Injected host facts, benchmark rules, charts, and reports |
 | [todo-example.md](docs/todo-example.md) | Complete TODO tour, architecture, persistence, keys, and evidence |
 | [golden-format.md](docs/golden-format.md) | The golden capture format |
 | [performance.md](docs/performance.md) | Allocation and cost gates, and the p99 procedure |

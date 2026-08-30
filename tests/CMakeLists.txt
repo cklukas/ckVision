@@ -34,7 +34,6 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_golden_hostile_content.cpp
     test_grid.cpp
     test_headless_terminal.cpp
-    test_hot_path_allocations.cpp
     test_help_viewer.cpp
     test_history.cpp
     test_image.cpp
@@ -100,6 +99,16 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_window.cpp
     test_window_list_dialog.cpp
     test_window_switcher_bar.cpp)
+
+# The allocation-budget suite deliberately replaces the process-wide global
+# new/delete family so it can count hot-path allocations. ThreadSanitizer
+# supplies the same replacements as part of its allocator interception and
+# the two implementations cannot coexist in one executable. Keep the budget
+# gate in every compatible configuration, and let the TSan lane concentrate
+# on the race instrumentation it is uniquely able to provide.
+if(NOT CKVISION_SANITIZE MATCHES "(^|,)thread(,|$)")
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_hot_path_allocations.cpp)
+endif()
 
 add_executable(cvision_tests ${CKVISION_PORTABLE_TEST_SOURCES} main.cpp)
 # Keep the test translation units' compile interface explicit even when the
@@ -357,6 +366,20 @@ if(TARGET capture_widget_gallery_screenshots)
     set_tests_properties(widget_gallery_visual_capture PROPERTIES LABELS "golden;visual;artifact" TIMEOUT 60)
 endif()
 
+# Each focused widget figure is published beside the compiled source region
+# that drew it. Regenerate all of them and compare bytes so the gallery cannot
+# keep an old rendering after widget behavior or capture setup changes.
+if(TARGET capture_widget_shots)
+    add_test(NAME widget_screenshot_freshness
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/widget-screenshots
+            -DCKVISION_WIDGET_CAPTURE=$<TARGET_FILE:capture_widget_shots>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_widget_screenshots.cmake)
+    set_tests_properties(widget_screenshot_freshness PROPERTIES
+        LABELS "golden;visual;documentation" TIMEOUT 60)
+endif()
+
 if(TARGET capture_gallery_screenshots)
     add_test(NAME gallery_visual_capture
         COMMAND capture_gallery_screenshots
@@ -394,6 +417,24 @@ if(TARGET capture_todo_screenshots)
                 ${CMAKE_BINARY_DIR}/test-artifacts/todo)
     set_tests_properties(todo_visual_capture PROPERTIES
         LABELS "golden;visual;artifact;todo" TIMEOUT 60)
+endif()
+
+# README figures are product claims, not decorative copies. Re-run the four
+# application capture paths and require the published SVG bytes to match, so a
+# UI change cannot leave the repository front page showing an older ckVision.
+if(TARGET capture_gallery_screenshots AND TARGET capture_editor_screenshots AND
+   TARGET capture_sysinfo_screenshots AND TARGET capture_todo_screenshots)
+    add_test(NAME readme_screenshot_freshness
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/readme-screenshots
+            -DCKVISION_GALLERY_CAPTURE=$<TARGET_FILE:capture_gallery_screenshots>
+            -DCKVISION_EDITOR_CAPTURE=$<TARGET_FILE:capture_editor_screenshots>
+            -DCKVISION_SYSINFO_CAPTURE=$<TARGET_FILE:capture_sysinfo_screenshots>
+            -DCKVISION_TODO_CAPTURE=$<TARGET_FILE:capture_todo_screenshots>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_readme_screenshots.cmake)
+    set_tests_properties(readme_screenshot_freshness PROPERTIES
+        LABELS "golden;visual;documentation" TIMEOUT 60)
 endif()
 
 if(TARGET capture_terminal_screenshots)
@@ -453,6 +494,14 @@ add_test(NAME doc_snippet_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/extract_snippets.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set_tests_properties(doc_snippet_check PROPERTIES LABELS "script;documentation" TIMEOUT 30)
+
+# The gallery's value-type field tables are generated from the struct
+# declarations; this fails when a field is added, renamed, retyped or
+# re-defaulted without the table following.
+add_test(NAME doc_field_tables
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/sync_field_tables.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(doc_field_tables PROPERTIES LABELS "script;documentation" TIMEOUT 30)
 
 add_test(NAME doc_widget_coverage
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_docs.py

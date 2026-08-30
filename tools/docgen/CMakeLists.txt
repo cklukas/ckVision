@@ -42,6 +42,22 @@ if(NOT TARGET docgen_frame_svg)
     endif()
 endif()
 
+# The per-widget figure set: one focused cut-out per public view, from
+# scenes that are also the gallery's compiled usage examples. Standalone
+# like capture_widget_gallery_screenshots — it drives public API only and
+# needs no example application.
+add_executable(capture_widget_shots
+    capture_widget_shots.cpp
+    widget_stage.cpp
+    widget_shots_controls.cpp
+    widget_shots_text.cpp
+    widget_shots_data.cpp
+    widget_shots_chrome.cpp
+    widget_shots_composite.cpp)
+target_link_libraries(capture_widget_shots PRIVATE docgen_frame_svg ckvision::cvision)
+target_include_directories(capture_widget_shots PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+ckvision_strict(capture_widget_shots)
+
 add_executable(capture_widget_gallery_screenshots capture_widget_gallery_screenshots.cpp)
 target_link_libraries(capture_widget_gallery_screenshots PRIVATE docgen_frame_svg ckvision::cvision)
 target_include_directories(capture_widget_gallery_screenshots PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

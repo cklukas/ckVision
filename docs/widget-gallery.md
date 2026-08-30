@@ -154,6 +154,32 @@ Header: `include/cvision/widgets/text_editor.hpp`. The dedicated shared-
 document editing view with keyboard/mouse selection, scrolling, gutter, syntax
 roles, and clipboard commands. It is not a `Memo` replacement; see [Editor](editor.md).
 
+![TextEditor with syntax highlighting, selection, and status](generated/screenshots/widget-texteditor.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_text.cpp" region="texteditor" -->
+```cpp
+widgets::SyntaxProfileRegistry profiles;
+widgets::register_standard_syntax_profiles(profiles);
+
+auto document = std::make_shared<widgets::EditorDocument>(
+    "{\n"
+    "  \"name\": \"ckvision\",\n"
+    "  \"version\": \"0.4.0\",\n"
+    "  \"headless\": true,\n"
+    "  \"widgets\": 51\n"
+    "}\n");
+
+auto editor = std::make_unique<widgets::TextEditor>(document, &profiles);
+editor->set_file_name("package.json");   // the profile detector reads this
+editor->set_show_line_numbers(true);
+editor->set_wrap_mode(widgets::WrapMode::None);
+editor->set_vertical_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
+editor->set_search_query(widgets::EditorSearchQuery{"ckvision", false, false});
+```
+<!-- /ckvision-snippet -->
+
 ## FileEditorController
 
 Header: `include/cvision/widgets/file_editor_controller.hpp`. Explicit safe
@@ -175,6 +201,25 @@ Header: `include/cvision/widgets/editor_window.hpp`. Optional reusable window
 composition owning a `TextEditor`, `FileEditorController`, dirty title, status
 overlay, and safe implicit close veto. Clients may instead compose the lower-
 level editor and controller themselves.
+
+![EditorWindow composition with editor content and window chrome](generated/screenshots/widget-editorwindow.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_text.cpp" region="editorwindow" -->
+```cpp
+static widgets::SyntaxProfileRegistry profiles;
+widgets::register_standard_syntax_profiles(profiles);
+
+auto window = std::make_unique<widgets::EditorWindow>(
+    "release.md", std::make_shared<widgets::EditorDocument>(), files, &profiles);
+window->set_bounds(Rect{14, 4, 52, 13});
+window->open("/notes/release.md");
+window->editor().set_show_line_numbers(true);
+widgets::EditorWindow* editor_window = stage.desktop().add<widgets::EditorWindow>(
+    std::move(window));
+```
+<!-- /ckvision-snippet -->
 
 ## ApplicationShell
 
@@ -203,11 +248,60 @@ shortcut duplicated elsewhere. Forms shows default and ordinary buttons. The
 classic metric is a ten-cell minimum footprint; use `set_minimum_width()` only
 to make a related button family deliberately wider.
 
+![Default, ordinary, and flat Button controls](generated/screenshots/widget-button.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="button" -->
+```cpp
+auto* save = content.make<widgets::Button>("&Save");
+save->set_bounds(Rect{2, 2, 12, 2});
+save->set_default(true);
+save->on_press = [] { /* run the save command */ };
+
+auto* cancel = content.make<widgets::Button>("&Cancel");
+cancel->set_bounds(Rect{16, 2, 12, 2});
+cancel->on_press = [] { /* dismiss */ };
+
+auto* step = content.make<widgets::Button>("+");
+step->set_flat(true);  // one row, no shadow, as wide as its label
+step->set_bounds(Rect{30, 2, 3, 1});
+```
+<!-- /ckvision-snippet -->
+
 ## Canvas
 
 Header: `include/cvision/widgets/canvas.hpp`. Use for deterministic client
 drawn raster content. Set bounds/cell metrics, install a draw callback, and
 use `on_click` for pointer interaction; see [Graphics](graphics.md).
+
+| Canvas with Sixel graphics | Canvas fallback without terminal graphics |
+| :---: | :---: |
+| ![Canvas with Sixel graphics](generated/screenshots/widget-canvas.svg) | ![Canvas fallback without terminal graphics](generated/screenshots/widget-canvas-no-graphics.svg) |
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="canvas" -->
+```cpp
+auto* canvas = content.make<widgets::Canvas>();
+canvas->set_bounds(Rect{1, 1, 30, 7});
+canvas->set_cell_metrics(stage.app().terminal_cell_pixels());
+canvas->set_pixel_size(30 * stage.app().terminal_cell_pixels().width,
+                       7 * stage.app().terminal_cell_pixels().height);
+canvas->set_draw_callback([](Image& image) {
+    for (int x = 0; x < image.width(); ++x) {
+        const double phase = 6.283 * x / image.width();
+        const int y = static_cast<int>((0.5 + 0.42 * std::sin(phase * 2)) * image.height());
+        for (int thickness = 0; thickness < 2; ++thickness)
+            image.set_pixel(x, std::min(image.height() - 1, y + thickness),
+                            Image::Rgba{80, 220, 160, 255});
+    }
+});
+canvas->set_fallback_painter([](scene::Painter& painter, Rect area) {
+    painter.draw_text(Point{0, area.height / 2}, "[no graphics: 2 Hz sine]", Style{});
+});
+```
+<!-- /ckvision-snippet -->
 
 ## ComboBox
 
@@ -222,6 +316,26 @@ place, so the control still works. When the dropdown is closed, `Editable`
 uses the standard text keymap (word/boundary navigation, Shift selection,
 Ctrl+C/X/V, Ctrl+Insert/Shift+Insert, and word deletion). Forms and Workbench
 show both modes.
+
+| Closed ComboBox controls | ComboBox with its PopupList open |
+| :---: | :---: |
+| ![Closed ComboBox controls](generated/screenshots/widget-combobox.svg) | ![ComboBox with its PopupList open](generated/screenshots/widget-combobox-open.svg) |
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="combobox" -->
+```cpp
+auto* country = content.make<widgets::ComboBox>(widgets::ComboBoxMode::PickOnly);
+country->set_bounds(Rect{12, 1, 20, 1});
+country->set_items({"Germany", "France", "Japan", "United States"});
+country->set_selected_index(0);
+
+auto* zone = content.make<widgets::ComboBox>(widgets::ComboBoxMode::Editable);
+zone->set_bounds(Rect{12, 3, 20, 1});
+zone->set_items({"Europe/Berlin", "Europe/Paris", "Asia/Tokyo"});
+zone->set_text("Europe/Berlin");
+```
+<!-- /ckvision-snippet -->
 
 ## CommandPresentation
 
@@ -241,6 +355,24 @@ rule and weekday it computes with are Gregorian, and that calendar began in
 October 1582 — a month it also cannot draw, since ten days were struck out of
 it — so 1583 is the first year it can state truthfully.
 
+![CalendarView month grid](generated/screenshots/widget-calendarview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="calendarview" -->
+```cpp
+auto* calendar = content.make<widgets::CalendarView>();
+calendar->set_bounds(Rect{1, 1, 28, 9});
+calendar->set_month(widgets::DateValue{2026, 8, 1});
+calendar->set_selected(widgets::DateValue{2026, 8, 19});
+calendar->set_today(widgets::DateValue{2026, 8, 9});
+calendar->set_marked_span(widgets::DateValue{2026, 8, 24}, widgets::DateValue{2026, 8, 28});
+calendar->set_first_weekday(widgets::Weekday::Monday);
+calendar->set_show_iso_week_numbers(true);
+calendar->on_select = [](widgets::DateValue day) { (void)day; };
+```
+<!-- /ckvision-snippet -->
+
 ## ClockView
 
 Header: `include/cvision/widgets/common_components.hpp`. A clock for a menu
@@ -256,6 +388,22 @@ the meridiem words are the host's to supply, as ckVision carries no locale
 data. `on_click` lets a clock open something — see CalendarDropdown — and
 `set_open()` draws it with the menu bar's own active role while that thing is
 showing, so it reads as a menu title rather than as a second kind of control.
+
+![ClockView displaying an injected time](generated/screenshots/widget-clockview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="clockview" -->
+```cpp
+auto* clock = content.make<widgets::ClockView>();
+clock->set_bounds(Rect{2, 1, 14, 1});
+clock->set_time_provider([] { return widgets::TimeValue{9, 41, 7}; });
+clock->set_show_seconds(true);
+clock->set_hour_format(widgets::HourFormat::TwelveHour);
+clock->set_meridiem_labels("AM", "PM");
+clock->on_click = [] { /* drop a calendar under it */ };
+```
+<!-- /ckvision-snippet -->
 
 ## CalendarDropdown
 
@@ -283,6 +431,20 @@ right edges aligned, the way a submenu hangs from the right end of a bar, and
 pulls it back inside the desktop rather than letting it run off the edge. It
 scopes input while it is up, so Tab walks its own three controls — days, month,
 year — and reaches nothing behind it.
+
+![CalendarDropdown with its calendar open](generated/screenshots/widget-calendardropdown.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="calendardropdown" -->
+```cpp
+widgets::CalendarDropdown* month =
+    widgets::show_calendar_dropdown(*anchor, stage.app(), stage.desktop());
+month->show_month(widgets::DateValue{2026, 8, 1});
+month->calendar().set_selected(widgets::DateValue{2026, 8, 19});
+month->calendar().on_select = [](widgets::DateValue day) { (void)day; };
+```
+<!-- /ckvision-snippet -->
 
 ## DateValue
 
@@ -312,11 +474,39 @@ carry the answer in the parallel `dates` vector and canonical text in
 `values`. Set `DialogDescriptor::help_context_key` to make every field and
 button inherit the form's contextual F1 topic.
 
+![DatePicker with a deterministic date](generated/screenshots/widget-datepicker.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="datepicker" -->
+```cpp
+auto* date = content.make<widgets::DatePicker>();
+date->set_bounds(Rect{12, 1, 13, 1});
+date->set_value(widgets::DateValue{2026, 8, 9});
+date->on_change = [](std::optional<widgets::DateValue> value) { (void)value; };
+```
+<!-- /ckvision-snippet -->
+
 ## TimePicker
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a compact
 time field. Arrow keys adjust the active component; the caller supplies and
 reads a `TimeValue`.
+
+![TimePicker in 24-hour format](generated/screenshots/widget-timepicker.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="timepicker" -->
+```cpp
+auto* time = content.make<widgets::TimePicker>();
+time->set_bounds(Rect{12, 3, 12, 1});
+time->set_value(widgets::TimeValue{14, 30, 0});
+time->set_show_seconds(true);
+time->set_24_hour(true);
+time->on_change = [](widgets::TimeValue value) { (void)value; };
+```
+<!-- /ckvision-snippet -->
 
 ## SpinBox
 
@@ -324,11 +514,41 @@ Header: `include/cvision/widgets/common_components.hpp`. Use for a small
 bounded integer. Set the range before setting the value; arrows and mouse
 controls change it in range.
 
+![SpinBox numeric input and step controls](generated/screenshots/widget-spinbox.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="spinbox" -->
+```cpp
+auto* speed = content.make<widgets::SpinBox>();
+speed->set_bounds(Rect{12, 3, 10, 1});
+speed->set_range(1, 16);  // set the range BEFORE the value
+speed->set_step(1);
+speed->set_value(4);
+speed->on_change = [](int value) { (void)value; };
+```
+<!-- /ckvision-snippet -->
+
 ## Slider
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a bounded
 continuous-looking value where a visual position is useful. Arrows and pointer
 input adjust the value; retain a textual value/label when precision matters.
+
+![Slider with a focused value](generated/screenshots/widget-slider.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="slider" -->
+```cpp
+auto* volume = content.make<widgets::Slider>();
+volume->set_bounds(Rect{12, 1, 26, 1});
+volume->set_range(0, 100);
+volume->set_step(5);
+volume->set_value(65);
+volume->on_change = [](int value) { (void)value; };
+```
+<!-- /ckvision-snippet -->
 
 ## SearchBox
 
@@ -336,11 +556,37 @@ Header: `include/cvision/widgets/common_components.hpp`. Use for a query field
 with search affordance. It owns query editing; the application decides how and
 when to execute the search.
 
+![SearchBox with query text](generated/screenshots/widget-searchbox.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="searchbox" -->
+```cpp
+auto* search = content.make<widgets::SearchBox>();
+search->set_bounds(Rect{1, 1, 34, 1});
+search->set_query("lovelace");
+search->on_change = [](const std::string& query) { (void)query; /* filter the model */ };
+search->on_clear = [] { /* show everything again */ };
+```
+<!-- /ckvision-snippet -->
+
 ## ToolBar
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to present a
 short list of registered commands near document content. It follows command
 enablement and executes the same handler as a menu/status item.
+
+![ToolBar command row](generated/screenshots/widget-toolbar.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="toolbar" -->
+```cpp
+auto* tools = content.make<widgets::ToolBar>();
+tools->set_bounds(Rect{0, 0, 44, 1});
+tools->set_commands({ids.open, ids.save, ids.print, ids.find});
+```
+<!-- /ckvision-snippet -->
 
 ## CommandPalette
 
@@ -350,11 +596,40 @@ scrollable result viewport, excludes framework-only commands, preserves
 mnemonics, and activates through the registry command path rather than a
 palette-only callback.
 
+![CommandPalette with filtered commands](generated/screenshots/widget-commandpalette.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="commandpalette" -->
+```cpp
+auto* palette = content.make<widgets::CommandPalette>();
+palette->set_bounds(Rect{1, 1, 40, 9});
+// An empty query offers everything the registry holds that is not
+// framework-only; typing narrows it, matching from the start of a
+// word rather than anywhere in the string.
+palette->set_query("");
+```
+<!-- /ckvision-snippet -->
+
 ## BreadcrumbBar
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to display a
 hierarchical location. It is a view in normal content chrome, not a replacement
 for a TreeView when the user needs expansion/navigation.
+
+![BreadcrumbBar path navigation](generated/screenshots/widget-breadcrumbbar.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="breadcrumbbar" -->
+```cpp
+auto* trail = content.make<widgets::BreadcrumbBar>();
+trail->set_bounds(Rect{1, 1, 40, 1});
+trail->set_segments({"ckvision", "include", "cvision", "widgets"});
+trail->set_separator(" > ");
+trail->on_activate = [](std::size_t index) { (void)index; /* jump to that level */ };
+```
+<!-- /ckvision-snippet -->
 
 ## PropertyItem
 
@@ -365,6 +640,24 @@ record consumed by PropertyInspector.
 
 Header: `include/cvision/widgets/common_components.hpp`. Use to inspect or
 edit a small named set of properties. Workbench shows the visual pattern.
+
+![PropertyInspector name and value rows](generated/screenshots/widget-propertyinspector.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="propertyinspector" -->
+```cpp
+auto* inspector = content.make<widgets::PropertyInspector>();
+inspector->set_bounds(Rect{1, 1, 32, 5});
+inspector->set_items({
+    widgets::PropertyItem{"Title", "Release notes", true},
+    widgets::PropertyItem{"Encoding", "UTF-8", false},
+    widgets::PropertyItem{"Read only", "no", true},
+    widgets::PropertyItem{"Lines", "1 284", false},
+});
+inspector->on_change = [](std::size_t index, std::string value) { (void)index; (void)value; };
+```
+<!-- /ckvision-snippet -->
 
 ## WizardPage
 
@@ -377,6 +670,24 @@ state-dependent Next policy.
 Header: `include/cvision/widgets/common_components.hpp`. Use a sequence of
 dialog-like pages with Back/Next. It enables Next only when the current page's
 predicate accepts; see [Dialogs](dialogs-and-commands.md#wizard-state-dependent-next).
+
+![Wizard page with navigation controls](generated/screenshots/widget-wizard.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="wizard" -->
+```cpp
+auto* wizard = content.make<widgets::Wizard>();
+wizard->set_bounds(Rect{1, 1, 40, 5});
+wizard->set_pages({
+    widgets::WizardPage{"Choose a name", [] { return name_given; }},
+    widgets::WizardPage{"Pick a template", [] { return true; }},
+    widgets::WizardPage{"Confirm", [] { return true; }},
+});
+wizard->on_finish = [] { /* do the thing */ };
+wizard->on_cancel = [] { /* leave it undone */ };
+```
+<!-- /ckvision-snippet -->
 
 ## Notification
 
@@ -408,6 +719,26 @@ otherwise leave the host holding a rectangle for rows that are gone.
 An empty centre paints nothing, and a centre with two lines paints two rows.
 So a host may leave one lying over its content at a generous size instead of
 resizing it on every post: the cells it does not write show what is beneath.
+
+![NotificationCenter with informational and warning messages](generated/screenshots/widget-notificationcenter.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="notificationcenter" -->
+```cpp
+auto* centre = stage.desktop().make<widgets::NotificationCenter>();
+centre->set_bounds(Rect{40, 2, 36, 6});
+centre->set_auto_dismiss(4'000'000'000);  // 4s for everything not persistent
+centre->add(widgets::Notification{widgets::NotificationSeverity::Info,
+                                  "Build finished in 42 s", false});
+centre->add(widgets::Notification{widgets::NotificationSeverity::Warning,
+                                  "2 tests were skipped", false});
+centre->add(widgets::Notification{widgets::NotificationSeverity::Error,
+                                  "Upload refused: no credentials",
+                                  /*persistent=*/true});
+centre->on_changed = [] { /* a post, a dismissal or an expiry */ };
+```
+<!-- /ckvision-snippet -->
 
 ## Tooltip
 
@@ -460,11 +791,37 @@ Slider, and Wizard with real values and ownership.
 ```
 <!-- /ckvision-snippet -->
 
+![Tooltip contextual help popup](generated/screenshots/widget-tooltip.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="tooltip" -->
+```cpp
+auto* tip = stage.desktop().make<widgets::Tooltip>("Writes report.pdf beside the source");
+tip->show_at(Point{20, 10});
+```
+<!-- /ckvision-snippet -->
+
 ## Desktop
 
 Header: `include/cvision/widgets/desktop.hpp`. Insert one below the
 Application root. It owns window z-order, docks, popups, activation, and
 desktop-wide tile/cascade commands; do not use a global desktop singleton.
+
+![Desktop containing overlapping windows](generated/screenshots/widget-desktop.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="desktop" -->
+```cpp
+for (const char* title : {"Sources", "Build log", "Terminal"}) {
+    auto frame = std::make_unique<widgets::Window>(title);
+    frame->set_content(std::make_unique<ui::View>());
+    stage.desktop().add_window(std::move(frame));
+}
+stage.desktop().tile();  // or cascade(); both are desktop-wide commands
+```
+<!-- /ckvision-snippet -->
 
 ### A world larger than the view of it (U7-a)
 
@@ -593,6 +950,65 @@ It can reserve a measured minimum framed size and align its action row. Set
 beneath the fields; the actions remain at the lower edge while the fields
 retain their ordinary layout and validation semantics.
 
+Its public configuration is synchronized directly from the declaration:
+
+<!-- ckvision-fields type="DialogDescriptor" -->
+| Field | Type | Default |
+|---|---|---|
+| `title` | `std::string` | — |
+| `fields` | `std::vector<FieldDescriptor>` | — |
+| `buttons` | `std::vector<ButtonDescriptor>` | — |
+| `resizable` | `bool` | `false` |
+| `minimum_window_size` | `Size` | `{}` |
+| `button_alignment` | `ui::Alignment` | `ui::Alignment::Start` |
+| `anchor_buttons_to_bottom` | `bool` | `false` |
+| `help_context_key` | `std::string` | `{}` |
+<!-- /ckvision-fields -->
+
+![Materialized descriptor-based form dialog](generated/screenshots/widget-dialogdescriptor.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="dialogdescriptor" -->
+```cpp
+widgets::DialogDescriptor descriptor;
+descriptor.title = "Export report";
+widgets::FieldDescriptor name;
+name.label = "&Name";
+name.initial_text = "release-notes";
+descriptor.fields.push_back(std::move(name));
+
+widgets::FieldDescriptor passphrase;
+passphrase.label = "&Passphrase";
+passphrase.password_echo = true;
+descriptor.fields.push_back(std::move(passphrase));
+
+widgets::FieldDescriptor format;
+format.label = "&Format";
+format.kind = widgets::FieldKind::Combo;
+format.options = {"PDF", "HTML", "Plain text"};
+format.initial_selection = 0;
+descriptor.fields.push_back(std::move(format));
+
+widgets::FieldDescriptor overwrite;
+overwrite.label = "&Overwrite an existing file";
+overwrite.kind = widgets::FieldKind::Check;
+overwrite.initial_checked = true;
+descriptor.fields.push_back(std::move(overwrite));
+
+descriptor.buttons = {
+    widgets::ButtonDescriptor{"E&xport", widgets::ButtonRole::Accept, [] {}},
+    widgets::ButtonDescriptor{"Cancel", widgets::ButtonRole::Dismiss, [] {}},
+};
+
+widgets::DescriptorDialogPresentation dialog =
+    widgets::present_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+dialog.set_completion_handler([](widgets::DialogResult result) {
+    (void)result;  // .accepted, plus one value per field
+});
+```
+<!-- /ckvision-snippet -->
+
 ## MaterializedDialog
 
 Header: `include/cvision/widgets/dialog.hpp`. The materialized view/result of
@@ -652,6 +1068,20 @@ Header: `include/cvision/widgets/directory_picker.hpp`. Typed result from the
 directory-picker presentation. Inject a FileSystem; never make the widget read
 the disk implicitly.
 
+![Directory picker dialog](generated/screenshots/widget-directorypicker.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="directorypicker" -->
+```cpp
+widgets::DirectoryPickerPresentation picker = widgets::present_directory_picker(
+    fs, "/project", stage.app(), stage.desktop(), stage.roles());
+picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
+    (void)result;  // {accepted, path}
+});
+```
+<!-- /ckvision-snippet -->
+
 ## FileDialogFilter
 
 Header: `include/cvision/widgets/file_dialog.hpp`. Describes a displayed file
@@ -661,6 +1091,26 @@ filter for the standard open/save dialog.
 
 Header: `include/cvision/widgets/file_dialog.hpp`. Options record for the
 standard file dialog, including mode and filters.
+
+![File dialog with filters and file list](generated/screenshots/widget-filedialog.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="filedialog" -->
+```cpp
+widgets::FileDialogOptions options;
+options.filters = {widgets::FileDialogFilter{"Markdown", {".md"}},
+                   widgets::FileDialogFilter{"All files", {}}};
+options.active_filter = 0;
+
+widgets::FileDialogPresentation picker = widgets::present_file_dialog(
+    widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
+    stage.roles());
+picker.set_completion_handler([](widgets::FileDialogResult result) {
+    (void)result;  // {accepted, path}
+});
+```
+<!-- /ckvision-snippet -->
 
 ## FileDialogResult
 
@@ -687,11 +1137,46 @@ of help topics. It keeps help content under application ownership.
 Header: `include/cvision/widgets/help_viewer.hpp`. Deterministic in-memory
 provider suitable for small applications and tests; Forms uses it.
 
+![Help viewer with linked topics](generated/screenshots/widget-helpviewer.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="helpviewer" -->
+```cpp
+provider.add_topic("gallery",
+                   widgets::HelpTopic{"Widget gallery",
+                                      "Every public widget, with a picture and the code that "
+                                      "drew it.",
+                                      {{"layout", "Layout guide"}, {"themes", "Themes"}}});
+provider.add_topic("layout", widgets::HelpTopic{"Layout guide", "Row, Column, Grid, Dock.", {}});
+
+widgets::HelpViewerPresentation help = widgets::present_help_viewer(
+    provider, "gallery", stage.app(), stage.desktop(), stage.roles());
+help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
+```
+<!-- /ckvision-snippet -->
+
 ## ImageView
 
 Header: `include/cvision/widgets/image_view.hpp`. Use to display an `Image`.
 It renders raster output if the terminal supports it and a cell fallback if it
 does not; [Graphics](graphics.md) shows both captures.
+
+![ImageView with rendered graphics](generated/screenshots/widget-imageview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="imageview" -->
+```cpp
+auto* preview = content.make<widgets::ImageView>();
+preview->set_bounds(Rect{1, 1, 30, 7});
+preview->set_image(gradient_image(240, 120));
+preview->set_stretch_to_fill(false);  // keep the picture's own aspect
+preview->on_click = [](const MouseEvent& event) {
+    (void)event;  // carries both the cell and the pixel it was in
+};
+```
+<!-- /ckvision-snippet -->
 
 ## FlowText
 
@@ -725,6 +1210,29 @@ Header: `include/cvision/widgets/flow_view.hpp`. Use for wrapped styled
 read-only content with keyboard and pointer link navigation plus inline raster
 atoms. Workbench's text tab provides the compiled example.
 
+![FlowView with text, link, and inline image](generated/screenshots/widget-flowview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_text.cpp" region="flowview" -->
+```cpp
+widgets::FlowBlock heading;
+heading.content.push_back(widgets::FlowText{"Release 0.4", Attr::Bold, std::nullopt});
+
+widgets::FlowBlock body;
+body.content.push_back(widgets::FlowText{"FlowView lays out a document of ", Attr{}, std::nullopt});
+body.content.push_back(widgets::FlowText{"styled runs", Attr::Underline, std::nullopt});
+body.content.push_back(widgets::FlowText{", line breaks and inline images, and wraps them to its own width. See ", Attr{}, std::nullopt});
+body.content.push_back(widgets::FlowText{"the flow view guide", Attr{}, std::string("flow-view.md")});
+body.content.push_back(widgets::FlowText{" for the document model.", Attr{}, std::nullopt});
+
+widgets::FlowDocument document;
+document.blocks = {std::move(heading), std::move(body)};
+flow->set_document(std::move(document));
+flow->on_link_activate = [](const std::string& target) { (void)target; /* follow it */ };
+```
+<!-- /ckvision-snippet -->
+
 ## InputLine
 
 Header: `include/cvision/widgets/input_line.hpp`. Use for one-line text with
@@ -736,11 +1244,57 @@ field boundaries, and Shift extends any cursor motion. Ctrl+C/X/V and
 Ctrl+Insert/Shift+Insert copy, cut, and paste; Ctrl+Backspace/Delete erase by
 word, while Shift+Delete cuts the selection. Forms shows a labelled field.
 
+![InputLine text editing control](generated/screenshots/widget-inputline.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="inputline" -->
+```cpp
+auto* name = content.make<widgets::InputLine>();
+name->set_bounds(Rect{14, 1, 30, 1});
+name->set_text("Ada Lovelace");
+
+auto* secret = content.make<widgets::InputLine>();
+secret->set_bounds(Rect{14, 3, 30, 1});
+secret->set_password_echo(true);
+secret->set_text("analytical");
+
+auto* serial = content.make<widgets::InputLine>();
+serial->set_bounds(Rect{14, 5, 30, 1});
+// '9' a digit, 'A' a letter, '*' anything; everything else is a
+// literal the reader cannot edit and the cursor skips. Setting a
+// mask resets the field to placeholders, so set it before the value.
+serial->set_mask("AAAA-9999-9999");
+
+auto* port = content.make<widgets::InputLine>();
+port->set_bounds(Rect{14, 7, 30, 1});
+port->set_validator([](const std::string& text) { return text.find_first_not_of("0123456789") == std::string::npos; });
+port->set_text("80a");
+port->set_valid(false);  // draws in the invalid role until it validates
+```
+<!-- /ckvision-snippet -->
+
 ## Label
 
 Header: `include/cvision/widgets/label.hpp`. Use a mnemonic label next to a
 control; it participates in mnemonic focus routing. Use StaticText for passive
 wrapped copy.
+
+![Mnemonic Label associated with an input](generated/screenshots/widget-label.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="label" -->
+```cpp
+auto* host = content.make<widgets::InputLine>();
+host->set_bounds(Rect{12, 1, 22, 1});
+host->set_text("db.internal");
+
+auto* label = content.make<widgets::Label>("&Host name");
+label->set_bounds(Rect{1, 1, 11, 1});
+label->set_buddy(host);  // Alt+H now focuses the field, not the label
+```
+<!-- /ckvision-snippet -->
 
 ## ListItem
 
@@ -760,6 +1314,24 @@ collection. Arrow keys select and Enter activates; File Browser connects it to
 TreeView selection. For dynamic or large data, set a ListModel rather than
 materializing rows.
 
+![Multi-select ListView](generated/screenshots/widget-listview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="listview" -->
+```cpp
+list->set_items({"applied-physics.md", "boot-sequence.md", "capabilities.md",
+                 "dialogs.md", "editor.md", "fuzzing.md", "graphics.md",
+                 "input-decoder.md", "layout.md", "themes.md"});
+list->set_cursor(2);
+list->set_selected(2, true);
+list->set_selected(4, true);
+list->set_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
+list->on_activate = [](std::size_t index) { (void)index; /* open the row */ };
+list->on_selection_changed = [](std::size_t index) { (void)index; };
+```
+<!-- /ckvision-snippet -->
+
 ## Memo
 
 Header: `include/cvision/widgets/memo.hpp`. Use for multiline editable text
@@ -769,6 +1341,23 @@ InputLine: Ctrl+Left/Right moves by word, Ctrl+Home/End reaches document
 boundaries, Shift extends selections, and Ctrl+C/X/V or
 Ctrl+Insert/Shift+Insert provide clipboard operations. Ctrl+Backspace/Delete
 erase by word; Shift+Delete cuts the current selection.
+
+![Multiline Memo editor](generated/screenshots/widget-memo.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_text.cpp" region="memo" -->
+```cpp
+memo->set_text(
+    "Memo is the multi-line field of a form: a description, a commit "
+    "message, an address.\n"
+    "It edits, wraps, selects, and talks to the clipboard, but it holds "
+    "its own text rather than a shared document -- for a real editor, use "
+    "TextEditor.");
+memo->set_wrap_mode(widgets::WrapMode::Word);
+memo->set_vertical_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
+```
+<!-- /ckvision-snippet -->
 
 ## MnemonicText
 
@@ -853,6 +1442,17 @@ over, and to the chain's root when it is over none of them. A press that ends
 up outside every one of them therefore closes the whole chain in one click,
 not one level of it.
 
+![Open dropdown menu with command items](generated/screenshots/widget-dropdownmenu.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="dropdownmenu" -->
+```cpp
+bar->activate();  // F10 does this for the reader; Down drops the menu
+stage.app().dispatch(KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+```
+<!-- /ckvision-snippet -->
+
 ## MenuBarItem
 
 Header: `include/cvision/widgets/menu.hpp`. Top-level label plus its MenuItem
@@ -868,6 +1468,19 @@ what delivers keys to them — always to the innermost one, which is where the
 reader's highlight is. Left and Right walk the top-level menus, except where a
 [DropdownMenu](#dropdownmenu) has a submenu to enter or leave.
 The [Hello tutorial](tutorial-hello.md) shows it open.
+
+![Application MenuBar](generated/screenshots/widget-menubar.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="menubar" -->
+```cpp
+auto* bar = stage.desktop().dock_top(std::make_unique<widgets::MenuBar>(demo_menus(ids)));
+bar->on_highlight_changed = [](const widgets::MenuHighlight& highlight) {
+    (void)highlight;  // e.g. mirror the help context into a status line
+};
+```
+<!-- /ckvision-snippet -->
 
 ## MenuBarAccessory
 
@@ -894,6 +1507,26 @@ dimensions, a minimum content width, and explicit graphic/text/button
 alignment for a deliberate identity presentation while ordinary alerts retain
 their compact composition.
 
+![Message box with graphic and action buttons](generated/screenshots/widget-messagebox.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="messagebox" -->
+```cpp
+widgets::MessageBoxDescriptor descriptor{
+    widgets::MessageBoxKind::Confirm, "Unsaved changes",
+    "release-notes.md has been edited since it was last saved.\n"
+    "Close it anyway?",
+    widgets::MessageBoxButtons::YesNoCancel};
+
+widgets::MessageBoxPresentation box =
+    widgets::present_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+box.set_completion_handler([](widgets::MessageBoxResult result) {
+    (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
+});
+```
+<!-- /ckvision-snippet -->
+
 ## CheckGroup
 
 Header: `include/cvision/widgets/option_group.hpp`. Use multiple independent
@@ -902,6 +1535,23 @@ values as shown in Forms. Its visual contract is square `[ ]`/`[X]` markers.
 `set_group_label()` gives the group an owned caption one row above the choices;
 the caption changes from its normal label colour to the focused-option
 foreground while the group owns keyboard focus.
+
+![CheckGroup with mnemonic options](generated/screenshots/widget-checkgroup.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="checkgroup" -->
+```cpp
+auto* flags = content.make<widgets::CheckGroup>(
+    std::vector<std::string>{"&Optimize", "&Debug info", "Warnings as errors"});
+flags->set_group_label("Compilation");
+flags->set_bounds(Rect{1, 1, 24, 4});
+flags->set_checked(0, true);
+flags->set_tristate(true);  // admits the third, Mixed state
+flags->set_check_state(2, widgets::CheckState::Mixed);
+flags->on_changed = [](std::size_t index, bool value) { (void)index; (void)value; };
+```
+<!-- /ckvision-snippet -->
 
 ## PopupList
 
@@ -920,6 +1570,23 @@ opened it — takes the mouse and the keys while it is up, and restores focus
 when it closes. Enter or a single press on a row chooses; Escape or a press
 outside dismisses. One of the two callbacks runs, once.
 
+![PopupList selection surface](generated/screenshots/widget-popuplist.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="popuplist" -->
+```cpp
+auto popup = std::make_unique<widgets::PopupList>(
+    std::vector<std::string>{"UTF-8", "UTF-16LE", "Latin-1", "Shift-JIS"},
+    std::optional<std::size_t>{0});
+popup->set_bounds(Rect{24, 6, 16, 6});
+popup->on_choose = [](std::size_t index) { (void)index; /* apply the encoding */ };
+popup->on_dismiss = [] { /* nothing was chosen */ };
+widgets::PopupList* list = stage.desktop().add<widgets::PopupList>(std::move(popup));
+stage.app().set_focus(&list->list());  // the inner ListView is the focusable part
+```
+<!-- /ckvision-snippet -->
+
 ## RadioGroup
 
 Header: `include/cvision/widgets/option_group.hpp`. Use exactly one choice.
@@ -930,10 +1597,43 @@ the focused-option foreground while the group owns keyboard focus. Use
 `set_column_width()` only for a measured form column; it clips long labels at
 that specified edge rather than changing the control's interaction model.
 
+![RadioGroup with one selected choice](generated/screenshots/widget-radiogroup.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="radiogroup" -->
+```cpp
+auto* target = content.make<widgets::RadioGroup>(
+    std::vector<std::string>{"&Static", "S&hared"});
+target->set_group_label("Library");
+target->set_bounds(Rect{26, 1, 14, 3});
+target->set_selected(1);
+target->on_changed = [](int index) { (void)index; };
+```
+<!-- /ckvision-snippet -->
+
 ## Progress
 
 Header: `include/cvision/widgets/progress.hpp`. Use a determinate fraction
 with an optional label; application work updates it through `set_fraction`.
+
+![Progress indicator](generated/screenshots/widget-progress.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="progress" -->
+```cpp
+auto* bar = content.make<widgets::Progress>();
+bar->set_bounds(Rect{1, 1, 36, 1});
+bar->set_fraction(0.62);
+bar->set_label("1 284 of 2 070 files");
+
+auto* scanning = content.make<widgets::Progress>();
+scanning->set_bounds(Rect{1, 3, 36, 1});
+scanning->set_indeterminate(true);  // no fraction is known yet
+scanning->set_pulse(7);             // the host advances this per tick
+```
+<!-- /ckvision-snippet -->
 
 ## ScrollViewport
 
@@ -966,6 +1666,28 @@ is the right answer — the innermost scrollable surface under the pointer is th
 one that should move — but it does mean an OUTER viewport never sees a wheel an
 inner one has taken.
 
+![ScrollViewport with oversized content](generated/screenshots/widget-scrollviewport.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="scrollviewport" -->
+```cpp
+auto* viewport = content.make<widgets::ScrollViewport>();
+viewport->set_bounds(Rect{0, 0, 38, 9});
+
+auto page = std::make_unique<ui::View>();
+page->set_preferred_size(Size{60, 30});  // the world, larger than the hole
+auto* body = page->make<widgets::StaticText>(
+    "ScrollViewport clips a content view larger than itself and owns the two "
+    "scrollbars that say where in it you are. Give the content a preferred "
+    "size: the viewport reads that, not the child's bounds.");
+body->set_bounds(Rect{0, 0, 58, 12});
+viewport->set_content(std::move(page));
+viewport->set_scroll(0, 0);
+viewport->set_scrollbars_always_visible(true);
+```
+<!-- /ckvision-snippet -->
+
 ## Scrollbar
 
 Header: `include/cvision/widgets/scrollbar.hpp`. Use for an explicit vertical
@@ -975,11 +1697,50 @@ the CP437-style U+25B2/U+25BC or U+25C4/U+25BA arrows, a U+2591 light-shade
 page area, and a U+2588 full-block proportional thumb. The active scheme owns
 their colours.
 
+![Vertical and horizontal Scrollbar controls](generated/screenshots/widget-scrollbar.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="scrollbar" -->
+```cpp
+auto* bar = content.make<widgets::Scrollbar>(widgets::Orientation::Vertical);
+bar->set_bounds(Rect{24, 0, 1, 8});
+bar->set_range(/*content_size=*/240, /*viewport_size=*/8);
+bar->set_position(96);
+bar->set_policy(widgets::ScrollbarPolicy::Auto);
+bar->on_position_changed = [](int position) { (void)position; };
+
+auto* ruler = content.make<widgets::Scrollbar>(widgets::Orientation::Horizontal);
+ruler->set_bounds(Rect{0, 9, 25, 1});
+ruler->set_range(200, 25);
+ruler->set_position(40);
+```
+<!-- /ckvision-snippet -->
+
 ## Splitter
 
 Header: `include/cvision/widgets/splitter.hpp`. Use exactly two adjacent panes
 with user-controlled division. Focus it and use its directional keys, or drag
 the divider. [Layout guide](layout-guide.md) and File Browser show it.
+
+![Splitter between two panes](generated/screenshots/widget-splitter.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="splitter" -->
+```cpp
+auto left = std::make_unique<widgets::ListView>();
+left->set_items({"alpha", "beta", "gamma", "delta"});
+auto right = std::make_unique<widgets::StaticText>(
+    "The Splitter owns both panes and the bar between them. Drag the bar, or "
+    "focus it and use the arrow keys.");
+
+auto* splitter = content.make<widgets::Splitter>(Rect{0, 0, 42, 8}, std::move(left),
+                                                 std::move(right),
+                                                 widgets::Orientation::Vertical);
+splitter->set_split_position(16);
+```
+<!-- /ckvision-snippet -->
 
 ## StandardStrings
 
@@ -1000,6 +1761,23 @@ opens at a width it can be read at instead of at the width of the terminal.
 Text marked preformatted with `set_preformatted` asks for every column it was
 written with instead: it cannot be reflowed, so a narrower view would clip it.
 
+![Wrapped StaticText content](generated/screenshots/widget-statictext.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="statictext" -->
+```cpp
+auto* body = content.make<widgets::StaticText>(
+    "StaticText wraps a paragraph to its own width and never takes focus. "
+    "It is the right view for explanatory copy inside a dialog.");
+body->set_bounds(Rect{1, 1, 40, 4});
+
+auto* footer = content.make<widgets::StaticText>("Centered footing");
+footer->set_alignment(ui::Alignment::Center);
+footer->set_bounds(Rect{1, 5, 40, 1});
+```
+<!-- /ckvision-snippet -->
+
 ## StatusLineItem
 
 Header: `include/cvision/widgets/status_line.hpp`. A command presentation or
@@ -1012,11 +1790,51 @@ for command hints and contextual help. Its command item executes the same
 registry action as a menu item; the registered key chord automatically uses
 the same `ckv.hotkey` accent as menu mnemonics.
 
+![StatusLine command hints](generated/screenshots/widget-statusline.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="statusline" -->
+```cpp
+auto* status = stage.desktop().dock_bottom(std::make_unique<widgets::StatusLine>());
+status->set_items({
+    widgets::StatusLineItem{"~F1~ Help"},
+    widgets::StatusLineItem{"~Ctrl+S~ Save", ids.save},
+    widgets::StatusLineItem{"~Ctrl+P~ Print", ids.print},
+    widgets::StatusLineItem{"~Alt+X~ Quit", stage.app().commands().standard().quit},
+});
+status->set_transient_hint("Saved package.json (1 284 bytes)");
+```
+<!-- /ckvision-snippet -->
+
 ## TabControl
 
 Header: `include/cvision/widgets/tab_control.hpp`. Use mutually exclusive
 pages within one window. Mnemonics/keyboard navigation change active page;
 Workbench and Graphics provide real tab captures.
+
+![TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="tabcontrol" -->
+```cpp
+auto* tabs = content.make<widgets::TabControl>();
+tabs->set_bounds(Rect{0, 0, 42, 8});
+
+auto general = std::make_unique<ui::View>();
+general->make<widgets::StaticText>("Settings that apply everywhere.")
+    ->set_bounds(Rect{1, 1, 36, 2});
+tabs->add_tab("&General", std::move(general));
+
+auto editor = std::make_unique<ui::View>();
+editor->make<widgets::StaticText>("Editor-only settings.")->set_bounds(Rect{1, 1, 36, 2});
+tabs->add_tab("&Editor", std::move(editor));
+
+tabs->add_tab("&Keys", std::make_unique<ui::View>());
+tabs->set_active_index(0);
+```
+<!-- /ckvision-snippet -->
 
 ## TableCell
 
@@ -1050,12 +1868,58 @@ Header: `include/cvision/widgets/table.hpp`. Use aligned sortable typed
 rows/columns. Arrow keys navigate; F2, Enter, or typing begins an editable
 cell's provider-validated edit. Use a TableModel for dynamic or large data.
 
+| Table with typed columns | Table with an active cell editor |
+| :---: | :---: |
+| ![Table with typed columns](generated/screenshots/widget-table.svg) | ![Table with an active cell editor](generated/screenshots/widget-table-editing.svg) |
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="table" -->
+```cpp
+table->set_columns({
+    widgets::TableColumn{"Suite", 22, 8, widgets::TableCellType::Text, false},
+    widgets::TableColumn{"Cases", 7, 4, widgets::TableCellType::Integer, false},
+    widgets::TableColumn{"Owner", 12, 5, widgets::TableCellType::Text, true},
+});
+table->set_rows({
+    {"test_application", "148", "core"},
+    {"test_editor", "96", "editor"},
+    {"test_frame_svg", "12", "docgen"},
+    {"test_table", "54", "widgets"},
+});
+// With set_rows() and no TableModel the built-in order is a plain
+// text comparison of that column; a model decides its own order in
+// request_sort() instead.
+table->sort_by(0, /*ascending=*/true);
+table->set_selected_cell(widgets::TableCellRef{0, 2});
+table->on_edit_committed = [](widgets::TableCellRef cell,
+                              const widgets::TableEditResult& result) {
+    (void)cell;
+    (void)result;
+};
+```
+<!-- /ckvision-snippet -->
+
 ## TerminalView
 
 Header: `include/cvision/widgets/terminal_view.hpp`. Hosts one explicitly
 launched `TerminalSubsession` in a normal view tree. It renders the private
 child snapshot, forwards the child input modes it requests, and keeps parent
 focus under the application's control; see [Embedded terminal](embedded-terminal.md).
+
+![TerminalView running inside a ckVision window](generated/screenshots/terminal-initial.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/capture_terminal_screenshots.cpp" region="terminalview" -->
+```cpp
+auto window = std::make_unique<ckv::widgets::Window>(child_sixel ? "Sixel Demo" : "Terminal 1");
+window->set_bounds(ckv::Rect{2, 2, 76, 20});
+auto view = std::make_unique<ckv::widgets::TerminalView>(session);
+window->set_content(std::move(view));
+shell.desktop().add_window(std::move(window));
+```
+<!-- /ckvision-snippet -->
 
 ## Terminal report dialog
 
@@ -1069,6 +1933,21 @@ a menu; an application whose terminal can count decoded SGR mouse reports (a
 POSIX host) presents the dialog itself through
 `present_terminal_report_dialog` and passes
 `TerminalReportDialogOptions::mouse_reports_decoded`.
+
+![Terminal capability report dialog](generated/screenshots/widget-terminalreportdialog.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="terminalreportdialog" -->
+```cpp
+widgets::TerminalReportDialogOptions options;
+options.mouse_reports_decoded = [] { return std::size_t{0}; };
+
+widgets::TerminalReportDialogPresentation report = widgets::present_terminal_report_dialog(
+    stage.desktop(), stage.app(), stage.roles(), options);
+report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
+```
+<!-- /ckvision-snippet -->
 
 ## TerminalReportDialogOptions
 
@@ -1139,6 +2018,25 @@ target; a containing ScrollViewport may own the visible scrollbars through
 `set_vertical_scrollbar_visible(false)`; Workbench shows an OSC 8-capable link
 span.
 
+![TextView with an active hyperlink](generated/screenshots/widget-textview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_text.cpp" region="textview" -->
+```cpp
+view->set_text(
+    "TextView shows text the reader cannot edit: a log, a report, a help "
+    "page.\n"
+    "It wraps, scrolls, and carries OSC 8 hyperlinks.\n"
+    "\n"
+    "Open the \x1B]8;;https://cklukas.github.io/ckVision/\x1B\\documentation "
+    "site\x1B]8;;\x1B\\ for the rest.");
+view->set_wrap_mode(widgets::WrapMode::Word);
+view->set_vertical_scrollbar_policy(widgets::ScrollbarPolicy::Auto);
+view->on_link_activate = [](const std::string& target) { (void)target; };
+```
+<!-- /ckvision-snippet -->
+
 ## TreeNode
 
 Header: `include/cvision/widgets/tree_view.hpp`. A hierarchy node with label,
@@ -1151,6 +2049,43 @@ Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
 children. File Browser uses the public selection callback to update a ListView.
 `TreeConnectorStyle::Outline` provides the compact classic terminal-outline
 appearance: `─+` for groups, `──` for leaves, and `│` ancestry guides.
+
+![Expanded TreeView hierarchy](generated/screenshots/widget-treeview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="treeview" -->
+```cpp
+widgets::TreeNode core;
+core.label = "core";
+widgets::TreeNode widgets_dir;
+widgets_dir.label = "widgets";
+
+widgets::TreeNode cvision;
+cvision.label = "cvision";
+cvision.expanded = true;
+cvision.children = {std::move(core), std::move(widgets_dir)};
+
+widgets::TreeNode include;
+include.label = "include";
+include.expanded = true;
+include.children.push_back(std::move(cvision));
+
+widgets::TreeNode src;
+src.label = "src";
+src.children_known = false;  // an expander, with the listing not yet done
+
+widgets::TreeNode readme;
+readme.label = "README.md";
+
+tree->set_roots({std::move(include), std::move(src), std::move(readme)});
+tree->set_connector_style(widgets::TreeConnectorStyle::Outline);
+tree->on_expand_request = [](widgets::TreeNode& node) {
+    (void)node;  // fill node.children in place; the tree redraws with them
+};
+tree->on_activate = [](widgets::TreeNode& node) { (void)node; };
+```
+<!-- /ckvision-snippet -->
 
 ## FrameSlot
 
@@ -1188,6 +2123,32 @@ fixed-size window. `set_minimizable(false)` takes it off a resizable window
 that must not be hidden; `Desktop`'s modal presentation does exactly that,
 since hiding the one window accepting input would leave an application
 answering nothing.
+
+`set_chrome_background_override(color)` replaces only the background used by
+the frame, title, controls, footer, and uncovered interior. Theme foregrounds
+and attributes remain intact. Use it when that surrounding colour is runtime
+state—such as an emulated display's overscan colour—and clear it with
+`std::nullopt` to return to the active or inactive window role.
+
+![Resizable Window with title controls](generated/screenshots/widget-window.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="window" -->
+```cpp
+auto frame = std::make_unique<widgets::Window>("Report");
+frame->set_bounds(Rect{6, 3, 44, 9});
+frame->set_footer("2 of 7");
+frame->set_min_size(Size{20, 5});
+frame->set_minimizable(true);
+frame->set_resizable(true);
+frame->close_request = [] {
+    return false;  // veto: something is unsaved
+};
+frame->set_content(std::make_unique<ui::View>());
+widgets::Window* window = stage.desktop().add_window(std::move(frame));
+```
+<!-- /ckvision-snippet -->
 
 ### Showing where a window went — the minimize flight
 
@@ -1288,6 +2249,18 @@ Header: `include/cvision/widgets/window_list_dialog.hpp`. The standard typed
 dialog for choosing/activating Desktop windows; use its presentation alias and
 result enum rather than building a one-off window list.
 
+![Window list selection dialog](generated/screenshots/widget-windowlistdialog.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="windowlistdialog" -->
+```cpp
+widgets::WindowListDialogPresentation list =
+    widgets::present_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
+```
+<!-- /ckvision-snippet -->
+
 ## PagedStrip
 
 Header: `include/cvision/widgets/paged_strip.hpp`. One row of variable-width
@@ -1368,6 +2341,36 @@ would shear the row it is meant to be steering.
 Keyboard: none, deliberately. A strip is chrome, and its items are reached by
 whatever commands the host already binds to them.
 
+![PagedStrip with overflow controls](generated/screenshots/widget-pagedstrip.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="pagedstrip" -->
+```cpp
+auto* strip = stage.desktop().dock_bottom(std::make_unique<widgets::PagedStrip>());
+// The strip pulls its items rather than being handed them: a host
+// whose model moved calls refresh_items() and the source is asked
+// again.
+strip->set_item_source([] {
+    std::vector<widgets::PagedStrip::Item> items;
+    for (const auto& [text, selected] : std::initializer_list<std::pair<const char*, bool>>{
+             {"editor", true}, {"shell", false}, {"monitor", false},
+             {"release notes", false}, {"changelog", false}}) {
+        widgets::PagedStrip::Item item;
+        item.text = text;
+        // The provider's own answer, never a measurement the strip takes
+        // of `text`: an item carrying a leading glyph says so here.
+        item.width = static_cast<int>(item.text.size());
+        item.selected = selected;
+        items.push_back(std::move(item));
+    }
+    return items;
+});
+strip->on_item_activated = [](std::size_t index) { (void)index; };
+strip->on_collapse_changed = [](bool collapsed) { (void)collapsed; };
+```
+<!-- /ckvision-snippet -->
+
 ## WindowSwitcherTarget
 
 Header: `include/cvision/widgets/window_switcher_bar.hpp`. The window one
@@ -1420,6 +2423,22 @@ The three placements a host chooses between (D-064):
 | `Parked` (default) | A stub on the desktop's bottom edge |
 | `HostListed` | Nothing — the host lists its own windows, e.g. with a [WindowSwitcherBar](#windowswitcherbar) |
 | `Disabled` | Nothing, and no window offers the `_` control at all |
+
+![Minimized window placeholder](generated/screenshots/widget-minimizedwindowstub.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="minimizedwindowstub" -->
+```cpp
+// An application never constructs one: a Desktop whose placement is
+// Parked puts a stub up when a window is minimized, and takes it down
+// again when the window comes back.
+stage.desktop().set_minimized_window_placement(
+    widgets::MinimizedWindowPlacement::Parked);
+stage.desktop().windows().front()->set_minimized(true);
+stage.desktop().finish_minimize_animation();
+```
+<!-- /ckvision-snippet -->
 
 ## WindowSwitcherBar
 
@@ -1482,6 +2501,18 @@ controls, and the first entry at column zero.
 
 The collapse toggle is off until a host calls `set_collapsible(true)`, so a
 bar that never collapses pays no column for the possibility.
+
+![WindowSwitcherBar entries and state indicators](generated/screenshots/widget-windowswitcherbar.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_chrome.cpp" region="windowswitcherbar" -->
+```cpp
+auto* switcher =
+    stage.desktop().dock_bottom(std::make_unique<widgets::WindowSwitcherBar>(stage.desktop()));
+switcher->refresh();
+```
+<!-- /ckvision-snippet -->
 
 ### Damped widths
 

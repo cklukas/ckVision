@@ -32,7 +32,8 @@ graphics — with deterministic, headless-testable behaviour.
 
 ## Widgets and views
 
-- [Widget gallery](widget-gallery.md) — every widget, with screenshots
+- [Widget gallery](widget-gallery.md) — every public type, with a picture of it
+  running, the compiled code that drew the picture, and what each setting does
 - [Data views](data-views.md)
 - [Editor](editor.md)
 - [Flow view](flow-view.md)
@@ -58,3 +59,4 @@ graphics — with deterministic, headless-testable behaviour.
 - [Fuzzing ckVision parsers](fuzzing.md)
 - [Golden dump format](golden-format.md)
 - [Documentation coverage](coverage.md)
+- the release audit

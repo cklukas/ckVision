@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <type_traits>
 
@@ -36,6 +37,26 @@ bool is_modal_scope_command(const StandardCommands& standard, CommandId id) noex
 // having happened correctly.
 constexpr Color kTooSmallFg = Color::rgb(255, 255, 255);
 constexpr Color kTooSmallBg = Color::rgb(170, 0, 0);
+
+std::int64_t next_repeating_timer_deadline(std::int64_t previous_deadline,
+                                           std::int64_t interval_nanos,
+                                           std::int64_t now_nanos) noexcept {
+    CKV_ASSERT(interval_nanos > 0);
+    CKV_ASSERT(previous_deadline <= now_nanos);
+
+    // Preserve the timer's original phase while coalescing every elapsed
+    // interval into the one callback this step is about to deliver. Advancing
+    // by only one interval leaves an overdue timer overdue, so subsequent
+    // zero-wait steps replay the missed ticks as a CPU-bound callback burst.
+    const auto elapsed = static_cast<std::uint64_t>(now_nanos) -
+                         static_cast<std::uint64_t>(previous_deadline);
+    const auto interval = static_cast<std::uint64_t>(interval_nanos);
+    const auto until_next = interval - (elapsed % interval);
+    const auto maximum = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    const auto now = static_cast<std::uint64_t>(now_nanos);
+    if (now > maximum - until_next) return std::numeric_limits<std::int64_t>::max();
+    return static_cast<std::int64_t>(now + until_next);
+}
 
 class ActiveOperation final {
   public:
@@ -973,9 +994,30 @@ bool Application::step(std::int64_t deadline_nanos) {
             wake_now = wake_requested_;
             wake_requested_ = false;
         }
-        std::int64_t effective_deadline = wake_now ? clock_.now_nanos() : deadline_nanos;
+        const std::int64_t before_wait = clock_.now_nanos();
+        // Known work is never held behind an input wait. This is what lets a
+        // standalone run loop wait indefinitely while dormant without also
+        // delaying its initial frame or an explicit invalidation.
+        std::int64_t effective_deadline =
+            (wake_now || dirty_) ? before_wait : deadline_nanos;
         if (const auto timer_deadline = next_timer_deadline_nanos())
             effective_deadline = std::min(effective_deadline, *timer_deadline);
+        // Frame-completion patience is a real deadline only while it protects
+        // raster back-pressure. A dormant text frame needs no periodic wake
+        // merely to age a diagnostic counter; the next genuine event can
+        // reconcile it. A picture holding a newer dirty picture back must,
+        // however, be released at the exact patience boundary.
+        if (presenter_.frame_completion_tracking() && oldest_unanswered_frame_nanos_ &&
+            presenter_.frames_marked() > frames_settled_ &&
+            presenter_.last_frame_carried_rasters()) {
+            const std::int64_t patience = frame_completion_patience_nanos();
+            const std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
+            const std::int64_t frame_deadline =
+                *oldest_unanswered_frame_nanos_ > maximum - patience
+                    ? maximum
+                    : *oldest_unanswered_frame_nanos_ + patience;
+            effective_deadline = std::min(effective_deadline, frame_deadline);
+        }
 
         // Sessions released since the last step leave empty slots behind —
         // erasing one inside the loop that was notifying about it would pull
@@ -1000,6 +1042,10 @@ bool Application::step(std::int64_t deadline_nanos) {
             }
         };
         drain_terminal_subsessions();
+        // A child session may have produced output before the combined wait
+        // began. Deliver that known work in this batch instead of blocking for
+        // a second, unrelated source after it has already arrived.
+        if (did_work) effective_deadline = std::min(effective_deadline, clock_.now_nanos());
         terminal_subsession_wait_handles_.clear();
         for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_) {
             if (session == nullptr) continue;
@@ -1028,7 +1074,8 @@ bool Application::step(std::int64_t deadline_nanos) {
             }
             due_callbacks.push_back(it->callback);
             if (it->repeating) {
-                it->next_fire_nanos += it->interval_nanos;
+                it->next_fire_nanos = next_repeating_timer_deadline(
+                    it->next_fire_nanos, it->interval_nanos, now);
                 ++it;
             } else {
                 it = timers_.erase(it);
@@ -1238,7 +1285,13 @@ bool Application::run_until(const std::function<bool()>& done) {
         if (quit_requested()) return false;
         bool finished = done();
         while (!finished && !quit_requested()) {
-            step(clock_.now_nanos() + kDefaultFrameIntervalNanos);
+            // step() clamps this indefinite outer wait to every real internal
+            // deadline (timers, cursor blink and frame-completion patience).
+            // Terminal input, child wait handles, post(), wake() and quit all
+            // interrupt it. An arbitrary externally-owned completion flag
+            // must therefore pair its state transition with wake() or post(),
+            // rather than being rediscovered by periodic predicate polling.
+            step(std::numeric_limits<std::int64_t>::max());
             if (quit_requested()) break;
             finished = done();
         }

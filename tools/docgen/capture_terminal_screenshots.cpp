@@ -56,11 +56,13 @@ void capture_profile(const std::filesystem::path& directory, std::string_view na
     profile.cell_pixels = capabilities.cell_pixels;
     ckv::term::TerminalEmulator session(profile);
     session.set_raster_identity(4'901);
+    // ckvision-doc: terminalview
     auto window = std::make_unique<ckv::widgets::Window>(child_sixel ? "Sixel Demo" : "Terminal 1");
     window->set_bounds(ckv::Rect{2, 2, 76, 20});
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     window->set_content(std::move(view));
     shell.desktop().add_window(std::move(window));
+    // ckvision-doc-end: terminalview
 
     if (child_sixel)
         session.feed_output("\x1bPq#0;2;100;0;0!32~-!32~-!32~-!32~-!32~-!32~\x1b\\ckvision$ ");

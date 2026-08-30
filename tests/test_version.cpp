@@ -16,8 +16,8 @@ CK_TEST(version_is_consistent) {
     const ckv::Version v = ckv::version();
     CK_CHECK(v.major == 0);
     CK_CHECK(v.minor == 1);
-    CK_CHECK(v.patch == 1);
-    CK_CHECK(ckv::version_string() == "0.1.1");
+    CK_CHECK(v.patch == 2);
+    CK_CHECK(ckv::version_string() == "0.1.2");
 }
 
 CK_TEST(the_version_string_spells_the_same_numbers_as_the_triple) {
