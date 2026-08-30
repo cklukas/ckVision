@@ -203,11 +203,15 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
     // The handler outlives this call, so everything it needs that a caller
     // might not keep alive is copied: the identity strings, and the roles --
     // which are a handful of ids, and which a caller may well have interned
-    // inline at the call site. Application and Desktop are the two things
-    // that outlive any handler by construction.
+    // inline at the call site. Application outlives the handler; a caller may
+    // explicitly detach the borrowed Desktop, so its liveness is checked
+    // before the raw observer is used.
+    const std::weak_ptr<void> desktop_liveness = desktop.lifetime_token();
+    Desktop* const desktop_ptr = &desktop;
     app.commands().set_handler(
         app.commands().standard().help,
-        [&app, &desktop, roles, held_title = std::move(title), held_body = std::move(body)] {
+        [&app, desktop_ptr, desktop_liveness, roles, held_title = std::move(title), held_body = std::move(body)] {
+            if (desktop_liveness.expired()) return;
             MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", held_title + "\n\n" + held_body,
                                             MessageBoxButtons::Ok};
             descriptor.emphasized_leading_lines = 1;
@@ -218,7 +222,7 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
             // than the symmetry is worth. The button keeps its centred
             // placement, since a lone button is not a line of prose.
             descriptor.button_alignment = ui::Alignment::Center;
-            auto presentation = present_message_box(app, desktop, roles, descriptor);
+            auto presentation = present_message_box(app, *desktop_ptr, roles, descriptor);
             presentation.set_completion_handler([](MessageBoxResult) {});
         });
 }
