@@ -15,7 +15,7 @@
 namespace {
 void write_svg(const std::filesystem::path& directory, const std::string& name,
                const ckv::term::VirtualDisplay& display) {
-    std::ofstream out(directory / (name + ".svg"));
+    std::ofstream out(directory / (name + ".svg"), std::ios::binary);
     out << ckv::docgen::render_virtual_display_svg(display);
     std::fprintf(stderr, "wrote %s (%dx%d cells)\n", (directory / (name + ".svg")).string().c_str(),
                  display.size().width, display.size().height);
