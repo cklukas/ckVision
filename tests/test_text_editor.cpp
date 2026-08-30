@@ -175,6 +175,22 @@ CK_TEST(text_editor_extends_and_collapses_selection_for_cursor_home_end_and_docu
     CK_CHECK(editor.selection()->begin.byte == 6U && editor.selection()->end.byte == 12U);
 }
 
+CK_TEST(text_editor_restores_a_current_grapheme_aligned_selection_for_controller_transactions) {
+    auto document = std::make_shared<EditorDocument>("alpha 🙂 beta");
+    TextEditor editor(document);
+    const auto begin = document->position_at_byte(6U);
+    const auto end = document->position_at_byte(10U);
+    CK_CHECK(begin.has_value() && end.has_value());
+    CK_CHECK(editor.set_selection({*begin, *end}));
+    CK_CHECK(editor.selection().has_value());
+    CK_CHECK(document->text(*editor.selection()) == "🙂");
+
+    const ckv::widgets::DocumentRange stale{*begin, *end};
+    CK_CHECK(document->replace({document->begin(), document->begin()}, "x"));
+    CK_CHECK(!editor.set_selection(stale));
+    CK_CHECK(!editor.set_selection({document->begin(), {document->revision(), 8U}}));
+}
+
 CK_TEST(text_editor_status_exposes_document_encoding_and_newline_metadata) {
     auto document = std::make_shared<EditorDocument>("\xEF\xBB\xBF" "first\r\nsecond\r\n");
     TextEditor editor(document);

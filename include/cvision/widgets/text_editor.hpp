@@ -46,6 +46,10 @@ public:
     const std::shared_ptr<EditorDocument>& document() const noexcept { return document_; }
     DocumentPosition cursor() const noexcept { return cursor_; }
     std::optional<DocumentRange> selection() const noexcept;
+    // Selects a current, grapheme-aligned document range. Controllers that
+    // apply a document transaction can restore the semantic selection around
+    // the transformed content without synthesizing keyboard input.
+    bool set_selection(DocumentRange range);
     EditorStatus status() const;
 
     void set_show_line_numbers(bool enabled);

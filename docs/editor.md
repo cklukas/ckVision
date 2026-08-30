@@ -118,6 +118,13 @@ created it. Obtain positions through `position_at_byte()` or
 text. Use `DocumentTransaction` to make several non-overlapping edits against
 one revision and advance the revision once.
 
+When an application-level command transforms a current selection through its
+own document transaction, it can call `TextEditor::set_selection()` with the
+new current, grapheme-aligned `DocumentRange`. The editor restores that range,
+scrolls it into view, publishes status, and invalidates normally; it never
+accepts a stale revision or a byte inside a grapheme cluster. This is a direct
+state API for controllers, not a request to synthesize cursor keystrokes.
+
 Line/column and byte-position lookup use the persistent piece tree's byte and
 newline aggregates. A local edit therefore does not need to materialize the
 entire document merely to locate a line or validate a grapheme boundary.

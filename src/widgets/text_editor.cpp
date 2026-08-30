@@ -443,6 +443,20 @@ std::optional<DocumentRange> TextEditor::selection() const noexcept {
     return less(*selection_anchor_, cursor_) ? DocumentRange{*selection_anchor_, cursor_} : DocumentRange{cursor_, *selection_anchor_};
 }
 
+bool TextEditor::set_selection(DocumentRange range) {
+    if (range.begin.revision != document_->revision() || range.end.revision != document_->revision() ||
+        range.begin.byte > range.end.byte || !document_->position_at_byte(range.begin.byte) ||
+        !document_->position_at_byte(range.end.byte))
+        return false;
+
+    selection_anchor_ = range.begin;
+    cursor_ = range.end;
+    ensure_cursor_visible();
+    notify_status_changed();
+    invalidate();
+    return true;
+}
+
 EditorStatus TextEditor::status() const {
     EditorStatus result;
     if (const auto line_column = document_->line_column(cursor_)) {
