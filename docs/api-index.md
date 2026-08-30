@@ -75,7 +75,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/option_group.hpp` | `CheckGroup`, `RadioGroup` | [Widget gallery](widget-gallery.md#checkgroup) |
 | `include/cvision/widgets/combo_box.hpp` | `ComboBox` | [Widget gallery](widget-gallery.md#combobox) |
 | `include/cvision/widgets/list_view.hpp` | `ListView`, `ListModel`, `ListItem` | [Data views](data-views.md) |
-| `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode` | [Widget gallery](widget-gallery.md#treeview) |
+| `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode`, `TreeModel`, `TreeItem` | [Data views](data-views.md#tree-providers) |
 | `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl` | [Widget gallery](widget-gallery.md#tabcontrol) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |

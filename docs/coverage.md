@@ -69,7 +69,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md); [TODO](todo-example.md#full-note-editor) | editor/todo/widget_shots | widget-texteditor/todo-note-editor | test_text_editor, test_todo_smoke |
 | `include/cvision/widgets/syntax_profile.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-json | test_syntax_profile |
 | `include/cvision/widgets/syntax_cache.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor | test_syntax_cache |
-| `include/cvision/widgets/tree_view.hpp` | [Gallery](widget-gallery.md#treeview) | filebrowser/widget_shots | widget-treeview | test_tree_view |
+| `include/cvision/widgets/tree_view.hpp` | [Data views](data-views.md#tree-providers) | filebrowser/widget_shots | widget-treeview | test_tree_view |
 | `include/cvision/widgets/window.hpp` | [Object model](object-model.md) | gallery/widget_shots | widget-window | test_window |
 | `include/cvision/widgets/window_list_dialog.hpp` | [Gallery](widget-gallery.md#window-list-dialog) | gallery/widget_shots | widget-windowlistdialog | test_window_list_dialog |
 | `include/cvision/widgets/minimized_window_stub.hpp` | [Gallery](widget-gallery.md#minimizedwindowstub) | widget_shots | widget-minimizedwindowstub | test_minimized_window_stub |

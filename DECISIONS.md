@@ -604,16 +604,16 @@ claiming timing proves origin; dropping interrupted content (needlessly loses
 user text); and a decoder-only warning invisible to applications.
 
 **D-041 — 0.1 controls are materialized cell controls; virtualized models and
-scroll-delta optimization are post-0.1.** The M6 catalog mixed first-release
-control behavior with scale/performance extensions that need separate model
-contracts. For 0.1, `ListView`, `Table`, and `TreeView` are materialized
-widgets: the application supplies the visible row/tree data as values, the
-widget owns deterministic cursor/selection/drawing behavior, and tests cover
-keyboard, mouse, Unicode-safe clipping, and injected-clock activation. The
-0.1 contract does not include a virtualized row provider, million-row lazy
-fetching, columned `ListView` mode, typed/numeric table comparators, or a
-cell-level table editor. D-043 promotes the concrete list/table requirements
-without changing this release-scope record.
+scroll-delta optimization are post-0.1 unless D-043 promotes a proven client
+need.** The M6 catalog mixed first-release control behavior with
+scale/performance extensions that need separate model contracts. For 0.1,
+`ListView`, `Table`, and `TreeView` retain compact materialized convenience
+APIs: the application may supply row/tree values and the widget owns
+deterministic cursor, selection, and drawing behavior. The baseline contract
+does not include a generic erased row provider, columned `ListView` mode,
+typed/numeric table comparators, or a cell-level table editor. D-043 now
+promotes the concrete List, Table, and Tree provider contracts from real
+clients without changing the compact value APIs.
 
 `ComboBox` is the first 0.1 dropdown/history control: it owns editable and
 pick-only state, draws its own in-bounds dropdown, and integrates with the
@@ -637,13 +637,14 @@ optimization.
 **D-043 — Provider-backed data views and flow content are explicit widget
 contracts.** Cworks-class interactive applications establish concrete clients
 for large data navigation and rich read-only presentation. ckVision therefore
-provides separate provider contracts for `ListView` and `Table`, rather than
-one erased “items” interface. A provider is caller-owned, synchronous for one
-requested visible item/cell, and identifies every row/item with a stable,
-opaque value. It never owns UI state, starts work, reads a service, or calls a
-widget from another thread. An application that loads data asynchronously
-updates its own provider and calls the view’s explicit `model_changed()` on the
-UI thread (normally through `Application::post()`).
+provides separate provider contracts for `ListView`, `Table`, and `TreeView`,
+rather than one erased “items” interface. A provider is caller-owned,
+synchronous for one requested visible item, cell, or tree path, and identifies
+every row/item with a stable, opaque value. It never owns UI state, starts
+work, reads a service, or calls a widget from another thread. An application
+that loads data asynchronously updates its own provider and calls the view’s
+explicit `model_changed()` on the UI thread (normally through
+`Application::post()`).
 
 Cursor, primary selection, and multi-selection store provider identities, not
 display offsets. Filtering, sorting, paging, and a refreshed backing store
@@ -652,6 +653,14 @@ removed identity is cleared deterministically. The view paints and queries
 only its visible slice plus the cursor-resolution queries required after a
 model change. Ordering belongs to the provider: header activation requests a
 sort but the widget never silently materializes or reorders application data.
+
+`TreeModel` additionally supplies root, parent, child-index, and reverse-path
+lookups. `TreeView` owns expansion, cursor, and selection by stable item id;
+it resolves only the expanded path needed to count, navigate, or paint a
+visible row. Refresh keeps every surviving expansion and selection identity,
+while a removed identity is discarded. The model describes hierarchy and item
+content only; it never stores widget expansion state or performs a filesystem,
+network, or background query on behalf of the view.
 
 `Table` exposes a closed, portable `CellValue` value vocabulary and a
 column-owned edit specification. It performs the standard text, Boolean,

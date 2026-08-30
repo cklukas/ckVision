@@ -2053,6 +2053,19 @@ view->on_link_activate = [](const std::string& target) { (void)target; };
 Header: `include/cvision/widgets/tree_view.hpp`. A hierarchy node with label,
 children, expansion state, and optional client data.
 
+## TreeItem
+
+Header: `include/cvision/widgets/tree_view.hpp`. The compact label,
+known-children state, and optional client payload returned for one requested
+`TreeModel` node. It carries neither child storage nor expansion state.
+
+## TreeModel
+
+Header: `include/cvision/widgets/tree_view.hpp`. A caller-owned, synchronous
+stable-ID hierarchy provider. It supplies root, parent, child-index, and item
+lookups so TreeView can retain view-owned selection and expansion across a
+refresh without enumerating the whole forest. See [Data views](data-views.md#tree-providers).
+
 ## TreeView
 
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
@@ -2062,8 +2075,10 @@ and selects it, which lets a result list or search controller navigate a tree
 without synthesizing input. File Browser uses the public selection callback to
 update a ListView. TreeView retains its flattened visible entries until roots
 or expansion state changes, so repeated draws and navigation do not repeatedly
-walk an unchanged materialized forest. Provider-backed virtualization remains
-post-0.1 scope.
+walk an unchanged materialized forest. `TreeModel` supplies the scalable,
+caller-owned alternative: it keeps expansion and selection by stable item id,
+and resolves only visible hierarchy paths. See [Data views](data-views.md#tree-providers)
+for the provider contract.
 `TreeConnectorStyle::Outline` provides the compact classic terminal-outline
 appearance: `─+` for groups, `──` for leaves, and `│` ancestry guides.
 

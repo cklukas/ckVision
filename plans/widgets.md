@@ -59,7 +59,7 @@ widgets and dialogs, never per-widget state.
 | Scroll viewport | Scrolls any content view, keyboard and wheel | Semantic cell-line scrolling; scroll-region byte-diff optimization is renderer/performance scope per D-041 |
 | Tab control | — | Top tabs with mnemonics, keyboard cycling, per-tab pages, overflow |
 | Table | — | Provider-backed rows, typed editable cells, stable row/cell selection, headers, resize, sort requests, and cell styling; application-defined range/formula/database semantics per D-043 |
-| Tree / outline | Expand/collapse, keyboard navigation | Connector-line styles; virtualized model is post-0.1 per D-041 |
+| Tree / outline | Expand/collapse, keyboard navigation, stable-ID provider model | Connector-line styles; compact `TreeNode` values remain available |
 | Progress | — | Determinate/indeterminate, label slot |
 | Splitter | — | Keyboard-adjustable split panes |
 | Text view | Read-only styled text, scrolling | Links (activatable; rendered as OSC 8 hyperlinks where supported), simple inline styles; the building block for help browsers and about boxes |
@@ -163,7 +163,7 @@ reference acceptance is missing.
 | Scrollbar auto-hide and viewport wheel delivery over descendant content; semantic cell-line scrolling | Scrollbar / Scroll viewport | WP-31, WP-34B; scroll-region byte-diff optimization moved out of widget catalog by D-041 |
 | TabControl complete behavior | Tab control beyond-baseline | WP-34B |
 | Table resize/sort/styled-cell model | Table beyond-baseline | WP-34C; virtualized rows moved post-0.1 by D-041 |
-| Tree connector styles and complete lazy/navigation integration | Tree beyond-baseline | WP-34C, WP-36; virtualized model moved post-0.1 by D-041 |
+| Tree connector styles, complete lazy/navigation integration, and stable-ID provider model | Tree beyond-baseline | WP-34C, WP-36; provider promoted by D-043 from real large-tree clients |
 | Progress complete behavior | Progress beyond-baseline | WP-34B |
 | Splitter keyboard adjustment and integrated resize/golden behavior | Splitter beyond-baseline | WP-34C, WP-36 |
 | TextView activatable links, OSC 8 export, and inline styles | Text view beyond-baseline | WP-34C |
@@ -193,7 +193,7 @@ the exhaustive cross-scheme visual/reference promotion gate.
 | Catalog item | 0.1 implementation / scope authority | Executable evidence | State |
 |---|---|---|---|
 | Table headers, resize, sort indicators, styled-cell hook | `widgets::Table`, `TableColumn`, `Table::sort_by`, `Table::set_cell_style_hook`; virtualized rows and cell editor are post-0.1 by D-041 | `suite_test_table` | Implemented locally |
-| Tree expand/collapse, keyboard/mouse navigation, lazy population, connector styles | `widgets::TreeView`, `TreeNode::children_known`, `TreeView::on_expand_request`, `TreeConnectorStyle`; virtualized provider is post-0.1 by D-041 | `suite_test_tree_view` | Implemented locally |
+| Tree expand/collapse, keyboard/mouse navigation, lazy population, connector styles, provider refresh | `widgets::TreeView`, `TreeNode::children_known`, `TreeView::on_expand_request`, `TreeModel`, `TreeConnectorStyle` | `suite_test_tree_view` | Implemented locally |
 | Splitter keyboard-adjustable panes | `widgets::Splitter::on_key`, `set_split_position`, size-hint clamp; integrated resize acceptance is covered by WP-36 shrink/filebrowser scripts | `suite_test_splitter`, `suite_test_wp36`, `suite_test_filebrowser_smoke` | Implemented locally |
 | TextView links, OSC 8, inline styles | `widgets::TextView::set_spans`, `TextSpan`, `on_link_activate`, `osc8_text` | `suite_test_text_view` | Implemented locally |
 | Help viewer cross-links, back, index/keyword lookup, injected provider | `HelpProvider`, `MemoryHelpProvider::index/search`, `make_help_viewer`, `present_help_viewer` | `suite_test_help_viewer` | Implemented locally |
