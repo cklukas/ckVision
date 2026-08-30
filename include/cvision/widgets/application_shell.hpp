@@ -31,9 +31,16 @@ struct ApplicationShellOptions {
 // ordinary root Desktop/menu/status arrangement but deliberately remains a
 // helper, not a framework owner: Application still owns process state,
 // root() owns the views, and callers still decide whether/how to run the loop.
+// A controller that must remove this chrome before its Application ends may
+// explicitly call detach_desktop().
 class ApplicationShell {
 public:
     ApplicationShell(ui::Application& app, ApplicationShellOptions options);
+
+    // Detaches and destroys the Desktop this helper added to Application's
+    // root. Idempotent. Call this when a controller ends before its borrowed
+    // Application; afterwards the observer accessors are no longer usable.
+    void detach_desktop();
 
     Desktop& desktop() noexcept { return *desktop_; }
     MenuBar* menu_bar() noexcept { return menu_bar_; }

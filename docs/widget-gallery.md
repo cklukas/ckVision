@@ -225,8 +225,10 @@ widgets::EditorWindow* editor_window = stage.desktop().add<widgets::EditorWindow
 
 Header: `include/cvision/widgets/application_shell.hpp`. Use when a small app
 needs a Desktop, classic theme, menu bar, and status line in one construction
-step. [Hello](tutorial-hello.md) is the complete source; use explicit Desktop
-construction when the shell needs more customization.
+step. The Application owns that Desktop while the shell helper is alive; the
+helper can call `detach_desktop()` when its controller must end before the
+Application. [Hello](tutorial-hello.md) is the complete source; use explicit
+Desktop construction when the shell needs more customization.
 
 ## ApplicationShellOptions
 
