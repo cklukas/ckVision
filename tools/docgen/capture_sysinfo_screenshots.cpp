@@ -32,7 +32,7 @@ namespace {
 void write_svg(const std::filesystem::path& directory, std::string_view name,
                const ckv::term::VirtualDisplay& display) {
     const std::filesystem::path path = directory / (std::string(name) + ".svg");
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     if (!out) fail("could not open an output SVG");
     out << ckv::docgen::render_virtual_display_svg(display);
     if (!out) fail("could not write an output SVG");

@@ -64,7 +64,7 @@ void WidgetStage::save(const std::filesystem::path& dir, std::string_view name, 
     const std::filesystem::path path = dir / (std::string(name) + ".svg");
     FrameSvgOptions options;
     options.crop = crop;
-    std::ofstream out(path);
+    std::ofstream out(path, std::ios::binary);
     out << render_virtual_display_svg(terminal_.display(), options);
     ++written_count;
     const Rect emitted = crop.empty() ? Rect{0, 0, terminal_.display().size().width,

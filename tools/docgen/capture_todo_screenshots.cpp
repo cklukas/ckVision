@@ -73,7 +73,7 @@ void write_scene(const std::filesystem::path& screenshot_directory,
                  bool golden) {
     scene.app.step(scene.monotonic.now_nanos());
     const std::filesystem::path svg_path = screenshot_directory / (std::string(name) + ".svg");
-    std::ofstream svg(svg_path);
+    std::ofstream svg(svg_path, std::ios::binary);
     if (!svg) fail("could not open an output SVG");
     svg << docgen::render_virtual_display_svg(scene.terminal.display());
     if (!svg) fail("could not write an output SVG");
