@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="243" height="54" viewBox="0 0 243 54">
+<rect x="0" y="0" width="243" height="54" fill="#000000"/>
+<style>text{font-family:ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace;font-size:15px}</style>
+<defs>
+<pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
+</pattern>
+</defs>
+<rect x="0" y="0" width="243" height="54" fill="#c8c8c8"/>
+<rect x="0" y="0" width="243" height="54" fill="url(#dither1-0000aa)"/>
+<g id="raster-plane">
+</g>
+</svg>

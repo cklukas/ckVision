@@ -122,7 +122,14 @@ The rendering model is retained cell surfaces with damage tracking:
   composed like everything else, so the terminal cursor always lands
   where the focused widget says. Accurate cursor state is also the IME
   contract: emulator-drawn preedit and candidate windows appear at the
-  focused control because the cursor is always truthful (D-OPEN-3).
+  focused control because the cursor is always truthful (D-OPEN-3). A
+  blinking cursor also declares its half-period. The presenter emits a
+  **steady** host cursor shape and owns the visibility phases on the injected
+  monotonic clock; the application includes the next cursor phase in its wait
+  deadline and a phase change writes only cursor bytes, without repainting the
+  scene. Host cursor preferences therefore cannot disable, double, or retime
+  application-declared blinking, while an embedded hardware model can publish
+  its device-specific cadence.
 
 The composed frame is core-typed frame data (cells plus visible raster
 slices plus annotations); the presenter (in `term`) diffs it against the

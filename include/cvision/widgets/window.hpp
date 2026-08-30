@@ -97,6 +97,20 @@ public:
         title_inactive_role_ = title_inactive_role;
     }
 
+    // Keeps the theme's foregrounds and attributes while replacing the
+    // background shared by the frame, title, footer, controls, and uncovered
+    // interior. This is useful for content whose surrounding colour is
+    // runtime state rather than an application theme role (for example a
+    // video adapter's overscan colour).
+    void set_chrome_background_override(std::optional<Color> color) noexcept {
+        if (chrome_background_override_ == color) return;
+        chrome_background_override_ = color;
+        invalidate();
+    }
+    [[nodiscard]] std::optional<Color> chrome_background_override() const noexcept {
+        return chrome_background_override_;
+    }
+
     void set_title(std::string title);
     const std::string& title() const noexcept { return title_; }
 
@@ -444,6 +458,7 @@ private:
     ui::RoleId title_active_role_ = ui::kInvalidRole;
     ui::RoleId title_inactive_role_ = ui::kInvalidRole;
     ui::RoleId control_role_ = ui::kInvalidRole;
+    std::optional<Color> chrome_background_override_;
 
     ui::View* content_ = nullptr;
     std::unordered_map<ui::View*, FrameSlot> frame_overlays_;

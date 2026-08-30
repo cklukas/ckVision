@@ -266,7 +266,11 @@ CK_TEST(posix_terminal_subsession_paints_initial_prompt_and_followup_output_with
         "/bin/sh", {"-i"});
     launch.profile.cells = ckv::Size{24, 4};
     launch.environment = {{"TERM", "xterm"}, {"PS1", "ckv-redraw$ "}};
-    launch.exit_policy = ckv::core::TerminalExitPolicy::WaitForExit;
+    // This is an interactive shell. Its destructor must have the same bounded
+    // teardown policy as the bash interaction test above: an interactive shell
+    // may ignore SIGTERM, and a successful paint assertion must not leave the
+    // suite waiting forever for test-fixture cleanup.
+    launch.exit_policy = ckv::core::TerminalExitPolicy::TerminateAfterGrace;
     ckv::term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(launch));
     auto view = std::make_unique<ckv::widgets::TerminalView>(session);
     view->set_fills_root(false);

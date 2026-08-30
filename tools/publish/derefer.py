@@ -57,14 +57,14 @@ AGENTS = "the engineering standard"
 # a label naming a file nobody can open is no better than the link.
 MD_LINK = re.compile(
     r"\[[^\]\n]*\]\(\s*(?:\.\./)*"
-    r"(?P<target>plans/[^)\s]*|docs/release-audit\.md"
+    r"(?P<target>plans/[^)\s]*|(?:docs/)?release-audit\.md"
     r"|ARCHITECTURE\.md|DECISIONS\.md|ROADMAP\.md|VISION\.md|AGENTS\.md)\s*\)")
 
 # A bare citation. "§5", "D-060" and "'s" are prose and stay; a ":123" points
 # into a document nobody can open, so it goes with the path.
 TOKEN = re.compile(
     r"(?:\.\./)*plans/(?P<plan>[A-Za-z0-9_-]+)?(?:\.md)?(?P<line>:\d+)?"
-    r"|(?:\.\./)*docs/release-audit\.md"
+    r"|(?:\.\./)*(?:docs/)?release-audit\.md"
     r"|(?<![\w])(?:ARCHITECTURE|DECISIONS|ROADMAP|VISION|AGENTS)\.md")
 
 # `plans/widgets.md` is marked up as a path. The name that replaces it is

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="324" height="72" viewBox="0 0 324 72">
+<rect x="0" y="0" width="324" height="72" fill="#000000"/>
+<style>text{font-family:ui-monospace, 'SF Mono', 'Cascadia Code', 'DejaVu Sans Mono', monospace;font-size:15px}</style>
+<defs>
+<pattern id="dither1-0000aa" width="2" height="2" patternUnits="userSpaceOnUse">
+<rect x="0" y="0" width="1" height="1" fill="#0000aa" shape-rendering="crispEdges"/>
+</pattern>
+</defs>
+<rect x="0" y="0" width="324" height="54" fill="#c8c8c8"/>
+<rect x="0" y="54" width="207" height="18" fill="#0000aa"/>
+<rect x="207" y="54" width="117" height="18" fill="#c8c8c8"/>
+<rect x="0" y="0" width="324" height="54" fill="url(#dither1-0000aa)"/>
+<rect x="207" y="54" width="117" height="18" fill="url(#dither1-0000aa)"/>
+<g data-box-drawing="single">
+<path d="M 4.5 72.5 L 4.5 63 L 9.5 63" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="single">
+<path d="M 8.5 63 L 13.5 63 L 18.5 63" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<text x="18" y="68" xml:space="preserve" fill="#c8c8c8">[</text>
+<text x="27" y="68" xml:space="preserve" fill="#00aa00" font-weight="bold">■</text>
+<text x="36" y="68" xml:space="preserve" fill="#c8c8c8">]</text>
+<text x="54" y="68" xml:space="preserve" fill="#c8c8c8">c</text>
+<text x="63" y="68" xml:space="preserve" fill="#c8c8c8">o</text>
+<text x="72" y="68" xml:space="preserve" fill="#c8c8c8">n</text>
+<text x="81" y="68" xml:space="preserve" fill="#c8c8c8">f</text>
+<text x="90" y="68" xml:space="preserve" fill="#c8c8c8">i</text>
+<text x="99" y="68" xml:space="preserve" fill="#c8c8c8">g</text>
+<text x="108" y="68" xml:space="preserve" fill="#c8c8c8">.</text>
+<text x="117" y="68" xml:space="preserve" fill="#c8c8c8">y</text>
+<text x="126" y="68" xml:space="preserve" fill="#c8c8c8">a</text>
+<text x="135" y="68" xml:space="preserve" fill="#c8c8c8">m</text>
+<text x="144" y="68" xml:space="preserve" fill="#c8c8c8">l</text>
+<text x="162" y="68" xml:space="preserve" fill="#c8c8c8">[</text>
+<text x="171" y="68" xml:space="preserve" fill="#00aa00" font-weight="bold">↑</text>
+<text x="180" y="68" xml:space="preserve" fill="#c8c8c8">]</text>
+<g data-box-drawing="single">
+<path d="M 188.5 63 L 193.5 63 L 198.5 63" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g data-box-drawing="single">
+<path d="M 202.5 72.5 L 202.5 63 L 197.5 63" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
+</g>
+<g id="raster-plane">
+</g>
+</svg>

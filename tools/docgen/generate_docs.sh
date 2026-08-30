@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: MIT
 #
 # Regenerates everything under docs/generated/: the example-app
-# screenshots (SVG, from the real virtual-terminal render — see
-# frame_svg.hpp) and the HTML/PDF renders of the Markdown documentation
-# pages, via CK Office Write's `ckwrite` CLI. Nothing under
-# docs/generated/ is committed (see .gitignore) — this script is the
-# single source of truth for producing it.
+# screenshots and the per-widget gallery figures (SVG, from the real
+# virtual-terminal render — see frame_svg.hpp) and the HTML/PDF renders
+# of the Markdown documentation pages, via CK Office Write's `ckwrite`
+# CLI. The SVGs are tracked and published, and regenerated in place; the
+# HTML, PDF and TeX under generated/ are not (see .gitignore). Either
+# way this script is the single source of truth for producing them.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -25,18 +26,21 @@ CKWRITE_BIN="${CKWRITE_BIN:-$HOME/git/cworks_dir/cworks/build/bin/ckwrite}"
 echo "==> Synchronizing source-backed documentation snippets"
 "$PYTHON_BIN" "$REPO_ROOT/tools/docgen/extract_snippets.py" --root "$REPO_ROOT" --write
 "$PYTHON_BIN" "$REPO_ROOT/tools/docgen/extract_snippets.py" --root "$REPO_ROOT"
+"$PYTHON_BIN" "$REPO_ROOT/tools/docgen/sync_field_tables.py" --root "$REPO_ROOT" --write
+"$PYTHON_BIN" "$REPO_ROOT/tools/docgen/sync_field_tables.py" --root "$REPO_ROOT"
 "$PYTHON_BIN" "$REPO_ROOT/tools/docgen/check_docs.py" --root "$REPO_ROOT"
 
 echo "==> Building ckVision (screenshot capture tools)"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
 cmake --build "$BUILD_DIR" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" \
-    --target capture_widget_gallery_screenshots capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots \
+    --target capture_widget_shots capture_widget_gallery_screenshots capture_gallery_screenshots capture_filebrowser_screenshots capture_hello_screenshots \
         capture_layouts_screenshots capture_forms_screenshots capture_workbench_screenshots \
         capture_graphics_screenshots capture_spin_screenshots capture_sysinfo_screenshots \
         capture_editor_screenshots capture_terminal_screenshots capture_todo_screenshots
 
 echo "==> Capturing example-app screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
+"$BUILD_DIR/tools/docgen/capture_widget_shots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_widget_gallery_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_gallery_screenshots" "$SCREENSHOTS_DIR"
 "$BUILD_DIR/tools/docgen/capture_filebrowser_screenshots" "$SCREENSHOTS_DIR"
@@ -58,51 +62,14 @@ mkdir -p "$SCREENSHOTS_DIR"
 # itself); if it's absent, PDF rendering below degrades to a clear
 # warning per file rather than a hard failure.
 if command -v rsvg-convert >/dev/null 2>&1; then
-    screenshot_names=(
-        widget-navigation
-        gallery-initial
-        gallery-typed-name
-        gallery-menu-open
-        gallery-no-graphics
-        filebrowser-initial
-        filebrowser-src-selected
-        filebrowser-include-selected
-        hello-initial
-        hello-greeting
-        hello-menu-open
-        editor-initial
-        editor-search
-        editor-close-confirm
-        terminal-initial
-        terminal-initial-dark
-        terminal-initial-light
-        terminal-initial-mono
-        terminal-menu
-        terminal-full-screen
-        terminal-nested
-        terminal-sixel
-        terminal-no-graphics
-        layouts-initial
-        layouts-wide
-        layouts-narrow
-        layouts-too-small
-        layouts-recovered
-        forms-initial
-        forms-invalid-dialog
-        forms-info-message
-        forms-wizard-ready
-        workbench-text
-        workbench-data
-        workbench-help
-        graphics-sixel-image
-        graphics-sixel-canvas
-        graphics-no-graphics-image
-        graphics-no-graphics-canvas
-        spin-initial
-        spin-menu
-        spin-desktop
-        spin-no-graphics
-    )
+    # Read the names from the manifest rather than keeping a second copy
+    # of them here: the two lists drifted apart the moment the gallery
+    # gained fifty figures, and check_docs.py only polices the manifest.
+    screenshot_names=()
+    while IFS= read -r name; do
+        [[ -z "$name" || "$name" == \#* ]] && continue
+        screenshot_names+=("$name")
+    done < "$REPO_ROOT/tools/docgen/screenshot-manifest.txt"
     for name in "${screenshot_names[@]}"; do
         svg="$SCREENSHOTS_DIR/$name.svg"
         echo "    converting $name.svg -> PDF"
