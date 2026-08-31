@@ -28,6 +28,7 @@ using ckv::widgets::TableColumn;
 using ckv::widgets::TableEditResult;
 using ckv::widgets::TableModel;
 using ckv::widgets::TableRowId;
+using ckv::widgets::format_cell_value;
 
 namespace {
 struct Fixture {
@@ -339,4 +340,23 @@ CK_TEST(provider_backed_table_commits_a_typed_edit_to_its_model) {
     CK_CHECK(!table.editing());
     CK_CHECK((model.committed == TableCellRef{10, 0}));
     CK_CHECK(std::get<std::int64_t>(*model.committed_value) == 42);
+}
+
+CK_TEST(real_cells_format_and_commit_without_locale_or_partial_parses) {
+    CK_CHECK(format_cell_value(ckv::widgets::CellValue{1.25}) == "1.25");
+
+    Fixture f;
+    auto table = make_table(f);
+    table.set_columns({TableColumn{"Value", 12, 3, ckv::widgets::TableCellType::Real, true}});
+    table.set_rows({{"0"}});
+
+    CK_CHECK(table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "1.25"}}));
+    CK_CHECK(table.on_key(key(Key::Enter)));
+    CK_CHECK(!table.editing());
+    CK_CHECK(table.row(0)[0] == "1.25");
+
+    CK_CHECK(table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, " 2.5"}}));
+    CK_CHECK(!table.on_key(key(Key::Enter)));
+    CK_CHECK(table.editing());
+    CK_CHECK(table.edit_diagnostic() == "Enter a real number");
 }
