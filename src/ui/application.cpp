@@ -973,6 +973,13 @@ void Application::settle_frame_completion() {
     }
 }
 
+bool Application::frame_backpressure_active() const noexcept {
+    return presenter_.frame_completion_tracking() &&
+           last_terminal_round_trip_nanos_ >= 0 &&
+           frames_awaiting_terminal() > 0 &&
+           presenter_.last_frame_requires_backpressure();
+}
+
 void Application::post(std::function<void()> fn) {
     // Match timers' callback contract: an empty std::function represents no
     // work, not an asynchronous bad_function_call that would terminate the
@@ -998,18 +1005,19 @@ bool Application::step(std::int64_t deadline_nanos) {
         // Known work is never held behind an input wait. This is what lets a
         // standalone run loop wait indefinitely while dormant without also
         // delaying its initial frame or an explicit invalidation.
+        const bool held_by_frame_backpressure = frame_backpressure_active();
         std::int64_t effective_deadline =
-            (wake_now || dirty_) ? before_wait : deadline_nanos;
+            (wake_now || (dirty_ && !held_by_frame_backpressure)) ? before_wait : deadline_nanos;
         if (const auto timer_deadline = next_timer_deadline_nanos())
             effective_deadline = std::min(effective_deadline, *timer_deadline);
         // Frame-completion patience is a real deadline only while it protects
-        // raster back-pressure. A dormant text frame needs no periodic wake
-        // merely to age a diagnostic counter; the next genuine event can
-        // reconcile it. A picture holding a newer dirty picture back must,
-        // however, be released at the exact patience boundary.
+        // an expensive frame. A dormant small text frame needs no periodic
+        // wake merely to age a diagnostic counter; the next genuine event can
+        // reconcile it. A large text or raster frame holding a newer dirty
+        // state back must, however, be released at the exact boundary.
         if (presenter_.frame_completion_tracking() && oldest_unanswered_frame_nanos_ &&
             presenter_.frames_marked() > frames_settled_ &&
-            presenter_.last_frame_carried_rasters()) {
+            presenter_.last_frame_requires_backpressure()) {
             const std::int64_t patience = frame_completion_patience_nanos();
             const std::int64_t maximum = std::numeric_limits<std::int64_t>::max();
             const std::int64_t frame_deadline =
@@ -1099,15 +1107,14 @@ bool Application::step(std::int64_t deadline_nanos) {
         }
 
         restore_modal_focus_if_needed();
-        // Coalesce rather than pile on. A picture costs the host far more
-        // than the cells around it, and the events that produce new frames
-        // — a window being dragged, a resize in progress — arrive at the
-        // pointer's rate, not at one the terminal agreed to. While it has
-        // not finished the last frame that carried a picture, the newest
-        // state simply waits here: nothing is queued, nothing is lost, and
-        // the frame that does go out is the current one rather than one of
-        // the positions passed through on the way. dirty_ stays set, and a
-        // host that never answers is released by the write-off deadline.
+        // Coalesce rather than pile on. A large text frame or a picture costs
+        // the host enough that pointer-rate window motion can otherwise fill
+        // the path with positions the reader will never see. While the host
+        // has not finished the last expensive frame, the newest state simply
+        // waits here: nothing is queued, nothing is lost, and the frame that
+        // does go out is the current one rather than a position passed through
+        // on the way. dirty_ stays set, and a host that never answers is
+        // released by the write-off deadline.
         // ...but only where the host has actually answered. A terminal that
         // never replies would otherwise hold every frame back until the
         // write-off deadline, which is a stall invented out of silence.
@@ -1120,11 +1127,7 @@ bool Application::step(std::int64_t deadline_nanos) {
         // back for a busy host below -- a throttled picture is no reason for
         // the cursor to freeze on the last thing it crossed.
         presenter_.present_pointer_shape(pointer_shape());
-        const bool waiting_on_a_host_that_answers = presenter_.frame_completion_tracking() &&
-                                                    last_terminal_round_trip_nanos_ >= 0 &&
-                                                    frames_awaiting_terminal() > 0 &&
-                                                    presenter_.last_frame_carried_rasters();
-        if (!waiting_on_a_host_that_answers) paint_and_present();
+        if (!frame_backpressure_active()) paint_and_present();
         if (presenter_.advance_cursor_blink(now)) did_work = true;
         return did_work;
     } catch (...) {

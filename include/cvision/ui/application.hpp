@@ -154,7 +154,11 @@ public:
     // Enabled, each presented frame carries a Device Status Report after
     // it; a terminal reads its input in order, so the reply says that
     // frame has been taken in. Nothing waits: the count below is a fact an
-    // application may consult, exactly like the cost counters above.
+    // application may consult, exactly like the cost counters above. The
+    // running loop uses the same fact to coalesce expensive frames: every
+    // raster frame and every text frame of at least
+    // term::kLargeTextFrameBytes must finish before another is sent, while
+    // small text interactions remain latency-first.
     //
     // A terminal that never answers must not stall anything, so an
     // unanswered frame is written off after kFrameCompletionTimeoutNanos,
@@ -659,6 +663,10 @@ private:
     // Turns this terminal's replies into the outstanding-frame count,
     // and writes off what it never answered.
     void reconcile_frame_completion(std::int64_t now_nanos);
+    // True only when a host known to answer still owes the completion of an
+    // expensive frame. While true, dirty_ is retained as the latest scene
+    // state rather than presented as another intermediate frame.
+    bool frame_backpressure_active() const noexcept;
     // How long this host's silence is given before an unanswered frame is
     // written off — the same patience whether the wait happens between
     // frames or at the end of the session.

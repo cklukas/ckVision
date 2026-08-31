@@ -326,6 +326,16 @@ Nothing blocks — `frames_awaiting_terminal()` is a fact to consult, like the
 cost counters beside it, and `last_terminal_round_trip_nanos()` says how long
 the answer took.
 
+The application loop also uses that answer as bounded back-pressure for
+frames expensive enough to create a stale queue: every raster frame and every
+text frame of at least `term::kLargeTextFrameBytes` (4 KiB) must finish before
+another frame is sent. Input and retained scene state continue to update; only
+the latest dirty state survives, so a rapid window drag sends the current
+position after the host catches up rather than every position crossed on the
+way. Text below the threshold remains immediate. This applies only after a
+host has answered once, so a terminal without DSR replies never acquires a
+periodic stall from a facility it does not implement.
+
 **What that reply is worth.** More than the protocol promises, and less than
 it looks. On a host examined for this (iTerm2), Sixel is decoded by a
 *blocking* call inline on the same path that answers the status report, so the

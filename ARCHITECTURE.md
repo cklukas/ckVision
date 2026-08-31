@@ -258,6 +258,15 @@ the scene decided is visible, and library users never deal with emission
 order. All OSC emissions (title, OSC 52, OSC 8 targets) escape or reject
 embedded terminator bytes (§12).
 
+When frame-completion tracking is enabled, expensive frames are also
+coalescing boundaries: every raster frame and every text frame of at least
+4 KiB must be acknowledged before another frame is emitted. Input and scene
+state continue to advance, but only the latest dirty state is retained, so a
+pointer-rate drag never becomes a queue of obsolete window positions. Smaller
+text frames remain latency-first and are emitted immediately. A host that has
+never answered is never allowed to stall presentation; the existing bounded
+write-off and capability give-up rules apply to both frame classes.
+
 **Platform adapters.** `term` hosts platform-backed implementations of the
 core service contracts: a filesystem model used by file dialogs, a monotonic
 clock, and a terminal-session clipboard-export adapter. The corresponding
@@ -591,8 +600,10 @@ machine** with ratcheted relative-regression thresholds in CI:
 - Input-event-to-presented-bytes latency: **p99 < 2 ms** (keystroke echo,
   focus moves, menu navigation), measured by a scripted PTY harness with
   timestamped event injection and byte capture.
-- Window move-drag: sustained at input event rate, composition-only,
-  **zero content repaints**. Window resize-drag: relayout and repaint
+- Window move-drag: input and scene state sustained at input event rate,
+  composition-only, **zero content repaints**; expensive terminal frames
+  coalesce behind host acknowledgement to the latest position. Window
+  resize-drag: relayout and repaint
   strictly confined to the resized window's dirty subtree, within the
   same sustained rate.
 - Full-screen recompose + diff after theme switch: **< 5 ms**.
