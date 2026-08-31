@@ -15,6 +15,7 @@
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/key_chord_capture.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/popup_list.hpp"
@@ -128,6 +129,28 @@ void shot_input_line(const std::filesystem::path& dir) {
     stage.focus(name);
     stage.step();
     stage.save_window(dir, "widget-inputline");
+}
+
+void shot_key_chord_capture(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    ui::View& content = stage.dialog_window("Keyboard shortcut", Rect{18, 7, 44, 7});
+
+    // ckvision-doc: keychordcapture
+    auto* shortcut = content.make<widgets::KeyChordCapture>();
+    shortcut->set_bounds(Rect{17, 1, 22, 1});
+    shortcut->set_chord(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Shift, "p"});
+    shortcut->on_chord_changed = [](const std::optional<KeyChord>& chord) {
+        (void)chord;  // validate conflicts, then persist the typed chord
+    };
+
+    auto* label = content.make<widgets::Label>("Command &palette");
+    label->set_bounds(Rect{1, 1, 15, 1});
+    label->set_buddy(shortcut);
+    // ckvision-doc-end: keychordcapture
+
+    stage.focus(shortcut);
+    stage.step();
+    stage.save_window(dir, "widget-keychordcapture");
 }
 
 void shot_option_groups(const std::filesystem::path& dir) {
@@ -316,6 +339,7 @@ void capture_control_shots(const std::filesystem::path& dir) {
     shot_label(dir);
     shot_static_text(dir);
     shot_input_line(dir);
+    shot_key_chord_capture(dir);
     shot_option_groups(dir);
     shot_combo_box(dir);
     shot_popup_list(dir);

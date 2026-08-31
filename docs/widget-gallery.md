@@ -1287,6 +1287,25 @@ Backspace or Delete clears a binding. The application owns conflict analysis,
 rebinding, and persistence through its `CommandRegistry`; this widget has no
 keymap or filesystem policy of its own.
 
+![Focused key-chord capture control](generated/screenshots/widget-keychordcapture.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="keychordcapture" -->
+```cpp
+auto* shortcut = content.make<widgets::KeyChordCapture>();
+shortcut->set_bounds(Rect{17, 1, 22, 1});
+shortcut->set_chord(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Shift, "p"});
+shortcut->on_chord_changed = [](const std::optional<KeyChord>& chord) {
+    (void)chord;  // validate conflicts, then persist the typed chord
+};
+
+auto* label = content.make<widgets::Label>("Command &palette");
+label->set_bounds(Rect{1, 1, 15, 1});
+label->set_buddy(shortcut);
+```
+<!-- /ckvision-snippet -->
+
 ## Label
 
 Header: `include/cvision/widgets/label.hpp`. Use a mnemonic label next to a
