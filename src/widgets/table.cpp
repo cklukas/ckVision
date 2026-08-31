@@ -5,7 +5,12 @@
 #include <algorithm>
 #include <charconv>
 #include <cctype>
+#include <iomanip>
+#include <limits>
+#include <locale>
 #include <numeric>
+#include <sstream>
+#include <string_view>
 #include <type_traits>
 
 #include "cvision/core/assert.hpp"
@@ -20,6 +25,31 @@ std::string ascii_lower(std::string value) {
     return value;
 }
 
+std::string format_real(double value) {
+#if defined(CKVISION_HAS_FLOAT_CHARCONV)
+    char buffer[64];
+    const auto result = std::to_chars(std::begin(buffer), std::end(buffer), value);
+    return result.ec == std::errc{} ? std::string(buffer, result.ptr) : std::string{};
+#else
+    std::ostringstream stream;
+    stream.imbue(std::locale::classic());
+    stream << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
+    return stream ? stream.str() : std::string{};
+#endif
+}
+
+bool parse_real(std::string_view text, double& value) {
+#if defined(CKVISION_HAS_FLOAT_CHARCONV)
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    return result.ec == std::errc{} && result.ptr == text.data() + text.size();
+#else
+    std::istringstream stream{std::string(text)};
+    stream.imbue(std::locale::classic());
+    stream >> std::noskipws >> value;
+    return stream && stream.peek() == std::char_traits<char>::eof();
+#endif
+}
+
 }  // namespace
 
 std::string format_cell_value(const CellValue& value) {
@@ -32,6 +62,8 @@ std::string format_cell_value(const CellValue& value) {
                 return item ? "true" : "false";
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return item;
+            } else if constexpr (std::is_same_v<T, double>) {
+                return format_real(item);
             } else {
                 char buffer[64];
                 const auto result = std::to_chars(std::begin(buffer), std::end(buffer), item);
@@ -301,8 +333,7 @@ bool Table::parse_edit_value(CellValue& out, std::string& diagnostic) const {
         }
         case TableCellType::Real: {
             double value = 0.0;
-            const auto result = std::from_chars(edit_text_.data(), edit_text_.data() + edit_text_.size(), value);
-            if (result.ec == std::errc{} && result.ptr == edit_text_.data() + edit_text_.size()) {
+            if (parse_real(edit_text_, value)) {
                 out = value;
                 return true;
             }

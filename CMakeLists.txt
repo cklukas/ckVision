@@ -1,11 +1,13 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
 cmake_minimum_required(VERSION 3.25)
-project(ckvision VERSION 0.1.3 LANGUAGES CXX)
+project(ckvision VERSION 0.1.4 LANGUAGES CXX)
 
 include(cmake/CkVisionSettings.cmake)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+include(CheckCXXSourceCompiles)
+find_package(Threads REQUIRED)
 
 option(CKVISION_BUILD_FUZZERS
     "Build libFuzzer targets and bounded corpus tests (Clang only)" OFF)
@@ -104,10 +106,27 @@ add_library(ckvision::cvision ALIAS cvision)
 target_include_directories(cvision PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(cvision PUBLIC Threads::Threads)
 # The public headers use C++20 library types.  Export the requirement with the
 # package target so an independent consumer is configured correctly instead
 # of depending on this project's directory-wide build setting.
 target_compile_features(cvision PUBLIC cxx_std_20)
+# Floating-point <charconv> arrived later than the integer overloads in some
+# otherwise C++20-capable standard libraries (notably libstdc++ 10, shipped by
+# Ubuntu 20.04). Detect the actual overloads instead of guessing from compiler
+# or library version macros; table.cpp supplies the locale-independent fallback.
+check_cxx_source_compiles([[#include <charconv>
+int main() {
+    char buffer[64]{};
+    double value = 1.25;
+    const auto written = std::to_chars(buffer, buffer + sizeof(buffer), value);
+    const auto read = std::from_chars(buffer, written.ptr, value);
+    return read.ec == std::errc{} ? 0 : 1;
+}
+]] CKVISION_HAS_FLOAT_CHARCONV)
+if(CKVISION_HAS_FLOAT_CHARCONV)
+    target_compile_definitions(cvision PRIVATE CKVISION_HAS_FLOAT_CHARCONV=1)
+endif()
 # One version, stated once. `project()` above is where ckVision's version
 # lives: it is what `write_basic_package_version_file` writes into
 # ckvisionConfigVersion.cmake, and therefore what `find_package(ckvision 0.1.0)`
