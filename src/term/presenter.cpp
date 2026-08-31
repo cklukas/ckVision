@@ -796,6 +796,8 @@ void Presenter::present(FrameView frame, CursorState cursor,
     // finished, and a question with no frame in front of it would only
     // measure the round trip of the question.
     last_frame_carried_rasters_ = frame_sends_raster;
+    last_frame_requires_backpressure_ =
+        frame_sends_raster || out.size() >= kLargeTextFrameBytes;
     if (track_frame_completion_ && !out.empty()) {
         out += "\x1B[5n";
         ++frames_marked_;

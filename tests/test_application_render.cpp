@@ -18,6 +18,7 @@
 #include "cvision/widgets/window.hpp"
 
 #include <optional>
+#include <string_view>
 
 using ckv::ManualClock;
 using ckv::Rect;
@@ -50,6 +51,28 @@ public:
     void change_content() { invalidate(); }
 
     int draw_count = 0;
+};
+
+// Alternating glyphs and colours make a one-column translation change every
+// visible content cell. It is the deterministic text analogue of a process
+// monitor: many independently styled fields move together with the window,
+// so each intermediate position is a genuinely large terminal frame.
+class DenseTextProbe final : public ckv::ui::View {
+public:
+    void draw(ckv::scene::Painter& painter) override {
+        constexpr int kWidth = 68;
+        constexpr int kHeight = 18;
+        for (int row = 0; row < kHeight; ++row) {
+            for (int column = 0; column < kWidth; ++column) {
+                const bool alternate = ((row + column) & 1) != 0;
+                const ckv::Style style{
+                    alternate ? ckv::Color::rgb(40, 210, 120)
+                              : ckv::Color::rgb(230, 170, 30),
+                    ckv::Color::rgb(0, 0, 0), ckv::Attr{}};
+                painter.draw_text(ckv::Point{column, row}, alternate ? "A" : "B", style);
+            }
+        }
+    }
 };
 
 struct Fixture {
@@ -250,6 +273,115 @@ CK_TEST(dragging_a_window_recomposes_without_repainting_its_retained_content) {
     CK_CHECK(f.app.last_compose_cells_touched() <= 216);
     CK_CHECK(f.app.last_bytes_emitted() > 0);
     CK_CHECK(f.app.last_bytes_emitted() <= 2048);
+}
+
+CK_TEST(rapid_large_text_window_dragging_keeps_only_the_latest_position) {
+    ckv::term::HeadlessTerminal term{ckv::Size{100, 30}};
+    ManualClock clock;
+    Application app{term, clock};
+    const ckv::ui::StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    app.set_frame_completion_tracking(true);
+
+    auto desktop_owned = std::make_unique<Desktop>(Rect{});
+    auto window_owned = std::make_unique<Window>("Dense text");
+    window_owned->set_bounds(Rect{2, 3, 72, 22});
+    Window* const window = desktop_owned->add_window(std::move(window_owned));
+    auto content = std::make_unique<DenseTextProbe>();
+    content->set_bounds(Rect{1, 1, 68, 18});
+    window->add_child(std::move(content));
+    app.root().add_child(std::move(desktop_owned));
+
+    app.step(clock.now_nanos());
+    CK_CHECK(app.last_bytes_emitted() >= ckv::term::kLargeTextFrameBytes);
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    CK_CHECK(app.frames_awaiting_terminal() == 0U);
+
+    // Start a real title-bar drag through Application's event route. The
+    // first move is allowed through; it establishes the expensive frame the
+    // host has not yet acknowledged.
+    term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Down,
+                                      .button = ckv::MouseButton::Left,
+                                      .cell = ckv::Point{12, 3},
+                                      .pixel = std::nullopt,
+                                      .modifiers = ckv::Modifier::None});
+    app.step(clock.now_nanos());
+    term.clear_written();
+
+    term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Move,
+                                      .button = ckv::MouseButton::Left,
+                                      .cell = ckv::Point{13, 3},
+                                      .pixel = std::nullopt,
+                                      .modifiers = ckv::Modifier::None});
+    app.step(clock.now_nanos());
+    const std::size_t first_move_bytes = term.written_bytes().size();
+    CK_CHECK(first_move_bytes >= ckv::term::kLargeTextFrameBytes);
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+
+    // Nineteen more pointer-rate positions arrive while the host still owes
+    // that answer. The retained scene follows every event, but not one stale
+    // intermediate frame is appended to the terminal stream.
+    for (int step = 2; step <= 20; ++step) {
+        term.inject_event(ckv::MouseEvent{.action = ckv::MouseAction::Move,
+                                          .button = ckv::MouseButton::Left,
+                                          .cell = ckv::Point{12 + step, 3},
+                                          .pixel = std::nullopt,
+                                          .modifiers = ckv::Modifier::None});
+        app.step(clock.now_nanos());
+    }
+    CK_CHECK(window->bounds() == (Rect{22, 3, 72, 22}));
+    CK_CHECK(term.written_bytes().size() == first_move_bytes);
+
+    // Once the host catches up, exactly the current position is presented.
+    // The byte ceiling is deliberately a frame-class budget: without
+    // coalescing this deterministic gesture emits roughly twenty large
+    // frames and exceeds both the ratio and the absolute bound.
+    term.inject_bytes("\x1B[0n", clock.now_nanos());
+    app.step(clock.now_nanos());
+    const std::size_t drag_bytes = term.written_bytes().size();
+    CK_CHECK(drag_bytes > first_move_bytes);
+    CK_CHECK(drag_bytes <= first_move_bytes * 3U);
+    CK_CHECK(drag_bytes <= 96U * 1024U);
+
+    std::size_t completion_marks = 0;
+    for (std::size_t at = term.written_bytes().find("\x1B[5n");
+         at != std::string_view::npos;
+         at = term.written_bytes().find("\x1B[5n", at + 1))
+        ++completion_marks;
+    CK_CHECK(completion_marks == 2U);
+    CK_CHECK(app.frames_awaiting_terminal() == 1U);
+}
+
+CK_TEST(small_text_frames_remain_immediate_while_an_answer_is_outstanding) {
+    Fixture f;
+    f.app.set_frame_completion_tracking(true);
+    auto label_owned = std::make_unique<Label>("A");
+    Label* const label = label_owned.get();
+    label->set_bounds(Rect{2, 2, 4, 1});
+    f.app.root().add_child(std::move(label_owned));
+
+    f.app.step(f.clock.now_nanos());
+    f.term.inject_bytes("\x1B[0n", f.clock.now_nanos());
+    f.app.step(f.clock.now_nanos());
+    CK_CHECK(f.app.frames_awaiting_terminal() == 0U);
+
+    label->set_text("B");
+    f.term.clear_written();
+    f.app.step(f.clock.now_nanos());
+    CK_CHECK(f.app.last_bytes_emitted() > 0U);
+    CK_CHECK(f.app.last_bytes_emitted() < ckv::term::kLargeTextFrameBytes);
+    CK_CHECK(f.app.frames_awaiting_terminal() == 1U);
+
+    // No acknowledgement for B. C still goes immediately because this frame
+    // class carries latency-sensitive interaction, not enough terminal work
+    // to justify a host round trip.
+    label->set_text("C");
+    f.term.clear_written();
+    f.app.step(f.clock.now_nanos());
+    CK_CHECK(!f.term.written_bytes().empty());
+    CK_CHECK(f.app.last_bytes_emitted() < ckv::term::kLargeTextFrameBytes);
+    CK_CHECK(f.app.frames_awaiting_terminal() == 2U);
 }
 
 CK_TEST(resizing_one_window_repaints_only_its_retained_subtree) {

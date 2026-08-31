@@ -23,6 +23,13 @@
 
 namespace ckv::term {
 
+// Text below this size remains latency-first: keystrokes, focus changes and
+// menu navigation must not wait behind a host round trip. At and above this
+// size a frame has enough terminal work behind it that sending every
+// intermediate state is worse than coalescing to the latest one. Raster
+// frames are always in the latter class, independent of their encoded size.
+inline constexpr std::size_t kLargeTextFrameBytes = 4U * 1024U;
+
 // Cursor blinking is presentation state, not scene animation. The Presenter
 // resolves a blinking CursorState into a steady host cursor whose visibility
 // changes on this deterministic cadence, so terminal profile preferences
@@ -122,11 +129,17 @@ public:
     // count, the difference is how far ahead of the terminal we are.
     std::size_t frames_marked() const noexcept { return frames_marked_; }
 
-    // Whether the most recent present() put a picture on the wire. A frame
-    // that did is the expensive kind — a host decodes raster pixels, and
-    // that cost is why an application may want to let one finish before
-    // producing the next.
+    // Whether the most recent present() put a picture on the wire.
     bool last_frame_carried_rasters() const noexcept { return last_frame_carried_rasters_; }
+
+    // Whether the most recent frame is expensive enough to hold a following
+    // frame behind its completion answer. Pictures always are; text becomes
+    // so at kLargeTextFrameBytes. Keeping the classification in Presenter
+    // makes it a statement about the bytes actually emitted, not a guess by
+    // Application from how much scene damage preceded them.
+    bool last_frame_requires_backpressure() const noexcept {
+        return last_frame_requires_backpressure_;
+    }
 
 private:
     // Everything an encoding depends on, and nothing else. Notably not where
@@ -242,6 +255,7 @@ private:
     bool track_frame_completion_ = false;
     std::size_t frames_marked_ = 0;
     bool last_frame_carried_rasters_ = false;
+    bool last_frame_requires_backpressure_ = false;
 };
 
 // Encodes a style as the SGR sequence a host with these capabilities can
