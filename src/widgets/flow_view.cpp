@@ -49,6 +49,30 @@ void FlowView::append_block(FlowBlock block) {
     invalidate_layout();
 }
 
+bool FlowView::replace_block(std::size_t index, FlowBlock block) {
+    if (index >= document_.blocks.size()) return false;
+    document_.blocks[index] = std::move(block);
+    current_link_.reset();
+    const bool is_final_block = index + 1 == document_.blocks.size();
+    const bool has_current_layout = layout_width_ == content_width() &&
+                                    block_layout_offsets_.size() == document_.blocks.size();
+    if (is_final_block && has_current_layout) {
+        const BlockLayoutOffset offset = block_layout_offsets_.back();
+        rows_.erase(rows_.begin() + static_cast<std::ptrdiff_t>(offset.row_begin), rows_.end());
+        images_.erase(images_.begin() + static_cast<std::ptrdiff_t>(offset.image_begin), images_.end());
+        link_targets_.erase(link_targets_.begin() + static_cast<std::ptrdiff_t>(offset.link_begin), link_targets_.end());
+        block_layout_offsets_.pop_back();
+        append_block_layout(index, layout_width_);
+        if (rows_.empty()) rows_.push_back(LayoutRow{});
+        if (!link_targets_.empty()) current_link_ = 0;
+        update_scrollbar_range();
+        invalidate();
+        return true;
+    }
+    invalidate_layout();
+    return true;
+}
+
 void FlowView::invalidate_layout() {
     layout_width_ = -1;
     if (scrollbar_ != nullptr) on_resized();
@@ -68,6 +92,19 @@ void FlowView::rebuild_layout(int width) const {
     rows_.clear();
     images_.clear();
     link_targets_.clear();
+    block_layout_offsets_.clear();
+
+    for (std::size_t block_index = 0; block_index < document_.blocks.size(); ++block_index)
+        append_block_layout(block_index, width);
+    if (rows_.empty()) rows_.push_back(LayoutRow{});
+    if (current_link_ && *current_link_ >= link_targets_.size()) current_link_.reset();
+    if (!current_link_ && !link_targets_.empty()) current_link_ = 0;
+    update_scrollbar_range();
+}
+
+void FlowView::append_block_layout(std::size_t block_index, int width) const {
+    block_layout_offsets_.push_back(BlockLayoutOffset{rows_.size(), images_.size(), link_targets_.size()});
+    if (block_index != 0) rows_.push_back(LayoutRow{});
 
     LayoutRow current;
     int current_width = 0;
@@ -95,43 +132,38 @@ void FlowView::rebuild_layout(int width) const {
         current_width += grapheme_width;
     };
 
-    for (std::size_t block_index = 0; block_index < document_.blocks.size(); ++block_index) {
-        if (block_index != 0 && current_open) flush();
-        if (block_index != 0) rows_.push_back(LayoutRow{});
-        for (const FlowInline& inline_item : document_.blocks[block_index].content) {
-            std::visit(
-                [&](const auto& item) {
-                    using T = std::decay_t<decltype(item)>;
-                    if constexpr (std::is_same_v<T, FlowText>) {
-                        std::optional<std::size_t> link;
-                        if (item.link_target) {
-                            link = link_targets_.size();
-                            link_targets_.push_back(*item.link_target);
-                            if (!current_link_) current_link_ = link;
-                        }
-                        for (std::string_view grapheme : text::split_graphemes(item.text)) {
-                            if (grapheme == "\n") {
-                                flush();
-                            } else {
-                                append_grapheme(grapheme, item.attrs, link);
-                            }
-                        }
-                    } else if constexpr (std::is_same_v<T, FlowLineBreak>) {
-                        flush();
-                    } else {
-                        if (current_open) flush();
-                        const Size extent{std::max(1, item.cell_extent.width), std::max(1, item.cell_extent.height)};
-                        images_.push_back(LayoutImage{static_cast<int>(rows_.size()), extent, item.image, item.fallback});
-                        for (int row = 0; row < extent.height; ++row) rows_.push_back(LayoutRow{});
+    for (const FlowInline& inline_item : document_.blocks[block_index].content) {
+        std::visit(
+            [&](const auto& item) {
+                using T = std::decay_t<decltype(item)>;
+                if constexpr (std::is_same_v<T, FlowText>) {
+                    std::optional<std::size_t> link;
+                    if (item.link_target) {
+                        link = link_targets_.size();
+                        link_targets_.push_back(*item.link_target);
                     }
-                },
-                inline_item);
-        }
+                    for (std::string_view grapheme : text::split_graphemes(item.text)) {
+                        if (grapheme == "\n") {
+                            flush();
+                        } else {
+                            append_grapheme(grapheme, item.attrs, link);
+                        }
+                    }
+                } else if constexpr (std::is_same_v<T, FlowLineBreak>) {
+                    flush();
+                } else {
+                    if (current_open) flush();
+                    const Size extent{std::max(1, item.cell_extent.width), std::max(1, item.cell_extent.height)};
+                    images_.push_back(LayoutImage{static_cast<int>(rows_.size()), extent, item.image, item.fallback});
+                    for (int row = 0; row < extent.height; ++row) rows_.push_back(LayoutRow{});
+                }
+            },
+            inline_item);
     }
     if (current_open) flush();
-    if (rows_.empty()) rows_.push_back(LayoutRow{});
-    if (current_link_ && *current_link_ >= link_targets_.size()) current_link_.reset();
-    if (!current_link_ && !link_targets_.empty()) current_link_ = 0;
+}
+
+void FlowView::update_scrollbar_range() const {
     if (scrollbar_ != nullptr) {
         scrollbar_->set_range(static_cast<int>(rows_.size()), std::max(1, bounds().height));
     }

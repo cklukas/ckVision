@@ -65,6 +65,31 @@ CK_TEST(text_editor_backspace_and_undo_operate_on_document_transactions) {
     CK_CHECK(document->text() == "abc");
 }
 
+CK_TEST(text_editor_offers_an_opt_in_newline_handler_with_a_safe_default_fallback) {
+    auto document = std::make_shared<EditorDocument>("- item");
+    TextEditor editor(document);
+    editor.set_bounds(Rect{0, 0, 30, 4});
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::End, Modifier::None, ""}}));
+
+    std::size_t handled = 0U;
+    editor.set_newline_handler([&](TextEditor& callback_editor) {
+        ++handled;
+        auto transaction = document->transaction();
+        transaction.replace({document->end(), document->end()}, "\n- ");
+        if (!document->commit(std::move(transaction))) return false;
+        const auto cursor = document->end();
+        return callback_editor.set_selection({cursor, cursor});
+    });
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(handled == 1U);
+    CK_CHECK(document->text() == "- item\n- ");
+    CK_CHECK(editor.status().line == 2U && editor.status().column == 3U);
+
+    editor.set_newline_handler([](TextEditor&) { return false; });
+    CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(document->text() == "- item\n- \n");
+}
+
 CK_TEST(text_editor_overwrite_replaces_complete_graphemes_without_crossing_a_line) {
     auto document = std::make_shared<EditorDocument>("a🙂b\ncd");
     TextEditor editor(document);
@@ -173,6 +198,22 @@ CK_TEST(text_editor_extends_and_collapses_selection_for_cursor_home_end_and_docu
     CK_CHECK(editor.status().line == 2U && editor.status().column == 1U);
     CK_CHECK(editor.on_key(KeyEvent{KeyChord{Key::End, Modifier::Ctrl | Modifier::Shift, ""}}));
     CK_CHECK(editor.selection()->begin.byte == 6U && editor.selection()->end.byte == 12U);
+}
+
+CK_TEST(text_editor_restores_a_current_grapheme_aligned_selection_for_controller_transactions) {
+    auto document = std::make_shared<EditorDocument>("alpha 🙂 beta");
+    TextEditor editor(document);
+    const auto begin = document->position_at_byte(6U);
+    const auto end = document->position_at_byte(10U);
+    CK_CHECK(begin.has_value() && end.has_value());
+    CK_CHECK(editor.set_selection({*begin, *end}));
+    CK_CHECK(editor.selection().has_value());
+    CK_CHECK(document->text(*editor.selection()) == "🙂");
+
+    const ckv::widgets::DocumentRange stale{*begin, *end};
+    CK_CHECK(document->replace({document->begin(), document->begin()}, "x"));
+    CK_CHECK(!editor.set_selection(stale));
+    CK_CHECK(!editor.set_selection({document->begin(), {document->revision(), 8U}}));
 }
 
 CK_TEST(text_editor_status_exposes_document_encoding_and_newline_metadata) {

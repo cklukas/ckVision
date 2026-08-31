@@ -57,6 +57,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/static_text.hpp` | `StaticText` | [Widget gallery](widget-gallery.md#statictext) |
 | `include/cvision/widgets/button.hpp` | `Button` | [Widget gallery](widget-gallery.md#button) |
 | `include/cvision/widgets/input_line.hpp` | `InputLine` | [Widget gallery](widget-gallery.md#inputline) |
+| `include/cvision/widgets/key_chord_capture.hpp` | `KeyChordCapture` | [Widget gallery](widget-gallery.md#keychordcapture) |
 | `include/cvision/widgets/memo.hpp` | `Memo`, `MemoPosition` | [Widget gallery](widget-gallery.md#memo) |
 | `include/cvision/widgets/editor_document.hpp` | `EditorDocument`, positions, ranges, transactions | [Editor](editor.md) |
 | `include/cvision/widgets/text_editor.hpp` | `TextEditor`, `EditorStatus`, `EditorStatusModel` | [Editor](editor.md) |
@@ -74,7 +75,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/option_group.hpp` | `CheckGroup`, `RadioGroup` | [Widget gallery](widget-gallery.md#checkgroup) |
 | `include/cvision/widgets/combo_box.hpp` | `ComboBox` | [Widget gallery](widget-gallery.md#combobox) |
 | `include/cvision/widgets/list_view.hpp` | `ListView`, `ListModel`, `ListItem` | [Data views](data-views.md) |
-| `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode` | [Widget gallery](widget-gallery.md#treeview) |
+| `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode`, `TreeModel`, `TreeItem` | [Data views](data-views.md#tree-providers) |
 | `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl` | [Widget gallery](widget-gallery.md#tabcontrol) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |

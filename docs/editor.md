@@ -78,6 +78,12 @@ Printable character events insert their terminal-provided UTF-8 text; Shift is
 part of normal text production, so uppercase and shifted symbols insert just
 like unshifted text, while Alt/Ctrl/Super character chords remain available to
 commands.
+`TextEditor::set_newline_handler()` is the narrow extension seam for a
+language-aware Enter action. It receives the editor before the normal newline
+is inserted: return `true` after committing an application-owned transaction
+and restoring a current selection with `set_selection()`, or `false` to keep
+the standard newline. It is not called for a read-only editor or pasted text,
+so a semantic rule cannot accidentally bypass either safeguard.
 Adding Shift extends the primary selection for every cursor movement, including
 Ctrl+Shift+Left/Right/Home/End. Ctrl+C/X/V use the application clipboard;
 Ctrl+Insert/Shift+Insert are equivalent copy/paste bindings, and Shift+Delete
@@ -117,6 +123,13 @@ created it. Obtain positions through `position_at_byte()` or
 `replace()` rejects stale positions instead of applying an offset to changed
 text. Use `DocumentTransaction` to make several non-overlapping edits against
 one revision and advance the revision once.
+
+When an application-level command transforms a current selection through its
+own document transaction, it can call `TextEditor::set_selection()` with the
+new current, grapheme-aligned `DocumentRange`. The editor restores that range,
+scrolls it into view, publishes status, and invalidates normally; it never
+accepts a stale revision or a byte inside a grapheme cluster. This is a direct
+state API for controllers, not a request to synthesize cursor keystrokes.
 
 Line/column and byte-position lookup use the persistent piece tree's byte and
 newline aggregates. A local edit therefore does not need to materialize the

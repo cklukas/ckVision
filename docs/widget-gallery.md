@@ -225,8 +225,10 @@ widgets::EditorWindow* editor_window = stage.desktop().add<widgets::EditorWindow
 
 Header: `include/cvision/widgets/application_shell.hpp`. Use when a small app
 needs a Desktop, classic theme, menu bar, and status line in one construction
-step. [Hello](tutorial-hello.md) is the complete source; use explicit Desktop
-construction when the shell needs more customization.
+step. The Application owns that Desktop while the shell helper is alive; the
+helper can call `detach_desktop()` when its controller must end before the
+Application. [Hello](tutorial-hello.md) is the complete source; use explicit
+Desktop construction when the shell needs more customization.
 
 ## ApplicationShellOptions
 
@@ -928,8 +930,9 @@ a place to add, remove or activate windows — post that work instead.
 
 Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator
 record used to materialize a descriptor dialog. `kind` selects the control:
-`Text` (an `InputLine`, the default), `Check` (a checkbox carrying the label
-as its own text) or `Note` (text the form states rather than asks). See
+`Text` (an `InputLine`, the default), `Memo` (a multi-line text field whose
+`memo_rows` controls its requested visible height), `Check` (a checkbox carrying
+the label as its own text) or `Note` (text the form states rather than asks). See
 [Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
 
 ## ButtonDescriptor
@@ -1271,6 +1274,35 @@ port->set_bounds(Rect{14, 7, 30, 1});
 port->set_validator([](const std::string& text) { return text.find_first_not_of("0123456789") == std::string::npos; });
 port->set_text("80a");
 port->set_valid(false);  // draws in the invalid role until it validates
+```
+<!-- /ckvision-snippet -->
+
+## KeyChordCapture
+
+Header: `include/cvision/widgets/key_chord_capture.hpp`. Use for editing a
+single command shortcut without allowing the captured chord to trigger that
+command. Focus the control and press Enter or Space to begin capture; the next
+key press becomes its typed `KeyChord`. Escape abandons capture, while
+Backspace or Delete clears a binding. The application owns conflict analysis,
+rebinding, and persistence through its `CommandRegistry`; this widget has no
+keymap or filesystem policy of its own.
+
+![Focused key-chord capture control](generated/screenshots/widget-keychordcapture.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="keychordcapture" -->
+```cpp
+auto* shortcut = content.make<widgets::KeyChordCapture>();
+shortcut->set_bounds(Rect{17, 1, 22, 1});
+shortcut->set_chord(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Shift, "p"});
+shortcut->on_chord_changed = [](const std::optional<KeyChord>& chord) {
+    (void)chord;  // validate conflicts, then persist the typed chord
+};
+
+auto* label = content.make<widgets::Label>("Command &palette");
+label->set_bounds(Rect{1, 1, 15, 1});
+label->set_buddy(shortcut);
 ```
 <!-- /ckvision-snippet -->
 
@@ -2042,11 +2074,32 @@ view->on_link_activate = [](const std::string& target) { (void)target; };
 Header: `include/cvision/widgets/tree_view.hpp`. A hierarchy node with label,
 children, expansion state, and optional client data.
 
+## TreeItem
+
+Header: `include/cvision/widgets/tree_view.hpp`. The compact label,
+known-children state, and optional client payload returned for one requested
+`TreeModel` node. It carries neither child storage nor expansion state.
+
+## TreeModel
+
+Header: `include/cvision/widgets/tree_view.hpp`. A caller-owned, synchronous
+stable-ID hierarchy provider. It supplies root, parent, child-index, and item
+lookups so TreeView can retain view-owned selection and expansion across a
+refresh without enumerating the whole forest. See [Data views](data-views.md#tree-providers).
+
 ## TreeView
 
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
 Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
-children. File Browser uses the public selection callback to update a ListView.
+children. `reveal_and_select(id)` opens the ancestors of a materialized node
+and selects it, which lets a result list or search controller navigate a tree
+without synthesizing input. File Browser uses the public selection callback to
+update a ListView. TreeView retains its flattened visible entries until roots
+or expansion state changes, so repeated draws and navigation do not repeatedly
+walk an unchanged materialized forest. `TreeModel` supplies the scalable,
+caller-owned alternative: it keeps expansion and selection by stable item id,
+and resolves only visible hierarchy paths. See [Data views](data-views.md#tree-providers)
+for the provider contract.
 `TreeConnectorStyle::Outline` provides the compact classic terminal-outline
 appearance: `─+` for groups, `──` for leaves, and `│` ancestry guides.
 

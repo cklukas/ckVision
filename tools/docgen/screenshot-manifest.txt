@@ -78,6 +78,7 @@ widget-flowview
 widget-helpviewer
 widget-imageview
 widget-inputline
+widget-keychordcapture
 widget-label
 widget-listview
 widget-memo

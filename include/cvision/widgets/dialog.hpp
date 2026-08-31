@@ -58,6 +58,7 @@
 #include "cvision/widgets/dialog_presentation.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/memo.hpp"
 #include "cvision/widgets/option_group.hpp"
 #include "cvision/widgets/scroll_viewport.hpp"
 #include "cvision/widgets/window.hpp"
@@ -112,6 +113,9 @@ enum class FieldKind {
     // `time_show_seconds` controls both presentation and the canonical
     // HH:MM or HH:MM:SS text returned on acceptance.
     Time,
+    // A multi-line Memo. It preserves ordinary Enter-for-newline editing;
+    // the form's default action remains reachable by Tab or pointer.
+    Memo,
 };
 
 struct FieldDescriptor {
@@ -168,6 +172,10 @@ struct FieldDescriptor {
     TimeValue initial_time{};
     bool time_show_seconds = true;
     bool time_24_hour = true;
+    // Memo only: its requested visible height inside the form. A dialog may
+    // still scroll its field area on a smaller terminal. Values below one are
+    // treated as one row rather than creating a non-interactive field.
+    int memo_rows = 5;
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -242,6 +250,7 @@ struct MaterializedDialog {
     // field, and `checks` is nullptr for a Text field.
     std::vector<Label*> labels;
     std::vector<InputLine*> inputs;
+    std::vector<Memo*> memos;
     std::vector<CheckGroup*> checks;
     std::vector<RadioGroup*> radios;
     std::vector<ComboBox*> combos;

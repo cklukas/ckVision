@@ -39,6 +39,12 @@ class TextEditor final : public ui::View {
 public:
     using StatusObserverId = std::uint64_t;
     using StatusObserver = std::function<void(const EditorStatus&)>;
+    // Called for an Enter key before the editor inserts its ordinary newline.
+    // Return true after handling the key (for example, by committing a
+    // language-aware document transaction and restoring a current selection);
+    // return false to retain the editor's standard newline insertion. The
+    // handler is not called for a read-only editor or pasted newline text.
+    using NewlineHandler = std::function<bool(TextEditor&)>;
 
     explicit TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRegistry* profiles = nullptr);
     ~TextEditor() override;
@@ -46,6 +52,10 @@ public:
     const std::shared_ptr<EditorDocument>& document() const noexcept { return document_; }
     DocumentPosition cursor() const noexcept { return cursor_; }
     std::optional<DocumentRange> selection() const noexcept;
+    // Selects a current, grapheme-aligned document range. Controllers that
+    // apply a document transaction can restore the semantic selection around
+    // the transformed content without synthesizing keyboard input.
+    bool set_selection(DocumentRange range);
     EditorStatus status() const;
 
     void set_show_line_numbers(bool enabled);
@@ -70,6 +80,7 @@ public:
     bool read_only() const noexcept { return read_only_; }
     void set_overwrite(bool value);
     bool overwrite() const noexcept { return overwrite_; }
+    void set_newline_handler(NewlineHandler handler) { newline_handler_ = std::move(handler); }
 
     void set_file_name(std::string name);
     void set_profile(std::optional<std::string> profile_id);
@@ -184,6 +195,7 @@ private:
     WrapMode wrap_mode_ = WrapMode::None;
     bool read_only_ = false;
     bool overwrite_ = false;
+    NewlineHandler newline_handler_;
     bool has_focus_ = false;
     bool dragging_ = false;
 

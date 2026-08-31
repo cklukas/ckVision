@@ -100,6 +100,7 @@ struct StandardRoles {
     RoleId table_header;     // Table: the column-header row
     RoleId memo_normal;
     RoleId memo_focused;
+    RoleId memo_invalid;  // a failed descriptor-form validator
     RoleId option_normal;    // CheckGroup / RadioGroup
     RoleId option_focused;
     RoleId scrollbar_track;  // shared by every widget with a built-in Scrollbar

@@ -44,10 +44,11 @@ Application                         host owns this
 `HelloApp` is not a `View`; it is a small builder/controller that stores a
 reference to `Application` and a non-owning pointer to the Desktop it created.
 `ApplicationShell` transfers the actual view ownership into the Application
-tree. The Desktop routes focus to its active surface. A message-box
-presentation establishes modality and restores the prior focus when it closes.
-Every node paints through the Application frame; a terminal resize reaches the
-root and is propagated through the tree.
+tree; call `detach_desktop()` only when a controller must remove that chrome
+before the Application ends. The Desktop routes focus to its active surface. A
+message-box presentation establishes modality and restores the prior focus when
+it closes. Every node paints through the Application frame; a terminal resize
+reaches the root and is propagated through the tree.
 
 ## Full source: application object
 

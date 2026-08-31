@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/application_shell.hpp"
 #include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/message_box.hpp"
 #include "cvision/widgets/status_line.hpp"
 
 #include "cvision/testing/cktest.hpp"
@@ -222,6 +223,32 @@ CK_TEST(application_shell_constructs_chrome_without_owning_loop_or_process_state
     CK_CHECK(f.app.root().children().size() == 1);
     CK_CHECK(f.app.root().children().front().get() == &shell.desktop());
     CK_CHECK(!f.app.quit_requested());
+}
+
+CK_TEST(application_shell_can_detach_its_desktop_before_the_application_ends) {
+    AppFixture f;
+    widgets::ApplicationShell shell(
+        f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles)});
+    CK_CHECK(f.app.root().children().size() == 1);
+    CK_CHECK(f.app.root().children().front().get() == &shell.desktop());
+
+    shell.detach_desktop();
+    CK_CHECK(f.app.root().children().empty());
+    shell.detach_desktop();
+    f.app.step(0);
+    CK_CHECK((f.app.current_frame().size() == Size{80, 24}));
+}
+
+CK_TEST(about_help_ignores_a_desktop_that_was_explicitly_detached) {
+    AppFixture f;
+    widgets::ApplicationShell shell(
+        f.app, {.theme = ui::make_classic_theme(f.app.roles(), f.roles)});
+    widgets::install_about_help(f.app, shell.desktop(), f.roles, "Teardown test", "Detached Desktop");
+
+    shell.detach_desktop();
+    CK_CHECK(f.app.execute_command(standard(f.app).help));
+    f.app.step(0);
+    CK_CHECK(f.app.root().children().empty());
 }
 
 CK_TEST(application_shell_docks_an_empty_status_line_only_when_the_caller_asks_for_one) {

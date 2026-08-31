@@ -126,7 +126,8 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // exists.
 //
 // Installs a handler for the standard help command, replacing any already
-// there.
+// there. If the borrowed Desktop is detached later, the handler becomes a
+// harmless no-op rather than retaining a stale view observer.
 void install_about_help(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
                         std::string title, std::string body);
 

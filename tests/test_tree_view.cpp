@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/tree_view.hpp"
 
+#include <map>
 #include <string_view>
 
 #include "cvision/testing/cktest.hpp"
@@ -23,6 +24,9 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::TreeNode;
 using ckv::widgets::TreeConnectorStyle;
+using ckv::widgets::TreeItem;
+using ckv::widgets::TreeItemId;
+using ckv::widgets::TreeModel;
 using ckv::widgets::TreeView;
 
 namespace {
@@ -53,6 +57,96 @@ std::vector<TreeNode> sample_forest() {
     roots.push_back(std::move(leaf));
     return roots;
 }
+
+struct ProviderNode {
+    TreeItemId id = 0;
+    std::optional<TreeItemId> parent;
+    std::string label;
+    std::vector<TreeItemId> children;
+    bool children_known = true;
+    bool present = true;
+};
+
+class ProviderTree final : public TreeModel {
+public:
+    ProviderTree() {
+        roots_ = {1};
+        nodes_.emplace(1, ProviderNode{1, std::nullopt, "root", {2, 3}, true, true});
+        nodes_.emplace(2, ProviderNode{2, 1, "branch", {4}, true, true});
+        nodes_.emplace(3, ProviderNode{3, 1, "sibling", {}, true, true});
+        nodes_.emplace(4, ProviderNode{4, 2, "match", {}, true, true});
+    }
+
+    std::size_t root_count() const override { return roots_.size(); }
+    TreeItemId root_id_at(std::size_t index) const override { return index < roots_.size() ? roots_[index] : 0; }
+    std::optional<std::size_t> root_index_of(TreeItemId id) const override {
+        for (std::size_t index = 0; index < roots_.size(); ++index)
+            if (roots_[index] == id && lookup(id) != nullptr) return index;
+        return std::nullopt;
+    }
+    std::optional<TreeItemId> parent_id_of(TreeItemId id) const override {
+        const ProviderNode* node = lookup(id);
+        return node == nullptr ? std::nullopt : node->parent;
+    }
+    std::size_t child_count(TreeItemId parent) const override {
+        const ProviderNode* node = lookup(parent);
+        return node == nullptr ? 0 : node->children.size();
+    }
+    TreeItemId child_id_at(TreeItemId parent, std::size_t index) const override {
+        const ProviderNode* node = lookup(parent);
+        return node != nullptr && index < node->children.size() ? node->children[index] : 0;
+    }
+    std::optional<std::size_t> child_index_of(TreeItemId parent, TreeItemId child) const override {
+        const ProviderNode* node = lookup(parent);
+        if (node == nullptr) return std::nullopt;
+        for (std::size_t index = 0; index < node->children.size(); ++index)
+            if (node->children[index] == child && lookup(child) != nullptr) return index;
+        return std::nullopt;
+    }
+    std::optional<TreeItem> item(TreeItemId id) const override {
+        ++item_queries;
+        const ProviderNode* node = lookup(id);
+        if (node == nullptr) return std::nullopt;
+        return TreeItem{node->label, node->children_known, id};
+    }
+
+    void reorder_root_children() { nodes_.at(1).children = {3, 2}; }
+    void remove(TreeItemId id) { nodes_.at(id).present = false; }
+    void mark_unknown(TreeItemId id) { nodes_.at(id).children_known = false; }
+
+    mutable std::size_t item_queries = 0;
+
+private:
+    const ProviderNode* lookup(TreeItemId id) const {
+        const auto found = nodes_.find(id);
+        return found != nodes_.end() && found->second.present ? &found->second : nullptr;
+    }
+
+    std::vector<TreeItemId> roots_;
+    std::map<TreeItemId, ProviderNode> nodes_;
+};
+
+class MillionRoots final : public TreeModel {
+public:
+    static constexpr std::size_t kCount = 1'000'000;
+
+    std::size_t root_count() const override { return kCount; }
+    TreeItemId root_id_at(std::size_t index) const override { return index < kCount ? index + 1 : 0; }
+    std::optional<std::size_t> root_index_of(TreeItemId id) const override {
+        return id != 0 && id <= kCount ? std::optional<std::size_t>(id - 1) : std::nullopt;
+    }
+    std::optional<TreeItemId> parent_id_of(TreeItemId) const override { return std::nullopt; }
+    std::size_t child_count(TreeItemId) const override { return 0; }
+    TreeItemId child_id_at(TreeItemId, std::size_t) const override { return 0; }
+    std::optional<std::size_t> child_index_of(TreeItemId, TreeItemId) const override { return std::nullopt; }
+    std::optional<TreeItem> item(TreeItemId id) const override {
+        ++item_queries;
+        if (id == 0 || id > kCount) return std::nullopt;
+        return TreeItem{"row " + std::to_string(id), true, id};
+    }
+
+    mutable std::size_t item_queries = 0;
+};
 }  // namespace
 
 // --- Basics --------------------------------------------------------------
@@ -71,12 +165,113 @@ CK_TEST(setting_roots_selects_the_first_top_level_node) {
     CK_CHECK(tree.selected()->label == "parent");
 }
 
+CK_TEST(reveal_and_select_opens_ancestors_before_selecting_a_hidden_node) {
+    Fixture f;
+    TreeNode match{.label = "match", .id = 17};
+    TreeNode group{.label = "group", .children = {std::move(match)}, .id = 11};
+    auto tree = make_tree(f);
+    tree.set_roots({std::move(group)});
+
+    int selection_changes = 0;
+    tree.on_selection_changed = [&](TreeNode&) { ++selection_changes; };
+
+    CK_CHECK(tree.reveal_and_select(17));
+    CK_CHECK(tree.selected() != nullptr);
+    CK_CHECK(tree.selected()->label == "match");
+    CK_CHECK(tree.selected()->id == 17);
+    CK_CHECK(selection_changes == 1);
+}
+
+CK_TEST(reveal_and_select_reports_a_missing_id_without_disturbing_selection) {
+    Fixture f;
+    auto tree = make_tree(f);
+    tree.set_roots(sample_forest());
+
+    CK_CHECK(!tree.reveal_and_select(999));
+    CK_CHECK(tree.selected() != nullptr);
+    CK_CHECK(tree.selected()->label == "parent");
+}
+
 CK_TEST(collapsed_children_are_not_reachable_by_down_arrow) {
     Fixture f;
     auto tree = make_tree(f);
     tree.set_roots(sample_forest());  // "parent" starts collapsed
     tree.on_key(key(Key::Down));
     CK_CHECK(tree.selected()->label == "leaf");  // skipped straight past parent's hidden children
+}
+
+CK_TEST(provider_tree_reveals_stable_id_and_preserves_it_through_a_refresh) {
+    Fixture f;
+    ProviderTree model;
+    auto tree = make_tree(f);
+    tree.set_model(model);
+
+    CK_CHECK(tree.reveal_and_select(4));
+    CK_CHECK(tree.selected_id() == 4);
+    CK_CHECK(tree.selected()->label == "match");
+    CK_CHECK(tree.item_expanded(1));
+    CK_CHECK(tree.item_expanded(2));
+
+    model.reorder_root_children();
+    tree.model_changed();
+    CK_CHECK(tree.selected_id() == 4);
+    CK_CHECK(tree.item_expanded(1));
+    CK_CHECK(tree.item_expanded(2));
+
+    tree.on_key(key(Key::Left));
+    CK_CHECK(tree.selected_id() == 2);
+    tree.on_key(key(Key::Left));
+    CK_CHECK(!tree.item_expanded(2));
+    tree.on_key(key(Key::Left));
+    CK_CHECK(tree.selected_id() == 1);
+
+    CK_CHECK(tree.reveal_and_select(4));
+    model.remove(4);
+    tree.model_changed();
+    CK_CHECK(!tree.selected_id());
+}
+
+CK_TEST(provider_tree_requests_unknown_children_once_and_keeps_expansion_in_the_view) {
+    Fixture f;
+    ProviderTree model;
+    model.mark_unknown(2);
+    auto tree = make_tree(f);
+    tree.set_model(model);
+    CK_CHECK(tree.set_item_expanded(1, true));
+    tree.on_key(key(Key::Down));
+    CK_CHECK(tree.selected_id() == 2);
+
+    int requests = 0;
+    tree.on_expand_request_id = [&](TreeItemId id) {
+        CK_CHECK(id == 2);
+        ++requests;
+    };
+    tree.on_key(key(Key::Right));
+    tree.on_key(key(Key::Left));
+    tree.on_key(key(Key::Right));
+
+    CK_CHECK(requests == 1);
+    CK_CHECK(tree.item_expanded(2));
+}
+
+CK_TEST(provider_tree_paints_only_the_visible_rows_of_a_million_item_forest) {
+    Fixture f;
+    MillionRoots model;
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 5});
+    tree.set_model(model);
+    model.item_queries = 0;
+
+    Surface surface(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 5});
+    tree.draw(painter);
+
+    CK_CHECK(model.item_queries == 5);
+    CK_CHECK(row_text(surface, 0).find("row 1") != std::string::npos);
+    CK_CHECK(row_text(surface, 4).find("row 5") != std::string::npos);
+    tree.on_key(key(Key::Down));
+    CK_CHECK(tree.selected_id() == 2);
 }
 
 CK_TEST(connector_style_defaults_to_minimal) {

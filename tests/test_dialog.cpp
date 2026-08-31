@@ -182,6 +182,48 @@ CK_TEST(a_time_field_materializes_as_a_typed_picker_with_its_own_buddy) {
     CK_CHECK(!dialog.times[0]->show_seconds());
 }
 
+CK_TEST(a_memo_field_materializes_as_a_labeled_multiline_editor) {
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Instruction:",
+        .initial_text = "First line\nSecond line",
+        .kind = ckv::widgets::FieldKind::Memo,
+        .memo_rows = 4,
+    });
+    auto dialog = materialize_dialog(descriptor);
+    dialog.root->set_bounds(Rect{0, 0, 60, 12});
+
+    CK_CHECK(dialog.memos.size() == 1U);
+    CK_CHECK(dialog.memos[0] != nullptr);
+    CK_CHECK(dialog.inputs[0] == nullptr);
+    CK_CHECK(dialog.memos[0]->text() == "First line\nSecond line");
+    CK_CHECK(dialog.labels[0]->buddy() == dialog.memos[0]);
+    CK_CHECK(dialog.initial_focus == dialog.memos[0]);
+    CK_CHECK(dialog.memos[0]->parent()->bounds().height == 4);
+}
+
+CK_TEST(a_memo_field_participates_in_dialog_validation_and_recovers_after_editing) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{
+        .label = "&Instruction:",
+        .validate = [](const std::string& value) { return !value.empty(); },
+        .kind = ckv::widgets::FieldKind::Memo,
+    });
+    auto dialog = materialize_dialog(descriptor);
+
+    CK_CHECK(!validate_dialog(dialog, descriptor, app));
+    CK_CHECK(!dialog.memos[0]->valid());
+    CK_CHECK(app.focused() == dialog.memos[0]);
+
+    dialog.memos[0]->set_text("A complete instruction.");
+    CK_CHECK(validate_dialog(dialog, descriptor, app));
+    CK_CHECK(dialog.memos[0]->valid());
+}
+
 CK_TEST(the_button_marked_default_is_reported_as_the_default_button) {
     Fixture f;
     DialogDescriptor descriptor;

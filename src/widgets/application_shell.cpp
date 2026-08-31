@@ -24,4 +24,12 @@ ApplicationShell::ApplicationShell(ui::Application& app, ApplicationShellOptions
     }
 }
 
+void ApplicationShell::detach_desktop() {
+    if (desktop_ != nullptr && desktop_->parent() == &app_.root())
+        (void)app_.root().detach_child(desktop_);
+    desktop_ = nullptr;
+    menu_bar_ = nullptr;
+    status_line_ = nullptr;
+}
+
 }  // namespace ckv::widgets

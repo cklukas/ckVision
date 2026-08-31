@@ -55,6 +55,12 @@ public:
     void set_document(FlowDocument document);
     const FlowDocument& document() const noexcept { return document_; }
     void append_block(FlowBlock block);
+    // Replaces one existing application-owned block. A stale index is rejected
+    // without altering the document. When a valid layout exists and this is
+    // the final block, only that block's derived layout is rebuilt; all other
+    // replacements rebuild the affected layout as a whole. Successful
+    // replacement resets link selection.
+    bool replace_block(std::size_t index, FlowBlock block);
 
     int line_count() const;
     int top_line() const noexcept;
@@ -86,10 +92,17 @@ private:
         std::shared_ptr<const Image> image;
         std::string fallback;
     };
+    struct BlockLayoutOffset {
+        std::size_t row_begin = 0;
+        std::size_t image_begin = 0;
+        std::size_t link_begin = 0;
+    };
 
     void invalidate_layout();
     void ensure_layout() const;
     void rebuild_layout(int content_width) const;
+    void append_block_layout(std::size_t block_index, int content_width) const;
+    void update_scrollbar_range() const;
     std::optional<std::size_t> link_at(int line, int column) const;
     int content_width() const noexcept;
     void scroll_to(int position);
@@ -99,6 +112,7 @@ private:
     mutable std::vector<LayoutRow> rows_;
     mutable std::vector<LayoutImage> images_;
     mutable std::vector<std::string> link_targets_;
+    mutable std::vector<BlockLayoutOffset> block_layout_offsets_;
     mutable std::optional<std::size_t> current_link_;
     Scrollbar* scrollbar_ = nullptr;
     ui::RoleId text_role_ = ui::kInvalidRole;

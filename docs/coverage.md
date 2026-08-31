@@ -40,6 +40,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/help_viewer.hpp` | [Dialogs](dialogs-and-commands.md) | forms/widget_shots | widget-helpviewer | test_help_viewer |
 | `include/cvision/widgets/image_view.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-imageview/graphics-no-graphics-image | test_graphics_smoke |
 | `include/cvision/widgets/input_line.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | widget-inputline | test_widgets |
+| `include/cvision/widgets/key_chord_capture.hpp` | [Gallery](widget-gallery.md#keychordcapture) | widget_shots | widget-keychordcapture | test_key_chord_capture |
 | `include/cvision/widgets/label.hpp` | [Gallery](widget-gallery.md#label) | layouts/widget_shots | widget-label | test_widgets |
 | `include/cvision/widgets/list_view.hpp` | [Data views](data-views.md) | filebrowser/widget_shots | widget-listview | test_list_view |
 | `include/cvision/widgets/memo.hpp` | [Gallery](widget-gallery.md#memo) | workbench/widget_shots | widget-memo | test_memo |
@@ -68,7 +69,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/text_editor.hpp` | [Editor](editor.md); [TODO](todo-example.md#full-note-editor) | editor/todo/widget_shots | widget-texteditor/todo-note-editor | test_text_editor, test_todo_smoke |
 | `include/cvision/widgets/syntax_profile.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor/editor-json | test_syntax_profile |
 | `include/cvision/widgets/syntax_cache.hpp` | [Editor](editor.md) | editor/widget_shots | widget-texteditor | test_syntax_cache |
-| `include/cvision/widgets/tree_view.hpp` | [Gallery](widget-gallery.md#treeview) | filebrowser/widget_shots | widget-treeview | test_tree_view |
+| `include/cvision/widgets/tree_view.hpp` | [Data views](data-views.md#tree-providers) | filebrowser/widget_shots | widget-treeview | test_tree_view |
 | `include/cvision/widgets/window.hpp` | [Object model](object-model.md) | gallery/widget_shots | widget-window | test_window |
 | `include/cvision/widgets/window_list_dialog.hpp` | [Gallery](widget-gallery.md#window-list-dialog) | gallery/widget_shots | widget-windowlistdialog | test_window_list_dialog |
 | `include/cvision/widgets/minimized_window_stub.hpp` | [Gallery](widget-gallery.md#minimizedwindowstub) | widget_shots | widget-minimizedwindowstub | test_minimized_window_stub |

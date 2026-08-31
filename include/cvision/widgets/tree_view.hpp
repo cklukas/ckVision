@@ -1,24 +1,21 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// TreeView: expand/collapse, keyboard navigation (the widget catalog
-// M6b baseline). A forest of TreeNode value trees — reparenting or
-// inserting/removing nodes while a TreeView displays them is not
-// supported in v1 (pointers into the tree stay stable across
-// expand/collapse since that only flips a bool, never reallocates,
-// but adding/removing a sibling could reallocate a containing
-// std::vector<TreeNode> and invalidate them — set_roots() with a
-// freshly built forest is the sanctioned way to change the content).
-//
-// Per D-041, the 0.1 tree model is materialized: the whole forest is flattened
-// to its visible entries on navigation/draw. A virtualized provider is
-// post-0.1 scope; lazy expansion through on_expand_request remains part of the
-// materialized model.
+// TreeView: expand/collapse, keyboard navigation, and caller-owned provider
+// trees (the widget catalog M6b baseline, D-043). Compact static clients may
+// still use a forest of TreeNode values. Those visible entries are flattened
+// after roots or expansion state changes and retained for steady-state drawing
+// and navigation. TreeModel serves large or refreshable hierarchies: TreeView
+// resolves only visible paths and retains expansion/cursor state by stable id.
 #pragma once
 
 #include <any>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,6 +24,9 @@
 #include "cvision/widgets/scrollbar.hpp"
 
 namespace ckv::widgets {
+
+using TreeItemId = std::uint64_t;
+inline constexpr TreeItemId kInvalidTreeItemId = 0;
 
 enum class TreeConnectorStyle {
     Minimal,     // existing compact "+ "/"- " twisties
@@ -72,6 +72,38 @@ struct TreeNode {
     bool might_have_children() const noexcept { return !children.empty() || !children_known; }
 };
 
+// The compact value returned by a TreeModel for one requested node. It does
+// not contain children or expansion state: hierarchy belongs to the model and
+// expansion belongs to TreeView. `children_known == false` keeps an expander
+// visible while a caller arranges loading and later calls model_changed().
+struct TreeItem {
+    std::string label;
+    bool children_known = true;
+    std::any user_data;
+};
+
+// A synchronous, caller-owned hierarchy provider. Every id is non-zero,
+// stable for as long as its node exists, and unique in the forest. Reverse
+// parent/index lookups let TreeView preserve expansion and selection through a
+// refresh without enumerating every sibling. Calls occur only on the UI thread;
+// a provider never starts work or calls back into a widget from a worker.
+class TreeModel {
+public:
+    virtual ~TreeModel() = default;
+
+    virtual std::size_t root_count() const = 0;
+    virtual TreeItemId root_id_at(std::size_t root_index) const = 0;
+    virtual std::optional<std::size_t> root_index_of(TreeItemId id) const = 0;
+    // A root has no parent. A non-root item must return its stable parent id.
+    virtual std::optional<TreeItemId> parent_id_of(TreeItemId id) const = 0;
+    virtual std::size_t child_count(TreeItemId parent) const = 0;
+    virtual TreeItemId child_id_at(TreeItemId parent, std::size_t child_index) const = 0;
+    virtual std::optional<std::size_t> child_index_of(TreeItemId parent, TreeItemId child) const = 0;
+    // A missing id returns std::nullopt. TreeView discards stale selection and
+    // expansion state deterministically when model_changed() observes this.
+    virtual std::optional<TreeItem> item(TreeItemId id) const = 0;
+};
+
 // Resolves its own theme roles from context() once attached (M9
 // WP-7, D-028): "ckv.list.normal"/"ckv.list.selected" (shared with
 // ListView — the two widgets are visually siblings in the M6a
@@ -89,8 +121,43 @@ public:
     void set_connector_style(TreeConnectorStyle style);
     TreeConnectorStyle connector_style() const noexcept { return connector_style_; }
 
+    // Borrows `model`; it must outlive this TreeView or be replaced/cleared
+    // before destruction. Changing models clears view state; model_changed()
+    // retains surviving stable identities across a refresh.
+    void set_model(TreeModel& model);
+    void clear_model();
+    TreeModel* model() const noexcept { return model_; }
+    void model_changed();
+
+    // Compact materialized convenience for static trees. This clears any
+    // borrowed provider and selects the first visible root when non-empty.
     void set_roots(std::vector<TreeNode> roots);
-    TreeNode* selected() const noexcept { return cursor_node_; }
+    // Materialized mode returns an owned node. Provider mode returns a snapshot
+    // valid until the next TreeView state change; retain selected_id(), not the
+    // pointer, across a refresh.
+    TreeNode* selected() const noexcept;
+    std::optional<TreeItemId> selected_id() const noexcept;
+
+    // Provider-mode expansion state is view-owned. A false result means `id`
+    // is absent or describes a confirmed leaf.
+    bool set_item_expanded(TreeItemId id, bool expanded);
+    bool item_expanded(TreeItemId id) const noexcept;
+
+    // Selects the first depth-first node with `id`, expanding every ancestor
+    // needed to make it visible. Returns false without changing selection
+    // when no node has that id. Applications that navigate to a result they
+    // have kept outside the view (for example a search match) assign their
+    // own stable, unique TreeNode::id values and call this instead of trying
+    // to manufacture keyboard input or retain pointers across set_roots().
+    bool reveal_and_select(std::uint64_t id);
+
+    // Provider clients receive stable identities. The TreeNode callbacks stay
+    // available for compact materialized trees and provider snapshots.
+    std::function<void(TreeItemId)> on_selection_changed_id;
+    std::function<void(TreeItemId)> on_activate_id;
+    // Fires once for an unknown provider item when the reader first asks to
+    // expand it. The application owns loading and later calls model_changed().
+    std::function<void(TreeItemId)> on_expand_request_id;
 
     // Fires whenever the cursor moves to a DIFFERENT node (navigation,
     // mouse click, Left-to-parent, or a set_roots() call whose
@@ -142,9 +209,26 @@ private:
         std::uint32_t stem_mask = 0;
     };
 
+    struct ProviderEntry {
+        TreeItemId id = kInvalidTreeItemId;
+        TreeItemId parent = kInvalidTreeItemId;
+        TreeItem item;
+        int depth = 0;
+        bool expanded = false;
+        bool might_have_children = false;
+        bool last_sibling = true;
+        std::uint32_t stem_mask = 0;
+    };
+
+    struct IndexedChild {
+        std::size_t index = 0;
+        TreeItemId id = kInvalidTreeItemId;
+    };
+
     void flatten_into(std::vector<TreeNode>& nodes, int depth, TreeNode* parent,
                        std::vector<VisibleEntry>& out, std::uint32_t stem_mask);
-    std::vector<VisibleEntry> visible_entries();
+    const std::vector<VisibleEntry>& visible_entries();
+    void invalidate_visible_entries() noexcept { visible_entries_valid_ = false; }
     // Columns one nesting level occupies, which is also the width of a
     // branch prefix. The outline convention draws a junction, a rule and
     // a marker; the compact styles draw a two-cell twisty.
@@ -159,9 +243,39 @@ private:
     // gets the same lazy-population behavior from one place.
     void set_expanded(TreeNode& node, bool expanded);
     void ensure_cursor_visible(int cursor_index);
+    void rebuild_model_expansion_index();
+    std::optional<TreeItem> model_item(TreeItemId id) const;
+    std::size_t model_visible_count() const;
+    std::size_t model_visible_span(TreeItemId id) const;
+    std::optional<ProviderEntry> model_entry_at(std::size_t display_index) const;
+    std::optional<ProviderEntry> model_sequence_entry_at(TreeItemId parent, std::size_t display_index,
+                                                          int depth, bool parent_last_sibling,
+                                                          std::uint32_t parent_stem_mask) const;
+    std::optional<ProviderEntry> model_direct_entry_at(TreeItemId parent, std::size_t sibling_index,
+                                                        int depth, bool parent_last_sibling,
+                                                        std::uint32_t parent_stem_mask) const;
+    std::optional<ProviderEntry> model_subtree_entry_at(const ProviderEntry& root,
+                                                         std::size_t display_index) const;
+    std::optional<std::size_t> model_row_of(TreeItemId id) const;
+    void select_provider_entry(const ProviderEntry& entry, std::size_t display_index, bool notify);
+    void refresh_provider_selection_snapshot();
+    TreeNode provider_snapshot(const ProviderEntry& entry) const;
+    bool model_item_might_have_children(TreeItemId id, const TreeItem& item) const;
+    void set_model_item_expanded(TreeItemId id, bool expanded);
+    void notify_provider_selection();
+    void notify_provider_activation();
 
     std::vector<TreeNode> roots_;
+    std::vector<VisibleEntry> visible_entries_;
+    bool visible_entries_valid_ = false;
     TreeNode* cursor_node_ = nullptr;
+
+    TreeModel* model_ = nullptr;
+    TreeItemId model_cursor_id_ = kInvalidTreeItemId;
+    std::optional<TreeNode> model_selected_node_;
+    std::set<TreeItemId> model_expanded_items_;
+    std::set<TreeItemId> model_expand_requested_items_;
+    std::map<TreeItemId, std::vector<IndexedChild>> model_expanded_children_;
     Scrollbar* scrollbar_ = nullptr;
     TreeConnectorStyle connector_style_ = TreeConnectorStyle::Minimal;
 

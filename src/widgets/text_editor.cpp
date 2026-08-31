@@ -443,6 +443,20 @@ std::optional<DocumentRange> TextEditor::selection() const noexcept {
     return less(*selection_anchor_, cursor_) ? DocumentRange{*selection_anchor_, cursor_} : DocumentRange{cursor_, *selection_anchor_};
 }
 
+bool TextEditor::set_selection(DocumentRange range) {
+    if (range.begin.revision != document_->revision() || range.end.revision != document_->revision() ||
+        range.begin.byte > range.end.byte || !document_->position_at_byte(range.begin.byte) ||
+        !document_->position_at_byte(range.end.byte))
+        return false;
+
+    selection_anchor_ = range.begin;
+    cursor_ = range.end;
+    ensure_cursor_visible();
+    notify_status_changed();
+    invalidate();
+    return true;
+}
+
 EditorStatus TextEditor::status() const {
     EditorStatus result;
     if (const auto line_column = document_->line_column(cursor_)) {
@@ -732,7 +746,10 @@ bool TextEditor::on_key(const KeyEvent& event) {
         }
         case Key::Backspace: return control ? erase_backward_word() : erase_backward();
         case Key::Delete: return control ? erase_forward_word() : erase_forward();
-        case Key::Enter: return replace_selection("\n");
+        case Key::Enter:
+            if (read_only_) return false;
+            if (newline_handler_ && newline_handler_(*this)) return true;
+            return replace_selection("\n");
         // Through set_overwrite, so that the mode reaches the status observers
         // with the keystroke that changed it: a toggle that only invalidated
         // left the frame reading INS until the next cursor move republished it.

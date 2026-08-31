@@ -90,6 +90,45 @@ CK_TEST(flow_view_exposes_link_navigation_and_activation) {
     CK_CHECK(activated == "two");
 }
 
+CK_TEST(flow_view_replaces_one_block_without_rebuilding_the_document_value) {
+    Fixture fixture;
+    FlowView view;
+    view.set_document(FlowDocument{{FlowBlock{{FlowText{"first", ckv::Attr::Bold, std::nullopt}}},
+                                   FlowBlock{{FlowText{"old", ckv::Attr{}, std::string("old")}}}}});
+    draw(view, fixture, ckv::Size{20, 4});
+    CK_CHECK(view.current_link() == 0);
+    CK_CHECK(view.replace_block(1, FlowBlock{{FlowText{"replacement", ckv::Attr::Underline, std::nullopt}}}));
+    CK_CHECK(view.document().blocks.size() == 2);
+    CK_CHECK(std::get<FlowText>(view.document().blocks[0].content.front()).text == "first");
+    CK_CHECK(std::get<FlowText>(view.document().blocks[1].content.front()).text == "replacement");
+    CK_CHECK(!view.current_link());
+    const Surface surface = draw(view, fixture, ckv::Size{20, 4});
+    CK_CHECK(row_text(surface, 0).substr(0, 5) == "first");
+    CK_CHECK(row_text(surface, 2).substr(0, 11) == "replacement");
+    CK_CHECK(!view.replace_block(2, FlowBlock{{FlowText{"ignored", ckv::Attr{}, std::nullopt}}}));
+    CK_CHECK(std::get<FlowText>(view.document().blocks[1].content.front()).text == "replacement");
+}
+
+CK_TEST(flow_view_replaces_the_final_block_without_losing_prior_link_navigation) {
+    Fixture fixture;
+    FlowView view;
+    view.set_document(FlowDocument{{FlowBlock{{FlowText{"first", ckv::Attr{}, std::string("first")}}},
+                                   FlowBlock{{FlowText{"old", ckv::Attr{}, std::string("old")}}}}});
+    draw(view, fixture, ckv::Size{20, 4});
+    CK_CHECK(view.current_link() == 0);
+    CK_CHECK(view.replace_block(1, FlowBlock{{FlowText{"replacement", ckv::Attr{}, std::string("replacement")}}}));
+    CK_CHECK(view.line_count() == 3);
+    CK_CHECK(view.link_count() == 2);
+    CK_CHECK(view.current_link() == 0);
+    std::string activated;
+    view.on_link_activate = [&activated](const std::string& target) { activated = target; };
+    CK_CHECK(view.activate_current_link());
+    CK_CHECK(activated == "first");
+    CK_CHECK(view.on_key(key(Key::Tab)));
+    CK_CHECK(view.activate_current_link());
+    CK_CHECK(activated == "replacement");
+}
+
 CK_TEST(flow_view_places_an_inline_image_through_the_scene_raster_path) {
     Fixture fixture;
     FlowView view;

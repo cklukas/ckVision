@@ -37,19 +37,27 @@ struct MemoPosition {
 };
 
 // Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.memo.normal"/"ckv.memo.focused"; its embedded
+// WP-7, D-028): "ckv.memo.normal"/"ckv.memo.focused"/"ckv.memo.invalid";
+// its embedded
 // Scrollbar resolves its own roles independently.
 class Memo : public ui::View {
 public:
     Memo();
 
-    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+    void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role,
+                           ui::RoleId invalid_role) noexcept {
         normal_role_ = normal_role;
         focused_role_ = focused_role;
+        invalid_role_ = invalid_role;
     }
 
     void set_text(std::string text);
     std::string text() const;
+
+    // The dialog materializer uses this external validation state on accept.
+    // The next content edit clears a stale rejection, as InputLine does.
+    void set_valid(bool valid) noexcept;
+    bool valid() const noexcept { return valid_; }
 
     // How a line too wide for the view is broken into display rows, and
     // when each scrollbar is on screen. WrapMode::Word is the default here:
@@ -128,6 +136,7 @@ private:
     bool has_focus_ = false;
     WrapMode wrap_mode_ = WrapMode::Word;
     bool dragging_selection_ = false;
+    bool valid_ = true;
 
     Scrollbar* scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;
@@ -139,6 +148,7 @@ private:
     int content_width_ = 0;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
+    ui::RoleId invalid_role_ = ui::kInvalidRole;
 };
 
 }  // namespace ckv::widgets
