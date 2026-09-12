@@ -82,6 +82,21 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     profile_id_ = profile_->id;
     cursor_ = document_->begin();
     observer_ = document_->subscribe([this](const DocumentChange& change) {
+        // The caret stays on the same text through an edit this editor did
+        // not make — a host writing the document from elsewhere, another
+        // view's change mirrored in: bytes inserted or removed before it
+        // carry it along, and a replacement that swallows it leaves it at
+        // the replacement's end. The editor's own edits set the caret
+        // explicitly afterwards, so this costs them nothing.
+        const auto carry = [&change](DocumentPosition& position) {
+            const std::size_t removed = change.replaced_end_byte - change.replaced_begin_byte;
+            if (change.replaced_end_byte <= position.byte)
+                position.byte = position.byte - removed + change.inserted_bytes;
+            else if (change.replaced_begin_byte < position.byte)
+                position.byte = change.replaced_begin_byte + change.inserted_bytes;
+        };
+        carry(cursor_);
+        if (selection_anchor_) carry(*selection_anchor_);
         clamp_cursor();
         rebuild_lines(change.first_affected_line);
         refresh_search();

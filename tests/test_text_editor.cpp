@@ -365,3 +365,30 @@ CK_TEST(a_history_handler_takes_the_undo_and_redo_keys_from_the_document) {
     CK_CHECK(editor.on_key(undo));
     CK_CHECK(document->text() == "abc");
 }
+
+CK_TEST(the_caret_stays_on_its_text_through_an_external_edit) {
+    auto document = std::make_shared<ckv::widgets::EditorDocument>("hello world");
+    ckv::widgets::TextEditor editor(document);
+    const auto at = [&](std::size_t byte) {
+        const auto position = document->position_at_byte(byte);
+        editor.set_selection(ckv::widgets::DocumentRange{*position, *position});
+    };
+    at(6);  // before "world"
+    // Bytes inserted before the caret carry it along.
+    document->replace(ckv::widgets::DocumentRange{document->begin(), document->begin()}, "XX ");
+    CK_CHECK(editor.cursor().byte == 9);
+    CK_CHECK(document->text().substr(editor.cursor().byte) == "world");
+    // Bytes removed before it too.
+    document->replace(ckv::widgets::DocumentRange{document->begin(),
+                                                  *document->position_at_byte(3)},
+                      "");
+    CK_CHECK(editor.cursor().byte == 6);
+    // An edit after the caret leaves it where it is.
+    document->replace(ckv::widgets::DocumentRange{document->end(), document->end()}, "!");
+    CK_CHECK(editor.cursor().byte == 6);
+    // A replacement that swallows the caret leaves it at the replacement's end.
+    document->replace(ckv::widgets::DocumentRange{*document->position_at_byte(4),
+                                                  *document->position_at_byte(8)},
+                      "-");
+    CK_CHECK(editor.cursor().byte == 5);
+}
