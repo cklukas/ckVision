@@ -79,3 +79,7 @@ reference documentation is not done.
   license statement, swept by ckmux's `tools/add_spdx.py`.
 - Commit messages: one-line summary, then what and why, then verification
   evidence (test/benchmark counts). Never commit with failing gates.
+- The owner's own commits carry no `Signed-off-by:` line. The DCO in
+  `CONTRIBUTING.md` is the certification an outside contributor gives; the
+  owner (Dr. Christian Klukas) develops this project himself and certifies
+  nothing to himself. Do not add a sign-off, and do not raise the question.
