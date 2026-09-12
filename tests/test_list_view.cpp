@@ -7,6 +7,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/dock.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -572,4 +573,51 @@ CK_TEST(a_list_says_how_much_room_its_contents_want) {
     wide.set_items({"a", "a much longer entry than the others"});
     CK_CHECK(wide.horizontal_size_hint().preferred >= 35);
     CK_CHECK(wide.horizontal_size_hint().preferred > list.horizontal_size_hint().preferred);
+}
+
+// --- The width a container gives a list -------------------------------------
+
+namespace {
+struct ThreeRows final : ListModel {
+    std::size_t item_count() const override { return 3; }
+    ListItem item_at(std::size_t index) const override {
+        static const char* const rows[] = {"1  Field Report  title", "2  Findings  notes  steps 3",
+                                           "3  Method  two-content"};
+        return ListItem{static_cast<ListItemId>(index + 1), rows[index], std::nullopt};
+    }
+    std::optional<std::size_t> index_of(ListItemId id) const override {
+        return id >= 1 && id <= 3 ? std::optional<std::size_t>(id - 1) : std::nullopt;
+    }
+};
+}  // namespace
+
+CK_TEST(a_docked_list_widens_when_its_model_gains_items) {
+    Fixture f;
+    ckv::ui::Dock dock;
+    dock.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    auto* list = static_cast<ListView*>(dock.add_item(std::make_unique<ListView>(), ckv::ui::DockEdge::Left));
+    dock.set_bounds(Rect{0, 0, 80, 20});
+    // Empty: the sliver an empty list is allowed to be.
+    CK_CHECK(list->bounds().width == 8);
+    ThreeRows rows;
+    list->set_model(rows);
+    // The dock heard the hint change and laid the column out for the rows.
+    CK_CHECK(list->bounds().width == 2 + 1 + static_cast<int>(std::string("2  Findings  notes  steps 3").size()));
+    list->model_changed();
+    CK_CHECK(list->bounds().width > 8);
+}
+
+CK_TEST(an_explicit_preferred_width_outranks_the_measured_one) {
+    Fixture f;
+    ckv::ui::Dock dock;
+    dock.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    auto list_view = std::make_unique<ListView>();
+    list_view->set_preferred_size(ckv::Size{30, 0});
+    auto* list = static_cast<ListView*>(dock.add_item(std::move(list_view), ckv::ui::DockEdge::Left));
+    dock.set_bounds(Rect{0, 0, 80, 20});
+    CK_CHECK(list->bounds().width == 30);
+    ThreeRows rows;
+    list->set_model(rows);
+    CK_CHECK(list->bounds().width == 30);
+    CK_CHECK(list->horizontal_size_hint().preferred == 30);
 }

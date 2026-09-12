@@ -42,6 +42,7 @@ void ListView::set_model(ListModel& model) {
     resolve_model_identities();
     on_resized();
     invalidate();
+    size_hint_changed();
 }
 
 void ListView::clear_model() {
@@ -51,6 +52,7 @@ void ListView::clear_model() {
     cursor_ = -1;
     if (scrollbar_ != nullptr) scrollbar_->set_range(0, std::max(1, bounds().height));
     invalidate();
+    size_hint_changed();
 }
 
 void ListView::model_changed() {
@@ -58,6 +60,9 @@ void ListView::model_changed() {
     on_resized();
     ensure_cursor_visible();
     invalidate();
+    // The measure above may have moved: a container that sized this list
+    // while its model was empty is told so, or it keeps the sliver.
+    size_hint_changed();
 }
 
 void ListView::set_items(std::vector<std::string> items) {
@@ -71,6 +76,7 @@ void ListView::set_items(std::vector<std::string> items) {
     on_resized();
     ensure_cursor_visible();
     invalidate();
+    size_hint_changed();
 }
 
 std::size_t ListView::item_count() const { return model_ != nullptr ? model_->item_count() : items_.size(); }
@@ -97,6 +103,12 @@ std::optional<ListItemId> ListView::cursor_id() const noexcept {
 }
 
 ui::SizeHint ListView::horizontal_size_hint() const {
+    // A width the owner asked for outranks the measure: it is the owner
+    // who knows what column the list has been given.
+    if (preferred_size().width > 0) {
+        const int asked = preferred_size().width;
+        return ui::SizeHint{std::min(8, asked), asked, ui::kUnboundedExtent};
+    }
     // The widest of the items worth measuring, plus the room the scrollbar takes
     // when it is there. A minimum of a few columns so an empty list is still a
     // list rather than a sliver.

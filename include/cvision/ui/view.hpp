@@ -244,6 +244,10 @@ public:
     // where that padding is already present.
     virtual bool trailing_row_is_shadow() const noexcept { return false; }
     void set_preferred_size(Size size) { preferred_size_ = size; }
+    // The size a caller asked for, as set_preferred_size() left it; the
+    // default hints above read it, and a widget that measures its own
+    // content consults it so an explicit request can still win.
+    Size preferred_size() const noexcept { return preferred_size_; }
 
     // Fired on the immediate parent (M9/WP-16, E10) whenever one of its
     // direct children calls size_hint_changed() below — a container

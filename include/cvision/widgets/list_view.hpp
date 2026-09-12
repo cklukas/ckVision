@@ -124,6 +124,13 @@ public:
     // model — how many items, and how wide the widest of the ones worth
     // measuring — never from live bounds, which would feed a container's own
     // resize back into the next layout pass.
+    // The widest of the first items, plus the scrollbar and a margin — the
+    // list's own measure — unless set_preferred_size() named a positive
+    // width, which then wins: a container that gives a list a column of a
+    // stated width must not see it grow with the longest title. Either
+    // way the content's changes reach the container: every model or item
+    // change reports a changed hint, so a Dock or Column lays the list
+    // out again rather than keeping the width it had while empty.
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
 
