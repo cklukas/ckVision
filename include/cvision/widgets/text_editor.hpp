@@ -82,6 +82,16 @@ public:
     bool overwrite() const noexcept { return overwrite_; }
     void set_newline_handler(NewlineHandler handler) { newline_handler_ = std::move(handler); }
 
+    // Where the editor's undo and redo keys go. Without a handler they walk
+    // the document's own history. With one, they are handed to it — the
+    // host that keeps the authoritative journal elsewhere (an application
+    // session whose undo steps are named and shared with every other view
+    // of the same document) answers them, and the document's own history
+    // is left out of the reader's hands so the two can never disagree
+    // about what "undo" reverses. `redo` says which of the two was asked.
+    using HistoryHandler = std::function<bool(TextEditor&, bool redo)>;
+    void set_history_handler(HistoryHandler handler) { history_handler_ = std::move(handler); }
+
     void set_file_name(std::string name);
     void set_profile(std::optional<std::string> profile_id);
     const std::string& profile_id() const noexcept { return profile_id_; }
@@ -205,6 +215,7 @@ private:
     ui::RoleId search_role_ = ui::kInvalidRole;
     std::vector<ui::RoleId> syntax_roles_;
     std::function<void(const EditorStatus&)> status_changed_;
+    HistoryHandler history_handler_;
     StatusObserverId next_status_observer_id_ = 1;
     std::vector<std::pair<StatusObserverId, StatusObserver>> status_observers_;
 };

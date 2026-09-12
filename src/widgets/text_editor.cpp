@@ -682,8 +682,10 @@ bool TextEditor::on_key(const KeyEvent& event) {
         return cut_selection_to_clipboard();
     const bool extend = has_modifier(event.chord.modifiers, Modifier::Shift);
     if (has_modifier(event.chord.modifiers, Modifier::Ctrl) && event.chord.key == Key::Char) {
-        if (event.chord.text == "z" || event.chord.text == "Z") return document_->undo();
-        if (event.chord.text == "y" || event.chord.text == "Y") return document_->redo();
+        if (event.chord.text == "z" || event.chord.text == "Z")
+            return history_handler_ ? history_handler_(*this, false) : document_->undo();
+        if (event.chord.text == "y" || event.chord.text == "Y")
+            return history_handler_ ? history_handler_(*this, true) : document_->redo();
         if (event.chord.text == "c" || event.chord.text == "C") return copy_selection_to_clipboard();
         if (event.chord.text == "x" || event.chord.text == "X") return cut_selection_to_clipboard();
         if (event.chord.text == "v" || event.chord.text == "V") return paste_from_clipboard();

@@ -339,3 +339,29 @@ CK_TEST(an_editor_rewrap_leaves_the_document_position_where_it_was) {
     CK_CHECK(editor.status().column == before.column);
     CK_CHECK(document->text() == "alpha beta gamma delta epsilon zeta");
 }
+
+// --- A host that keeps the journal elsewhere --------------------------------
+
+CK_TEST(a_history_handler_takes_the_undo_and_redo_keys_from_the_document) {
+    auto document = std::make_shared<ckv::widgets::EditorDocument>("abc");
+    ckv::widgets::TextEditor editor(document);
+    int undos = 0;
+    int redos = 0;
+    editor.set_history_handler([&](ckv::widgets::TextEditor&, bool redo) {
+        (redo ? redos : undos) += 1;
+        return true;
+    });
+    document->replace(ckv::widgets::DocumentRange{document->end(), document->end()}, "d");
+    CK_CHECK(document->can_undo());
+    const ckv::KeyEvent undo{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Ctrl, "z"}};
+    const ckv::KeyEvent redo{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Ctrl, "y"}};
+    CK_CHECK(editor.on_key(undo));
+    CK_CHECK(editor.on_key(redo));
+    CK_CHECK(undos == 1 && redos == 1);
+    // The document's own history was not walked.
+    CK_CHECK(document->text() == "abcd");
+    // Without a handler the keys walk the document's history as before.
+    editor.set_history_handler({});
+    CK_CHECK(editor.on_key(undo));
+    CK_CHECK(document->text() == "abc");
+}
