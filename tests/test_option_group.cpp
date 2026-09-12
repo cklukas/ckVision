@@ -3,8 +3,11 @@
 #include "cvision/widgets/option_group.hpp"
 
 #include "cvision/testing/cktest.hpp"
+#include "cvision/core/clock.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -29,6 +32,12 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    // Focus is the Application's to give (D-065), so the fixture carries one
+    // for the tests that need a group to hold it.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, &app}; }
 };
 
 ckv::KeyEvent key(ckv::Key k, std::string text = "") {
@@ -157,7 +166,7 @@ CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     Fixture f;
     CheckGroup group({"First", "Second"});
     group.set_group_label("Choices");
-    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_context(f.ctx());
     group.set_bounds(Rect{0, 0, 16, 3});
     CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{3, 3, 3}));
 
@@ -173,7 +182,7 @@ CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
                                              std::nullopt, Modifier::None}));
     CK_CHECK(group.checked(0));
 
-    group.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&group);
     Surface focused(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter focused_painter(focused, Rect{0, 0, 16, 3});
     group.draw(focused_painter);
@@ -316,7 +325,7 @@ CK_TEST(a_radio_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     Fixture f;
     RadioGroup group({"First", "Second"});
     group.set_group_label("Mode");
-    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_context(f.ctx());
     group.set_bounds(Rect{0, 0, 16, 3});
     CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{3, 3, 3}));
 
@@ -332,7 +341,7 @@ CK_TEST(a_radio_group_caption_owns_a_row_and_turns_white_with_group_focus) {
                                              std::nullopt, Modifier::None}));
     CK_CHECK(group.selected() == 1);
 
-    group.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&group);
     Surface focused(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter focused_painter(focused, Rect{0, 0, 16, 3});
     group.draw(focused_painter);

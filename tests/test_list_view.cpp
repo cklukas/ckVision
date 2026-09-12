@@ -33,6 +33,12 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    // Focus is the Application's to give (D-065), so the fixture carries one
+    // for the tests that need a list to hold it.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, &app}; }
 };
 
 ListView make_list(Fixture&, bool multi = false) { return ListView(multi); }
@@ -82,7 +88,7 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     // marks its place, but in the muted form.
     Fixture f;
     auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_context(f.ctx());
     list.on_attached();
     list.set_items({"one", "two"});
     list.set_bounds(Rect{0, 0, 8, 2});
@@ -94,12 +100,12 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
     CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
 
-    list.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&list);
     list.draw(painter);
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected));
     CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
 
-    list.on_focus(ckv::FocusEvent{false});
+    f.app.set_focus(nullptr);
     list.draw(painter);
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
 }
@@ -110,9 +116,9 @@ CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {
     // underline alone reads as a text field or a hyperlink.
     Fixture f;
     auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_context(f.ctx());
     list.on_attached();
-    list.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&list);
     list.set_items({"one", "two"});
     list.set_bounds(Rect{0, 0, 8, 2});
     ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));

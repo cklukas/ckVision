@@ -542,10 +542,7 @@ std::size_t InputLine::cursor_index_at(Point absolute_cell) const {
     return index;
 }
 
-void InputLine::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void InputLine::on_focus(const FocusEvent&) { invalidate(); }
 
 SizeHint InputLine::horizontal_size_hint() const {
     if (has_mask()) {
@@ -578,7 +575,7 @@ int InputLine::scroll_offset_for_display() const {
 }
 
 void InputLine::draw(scene::Painter& painter) {
-    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus_ ? focused_role_ : normal_role_);
+    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_);
     const Style base = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
 
@@ -598,7 +595,7 @@ void InputLine::draw(scene::Painter& painter) {
         painter.draw_text(Point{x, 0}, glyph, style);
     }
 
-    if (has_focus_) {
+    if (has_focus()) {
         const int cursor_x = col_of[cursor_] - col_of[scroll];
         if (cursor_x >= 0 && cursor_x < bounds().width) {
             Style cursor_style = base;

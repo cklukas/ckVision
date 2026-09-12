@@ -40,7 +40,12 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
-    ui::Context ctx() { return ui::Context{&theme, &registry, nullptr}; }
+    // Focus is the Application's to give (D-065): a widget drawn focused has
+    // been given it by this one, through the context the fixture hands out.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ui::Context ctx() { return ui::Context{&theme, &registry, &app}; }
 };
 
 Surface make_surface(int w, int h) { return Surface(ckv::Size{w, h}, ckv::Cell::from_grapheme(" ", ckv::Style{})); }
@@ -216,9 +221,10 @@ CK_TEST(button_with_no_on_press_handler_does_not_crash_when_pressed) {
 CK_TEST(button_escape_cancels_a_key_press_in_flight_and_is_consumed) {
     Fixture f;
     Button button("OK");
+    button.set_context(f.ctx());
     int presses = 0;
     button.on_press = [&] { ++presses; };
-    button.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&button);
 
     const KeyChord space{Key::Char, Modifier::None, " "};
     const KeyChord escape{Key::Escape, Modifier::None, ""};
@@ -350,7 +356,7 @@ CK_TEST(a_focused_buttons_face_uses_the_focused_style) {
     Button button("OK");
     button.set_context(f.ctx());
     button.set_bounds(Rect{0, 0, 12, 2});
-    button.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&button);
     Painter painter(s, Rect{0, 0, 14, 3});
     button.draw(painter);
     CK_CHECK(s.at(ckv::Point{5, 0}).style() == f.theme.resolve(f.roles.button_focused));
@@ -689,7 +695,7 @@ CK_TEST(draw_does_not_crash_when_the_field_is_empty_and_focused) {
     InputLine input;
     input.set_context(f.ctx());
     input.set_bounds(Rect{0, 0, 10, 1});
-    input.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&input);
     Painter root(s, Rect{0, 0, 20, 3});
     input.draw(root);
     CK_CHECK(true);

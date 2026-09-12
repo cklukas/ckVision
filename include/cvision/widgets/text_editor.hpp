@@ -206,7 +206,6 @@ private:
     bool read_only_ = false;
     bool overwrite_ = false;
     NewlineHandler newline_handler_;
-    bool has_focus_ = false;
     bool dragging_ = false;
 
     ui::RoleId text_role_ = ui::kInvalidRole;

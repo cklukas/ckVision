@@ -117,7 +117,7 @@ void Button::draw(scene::Painter& painter) {
     // A shadowed button shows a press in its geometry rather than its
     // colour, so its face role skips the pressed state the flat one uses.
     const Style face =
-        theme.resolve(has_focus_    ? focused_role_
+        theme.resolve(has_focus()  ? focused_role_
                       : hovered()   ? hovered_role_
                       : is_default_ ? default_role_
                                     : normal_role_);
@@ -235,7 +235,7 @@ bool Button::on_key(const KeyEvent& event) {
 
 bool Button::on_key_release(const KeyEvent& event) {
     if (!activation_chord(event.chord) || !key_armed_) return false;
-    const bool fire = armed_ && has_focus_;
+    const bool fire = armed_ && has_focus();
     key_armed_ = false;
     armed_ = false;
     pressed_ = false;
@@ -280,7 +280,6 @@ bool Button::on_mouse(const MouseEvent& event) {
 }
 
 void Button::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
     // Focus moving away (Tab, or anything else) takes back a keyboard press
     // in flight: the key that eventually comes up is no longer this
     // button's, so it must neither look pressed nor act.

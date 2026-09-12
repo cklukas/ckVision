@@ -1588,3 +1588,49 @@ capable of being hidden — and overloading it would make a modal's gate mean
 two things); a blanket `set_minimizable(true)` when leaving `Disabled` (it
 hands the control to modals and to windows an application fixed itself, so
 the gate records who it took the control FROM).
+
+**D-065 — Focus is a question a view asks its Application, and an arrow a
+control has no use for walks the window it sits in.** Two rules with one
+cause. Every widget used to keep a `has_focus_` flag, set from `on_focus()`
+and read when it painted. The Application, though, cannot deliver a focus-out
+to a view that leaves the tree while focused — the detach sink must not call
+into a view that may be mid-destruction — so a window removed from the
+desktop and put back, or a popup dismissed and re-shown, came back with its
+flag still up, drawing itself focused beside the view that really was. The
+menu bar's trailing clock stayed lit the same way after the calendar it
+dropped took the focus. A flag is a second truth, and every second truth
+eventually disagrees with the first.
+
+So the truth is asked for: `View::has_focus()` is `Application::focused() ==
+this`, and no widget keeps a flag. `on_focus()` remains a notification, for
+what a view does on the way in or out — repaint, cancel a press in flight,
+send a focus report to a child terminal — and it is delivered after the
+Application has moved its pointer, so that `has_focus()` inside
+`on_focus(false)` already answers no: a view deciding what to leave on screen
+gets the settled answer. A view whose context names no Application is never
+focused; a test that wants a widget focused attaches it to one and asks the
+Application, as an application does. `MenuBar` follows the same rule for its
+walk: `active()` is having the focus, a focus loss of any origin ends the walk
+and takes the trailing title's highlight and the bar's bookmark with it, and
+activating the trailing title — Enter, Space, or a pointer on it — ends the
+walk first, so what the title opens saves and later restores the reader's own
+view rather than a bar that would wake up highlighted.
+
+The second rule is the reader's: in a dialog, an arrow reaches the next
+control, and `Right` then `Enter` on a Yes/No/Cancel row answers No — the
+convention of every classic desktop dialog, observed rather than derived.
+`Window::on_key` therefore walks the window's own controls for a plain arrow
+that reached it — Down and Right to the next, Up and Left to the previous,
+wrapping within the window, through `Application::focus_next_within()` and
+`focus_previous_within()`. A control that means something by an arrow — an
+input line by Left, a list by Down, a radio group by Up — has consumed it
+before it reaches the window, so only arrows that would otherwise do nothing
+move the focus; a modified arrow is left alone.
+
+*Rejected:* binding the arrows to the standard `focus_next`/`focus_previous`
+commands in the keymap — it would apply outside windows, and collide with an
+application that gives the arrows a meaning of its own, such as a slide
+show's next and previous. *Rejected:* delivering the focus-out from the
+detach sink — the sink's one contract is that it never calls into the view.
+*Rejected:* a flag kept in `View` and set by the Application — a truth with a
+setter is a truth anyone can set, and the notification order problem stays.

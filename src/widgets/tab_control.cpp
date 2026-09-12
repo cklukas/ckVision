@@ -129,10 +129,7 @@ bool TabControl::on_mouse(const MouseEvent& event) {
     return true;
 }
 
-void TabControl::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void TabControl::on_focus(const FocusEvent&) { invalidate(); }
 
 void TabControl::draw(scene::Painter& painter) {
     if (bounds().height <= 0 || bounds().width <= 0) return;
@@ -149,7 +146,7 @@ void TabControl::draw(scene::Painter& painter) {
         const std::string label = " " + tabs_[i].label + " ";
         painter.draw_text(Point{x, 0}, text::clip_to_width(label, bounds().width - x), style);
     }
-    if (has_focus_) {
+    if (has_focus()) {
         Style focus = active;
         focus.attrs |= Attr::Underline;
         painter.draw_text(Point{std::min(bounds().width - 1, tab_start_x(active_index_)), 0}, " ", focus);

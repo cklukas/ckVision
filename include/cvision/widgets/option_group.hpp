@@ -85,7 +85,6 @@ private:
     std::vector<CheckState> states_;
     std::size_t cursor_ = 0;
     bool tristate_ = false;
-    bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
@@ -140,7 +139,6 @@ private:
     std::string group_label_;
     int selected_ = -1;
     std::size_t cursor_ = 0;
-    bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;

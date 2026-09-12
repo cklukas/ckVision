@@ -324,11 +324,18 @@ CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_dra
 }
 
 CK_TEST(a_focused_search_box_shows_a_caret_where_typing_will_land) {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::ui::RoleRegistry registry;
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
+    const ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
     ckv::widgets::SearchBox box;
+    box.set_context(ckv::ui::Context{&theme, &registry, &app});
     box.set_bounds(ckv::Rect{0, 0, 20, 1});
     CK_CHECK(!box.cursor_state().has_value());  // unfocused: no caret
 
-    box.on_focus(ckv::FocusEvent{true});
+    app.set_focus(&box);
     const auto empty_caret = box.cursor_state();
     CK_CHECK(empty_caret.has_value());
     CK_CHECK(empty_caret->visible);

@@ -216,7 +216,6 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
-    bool focused_ = false;
 };
 
 }  // namespace ckv::widgets

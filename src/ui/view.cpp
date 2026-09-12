@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/ui/application.hpp"
 
 namespace ckv::ui {
 
@@ -294,6 +295,10 @@ void View::notify_detaching_recursive() {
     if (detach_sink_) detach_sink_(*this);
     on_detaching();
     for (auto& child : children_) child->notify_detaching_recursive();
+}
+
+bool View::has_focus() const noexcept {
+    return context_.app != nullptr && context_.app->focused() == this;
 }
 
 }  // namespace ckv::ui

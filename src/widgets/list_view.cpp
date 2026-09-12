@@ -23,9 +23,7 @@ void ListView::on_attached() {
         selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
 }
 
-void ListView::on_focus(const FocusEvent& event) {
-    if (focused_ == event.gained) return;
-    focused_ = event.gained;
+void ListView::on_focus(const FocusEvent&) {
     // The selection changes appearance, so the rows have to be repainted even
     // though nothing about the model moved.
     invalidate();
@@ -345,7 +343,7 @@ void ListView::draw(scene::Painter& painter) {
         // active, and the reader cannot tell which one their arrow keys will
         // move; the muted form still says "this list's place is here".
         const ui::RoleId selection_role =
-            focused_ || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
+            has_focus() || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
                                                                     : selected_inactive_role_;
         Style style = item.id != kInvalidListItemId &&
                                   (item.id == cursor_id_ || is_selected_id(item.id))

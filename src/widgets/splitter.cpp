@@ -70,7 +70,7 @@ void Splitter::relayout() {
 }
 
 void Splitter::draw(scene::Painter& painter) {
-    const ui::RoleId role = has_focus_ ? focused_role_ : normal_role_;
+    const ui::RoleId role = has_focus() ? focused_role_ : normal_role_;
     const Style style = context().theme->resolve(role);
     if (orientation_ == Orientation::Horizontal) {
         painter.vline(Point{split_position_, 0}, bounds().height, scene::LineStyle::Single, style);
@@ -170,9 +170,6 @@ bool Splitter::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void Splitter::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void Splitter::on_focus(const FocusEvent&) { invalidate(); }
 
 }  // namespace ckv::widgets

@@ -258,7 +258,6 @@ bool ComboBox::on_mouse(const MouseEvent& event) {
 }
 
 void ComboBox::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
     editor_.on_focus(event);
     invalidate();
 }
@@ -269,7 +268,7 @@ void ComboBox::on_resized() {
 }
 
 void ComboBox::draw(scene::Painter& painter) {
-    const Style normal = context().theme->resolve(has_focus_ ? focused_role_ : normal_role_);
+    const Style normal = context().theme->resolve(has_focus() ? focused_role_ : normal_role_);
     const int w = bounds().width;
     if (w <= 0 || bounds().height <= 0) return;
 

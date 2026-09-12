@@ -819,6 +819,25 @@ bool Window::on_key(const KeyEvent& event) {
         }
         if (context().app != nullptr && activate_control_mnemonic(*this, event, *context().app))
             return true;
+        // An arrow the focused control did not use walks this window's
+        // controls the way Tab does: Down and Right to the next, Up and Left
+        // to the previous, wrapping within the window (ARCHITECTURE.md §5,
+        // D-065). A control that means something by an arrow — an input
+        // line by Left, a list by Down, a radio group by Up — has consumed
+        // it before it reaches here, so only the arrows that would otherwise
+        // do nothing move the focus.
+        if (context().app != nullptr && event.chord.modifiers == Modifier::None) {
+            switch (event.chord.key) {
+                case Key::Down:
+                case Key::Right:
+                    return context().app->focus_next_within(*this);
+                case Key::Up:
+                case Key::Left:
+                    return context().app->focus_previous_within(*this);
+                default:
+                    break;
+            }
+        }
         return false;
     }
 

@@ -469,13 +469,20 @@ resize step.
 
 ### Focus and traversal
 
-One focused view per application, always visible, always consistent:
-focus-in/focus-out notifications, Tab/Shift-Tab traversal in declaration
-order with explicit override, arrow keys within radio/check groups,
-mnemonic jump, initial focus = first focusable by construction (a dialog
-cannot be built with wrong initial focus), and focus restoration on
-window close and modal exit. Disabled and hidden views are transparent
-to traversal.
+One focused view per application, always visible, always consistent: a
+view learns whether it is focused by asking (`View::has_focus()`, which is
+the Application's answer) and never by remembering, so nothing can be drawn
+focused beside the view that is; focus-in/focus-out notifications,
+delivered after the Application has moved on, so that inside them the
+answer is already the settled one; Tab/Shift-Tab traversal in declaration
+order with explicit override; the arrow keys a focused control does not
+use walk the controls of the window it sits in (Down and Right forward, Up
+and Left back, wrapping within the window), so a button row is walked with
+an arrow the way a dialog reader expects; arrow keys within radio/check
+groups; mnemonic jump; initial focus = first focusable by construction (a
+dialog cannot be built with wrong initial focus); and focus restoration on
+window close and modal exit. Disabled and hidden views are transparent to
+traversal (D-065).
 
 ### Layout and dialog construction
 

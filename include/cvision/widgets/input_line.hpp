@@ -172,7 +172,6 @@ private:
     std::size_t cursor_ = 0;
     std::optional<std::size_t> selection_anchor_;
     bool overwrite_mode_ = false;
-    bool has_focus_ = false;
     bool valid_ = true;
     std::function<bool(const std::string&)> validator_;
     std::function<bool(std::string_view)> grapheme_filter_;

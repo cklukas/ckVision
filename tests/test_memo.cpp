@@ -29,7 +29,11 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
-    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, nullptr}; }
+    // Focus is the Application's to give (D-065), so the fixture carries one.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, &app}; }
 };
 
 Memo make_memo(Fixture&) { return Memo(); }
@@ -343,7 +347,7 @@ CK_TEST(draw_does_not_crash_for_an_empty_focused_memo) {
     auto memo = make_memo(f);
     memo.set_context(f.ctx());
     memo.set_bounds(Rect{0, 0, 20, 5});
-    memo.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&memo);
     ckv::scene::Surface s(ckv::Size{20, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     ckv::scene::Painter painter(s, Rect{0, 0, 20, 5});
     memo.draw(painter);
@@ -445,7 +449,7 @@ CK_TEST(the_memo_cursor_stays_on_screen_horizontally_as_it_walks_a_long_line) {
     memo.set_wrap_mode(ckv::widgets::WrapMode::None);
     memo.set_bounds(Rect{0, 0, 12, 4});
     memo.set_text("0123456789abcdefghijklmnopqrstuvwxyz");
-    memo.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&memo);
     CK_CHECK(memo.left_column() == 0);
 
     for (int i = 0; i < 30; ++i) memo.on_key(key(Key::Right));
@@ -467,7 +471,7 @@ CK_TEST(a_memo_rewrap_moves_no_cursor_and_no_selection) {
     memo.on_attached();
     memo.set_bounds(Rect{0, 0, 14, 6});
     memo.set_text("alpha beta gamma delta epsilon");
-    memo.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&memo);
     for (int i = 0; i < 12; ++i) memo.on_key(key(Key::Right));
     const MemoPosition before = memo.cursor();
 

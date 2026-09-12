@@ -79,7 +79,6 @@ private:
     std::string text_;
     std::optional<std::size_t> selected_index_;
     PopupList* popup_ = nullptr;
-    bool has_focus_ = false;
     InputLine editor_;
 
     ui::HistoryRegistry* history_registry_ = nullptr;

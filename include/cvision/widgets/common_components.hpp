@@ -241,7 +241,6 @@ private:
     int header_row() const noexcept { return show_title_ ? 1 : 0; }
     int grid_top() const noexcept { return header_row() + 1; }
     bool show_iso_week_numbers_ = false;
-    bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
@@ -351,7 +350,6 @@ private:
     int active_field_ = 0;  // 0 year, 1 month, 2 day
     bool empty_allowed_ = true;
     bool valid_ = true;
-    bool focused_ = false;
     ui::Application* calendar_app_ = nullptr;
     Desktop* calendar_desktop_ = nullptr;
     CalendarDropdown* calendar_dropdown_ = nullptr;
@@ -386,7 +384,6 @@ private:
     bool show_seconds_ = true;
     bool twenty_four_hour_ = true;
     bool valid_ = true;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
@@ -413,7 +410,6 @@ private:
     int maximum_ = 100;
     int step_ = 1;
     int value_ = 0;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
 };
@@ -440,7 +436,6 @@ private:
     int maximum_ = 100;
     int step_ = 1;
     int value_ = 0;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId fill_role_ = ui::kInvalidRole;
 };
@@ -469,7 +464,6 @@ private:
     static constexpr int kClearControlWidth = 3;
 
     std::string query_;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId label_role_ = ui::kInvalidRole;
@@ -520,7 +514,6 @@ public:
 private:
     std::string query_;
     std::size_t highlighted_ = 0;
-    bool has_focus_ = false;
     ui::RoleId input_role_ = ui::kInvalidRole;
     ui::RoleId result_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
@@ -544,7 +537,6 @@ private:
     std::vector<std::string> segments_;
     std::string separator_ = "/";
     std::size_t focused_ = 0;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
 };
@@ -572,7 +564,6 @@ private:
     std::vector<PropertyItem> items_;
     int cursor_ = 0;
     bool editing_ = false;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
 };

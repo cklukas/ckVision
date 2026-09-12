@@ -1895,3 +1895,70 @@ CK_TEST(a_command_row_cannot_be_told_it_is_available_when_its_command_is_not) {
     // the palette about whether a verb can be used.
     CK_EXPECT_ABORT({ (void)MenuItem::command(ui::kInvalidCommand).with_enabled(false); });
 }
+
+CK_TEST(activating_the_trailing_title_from_the_keyboard_ends_the_walk_first) {
+    // Enter on the trailing title hands off to whatever the title opens -- a
+    // calendar, say -- and that hand-off ends the walk the way choosing an item
+    // does. Done in the other order, the calendar's modal scope saved a focused
+    // BAR and gave it back when the calendar closed: a bar standing highlighted
+    // on its first menu that nobody had asked for.
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Left));  // onto the trailing title
+    CK_CHECK(probe->highlighted());
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(probe->activations == 1);
+    CK_CHECK(!bar->active());
+    CK_CHECK(!probe->highlighted());
+    CK_CHECK(mf.app.focused() == other);
+}
+
+CK_TEST(a_pointer_on_the_trailing_title_ends_the_walk_before_the_title_reacts) {
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+
+    bar->activate();
+    CK_CHECK(bar->active());
+    // What the Application tells every ancestor of a pointer-down target
+    // before the target itself hears of it (ARCHITECTURE.md §5, pointer
+    // delivery): the bar sees the press on its trailing title coming.
+    bar->on_descendant_mouse_down(*probe);
+    CK_CHECK(!bar->active());
+    CK_CHECK(!probe->highlighted());
+    CK_CHECK(mf.app.focused() == other);
+}
+
+CK_TEST(losing_focus_to_another_view_ends_the_walk_and_its_trailing_highlight) {
+    // Focus can leave the bar without the bar's own doing -- a view opened
+    // from the trailing title takes it. Whatever the walk had lit, the bar's
+    // title or the trailing one, goes out with it, and the bookmark goes too:
+    // a deactivate() that came later must not carry focus back to a view the
+    // reader left long ago.
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    auto* taker = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    taker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Left));
+    CK_CHECK(probe->highlighted());
+    mf.app.set_focus(taker);
+    CK_CHECK(!bar->active());
+    CK_CHECK(!probe->highlighted());
+    bar->deactivate();  // nothing to end; must not move focus anywhere
+    CK_CHECK(mf.app.focused() == taker);
+}

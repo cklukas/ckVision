@@ -422,6 +422,9 @@ public:
     // sits is the bar's decision -- a clock switched to seconds is two cells
     // wider than it was, and keeping the old width clips it.
     void on_child_size_hint_changed(ui::View& child) override;
+    // A pointer going down on the trailing view while the bar is being walked
+    // ends the walk before the view reacts: the press is a hand-off.
+    void on_descendant_mouse_down(ui::View& target) override;
 
     explicit MenuBar(std::vector<MenuBarItem> menus);
     ~MenuBar() override;
@@ -441,7 +444,7 @@ public:
     // Closes any open dropdown and restores focus to whatever was
     // focused before activate() was called.
     void deactivate();
-    bool active() const noexcept { return active_; }
+    bool active() const noexcept { return has_focus(); }
 
     void set_menus(std::vector<MenuBarItem> menus);
     const std::vector<MenuBarItem>& menus() const noexcept { return menus_; }
@@ -487,13 +490,14 @@ private:
     bool trailing_slot_highlighted() const noexcept;
     void set_bar_highlight(std::size_t slot);
     void sync_trailing_highlight();
+    // Ends the walk, then activates the trailing title -- in that order.
+    void activate_trailing_accessory();
     void layout_trailing_view();
     std::vector<MenuBarItem> menus_;
     std::size_t highlighted_ = 0;
     // Whether walking the bar carries an open menu with it, as it does from
     // the moment one is opened until the reader closes it or leaves the bar.
     bool menus_follow_walk_ = false;
-    bool active_ = false;
     std::optional<ui::Application::FocusBookmark> previously_focused_;
     std::vector<std::string> invocation_contexts_;
     DropdownMenu* open_dropdown_ = nullptr;  // observer into desktop_'s popup list

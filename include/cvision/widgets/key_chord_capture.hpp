@@ -52,7 +52,6 @@ private:
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     bool capturing_ = false;
-    bool focused_ = false;
 };
 
 }  // namespace ckv::widgets

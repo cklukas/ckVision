@@ -854,14 +854,17 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void TextEditor::on_focus(const FocusEvent& event) { has_focus_ = event.gained; notify_status_changed(); invalidate(); }
+void TextEditor::on_focus(const FocusEvent&) {
+    notify_status_changed();
+    invalidate();
+}
 void TextEditor::on_resized() {
     rebuild_lines();
     relayout_scrollbars();
 }
 
 std::optional<CursorState> TextEditor::cursor_state() const {
-    if (!has_focus_ || bounds().width <= 0 || bounds().height <= 0) return std::nullopt;
+    if (!has_focus() || bounds().width <= 0 || bounds().height <= 0) return std::nullopt;
     const int gutter = static_cast<int>(gutter_width());
     const int content_width = bounds().width - gutter;
     if (content_width <= 0) return std::nullopt;

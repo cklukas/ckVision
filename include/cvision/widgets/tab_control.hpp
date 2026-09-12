@@ -50,7 +50,6 @@ private:
 
     std::vector<Tab> tabs_;
     std::size_t active_index_ = 0;
-    bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId active_role_ = ui::kInvalidRole;
     ui::RoleId page_role_ = ui::kInvalidRole;

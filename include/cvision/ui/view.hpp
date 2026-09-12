@@ -458,6 +458,15 @@ public:
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }
     void set_focus_policy(FocusPolicy policy) { focus_policy_ = policy; }
     bool focusable() const noexcept { return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_; }
+    // Whether this view is the one its Application has focused. The answer
+    // is the Application's, asked at the moment it matters — painting a
+    // face, publishing a caret, deciding whether a key release fires — and
+    // never a flag kept here from the last on_focus(): a view that left the
+    // tree while focused, was put back, or otherwise missed a notification
+    // would go on drawing itself focused beside the view that really is
+    // (ARCHITECTURE.md §5 "Focus and traversal", D-065). A view whose
+    // context names no Application is never focused.
+    bool has_focus() const noexcept;
 
     // --- Help context (ARCHITECTURE.md §5 "Commands and help", D-027) ---
 

@@ -101,7 +101,6 @@ private:
     View* second_ = nullptr;
     Orientation orientation_;
     int split_position_ = 0;
-    bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     bool dragging_ = false;

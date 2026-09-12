@@ -185,21 +185,18 @@ bool CheckGroup::on_mouse(const MouseEvent& event) {
     return true;
 }
 
-void CheckGroup::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void CheckGroup::on_focus(const FocusEvent&) { invalidate(); }
 
 void CheckGroup::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const int label_rows = group_label_rows(group_label_);
     if (label_rows != 0) {
-        const Style title_style = group_label_style(theme, group_label_role_, focused_role_, has_focus_);
+        const Style title_style = group_label_style(theme, group_label_role_, focused_role_, has_focus());
         painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", title_style));
         painter.draw_text(Point{0, 0}, text::clip_to_width(group_label_, bounds().width), title_style);
     }
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
+        const Style style = (has_focus() && i == cursor_) ? theme.resolve(focused_role_)
                                                           : theme.resolve(normal_role_);
         const int row = label_rows + static_cast<int>(i);
         const int item_indent = label_rows == 0 ? 0 : 1;
@@ -325,21 +322,18 @@ bool RadioGroup::on_mouse(const MouseEvent& event) {
     return true;
 }
 
-void RadioGroup::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void RadioGroup::on_focus(const FocusEvent&) { invalidate(); }
 
 void RadioGroup::draw(scene::Painter& painter) {
     const ui::Theme& theme = *context().theme;
     const int label_rows = group_label_rows(group_label_);
     if (label_rows != 0) {
-        const Style title_style = group_label_style(theme, group_label_role_, focused_role_, has_focus_);
+        const Style title_style = group_label_style(theme, group_label_role_, focused_role_, has_focus());
         painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", title_style));
         painter.draw_text(Point{0, 0}, text::clip_to_width(group_label_, bounds().width), title_style);
     }
     for (std::size_t i = 0; i < labels_.size(); ++i) {
-        const Style style = (has_focus_ && i == cursor_) ? theme.resolve(focused_role_)
+        const Style style = (has_focus() && i == cursor_) ? theme.resolve(focused_role_)
                                                           : theme.resolve(normal_role_);
         const int row = label_rows + static_cast<int>(i);
         const int item_indent = label_rows == 0 ? 0 : 1;
