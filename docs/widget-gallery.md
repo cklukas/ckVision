@@ -102,7 +102,8 @@ detector, and line highlighter registered by an application.
 ## SyntaxProfileRegistry
 
 Header: `include/cvision/widgets/syntax_profile.hpp`. Instance-owned language
-profile registry; the editor guide registers JSON, YAML, Bash, and plain text.
+profile registry; the editor guide registers JSON, YAML, Bash, Markdown, and
+plain text.
 
 ## SyntaxCacheLine
 

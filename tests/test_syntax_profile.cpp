@@ -4,6 +4,9 @@
 
 #include "cvision/widgets/syntax_profile.hpp"
 
+#include <string_view>
+#include <vector>
+
 using ckv::widgets::LanguageDetectionInput;
 using ckv::widgets::SyntaxProfileRegistry;
 using ckv::widgets::SyntaxTokenKind;
@@ -119,4 +122,140 @@ CK_TEST(profile_lexing_uses_explicit_ascii_source_grammar_without_locale_classif
     bool error = false;
     for (const auto& span : first.spans) error = error || span.kind == SyntaxTokenKind::Error;
     CK_CHECK(error);
+}
+
+namespace {
+
+using ckv::widgets::SyntaxSpan;
+
+std::vector<SyntaxSpan> markdown_spans(std::string_view line, std::string_view state = "body") {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    return registry.find("markdown")->highlight_line(line, state).spans;
+}
+
+}  // namespace
+
+CK_TEST(markdown_profile_is_detected_by_file_suffix_and_by_content) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "talk.md", {}, {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "README.markdown", {}, {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "\n# Release notes\n\n- item\n", {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled",
+                                                    "---\ntitle: Field Report\nformat: slides\n---\n\n# Field Report\n", {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled",
+                                                    "---\ntitle: Field Report\n# reviewed\ntags:\n  - field\n---\n", {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "#hashtag first\n", {}}).id == "plain");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "#!/usr/bin/env bash\n# heading?\n", {}}).id == "bash");
+}
+
+CK_TEST(markdown_profile_leaves_yaml_that_only_looks_like_front_matter_to_yaml) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    // A document that opens with `---` but never closes the block is YAML.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "---\nname: ckVision\nversion: 1\n", {}}).id == "yaml");
+    // A line that is not `key: value` before the closing `---` ends the claim.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "---\nname: ckVision\nnot a key\n---\n", {}}).id == "yaml");
+    // The file suffix outranks a front-matter-shaped prefix.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "deck.yml", "---\ntitle: Field Report\n---\n", {}}).id == "yaml");
+}
+
+CK_TEST(markdown_profile_marks_atx_headings_whole) {
+    const std::vector<SyntaxSpan> expected{{0, 22, SyntaxTokenKind::Keyword}};
+    CK_CHECK(markdown_spans("# Field Report {a=b}  ") == expected);
+    CK_CHECK(markdown_spans("###### Deep") == std::vector<SyntaxSpan>({{0, 11, SyntaxTokenKind::Keyword}}));
+    CK_CHECK(markdown_spans("####### Not a heading").empty());
+    CK_CHECK(markdown_spans("#hashtag").empty());
+}
+
+CK_TEST(markdown_profile_marks_emphasis_strong_emphasis_and_escapes) {
+    const std::vector<SyntaxSpan> expected{{6, 17, SyntaxTokenKind::Type}, {31, 42, SyntaxTokenKind::Keyword}};
+    CK_CHECK(markdown_spans("Costs *warehouse* fell; margin **doubled**.") == expected);
+    CK_CHECK(markdown_spans("__strong__ and _em_") ==
+             std::vector<SyntaxSpan>({{0, 10, SyntaxTokenKind::Keyword}, {15, 19, SyntaxTokenKind::Type}}));
+    // Intraword underscores and unbalanced stars are text.
+    CK_CHECK(markdown_spans("snake_case_name * 2").empty());
+    CK_CHECK(markdown_spans("a \\* literal star") == std::vector<SyntaxSpan>({{2, 4, SyntaxTokenKind::Escape}}));
+}
+
+CK_TEST(markdown_profile_marks_inline_code_by_matching_backtick_runs) {
+    CK_CHECK(markdown_spans("run `make` now") == std::vector<SyntaxSpan>({{4, 10, SyntaxTokenKind::String}}));
+    CK_CHECK(markdown_spans("`` a ` b `` tail") == std::vector<SyntaxSpan>({{0, 11, SyntaxTokenKind::String}}));
+    CK_CHECK(markdown_spans("an unmatched ` stays text").empty());
+}
+
+CK_TEST(markdown_profile_carries_the_fence_state_until_the_closing_fence) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& markdown = *registry.find("markdown");
+    const auto opening = markdown.highlight_line("```cpp", "body");
+    CK_CHECK(opening.next_state == "fence:```");
+    CK_CHECK(opening.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}, {3, 6, SyntaxTokenKind::Type}}));
+    const auto body = markdown.highlight_line("# not a heading, *not* emphasis", opening.next_state);
+    CK_CHECK(body.next_state == "fence:```");
+    CK_CHECK(body.spans == std::vector<SyntaxSpan>({{0, 31, SyntaxTokenKind::String}}));
+    const auto shorter = markdown.highlight_line("``", body.next_state);
+    CK_CHECK(shorter.next_state == "fence:```");
+    const auto closing = markdown.highlight_line("````  ", shorter.next_state);
+    CK_CHECK(closing.next_state == "body");
+    CK_CHECK(closing.spans == std::vector<SyntaxSpan>({{0, 4, SyntaxTokenKind::Operator}}));
+    // A backtick fence's info string may not contain a backtick: that line is inline code.
+    CK_CHECK(markdown.highlight_line("``` a ` b ```", "body").next_state == "body");
+    CK_CHECK(markdown.highlight_line("~~~", "body").next_state == "fence:~~~");
+}
+
+CK_TEST(markdown_profile_marks_links_and_images) {
+    CK_CHECK(markdown_spans("see [the report](https://example.org/r?a=(1)) now") ==
+             std::vector<SyntaxSpan>({{4, 16, SyntaxTokenKind::Property}, {16, 45, SyntaxTokenKind::String}}));
+    CK_CHECK(markdown_spans("![alt][ref]") == std::vector<SyntaxSpan>({{0, 11, SyntaxTokenKind::Property}}));
+    CK_CHECK(markdown_spans("- [ ] a task").size() == 1U);
+    CK_CHECK(markdown_spans("[bare] brackets").empty());
+}
+
+CK_TEST(markdown_profile_marks_block_quotes_list_markers_and_rules) {
+    CK_CHECK(markdown_spans("> quoted **text**") ==
+             std::vector<SyntaxSpan>({{0, 1, SyntaxTokenKind::Operator}, {1, 17, SyntaxTokenKind::Comment}}));
+    CK_CHECK(markdown_spans("- Revenue grew *fast*") ==
+             std::vector<SyntaxSpan>({{0, 1, SyntaxTokenKind::Operator}, {15, 21, SyntaxTokenKind::Type}}));
+    CK_CHECK(markdown_spans("  12. twelfth") ==
+             std::vector<SyntaxSpan>({{2, 5, SyntaxTokenKind::Number}}));
+    CK_CHECK(markdown_spans("-no space, not a list").empty());
+    CK_CHECK(markdown_spans("* * *") == std::vector<SyntaxSpan>({{0, 5, SyntaxTokenKind::Operator}}));
+    CK_CHECK(markdown_spans("===") == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+}
+
+CK_TEST(markdown_profile_opens_front_matter_only_at_the_document_start) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& markdown = *registry.find("markdown");
+    const auto opening = markdown.highlight_line("---", "");
+    CK_CHECK(opening.next_state == "front");
+    CK_CHECK(opening.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    const auto key = markdown.highlight_line("title: Field Report", opening.next_state);
+    CK_CHECK(key.next_state == "front");
+    CK_CHECK(key.spans == std::vector<SyntaxSpan>({{0, 5, SyntaxTokenKind::Property},
+                                                   {5, 6, SyntaxTokenKind::Operator},
+                                                   {7, 19, SyntaxTokenKind::Plain}}));
+    const auto closing = markdown.highlight_line("---", key.next_state);
+    CK_CHECK(closing.next_state == "body");
+    CK_CHECK(closing.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    // The same `---` after body text is a thematic break, and the body state is kept.
+    const auto rule = markdown.highlight_line("---", closing.next_state);
+    CK_CHECK(rule.next_state == "body");
+    CK_CHECK(rule.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    // A document that does not start with `---` is body from its first line.
+    CK_CHECK(markdown.highlight_line("# Title", "").next_state == "body");
+}
+
+CK_TEST(markdown_profile_marks_directive_lines) {
+    CK_CHECK(markdown_spans("::steps") == std::vector<SyntaxSpan>({{0, 7, SyntaxTokenKind::Command}}));
+    CK_CHECK(markdown_spans("::step{at=2-3}") ==
+             std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::Command}, {6, 14, SyntaxTokenKind::Property}}));
+    CK_CHECK(markdown_spans("::") == std::vector<SyntaxSpan>({{0, 2, SyntaxTokenKind::Command}}));
+    CK_CHECK(markdown_spans("::figure{src=a.png} *caption*") ==
+             std::vector<SyntaxSpan>({{0, 8, SyntaxTokenKind::Command}, {8, 19, SyntaxTokenKind::Property},
+                                      {20, 29, SyntaxTokenKind::Type}}));
+    CK_CHECK(markdown_spans("::step{unclosed") ==
+             std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::Command}, {6, 15, SyntaxTokenKind::Property}}));
 }

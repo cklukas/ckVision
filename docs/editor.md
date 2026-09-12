@@ -164,7 +164,8 @@ rejection. The detected input newline style is retained as
 ## Profiles and highlighting
 
 `SyntaxProfileRegistry` is instance-owned. Register the standard profiles with
-`register_standard_syntax_profiles()` for Plain text, JSON, YAML, and Bash.
+`register_standard_syntax_profiles()` for Plain text, JSON, YAML, Bash, and
+Markdown.
 Automatic detection uses an explicit requested profile, file suffix, content
 prefix, and shebang; it never reads environment variables. A profile consists
 of a stable ID, detector, and `SyntaxLineHighlighter`, so an application can
@@ -195,6 +196,20 @@ returns only grapheme-boundary spans within that line, and supplies the next
 state. Register it on the application-owned `SyntaxProfileRegistry`; nothing
 is process-global. The shipped JSON, YAML, and Bash profiles demonstrate
 suffix, content-prefix, and shebang detection respectively.
+
+The Markdown profile is detected by a `.md` or `.markdown` name, by a
+leading YAML front matter block (a `---` line, `key: value` lines, a closing
+`---`), or by an ATX heading on the first non-blank line; the front matter
+outranks YAML's own content score, and a `---` block that never closes stays
+YAML. It paints ATX headings and strong emphasis as keywords, emphasis as a
+type, code spans and fenced code as strings, link text as a property and the
+link target as a string, block quotes as comments, list markers as operators
+(ordered ones as numbers), thematic breaks and fences as operators, the front
+matter's lines with the YAML rules, and `::name{...}` directive lines as a
+command with a property block. Its states are never empty: the cache hands
+the first line an empty state, so an empty incoming state means the document
+start, where a `---` opens the front matter instead of drawing a rule, and a
+`fence:` state carries a fenced block to the fence that closes it.
 
 The complete [INI extension sample](../examples/editor/profile_sample.cpp)
 compiles and runs in the test suite using only this public API. Its essential
