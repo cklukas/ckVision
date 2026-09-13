@@ -12,6 +12,7 @@
 #include "cvision/ui/layout_metrics.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
+#include "cvision/widgets/text_layout.hpp"
 
 namespace ckv::widgets {
 
@@ -67,6 +68,77 @@ void reveal_in_scroll_viewport(ui::View& view) {
 // and does not stay the same afterwards: terminals are resized, docks
 // appear, the desktop shrinks and grows. A tree that chose its shape once
 // would be right until the first resize.
+// The focused field's description, word-wrapped. It asks the Application
+// which view has the focus when it paints rather than listening for focus
+// changes: every focus move inside a dialog invalidates the field it leaves
+// and the one it reaches, which repaints the window this panel is part of.
+class FieldDescriptionView final : public ui::View {
+public:
+    struct Entry {
+        ui::View* field = nullptr;
+        std::weak_ptr<void> liveness;
+        std::string description;
+    };
+
+    explicit FieldDescriptionView(int rows) noexcept : rows_(std::max(1, rows)) {}
+
+    void add(ui::View& field, std::string description) {
+        entries_.push_back(Entry{&field, field.lifetime_token(), std::move(description)});
+        if (shown_ >= entries_.size()) shown_ = 0;
+    }
+
+    // The description on show right now; exposed for tests.
+    const std::string& shown_description() const {
+        refresh_shown();
+        static const std::string empty;
+        return shown_ < entries_.size() ? entries_[shown_].description : empty;
+    }
+
+    ui::SizeHint horizontal_size_hint() const override { return ui::SizeHint{0, 0, ui::kUnboundedExtent}; }
+    ui::SizeHint vertical_size_hint() const override { return ui::SizeHint{rows_, rows_, rows_}; }
+    int rows() const noexcept { return rows_; }
+
+    void on_attached() override {
+        if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.static.text");
+    }
+
+    void draw(scene::Painter& painter) override {
+        const Style style = context().theme->resolve(role_);
+        painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", style));
+        const std::string& text = shown_description();
+        int y = 0;
+        std::size_t begin = 0;
+        while (y < bounds().height && begin <= text.size()) {
+            const std::size_t end = std::min(text.find('\n', begin), text.size());
+            const std::string_view line(text.data() + begin, end - begin);
+            for (const WrapSegment& segment :
+                 wrap_text(line, WrapOptions{std::max(1, bounds().width), WrapMode::Word, 0})) {
+                if (y >= bounds().height) break;
+                painter.draw_text(Point{0, y++}, line.substr(segment.begin, segment.end - segment.begin), style);
+            }
+            begin = end + 1;
+        }
+    }
+
+private:
+    void refresh_shown() const {
+        const ui::Application* const app = context().app;
+        if (app == nullptr) return;
+        for (const ui::View* view = app->focused(); view != nullptr; view = view->parent()) {
+            for (std::size_t index = 0; index < entries_.size(); ++index) {
+                if (entries_[index].field != view || entries_[index].liveness.expired()) continue;
+                shown_ = index;
+                return;
+            }
+        }
+    }
+
+    int rows_;
+    std::vector<Entry> entries_;
+    mutable std::size_t shown_ = 0;
+    ui::RoleId role_ = ui::kInvalidRole;
+};
+
 class DialogPane final : public ui::View {
 public:
     DialogPane(ui::Alignment button_alignment, bool anchor_buttons_to_bottom) noexcept
@@ -95,6 +167,14 @@ public:
         relayout();
     }
 
+    FieldDescriptionView* set_description(std::unique_ptr<FieldDescriptionView> description) {
+        CKV_ASSERT(description_ == nullptr);
+        CKV_ASSERT(description != nullptr);
+        description_ = add(std::move(description));
+        relayout();
+        return description_;
+    }
+
     ui::SizeHint horizontal_size_hint() const override {
         // The cross axis maxes, exactly as the Column this replaced did.
         // Deliberately no allowance for the vertical bar: a dialog must not
@@ -121,6 +201,10 @@ public:
             hint.min += fields.min;
             hint.preferred += fields.preferred;
         }
+        if (description_ != nullptr) {
+            hint.min += description_->rows() + kFieldSpacing;
+            hint.preferred += description_->rows() + kFieldSpacing;
+        }
         if (buttons_ != nullptr) {
             const ui::SizeHint buttons = buttons_->vertical_size_hint();
             const int between = field_button_gap() + anchor_slack();
@@ -133,6 +217,7 @@ public:
     int height_for_width(int width) const override {
         const int usable = std::max(0, width);
         int total = fields_ != nullptr ? fields_->height_for_width(usable) : 0;
+        if (description_ != nullptr) total += description_->rows() + kFieldSpacing;
         if (buttons_ != nullptr)
             total += field_button_gap() + anchor_slack() +
                      ui::detail::preferred_height_for_width(*buttons_, button_row_width(usable));
@@ -204,18 +289,23 @@ private:
             buttons_ != nullptr ? std::max(1, buttons_->vertical_size_hint().preferred) : 0;
         const int natural =
             fields_ != nullptr ? ui::detail::preferred_height_for_width(*fields_, width) : 0;
+        // The description panel sits under the fields and never scrolls with
+        // them: it is about whichever field has the focus, wherever that is.
+        const int description_height = description_ != nullptr ? description_->rows() + kFieldSpacing : 0;
 
         // THE decision, and the only one: is there room for the whole form
         // AND its buttons? An anchored dialog takes the same branch as one
         // that does not fit, because both mean "buttons at the bottom edge".
-        const bool fits = natural + gap + buttons_height <= height;
+        const bool fits = natural + description_height + gap + buttons_height <= height;
         const int viewport_height = (fits && !anchor_buttons_to_bottom_)
                                         ? natural
-                                        : std::max(0, height - gap - buttons_height);
+                                        : std::max(0, height - description_height - gap - buttons_height);
         viewport_->set_bounds(Rect{0, 0, width, viewport_height});
+        if (description_ != nullptr)
+            description_->set_bounds(Rect{0, viewport_height + kFieldSpacing, width, description_->rows()});
         if (buttons_ == nullptr) return;
         // Never past this pane's own last row, however little height there is.
-        const int y = std::min(viewport_height + gap, std::max(0, height - buttons_height));
+        const int y = std::min(viewport_height + description_height + gap, std::max(0, height - buttons_height));
         const auto [x, button_width] = ui::align_cross_axis(
             width, buttons_->horizontal_size_hint().preferred, button_alignment_, 0, 0);
         buttons_->set_bounds(Rect{x, y, button_width, buttons_height});
@@ -223,6 +313,7 @@ private:
 
     ScrollViewport* viewport_ = nullptr;
     ui::View* fields_ = nullptr;  // owned by viewport_; kept for measurement
+    FieldDescriptionView* description_ = nullptr;
     Row* buttons_ = nullptr;
     ui::Alignment button_alignment_ = ui::Alignment::Start;
     bool anchor_buttons_to_bottom_ = false;
@@ -740,6 +831,23 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
     auto pane = std::make_unique<DialogPane>(descriptor.button_alignment,
                                              descriptor.anchor_buttons_to_bottom);
     result.content_viewport = pane->set_fields(std::move(column));
+
+    if (descriptor.field_description_rows > 0) {
+        auto description = std::make_unique<FieldDescriptionView>(descriptor.field_description_rows);
+        for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
+            // The field's own control — whichever of the parallel slots it
+            // filled; a note has none and so no description to show.
+            ui::View* control = nullptr;
+            for (ui::View* candidate :
+                 {static_cast<ui::View*>(result.inputs[index]), static_cast<ui::View*>(result.memos[index]),
+                  static_cast<ui::View*>(result.checks[index]), static_cast<ui::View*>(result.radios[index]),
+                  static_cast<ui::View*>(result.combos[index]), static_cast<ui::View*>(result.dates[index]),
+                  static_cast<ui::View*>(result.times[index])})
+                if (candidate != nullptr) control = candidate;
+            if (control != nullptr) description->add(*control, descriptor.fields[index].description);
+        }
+        result.field_description = pane->set_description(std::move(description));
+    }
 
     if (!descriptor.buttons.empty()) {
         auto button_row = std::make_unique<Row>();

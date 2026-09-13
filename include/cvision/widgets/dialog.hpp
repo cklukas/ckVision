@@ -176,6 +176,10 @@ struct FieldDescriptor {
     // still scroll its field area on a smaller terminal. Values below one are
     // treated as one row rather than creating a non-interactive field.
     int memo_rows = 5;
+    // What this field wants, for a form that reserves a description panel
+    // (DialogDescriptor::field_description_rows): shown there, word-wrapped,
+    // while the field has the focus. Lines break at '\n'.
+    std::string description{};
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is
@@ -234,6 +238,12 @@ struct DialogDescriptor {
     // the bottom rather than treating that intentional space as a trailing
     // blank area. Defaults preserve existing compact descriptor dialogs.
     bool anchor_buttons_to_bottom = false;
+    // Rows reserved between the fields and the buttons for the focused
+    // field's `description`; zero for no panel. A form with more fields than
+    // room for a line of help beside each keeps one explanation in view
+    // instead — the field's the reader is on, and the last one while a
+    // button has the focus. The panel stays put when the fields scroll.
+    int field_description_rows = 0;
     // Contextual F1 topic inherited by every field and button through the
     // hosting Window. Keeping this on the descriptor prevents declarative
     // forms from losing help merely because their callers do not hand-build
@@ -259,6 +269,9 @@ struct MaterializedDialog {
     std::vector<Button*> buttons;    // parallel to descriptor.buttons
     ui::View* initial_focus = nullptr;
     Button* default_button = nullptr;
+    // The panel showing the focused field's description, or nullptr when the
+    // descriptor reserved none. Owned by `root`.
+    ui::View* field_description = nullptr;
     // The viewport the fields live in (never null; see this file's header
     // for the shape). Owned by `root`. A caller reads it to scroll the form
     // itself — to bring its own field into view after changing something,

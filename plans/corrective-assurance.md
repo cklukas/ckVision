@@ -85,9 +85,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 36 | WP-54 — SysInfo report export, help, and documentation | 1 pw | **Implementation complete — gate pending** | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
 | 37 | WP-56 — Storage throughput and its interface ceilings | 0.5–1 pw | **Implementation complete — Mac and Linux gates passed** | WP-54 | Example coverage: the disk question, measured and compared; [SysInfo plan](sysinfo-example.md) |
 | 38 | WP-57 — TextEditor as an application's document editing surface | 2–3 pw | **Implementation complete — gate pending** | WP-44 | Editor verbs as data, edit requests, caret motion, virtual caret, host colouring, context menus; [architecture](editor-architecture.md) |
-| 39 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 40 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 41 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 39 | WP-58 — Status legends and form help that follow focus | 0.5–1 pw | **Implementation complete — gate pending** | WP-57 | StatusLine item sets per command context; descriptor-dialog field description panel |
+| 40 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 41 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 42 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2486,6 +2487,29 @@ capability.
 - The editor guide and widget gallery document each capability.
 - Gates: warnings-as-errors build, full suite, documentation gates,
   provenance check.
+
+### WP-58 — Status legends and form help that follow focus
+
+**Purpose.** A status legend that offers the same keys wherever the reader is
+tells them nothing about where they are, and a long form with no room for a
+line of help per field leaves every field unexplained. Both already follow
+focus in part — the status line's hint does — and both should wholly.
+
+**Work.**
+
+- `StatusLine::set_context_items()`: an item set per command context, shown
+  while the focused view's nearest command context is that one.
+- `FieldDescriptor::description` and `DialogDescriptor::field_description_rows`:
+  a non-scrolling panel between a form's fields and buttons that shows the
+  focused field's description and keeps the last one on a button.
+
+**Acceptance.**
+
+- Unit coverage: the item set follows focus through an ancestor's context,
+  falls back without one, and a click reaches the shown item; the panel shows
+  each field's description as focus moves and keeps it on a button.
+- Documentation in the widget gallery and the dialogs guide; documentation and
+  provenance gates.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

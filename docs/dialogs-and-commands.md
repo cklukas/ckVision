@@ -138,6 +138,23 @@ the default button from anywhere in the dialog, a focused checkbox or radio
 group included.
 
 Notes take no focus, so `Tab` still moves between the fields a reader answers.
+
+## Describing the focused field
+
+A form with more fields than room for a line of help beside each can keep one
+explanation in view instead. Give each field a `description` and reserve rows
+for it with `DialogDescriptor::field_description_rows`: a panel between the
+fields and the buttons shows the focused field's description, word-wrapped and
+broken at `'\n'`, and keeps the last one while a button has the focus. The
+panel never scrolls with the fields, so the explanation stays beside whichever
+field the reader is on however long the form is.
+
+```cpp
+descriptor.field_description_rows = 3;
+descriptor.fields.push_back(widgets::FieldDescriptor{
+    .label = "&Network name",
+    .description = "The network's SSID, exactly as it is broadcast.\nExample: Home"});
+```
 Consecutive notes lay out as one paragraph with no blank row between them: the
 form's own spacing separates questions, not the lines of a sentence.
 

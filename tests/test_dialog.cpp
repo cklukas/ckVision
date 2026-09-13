@@ -848,3 +848,58 @@ CK_TEST(a_presented_dialog_scrolls_when_the_terminal_shrinks_and_recovers_when_i
     CK_CHECK(save->absolute_bounds().y - window->absolute_bounds().y == 18);
     (void)presentation;
 }
+
+CK_TEST(a_description_panel_shows_the_focused_fields_description_and_keeps_the_last_one_on_a_button) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles app_roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), app_roles);
+    auto* desktop =
+        static_cast<Desktop*>(app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 80, 24})));
+
+    DialogDescriptor descriptor;
+    descriptor.title = "Wi-Fi access";
+    FieldDescriptor network;
+    network.label = "&Network name";
+    network.description = "The network's SSID.\nExample: Home";
+    FieldDescriptor password;
+    password.label = "&Password";
+    password.description = "Leave empty for an open network.";
+    FieldDescriptor note;
+    note.kind = ckv::widgets::FieldKind::Note;
+    note.label = "A note has no control, so no description.";
+    descriptor.fields = {network, password, note};
+    descriptor.buttons.push_back({"&OK", ButtonRole::Accept, {}});
+    descriptor.field_description_rows = 3;
+
+    CK_CHECK(materialize_dialog(descriptor).field_description != nullptr);
+
+    auto presentation = ckv::widgets::present_dialog(descriptor, app, *desktop, app_roles);
+    app.step(0);
+    const auto frame = [&app] {
+        std::string out;
+        const auto& surface = app.composed_surface();
+        for (int y = 0; y < surface.size().height; ++y) {
+            for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, y}).grapheme();
+            out += '\n';
+        }
+        return out;
+    };
+    std::string text = frame();
+    CK_CHECK(text.find("The network's SSID.") != std::string::npos);
+    CK_CHECK(text.find("Example: Home") != std::string::npos);
+    CK_CHECK(text.find("Leave empty for an open network.") == std::string::npos);
+
+    CK_CHECK(app.dispatch(ckv::term::TerminalEvent{ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}}));
+    app.step(0);
+    text = frame();
+    CK_CHECK(text.find("Leave empty for an open network.") != std::string::npos);
+    CK_CHECK(text.find("The network's SSID.") == std::string::npos);
+
+    // On the button the last field's description stays.
+    CK_CHECK(app.dispatch(ckv::term::TerminalEvent{ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}}));
+    app.step(0);
+    CK_CHECK(frame().find("Leave empty for an open network.") != std::string::npos);
+    (void)presentation;
+}

@@ -960,8 +960,9 @@ Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator
 record used to materialize a descriptor dialog. `kind` selects the control:
 `Text` (an `InputLine`, the default), `Memo` (a multi-line text field whose
 `memo_rows` controls its requested visible height), `Check` (a checkbox carrying
-the label as its own text) or `Note` (text the form states rather than asks). See
-[Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
+the label as its own text) or `Note` (text the form states rather than asks). Its
+`description` is what a form's description panel shows while the field has the
+focus. See [Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
 
 ## ButtonDescriptor
 
@@ -993,6 +994,7 @@ Its public configuration is synchronized directly from the declaration:
 | `minimum_window_size` | `Size` | `{}` |
 | `button_alignment` | `ui::Alignment` | `ui::Alignment::Start` |
 | `anchor_buttons_to_bottom` | `bool` | `false` |
+| `field_description_rows` | `int` | `0` |
 | `help_context_key` | `std::string` | `{}` |
 <!-- /ckvision-fields -->
 
@@ -1848,7 +1850,10 @@ short status surface entry used by StatusLine.
 Header: `include/cvision/widgets/status_line.hpp`. Dock it at Desktop bottom
 for command hints and contextual help. Its command item executes the same
 registry action as a menu item; the registered key chord automatically uses
-the same `ckv.hotkey` accent as menu mnemonics.
+the same `ckv.hotkey` accent as menu mnemonics. `set_context_items()` gives a
+command context (`View::set_command_context`) an item set of its own, shown
+instead of the ordinary items while focus is inside that context — an editor's
+keys while the editor has the focus, a list's while the list does.
 
 ![StatusLine command hints](generated/screenshots/widget-statusline.svg)
 
