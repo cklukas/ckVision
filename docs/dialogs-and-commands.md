@@ -196,6 +196,14 @@ deliberate whitespace around compact content.
 For file/directory selection, help, and window lists use the matching standard
 presentation headers shown in [the API index](api-index.md#dialogs-and-client-services).
 
+A presentation's completion handler runs only while the presentation is kept.
+An application with a handful of dialogs keeps one member per dialog; one that
+asks many questions keeps a single
+[`PendingDialogs`](widget-gallery.md#pendingdialogs) and hands it every
+presentation together with what to do with the answer. Each is released when
+its answer arrives and before that answer runs, so a confirmation can present
+the error box that follows it without a second member to hold it.
+
 ## Wizard: state-dependent Next
 
 `WizardPage` receives a predicate that tells the Wizard whether Next is

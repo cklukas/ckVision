@@ -12,6 +12,7 @@
 #include "cvision/widgets/window_list_dialog.hpp"
 
 #include <optional>
+#include <vector>
 
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
@@ -818,4 +819,61 @@ CK_TEST(an_owner_destroyed_before_its_application_is_not_called_back_during_tear
     f.app.step(0);
 
     CK_CHECK(!called_after_owner_died);
+}
+
+CK_TEST(pending_dialogs_keep_each_presentation_until_it_answers_and_let_the_answer_ask_again) {
+    Fixture f;
+    ckv::widgets::PendingDialogs pending;
+    std::vector<MessageBoxResult> answers;
+
+    pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                  [&](MessageBoxResult first) {
+                      answers.push_back(first);
+                      // The answer asks the next question: the first dialog is
+                      // already released, and the second is kept in its place.
+                      CK_CHECK(pending.empty());
+                      pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                                    [&](MessageBoxResult second) { answers.push_back(second); });
+                  });
+    CK_CHECK(pending.size() == 1);
+    CK_CHECK(f.desktop->windows().back()->close());
+    f.app.step(0);
+    CK_CHECK(answers.size() == 1);
+    CK_CHECK(pending.size() == 1);
+    CK_CHECK(f.desktop->windows().size() == 1);
+
+    CK_CHECK(f.desktop->windows().back()->close());
+    f.app.step(0);
+    CK_CHECK((answers == std::vector<MessageBoxResult>{MessageBoxResult::Cancel, MessageBoxResult::Cancel}));
+    CK_CHECK(pending.empty());
+}
+
+CK_TEST(pending_dialogs_withdraw_every_outstanding_answer_when_their_owner_goes) {
+    Fixture f;
+    bool called_after_owner_died = false;
+    {
+        ckv::widgets::PendingDialogs pending;
+        pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                      [&](MessageBoxResult) { called_after_owner_died = true; });
+        // A notice with no answer to act on is kept all the same.
+        pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()));
+        CK_CHECK(pending.size() == 2);
+    }
+    while (!f.desktop->windows().empty())
+        CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
+    f.app.step(0);
+    CK_CHECK(!called_after_owner_died);
+}
+
+CK_TEST(pending_dialogs_answer_at_once_for_a_presentation_that_already_completed) {
+    Fixture f;
+    ckv::widgets::PendingDialogs pending;
+    auto presentation = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    CK_CHECK(f.desktop->windows().back()->close());
+    f.app.step(0);
+    CK_CHECK(presentation.completed());
+    std::optional<MessageBoxResult> answer;
+    pending.await(std::move(presentation), [&](MessageBoxResult result) { answer = result; });
+    CK_CHECK(answer == MessageBoxResult::Cancel);
+    CK_CHECK(pending.empty());
 }

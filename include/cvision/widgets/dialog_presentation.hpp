@@ -6,9 +6,13 @@
 // DialogPresentation<Result> to inspect or handle that one completion.
 #pragma once
 
+#include <cstddef>
 #include <functional>
+#include <iterator>
+#include <list>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "cvision/core/assert.hpp"
@@ -104,6 +108,68 @@ private:
     std::shared_ptr<State> state_;
 
     friend struct detail::DialogPresentationAccess<Result>;
+};
+
+// The dialogs an owner is waiting on, each kept exactly as long as it is open.
+//
+// A presentation's completion reaches its handler only while the presentation
+// is kept (see ~DialogPresentation), so an application keeps one per dialog it
+// awaits — which, for a single member per dialog kind, is one optional per
+// question the application can ask. An application that asks many questions
+// wants the rule, not the members: hand each presentation over with what to do
+// with its answer, and it is released as that answer arrives. The completion
+// runs after the release, so it may present the next dialog in a chain.
+//
+// Destroying the set withdraws every completion still outstanding, which is
+// the same promise dropping one presentation makes: an owner that is gone is
+// never called back.
+class PendingDialogs {
+public:
+    PendingDialogs() = default;
+    PendingDialogs(const PendingDialogs&) = delete;
+    PendingDialogs& operator=(const PendingDialogs&) = delete;
+
+    // Keeps `presentation` until it completes, then runs `on_complete` with
+    // its result. A presentation that has already completed runs it at once.
+    template <class Result>
+    void await(DialogPresentation<Result> presentation,
+               std::type_identity_t<std::function<void(Result)>> on_complete) {
+        auto held = std::make_unique<Held<Result>>(std::move(presentation));
+        Held<Result>* const raw = held.get();
+        entries_.push_back(std::move(held));
+        const auto position = std::prev(entries_.end());
+        // The presentation moves this handler out of its state before calling
+        // it, so erasing the entry that owns the presentation cannot destroy
+        // the closure while it runs.
+        raw->presentation.set_completion_handler(
+            [this, position, completion = std::move(on_complete)](Result result) {
+                entries_.erase(position);
+                if (completion) completion(std::move(result));
+            });
+    }
+
+    // Keeps `presentation` open with nothing to do on completion — a notice
+    // whose only answer is that the reader has read it.
+    template <class Result>
+    void await(DialogPresentation<Result> presentation) {
+        await(std::move(presentation), std::function<void(Result)>{});
+    }
+
+    // How many dialogs are still open.
+    std::size_t size() const noexcept { return entries_.size(); }
+    bool empty() const noexcept { return entries_.empty(); }
+
+private:
+    struct Entry {
+        virtual ~Entry() = default;
+    };
+    template <class Result>
+    struct Held final : Entry {
+        explicit Held(DialogPresentation<Result> kept) : presentation(std::move(kept)) {}
+        DialogPresentation<Result> presentation;
+    };
+
+    std::list<std::unique_ptr<Entry>> entries_;
 };
 
 namespace detail {

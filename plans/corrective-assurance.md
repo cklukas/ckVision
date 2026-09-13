@@ -86,7 +86,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 37 | WP-56 — Storage throughput and its interface ceilings | 0.5–1 pw | **Implementation complete — Mac and Linux gates passed** | WP-54 | Example coverage: the disk question, measured and compared; [SysInfo plan](sysinfo-example.md) |
 | 38 | WP-57 — TextEditor as an application's document editing surface | 2–3 pw | **Implementation complete — gate pending** | WP-44 | Editor verbs as data, edit requests, caret motion, virtual caret, host colouring, context menus; [architecture](editor-architecture.md) |
 | 39 | WP-58 — Status legends and form help that follow focus | 0.5–1 pw | **Implementation complete — gate pending** | WP-57 | StatusLine item sets per command context; descriptor-dialog field description panel |
-| 40 | WP-59 — Commands that belong to several contexts | 0.5 pw | **Implementation complete — gate pending** | WP-58 | CommandScope: several named contexts and the context-free place; command palette keeps its invoking contexts |
+| 40 | WP-59 — Commands that belong to several contexts | 0.5 pw | **Implementation complete — gate pending** | WP-58 | CommandScope: several named contexts and the context-free place; command palette keeps its invoking contexts; PendingDialogs |
 | 41 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 42 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 43 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
@@ -2529,6 +2529,9 @@ context-bound command at all.
   available, and `outside_contexts` for where no context is active.
   `CommandRegistry::set_command_scope` restates it; `in_named_context` is what
   a modal scope admits a command by.
+- `widgets::PendingDialogs` keeps the presentations an owner awaits, each
+  until its answer arrives, so an application with many questions does not
+  keep a member per dialog.
 - `ui::command_context_path()` is the public form of the invoking-context
   capture menus already made; `CommandPalette::set_invocation_contexts()` lists
   and runs what that place allows, and without it the palette asks its own
@@ -2541,7 +2544,10 @@ context-bound command at all.
   that names no context and in a context it names, never in one it does not
   name, focused or pushed; a modal admits it only by a named context; a menu
   walk from the bare desktop runs it; a palette runs a context-bound command
-  given its invocation contexts and from inside the context.
+  given its invocation contexts and from inside the context; a kept
+  presentation answers once and is released before the answer runs, an
+  answer may present the next dialog, an owner's destruction withdraws every
+  outstanding answer, and an already-completed presentation answers at once.
 - Documentation in the standard-commands guide and the widget gallery;
   documentation and provenance gates.
 

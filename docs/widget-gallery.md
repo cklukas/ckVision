@@ -1093,6 +1093,17 @@ Header: `include/cvision/widgets/dialog_presentation.hpp`. Presentation helper
 that restores the invoking focus after modal close; use the public presentation
 functions rather than constructing it directly.
 
+## PendingDialogs
+
+Header: `include/cvision/widgets/dialog_presentation.hpp`. The dialogs an owner
+is waiting on. A presentation delivers its completion only while it is kept, so
+an application that asks many questions hands each presentation to one
+`PendingDialogs` member with what to do with the answer —
+`pending.await(present_dialog(...), on_answer)` —
+instead of keeping an optional member per dialog. Each is released as its
+answer arrives, before the answer runs, so a completion may present the next
+dialog of a chain; destroying the set withdraws every answer still outstanding.
+
 ## DialogPresentationAccess
 
 Header: `include/cvision/widgets/dialog_presentation.hpp`. Internal access
