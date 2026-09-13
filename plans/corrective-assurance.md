@@ -87,9 +87,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 38 | WP-57 — TextEditor as an application's document editing surface | 2–3 pw | **Implementation complete — gate pending** | WP-44 | Editor verbs as data, edit requests, caret motion, virtual caret, host colouring, context menus; [architecture](editor-architecture.md) |
 | 39 | WP-58 — Status legends and form help that follow focus | 0.5–1 pw | **Implementation complete — gate pending** | WP-57 | StatusLine item sets per command context; descriptor-dialog field description panel |
 | 40 | WP-59 — Commands that belong to several contexts | 0.5 pw | **Implementation complete — gate pending** | WP-58 | CommandScope: several named contexts and the context-free place; command palette keeps its invoking contexts; PendingDialogs |
-| 41 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 42 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 43 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 41 | WP-60 — Side panels a reader sizes, hides and gets back | 0.5 pw | **Implementation complete — gate pending** | WP-59 | Splitter resize anchor, remembered extent, move report, collapsing a hidden pane; containers follow child visibility |
+| 42 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 43 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 44 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2550,6 +2551,37 @@ context-bound command at all.
   outstanding answer, and an already-completed presentation answers at once.
 - Documentation in the standard-commands guide and the widget gallery;
   documentation and provenance gates.
+
+### WP-60 — Side panels a reader sizes, hides and gets back
+
+**Purpose.** A document window with a panel on each side — an outline on the
+left, a preview on the right — needs the far panel to keep its width as the
+window grows, the width the reader chose to come back exactly after a restart
+or a moment of too little room, and a hidden panel to leave nothing where it
+was. A splitter kept only its first pane's size, clamped away a width set
+before it had any size of its own, reported nothing when the reader moved it,
+and kept an empty region and a divider for a hidden pane; containers did not
+rearrange when a child was hidden or shown until something else resized them.
+
+**Work.**
+
+- `Splitter::set_resize_anchor()` names the pane that keeps its extent;
+  `set_anchored_extent()` / `anchored_extent()` hold that extent as asked for,
+  clamped only when laid out; `on_split_moved` fires for a divider the reader
+  moved; `collapsed()` answers whether a hidden pane gave the other the whole
+  splitter, which then draws, grabs and focuses no divider.
+- `View::set_visible()` tells the parent, so Row, Column and Splitter
+  rearrange when a child is hidden or shown.
+
+**Acceptance.**
+
+- Unit coverage: the second pane keeps its extent across a resize; an extent
+  survives a splitter briefly too small and one asked for before any size is
+  honoured; changing the anchor keeps the arrangement; key and pointer moves
+  are reported and programmatic ones are not; a hidden pane takes no room,
+  leaves no divider, focus stop or grab, and comes back at its extent; a row
+  rearranges when a child is hidden and shown.
+- Documentation in the widget gallery; documentation and provenance gates.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

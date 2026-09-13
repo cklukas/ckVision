@@ -322,3 +322,96 @@ CK_TEST(the_divider_roles_can_be_overridden) {
     const ckv::Style expected = f.theme.resolve(f.roles.dialog_background);
     CK_CHECK(s.at(ckv::Point{splitter.split_position(), 0}).style().bg == expected.bg);
 }
+
+// --- Resize anchor ---------------------------------------------------------
+
+CK_TEST(a_splitter_anchored_on_its_second_pane_keeps_that_panes_extent_as_it_resizes) {
+    Splitter splitter(Rect{0, 0, 41, 10}, std::make_unique<View>(), std::make_unique<View>());
+    splitter.set_resize_anchor(ckv::widgets::SplitterPane::Second);
+    splitter.set_anchored_extent(12);
+    CK_CHECK(splitter.second()->bounds() == (Rect{29, 0, 12, 10}));  // 28 + divider
+
+    splitter.set_bounds(Rect{0, 0, 61, 10});
+    CK_CHECK(splitter.second()->bounds().width == 12);
+    CK_CHECK(splitter.first()->bounds().width == 48);
+    CK_CHECK(splitter.anchored_extent() == 12);
+}
+
+CK_TEST(the_anchored_extent_survives_a_splitter_briefly_too_small_for_it) {
+    Splitter splitter(Rect{0, 0, 41, 10}, std::make_unique<View>(), std::make_unique<MinSizedView>(4));
+    splitter.set_anchored_extent(30);
+    splitter.set_bounds(Rect{0, 0, 21, 10});
+    CK_CHECK(splitter.first()->bounds().width == 16);  // 20 usable - 4 second min
+    splitter.set_bounds(Rect{0, 0, 41, 10});
+    CK_CHECK(splitter.first()->bounds().width == 30);
+}
+
+CK_TEST(an_extent_asked_for_before_the_splitter_has_a_size_is_honoured_at_its_first_layout) {
+    Splitter splitter(Rect{0, 0, 0, 0}, std::make_unique<View>(), std::make_unique<View>());
+    splitter.set_resize_anchor(ckv::widgets::SplitterPane::Second);
+    splitter.set_anchored_extent(20);
+    splitter.set_bounds(Rect{0, 0, 81, 24});
+    CK_CHECK(splitter.second()->bounds().width == 20);
+    CK_CHECK(splitter.split_position() == 60);
+}
+
+CK_TEST(changing_the_resize_anchor_keeps_the_current_arrangement) {
+    Splitter splitter(Rect{0, 0, 41, 10}, std::make_unique<View>(), std::make_unique<View>());
+    splitter.set_split_position(10);
+    splitter.set_resize_anchor(ckv::widgets::SplitterPane::Second);
+    CK_CHECK(splitter.split_position() == 10);
+    CK_CHECK(splitter.anchored_extent() == 30);
+}
+
+// --- Moves the reader makes ------------------------------------------------
+
+CK_TEST(the_reader_moving_the_divider_is_reported_and_a_programmatic_move_is_not) {
+    Splitter splitter(Rect{0, 0, 21, 10}, std::make_unique<View>(), std::make_unique<View>());
+    int moves = 0;
+    splitter.on_split_moved = [&] { ++moves; };
+
+    splitter.set_split_position(6);
+    splitter.set_anchored_extent(8);
+    CK_CHECK(moves == 0);
+
+    CK_CHECK(splitter.on_key(key(Key::Right)));
+    CK_CHECK(moves == 1);
+    CK_CHECK(splitter.anchored_extent() == 9);
+
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Down, 9, 2)));
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Move, 4, 2)));
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Move, 4, 2)));  // no movement, no report
+    CK_CHECK(splitter.on_mouse(mouse(ckv::MouseAction::Up, 4, 2)));
+    CK_CHECK(moves == 2);
+    CK_CHECK(splitter.anchored_extent() == 4);
+}
+
+// --- A hidden pane ----------------------------------------------------------
+
+CK_TEST(a_hidden_pane_takes_no_room_and_leaves_no_divider_behind) {
+    Fixture f;
+    Splitter splitter(Rect{0, 0, 21, 5}, std::make_unique<View>(), std::make_unique<View>());
+    splitter.set_context(f.ctx());
+    splitter.set_split_position(6);
+
+    splitter.second()->set_visible(false);
+    CK_CHECK(splitter.collapsed());
+    CK_CHECK(splitter.first()->bounds() == (Rect{0, 0, 21, 5}));
+    CK_CHECK(splitter.focus_policy() == ckv::ui::FocusPolicy::None);
+    CK_CHECK(!splitter.on_key(key(Key::Left)));
+    CK_CHECK(!splitter.on_mouse(mouse(ckv::MouseAction::Down, 6, 2)));
+    ckv::scene::Surface s(ckv::Size{21, 5}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(s, Rect{0, 0, 21, 5});
+    splitter.draw(painter);
+    CK_CHECK(s.at(ckv::Point{6, 0}).grapheme() == " ");
+
+    // Shown again, the pane comes back at the extent it had.
+    splitter.second()->set_visible(true);
+    CK_CHECK(!splitter.collapsed());
+    CK_CHECK(splitter.first()->bounds() == (Rect{0, 0, 6, 5}));
+    CK_CHECK(splitter.second()->bounds() == (Rect{7, 0, 14, 5}));
+    CK_CHECK(splitter.focus_policy() == ckv::ui::FocusPolicy::TabStop);
+
+    splitter.first()->set_visible(false);
+    CK_CHECK(splitter.second()->bounds() == (Rect{0, 0, 21, 5}));
+}

@@ -1800,6 +1800,16 @@ Header: `include/cvision/widgets/splitter.hpp`. Use exactly two adjacent panes
 with user-controlled division. Focus it and use its directional keys, or drag
 the divider. [Layout guide](layout-guide.md) and File Browser show it.
 
+The first pane keeps its size when the splitter resizes; `set_resize_anchor`
+gives that to the second instead, which is what a side panel on the far edge
+wants. `set_anchored_extent` asks for the anchored pane's size — kept as asked
+across resizes, and honoured even when set before the splitter has a size, so a
+remembered width restores exactly — and `on_split_moved` reports the reader
+moving the divider, which is when to remember it. A pane set invisible takes no
+room: the other fills the splitter and no divider remains until it shows again.
+Two splitters, one inside the other with opposite anchors, make a document with
+a panel on each side.
+
 ![Splitter between two panes](generated/screenshots/widget-splitter.svg)
 
 The compiled scene below is the source of this figure.

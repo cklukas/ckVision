@@ -504,6 +504,20 @@ CK_TEST(a_hidden_child_takes_no_room_in_a_row_either) {
     CK_CHECK(last->bounds().x == 6);  // 4 + 2
 }
 
+CK_TEST(a_child_hidden_or_shown_rearranges_its_container_without_being_told_twice) {
+    Row row;
+    row.set_spacing(2);
+    row.set_bounds(Rect{0, 0, 30, 5});
+    row.add_item(std::make_unique<Sized>(4), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* hidden = row.add_item(std::make_unique<Sized>(6), LayoutSpec{SizePolicy::Fixed, 1});
+    auto* last = row.add_item(std::make_unique<Sized>(5), LayoutSpec{SizePolicy::Fixed, 1});
+
+    hidden->set_visible(false);
+    CK_CHECK(last->bounds().x == 6);  // 4 + 2
+    hidden->set_visible(true);
+    CK_CHECK(last->bounds().x == 14);  // 4 + 2 + 6 + 2
+}
+
 // --- Height for width through a container ----------------------------------
 
 namespace {

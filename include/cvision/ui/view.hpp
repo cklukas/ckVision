@@ -270,6 +270,8 @@ public:
     virtual int height_for_width(int /*width*/) const { return preferred_size_.height; }
 
     bool visible() const noexcept { return visible_; }
+    // A change tells the parent (on_child_size_hint_changed), since a
+    // container lays out only the children that show.
     void set_visible(bool visible);
 
     // This view AND every ancestor visible, which is what "on the frame at

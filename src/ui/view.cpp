@@ -145,6 +145,9 @@ void View::set_visible(bool visible) {
     if (visible == visible_) return;
     visible_ = visible;
     invalidate();
+    // A container lays out only what shows, so a child appearing or going
+    // away changes its arrangement exactly as a changed size hint does.
+    if (parent_ != nullptr) parent_->on_child_size_hint_changed(*this);
 }
 
 void View::set_enabled(bool enabled) {
