@@ -1082,6 +1082,13 @@ grip, so the size is theirs. `wire_dialog_window` does not re-fit a
 caller-owned window at all; the window and its geometry policy belong to the
 caller.
 
+## DialogVeto
+
+Header: `include/cvision/widgets/dialog.hpp`. What `DialogDescriptor::check`
+returns when the answers as a whole cannot be accepted: the message the form's
+description panel shows, and the field to put right. See
+[Checking the whole answer](dialogs-and-commands.md#checking-the-whole-answer).
+
 ## DialogResult
 
 Header: `include/cvision/widgets/dialog.hpp`. Typed completion payload for a

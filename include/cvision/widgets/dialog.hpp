@@ -211,6 +211,20 @@ struct ButtonDescriptor {
     std::function<void()> on_press;
 };
 
+struct DialogResult;
+
+// Why a form's answers cannot be accepted as they stand, found once every
+// field's own validator has passed: a combination no single field is wrong
+// about ("an abbreviation needs its expansion"), or a rule only the
+// application can apply to the whole answer.
+struct DialogVeto {
+    // What the reader is told, in the form's description panel.
+    std::string message;
+    // The field to put right: marked invalid where its control can show that,
+    // and given the focus. None when the answer is wrong as a whole.
+    std::optional<std::size_t> field{};
+};
+
 struct DialogDescriptor {
     std::string title;  // not yet rendered anywhere (no window chrome until M5) — carried for that wiring
     std::vector<FieldDescriptor> fields;
@@ -244,6 +258,13 @@ struct DialogDescriptor {
     // instead — the field's the reader is on, and the last one while a
     // button has the focus. The panel stays put when the fields scroll.
     int field_description_rows = 0;
+    // Runs when the reader accepts and every field's own validator passed,
+    // with the answers the dialog would complete with. A veto keeps the dialog
+    // open with those answers: the named field is marked and focused, and the
+    // message stands in the description panel until the focus moves on. A
+    // descriptor with a check always has that panel — two rows when
+    // field_description_rows asks for none.
+    std::function<std::optional<DialogVeto>(const DialogResult&)> check{};
     // Contextual F1 topic inherited by every field and button through the
     // hosting Window. Keeping this on the descriptor prevents declarative
     // forms from losing help merely because their callers do not hand-build

@@ -155,6 +155,25 @@ descriptor.fields.push_back(widgets::FieldDescriptor{
     .label = "&Network name",
     .description = "The network's SSID, exactly as it is broadcast.\nExample: Home"});
 ```
+
+## Checking the whole answer
+
+A field's `validate` answers for its own text. What only the whole answer can
+be wrong about — an abbreviation with no expansion, a range whose end comes
+before its start — goes in `DialogDescriptor::check`, which runs when the reader
+accepts and every field has passed, with the `DialogResult` the dialog would
+complete with. Returning a `DialogVeto` keeps the dialog open with everything
+the reader entered: the field it names is marked and takes the focus, and its
+message stands in the description panel until the focus moves on. A descriptor
+with a check always has that panel, two rows tall when it reserved none.
+
+```cpp
+descriptor.check = [](const widgets::DialogResult& answers) -> std::optional<widgets::DialogVeto> {
+    if (answers.selected[0] == kAbbreviation && answers.values[1].empty())
+        return widgets::DialogVeto{"An abbreviation needs its expansion.", 1};
+    return std::nullopt;
+};
+```
 Consecutive notes lay out as one paragraph with no blank row between them: the
 form's own spacing separates questions, not the lines of a sentence.
 

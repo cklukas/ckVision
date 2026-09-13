@@ -88,9 +88,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 39 | WP-58 — Status legends and form help that follow focus | 0.5–1 pw | **Implementation complete — gate pending** | WP-57 | StatusLine item sets per command context; descriptor-dialog field description panel |
 | 40 | WP-59 — Commands that belong to several contexts | 0.5 pw | **Implementation complete — gate pending** | WP-58 | CommandScope: several named contexts and the context-free place; command palette keeps its invoking contexts; PendingDialogs |
 | 41 | WP-60 — Side panels a reader sizes, hides and gets back | 0.5 pw | **Implementation complete — gate pending** | WP-59 | Splitter resize anchor, remembered extent, move report, collapsing a hidden pane; containers follow child visibility |
-| 42 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 43 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 44 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 42 | WP-61 — Forms that check the whole answer | 0.5 pw | **Implementation complete — gate pending** | WP-60 | DialogDescriptor::check and DialogVeto: the dialog stays open, the field is marked and focused, the reason stands in the panel |
+| 43 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 44 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 45 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2582,6 +2583,31 @@ rearrange when a child was hidden or shown until something else resized them.
   leaves no divider, focus stop or grab, and comes back at its extent; a row
   rearranges when a child is hidden and shown.
 - Documentation in the widget gallery; documentation and provenance gates.
+
+### WP-61 — Forms that check the whole answer
+
+**Purpose.** A field's validator answers for its own text, and a form whose
+answers are wrong only in combination — an abbreviation with no expansion, a
+range that ends before it starts — had nowhere to say so. The application
+either closed the form and asked again, losing what the reader typed, or said
+nothing and let a bad answer through.
+
+**Work.**
+
+- `DialogDescriptor::check` runs at accept time on the answers the dialog
+  would complete with, once every field has passed; a `DialogVeto` keeps the
+  dialog open, marks and focuses the field it names, and shows its message in
+  the description panel until the focus moves on. A descriptor with a check
+  always has the panel. Both the presented dialog and a window wired with
+  `wire_dialog_window` honour it.
+
+**Acceptance.**
+
+- Unit coverage: a veto keeps a presented form open with the field marked and
+  focused and the reason shown, the reason retires when the focus moves, and a
+  corrected answer is accepted; a wired window vetoes and then accepts.
+- Documentation in the dialogs guide and the widget gallery; documentation and
+  provenance gates.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

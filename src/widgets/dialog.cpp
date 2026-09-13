@@ -90,8 +90,17 @@ public:
     // The description on show right now; exposed for tests.
     const std::string& shown_description() const {
         refresh_shown();
+        if (veto_active()) return veto_;
         static const std::string empty;
         return shown_ < entries_.size() ? entries_[shown_].description : empty;
+    }
+
+    // A veto's message, standing while the focus stays on `focus`.
+    void set_veto(std::string message, const ui::View* focus) {
+        veto_ = std::move(message);
+        veto_focus_ = focus;
+        veto_liveness_ = focus != nullptr ? focus->lifetime_token() : std::weak_ptr<void>{};
+        invalidate();
     }
 
     ui::SizeHint horizontal_size_hint() const override { return ui::SizeHint{0, 0, ui::kUnboundedExtent}; }
@@ -100,10 +109,11 @@ public:
 
     void on_attached() override {
         if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.static.text");
+        if (veto_role_ == ui::kInvalidRole) veto_role_ = context().roles->find("ckv.message.error.text");
     }
 
     void draw(scene::Painter& painter) override {
-        const Style style = context().theme->resolve(role_);
+        const Style style = context().theme->resolve(veto_active() ? veto_role_ : role_);
         painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", style));
         const std::string& text = shown_description();
         int y = 0;
@@ -133,10 +143,24 @@ private:
         }
     }
 
+    // Whether the veto still stands: set, and the focus where it put it.
+    bool veto_active() const {
+        if (veto_.empty()) return false;
+        const ui::Application* const app = context().app;
+        const bool stands = app != nullptr && veto_focus_ != nullptr && !veto_liveness_.expired() &&
+                            app->focused() == veto_focus_;
+        if (!stands) veto_.clear();
+        return stands;
+    }
+
     int rows_;
     std::vector<Entry> entries_;
     mutable std::size_t shown_ = 0;
     ui::RoleId role_ = ui::kInvalidRole;
+    ui::RoleId veto_role_ = ui::kInvalidRole;
+    mutable std::string veto_;
+    const ui::View* veto_focus_ = nullptr;
+    std::weak_ptr<void> veto_liveness_;
 };
 
 class DialogPane final : public ui::View {
@@ -336,7 +360,39 @@ std::optional<long long> parse_number(const FieldDescriptor& field, std::string_
     return value;
 }
 
-// Gives every ButtonRole::Dismiss button the rest of what its role promises:
+// Runs the descriptor's check over the answers the dialog would complete with.
+// On a veto the field it names is marked and focused, the message stands in
+// the description panel, and the answers are not accepted.
+bool passes_check(const DialogDescriptor& descriptor, const DialogResult& answers,
+                  const std::vector<InputLine*>& inputs, const std::vector<Memo*>& memos,
+                  const std::vector<CheckGroup*>& checks, const std::vector<RadioGroup*>& radios,
+                  const std::vector<ComboBox*>& combos, const std::vector<DatePicker*>& dates,
+                  const std::vector<TimePicker*>& times, ui::View* description, ui::Application& app) {
+    if (!descriptor.check) return true;
+    const std::optional<DialogVeto> veto = descriptor.check(answers);
+    if (!veto) return true;
+    if (veto->field && *veto->field < inputs.size()) {
+        const std::size_t i = *veto->field;
+        if (inputs[i] != nullptr) inputs[i]->set_valid(false);
+        if (memos[i] != nullptr) memos[i]->set_valid(false);
+        if (dates[i] != nullptr) dates[i]->set_valid(false);
+        if (times[i] != nullptr) times[i]->set_valid(false);
+        for (ui::View* control : {static_cast<ui::View*>(inputs[i]), static_cast<ui::View*>(memos[i]),
+                                  static_cast<ui::View*>(checks[i]), static_cast<ui::View*>(radios[i]),
+                                  static_cast<ui::View*>(combos[i]), static_cast<ui::View*>(dates[i]),
+                                  static_cast<ui::View*>(times[i])}) {
+            if (control != nullptr && control->focusable()) {
+                app.set_focus(control);
+                break;
+            }
+        }
+    }
+    if (description != nullptr)
+        static_cast<FieldDescriptionView*>(description)->set_veto(veto->message, app.focused());
+    return false;
+}
+
+// Gives every ButtonRole::Dismiss button the rest of what its role promises:// Gives every ButtonRole::Dismiss button the rest of what its role promises:
 // its own handler, and then the dialog gone. Called by whoever put the
 // materialized tree into a window, since `dismiss` is that window's cancel
 // path -- a dismissing button and Esc must not be two behaviours.
@@ -524,6 +580,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     }
     Button* const default_button = materialized.default_button;
     ui::View* const initial_focus = materialized.initial_focus;
+    ui::View* const description = materialized.field_description;
 
     auto window = std::make_unique<Window>(retained_descriptor->title);
     if (!retained_descriptor->help_context_key.empty())
@@ -551,7 +608,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
     window->accept_request = [window_ptr, completion, retained_descriptor, inputs, memos, checks, radios, combos,
-                              dates, times, accept_press, &app]() {
+                              dates, times, description, accept_press, &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
         // callback is allowed to detach and destroy its own Window, which
@@ -559,11 +616,15 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         Window* const held_window = window_ptr;
         if (!validate_inputs(inputs, memos, *retained_descriptor, dates, times, app)) return;
+        DialogResult answers =
+            accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times);
+        if (!passes_check(*retained_descriptor, answers, inputs, memos, checks, radios, combos, dates, times,
+                          description, app))
+            return;
         // Record before application code runs: a descriptor button handler
         // may detach or destroy this Window synchronously, but its successful
         // acceptance still has one stable typed result after detachment.
-        held_completion->selected_result =
-            accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times);
+        held_completion->selected_result = std::move(answers);
         if (accept_press) accept_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
@@ -832,8 +893,10 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
                                              descriptor.anchor_buttons_to_bottom);
     result.content_viewport = pane->set_fields(std::move(column));
 
-    if (descriptor.field_description_rows > 0) {
-        auto description = std::make_unique<FieldDescriptionView>(descriptor.field_description_rows);
+    if (descriptor.field_description_rows > 0 || descriptor.check) {
+        // A veto needs somewhere to say why; two rows hold a sentence of it.
+        const int rows = descriptor.field_description_rows > 0 ? descriptor.field_description_rows : 2;
+        auto description = std::make_unique<FieldDescriptionView>(rows);
         for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
             // The field's own control — whichever of the parallel slots it
             // filled; a note has none and so no description to show.
@@ -894,10 +957,14 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     // so cannot be captured into a std::function at all.
     std::vector<InputLine*> inputs = dialog.inputs;
     std::vector<Memo*> memos = dialog.memos;
+    std::vector<CheckGroup*> checks = dialog.checks;
+    std::vector<RadioGroup*> radios = dialog.radios;
+    std::vector<ComboBox*> combos = dialog.combos;
     std::vector<Button*> buttons = dialog.buttons;
     std::vector<DatePicker*> dates = dialog.dates;
     std::vector<TimePicker*> times = dialog.times;
     Button* default_button = dialog.default_button;
+    ui::View* description = dialog.field_description;
 
     window.set_content(std::move(dialog.root));
     if (!descriptor.help_context_key.empty()) window.set_help_context_key(descriptor.help_context_key);
@@ -916,10 +983,16 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
-    window.accept_request = [&window, &app, inputs, memos, dates, times, &descriptor, accept_press, close_state]() {
+    window.accept_request = [&window, &app, inputs, memos, checks, radios, combos, dates, times, description,
+                             &descriptor, accept_press, close_state]() {
         const std::shared_ptr<CloseState> held_close_state = close_state;
         Window* const held_window = &window;
         if (!validate_inputs(inputs, memos, descriptor, dates, times, app)) return;
+        if (descriptor.check &&
+            !passes_check(descriptor,
+                          accepted_result(descriptor, inputs, memos, checks, radios, combos, dates, times),
+                          inputs, memos, checks, radios, combos, dates, times, description, app))
+            return;
         if (accept_press) accept_press();
         if (!held_close_state->closed && !held_close_state->window_liveness.expired()) held_window->close();
     };
