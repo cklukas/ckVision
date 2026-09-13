@@ -574,4 +574,11 @@ private:
     Context context_;
 };
 
+// The command contexts named on the path from `view` up to its root,
+// nearest first; empty for nullptr. What a surface that borrows the focus
+// for a moment — a menu walk, a context menu, a command palette — records as
+// it opens, so the commands it offers are the ones the reader's own place
+// allows rather than the ones the surface itself would.
+std::vector<std::string> command_context_path(const View* view);
+
 }  // namespace ckv::ui

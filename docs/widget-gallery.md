@@ -624,7 +624,11 @@ Header: `include/cvision/widgets/common_components.hpp`. Use for searchable
 command discovery. It presents an inset search field and an independently
 scrollable result viewport, excludes framework-only commands, preserves
 mnemonics, and activates through the registry command path rather than a
-palette-only callback.
+palette-only callback. It offers what its focus path allows; a palette opened
+in a window of its own takes the focus away from the place whose commands it
+should list, so give it that place's contexts with
+`set_invocation_contexts(ui::command_context_path(view))`, exactly as a menu
+walk keeps them.
 
 ![CommandPalette with filtered commands](generated/screenshots/widget-commandpalette.svg)
 

@@ -665,10 +665,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     if (scope_root != nullptr) {
                         if (auto id = commands_.command_for_key(e.chord)) {
                             const std::vector<std::string>& contexts = focused_command_contexts();
-                            const CommandInfo* info = commands_.find(*id);
                             const bool modal_context_command =
-                                info != nullptr && !info->context.empty() &&
-                                commands_.is_available(*id, contexts);
+                                commands_.is_enabled(*id) && commands_.in_named_context(*id, contexts);
                             if (is_modal_scope_command(commands_.standard(), *id) ||
                                 modal_context_command)
                                 return commands_.execute(*id, contexts);

@@ -1332,12 +1332,21 @@ CommandPalette::CommandPalette() {
     set_preferred_size(Size{40, 8});
 }
 void CommandPalette::set_query(std::string query) { query_ = std::move(query); highlighted_ = 0; invalidate(); }
+void CommandPalette::set_invocation_contexts(std::vector<std::string> contexts) {
+    invocation_contexts_ = std::move(contexts);
+    highlighted_ = 0;
+    invalidate();
+}
+bool CommandPalette::available(ui::CommandId id) const {
+    if (invocation_contexts_) return context().app->commands().is_available(id, *invocation_contexts_);
+    return context().app->command_available(id);
+}
 std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
     if (context().app == nullptr) return {};
     std::vector<ui::CommandInfo> out;
     for (const ui::CommandInfo& info : context().app->commands().all())
         if (info.visibility == ui::CommandVisibility::Palette && contains_ci(info.title, query_) &&
-            context().app->commands().is_available(info.id))
+            available(info.id))
             out.push_back(info);
     return out;
 }
@@ -1420,7 +1429,10 @@ bool CommandPalette::on_key(const KeyEvent& event) {
     if (event.chord.key == Key::Up && highlighted_ > 0) { --highlighted_; invalidate(); return true; }
     if (event.chord.key == Key::Backspace && !query_.empty()) { query_.pop_back(); highlighted_ = 0; invalidate(); return true; }
     if (event.chord.key == Key::Enter && context().app != nullptr) {
-        if (auto command = highlighted_command()) return context().app->commands().execute(*command);
+        if (auto command = highlighted_command()) {
+            if (invocation_contexts_) return context().app->commands().execute(*command, *invocation_contexts_);
+            return context().app->execute_command(*command);
+        }
     }
     return false;
 }

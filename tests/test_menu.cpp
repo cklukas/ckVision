@@ -528,7 +528,7 @@ CK_TEST(a_menu_bar_keeps_the_invoking_views_command_context_while_open) {
     mf.app.set_focus(editor);
 
     const ui::CommandId save = mf.app.commands().declare(
-        {.key = "test.contextual-save", .title = "Save", .context = "document"});
+        {.key = "test.contextual-save", .title = "Save", .scope = {.contexts = {"document"}}});
     bool ran = false;
     mf.app.set_command_handler(save, [&] { ran = true; });
     auto bar_owned = std::make_unique<MenuBar>(
@@ -540,6 +540,35 @@ CK_TEST(a_menu_bar_keeps_the_invoking_views_command_context_while_open) {
     CK_CHECK(mf.app.dispatch(key(Key::Enter)));
     CK_CHECK(ran);
     CK_CHECK(mf.app.focused() == editor);
+}
+
+CK_TEST(a_menu_opened_from_the_bare_desktop_offers_what_is_usable_outside_contexts) {
+    MenuBarFixture mf;
+    const ui::CommandId open = mf.app.commands().declare(
+        {.key = "test.contextual-open",
+         .title = "Open",
+         .scope = {.contexts = {"document"}, .outside_contexts = true}});
+    const ui::CommandId save = mf.app.commands().declare(
+        {.key = "test.contextual-save", .title = "Save", .scope = {.contexts = {"document"}}});
+    int opened = 0;
+    int saved = 0;
+    mf.app.set_command_handler(open, [&] { ++opened; });
+    mf.app.set_command_handler(save, [&] { ++saved; });
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&File", {MenuItem::command(open), MenuItem::command(save)}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+
+    mf.app.set_focus(nullptr);
+    bar->activate();
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    CK_CHECK(mf.app.dispatch(key(Key::Enter)));
+    CK_CHECK(opened == 1);
+
+    bar->activate();
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(saved == 0);
 }
 
 // Regression (M8/WP-2): Application::dispatch's new click-to-focus must
@@ -1598,7 +1627,7 @@ CK_TEST(a_context_menu_keeps_the_invoking_views_command_context_while_open) {
     ckv::ui::View* previous = host->add(std::move(origin));
     app.set_focus(previous);
     const ui::CommandId save = app.commands().declare(
-        {.key = "test.context-menu-save", .title = "Save", .context = "document"});
+        {.key = "test.context-menu-save", .title = "Save", .scope = {.contexts = {"document"}}});
     bool ran = false;
     app.set_command_handler(save, [&] { ran = true; });
 

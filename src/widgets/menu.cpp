@@ -145,13 +145,6 @@ bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
     return false;
 }
 
-std::vector<std::string> command_contexts_for(const ui::View* view) {
-    std::vector<std::string> contexts;
-    for (const ui::View* current = view; current != nullptr; current = current->parent())
-        if (current->command_context()) contexts.push_back(*current->command_context());
-    return contexts;
-}
-
 }  // namespace
 
 // --- DropdownMenu ------------------------------------------------------
@@ -781,7 +774,7 @@ void MenuBar::activate() {
         invalidate();
         return;
     }
-    invocation_contexts_ = command_contexts_for(app_->focused());
+    invocation_contexts_ = ui::command_context_path(app_->focused());
     previously_focused_ = app_->save_focus();
     app_->set_focus(this);  // on_focus(true) below paints the walk
 }
@@ -1159,7 +1152,7 @@ bool MenuBar::navigate_pointer(const MouseEvent& event) {
 DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop) {
     const ui::Application::FocusBookmark previous_focus = app.save_focus();
-    const std::vector<std::string> invocation_contexts = command_contexts_for(app.focused());
+    const std::vector<std::string> invocation_contexts = ui::command_context_path(app.focused());
     auto menu = std::make_unique<DropdownMenu>(std::move(items));
     menu->set_invocation_contexts(invocation_contexts);
     const Rect desktop_abs = desktop.absolute_bounds();

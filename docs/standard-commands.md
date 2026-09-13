@@ -181,15 +181,29 @@ choices reviewable in one place.
   leaking through.
 - **Named command contexts** live in `CommandRegistry` metadata and can be
   activated by explicit push/pop scopes or by a focused view's ancestry
-  (`View::set_command_context`). A context-bound command is unavailable until
-  one of those sources names its context. `CommandRegistry::withdraw`
+  (`View::set_command_context`). A command's `CommandScope` names the
+  contexts it belongs to, and it is available while any one of them is
+  active — an editor's Save can belong to the document and to the outline
+  pane beside it. A scope that names none is available everywhere.
+  `CommandScope::outside_contexts` adds the one place a list of names cannot
+  state: where no context is active at all — nothing pushed, and nothing on
+  the focus path naming one, such as the bare desktop with no window focused.
+  So an Open that belongs to the desktop and to document windows, but not to
+  the field where the reader is typing a value, is
+  `{.contexts = {"document"}, .outside_contexts = true}`. A modal scope admits
+  a command only through a context it names; being usable outside contexts
+  says nothing about the modal. `CommandRegistry::set_command_scope` restates
+  a declared command's scope. `CommandRegistry::withdraw`
   removes the command's metadata, handler, enablement predicate, and key
   bindings together so stale menu/status references become inert.
   Menu-bar dropdowns and context menus preserve the invoking focus ancestry
   while they are open. Moving focus into temporary menu UI therefore does not
   grey or block commands that belong to the document, board, or editor from
   which the menu was opened; choosing a command still restores that focus
-  before its handler runs.
+  before its handler runs. A command palette presented in a window of its own
+  does the same when it is told the invoking contexts
+  (`CommandPalette::set_invocation_contexts`, with
+  `ui::command_context_path` of the view the reader was on).
 - **`close`/`quit`'s default handlers** (M9/WP-15) are installed by
   `Desktop::on_attached()` — but only if nothing has claimed the
   command yet (`CommandRegistry::has_handler`), the same guarded pattern

@@ -204,6 +204,46 @@ CK_TEST(toolbar_and_command_palette_are_command_registry_surfaces) {
     CK_CHECK(ran == 2);
 }
 
+CK_TEST(command_palette_lists_and_runs_what_the_place_it_was_opened_from_allows) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    int saved = 0;
+    const ckv::ui::CommandId save = app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.save", .title = "Save", .category = "test",
+                                   .scope = {.contexts = {"document"}},
+                                   .handler = [&] { ++saved; }});
+
+    auto* document = app.root().add(std::make_unique<ckv::ui::View>());
+    document->set_command_context("document");
+    document->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    app.set_focus(document);
+
+    // A palette in a place of its own offers what that place allows.
+    auto palette = std::make_unique<CommandPalette>();
+    CommandPalette* palette_ptr = palette.get();
+    app.root().add(std::move(palette));
+    palette_ptr->set_query("save");
+    app.set_focus(palette_ptr);
+    CK_CHECK(!palette_ptr->highlighted_command().has_value());
+
+    // Told where the reader was, it offers and runs that place's commands.
+    palette_ptr->set_invocation_contexts(ckv::ui::command_context_path(document));
+    CK_CHECK(palette_ptr->highlighted_command() == save);
+    CK_CHECK(palette_ptr->on_key(key(Key::Enter)));
+    CK_CHECK(saved == 1);
+
+    // Placed inside the document itself, its own focus path already says so.
+    auto nested = std::make_unique<CommandPalette>();
+    CommandPalette* nested_ptr = nested.get();
+    document->add(std::move(nested));
+    nested_ptr->set_query("save");
+    app.set_focus(nested_ptr);
+    CK_CHECK(nested_ptr->highlighted_command() == save);
+    CK_CHECK(nested_ptr->on_key(key(Key::Enter)));
+    CK_CHECK(saved == 2);
+}
+
 CK_TEST(property_inspector_wizard_notifications_and_tooltip_cover_utility_components) {
     Standalone s;
     PropertyInspector inspector;

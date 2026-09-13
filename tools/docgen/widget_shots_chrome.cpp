@@ -38,17 +38,17 @@ struct DemoCommands {
 DemoCommands declare_demo_commands(ui::Application& app) {
     ui::CommandRegistry& registry = app.commands();
     DemoCommands ids;
-    ids.open = registry.declare({"doc.open", "&Open...", "File", "", "Ctrl+O",
+    ids.open = registry.declare({"doc.open", "&Open...", "File", {}, "Ctrl+O",
                                  ui::CommandVisibility::Palette, [] {}});
-    ids.save = registry.declare({"doc.save", "&Save", "File", "", "Ctrl+S",
+    ids.save = registry.declare({"doc.save", "&Save", "File", {}, "Ctrl+S",
                                  ui::CommandVisibility::Palette, [] {}});
-    ids.print = registry.declare({"doc.print", "&Print", "File", "", "Ctrl+P",
+    ids.print = registry.declare({"doc.print", "&Print", "File", {}, "Ctrl+P",
                                   ui::CommandVisibility::Palette, [] {}});
-    ids.find = registry.declare({"doc.find", "&Find...", "Search", "", "Ctrl+F",
+    ids.find = registry.declare({"doc.find", "&Find...", "Search", {}, "Ctrl+F",
                                  ui::CommandVisibility::Palette, [] {}});
-    ids.replace_all = registry.declare({"doc.replace_all", "Replace &All", "Search", "", "",
+    ids.replace_all = registry.declare({"doc.replace_all", "Replace &All", "Search", {}, "",
                                         ui::CommandVisibility::Palette, [] {}});
-    ids.tile = registry.declare({"win.tile", "&Tile", "Window", "", "",
+    ids.tile = registry.declare({"win.tile", "&Tile", "Window", {}, "",
                                  ui::CommandVisibility::Palette, [] {}});
     // Availability belongs to the command, not to any one surface that
     // shows it: this predicate is why Print greys on the menu AND on the

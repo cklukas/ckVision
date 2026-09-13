@@ -503,6 +503,13 @@ public:
     // Palette-visible, title-matching, currently available — in the
     // order the commands were declared.
     std::vector<ui::CommandInfo> filtered_commands() const;
+    // The command contexts the palette answers for (ui::command_context_path
+    // of the view the reader was on when it opened), instead of its own
+    // focus path. A palette presented in a window of its own takes the focus
+    // from the place whose commands it lists, exactly as a menu walk does,
+    // and without this it would offer what the palette's window allows —
+    // no context-bound command at all.
+    void set_invocation_contexts(std::vector<std::string> contexts);
     std::optional<ui::CommandId> highlighted_command() const;
 
     void draw(scene::Painter& painter) override;
@@ -512,8 +519,11 @@ public:
     void on_attached() override;
 
 private:
+    bool available(ui::CommandId id) const;
+
     std::string query_;
     std::size_t highlighted_ = 0;
+    std::optional<std::vector<std::string>> invocation_contexts_;
     ui::RoleId input_role_ = ui::kInvalidRole;
     ui::RoleId result_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;

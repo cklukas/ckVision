@@ -248,6 +248,13 @@ const std::string* View::resolve_help_context_key() const noexcept {
     return nullptr;
 }
 
+std::vector<std::string> command_context_path(const View* view) {
+    std::vector<std::string> contexts;
+    for (const View* current = view; current != nullptr; current = current->parent())
+        if (current->command_context()) contexts.push_back(*current->command_context());
+    return contexts;
+}
+
 void View::propagate_dirty_rect_sink(const DirtyRectSink& sink) {
     dirty_rect_sink_ = sink;
     for (auto& child : children_) child->propagate_dirty_rect_sink(sink);
