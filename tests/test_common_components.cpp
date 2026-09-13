@@ -233,6 +233,14 @@ CK_TEST(command_palette_lists_and_runs_what_the_place_it_was_opened_from_allows)
     CK_CHECK(palette_ptr->on_key(key(Key::Enter)));
     CK_CHECK(saved == 1);
 
+    // The reader types the title as the row shows it, mnemonic marker and all
+    // left out.
+    const ckv::ui::CommandId save_as = app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.save-as", .title = "Save &as...", .category = "test",
+                                   .handler = [] {}});
+    palette_ptr->set_query("save as");
+    CK_CHECK(palette_ptr->highlighted_command() == save_as);
+
     // Placed inside the document itself, its own focus path already says so.
     auto nested = std::make_unique<CommandPalette>();
     CommandPalette* nested_ptr = nested.get();

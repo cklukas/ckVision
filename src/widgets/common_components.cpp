@@ -1345,8 +1345,10 @@ std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
     if (context().app == nullptr) return {};
     std::vector<ui::CommandInfo> out;
     for (const ui::CommandInfo& info : context().app->commands().all())
-        if (info.visibility == ui::CommandVisibility::Palette && contains_ci(info.title, query_) &&
-            available(info.id))
+        // The reader types what the row shows, so the match is against the
+        // title as displayed: "Save as" finds "Save &as...".
+        if (info.visibility == ui::CommandVisibility::Palette &&
+            contains_ci(parse_mnemonic(info.title).display, query_) && available(info.id))
             out.push_back(info);
     return out;
 }
