@@ -1302,6 +1302,9 @@ cursor/selection. Ctrl+Left/Right moves by word, Ctrl+Home/End reaches the
 field boundaries, and Shift extends any cursor motion. Ctrl+C/X/V and
 Ctrl+Insert/Shift+Insert copy, cut, and paste; Ctrl+Backspace/Delete erase by
 word, while Shift+Delete cuts the selection. Forms shows a labelled field.
+`on_accept` reports Enter; `on_edited` reports each change the reader makes to
+the text — what a search box filters on as it is typed into — and not the
+owner's own `set_text()`.
 
 ![InputLine text editing control](generated/screenshots/widget-inputline.svg)
 

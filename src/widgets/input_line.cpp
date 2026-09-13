@@ -99,7 +99,26 @@ void InputLine::record_undo_state() {
     undo_stack_.push_back(EditState{graphemes_, cursor_, selection_anchor_, overwrite_mode_});
 }
 
+bool InputLine::reporting_edits(const std::function<bool()>& action) {
+    const bool outermost = edit_depth_ == 0;
+    std::vector<std::string> before;
+    if (outermost && on_edited) before = graphemes_;
+    // The action may reach application code (on_accept) that closes the
+    // dialog this field is in; nothing of this field is touched after that.
+    const std::weak_ptr<void> alive = lifetime_token();
+    ++edit_depth_;
+    const bool handled = action();
+    if (alive.expired()) return handled;
+    --edit_depth_;
+    if (outermost && on_edited && graphemes_ != before) on_edited();
+    return handled;
+}
+
 bool InputLine::undo() {
+    return reporting_edits([this] { return handle_undo(); });
+}
+
+bool InputLine::handle_undo() {
     if (undo_stack_.empty()) return false;
     EditState state = std::move(undo_stack_.back());
     undo_stack_.pop_back();
@@ -158,6 +177,10 @@ bool InputLine::copy_selection_to_clipboard() {
 }
 
 bool InputLine::cut_selection_to_clipboard() {
+    return reporting_edits([this] { return handle_cut(); });
+}
+
+bool InputLine::handle_cut() {
     if (!selection_anchor_ || selected_text().empty()) return false;
     if (context().app == nullptr) return false;
     record_undo_state();
@@ -389,6 +412,10 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    return reporting_edits([this, &event] { return handle_key(event); });
+}
+
+bool InputLine::handle_key(const KeyEvent& event) {
     if (event.chord.key == Key::Enter && event.chord.modifiers == Modifier::None && on_accept) {
         on_accept();
         return true;
@@ -498,6 +525,10 @@ bool InputLine::on_key(const KeyEvent& event) {
 }
 
 bool InputLine::on_text(const TextEvent& event) {
+    return reporting_edits([this, &event] { return handle_text(event); });
+}
+
+bool InputLine::handle_text(const TextEvent& event) {
     if (!enabled()) return false;
     if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;

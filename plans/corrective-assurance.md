@@ -90,9 +90,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 41 | WP-60 — Side panels a reader sizes, hides and gets back | 0.5 pw | **Implementation complete — gate pending** | WP-59 | Splitter resize anchor, remembered extent, move report, collapsing a hidden pane; containers follow child visibility |
 | 42 | WP-61 — Forms that check the whole answer | 0.5 pw | **Implementation complete — gate pending** | WP-60 | DialogDescriptor::check and DialogVeto: the dialog stays open, the field is marked and focused, the reason stands in the panel |
 | 43 | WP-62 — A save dialog that offers a name | 0.25 pw | **Implementation complete — gate pending** | WP-61 | FileDialogOptions::suggested_name, kept across directories and focused for Enter |
-| 44 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 45 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 46 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 44 | WP-63 — A field that says it was edited | 0.25 pw | **Implementation complete — gate pending** | WP-62 | InputLine::on_edited for every reader change, once, and never for set_text |
+| 45 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 46 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 47 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2627,6 +2628,28 @@ start as the directory.
 
 - Unit coverage: the name is offered in the starting directory and after
   browsing into another, and accepting reports that path.
+- Documentation in the widget gallery; documentation and provenance gates.
+
+### WP-63 — A field that says it was edited
+
+**Purpose.** A search box that filters as the reader types, or a form that
+reacts to one field while it is filled in, needs to hear that the text
+changed. An input line reported only Enter, so applications subclassed it
+and reported every handled key — caret moves included — while missing a
+change made by paste or undo through another route.
+
+**Work.**
+
+- `InputLine::on_edited`: fired once for each reader action that changed the
+  text — typing, erasing, pasting, cutting, undoing, stepping through
+  history — however many internal steps the action took, and never for
+  `set_text()` or an action that left the text as it was.
+
+**Acceptance.**
+
+- Unit coverage: typing, erasing, a paste through its key and undo report
+  once each; a caret move, a same-text paste over a selection, a refused
+  grapheme and set_text report nothing.
 - Documentation in the widget gallery; documentation and provenance gates.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix

@@ -759,6 +759,39 @@ CK_TEST(input_line_uses_word_navigation_and_legacy_insert_clipboard_bindings) {
     CK_CHECK(input.text() == "one two three");
 }
 
+CK_TEST(input_line_reports_each_edit_the_reader_makes_and_nothing_else) {
+    Fixture f;
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    InputLine input;
+    input.set_context(ui::Context{&f.theme, &f.registry, &app});
+    int edits = 0;
+    input.on_edited = [&edits] { ++edits; };
+
+    input.set_text("abc");  // the owner's change, not the reader's
+    CK_CHECK(edits == 0);
+    CK_CHECK(input.on_text(ckv::TextEvent{"d", false}));
+    CK_CHECK(edits == 1);
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}}));
+    CK_CHECK(edits == 1);  // a caret move changes nothing
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Backspace, Modifier::None, ""}}));
+    CK_CHECK(edits == 2);
+    // A paste reached through its key is one edit, not one per layer.
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Shift, ""}});
+    CK_CHECK(input.on_key(ctrl_char("c")));
+    CK_CHECK(input.on_key(ctrl_char("v")));
+    CK_CHECK(edits == 2);  // the selection replaced by its own text
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::End, Modifier::None, ""}}));
+    CK_CHECK(input.on_key(ctrl_char("v")));
+    CK_CHECK(edits == 3);
+    CK_CHECK(input.undo());
+    CK_CHECK(edits == 4);
+    input.set_grapheme_filter([](std::string_view grapheme) { return grapheme != "!"; });
+    CK_CHECK(input.on_text(ckv::TextEvent{"!", false}));
+    CK_CHECK(edits == 4);  // refused, so unchanged
+}
+
 CK_TEST(input_line_undo_restores_the_previous_text_and_selection_state) {
     Fixture f;
     InputLine input;

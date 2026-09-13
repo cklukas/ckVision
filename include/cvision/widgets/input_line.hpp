@@ -80,6 +80,14 @@ public:
     // fires only when something is listening.
     std::function<void()> on_accept;
 
+    // The reader changed the text — typed, erased, pasted, cut, undid, or
+    // stepped through history — reported once the change is complete. A
+    // search box filters as it is typed into; a form reacts to one field
+    // while the reader fills it. A programmatic set_text() is the owner's own
+    // change and does not report, and neither does an event that left the
+    // text as it was (a caret move, a refused grapheme).
+    std::function<void()> on_edited;
+
     void set_validator(std::function<bool(const std::string&)> validator);
 
     // Optional per-grapheme admission rule for interactive input. It applies
@@ -144,6 +152,14 @@ private:
 
     static constexpr std::size_t kMaxUndoDepth = 64;
 
+    // Runs one reader action and reports on_edited when it — and not an
+    // action it runs in turn — changed the text.
+    bool reporting_edits(const std::function<bool()>& action);
+    bool handle_key(const KeyEvent& event);
+    bool handle_text(const TextEvent& event);
+    bool handle_undo();
+    bool handle_cut();
+
     void insert_graphemes(const std::vector<std::string>& graphemes);
     void erase_selection();
     void move_cursor(std::size_t new_cursor, bool extend_selection);
@@ -168,6 +184,7 @@ private:
     std::size_t next_word(std::size_t from) const noexcept;
     void erase_range(std::size_t begin, std::size_t end);
 
+    int edit_depth_ = 0;
     std::vector<std::string> graphemes_;
     std::size_t cursor_ = 0;
     std::optional<std::size_t> selection_anchor_;
