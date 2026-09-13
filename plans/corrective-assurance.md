@@ -89,9 +89,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 40 | WP-59 — Commands that belong to several contexts | 0.5 pw | **Implementation complete — gate pending** | WP-58 | CommandScope: several named contexts and the context-free place; command palette keeps its invoking contexts; PendingDialogs |
 | 41 | WP-60 — Side panels a reader sizes, hides and gets back | 0.5 pw | **Implementation complete — gate pending** | WP-59 | Splitter resize anchor, remembered extent, move report, collapsing a hidden pane; containers follow child visibility |
 | 42 | WP-61 — Forms that check the whole answer | 0.5 pw | **Implementation complete — gate pending** | WP-60 | DialogDescriptor::check and DialogVeto: the dialog stays open, the field is marked and focused, the reason stands in the panel |
-| 43 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 44 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 45 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 43 | WP-62 — A save dialog that offers a name | 0.25 pw | **Implementation complete — gate pending** | WP-61 | FileDialogOptions::suggested_name, kept across directories and focused for Enter |
+| 44 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 45 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 46 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2608,6 +2609,25 @@ nothing and let a bad answer through.
   corrected answer is accepted; a wired window vetoes and then accepts.
 - Documentation in the dialogs guide and the widget gallery; documentation and
   provenance gates.
+
+### WP-62 — A save dialog that offers a name
+
+**Purpose.** An application saving something it can already name — Save As
+for a document with a name, an export beside it — had to leave the reader to
+type the whole name again, because the save dialog's path field could only
+start as the directory.
+
+**Work.**
+
+- `FileDialogOptions::suggested_name`: the path field reads the shown
+  directory with the name, in whichever directory the reader browses to, and
+  takes the initial focus; a file chosen from the list replaces it.
+
+**Acceptance.**
+
+- Unit coverage: the name is offered in the starting directory and after
+  browsing into another, and accepting reports that path.
+- Documentation in the widget gallery; documentation and provenance gates.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

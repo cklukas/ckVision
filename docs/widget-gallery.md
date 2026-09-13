@@ -1145,7 +1145,11 @@ filter for the standard open/save dialog.
 ## FileDialogOptions
 
 Header: `include/cvision/widgets/file_dialog.hpp`. Options record for the
-standard file dialog, including mode and filters.
+standard file dialog, including mode and filters. `suggested_name` offers a
+name for something the application can already name — Save As for
+`notes.md`, an export beside it as `notes.html`: the path field reads the
+shown directory with that name wherever the reader browses, and has the focus,
+so Enter accepts it.
 
 ![File dialog with filters and file list](generated/screenshots/widget-filedialog.svg)
 

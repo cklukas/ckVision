@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/file_dialog.hpp"
 
+#include <algorithm>
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -477,4 +479,36 @@ CK_TEST(exec_file_dialog_host_quit_returns_cancellation_and_detaches_the_open_di
     CK_CHECK(app.quit_requested());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(a_suggested_name_is_offered_in_every_directory_and_enter_accepts_it) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    std::vector<FileDialogResult> results;
+    ckv::widgets::FileDialogOptions options;
+    options.suggested_name = "notes.html";
+    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", fs, options, f.roles, app, nullptr,
+                                   [&](FileDialogResult r) { results.push_back(r); });
+    ckv::widgets::Window* window_ptr = handle.window.get();
+    auto* path_field = dynamic_cast<ckv::widgets::InputLine*>(handle.initial_focus);
+    CK_CHECK(path_field != nullptr);
+    CK_CHECK(path_field != nullptr && path_field->text() == "/home/user/notes.html");
+    app.root().add_child(std::move(handle.window));
+
+    // Browsing into a directory keeps offering the name there.
+    auto* list = find_descendant<ckv::widgets::ListView>(*window_ptr);
+    CK_CHECK(list != nullptr);
+    const auto& rows = list->items();
+    const auto docs = std::find(rows.begin(), rows.end(), std::string("docs/"));
+    CK_CHECK(docs != rows.end());
+    list->on_activate(static_cast<std::size_t>(docs - rows.begin()));
+    CK_CHECK(path_field->text() == "/home/user/docs/notes.html");
+
+    window_ptr->accept_request();
+    CK_CHECK(results.size() == 1);
+    CK_CHECK(results[0].accepted);
+    CK_CHECK(results[0].path == "/home/user/docs/notes.html");
 }
