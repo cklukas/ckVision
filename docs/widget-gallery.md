@@ -141,7 +141,34 @@ performs one-transaction replace-all; see [Editor](editor.md#search-and-files).
 ## EditorStatus
 
 Header: `include/cvision/widgets/text_editor.hpp`. Line/column, selection,
-modified, overwrite, and profile data a client can place in its own status UI.
+modified, overwrite, virtual-caret, and profile data a client can place in its
+own status UI.
+
+## EditorKeyBinding
+
+Header: `include/cvision/widgets/text_editor.hpp`. One chord and the
+`EditorCommand` it runs. `TextEditor::set_key_bindings()` replaces the list, so
+an application with its own command table and keyboard scheme decides which
+chords the editor answers itself; see [Editor](editor.md#commands-and-key-bindings).
+
+## VirtualCaret
+
+Header: `include/cvision/widgets/text_editor.hpp`. A provisional caret past the
+text — a logical line, which may lie below the last one, and a cell column. It
+writes nothing until text arrives; see [Editor](editor.md#a-caret-past-the-text).
+
+## EditRequest
+
+Header: `include/cvision/widgets/text_editor.hpp`. One text change the reader
+asked for — its `EditKind`, text, and the replacement the editor would commit —
+handed to an edit handler before anything changes; see
+[Editor](editor.md#edit-requests).
+
+## HighlightSpan
+
+Header: `include/cvision/widgets/text_editor.hpp`. A host-computed byte range
+of the document and the theme role it is painted in; see
+[Editor](editor.md#host-colouring).
 
 ## EditorStatusModel
 

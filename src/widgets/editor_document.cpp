@@ -394,7 +394,14 @@ DocumentEditResult EditorDocument::commit_edits(const std::vector<DocumentTextEd
             undo_.erase(undo_.begin());
         }
     }
-    DocumentChange change{previous, revision_, first, last, inserted, first_line ? first_line->line : 0U,
+    // One covering replacement, whatever the transaction held: [first, last)
+    // of the old text became the span that now starts at `first`, whose
+    // length is what the edits left between them plus what they inserted.
+    // An observer carrying a position through the change needs exactly that,
+    // and a sum of insertions alone would misplace everything after the
+    // first of several separated edits.
+    const std::size_t covering_bytes = (last - first) - removed + inserted;
+    DocumentChange change{previous, revision_, first, last, covering_bytes, first_line ? first_line->line : 0U,
                           last_line ? last_line->line : 0U};
     notify(change);
     return DocumentEditResult{DocumentEditStatus::Ok, change};
@@ -406,10 +413,13 @@ bool EditorDocument::undo() {
     undo_.pop_back();
     undo_bytes_ -= entry.retained_bytes;
     const DocumentRevision previous = revision_;
+    const std::size_t previous_bytes = byte_size();
+    const std::size_t previous_lines = line_count();
     root_ = entry.before;
     ++revision_;
     redo_.push_back(std::move(entry));
-    notify(DocumentChange{previous, revision_, 0, byte_size(), byte_size(), 0, line_count() - 1U});
+    notify(DocumentChange{previous, revision_, 0, previous_bytes, byte_size(), 0,
+                          std::max(previous_lines, line_count()) - 1U});
     return true;
 }
 
@@ -418,11 +428,14 @@ bool EditorDocument::redo() {
     HistoryEntry entry = redo_.back();
     redo_.pop_back();
     const DocumentRevision previous = revision_;
+    const std::size_t previous_bytes = byte_size();
+    const std::size_t previous_lines = line_count();
     root_ = entry.after;
     ++revision_;
     undo_bytes_ += entry.retained_bytes;
     undo_.push_back(std::move(entry));
-    notify(DocumentChange{previous, revision_, 0, byte_size(), byte_size(), 0, line_count() - 1U});
+    notify(DocumentChange{previous, revision_, 0, previous_bytes, byte_size(), 0,
+                          std::max(previous_lines, line_count()) - 1U});
     return true;
 }
 

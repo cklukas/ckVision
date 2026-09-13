@@ -84,9 +84,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 35 | WP-53 — Cache hierarchy, multicore scaling, and host capabilities | 1–2 pw | **Implementation complete — Mac and Linux gates passed** | WP-52 | Example coverage: capability-driven chart paths; [SysInfo plan](sysinfo-example.md) |
 | 36 | WP-54 — SysInfo report export, help, and documentation | 1 pw | **Implementation complete — gate pending** | WP-53 | Example coverage: injected-filesystem export and example documentation; [SysInfo plan](sysinfo-example.md) |
 | 37 | WP-56 — Storage throughput and its interface ceilings | 0.5–1 pw | **Implementation complete — Mac and Linux gates passed** | WP-54 | Example coverage: the disk question, measured and compared; [SysInfo plan](sysinfo-example.md) |
-| 38 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 39 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 40 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 38 | WP-57 — TextEditor as an application's document editing surface | 2–3 pw | **Implementation complete — gate pending** | WP-44 | Editor verbs as data, edit requests, caret motion, virtual caret, host colouring, context menus; [architecture](editor-architecture.md) |
+| 39 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 40 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 41 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2443,6 +2444,48 @@ mandatory provenance gates pass. A focused Homebrew Clang 22.1.8 ASan/UBSan
 run passes the same eight suites plus the visual capture (9/9). This package
 adds no parser or hot-path algorithm requiring a new fuzz target or benchmark.
 Final cross-platform/global promotion remains WP-37/WP-38 work.
+
+### WP-57 — TextEditor as an application's document editing surface
+
+**Purpose.** An application that edits real documents through `TextEditor`
+brings things the widget cannot assume: its own command table and keyboard
+scheme, its own editing rules and undo journal, a parser that colours the
+whole document, and a context menu. Each was either impossible or had to be
+worked around in the application. This package makes each a stated widget
+capability.
+
+**Work.**
+
+- Editor verbs (undo, redo, cut, copy, paste, select all, find selection,
+  find next/previous, overwrite) as `EditorCommand` values bound to chords by
+  replaceable `EditorKeyBinding` data, with `perform()`; a focused editor no
+  longer takes an application's chords it was not given. Ctrl+A select all
+  joins the defaults.
+- `EditRequest` handed to an edit handler before every typed, pasted, broken,
+  indented, erased or cut change, describing both the intent and the
+  replacement the widget would commit; supersedes the single newline seam.
+- Caret motion: a column vertical motion returns to; PageUp/PageDown move the
+  caret by the viewport and extend a selection with Shift; Tab width as
+  policy; the caret painted at the horizontally scrolled column.
+- A virtual caret past the text (opt-in): a double-click past a line's end or
+  below the last line places it, nothing is written until text arrives, and
+  the padding and the text are one edit.
+- Host colouring: revision-bound `HighlightSpan`s resolved through theme
+  roles, replacing the profile's colouring, carried through edits.
+- A context-menu request on right click, Ctrl+click and Shift+F10, with the
+  caret placed first.
+- `DocumentChange` reported as one covering replacement for multi-edit
+  transactions and for undo/redo, so observers carry positions correctly.
+
+**Acceptance.**
+
+- Unit coverage for every binding, request kind, motion, virtual-caret path,
+  highlight validation and carry, and context-menu route; the default
+  bindings behave as before.
+- A golden frame pins host colouring and a caret painted below the text.
+- The editor guide and widget gallery document each capability.
+- Gates: warnings-as-errors build, full suite, documentation gates,
+  provenance check.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

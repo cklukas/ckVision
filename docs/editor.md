@@ -73,17 +73,17 @@ puts its live `Ln <line>, Col <column>` status in a bottom-right window-frame
 overlay; resizing and reflow therefore do not make the position ambiguous.
 The focused editor also publishes a terminal caret: a bar in insert mode and a
 block in overwrite mode. Arrow keys move by grapheme, Ctrl+Left/Right by word,
-Ctrl+Home/End by document, and Tab inserts four spaces into the document.
+Ctrl+Home/End by document, and Tab inserts `tab_width()` spaces — four unless
+`set_tab_width()` says otherwise. Up and Down return to the column the caret
+left: moving down through a short line and on to a long one lands where the
+walk started, and only horizontal motion or an edit sets a new column.
+PageUp and PageDown move the caret by the viewport less one row and scroll the
+view with it, so the caret keeps its place on screen; with Shift they select
+the paged range.
 Printable character events insert their terminal-provided UTF-8 text; Shift is
 part of normal text production, so uppercase and shifted symbols insert just
 like unshifted text, while Alt/Ctrl/Super character chords remain available to
 commands.
-`TextEditor::set_newline_handler()` is the narrow extension seam for a
-language-aware Enter action. It receives the editor before the normal newline
-is inserted: return `true` after committing an application-owned transaction
-and restoring a current selection with `set_selection()`, or `false` to keep
-the standard newline. It is not called for a read-only editor or pasted text,
-so a semantic rule cannot accidentally bypass either safeguard.
 Adding Shift extends the primary selection for every cursor movement, including
 Ctrl+Shift+Left/Right/Home/End. Ctrl+C/X/V use the application clipboard;
 Ctrl+Insert/Shift+Insert are equivalent copy/paste bindings, and Shift+Delete
@@ -115,6 +115,89 @@ An explicit host-provided double-click selects the clicked ASCII source word
 (or a single non-word grapheme). ckVision does not synthesize double-clicks
 from wall-clock timing.
 
+## Commands and key bindings
+
+The verbs a reader also finds in an Edit or Search menu — undo, redo, cut,
+copy, paste, select all, find the selection, find next and previous, and the
+overwrite toggle — are `EditorCommand` values, and the chords that run them are
+data. `default_editor_key_bindings()` is what every editor starts with:
+
+| Chord | Command |
+|---|---|
+| Ctrl+Z / Ctrl+Y | Undo / Redo |
+| Ctrl+X, Shift+Delete | Cut |
+| Ctrl+C, Ctrl+Insert | Copy |
+| Ctrl+V, Shift+Insert | Paste |
+| Ctrl+A | SelectAll |
+| Ctrl+F | FindSelection |
+| F3 / Shift+F3 | FindNext / FindPrevious |
+| Insert | ToggleOverwrite |
+
+A focused view sees a key before the application's command keymap, so an
+editor that answered Ctrl+F itself would keep the chord from an application
+whose own Find lives there. `set_key_bindings()` replaces the list: an
+application that owns its commands and keyboard scheme gives the editor the
+bindings it wants — often none — and runs the same verbs through
+`TextEditor::perform()` from its own command handlers. A chord the editor does
+not bind reaches the keymap like any other key. `perform()` reports whether the
+verb did anything, so an undo with nothing to undo is visibly a no-op.
+
+## Edit requests
+
+Every change the reader asks for — typing, a paste, Enter, Tab, the four
+deletions, a cut — is described as an `EditRequest` before anything is
+committed: its `EditKind`, the text the reader supplied, the current range the
+editor would replace, and the replacement it would put there (including any
+padding a virtual caret needs). `set_edit_handler()` receives each request
+first. Return `true` after handling it — typically by committing a transaction
+of the host's own and restoring a current selection with `set_selection()` —
+and the editor commits nothing; return `false`, having changed nothing, and the
+editor commits `replacement` over `range` itself.
+
+That one seam serves two kinds of host. One keeps its own editing rules —
+a language-aware line break, a session whose undo steps are named "Typing",
+"Paste" or "Cut" and which decides what folds into one step — and acts on the
+request's intent. The other only wants to observe or veto, and commits the
+described replacement. The handler is never called for a read-only or disabled
+editor, so a rule cannot bypass either safeguard.
+
+## A caret past the text
+
+With `set_virtual_space(true)`, a double-click right of a line's end, or below
+the last line, places a `VirtualCaret` there instead of snapping to the
+nearest position. Nothing is written: the status reports the provisional
+line and column (`EditorStatus::virtual_caret` says it is one), and the
+terminal caret sits in the blank cell. The first text to arrive — typed,
+pasted, a line break or an indent — supplies the line breaks and spaces needed
+to reach that cell together with the text, as one edit. Any caret motion, a
+click elsewhere, or a deletion abandons the provisional caret and leaves the
+document byte-identical. A host restoring one after its own transaction calls
+`set_virtual_caret()`, which refuses a position that is not past the text.
+
+## Host colouring
+
+A syntax profile lexes one line at a time, which suits source languages. A host
+that already parses the whole document — whose colouring depends on context a
+line lexer cannot see — hands the editor its own result instead:
+`set_highlights(revision, spans)` takes ordered, non-overlapping
+`HighlightSpan`s over the document's current revision, each naming a theme
+role. They replace the profile's colouring entirely; text they leave unmarked
+is plain text. A span for a stale revision is refused. An edit keeps the spans
+it does not touch, shifted with the text, and drops the ones it overlaps, so an
+asynchronous host never flashes the whole document plain while it recomputes.
+`clear_highlights()` returns to the profile. A grapheme takes the style of the
+span that contains its first byte. Selection and search matches still paint
+over host colouring.
+
+## Context menus
+
+`set_context_menu_handler()` is asked for a menu on a right click, on a
+Ctrl+click — for terminals that keep the right button for their own selection
+— and on Shift+F10. A click first places the caret at the clicked cell unless
+it lands inside the selection, so the menu acts on what the reader pointed at.
+The handler receives the screen cell the menu belongs at and typically calls
+`show_context_menu()`. Without a handler those events are not the editor's.
+
 ## Positions and edits
 
 `DocumentPosition` carries both a byte offset and the document revision that
@@ -123,6 +206,13 @@ created it. Obtain positions through `position_at_byte()` or
 `replace()` rejects stale positions instead of applying an offset to changed
 text. Use `DocumentTransaction` to make several non-overlapping edits against
 one revision and advance the revision once.
+
+Every change notifies observers with one `DocumentChange` describing a single
+covering replacement: the old bytes `[replaced_begin_byte, replaced_end_byte)`
+became the `inserted_bytes` bytes that now start at `replaced_begin_byte`. A
+transaction of several separated edits is reported as the span from its first
+edit to its last, and an undo or redo as the whole document, so an observer
+carries a position through any change with the same arithmetic.
 
 When an application-level command transforms a current selection through its
 own document transaction, it can call `TextEditor::set_selection()` with the
