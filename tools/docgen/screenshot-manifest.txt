@@ -75,6 +75,7 @@ widget-dropdownmenu
 widget-editorwindow
 widget-filedialog
 widget-flowview
+widget-frametext
 widget-helpviewer
 widget-imageview
 widget-inputline

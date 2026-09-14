@@ -131,6 +131,12 @@ public:
     void set_active(bool active);
     bool active() const noexcept { return active_; }
 
+    // The style the border is drawn in now: the active or the inactive frame
+    // role, with the chrome background override applied. Text set into the
+    // border (FrameText) wears it, so it follows the window's activation.
+    // Meaningful once the window is attached and its roles are resolved.
+    Style frame_style() const;
+
     // The sole content child, positioned to fill the interior (inside
     // the 1-cell frame border). Replaces and returns ownership of any
     // previous content (nullptr if there was none).

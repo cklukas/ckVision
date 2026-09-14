@@ -16,6 +16,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_combo_box.cpp
     test_filesystem.cpp
     test_focus.cpp
+    test_frame_text.cpp
     test_desktop.cpp
     test_desktop_dialog_golden.cpp
     test_dialog.cpp

@@ -261,7 +261,7 @@ animation but a slow application.
 
 Spin answers that with two rules and no polling at all:
 
-<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="461-496" -->
+<!-- ckvision-snippet source="examples/spin/spin_app.cpp" lines="455-490" -->
 ```cpp
     last_tick_nanos_.reset();
 }

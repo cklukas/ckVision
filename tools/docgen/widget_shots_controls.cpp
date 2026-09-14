@@ -13,6 +13,7 @@
 #include "cvision/core/event.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/frame_text.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/key_chord_capture.hpp"
@@ -315,6 +316,21 @@ void shot_pickers(const std::filesystem::path& dir) {
     stage.save_content(dir, "widget-timepicker", Rect{1, 3, 25, 1});
 }
 
+void shot_frame_text(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    widgets::Window& window = stage.window_with_content("notes.md", Rect{16, 5, 44, 6}, std::make_unique<ui::View>());
+
+    // ckvision-doc: frametext
+    auto* position = window.add_frame_overlay(std::make_unique<widgets::FrameText>("12:4"),
+                                              widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::Start, 1});
+    position->set_reserved_width(10);  // a longer line number does not move it
+    position->set_text("12:4  *");     // the caret moved and the page changed
+    // ckvision-doc-end: frametext
+
+    stage.step();
+    stage.save_window(dir, "widget-frametext");
+}
+
 void shot_search_box(const std::filesystem::path& dir) {
     WidgetStage stage;
     ui::View& content = stage.dialog_window("Contacts", Rect{20, 7, 40, 6});
@@ -337,6 +353,7 @@ void shot_search_box(const std::filesystem::path& dir) {
 void capture_control_shots(const std::filesystem::path& dir) {
     shot_button(dir);
     shot_label(dir);
+    shot_frame_text(dir);
     shot_static_text(dir);
     shot_input_line(dir);
     shot_key_chord_capture(dir);

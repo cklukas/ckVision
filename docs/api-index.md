@@ -53,6 +53,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 
 | Header | Primary types | Guide/example |
 |---|---|---|
+| `include/cvision/widgets/frame_text.hpp` | `FrameText` | [Widget gallery](widget-gallery.md#frametext) |
 | `include/cvision/widgets/label.hpp` | `Label` | [Widget gallery](widget-gallery.md#label) |
 | `include/cvision/widgets/static_text.hpp` | `StaticText` | [Widget gallery](widget-gallery.md#statictext) |
 | `include/cvision/widgets/button.hpp` | `Button` | [Widget gallery](widget-gallery.md#button) |

@@ -93,9 +93,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 44 | WP-63 — A field that says it was edited | 0.25 pw | **Implementation complete — gate pending** | WP-62 | InputLine::on_edited for every reader change, once, and never for set_text |
 | 45 | WP-64 — Forms whose answers line up | 0.25 pw | **Implementation complete — gate pending** | WP-63 | Label::set_column_width; descriptor dialogs put the labels beside their controls in one column |
 | 46 | WP-65 — Trees a reader pages through | 0.1 pw | **Implementation complete — gate pending** | WP-64 | TreeView Home/End and PageUp/PageDown over the visible rows, for models and materialized trees; a cursor placed before layout revealed on first size; a dialog chain returns focus where it began |
-| 47 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 48 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 49 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 47 | WP-66 — Text on a window's border | 0.25 pw | **Implementation complete — gate pending** | WP-65 | FrameText overlay in the border's own style; Window::frame_style; EditorWindow's readout and the spin example use it |
+| 48 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 49 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 50 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2699,6 +2700,33 @@ focus nowhere when it closed.
   provider model; list and tree cursors placed before layout; a modal opened
   while another detaches returns focus to the first one's origin.
 - Documentation in the widget gallery.
+
+### WP-66 — Text on a window's border
+
+**Purpose.** A readout set into a window's frame — a caret position, a page
+count, a path — was a StaticText or Label overlay, which paints the dialog
+text colours: a grey block cut into a blue border that stayed the same when
+the window lost activation. The spin example drew one correctly by resolving
+the frame roles itself, which ignored a window's role override.
+
+**Work.**
+
+- `Window::frame_style()`: the style the border is drawn in now — active or
+  inactive role, chrome background override applied; the window draws its
+  border with it.
+- `FrameText`: an overlay that paints its text and a space either side in that
+  style, with a reserved width and an alignment within it; outside a window it
+  draws nothing.
+- `EditorWindow`'s line/column readout is a FrameText; the spin example's
+  readout reads `frame_style()`.
+
+**Acceptance.**
+
+- Unit coverage: the text on the border in the active and the inactive frame
+  style, a reserved width that keeps the readout still while the rest stays
+  border line, nothing drawn outside a window.
+- Widget gallery section, API index and coverage rows, `widget-frametext`
+  figure; the EditorWindow figure regenerated.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

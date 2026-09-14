@@ -1292,6 +1292,30 @@ flow->on_link_activate = [](const std::string& target) { (void)target; /* follow
 ```
 <!-- /ckvision-snippet -->
 
+## FrameText
+
+Header: `include/cvision/widgets/frame_text.hpp`. Use for a short readout set
+into a window's border — a line and column, a page count, the path being
+browsed — with `Window::add_frame_overlay`. It wears the border's own style
+(`Window::frame_style()`), so it follows the window's activation and any role
+override the window carries, and paints only its text and a space either side:
+the rest of its reserved width stays border line. `set_reserved_width` keeps a
+changing readout from moving along the border; `set_alignment` places the text
+within that width.
+
+![A line and column readout on a window's bottom border](generated/screenshots/widget-frametext.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="frametext" -->
+```cpp
+auto* position = window.add_frame_overlay(std::make_unique<widgets::FrameText>("12:4"),
+                                          widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::Start, 1});
+position->set_reserved_width(10);  // a longer line number does not move it
+position->set_text("12:4  *");     // the caret moved and the page changed
+```
+<!-- /ckvision-snippet -->
+
 ## InputLine
 
 Header: `include/cvision/widgets/input_line.hpp`. Use for one-line text with

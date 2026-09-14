@@ -178,14 +178,11 @@ public:
     void draw(scene::Painter& painter) override;
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
-    void on_attached() override;
 
 private:
     const widgets::Window& window_;
     int width_;
     std::function<std::string()> text_;
-    ui::RoleId frame_active_role_ = ui::kInvalidRole;
-    ui::RoleId frame_inactive_role_ = ui::kInvalidRole;
 };
 
 class SpinApp {

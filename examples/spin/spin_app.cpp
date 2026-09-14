@@ -170,11 +170,6 @@ void SpinView::accept_frame(std::shared_ptr<const Image> frame) {
 FrameReadout::FrameReadout(const widgets::Window& window, int width, std::function<std::string()> text)
     : window_(window), width_(std::max(1, width)), text_(std::move(text)) {}
 
-void FrameReadout::on_attached() {
-    frame_active_role_ = context().roles->find("ckv.window.frame.active");
-    frame_inactive_role_ = context().roles->find("ckv.window.frame.inactive");
-}
-
 ui::SizeHint FrameReadout::horizontal_size_hint() const {
     // The same width whatever the text says. A frame overlay is placed
     // from this hint, so a hint that tracked the text would move the
@@ -185,11 +180,10 @@ ui::SizeHint FrameReadout::horizontal_size_hint() const {
 ui::SizeHint FrameReadout::vertical_size_hint() const { return ui::SizeHint{1, 1, 1}; }
 
 void FrameReadout::draw(scene::Painter& painter) {
-    const ui::RoleId role = window_.active() ? frame_active_role_ : frame_inactive_role_;
-    if (context().theme == nullptr || role == ui::kInvalidRole) return;
+    if (context().theme == nullptr) return;
     // The window's own frame style, so this reads as part of the border
     // whichever theme is loaded and whether or not the window is active.
-    const Style style = context().theme->resolve(role);
+    const Style style = window_.frame_style();
     // Pulled here, in the paint that will show it — see this class's own
     // comment for why it is not pushed.
     const std::string text = text_ ? text_() : std::string();
