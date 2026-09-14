@@ -1495,6 +1495,43 @@ CK_TEST(popping_or_detaching_a_modal_restores_the_saved_focus_only_after_scope_e
     CK_CHECK(app.focused() == background);
 }
 
+CK_TEST(a_modal_opened_while_another_detaches_returns_focus_where_the_first_found_it) {
+    // A dialog chain: the first dialog's answer arrives as its window leaves
+    // the tree, and the next dialog opens right there. Ending the chain must
+    // give focus back to the view the first dialog took it from.
+    class DepartingView final : public ProbeView {
+    public:
+        std::function<void()> departing;
+        void on_detaching() override {
+            if (departing) departing();
+        }
+    };
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* background = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    background->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(background);
+    auto* first = static_cast<DepartingView*>(app.root().add_child(std::make_unique<DepartingView>()));
+    first->set_focus_policy(FocusPolicy::TabStop);
+    auto* second = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    second->set_focus_policy(FocusPolicy::TabStop);
+
+    app.push_modal(*first);
+    app.focus_next();
+    CK_CHECK(app.focused() == first);
+    Application::ModalScopeId second_scope = 0;
+    first->departing = [&] { second_scope = app.push_modal(*second); };
+    std::unique_ptr<View> detached_first = app.root().remove_child(first);
+    app.step(0);
+    CK_CHECK(second_scope != 0);
+    CK_CHECK(app.focused() != background);  // the chain's next step holds the scope
+    app.focus_next();
+    CK_CHECK(app.focused() == second);
+    CK_CHECK(app.pop_modal(second_scope));
+    CK_CHECK(app.focused() == background);
+}
+
 CK_TEST(detaching_an_outer_modal_preserves_the_inner_modals_event_scope_and_restore_target) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;

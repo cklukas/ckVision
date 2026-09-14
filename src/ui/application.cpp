@@ -1315,8 +1315,19 @@ bool Application::run_until(const std::function<bool()>& done) {
 Application::ModalScopeId Application::push_modal(View& modal_root) {
     CKV_ASSERT(tree_contains(root_, &modal_root));
     std::optional<ViewHandle> restore;
-    if (focused_ != nullptr && tree_contains(root_, focused_))
+    if (focused_ != nullptr && tree_contains(root_, focused_)) {
         restore = make_view_handle(*focused_);
+    } else if (pending_modal_focus_restore_) {
+        // A modal that has just ended has not yet handed focus back — this
+        // one opens from inside its departure, the way a dialog chain
+        // presents its next step once the first answers. Focus is nowhere
+        // for that moment, and the departed scope's restoration can no
+        // longer apply inside this new scope. This scope takes it over, so
+        // that when the chain ends focus returns where the first dialog
+        // found it rather than nowhere.
+        restore = std::move(pending_modal_focus_restore_);
+        pending_modal_focus_restore_.reset();
+    }
     const ModalScopeId id = next_modal_scope_id_++;
     CKV_ASSERT(id != 0); // wraparound would make a retained identity ambiguous
     modal_stack_.push_back(ModalScope{id, &modal_root, std::move(restore)});
