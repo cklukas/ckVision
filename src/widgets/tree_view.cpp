@@ -579,6 +579,31 @@ void TreeView::set_expanded(TreeNode& node, bool expanded) {
 }
 
 bool TreeView::on_key(const KeyEvent& event) {
+    // Reaching the ends and paging are the same for a provider model and a
+    // materialized tree: Home and End go to the first and the last visible
+    // row, PageUp and PageDown a viewport's height, as a list does.
+    switch (event.chord.key) {
+        case Key::Home:
+        case Key::End: {
+            const std::size_t count = model_ != nullptr ? model_visible_count() : visible_entries().size();
+            if (count == 0) return true;
+            const int last = model_ != nullptr
+                                 ? scrollbar_range(count) - 1
+                                 : static_cast<int>(std::min(count - 1, static_cast<std::size_t>(std::numeric_limits<int>::max())));
+            const int current = static_cast<int>(
+                std::min(cursor_row().value_or(0), static_cast<std::size_t>(std::numeric_limits<int>::max())));
+            move_cursor((event.chord.key == Key::Home ? 0 : last) - current);
+            return true;
+        }
+        case Key::PageUp:
+            move_cursor(-std::max(1, bounds().height));
+            return true;
+        case Key::PageDown:
+            move_cursor(std::max(1, bounds().height));
+            return true;
+        default:
+            break;
+    }
     if (model_ != nullptr) {
         switch (event.chord.key) {
             case Key::Up:

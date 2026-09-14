@@ -92,9 +92,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 43 | WP-62 — A save dialog that offers a name | 0.25 pw | **Implementation complete — gate pending** | WP-61 | FileDialogOptions::suggested_name, kept across directories and focused for Enter |
 | 44 | WP-63 — A field that says it was edited | 0.25 pw | **Implementation complete — gate pending** | WP-62 | InputLine::on_edited for every reader change, once, and never for set_text |
 | 45 | WP-64 — Forms whose answers line up | 0.25 pw | **Implementation complete — gate pending** | WP-63 | Label::set_column_width; descriptor dialogs put the labels beside their controls in one column |
-| 46 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 47 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 48 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 46 | WP-65 — Trees a reader pages through | 0.1 pw | **Implementation complete — gate pending** | WP-64 | TreeView Home/End and PageUp/PageDown over the visible rows, for models and materialized trees; a cursor placed before layout revealed on first size; a dialog chain returns focus where it began |
+| 47 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 48 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 49 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2673,6 +2674,31 @@ and read as a ragged list rather than a set of answers.
   field has no label, and a label's column width never narrows its text.
 - Golden and documentation captures of descriptor dialogs regenerated; the
   widget gallery and the dialog guide describe the column.
+
+### WP-65 — Trees a reader pages through
+
+**Purpose.** A grouped chooser of thirty entries, a file tree or a help index
+was walked one row per key: TreeView answered neither Home and End nor PageUp
+and PageDown, which a list answers. Two defects met on the way to such a
+chooser: a cursor selected while the view had no size scrolled the rows above
+it away for good, and a dialog opened from the answer of another returned
+focus nowhere when it closed.
+
+**Work.**
+
+- `TreeView`: Home and End select the first and the last visible row, PageUp
+  and PageDown move the viewport's height, for a `TreeModel` and for
+  materialized roots alike. ListView and TreeView defer a reveal requested
+  before they have a height until they get one.
+- `Application::push_modal`: a modal pushed while no view has focus and a
+  departed scope's restoration is pending takes that restoration over.
+
+**Acceptance.**
+
+- Unit coverage: ends and paging over expanded and collapsed families and a
+  provider model; list and tree cursors placed before layout; a modal opened
+  while another detaches returns focus to the first one's origin.
+- Documentation in the widget gallery.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

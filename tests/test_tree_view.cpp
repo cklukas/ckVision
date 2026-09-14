@@ -225,6 +225,39 @@ CK_TEST(reveal_and_select_reports_a_missing_id_without_disturbing_selection) {
     CK_CHECK(tree.selected()->label == "parent");
 }
 
+CK_TEST(home_end_and_paging_move_through_the_visible_rows) {
+    // A catalogue of thirty entries or a deep folder is walked by its ends
+    // and a screen at a time, not one row per key.
+    Fixture f;
+    std::vector<TreeNode> children;
+    for (std::uint64_t id = 2; id <= 21; ++id)
+        children.push_back(TreeNode{.label = "entry " + std::to_string(id), .id = id});
+    TreeNode family{.label = "family", .children = std::move(children), .expanded = true, .id = 1};
+    TreeNode hidden_child{.label = "hidden", .id = 31};
+    TreeNode closed{.label = "closed", .children = {std::move(hidden_child)}, .id = 30};
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_bounds(Rect{0, 0, 20, 5});
+    tree.set_roots({std::move(family), std::move(closed)});
+
+    CK_CHECK(tree.on_key(key(Key::End)));
+    CK_CHECK(tree.selected()->label == "closed");  // the last VISIBLE row: its child stays hidden
+    CK_CHECK(tree.on_key(key(Key::PageUp)));
+    CK_CHECK(tree.selected()->id == 17);  // five rows up from row 21
+    CK_CHECK(tree.on_key(key(Key::Home)));
+    CK_CHECK(tree.selected()->label == "family");
+    CK_CHECK(tree.on_key(key(Key::PageDown)));
+    CK_CHECK(tree.selected()->id == 6);
+
+    ProviderTree model;
+    auto provided = make_tree(f);
+    provided.set_context(f.ctx());
+    provided.set_bounds(Rect{0, 0, 20, 5});
+    provided.set_model(model);
+    CK_CHECK(provided.on_key(key(Key::End)));
+    CK_CHECK(provided.selected_id() == 1);  // only the collapsed root is visible
+}
+
 CK_TEST(collapsed_children_are_not_reachable_by_down_arrow) {
     Fixture f;
     auto tree = make_tree(f);

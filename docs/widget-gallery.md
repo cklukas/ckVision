@@ -2164,8 +2164,9 @@ refresh without enumerating the whole forest. See [Data views](data-views.md#tre
 ## TreeView
 
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
-Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
-children. `reveal_and_select(id)` opens the ancestors of a materialized node
+Arrows select/expand, Home and End reach the first and last visible row,
+PageUp and PageDown move a viewport's height, Enter activates, and
+`on_expand_request` supports lazy children. `reveal_and_select(id)` opens the ancestors of a materialized node
 and selects it, which lets a result list or search controller navigate a tree
 without synthesizing input. File Browser uses the public selection callback to
 update a ListView. TreeView retains its flattened visible entries until roots
