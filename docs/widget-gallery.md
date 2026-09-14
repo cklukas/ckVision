@@ -1369,7 +1369,9 @@ label->set_buddy(shortcut);
 
 Header: `include/cvision/widgets/label.hpp`. Use a mnemonic label next to a
 control; it participates in mnemonic focus routing. Use StaticText for passive
-wrapped copy.
+wrapped copy. In a column of labels laid out in rows, `set_column_width(cells)`
+makes each label at least the column's width, so the controls beside them start
+at the same place — descriptor dialogs line up their labels this way.
 
 ![Mnemonic Label associated with an input](generated/screenshots/widget-label.svg)
 

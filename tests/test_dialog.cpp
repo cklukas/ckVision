@@ -7,6 +7,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/label.hpp"
 #include "cvision/widgets/scroll_viewport.hpp"
 #include "cvision/widgets/window.hpp"
 
@@ -27,6 +28,7 @@ using ckv::widgets::ButtonRole;
 using ckv::widgets::Desktop;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
+using ckv::widgets::FieldKind;
 using ckv::widgets::materialize_dialog;
 using ckv::widgets::ScrollViewport;
 using ckv::widgets::validate_dialog;
@@ -73,6 +75,35 @@ CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
     CK_CHECK(dialog.labels[0] != nullptr);
     CK_CHECK(dialog.inputs[0]->text() == "initial");
     CK_CHECK(dialog.buttons[0]->text() == "OK");
+}
+
+CK_TEST(the_labels_beside_a_forms_controls_share_one_column) {
+    // Controls that start wherever their own label happens to end make a
+    // ragged form; the labels beside them are one column, as wide as the
+    // widest, so every control starts at the same place.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&Name", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{"&Hidden network", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Remember", .kind = FieldKind::Check});
+    FieldDescriptor size{"&Size", "", nullptr};
+    size.kind = FieldKind::Combo;
+    size.options = {"small", "large"};
+    descriptor.fields.push_back(std::move(size));
+    auto dialog = materialize_dialog(descriptor);
+
+    const int widest = static_cast<int>(std::string("Hidden network").size());
+    CK_CHECK(dialog.labels[0]->horizontal_size_hint().preferred == widest);
+    CK_CHECK(dialog.labels[1]->horizontal_size_hint().preferred == widest);
+    CK_CHECK(dialog.labels[3]->horizontal_size_hint().preferred == widest);
+    CK_CHECK(dialog.labels[2] == nullptr);  // a check box carries its own text
+
+    ckv::widgets::Label alone{"&Title"};
+    CK_CHECK(alone.horizontal_size_hint().preferred == 5);
+    alone.set_column_width(12);
+    CK_CHECK(alone.horizontal_size_hint().preferred == 12);
+    alone.set_column_width(2);  // never narrower than its own text
+    CK_CHECK(alone.horizontal_size_hint().preferred == 5);
 }
 
 CK_TEST(classic_buttons_keep_a_ten_cell_footprint_and_can_be_widened) {

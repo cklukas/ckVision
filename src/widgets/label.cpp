@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/label.hpp"
 
+#include <algorithm>
 #include <cctype>
 
 #include "cvision/core/text.hpp"
@@ -109,9 +110,19 @@ void Label::draw(scene::Painter& painter) {
                   bounds().width, theme.resolve(text_role_), theme.resolve(mnemonic_role_));
 }
 
+void Label::set_column_width(int cells) {
+    const int width = std::max(0, cells);
+    if (width == column_width_) return;
+    column_width_ = width;
+    size_hint_changed();
+    invalidate();
+}
+
 SizeHint Label::horizontal_size_hint() const {
-    const int width = text::text_width(display_text_);
-    return SizeHint{width, width, width};  // a label never stretches or shrinks its text
+    // A label never stretches or shrinks its text; standing in a column, it
+    // takes the column's width.
+    const int width = std::max(text::text_width(display_text_), column_width_);
+    return SizeHint{width, width, width};
 }
 
 bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app) {

@@ -91,9 +91,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 42 | WP-61 — Forms that check the whole answer | 0.5 pw | **Implementation complete — gate pending** | WP-60 | DialogDescriptor::check and DialogVeto: the dialog stays open, the field is marked and focused, the reason stands in the panel |
 | 43 | WP-62 — A save dialog that offers a name | 0.25 pw | **Implementation complete — gate pending** | WP-61 | FileDialogOptions::suggested_name, kept across directories and focused for Enter |
 | 44 | WP-63 — A field that says it was edited | 0.25 pw | **Implementation complete — gate pending** | WP-62 | InputLine::on_edited for every reader change, once, and never for set_text |
-| 45 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 46 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 47 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 45 | WP-64 — Forms whose answers line up | 0.25 pw | **Implementation complete — gate pending** | WP-63 | Label::set_column_width; descriptor dialogs put the labels beside their controls in one column |
+| 46 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 47 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 48 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2651,6 +2652,27 @@ change made by paste or undo through another route.
   once each; a caret move, a same-text paste over a selection, a refused
   grapheme and set_text report nothing.
 - Documentation in the widget gallery; documentation and provenance gates.
+
+### WP-64 — Forms whose answers line up
+
+**Purpose.** A descriptor form placed each control right after its own label,
+so a form whose labels differ in length started every control somewhere else
+and read as a ragged list rather than a set of answers.
+
+**Work.**
+
+- `Label::set_column_width`: a label at least as wide as the column it stands
+  in, its text at the start; never narrower than its own text.
+- `materialize_dialog`: the labels beside a control share one column as wide
+  as the widest of them. Check boxes carry their own text, radio groups
+  caption their choices and notes are prose; none of them joins the column.
+
+**Acceptance.**
+
+- Unit coverage: text and combo labels share the widest label's width, a check
+  field has no label, and a label's column width never narrows its text.
+- Golden and documentation captures of descriptor dialogs regenerated; the
+  widget gallery and the dialog guide describe the column.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

@@ -692,6 +692,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 
     MaterializedDialog result;
     auto column = std::make_unique<Column>();
+    // The labels that stand beside a control, lined up below.
+    std::vector<Label*> beside_labels;
     column->set_spacing(kFieldSpacing);
 
     for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
@@ -781,6 +783,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         if (!field.label.empty()) {
             auto label = std::make_unique<Label>(field.label);
             label_ptr = static_cast<Label*>(row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
+            beside_labels.push_back(label_ptr);
         }
 
         if (field.kind == FieldKind::Combo) {
@@ -886,6 +889,14 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }
+
+    // The labels beside controls are one column, as wide as the widest of
+    // them, so every control starts at the same place and a reader's eye
+    // runs straight down the answers.
+    int label_column = 0;
+    for (const Label* label : beside_labels)
+        label_column = std::max(label_column, label->horizontal_size_hint().preferred);
+    for (Label* label : beside_labels) label->set_column_width(label_column);
 
     // The fields go into the pane's viewport whatever their height: there is
     // one tree shape, and the fit is decided in layout (see DialogPane).

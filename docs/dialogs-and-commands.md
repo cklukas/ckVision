@@ -103,6 +103,11 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 
 ![Invalid profile dialog](generated/screenshots/forms-invalid-dialog.svg)
 
+The labels that stand beside a control — every field but a `Check`, a `Radio`
+(which captions its own choices) and a `Note` — form one column as wide as the
+widest of them, so each control starts at the same place and the answers read
+straight down the form.
+
 ## Fields that are not text
 
 `FieldDescriptor::kind` selects what a field materializes as. `Text` is the
