@@ -207,6 +207,15 @@ void ListView::move_cursor(int new_cursor, bool select_on_move) {
 
 void ListView::ensure_cursor_visible() {
     if (cursor_ < 0 || scrollbar_ == nullptr) return;
+    // A list with no rows on screen yet has nowhere to show the cursor. The
+    // request waits for the list's first real size instead of scrolling as
+    // though the viewport were one row tall, which would leave the rows
+    // above the cursor scrolled away once the list is laid out.
+    if (bounds().height <= 0) {
+        reveal_pending_ = true;
+        return;
+    }
+    reveal_pending_ = false;
     if (cursor_ < scrollbar_->position()) {
         scrollbar_->set_position(cursor_);
     } else if (cursor_ >= scrollbar_->position() + scrollbar_->viewport_size()) {
@@ -233,6 +242,7 @@ void ListView::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
     scrollbar_->set_range(static_cast<int>(item_count()), std::max(1, bounds().height));
+    if (reveal_pending_) ensure_cursor_visible();
 }
 
 bool ListView::on_key(const KeyEvent& event) {

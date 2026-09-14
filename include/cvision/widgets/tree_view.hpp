@@ -243,6 +243,8 @@ private:
     // gets the same lazy-population behavior from one place.
     void set_expanded(TreeNode& node, bool expanded);
     void ensure_cursor_visible(int cursor_index);
+    // The cursor's row among the visible rows, when there is a cursor.
+    std::optional<std::size_t> cursor_row();
     void rebuild_model_expansion_index();
     std::optional<TreeItem> model_item(TreeItemId id) const;
     std::size_t model_visible_count() const;
@@ -277,6 +279,8 @@ private:
     std::set<TreeItemId> model_expand_requested_items_;
     std::map<TreeItemId, std::vector<IndexedChild>> model_expanded_children_;
     Scrollbar* scrollbar_ = nullptr;
+    // The cursor was placed before the tree had a height to show it in.
+    bool reveal_pending_ = false;
     TreeConnectorStyle connector_style_ = TreeConnectorStyle::Minimal;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;

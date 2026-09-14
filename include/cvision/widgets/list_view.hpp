@@ -212,6 +212,8 @@ private:
     std::int64_t last_click_nanos_ = -1;
 
     Scrollbar* scrollbar_ = nullptr;
+    // The cursor was placed before the list had a height to show it in.
+    bool reveal_pending_ = false;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;

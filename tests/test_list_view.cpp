@@ -110,6 +110,35 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
 }
 
+CK_TEST(a_cursor_placed_before_layout_is_revealed_once_the_list_has_a_height) {
+    // Placed while the list had no size, the cursor is shown when the size
+    // arrives — from the top when it fits, rather than scrolled as though
+    // the viewport had been one row tall.
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.on_attached();
+    std::vector<std::string> items;
+    for (int index = 0; index < 10; ++index) items.push_back("item" + std::to_string(index));
+    list.set_items(items);
+    list.set_cursor(2);
+    list.set_bounds(Rect{0, 0, 8, 4});
+    ckv::scene::Surface surface(ckv::Size{8, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 4});
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "0");
+
+    auto later = make_list(f);
+    later.set_context(f.ctx());
+    later.on_attached();
+    later.set_items(items);
+    later.set_cursor(7);
+    later.set_bounds(Rect{0, 0, 8, 4});
+    later.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "4");
+    CK_CHECK(surface.at(ckv::Point{4, 3}).grapheme() == "7");
+}
+
 CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {
     // The selected row must differ from a normal one by its background, the
     // way every other "this is the one" surface in the schemes does. An

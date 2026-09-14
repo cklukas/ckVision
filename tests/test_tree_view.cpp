@@ -182,6 +182,39 @@ CK_TEST(reveal_and_select_opens_ancestors_before_selecting_a_hidden_node) {
     CK_CHECK(selection_changes == 1);
 }
 
+CK_TEST(a_node_selected_before_layout_is_shown_below_the_rows_above_it) {
+    // A dialog selects its first entry while it builds the tree, before the
+    // tree has a size. Laid out with room for every row, the tree shows them
+    // all from the top: the heading above the entry is not scrolled away.
+    Fixture f;
+    TreeNode entry{.label = "entry", .id = 2};
+    TreeNode heading{.label = "heading", .children = {std::move(entry)}, .id = 1};
+    auto tree = make_tree(f);
+    tree.set_context(f.ctx());
+    tree.set_roots({std::move(heading)});
+    CK_CHECK(tree.reveal_and_select(2));
+    tree.set_bounds(Rect{0, 0, 20, 4});
+
+    Surface surface(ckv::Size{20, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 20, 4});
+    tree.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("heading") != std::string::npos);
+    CK_CHECK(row_text(surface, 1).find("entry") != std::string::npos);
+
+    // A cursor that does not fit when the size arrives is scrolled just far
+    // enough to show it.
+    std::vector<TreeNode> many;
+    for (std::uint64_t id = 1; id <= 10; ++id) many.push_back(TreeNode{.label = "row " + std::to_string(id), .id = id});
+    auto tall = make_tree(f);
+    tall.set_context(f.ctx());
+    tall.set_roots(std::move(many));
+    CK_CHECK(tall.reveal_and_select(6));
+    tall.set_bounds(Rect{0, 0, 20, 4});
+    tall.draw(painter);
+    CK_CHECK(row_text(surface, 0).find("row 3") != std::string::npos);
+    CK_CHECK(row_text(surface, 3).find("row 6") != std::string::npos);
+}
+
 CK_TEST(reveal_and_select_reports_a_missing_id_without_disturbing_selection) {
     Fixture f;
     auto tree = make_tree(f);
