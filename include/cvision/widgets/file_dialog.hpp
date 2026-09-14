@@ -43,7 +43,7 @@ struct FileDialogFilter {
 };
 
 struct FileDialogOptions {
-    std::vector<FileDialogFilter> filters;
+    std::vector<FileDialogFilter> filters{};
     std::size_t active_filter = 0;
     bool show_hidden = false;
 
@@ -53,7 +53,7 @@ struct FileDialogOptions {
     // this name, in whichever directory the reader browses to, and has the
     // focus, so Enter accepts the suggestion and typing replaces it. A file
     // chosen from the list replaces the name. Empty offers none.
-    std::string suggested_name;
+    std::string suggested_name{};
 
     // Optional recent-location registry. The dialog records the current
     // directory on accept and shows still-existing directories as navigable

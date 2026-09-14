@@ -73,7 +73,7 @@ enum class CommandVisibility {
 // contexts and outside_contexts is available only where no context is
 // active.
 struct CommandScope {
-    std::vector<std::string> contexts;
+    std::vector<std::string> contexts{};
     bool outside_contexts = false;
 
     // Available everywhere: no context named and no restriction to the
@@ -120,17 +120,22 @@ struct CommandDescriptor {
     // Owned rather than a view, like every other field here: a
     // descriptor may be built in one place and declared in another, and
     // a computed key must not have to outlive that.
-    std::string key;
-    std::string title;
-    std::string category;
-    CommandScope scope;
+    //
+    // Every member carries an explicit initializer, empty though most are:
+    // descriptors are declared with designated initializers naming only what
+    // a command needs, and a member without one trips
+    // -Wmissing-field-initializers at every declaration that leaves it out.
+    std::string key{};
+    std::string title{};
+    std::string category{};
+    CommandScope scope{};
     // Default chord in KeyChord::parse() spelling, e.g. "Alt+G"; empty
     // means no default chord. A caller holding an already-built
     // KeyChord (rather than a source literal) declares without one and
     // calls bind_key() instead.
-    std::string chord;
+    std::string chord{};
     CommandVisibility visibility = CommandVisibility::Palette;
-    std::function<void()> handler;
+    std::function<void()> handler{};
 };
 
 // The library's own standard commands (D-013 materialized, M9/WP-12),
