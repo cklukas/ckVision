@@ -1149,7 +1149,9 @@ standard file dialog, including mode and filters. `suggested_name` offers a
 name for something the application can already name — Save As for
 `notes.md`, an export beside it as `notes.html`: the path field reads the
 shown directory with that name wherever the reader browses, and has the focus,
-so Enter accepts it.
+so Enter accepts it. In either mode, choosing a file in the list puts its path
+in the path field and the focus there: Enter accepts the file, typing edits the
+name.
 
 ![File dialog with filters and file list](generated/screenshots/widget-filedialog.svg)
 

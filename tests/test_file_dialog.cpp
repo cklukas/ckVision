@@ -116,29 +116,36 @@ CK_TEST(activating_a_directory_entry_navigates_into_it_and_activating_dotdot_nav
     CK_CHECK(results.empty());      // navigation never fires on_result
 }
 
-CK_TEST(activating_a_file_entry_fills_the_path_field_rather_than_navigating) {
+CK_TEST(activating_a_file_entry_fills_the_path_field_and_a_second_enter_accepts_it) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
     auto fs = sample_fs();
     int result_calls = 0;
+    std::string accepted_path;
     auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
-                                    [&](FileDialogResult) { ++result_calls; });
+                                    [&](FileDialogResult result) {
+                                        ++result_calls;
+                                        accepted_path = result.path;
+                                    });
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
 
-    app.dispatch(key(Key::Down));   // move to "readme.txt" (row 1, after "docs/")
+    app.dispatch(key(Key::Down));   // "docs/", after ".."
+    app.dispatch(key(Key::Down));   // "readme.txt"
     app.dispatch(key(Key::Enter));  // activate the file entry
     // Selecting the file must NOT close the dialog — activation only
     // fills the path field; on_result must not have fired yet.
     CK_CHECK(result_calls == 0);
 
-    // Confirm the field now holds the selected file's full path by
-    // accepting through the default button and checking the result.
-    window_ptr->accept_request();
+    // The focus followed the path into the field, so Enter accepts the file.
+    CK_CHECK(app.focused() != nullptr && app.focused() != handle.initial_focus);
+    app.dispatch(key(Key::Enter));
     CK_CHECK(result_calls == 1);
+    CK_CHECK(accepted_path == "/home/user/readme.txt");
+    static_cast<void>(window_ptr);
 }
 
 CK_TEST(filters_limit_visible_files_and_the_filter_button_cycles_filters) {
