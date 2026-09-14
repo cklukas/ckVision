@@ -174,9 +174,10 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(default_pressed);
     // The self-detach is deferred until the button callback unwinds, then
     // drained by this same step's ordinary posted-work phase.
+    // The field opened with its preset selected, so the typing replaced it.
     CK_CHECK((presentation.result() ==
               DialogResult{true,
-                           {"localhost"},
+                           {"host"},
                            {false},
                            {-1},
                            {std::nullopt},
@@ -276,8 +277,7 @@ CK_TEST(pressing_the_accepting_button_accepts_with_the_typed_values) {
         CK_CHECK(presentation.result()->accepted);
         CK_CHECK(!presentation.result()->values.empty());
         if (!presentation.result()->values.empty())
-            CK_CHECK(presentation.result()->values.front() == "typedlocal" ||
-                     presentation.result()->values.front() == "localtyped");
+            CK_CHECK(presentation.result()->values.front() == "typed");  // over the selected preset
     }
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(f.desktop->windows().empty());

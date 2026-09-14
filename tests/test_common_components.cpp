@@ -818,7 +818,8 @@ CK_TEST(the_year_steppers_move_a_year_at_a_time) {
 CK_TEST(a_typed_year_takes_digits_only_and_moves_the_calendar_on_enter) {
     DroppedCalendar c;
     c.press(ckv::Key::Tab);
-    c.press(ckv::Key::Tab);  // onto the year field
+    c.press(ckv::Key::Tab);  // onto the year field, its year selected
+    c.press(ckv::Key::End);  // kept, the caret after it
     c.press(ckv::Key::Backspace);
     c.press(ckv::Key::Char, ckv::Modifier::None, "x");  // not part of a year
     c.press(ckv::Key::Char, ckv::Modifier::None, "5");
@@ -831,6 +832,7 @@ CK_TEST(leaving_the_year_field_commits_what_was_typed) {
     DroppedCalendar c;
     c.press(ckv::Key::Tab);
     c.press(ckv::Key::Tab);
+    c.press(ckv::Key::End);
     c.press(ckv::Key::Backspace);
     c.press(ckv::Key::Char, ckv::Modifier::None, "4");
     c.press(ckv::Key::Tab);  // moving on says the same thing as Enter

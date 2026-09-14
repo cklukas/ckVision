@@ -516,7 +516,9 @@ bool InputLine::handle_key(const KeyEvent& event) {
             }
             return true;
         case Key::Insert:
+            // Switching modes is a choice to keep editing the text as it is.
             overwrite_mode_ = !overwrite_mode_;
+            selection_anchor_.reset();
             invalidate();
             return true;
         default:
@@ -551,6 +553,9 @@ bool InputLine::on_mouse(const MouseEvent& event) {
     }
     if (event.action != MouseAction::Down) return false;
     if (!contains(absolute_bounds(), event.cell)) return false;
+    // The focus first, so arriving selects nothing the press is about to
+    // place a caret in.
+    if (!has_focus() && focusable() && context().app != nullptr) context().app->set_focus(this);
     dragging_selection_ = true;
     move_cursor(cursor_index_at(event.cell), false);
     return true;
@@ -573,7 +578,19 @@ std::size_t InputLine::cursor_index_at(Point absolute_cell) const {
     return index;
 }
 
-void InputLine::on_focus(const FocusEvent&) { invalidate(); }
+void InputLine::on_focus(const FocusEvent& event) {
+    // A field the reader arrives at from the keyboard — a dialog opening on
+    // it, Tab, the focus coming back — offers its text selected, the caret at
+    // the end: typing replaces it, Backspace and Delete clear it, and a caret
+    // key keeps it and moves from the end. A pointer press places the caret
+    // where it lands instead; on_mouse takes the focus before it does. A
+    // masked field has fixed positions to type into, and is left as it is.
+    if (event.gained && !has_mask() && !graphemes_.empty()) {
+        selection_anchor_ = 0;
+        cursor_ = graphemes_.size();
+    }
+    invalidate();
+}
 
 SizeHint InputLine::horizontal_size_hint() const {
     if (has_mask()) {

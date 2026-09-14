@@ -1330,7 +1330,11 @@ Ctrl+Insert/Shift+Insert copy, cut, and paste; Ctrl+Backspace/Delete erase by
 word, while Shift+Delete cuts the selection. Forms shows a labelled field.
 `on_accept` reports Enter; `on_edited` reports each change the reader makes to
 the text — what a search box filters on as it is typed into — and not the
-owner's own `set_text()`.
+owner's own `set_text()`. A field the focus reaches from the keyboard — a dialog
+opening on it, Tab, the focus coming back — offers its text selected with the
+caret at the end: typing replaces it, Backspace or Delete clears it, and Right,
+End, Left, Home or Insert keep it and edit from there. A pointer press places
+the caret where it lands instead (D-066).
 
 ![InputLine text editing control](generated/screenshots/widget-inputline.svg)
 

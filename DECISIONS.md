@@ -1634,3 +1634,30 @@ show's next and previous. *Rejected:* delivering the focus-out from the
 detach sink — the sink's one contract is that it never calls into the view.
 *Rejected:* a flag kept in `View` and set by the Application — a truth with a
 setter is a truth anyone can set, and the notification order problem stays.
+
+**D-066 — A text field the keyboard reaches offers its text selected.**
+A field that opens with a value — a web address's "https://", a page's current
+name, the search remembered from last time — is most often retyped, and
+sometimes continued. The classic desktop dialog convention, observed on a
+running classic-dialog application rather than derived from any
+implementation, serves both with one key: arriving at the field selects its
+text with the caret at the end, so typing replaces it, Backspace or Delete
+clears it, and a single caret key keeps it — Right or End continue after it,
+Left steps one character back from its end, Home and a word-left go to its
+start — while Insert switches the typing mode and keeps it too. Leaving the
+field and coming back selects it again. A pointer press is different: the
+reader has pointed at a place in the text, and the caret goes there with
+nothing selected.
+
+So `InputLine::on_focus` selects the whole text, anchor at the start and caret
+at the end, whenever the focus arrives and the field holds text, and
+`InputLine::on_mouse` takes the focus itself before it places the caret, so a
+press is never followed by that selection. Insert clears a selection. A masked
+field has fixed positions to type into and is left as it is. An editable
+ComboBox's field follows, as it receives the same focus notification.
+
+*Rejected:* selecting only when a dialog opens — the same field reached with
+Tab, or returned to after a message box, would behave differently for no
+reason the reader can see. *Rejected:* a per-field option — the convention is
+what a reader of this kind of application expects everywhere, and an option
+is a second behaviour every application would have to choose between.
