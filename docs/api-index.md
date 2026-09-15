@@ -78,6 +78,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/list_view.hpp` | `ListView`, `ListModel`, `ListItem` | [Data views](data-views.md) |
 | `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode`, `TreeModel`, `TreeItem` | [Data views](data-views.md#tree-providers) |
 | `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
+| `include/cvision/widgets/cell_grid.hpp` | `CellGrid`, `CellGridModel`, `GridCell`, `GridFrame`, `MaterializedCellGridModel` | [Data views](data-views.md#cell-grid-providers) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl` | [Widget gallery](widget-gallery.md#tabcontrol) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |
 | `include/cvision/widgets/scrollbar.hpp` | `Scrollbar` | [Widget gallery](widget-gallery.md#scrollbar) |

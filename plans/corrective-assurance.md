@@ -95,9 +95,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 46 | WP-65 — Trees a reader pages through | 0.1 pw | **Implementation complete — gate pending** | WP-64 | TreeView Home/End and PageUp/PageDown over the visible rows, for models and materialized trees; a cursor placed before layout revealed on first size; a dialog chain returns focus where it began |
 | 47 | WP-66 — Text on a window's border | 0.25 pw | **Implementation complete — gate pending** | WP-65 | FrameText overlay in the border's own style; Window::frame_style; EditorWindow's readout and the spin example use it |
 | 48 | WP-67 — Text fields that offer their preset | 0.25 pw | **Implementation complete — gate pending** | WP-66 | D-066: keyboard focus selects an input line's text, caret at the end; a press places the caret; Insert keeps the text |
-| 49 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 50 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 51 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 49 | WP-68 — A cell grid | 1 pw | **Implementation complete — gate pending** | WP-67 | D-067: `CellGrid` over a provider that owns the cursor, the selection and the scroll origin; header, gutter, frozen bands, spans, cell styles, overlays; `MaterializedCellGridModel`; four theme roles |
+| 50 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 51 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 52 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2751,6 +2752,34 @@ dialog convention selects the value on arrival (D-066).
 - Tests that typed into presets updated to the rule; the todo task editor
   golden and the input line, label, descriptor and todo figures regenerated;
   the widget gallery describes the rule.
+
+### WP-68 — A cell grid
+
+**Purpose.** A worksheet, a query result and a matrix are all a grid of cells
+under a column header, and the toolkit had no widget for it: `Table` is a
+list of typed rows. An application had to paint its own grid, cell by cell,
+and reinvent the cursor, the selection, the frozen bands and the spans.
+
+**Work.**
+
+- `widgets::CellGrid` and `CellGridModel` (D-067): the provider owns the
+  cursor, the selection and the scroll origin; the widget paints the frame,
+  the header and the gutter, resolves spans, composes the cursor and the
+  selection over a cell's own colours, and routes the keyboard and the mouse
+  to the provider as requests.
+- `MaterializedCellGridModel`: a table of values with the generic rules.
+- Roles `ckv.cellgrid.normal`, `.header`, `.cursor` and `.selection` in every
+  built-in scheme.
+
+**Acceptance.**
+
+- Unit coverage: the materialized model's clamping, extension, paging, jumps,
+  frozen bands, fitted columns, scroll-follow and span listing; the widget's
+  header, gutter and alignment, the overlays on plain, coloured and
+  unreadable cells, spans and covered cells, the keys, the mouse, the owner
+  callbacks, and that only listed cells are asked for.
+- Data views and widget gallery sections, API index and coverage rows, the
+  `widget-cellgrid` figure.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

@@ -62,6 +62,7 @@ widget-calendardropdown
 widget-calendarview
 widget-canvas
 widget-canvas-no-graphics
+widget-cellgrid
 widget-checkgroup
 widget-clockview
 widget-combobox

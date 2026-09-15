@@ -62,6 +62,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/status_line.hpp` | [Hello](tutorial-hello.md) | hello/widget_shots | widget-statusline | test_status_line |
 | `include/cvision/widgets/tab_control.hpp` | [Gallery](widget-gallery.md#tabcontrol) | workbench/graphics/widget_shots | widget-tabcontrol | test_tab_control |
 | `include/cvision/widgets/table.hpp` | [Data views](data-views.md) | workbench/widget_shots | widget-table/widget-table-editing | test_table |
+| `include/cvision/widgets/cell_grid.hpp` | [Data views](data-views.md#cell-grid-providers) | widget_shots | widget-cellgrid | test_cell_grid |
 | `include/cvision/widgets/terminal_report_dialog.hpp` | [Gallery](widget-gallery.md#terminal-report-dialog) | spin/widget_shots | widget-terminalreportdialog | test_terminal_report_dialog |
 | `include/cvision/widgets/terminal_scrollbar.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | interactive session | test_terminal_scrollbar |
 | `include/cvision/widgets/terminal_view.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | terminal-initial | test_terminal_view, test_terminal_app, terminal_redraw_contract |

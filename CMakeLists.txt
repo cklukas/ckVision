@@ -56,6 +56,7 @@ add_library(cvision
     src/widgets/application_shell.cpp
     src/widgets/button.cpp
     src/widgets/canvas.cpp
+    src/widgets/cell_grid.cpp
     src/widgets/combo_box.cpp
     src/widgets/common_components.cpp
     src/widgets/desktop.cpp

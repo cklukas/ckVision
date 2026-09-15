@@ -2036,6 +2036,91 @@ table->on_edit_committed = [](widgets::TableCellRef cell,
 ```
 <!-- /ckvision-snippet -->
 
+## GridPosition
+
+Header: `include/cvision/widgets/cell_grid.hpp`. A row and a column in a
+CellGridModel's own index space — where the cursor is, where a press landed.
+
+## GridRange
+
+Header: `include/cvision/widgets/cell_grid.hpp`. An inclusive rectangle of
+grid positions with its corners ordered: a selection, or a merged span.
+
+## GridCellStyle
+
+Header: `include/cvision/widgets/cell_grid.hpp`. What one cell changes about
+the grid's cell style — a foreground, a background, the attributes, the
+underline shape — with every member it leaves empty kept as the theme's.
+
+## GridCell
+
+Header: `include/cvision/widgets/cell_grid.hpp`. One cell as a CellGridModel
+answers it: its text, what it changes about the grid's cell style
+(`GridCellStyle`), and where the text sits in the cell.
+
+## GridFrame
+
+Header: `include/cvision/widgets/cell_grid.hpp`. The rows and columns a
+CellGrid shows, each frozen band first, and the merged spans that reach into
+them.
+
+## CellGridModel
+
+Header: `include/cvision/widgets/cell_grid.hpp`. The caller-owned provider of
+a CellGrid. Unlike the list, tree and table providers it also owns the cursor,
+the selection and the scroll origin, and is asked to move them (D-067); see
+[Data views](data-views.md#cell-grid-providers).
+
+## MaterializedCellGridModel
+
+Header: `include/cvision/widgets/cell_grid.hpp`. A CellGridModel over a table
+of values held in the model, with the generic rules: the cursor clamps to the
+table, a page is the body's height, a jump reaches the table's edge.
+
+## CellGrid
+
+Header: `include/cvision/widgets/cell_grid.hpp`. Use for a surface of cells: a
+worksheet, a query result, a matrix. Arrows move the cursor, Shift extends the
+selection, Ctrl jumps, Home and End reach the row's ends and, with Ctrl, the
+grid's; Enter or F2 activate the cursor cell, a printable key starts
+type-ahead, and Delete asks to clear. A press places the cursor, a drag
+extends, a double click activates, the wheel scrolls the body. The provider
+owns the cursor and is asked to move it.
+
+![CellGrid over a materialized model](generated/screenshots/widget-cellgrid.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="cellgrid" -->
+```cpp
+sheet.set_cells({
+    {"Region", "Q1", "Q2", "Total"},
+    {"North", "1240", "1310", "2550"},
+    {"South", "980", "1105", "2085"},
+    {"West", "1530", "1490", "3020"},
+    {"Sum", "3750", "3905", "7655"},
+});
+sheet.set_column_widths({8, 7, 7, 7});
+sheet.set_frozen(1, 0);  // the title row stays while the body scrolls
+for (widgets::GridIndex column = 0; column < sheet.column_count(); ++column) {
+    widgets::GridCell title = sheet.cell_at({0, column});
+    title.style.attributes = Attr::Bold;
+    sheet.set_cell({0, column}, title);
+}
+for (widgets::GridIndex row = 1; row < sheet.row_count(); ++row)
+    for (widgets::GridIndex column = 1; column < sheet.column_count(); ++column) {
+        widgets::GridCell figure = sheet.cell_at({row, column});
+        figure.alignment = widgets::CellAlignment::End;  // figures end at the right edge
+        sheet.set_cell({row, column}, figure);
+    }
+sheet.place_cursor({2, 1}, false);
+sheet.navigate(widgets::GridMove::Right, true);  // Shift+Right: a two-cell selection
+grid->set_model(sheet);
+grid->on_activate = [] { /* edit the cursor cell */ };
+grid->on_type_ahead = [](const std::string& text) { (void)text; /* start editing with it */ };
+```
+<!-- /ckvision-snippet -->
+
 ## TerminalView
 
 Header: `include/cvision/widgets/terminal_view.hpp`. Hosts one explicitly

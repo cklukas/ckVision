@@ -100,6 +100,14 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     r.list_selected_inactive =
         registry.intern("ckv.list.selected.inactive", Style{kBlack, kLightGray, Attr{}});
     r.table_header = registry.intern("ckv.table.header", Style{kWhite, kLightGray, Attr{}});
+    // The classic worksheet: yellow figures on the blue document surface,
+    // headers in the frame's blue-on-gray, a green cursor and a cyan
+    // selection — the two highlights differ in hue so a cursor inside its
+    // own selection is still the cursor.
+    r.cell_grid_normal = registry.intern("ckv.cellgrid.normal", Style{kYellow, kBlue, Attr{}});
+    r.cell_grid_header = registry.intern("ckv.cellgrid.header", Style{kBlue, kLightGray, Attr{}});
+    r.cell_grid_cursor = registry.intern("ckv.cellgrid.cursor", Style{kWhite, kGreen, Attr{}});
+    r.cell_grid_selection = registry.intern("ckv.cellgrid.selection", Style{kWhite, kCyan, Attr{}});
     r.memo_normal = registry.intern("ckv.memo.normal", Style{kBlack, kWhite, Attr{}});
     r.memo_focused = registry.intern("ckv.memo.focused", Style{kBlack, kWhite, Attr::Underline});
     r.memo_invalid = registry.intern("ckv.memo.invalid", Style{kWhite, kRed, Attr::Bold});
@@ -186,6 +194,10 @@ Theme make_classic_theme(const RoleRegistry& registry, const StandardRoles& role
     theme.set(roles.list_selected, Style{kBlack, kGreen, Attr{}});
     theme.set(roles.list_selected_inactive, Style{kBlack, kLightGray, Attr{}});
     theme.set(roles.table_header, Style{kWhite, kLightGray, Attr{}});
+    theme.set(roles.cell_grid_normal, Style{kYellow, kBlue, Attr{}});
+    theme.set(roles.cell_grid_header, Style{kBlue, kLightGray, Attr{}});
+    theme.set(roles.cell_grid_cursor, Style{kWhite, kGreen, Attr{}});
+    theme.set(roles.cell_grid_selection, Style{kWhite, kCyan, Attr{}});
     theme.set(roles.memo_normal, Style{kBlack, kWhite, Attr{}});
     theme.set(roles.memo_focused, Style{kBlack, kWhite, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kWhite, kRed, Attr::Bold});
@@ -291,6 +303,10 @@ Theme make_dark_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.list_selected, Style{kMonoFg, kDarkAccent, Attr{}});
     theme.set(roles.list_selected_inactive, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.table_header, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.cell_grid_normal, Style{kDarkYellow, kDarkBg, Attr{}});
+    theme.set(roles.cell_grid_header, Style{kDarkFg, kDarkPanel, Attr{}});
+    theme.set(roles.cell_grid_cursor, Style{kMonoFg, kDarkAccent, Attr::Bold});
+    theme.set(roles.cell_grid_selection, Style{kDarkFg, kDarkFocus, Attr{}});
     theme.set(roles.memo_normal, Style{kDarkFg, kDarkBg, Attr{}});
     theme.set(roles.memo_focused, Style{kDarkFg, kDarkBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoFg, kDarkRed, Attr::Bold});
@@ -362,6 +378,10 @@ Theme make_light_theme(const RoleRegistry& registry, const StandardRoles& roles)
     theme.set(roles.list_selected, Style{kLightFg, kLightAccent, Attr{}});
     theme.set(roles.list_selected_inactive, Style{kLightFg, kLightPanel, Attr{}});
     theme.set(roles.table_header, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.cell_grid_normal, Style{kLightFg, kLightBg, Attr{}});
+    theme.set(roles.cell_grid_header, Style{kLightFg, kLightPanel, Attr{}});
+    theme.set(roles.cell_grid_cursor, Style{kLightFg, kLightAccent, Attr::Bold});
+    theme.set(roles.cell_grid_selection, Style{kLightFg, kLightFocus, Attr{}});
     theme.set(roles.memo_normal, Style{kLightFg, kLightBg, Attr{}});
     theme.set(roles.memo_focused, Style{kLightFg, kLightBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoFg, kLightRed, Attr::Bold});
@@ -434,6 +454,12 @@ Theme make_mono_theme(const RoleRegistry& registry, const StandardRoles& roles) 
     theme.set(roles.list_selected, Style{kMonoBg, kMonoFg, Attr::Reverse});
     theme.set(roles.list_selected_inactive, Style{kMonoGray, kMonoBg, Attr::Bold});
     theme.set(roles.table_header, Style{kMonoFg, kMonoBg, Attr::Bold});
+    // Three distinctions, three attributes: headers by weight, the cursor by
+    // inversion, the selection by an underline the cursor does not wear.
+    theme.set(roles.cell_grid_normal, Style{kMonoFg, kMonoBg, Attr{}});
+    theme.set(roles.cell_grid_header, Style{kMonoFg, kMonoBg, Attr::Bold});
+    theme.set(roles.cell_grid_cursor, Style{kMonoBg, kMonoFg, Attr::Reverse});
+    theme.set(roles.cell_grid_selection, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.memo_normal, Style{kMonoFg, kMonoBg, Attr{}});
     theme.set(roles.memo_focused, Style{kMonoFg, kMonoBg, Attr::Underline});
     theme.set(roles.memo_invalid, Style{kMonoBg, kMonoFg, Attr::Reverse | Attr::Bold});
@@ -481,7 +507,9 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
         roles.menu_bar_active,       roles.menu_dropdown_normal,     roles.menu_dropdown_highlighted,
         roles.menu_dropdown_disabled, roles.list_normal,             roles.list_selected,
         roles.list_selected_inactive,
-        roles.table_header,          roles.memo_normal,              roles.memo_focused,
+        roles.table_header,          roles.cell_grid_normal,         roles.cell_grid_header,
+        roles.cell_grid_cursor,      roles.cell_grid_selection,
+        roles.memo_normal,           roles.memo_focused,
         roles.memo_invalid,
         roles.option_normal,         roles.option_focused,           roles.scrollbar_track,
         roles.scrollbar_thumb,       roles.image_fallback,           roles.canvas_fallback,
@@ -525,6 +553,9 @@ Theme make_high_contrast_theme(const RoleRegistry& registry, const StandardRoles
     // would be indistinguishable from the focused one.
     theme.set(roles.list_selected_inactive, Style{white, black, Attr::Bold});
     theme.set(roles.table_header, Style{black, white, Attr::Bold});
+    theme.set(roles.cell_grid_header, Style{black, white, Attr::Bold});
+    theme.set(roles.cell_grid_cursor, selected);
+    theme.set(roles.cell_grid_selection, Style{white, black, Attr::Underline});
     theme.set(roles.memo_focused, Style{white, black, Attr::Underline});
     theme.set(roles.memo_invalid, Style{black, white, Attr::Bold});
     theme.set(roles.option_focused, selected);

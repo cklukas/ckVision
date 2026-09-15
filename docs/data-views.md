@@ -127,6 +127,65 @@ formatted strings. Once the provider publishes the changed order, call
 The compact `set_rows()` API remains for static string tables. It is not the
 right choice for paged or refreshable data.
 
+## Cell grid providers
+
+`CellGrid` shows a two-dimensional surface of cells — a worksheet, a query
+result, a matrix — under a column header and beside a row gutter, with a
+cursor, a rectangular selection, frozen leading bands and merged spans. Its
+`CellGridModel` differs from the three providers above in one respect, and
+deliberately (D-067): **it owns the cursor, the selection and the scroll
+origin**, and the widget asks it to move them. In a grid of cells those are
+what the application's commands act on, and the rules for moving them need the
+application's knowledge — where a block of data ends, which rows are hidden,
+how a frozen band scrolls — so a second copy in the widget would have to be
+reconciled with the first on every key.
+
+```cpp
+class Worksheet final : public widgets::CellGridModel {
+public:
+    void set_viewport(int rows, int width) override;   // the room the grid has
+    widgets::GridFrame frame() const override;         // what it shows, frozen bands first
+    int column_width(widgets::GridIndex column) const override;
+    int row_header_width() const override;
+    std::string row_label(widgets::GridIndex row) const override;
+    std::string column_label(widgets::GridIndex column) const override;
+    widgets::GridCell cell(widgets::GridIndex row, widgets::GridIndex column) const override;
+    widgets::GridPosition cursor() const override;
+    std::optional<widgets::GridRange> selection() const override;
+    void navigate(widgets::GridMove move, bool extend) override;
+    void place_cursor(widgets::GridPosition at, bool extend) override;
+    void scroll_by(int rows, int columns) override;
+};
+
+Worksheet sheet;
+widgets::CellGrid grid;
+grid.set_model(sheet);                                  // sheet outlives grid
+grid.on_type_ahead = [&](const std::string& text) { /* start editing with it */ };
+```
+
+Indices are the provider's own ordered integers. The frame lists the visible
+rows and columns in display order, each frozen band first; a hidden row is
+simply not listed, and a span is resolved over the listed indices, so a region
+whose anchor has scrolled away still covers the cells the reader can see. A
+cell states only what it changes about the theme's cell style
+(`GridCellStyle`: a foreground, a background, the attributes, the underline
+shape), and the grid composes the cursor and the selection over it — a cell
+with no colour of its own wears the role, a coloured cell keeps both colours
+and swaps them, and an unreadable swap falls back to the role.
+
+The grid tells the provider its room through `set_viewport()` before every
+frame. After the provider changes anything itself — an edit, a command, a
+scroll it performed — the application calls `grid.model_changed()`; after a
+change the grid requested, the grid repaints on its own and reports through
+`on_changed`. Enter, F2, a printable key and Delete reach the owner through
+`on_activate`, `on_type_ahead` and `on_clear_request`, and are consumed only
+where a handler is installed.
+
+`MaterializedCellGridModel` holds a table of values with the generic rules —
+the cursor clamps to the table, a page is the body's height, a jump reaches
+the table's edge — for a grid that shows a result rather than edits a
+document, and for tests.
+
 ## Ownership and threading
 
 All three widgets borrow their provider. The provider must outlive the view or be

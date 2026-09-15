@@ -1661,3 +1661,43 @@ Tab, or returned to after a message box, would behave differently for no
 reason the reader can see. *Rejected:* a per-field option — the convention is
 what a reader of this kind of application expects everywhere, and an option
 is a second behaviour every application would have to choose between.
+
+**D-067 — A cell grid paints what its provider decides, cursor included.**
+`widgets::CellGrid` is the surface a worksheet, a query result or a matrix is
+shown on: cells under a column header and beside a row gutter, a cursor, a
+rectangular selection, frozen leading bands and merged spans. Its provider,
+`CellGridModel`, departs from D-043 in one respect: it OWNS the cursor, the
+selection and the scroll origin, and the widget asks it to move them —
+`navigate(GridMove, extend)`, `place_cursor`, `scroll_by` — rather than keeping
+a cursor of its own and reporting where it went. The reason is what those
+three things are in a grid of cells. A list's cursor is a place in a
+presentation; a grid's cursor and selection are the operands of the
+application's commands — fill this range, sort that one, format the cell
+here — and the rules for moving them belong to the application: where a block
+of data ends when the reader holds Ctrl, which rows are hidden and so take no
+step, how a frozen band scrolls under a page. A widget that kept a second copy
+would have to be told the answer to each of those and then reconciled with the
+application's own state on every key, and two copies of one truth disagree
+eventually — D-065's lesson about focus flags, applied to a cursor. So there
+is one copy, the provider's, read whenever the widget paints or hit-tests.
+`TerminalView` has the same shape with its emulator, and D-043's own `Table`
+already delegates ordering and commits to its provider. What the widget keeps
+is presentation: the frame as last laid out, the header and gutter geometry,
+the click-to-cell mapping, the overlays. Indices are the provider's own
+ordered integers; the frame lists the visible ones, each frozen band first, so
+a hidden row is simply absent and a span is resolved over the listed indices.
+A cell states only what it changes about the theme's cell style, and the
+cursor and selection compose over it: a cell with no colour of its own wears
+the role; a coloured cell keeps both colours and swaps them, falling back to
+the role when the swapped pair is unreadable by the widget's own integer
+luminance estimate — so a document's colouring stays visible under the
+highlight, and a theme still decides what a highlight is.
+`MaterializedCellGridModel` supplies the generic rules for a grid with no
+application behind it, and is what the figure and the tests drive.
+*Rejected:* a widget-owned cursor mirrored into the application (the
+two-truths reconciliation above); a display-index contract (hidden rows would
+occupy display slots, or every provider would renumber its rows on each
+frame); scrollbars in this first version (the grids that asked for the widget
+are unbounded surfaces, and a bounded consumer can pair it with a Scrollbar
+through `scroll_by`); in-cell editing (a worksheet edits in a formula line,
+and `Table` already covers the typed-cell case).
