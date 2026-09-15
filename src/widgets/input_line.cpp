@@ -45,6 +45,11 @@ void InputLine::set_text(std::string text) {
     revalidate();
 }
 
+void InputLine::set_cursor(std::size_t grapheme) {
+    const std::size_t at = std::min(grapheme, graphemes_.size());
+    move_cursor(has_mask() ? mask_next_editable(at) : at, false);
+}
+
 std::string InputLine::text() const {
     std::string out;
     for (const auto& g : graphemes_) out += g;

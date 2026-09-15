@@ -1323,3 +1323,24 @@ CK_TEST(an_input_line_exactly_as_wide_as_its_text_shows_all_of_it) {
     // the first one, which is not a trade a field that fits should make.
     CK_CHECK(row_text(surface, 0) == "2026");
 }
+
+CK_TEST(an_owner_places_the_caret_and_the_selection_goes_with_it) {
+    PresetField f("=SUM(");
+    CK_CHECK(f.input->has_selection());  // arrived at from the keyboard: offered whole
+    f.input->set_cursor(1);
+    CK_CHECK(!f.input->has_selection());
+    CK_CHECK(f.input->cursor() == 1U);
+    f.type("x");
+    CK_CHECK(f.input->text() == "=xSUM(");
+    f.input->set_cursor(100);  // past the end: the end
+    CK_CHECK(f.input->cursor() == 6U);
+
+    // A masked field has fixed places to type into; the caret lands on one.
+    Fixture g;
+    InputLine masked;
+    masked.set_context(g.ctx());
+    masked.on_attached();
+    masked.set_mask("99-99");
+    masked.set_cursor(2);
+    CK_CHECK(masked.cursor() == 3U);
+}

@@ -1334,7 +1334,9 @@ owner's own `set_text()`. A field the focus reaches from the keyboard — a dial
 opening on it, Tab, the focus coming back — offers its text selected with the
 caret at the end: typing replaces it, Backspace or Delete clears it, and Right,
 End, Left, Home or Insert keep it and edit from there. A pointer press places
-the caret where it lands instead (D-066).
+the caret where it lands instead (D-066), and so does an owner's `set_cursor()`
+— a formula line seeded with the reader's first keystroke, say, continues
+after it rather than offering it for replacement.
 
 ![InputLine text editing control](generated/screenshots/widget-inputline.svg)
 

@@ -54,6 +54,13 @@ public:
     std::string text() const;
 
     std::size_t cursor() const noexcept { return cursor_; }
+    // Places the caret at `grapheme` (clamped to the text; on a masked field,
+    // at the next editable position) with nothing selected — what an owner
+    // does after seeding the field with a keystroke, or to point at the
+    // place a validator objected to. Editing continues from there; the
+    // select-on-focus offer (D-066) is for a field the reader arrives at,
+    // and an owner that has just placed the caret has decided otherwise.
+    void set_cursor(std::size_t grapheme);
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
     std::pair<std::size_t, std::size_t> selection_range() const noexcept;  // [begin, end) in graphemes; {cursor_,cursor_} if none
 
