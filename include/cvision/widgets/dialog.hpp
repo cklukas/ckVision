@@ -180,6 +180,13 @@ struct FieldDescriptor {
     // (DialogDescriptor::field_description_rows): shown there, word-wrapped,
     // while the field has the focus. Lines break at '\n'.
     std::string description{};
+    // Radio only: how many columns its choices flow into, row-major (D-068).
+    // One stacks them. A form that asks several short questions in a row —
+    // keep, on, off or reset, for each of four properties — puts each set on
+    // one row by naming as many columns as it has choices; a field on one
+    // row is then labelled beside it like a text field, where a field of
+    // several rows captions its choices above them.
+    int columns = 1;
 };
 
 // What pressing a button does to the dialog around it. A button descriptor is

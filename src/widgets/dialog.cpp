@@ -757,16 +757,29 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         }
 
         if (field.kind == FieldKind::Radio) {
-            // The group carries its own caption above its choices, rather
-            // than a Label beside them: a set of alternatives is one thing a
-            // form asks about, and a label in the left column would put the
-            // question level with the first answer.
+            // A group of several rows carries its own caption above its
+            // choices, rather than a Label beside them: a set of alternatives
+            // is one thing a form asks about, and a label in the left column
+            // would put the question level with the first answer. A group
+            // whose choices share one row has no such row to be level with,
+            // so it is labelled beside, in the column every other field's
+            // label stands in (D-068).
             auto radio = std::make_unique<RadioGroup>(field.options);
-            if (!field.label.empty()) radio->set_group_label(field.label);
+            radio->set_columns(field.columns);
             radio->set_selected(field.initial_selection);
+            const bool one_row = radio->vertical_size_hint().preferred <= 1;
+            Label* beside = nullptr;
+            if (!field.label.empty() && one_row) {
+                auto label = std::make_unique<Label>(field.label);
+                beside = static_cast<Label*>(row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
+                beside_labels.push_back(beside);
+            } else if (!field.label.empty()) {
+                radio->set_group_label(field.label);
+            }
             auto* radio_ptr =
                 static_cast<RadioGroup*>(row->add_item(std::move(radio), LayoutSpec{SizePolicy::Expanding, 1}));
-            result.labels.push_back(nullptr);
+            if (beside != nullptr) beside->set_buddy(radio_ptr);
+            result.labels.push_back(beside);
             result.inputs.push_back(nullptr);
             result.memos.push_back(nullptr);
             result.checks.push_back(nullptr);
@@ -774,7 +787,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(nullptr);
             result.times.push_back(nullptr);
-            const int rows = static_cast<int>(field.options.size()) + (field.label.empty() ? 0 : 1);
+            const int rows = radio_ptr->vertical_size_hint().preferred;
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, std::max(1, rows)});
             continue;
         }

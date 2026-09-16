@@ -14,6 +14,8 @@
 #include <optional>
 #include <vector>
 
+#include "cvision/core/golden.hpp"
+#include "cvision/scene/golden_capture.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/command.hpp"
@@ -607,6 +609,44 @@ CK_TEST(a_radio_group_reports_what_the_reader_moved_to_rather_than_what_it_opene
     CK_CHECK(f.app.step(0));
     CK_CHECK(presentation.completed());
     CK_CHECK(presentation.result()->selected == std::vector<int>{1});
+}
+
+CK_TEST(a_radio_field_lays_its_choices_in_the_columns_it_names) {
+    // FieldDescriptor::columns (D-068). Four toggles of four choices each
+    // take four rows, not twenty, and the caption's letter reaches each.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Format";
+    for (const char* label : {"&Bold:", "&Italic:"})
+        descriptor.fields.push_back(FieldDescriptor{.label = label,
+                                                     .kind = ckv::widgets::FieldKind::Radio,
+                                                     .options = {"Keep", "On", "Off", "Reset"},
+                                                     .initial_selection = 0,
+                                                     .columns = 4});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    const std::string frame = ckv::golden::serialize(
+        ckv::scene::capture(f.app.composed_surface(), f.app.current_cursor()));
+    // The label is drawn without its marker, beside the one row its four
+    // choices share, as a text field's label would be.
+    CK_CHECK(frame.find("&Bold") == std::string::npos);
+    const std::size_t bold = frame.find("Bold:");
+    CK_CHECK(bold != std::string::npos);
+    const std::size_t choices = frame.find("(•) Keep  ( ) On  ( ) Off  ( ) Reset");
+    CK_CHECK(choices != std::string::npos);
+    CK_CHECK(frame.find('\n', bold) == frame.find('\n', choices));
+
+    // Alt+I reaches the second group; Right picks On there; Enter accepts.
+    f.terminal.inject_bytes("\x1bi", 0);
+    CK_CHECK(f.app.step(0));
+    f.terminal.inject_bytes("\x1b[C", 0);
+    CK_CHECK(f.app.step(0));
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    CK_CHECK((presentation.result()->selected == std::vector<int>{0, 1}));
 }
 
 CK_TEST(a_combo_field_answers_with_its_index_and_its_text) {

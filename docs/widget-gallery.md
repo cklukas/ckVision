@@ -1659,7 +1659,15 @@ choices. Arrows select a row and Space toggles it; optionally enable tri-state
 values as shown in Forms. Its visual contract is square `[ ]`/`[X]` markers.
 `set_group_label()` gives the group an owned caption one row above the choices;
 the caption changes from its normal label colour to the focused-option
-foreground while the group owns keyboard focus.
+foreground while the group owns keyboard focus. The caption is the group's
+label in the sense a `Label` is a field's: it may carry a `&`-marked mnemonic,
+and Alt with that letter, pressed anywhere in the group's window, gives the
+group the focus. `set_columns()` lets the choices flow into columns, row-major,
+each column as wide as the widest choice in it, so one row packs its choices
+and several rows align as a table; Left and Right step through the choices in
+order, Up and Down move within a column, and an arrow that would not move the
+cursor — Up on a single row, any arrow on a lone box — walks the window's
+controls instead, as D-065 has every dialog do.
 
 ![CheckGroup with mnemonic options](generated/screenshots/widget-checkgroup.svg)
 
@@ -1718,7 +1726,12 @@ Header: `include/cvision/widgets/option_group.hpp`. Use exactly one choice.
 Arrows and mnemonics change its selected index. Its visual contract is rounded
 `( )`/`(U+2022)` markers. `set_group_label()` gives the group an owned caption
 one row above the choices; the caption changes from its normal label colour to
-the focused-option foreground while the group owns keyboard focus. Use
+the focused-option foreground while the group owns keyboard focus, and its
+`&`-marked letter reaches the group from anywhere in its window, as a
+[CheckGroup](#checkgroup)'s does. `set_columns()` lays the choices out in
+columns the same way: the figure's second group asks one question of four
+short answers in two columns rather than four rows, which is how a form that
+asks the same short question several times over stays on one screen. Use
 `set_column_width()` only for a measured form column; it clips long labels at
 that specified edge rather than changing the control's interaction model.
 
@@ -1730,10 +1743,17 @@ The compiled scene below is the source of this figure.
 ```cpp
 auto* target = content.make<widgets::RadioGroup>(
     std::vector<std::string>{"&Static", "S&hared"});
-target->set_group_label("Library");
+target->set_group_label("&Library");  // Alt+L focuses the group
 target->set_bounds(Rect{26, 1, 14, 3});
 target->set_selected(1);
 target->on_changed = [](int index) { (void)index; };
+
+auto* level = content.make<widgets::RadioGroup>(
+    std::vector<std::string>{"None", "Size", "Speed", "Full"});
+level->set_group_label("&Optimization");
+level->set_columns(2);  // two choices per row, each column as wide as its widest
+level->set_bounds(Rect{20, 5, 21, 3});
+level->set_selected(2);
 ```
 <!-- /ckvision-snippet -->
 

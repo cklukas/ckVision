@@ -1701,3 +1701,38 @@ frame); scrollbars in this first version (the grids that asked for the widget
 are unbounded surfaces, and a bounded consumer can pair it with a Scrollbar
 through `scroll_by`); in-cell editing (a worksheet edits in a formula line,
 and `Table` already covers the typed-cell case).
+
+**D-068 — An option group's caption is its label, and its choices may run in
+columns.** A `CheckGroup` or `RadioGroup` with a caption drew the caption's
+'&' literally: the caption was text where every other label in a form is a
+label, with a marked letter that Alt reaches. So the caption is parsed as
+`Label` parses its text and drawn the same way, and the window's mnemonic
+routes (`activate_label_mnemonic`, `activate_control_mnemonic`) treat a group
+whose caption marks the letter as they treat a label's buddy: Alt with the
+letter, pressed anywhere in the window, gives the group the focus. A choice's
+own mnemonic keeps acting while the group has the focus, as before; routing
+choices from the window too was not done, because a form's captions and
+labels already share one alphabet and its choices would crowd it.
+
+The second half is shape. The groups stacked one choice per row, and a form
+that asks the same short question several times over — keep, on, off or
+reset, of bold, italic, strike and underline — took twenty rows and a
+scrollbar for what every classic dialog fits in four. `set_columns()` lets
+the choices flow into columns, row-major, two cells apart and each column as
+wide as the widest choice in it — so one row packs its choices, as the classic
+dialogs do, and several rows align as a table — and `FieldDescriptor::columns` says the same for
+a descriptor's `Radio` field — which, on one row, is labelled beside that row
+in the form's label column like a text field, since the reason a group of
+several rows captions its choices above them (a label beside would sit level
+with the first answer) does not arise. A choice owns its row from its marker to the
+next column's, or to the edge for the last column, for its highlight and for
+a press alike, so a stacked group paints exactly as it did. The arrows follow
+the shape: Left and Right step through the choices in order and wrap, Up and
+Down move within the cursor's column and wrap there, and an arrow that would
+not move the cursor — Up on a single row, any arrow on a lone box — is not
+the group's, so it reaches the window and walks its controls, which is D-065's
+rule stated for a group. *Rejected:* a horizontal flag (a count says how the
+flow looks, and a flag would still need the count for anything but one row);
+columns all as wide as the group's widest choice (a row of four short
+answers grew to twice its width for one long one, and no longer fit beside
+its label on the eighty-column baseline).

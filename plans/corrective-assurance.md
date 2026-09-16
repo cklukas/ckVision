@@ -96,9 +96,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 47 | WP-66 — Text on a window's border | 0.25 pw | **Implementation complete — gate pending** | WP-65 | FrameText overlay in the border's own style; Window::frame_style; EditorWindow's readout and the spin example use it |
 | 48 | WP-67 — Text fields that offer their preset | 0.25 pw | **Implementation complete — gate pending** | WP-66 | D-066: keyboard focus selects an input line's text, caret at the end; a press places the caret; Insert keeps the text |
 | 49 | WP-68 — A cell grid | 1 pw | **Implementation complete — gate pending** | WP-67 | D-067: `CellGrid` over a provider that owns the cursor, the selection and the scroll origin; header, gutter, frozen bands, spans, cell styles, overlays; `MaterializedCellGridModel`; four theme roles |
-| 50 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 51 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 52 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 50 | WP-69 — Option groups with captions that route and choices in columns | 0.25 pw | **Implementation complete — gate pending** | WP-68 | D-068: a group's caption carries a mnemonic that focuses the group from its window; `set_columns()` and `FieldDescriptor::columns` lay choices out row-major; arrows step the sequence and the column, and one that would not move is the window's |
+| 51 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 52 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 53 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2780,6 +2781,34 @@ and reinvent the cursor, the selection, the frozen bands and the spans.
   callbacks, and that only listed cells are asked for.
 - Data views and widget gallery sections, API index and coverage rows, the
   `widget-cellgrid` figure.
+
+### WP-69 — Option groups with captions that route and choices in columns
+
+**Purpose.** A captioned option group drew its caption's `&` literally, so a
+form's radio fields were the one control Alt could not reach; and the groups
+stacked one choice per row, so a form asking the same short question of four
+properties scrolled where every classic dialog fits on one screen.
+
+**Work.**
+
+- The caption is parsed and drawn as a `Label`'s text, and the window's
+  mnemonic routes focus a group whose caption marks the letter (D-068).
+- `set_columns()` on both groups: row-major flow, columns as wide as the
+  widest choice, a choice's span from its marker to the next column's for
+  highlight and press alike; Left and Right step the sequence, Up and Down
+  the column, and an arrow that would not move the cursor goes to the window.
+- `FieldDescriptor::columns` for a descriptor's `Radio` field, with the row
+  count taken from the group's own size hint.
+
+**Acceptance.**
+
+- Unit coverage: the caption's mnemonic parsed, drawn without its marker and
+  accented; Alt+letter focusing a group from another control in its window;
+  size hints, the row-major flow and the half-full last row; the arrows in a
+  row, in a column and on a lone box; presses by column and in the gap; a
+  descriptor radio field on one row that Alt reaches and Right moves.
+- Gallery sections for both groups, the dialogs page, the header comments,
+  and the option group figures showing a two-column captioned group.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

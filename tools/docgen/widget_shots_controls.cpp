@@ -172,20 +172,27 @@ void shot_option_groups(const std::filesystem::path& dir) {
     // ckvision-doc: radiogroup
     auto* target = content.make<widgets::RadioGroup>(
         std::vector<std::string>{"&Static", "S&hared"});
-    target->set_group_label("Library");
+    target->set_group_label("&Library");  // Alt+L focuses the group
     target->set_bounds(Rect{26, 1, 14, 3});
     target->set_selected(1);
     target->on_changed = [](int index) { (void)index; };
+
+    auto* level = content.make<widgets::RadioGroup>(
+        std::vector<std::string>{"None", "Size", "Speed", "Full"});
+    level->set_group_label("&Optimization");
+    level->set_columns(2);  // two choices per row, each column as wide as its widest
+    level->set_bounds(Rect{20, 5, 21, 3});
+    level->set_selected(2);
     // ckvision-doc-end: radiogroup
 
     stage.focus(flags);
     stage.step();
     stage.save_window(dir, "widget-checkgroup");
-    // The radio group's own figure, cut from the same composed screen, so
+    // The radio groups' own figure, cut from the same composed screen, so
     // the two are photographed under identical conditions.
     stage.focus(target);
     stage.step();
-    stage.save_content(dir, "widget-radiogroup", Rect{26, 0, 15, 5});
+    stage.save_content(dir, "widget-radiogroup", Rect{20, 0, 22, 9});
 }
 
 void shot_combo_box(const std::filesystem::path& dir) {

@@ -10,6 +10,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
+#include "cvision/widgets/option_group.hpp"
 
 namespace ckv::widgets {
 
@@ -38,16 +39,31 @@ bool is_label_mnemonic_request(const KeyEvent& event) noexcept {
            !event.chord.text.empty();
 }
 
-bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
-                                       ui::Application& app) {
-    if (!view.visible() || !view.enabled()) return false;
+// A label's buddy, or an option group whose caption is its own label: the
+// control `query` should give the focus to, when `view` names one.
+ui::View* labeled_target(ui::View& view, ui::View& scope, const std::string& query) {
     if (auto* label = dynamic_cast<Label*>(&view); label != nullptr &&
         !label->mnemonic().empty() && ascii_ci_equal(label->mnemonic(), query)) {
         ui::View* const buddy = label->buddy();
-        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) {
-            app.set_focus(buddy);
-            return true;
-        }
+        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) return buddy;
+    }
+    if (auto* checks = dynamic_cast<CheckGroup*>(&view); checks != nullptr &&
+        !checks->group_mnemonic().empty() && ascii_ci_equal(checks->group_mnemonic(), query) &&
+        checks->focusable())
+        return checks;
+    if (auto* radios = dynamic_cast<RadioGroup*>(&view); radios != nullptr &&
+        !radios->group_mnemonic().empty() && ascii_ci_equal(radios->group_mnemonic(), query) &&
+        radios->focusable())
+        return radios;
+    return nullptr;
+}
+
+bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
+                                       ui::Application& app) {
+    if (!view.visible() || !view.enabled()) return false;
+    if (ui::View* const target = labeled_target(view, scope, query); target != nullptr) {
+        app.set_focus(target);
+        return true;
     }
     for (const auto& child : view.children())
         if (activate_label_mnemonic_recursive(*child, scope, query, app)) return true;
@@ -57,13 +73,9 @@ bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const st
 bool activate_control_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
                                          ui::Application& app) {
     if (!view.visible() || !view.enabled()) return false;
-    if (auto* label = dynamic_cast<Label*>(&view); label != nullptr &&
-        !label->mnemonic().empty() && ascii_ci_equal(label->mnemonic(), query)) {
-        ui::View* const buddy = label->buddy();
-        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) {
-            app.set_focus(buddy);
-            return true;
-        }
+    if (ui::View* const target = labeled_target(view, scope, query); target != nullptr) {
+        app.set_focus(target);
+        return true;
     }
     if (auto* button = dynamic_cast<Button*>(&view); button != nullptr &&
         button->activate_mnemonic(query))

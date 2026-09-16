@@ -103,10 +103,11 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 
 ![Invalid profile dialog](generated/screenshots/forms-invalid-dialog.svg)
 
-The labels that stand beside a control — every field but a `Check`, a `Radio`
-(which captions its own choices) and a `Note` — form one column as wide as the
-widest of them, so each control starts at the same place and the answers read
-straight down the form.
+The labels that stand beside a control — every field but a `Check`, a `Note`
+and a `Radio` of several rows, which captions its own choices above them —
+form one column as wide as the widest of them, so each control starts at the
+same place and the answers read straight down the form. A `Radio` whose
+choices share one row is labelled beside that row like any other field.
 
 ## Fields that are not text
 
@@ -115,7 +116,10 @@ default; `Check` is a single checkbox carrying `label` as its own text; `Note`
 is text the form states rather than asks. `Memo` is a multi-line, word-wrapped
 text field; use `memo_rows` to request its visible height (five rows by
 default). `Radio`, `Combo`, `Number`, `Date`, and `Time` materialize their
-corresponding typed ckVision controls.
+corresponding typed ckVision controls. A `Radio` field's `label` captions its
+choices, mnemonic included, and `columns` lets the choices flow into columns:
+a form that asks "keep, on, off or reset" of four properties names four
+columns and takes four rows for it rather than twenty.
 
 ```cpp
 descriptor.fields.push_back(widgets::FieldDescriptor{

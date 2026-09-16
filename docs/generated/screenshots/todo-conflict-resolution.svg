@@ -1171,17 +1171,16 @@
 <path d="M 112.5 251.5 L 112.5 261 L 112.5 270.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 112.5 251.5 L 112.5 261 L 112.5 270.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="126" y="266" xml:space="preserve" fill="#ffffff">&amp;</text>
-<text x="135" y="266" xml:space="preserve" fill="#ffffff">R</text>
-<text x="144" y="266" xml:space="preserve" fill="#ffffff">e</text>
-<text x="153" y="266" xml:space="preserve" fill="#ffffff">s</text>
-<text x="162" y="266" xml:space="preserve" fill="#ffffff">o</text>
-<text x="171" y="266" xml:space="preserve" fill="#ffffff">l</text>
-<text x="180" y="266" xml:space="preserve" fill="#ffffff">u</text>
-<text x="189" y="266" xml:space="preserve" fill="#ffffff">t</text>
-<text x="198" y="266" xml:space="preserve" fill="#ffffff">i</text>
-<text x="207" y="266" xml:space="preserve" fill="#ffffff">o</text>
-<text x="216" y="266" xml:space="preserve" fill="#ffffff">n</text>
+<text x="126" y="266" xml:space="preserve" fill="#ffff55">R</text>
+<text x="135" y="266" xml:space="preserve" fill="#ffffff">e</text>
+<text x="144" y="266" xml:space="preserve" fill="#ffffff">s</text>
+<text x="153" y="266" xml:space="preserve" fill="#ffffff">o</text>
+<text x="162" y="266" xml:space="preserve" fill="#ffffff">l</text>
+<text x="171" y="266" xml:space="preserve" fill="#ffffff">u</text>
+<text x="180" y="266" xml:space="preserve" fill="#ffffff">t</text>
+<text x="189" y="266" xml:space="preserve" fill="#ffffff">i</text>
+<text x="198" y="266" xml:space="preserve" fill="#ffffff">o</text>
+<text x="207" y="266" xml:space="preserve" fill="#ffffff">n</text>
 <g data-box-drawing="double">
 <path d="M 787.5 251.5 L 787.5 261 L 787.5 270.5" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 787.5 251.5 L 787.5 261 L 787.5 270.5" fill="none" stroke="#c8c8c8" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

@@ -66,7 +66,9 @@ private:
 
 // Widgets-layer mnemonic routing for containers that own Label subtrees.
 // Handles Alt+Char key presses, finds the first visible/enabled matching
-// Label inside `scope`, and focuses its still-live, focusable buddy.
+// Label inside `scope`, and focuses its still-live, focusable buddy. An
+// option group's caption is its own label: a CheckGroup or RadioGroup whose
+// caption marks the letter is focused the same way (D-068).
 bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
 
 // Extends label-to-buddy mnemonics with direct Button accelerators. Windows
