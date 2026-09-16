@@ -1721,10 +1721,12 @@ scrollbar for what every classic dialog fits in four. `set_columns()` lets
 the choices flow into columns, row-major, two cells apart and each column as
 wide as the widest choice in it — so one row packs its choices, as the classic
 dialogs do, and several rows align as a table — and `FieldDescriptor::columns` says the same for
-a descriptor's `Radio` field — which, on one row, is labelled beside that row
-in the form's label column like a text field, since the reason a group of
-several rows captions its choices above them (a label beside would sit level
-with the first answer) does not arise. A choice owns its row from its marker to the
+a descriptor's `Radio` field — which, laid out in columns and fitting one
+row, is labelled beside that row in the form's label column like a text
+field, since the reason a group of several rows captions its choices above
+them (a label beside would sit level with the first answer) does not arise;
+a stacked list keeps its caption above even when it holds one entry, so a
+form does not change shape with the number of entries it offers. A choice owns its row from its marker to the
 next column's, or to the edge for the last column, for its highlight and for
 a press alike, so a stacked group paints exactly as it did. The arrows follow
 the shape: Left and Right step through the choices in order and wrap, Up and

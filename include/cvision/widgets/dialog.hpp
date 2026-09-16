@@ -183,9 +183,10 @@ struct FieldDescriptor {
     // Radio only: how many columns its choices flow into, row-major (D-068).
     // One stacks them. A form that asks several short questions in a row —
     // keep, on, off or reset, for each of four properties — puts each set on
-    // one row by naming as many columns as it has choices; a field on one
-    // row is then labelled beside it like a text field, where a field of
-    // several rows captions its choices above them.
+    // one row by naming as many columns as it has choices; a field laid out
+    // in columns whose choices fit one row is then labelled beside it like
+    // a text field, where a stacked field, or one of several rows, captions
+    // its choices above them.
     int columns = 1;
 };
 

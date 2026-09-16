@@ -757,17 +757,20 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         }
 
         if (field.kind == FieldKind::Radio) {
-            // A group of several rows carries its own caption above its
-            // choices, rather than a Label beside them: a set of alternatives
-            // is one thing a form asks about, and a label in the left column
-            // would put the question level with the first answer. A group
-            // whose choices share one row has no such row to be level with,
-            // so it is labelled beside, in the column every other field's
-            // label stands in (D-068).
+            // A stacked group carries its own caption above its choices,
+            // rather than a Label beside them: a set of alternatives is one
+            // thing a form asks about, and a label in the left column would
+            // put the question level with the first answer. A group the
+            // descriptor lays out in columns, and whose choices then share
+            // one row, has no such row to be level with, so it is labelled
+            // beside, in the column every other field's label stands in
+            // (D-068). A stacked list that happens to hold one choice is
+            // still a list: its caption stays above, so a form does not
+            // change shape with the number of entries it offers.
             auto radio = std::make_unique<RadioGroup>(field.options);
             radio->set_columns(field.columns);
             radio->set_selected(field.initial_selection);
-            const bool one_row = radio->vertical_size_hint().preferred <= 1;
+            const bool one_row = field.columns > 1 && radio->vertical_size_hint().preferred <= 1;
             Label* beside = nullptr;
             if (!field.label.empty() && one_row) {
                 auto label = std::make_unique<Label>(field.label);

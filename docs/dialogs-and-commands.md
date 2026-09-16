@@ -104,10 +104,12 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 ![Invalid profile dialog](generated/screenshots/forms-invalid-dialog.svg)
 
 The labels that stand beside a control — every field but a `Check`, a `Note`
-and a `Radio` of several rows, which captions its own choices above them —
-form one column as wide as the widest of them, so each control starts at the
-same place and the answers read straight down the form. A `Radio` whose
-choices share one row is labelled beside that row like any other field.
+and a stacked `Radio`, which captions its own choices above them — form one
+column as wide as the widest of them, so each control starts at the same
+place and the answers read straight down the form. A `Radio` laid out in
+`columns` whose choices share one row is labelled beside that row like any
+other field; a stacked list keeps its caption above however many entries it
+holds, so a form does not change shape with the number it offers.
 
 ## Fields that are not text
 

@@ -649,6 +649,28 @@ CK_TEST(a_radio_field_lays_its_choices_in_the_columns_it_names) {
     CK_CHECK((presentation.result()->selected == std::vector<int>{0, 1}));
 }
 
+CK_TEST(a_stacked_radio_field_of_one_entry_keeps_its_caption_above) {
+    // A list of recent documents that happens to hold one document is still
+    // a list: its caption stays above the entry, where it will be when there
+    // are three, so the form does not change shape with the count.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Document",
+                                                 .kind = ckv::widgets::FieldKind::Radio,
+                                                 .options = {"report.pdf"},
+                                                 .initial_selection = 0});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    const std::string frame = ckv::golden::serialize(
+        ckv::scene::capture(f.app.composed_surface(), f.app.current_cursor()));
+    const std::size_t caption = frame.find("Document");
+    const std::size_t entry = frame.find("(•) report.pdf");
+    CK_CHECK(caption != std::string::npos);
+    CK_CHECK(entry != std::string::npos);
+    CK_CHECK(frame.find('\n', caption) < entry);
+}
+
 CK_TEST(a_combo_field_answers_with_its_index_and_its_text) {
     // FieldKind::Combo, for a list too long to show at once. Both answers are
     // filled: an index for what was picked, and the text for a caller that
