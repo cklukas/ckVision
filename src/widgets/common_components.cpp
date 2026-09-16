@@ -1426,6 +1426,12 @@ void CommandPalette::draw(scene::Painter& painter) {
 }
 bool CommandPalette::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
+    // A typed character reaches the query the way a terminal reports it:
+    // as a Key::Char event. Alt, Ctrl and Super chords stay the registry's.
+    if (event.chord.key == Key::Char && !event.chord.text.empty() &&
+        !has_modifier(event.chord.modifiers, Modifier::Alt) && !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super))
+        return on_text(TextEvent{event.chord.text, false});
     const auto commands = filtered_commands();
     if (event.chord.key == Key::Down && !commands.empty()) { highlighted_ = std::min(highlighted_ + 1, commands.size() - 1); invalidate(); return true; }
     if (event.chord.key == Key::Up && highlighted_ > 0) { --highlighted_; invalidate(); return true; }

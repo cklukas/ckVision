@@ -291,6 +291,30 @@ CK_TEST(property_inspector_wizard_notifications_and_tooltip_cover_utility_compon
     CK_CHECK(!tooltip.shown());
 }
 
+CK_TEST(the_command_palette_accepts_ordinary_typed_characters) {
+    // The same regression as the search box's: a terminal reports typed
+    // characters as Key::Char events, and the palette's query only ever
+    // took TextEvent, so a reader could not type into it.
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    static_cast<void>(app.commands().declare(ckv::ui::CommandDescriptor{
+        .key = "test.build", .title = "Build", .category = "test", .handler = [] {}}));
+    auto palette = std::make_unique<CommandPalette>();
+    CommandPalette* palette_ptr = palette.get();
+    app.root().add(std::move(palette));
+    const auto type = [palette_ptr](const char* text, Modifier modifiers = Modifier::None) {
+        return palette_ptr->on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, modifiers, text}});
+    };
+    CK_CHECK(type("b"));
+    CK_CHECK(type("u"));
+    CK_CHECK(palette_ptr->query() == "bu");
+    CK_CHECK(palette_ptr->highlighted_command().has_value());
+    // A chord is the registry's, not the query's.
+    CK_CHECK(!type("x", Modifier::Alt));
+    CK_CHECK(palette_ptr->query() == "bu");
+}
+
 CK_TEST(a_search_box_accepts_ordinary_typed_characters) {
     // Regression: the box only ever appended text from TextEvent, but a
     // terminal reports typed characters as Key::Char key events — TextEvent
