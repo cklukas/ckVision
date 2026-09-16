@@ -1738,3 +1738,17 @@ flow looks, and a flag would still need the count for anything but one row);
 columns all as wide as the group's widest choice (a row of four short
 answers grew to twice its width for one long one, and no longer fit beside
 its label on the eighty-column baseline).
+
+**D-069 — With nothing focused, the status line's hint is the root's.** The
+hint resolved only through the focused view, so an application whose desktop
+was empty — a database manager before its first file is opened — showed no
+hint at all where the Turbo Vision convention shows the line that says how to
+begin ("F3 opens a database"). The status line now resolves from the focused
+view when there is one and from `Application::root()` otherwise: the root is
+the one view that stands for the application as a whole, and a key given to
+it answers exactly the situation of nothing else answering. A focused view's
+own key, or any ancestor's, still outranks it, since the walk from a focused
+view reaches the root last. *Rejected:* a separate "default hint" string on
+the status line (a second mechanism for what the provider already maps, and
+one the F1 route could not share); resolving from the desktop (a dock's
+sibling, which the status line would have to be told about).

@@ -122,6 +122,31 @@ CK_TEST(hint_updates_when_focus_moves_to_a_different_view) {
     CK_CHECK(status.current_hint() == "b");
 }
 
+CK_TEST(with_nothing_focused_the_hint_resolves_from_the_roots_help_context_key) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_hint_provider([](const std::string& key) { return "Hint for " + key; });
+    // An empty desktop: the root's key stands for the application as a whole.
+    app.root().set_help_context_key("desktop");
+    CK_CHECK(app.focused() == nullptr);
+    CK_CHECK(status.current_hint() == "Hint for desktop");
+    // A focused view with a key of its own outranks the root's.
+    auto* view = app.root().add_child(std::make_unique<View>());
+    view->set_focus_policy(FocusPolicy::TabStop);
+    view->set_help_context_key("topic.a");
+    app.set_focus(view);
+    CK_CHECK(status.current_hint() == "Hint for topic.a");
+    // A focused view without one inherits the root's, as any ancestor's.
+    auto* plain = app.root().add_child(std::make_unique<View>());
+    plain->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(plain);
+    CK_CHECK(status.current_hint() == "Hint for desktop");
+}
+
 // --- Items -----------------------------------------------------------
 
 CK_TEST(the_items_follow_the_focused_views_command_context) {

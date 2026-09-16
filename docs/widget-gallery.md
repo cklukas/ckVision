@@ -1946,7 +1946,11 @@ registry action as a menu item; the registered key chord automatically uses
 the same `ckv.hotkey` accent as menu mnemonics. `set_context_items()` gives a
 command context (`View::set_command_context`) an item set of its own, shown
 instead of the ordinary items while focus is inside that context — an editor's
-keys while the editor has the focus, a list's while the list does.
+keys while the editor has the focus, a list's while the list does. The hint
+is resolved through the focused view's nearest help-context key, and with
+nothing focused — an empty desktop — through the root's (D-069): an
+application that gives `Application::root()` a key has a hint before its
+first window opens.
 
 ![StatusLine command hints](generated/screenshots/widget-statusline.svg)
 

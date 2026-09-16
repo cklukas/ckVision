@@ -123,9 +123,12 @@ void StatusLine::set_transient_hint(std::string hint) {
 std::string StatusLine::current_hint() const {
     if (!transient_hint_.empty()) return transient_hint_;
     if (!hint_provider_) return {};
-    const ui::View* focused = context().app->focused();
-    if (focused == nullptr) return {};
-    const std::string* key = focused->resolve_help_context_key();
+    // Nothing focused — an empty desktop — resolves from the root, which
+    // stands for the application as a whole (D-069): an application that
+    // wants a hint there gives its root the key.
+    const ui::View* origin = context().app->focused();
+    if (origin == nullptr) origin = &context().app->root();
+    const std::string* key = origin->resolve_help_context_key();
     if (key == nullptr) return {};
     return hint_provider_(*key);
 }

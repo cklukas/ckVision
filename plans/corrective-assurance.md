@@ -97,9 +97,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 48 | WP-67 — Text fields that offer their preset | 0.25 pw | **Implementation complete — gate pending** | WP-66 | D-066: keyboard focus selects an input line's text, caret at the end; a press places the caret; Insert keeps the text |
 | 49 | WP-68 — A cell grid | 1 pw | **Implementation complete — gate pending** | WP-67 | D-067: `CellGrid` over a provider that owns the cursor, the selection and the scroll origin; header, gutter, frozen bands, spans, cell styles, overlays; `MaterializedCellGridModel`; four theme roles |
 | 50 | WP-69 — Option groups with captions that route and choices in columns | 0.25 pw | **Implementation complete — gate pending** | WP-68 | D-068: a group's caption carries a mnemonic that focuses the group from its window; `set_columns()` and `FieldDescriptor::columns` lay choices out row-major; arrows step the sequence and the column, and one that would not move is the window's |
-| 51 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 52 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 53 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
+| 52 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 53 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 54 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2809,6 +2810,23 @@ properties scrolled where every classic dialog fits on one screen.
   descriptor radio field on one row that Alt reaches and Right moves.
 - Gallery sections for both groups, the dialogs page, the header comments,
   and the option group figures showing a two-column captioned group.
+
+### WP-70 — The status line's hint on an empty desktop
+
+**Purpose.** An application whose desktop is empty had no hint: the status
+line resolved its help-context key only through the focused view, and with
+no window open nothing is focused.
+
+**Work.**
+
+- `StatusLine::current_hint()` resolves from the focused view when there is
+  one and from `Application::root()` otherwise (D-069); the header and the
+  gallery say so.
+
+**Acceptance.**
+
+- Unit coverage: the root's key answers with nothing focused; a focused
+  view's own key outranks it; a focused view without a key inherits it.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

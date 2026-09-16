@@ -80,7 +80,10 @@ public:
 
     // Maps a resolved help-context key to the hint text to display.
     // Unset (or a resolved key with no mapping — an empty return is
-    // treated the same as "no hint") shows the item list only.
+    // treated the same as "no hint") shows the item list only. The key is
+    // the focused view's nearest, or — with nothing focused, an empty
+    // desktop — the root's (D-069), so an application whose root carries a
+    // key has a hint before its first window opens.
     void set_hint_provider(std::function<std::string(const std::string&)> provider);
 
     // A hint that outranks the focus-derived one until it is cleared
