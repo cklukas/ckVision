@@ -98,9 +98,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 49 | WP-68 — A cell grid | 1 pw | **Implementation complete — gate pending** | WP-67 | D-067: `CellGrid` over a provider that owns the cursor, the selection and the scroll origin; header, gutter, frozen bands, spans, cell styles, overlays; `MaterializedCellGridModel`; four theme roles |
 | 50 | WP-69 — Option groups with captions that route and choices in columns | 0.25 pw | **Implementation complete — gate pending** | WP-68 | D-068: a group's caption carries a mnemonic that focuses the group from its window; `set_columns()` and `FieldDescriptor::columns` lay choices out row-major; arrows step the sequence and the column, and one that would not move is the window's |
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
-| 52 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 53 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 54 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
+| 53 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 54 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 55 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2827,6 +2828,25 @@ no window open nothing is focused.
 
 - Unit coverage: the root's key answers with nothing focused; a focused
   view's own key outranks it; a focused view without a key inherits it.
+
+### WP-71 — A list's keyboard search as a typed prefix
+
+**Purpose.** Each typed letter was its own search, so a name typed into a
+file dialog's list left the cursor on the row beginning with its last letter.
+
+**Work.**
+
+- `ListView` keeps the letters typed within a second as one prefix (D-070):
+  a prefix the cursor's row still begins with keeps it, any other searches on
+  from the cursor, the same letter again steps on, a miss drops the prefix,
+  and a letter with Alt, Ctrl or Super is left to the chords. The gallery
+  says so.
+
+**Acceptance.**
+
+- Unit coverage: a prefix formed and kept, a miss dropped, the same letter
+  stepping on after the window, a modified letter declined, and a provider
+  reached through `find_prefix` with a two-letter prefix.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

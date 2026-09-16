@@ -302,6 +302,65 @@ CK_TEST(keyboard_search_with_no_match_is_unhandled) {
     CK_CHECK(!list.on_key(key(Key::Char, "z")));
 }
 
+CK_TEST(letters_typed_together_form_one_prefix_and_the_same_letter_again_steps_on) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.set_items({"parts.csv", "sample.db", "sample.db-wal", "second"});
+    // "s" reaches the first s-row; "a" right after keeps it, since it still
+    // begins with "sa"; "e" then makes "sae", which nothing begins with,
+    // so the search restarts on the next letter.
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list.on_key(key(Key::Char, "a")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(!list.on_key(key(Key::Char, "e")));
+    CK_CHECK(list.cursor() == 1);
+    // "s" then "e" typed together: the second letter moves past the row
+    // that only matches the first.
+    f.clock.advance(2'000'000'000);
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 2);
+    CK_CHECK(list.on_key(key(Key::Char, "e")));
+    CK_CHECK(list.cursor() == 3);
+    // The same letter again, quickly, steps to the next row beginning with
+    // it rather than searching for "ss".
+    f.clock.advance(2'000'000'000);
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 2);
+    // A letter with a command modifier is a chord, not a search.
+    CK_CHECK(!list.on_key(ckv::KeyEvent{ckv::KeyChord{Key::Char, ckv::Modifier::Alt, "p"}}));
+    CK_CHECK(list.cursor() == 2);
+}
+
+CK_TEST(the_prefix_search_reaches_a_provider_through_find_prefix) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    struct Names final : public ckv::widgets::ListModel {
+        std::vector<std::string> rows{"alpha", "beta", "bravo", "gamma"};
+        std::size_t item_count() const override { return rows.size(); }
+        ckv::widgets::ListItem item_at(std::size_t index) const override { return {index + 1, rows[index], {}}; }
+        std::optional<std::size_t> index_of(ckv::widgets::ListItemId id) const override {
+            return id >= 1 && id <= rows.size() ? std::optional<std::size_t>(id - 1) : std::nullopt;
+        }
+        std::optional<std::size_t> find_prefix(std::string_view prefix, std::size_t after) const override {
+            for (std::size_t step = 1; step <= rows.size(); ++step) {
+                const std::size_t index = (after + step) % rows.size();
+                if (rows[index].rfind(prefix, 0) == 0) return index;
+            }
+            return std::nullopt;
+        }
+    } names;
+    list.set_model(names);
+    CK_CHECK(list.on_key(key(Key::Char, "b")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list.on_key(key(Key::Char, "r")));
+    CK_CHECK(list.cursor() == 2);
+}
+
 // --- Activation --------------------------------------------------------
 
 CK_TEST(enter_activates_the_cursor_item) {

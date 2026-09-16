@@ -1437,7 +1437,10 @@ selection survives refreshes and reordering; see [Data views](data-views.md).
 Header: `include/cvision/widgets/list_view.hpp`. Use a linear selectable
 collection. Arrow keys select and Enter activates; File Browser connects it to
 TreeView selection. For dynamic or large data, set a ListModel rather than
-materializing rows.
+materializing rows. Typing searches: letters typed within a second of each
+other form one prefix, so `sa` reaches "sample" past "parts", while a letter
+typed alone — or the same letter again — steps to the next row beginning
+with it (D-070); a provider answers the search through `find_prefix`.
 
 ![Multi-select ListView](generated/screenshots/widget-listview.svg)
 

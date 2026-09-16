@@ -206,7 +206,17 @@ private:
     ListModel* model_ = nullptr;
     std::vector<ListItemId> selected_ids_;
     ListItemId cursor_id_ = kInvalidListItemId;
+    // The row's text, from the model or the materialized items.
+    std::string text_at(std::size_t index) const;
+
     int cursor_ = -1;
+    // Keyboard search (D-070): letters typed within kTypeaheadWindowNanos
+    // of each other form one prefix, so "sa" reaches "sample" past "parts";
+    // a letter typed alone, or the same letter again, steps to the next row
+    // beginning with it. The application's clock times the window, never
+    // a wall clock.
+    std::string typeahead_;
+    std::int64_t typeahead_at_ = 0;
     bool multi_select_;
     int last_click_index_ = -1;
     std::int64_t last_click_nanos_ = -1;

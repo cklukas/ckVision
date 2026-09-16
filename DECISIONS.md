@@ -1752,3 +1752,17 @@ view reaches the root last. *Rejected:* a separate "default hint" string on
 the status line (a second mechanism for what the provider already maps, and
 one the F1 route could not share); resolving from the desktop (a dock's
 sibling, which the status line would have to be told about).
+
+**D-070 — A list's keyboard search is a prefix, typed together.** Typing a
+letter over a list stepped to the next row beginning with it, and only that:
+each letter was its own search, so a reader who typed a file's name into a
+file dialog's list found the cursor on whatever row began with the name's
+LAST letter. Letters typed within a second of each other now form one prefix
+(`sa` keeps "sample" past "parts"), the same letter typed again steps to the
+next row beginning with it, and a prefix nothing begins with is dropped so
+the next letter starts afresh; a letter with a command modifier is a chord,
+not a search. The window is timed by the application's clock, never a wall
+clock, so a test drives it with a `ManualClock`. A provider answers the
+search through the existing `find_prefix`, whose prefix may now be longer
+than one letter. *Rejected:* a visible search field in every list (a chooser
+is not a filter; the search is momentary and the rows never move).

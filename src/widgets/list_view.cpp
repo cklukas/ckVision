@@ -6,10 +6,39 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
+#include <string>
+#include <string_view>
 
 #include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
+namespace {
+
+// Letters typed this close together form one search prefix.
+constexpr std::int64_t kTypeaheadWindowNanos = 1'000'000'000;
+
+std::string fold_typeahead(std::string_view text) {
+    std::string folded;
+    for (const char c : text) folded.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    return folded;
+}
+
+std::string repeated(const std::string& unit, std::size_t times) {
+    std::string out;
+    for (std::size_t i = 0; i < times; ++i) out += unit;
+    return out;
+}
+
+bool starts_with_folded(std::string_view text, const std::string& folded_prefix) {
+    if (text.size() < folded_prefix.size()) return false;
+    for (std::size_t i = 0; i < folded_prefix.size(); ++i)
+        if (static_cast<char>(std::tolower(static_cast<unsigned char>(text[i]))) != folded_prefix[i]) return false;
+    return true;
+}
+
+}  // namespace
+
 
 ListView::ListView(bool multi_select) : multi_select_(multi_select) {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
@@ -245,6 +274,11 @@ void ListView::on_resized() {
     if (reveal_pending_) ensure_cursor_visible();
 }
 
+std::string ListView::text_at(std::size_t index) const {
+    if (model_ != nullptr) return index < model_->item_count() ? model_->item_at(index).text : std::string();
+    return index < items_.size() ? items_[index] : std::string();
+}
+
 bool ListView::on_key(const KeyEvent& event) {
     switch (event.chord.key) {
         case Key::Up:
@@ -282,22 +316,45 @@ bool ListView::on_key(const KeyEvent& event) {
                 return true;
             }
             if (!event.chord.text.empty() && item_count() != 0) {
-                const char query = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
-                const std::string folded(1, query);
+                // A letter with a command modifier is a chord, not a search.
+                if (has_modifier(event.chord.modifiers, Modifier::Alt) ||
+                    has_modifier(event.chord.modifiers, Modifier::Ctrl) ||
+                    has_modifier(event.chord.modifiers, Modifier::Super))
+                    return false;
+                const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : 0;
+                const std::string letter = fold_typeahead(event.chord.text);
+                const bool continues = !typeahead_.empty() && now - typeahead_at_ <= kTypeaheadWindowNanos;
+                // The same letter again is a step to the next row beginning
+                // with it, not a longer prefix; any other letter extends.
+                const bool repeats = continues && typeahead_.size() >= letter.size() &&
+                                     typeahead_ == repeated(letter, typeahead_.size() / letter.size());
+                if (continues && !repeats) typeahead_ += letter;
+                else typeahead_ = letter;
+                typeahead_at_ = now;
+                const bool extends = continues && !repeats;
+                // An extended prefix may still describe the cursor's row; a
+                // fresh or repeated letter searches from the next row on.
+                const std::size_t cursor = static_cast<std::size_t>(std::max(0, cursor_));
+                if (extends && cursor < item_count() && starts_with_folded(text_at(cursor), typeahead_)) return true;
+                std::optional<std::size_t> found;
                 if (model_ != nullptr) {
-                    const auto found = model_->find_prefix(folded, static_cast<std::size_t>(std::max(0, cursor_)));
-                    if (!found || *found >= item_count()) return false;
-                    move_cursor(static_cast<int>(*found), !multi_select_);
-                    return true;
-                }
-                const std::size_t n = items_.size();
-                for (std::size_t step = 1; step <= n; ++step) {
-                    const std::size_t index = (static_cast<std::size_t>(cursor_) + step) % n;
-                    if (!items_[index].empty() && std::tolower(static_cast<unsigned char>(items_[index][0])) == query) {
-                        move_cursor(static_cast<int>(index), !multi_select_);
-                        return true;
+                    found = model_->find_prefix(typeahead_, cursor);
+                    if (found && *found >= item_count()) found.reset();
+                } else {
+                    const std::size_t n = items_.size();
+                    for (std::size_t step = 1; step <= n && !found; ++step) {
+                        const std::size_t index = (cursor + step) % n;
+                        if (starts_with_folded(items_[index], typeahead_)) found = index;
                     }
                 }
+                if (!found) {
+                    // Nothing begins with the prefix: it is dropped, so the
+                    // next letter starts afresh rather than compounding a miss.
+                    typeahead_.clear();
+                    return false;
+                }
+                move_cursor(static_cast<int>(*found), !multi_select_);
+                return true;
             }
             return false;
         default:
