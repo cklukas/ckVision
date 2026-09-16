@@ -259,3 +259,103 @@ CK_TEST(markdown_profile_marks_directive_lines) {
     CK_CHECK(markdown_spans("::step{unclosed") ==
              std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::Command}, {6, 15, SyntaxTokenKind::Property}}));
 }
+
+namespace {
+
+std::vector<SyntaxSpan> sql_spans(std::string_view line, std::string_view state = "") {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    return registry.find("sql")->highlight_line(line, state).spans;
+}
+
+/// The kind covering `text` in `line`, or Plain when nothing covers it.
+SyntaxTokenKind sql_kind_of(std::string_view line, std::string_view text) {
+    const std::size_t at = line.find(text);
+    if (at == std::string_view::npos) return SyntaxTokenKind::Error;
+    for (const SyntaxSpan& span : sql_spans(line))
+        if (span.begin_byte <= at && at + text.size() <= span.end_byte) return span.kind;
+    return SyntaxTokenKind::Plain;
+}
+
+}  // namespace
+
+CK_TEST(sql_profile_is_detected_by_file_suffix_and_by_a_leading_statement_word) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "report.sql", {}, {}}).id == "sql");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "select 1", {}}).id == "sql");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "  CREATE TABLE t (id INTEGER)", {}}).id == "sql");
+    // A statement's bound parameters put a colon in most of them, which is
+    // all YAML's content rule asks for; the statement word outranks it.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled",
+                                                     "SELECT company FROM customers WHERE revenue > :least", {}})
+                 .id == "sql");
+    // Prose that merely mentions a table is nobody's source.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "notes.txt", "the customers table", {}}).id == "plain");
+}
+
+CK_TEST(sql_profile_marks_keywords_types_numbers_calls_and_operators) {
+    const std::string_view line = "SELECT count(id), price * 1.5e2, 0xFF FROM items WHERE ok = true;";
+    CK_CHECK(sql_kind_of(line, "SELECT") == SyntaxTokenKind::Keyword);
+    CK_CHECK(sql_kind_of(line, "FROM") == SyntaxTokenKind::Keyword);
+    // A word before '(' is a call, whoever defined it.
+    CK_CHECK(sql_kind_of(line, "count") == SyntaxTokenKind::Command);
+    CK_CHECK(sql_kind_of(line, "1.5e2") == SyntaxTokenKind::Number);
+    CK_CHECK(sql_kind_of(line, "0xFF") == SyntaxTokenKind::Number);
+    CK_CHECK(sql_kind_of(line, "true") == SyntaxTokenKind::Number);
+    CK_CHECK(sql_kind_of(line, "*") == SyntaxTokenKind::Operator);
+    // An ordinary name is left alone, so the marked words stand out.
+    CK_CHECK(sql_kind_of(line, "items") == SyntaxTokenKind::Plain);
+    const std::string_view ddl = "create table t (id integer primary key, name TEXT not null)";
+    CK_CHECK(sql_kind_of(ddl, "integer") == SyntaxTokenKind::Type);
+    CK_CHECK(sql_kind_of(ddl, "TEXT") == SyntaxTokenKind::Type);
+    CK_CHECK(sql_kind_of(ddl, "create") == SyntaxTokenKind::Keyword);
+}
+
+CK_TEST(sql_profile_paints_a_quoted_name_as_a_name_and_only_single_quotes_as_text) {
+    // SQL's own trap: "abc" is a NAME, not the text abc, and an engine that
+    // accepts it where no such column exists changes what the statement means.
+    const std::string_view line = "SELECT \"company\", [order], `qty` FROM t WHERE name = 'it''s'";
+    CK_CHECK(sql_kind_of(line, "\"company\"") == SyntaxTokenKind::Property);
+    CK_CHECK(sql_kind_of(line, "[order]") == SyntaxTokenKind::Property);
+    CK_CHECK(sql_kind_of(line, "`qty`") == SyntaxTokenKind::Property);
+    // The doubled quote is one quote inside the text, not its end.
+    CK_CHECK(sql_kind_of(line, "'it''s'") == SyntaxTokenKind::String);
+}
+
+CK_TEST(sql_profile_marks_every_spelling_of_a_bound_parameter) {
+    const std::string_view line = "SELECT * FROM t WHERE a = :least AND b = @name AND c = $id AND d = ? AND e = ?1";
+    for (const std::string_view parameter : {":least", "@name", "$id", "?1"})
+        CK_CHECK(sql_kind_of(line, parameter) == SyntaxTokenKind::Property);
+    // A lone '?' is a parameter too; a lone ':' is punctuation.
+    CK_CHECK(sql_kind_of("SELECT ?", "?") == SyntaxTokenKind::Property);
+    CK_CHECK(sql_kind_of("SELECT a : b", ":") == SyntaxTokenKind::Operator);
+}
+
+CK_TEST(sql_profile_carries_a_block_comment_and_an_unclosed_string_across_lines) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& sql = *registry.find("sql");
+    const auto opened = sql.highlight_line("SELECT 1 /* why this", "");
+    CK_CHECK(opened.next_state == "comment");
+    const auto inside = sql.highlight_line("still the comment", opened.next_state);
+    CK_CHECK(inside.next_state == "comment");
+    CK_CHECK(inside.spans.size() == 1U && inside.spans.front().kind == SyntaxTokenKind::Comment);
+    const auto closed = sql.highlight_line("ends */ FROM t", inside.next_state);
+    CK_CHECK(closed.next_state.empty());
+    bool keyword = false;
+    for (const auto& span : closed.spans) keyword = keyword || span.kind == SyntaxTokenKind::Keyword;
+    CK_CHECK(keyword);
+
+    const auto open_text = sql.highlight_line("SELECT 'unterminated", "");
+    CK_CHECK(open_text.next_state == "string");
+    const auto end_text = sql.highlight_line("still text' FROM t", open_text.next_state);
+    CK_CHECK(end_text.next_state.empty());
+    CK_CHECK(end_text.spans.front().kind == SyntaxTokenKind::String);
+
+    // A line comment ends at the line, whatever follows it.
+    const auto commented = sql.highlight_line("SELECT 1 -- a note with 'quotes' and /*", "");
+    CK_CHECK(commented.next_state.empty());
+    CK_CHECK(commented.spans.back().kind == SyntaxTokenKind::Comment);
+}
+

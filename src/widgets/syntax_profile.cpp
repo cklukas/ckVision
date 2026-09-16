@@ -369,6 +369,225 @@ void markdown_inline(std::string_view line, std::size_t begin, std::vector<Synta
     }
 }
 
+// -- SQL ---------------------------------------------------------------------
+//
+// One line of SQL, in the dialect every embedded engine agrees on. Two rules
+// are worth stating because they are where SQL misleads a reader:
+//
+//  * '...' is the only string literal. "..." , [...] and `...` are QUOTED
+//    NAMES, and are painted as names — so a reader sees at a glance that
+//    "abc" is not the text abc, which is the mistake SQL's own permissiveness
+//    invites (an engine may accept a double-quoted name as text where no such
+//    column exists, and the statement then means something else entirely).
+//  * A word immediately before '(' is a call. Naming no functions keeps the
+//    profile true for every engine's own set and for the ones an application
+//    registers itself.
+//
+// A bound parameter (:name, @name, $name, ? and ?1) is a name too: it is what
+// a saved query leaves for its caller to fill in, and it must be visible.
+
+constexpr std::string_view sql_comment_state = "comment";
+constexpr std::string_view sql_string_state = "string";
+
+bool sql_word_char(char value) noexcept { return ascii_alnum(value) || value == '_' || value == '$'; }
+
+/// Case-insensitive membership, so `select` and `SELECT` are one word.
+bool sql_word_is(std::string_view token, std::initializer_list<std::string_view> words) {
+    std::string folded;
+    folded.reserve(token.size());
+    for (const char value : token)
+        folded.push_back(value >= 'A' && value <= 'Z' ? static_cast<char>(value - 'A' + 'a') : value);
+    return std::find(words.begin(), words.end(), std::string_view(folded)) != words.end();
+}
+
+bool sql_keyword(std::string_view token) {
+    return sql_word_is(token, {"abort", "action", "add", "after", "all", "alter", "always", "analyze", "and", "as",
+                               "asc", "attach", "autoincrement", "before", "begin", "between", "by", "cascade",
+                               "case", "cast", "check", "collate", "column", "commit", "conflict", "constraint",
+                               "create", "cross", "current", "database", "default", "deferrable", "deferred",
+                               "delete", "desc", "detach", "distinct", "do", "drop", "each", "else", "end",
+                               "escape", "except", "exclusive", "exists", "explain", "fail", "filter", "first",
+                               "following", "for", "foreign", "from", "full", "generated", "glob", "group",
+                               "groups", "having", "if", "ignore", "immediate", "in", "index", "indexed",
+                               "initially", "inner", "insert", "instead", "intersect", "into", "is", "isnull",
+                               "join", "key", "last", "left", "like", "limit", "match", "materialized",
+                               "natural", "no", "not", "nothing", "notnull", "null", "nulls", "of", "offset",
+                               "on", "or", "order", "others", "outer", "over", "partition", "plan", "pragma",
+                               "preceding", "primary", "query", "raise", "range", "recursive", "references",
+                               "regexp", "reindex", "release", "rename", "replace", "restrict", "returning",
+                               "right", "rollback", "row", "rows", "savepoint", "select", "set", "table", "temp",
+                               "temporary", "then", "ties", "to", "transaction", "trigger", "unbounded", "union",
+                               "unique", "update", "using", "vacuum", "values", "view", "virtual", "when",
+                               "where", "window", "with", "without"});
+}
+
+bool sql_type(std::string_view token) {
+    return sql_word_is(token, {"bigint", "blob", "boolean", "char", "character", "date", "datetime", "decimal",
+                               "double", "float", "int", "int2", "int8", "integer", "mediumint", "numeric",
+                               "nvarchar", "precision", "real", "smallint", "text", "time", "timestamp",
+                               "tinyint", "varchar", "varying"});
+}
+
+bool sql_literal_word(std::string_view token) {
+    return sql_word_is(token, {"true", "false", "null", "current_date", "current_time", "current_timestamp"});
+}
+
+/// The quoted-name closer for an opener, or '\0' when the character opens no
+/// name. The three spellings are one rule with three brackets.
+char sql_name_closer(char opener) noexcept {
+    if (opener == '"') return '"';
+    if (opener == '[') return ']';
+    if (opener == '`') return '`';
+    return '\0';
+}
+
+SyntaxLineResult sql_line(std::string_view line, std::string_view incoming) {
+    SyntaxLineResult result;
+    std::size_t i = 0;
+    // A block comment and a string literal both carry across lines, and the
+    // rest of the line belongs to whichever is open.
+    if (incoming == sql_comment_state) {
+        const std::size_t close = line.find("*/");
+        if (close == std::string_view::npos) {
+            add(result.spans, 0, line.size(), SyntaxTokenKind::Comment);
+            result.next_state = std::string(sql_comment_state);
+            return result;
+        }
+        add(result.spans, 0, close + 2U, SyntaxTokenKind::Comment);
+        i = close + 2U;
+    } else if (incoming == sql_string_state) {
+        std::size_t end = 0;
+        bool closed = false;
+        while (end < line.size()) {
+            if (line[end] != '\'') {
+                ++end;
+            } else if (end + 1U < line.size() && line[end + 1U] == '\'') {
+                end += 2U;  // '' is one quote inside the text, not its end
+            } else {
+                ++end;
+                closed = true;
+                break;
+            }
+        }
+        add(result.spans, 0, end, SyntaxTokenKind::String);
+        if (!closed) {
+            result.next_state = std::string(sql_string_state);
+            return result;
+        }
+        i = end;
+    }
+
+    while (i < line.size()) {
+        const char ch = line[i];
+        if (ascii_space(ch)) {
+            ++i;
+            continue;
+        }
+        if (ch == '-' && i + 1U < line.size() && line[i + 1U] == '-') {
+            add(result.spans, i, line.size(), SyntaxTokenKind::Comment);
+            return result;
+        }
+        if (ch == '/' && i + 1U < line.size() && line[i + 1U] == '*') {
+            const std::size_t close = line.find("*/", i + 2U);
+            if (close == std::string_view::npos) {
+                add(result.spans, i, line.size(), SyntaxTokenKind::Comment);
+                result.next_state = std::string(sql_comment_state);
+                return result;
+            }
+            add(result.spans, i, close + 2U, SyntaxTokenKind::Comment);
+            i = close + 2U;
+            continue;
+        }
+        if (ch == '\'') {
+            std::size_t end = i + 1U;
+            bool closed = false;
+            while (end < line.size()) {
+                if (line[end] != '\'') {
+                    ++end;
+                } else if (end + 1U < line.size() && line[end + 1U] == '\'') {
+                    end += 2U;
+                } else {
+                    ++end;
+                    closed = true;
+                    break;
+                }
+            }
+            add(result.spans, i, end, SyntaxTokenKind::String);
+            if (!closed) {
+                result.next_state = std::string(sql_string_state);
+                return result;
+            }
+            i = end;
+            continue;
+        }
+        if (const char closer = sql_name_closer(ch); closer != '\0') {
+            std::size_t end = i + 1U;
+            while (end < line.size() && line[end] != closer) ++end;
+            if (end < line.size()) ++end;
+            add(result.spans, i, end, SyntaxTokenKind::Property);
+            i = end;
+            continue;
+        }
+        if (ch == ':' || ch == '@' || ch == '?' ||
+            (ch == '$' && i + 1U < line.size() && sql_word_char(line[i + 1U]))) {
+            std::size_t end = i + 1U;
+            while (end < line.size() && sql_word_char(line[end])) ++end;
+            // A lone ':' or '@' is punctuation; '?' alone IS a parameter.
+            if (end > i + 1U || ch == '?') {
+                add(result.spans, i, end, SyntaxTokenKind::Property);
+                i = end;
+                continue;
+            }
+            add(result.spans, i, i + 1U, SyntaxTokenKind::Operator);
+            ++i;
+            continue;
+        }
+        if (ascii_digit(ch) || (ch == '.' && i + 1U < line.size() && ascii_digit(line[i + 1U]))) {
+            std::size_t end = i;
+            if (ch == '0' && i + 1U < line.size() && (line[i + 1U] == 'x' || line[i + 1U] == 'X')) {
+                end = i + 2U;
+                while (end < line.size() && (ascii_digit(line[end]) || (line[end] >= 'a' && line[end] <= 'f') ||
+                                             (line[end] >= 'A' && line[end] <= 'F')))
+                    ++end;
+            } else {
+                while (end < line.size() && (ascii_digit(line[end]) || line[end] == '.')) ++end;
+                if (end < line.size() && (line[end] == 'e' || line[end] == 'E')) {
+                    std::size_t exponent = end + 1U;
+                    if (exponent < line.size() && (line[exponent] == '+' || line[exponent] == '-')) ++exponent;
+                    if (exponent < line.size() && ascii_digit(line[exponent])) {
+                        end = exponent;
+                        while (end < line.size() && ascii_digit(line[end])) ++end;
+                    }
+                }
+            }
+            add(result.spans, i, end, SyntaxTokenKind::Number);
+            i = end;
+            continue;
+        }
+        if (ascii_alpha(ch) || ch == '_') {
+            std::size_t end = i;
+            while (end < line.size() && sql_word_char(line[end])) ++end;
+            const std::string_view token = line.substr(i, end - i);
+            std::size_t after = end;
+            while (after < line.size() && ascii_space(line[after])) ++after;
+            const bool call = after < line.size() && line[after] == '(';
+            if (sql_keyword(token)) add(result.spans, i, end, SyntaxTokenKind::Keyword);
+            else if (sql_literal_word(token)) add(result.spans, i, end, SyntaxTokenKind::Number);
+            else if (sql_type(token)) add(result.spans, i, end, SyntaxTokenKind::Type);
+            else if (call) add(result.spans, i, end, SyntaxTokenKind::Command);
+            i = end;
+            continue;
+        }
+        if (std::string_view("=<>!+-*/%|&~^,;().").find(ch) != std::string_view::npos) {
+            add(result.spans, i, i + 1U, SyntaxTokenKind::Operator);
+            ++i;
+            continue;
+        }
+        ++i;
+    }
+    return result;
+}
+
 SyntaxLineResult markdown_line(std::string_view line, std::string_view incoming) {
     SyntaxLineResult result;
     if (incoming.starts_with(markdown_fence_prefix)) {
@@ -574,6 +793,23 @@ void register_standard_syntax_profiles(SyntaxProfileRegistry& registry) {
         },
         bash_line});
     (void)registry.register_profile(LanguageProfile{"markdown", "Markdown", markdown_detect, markdown_line});
+    (void)registry.register_profile(LanguageProfile{
+        "sql", "SQL",
+        [](const LanguageDetectionInput& input) {
+            if (ends_with(input.file_name, ".sql")) return LanguageDetection{80, "file suffix"};
+            // A statement word at the start is the only content SQL claims,
+            // and it outranks YAML's bare "there is a colon somewhere" — a
+            // statement's bound parameters put colons in most of them.
+            const std::string_view prefix = trim_ascii_space(input.content_prefix);
+            std::size_t end = 0;
+            while (end < prefix.size() && (ascii_alpha(prefix[end]) || prefix[end] == '_')) ++end;
+            if (end > 0 && sql_word_is(prefix.substr(0, end),
+                                       {"select", "insert", "update", "delete", "create", "alter", "drop", "with",
+                                        "explain", "pragma", "begin", "vacuum", "replace"}))
+                return LanguageDetection{50, "content prefix"};
+            return LanguageDetection{};
+        },
+        sql_line});
 }
 
 }  // namespace ckv::widgets

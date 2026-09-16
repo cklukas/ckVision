@@ -254,8 +254,8 @@ rejection. The detected input newline style is retained as
 ## Profiles and highlighting
 
 `SyntaxProfileRegistry` is instance-owned. Register the standard profiles with
-`register_standard_syntax_profiles()` for Plain text, JSON, YAML, Bash, and
-Markdown.
+`register_standard_syntax_profiles()` for Plain text, JSON, YAML, Bash,
+Markdown, and SQL.
 Automatic detection uses an explicit requested profile, file suffix, content
 prefix, and shebang; it never reads environment variables. A profile consists
 of a stable ID, detector, and `SyntaxLineHighlighter`, so an application can
@@ -286,6 +286,24 @@ returns only grapheme-boundary spans within that line, and supplies the next
 state. Register it on the application-owned `SyntaxProfileRegistry`; nothing
 is process-global. The shipped JSON, YAML, and Bash profiles demonstrate
 suffix, content-prefix, and shebang detection respectively.
+
+The SQL profile is detected by a `.sql` name or by a statement word at the
+start of the text (`SELECT`, `CREATE`, `WITH`, `PRAGMA` and the rest), which
+outranks YAML's bare "there is a colon somewhere" — a statement's bound
+parameters put a colon in most of them. It paints keywords and declared types
+(`INTEGER`, `TEXT`, …) as keyword and type, numbers with hex and exponents and
+the literal words `true`, `false` and `null` as numbers, `--` and `/* */`
+comments as comments (the block one carries across lines), and a word
+immediately before `(` as a command, so an engine's own functions and an
+application's registered ones are marked alike without naming any.
+
+Two rules are worth knowing because they are where SQL misleads a reader.
+Only `'...'` is text — a doubled quote inside it is one quote, not its end —
+while `"..."`, `[...]` and `` `...` `` are quoted **names** and are painted as
+names: a reader sees at once that `"abc"` is not the text `abc`, which is the
+mistake SQL's permissiveness invites. And a bound parameter (`:name`,
+`@name`, `$name`, `?`, `?1`) is a name too, because it is what a saved
+statement leaves for its caller to fill in; a lone `:` stays punctuation.
 
 The Markdown profile is detected by a `.md` or `.markdown` name, by a
 leading YAML front matter block (a `---` line, `key: value` lines, a closing

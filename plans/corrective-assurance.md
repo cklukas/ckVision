@@ -99,9 +99,10 @@ dependent row's package prerequisite; `Blocked` does not.
 | 50 | WP-69 — Option groups with captions that route and choices in columns | 0.25 pw | **Implementation complete — gate pending** | WP-68 | D-068: a group's caption carries a mnemonic that focuses the group from its window; `set_columns()` and `FieldDescriptor::columns` lay choices out row-major; arrows step the sequence and the column, and one that would not move is the window's |
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
-| 53 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 54 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 55 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
+| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2847,6 +2848,31 @@ file dialog's list left the cursor on the row beginning with its last letter.
 - Unit coverage: a prefix formed and kept, a miss dropped, the same letter
   stepping on after the window, a modified letter declined, and a provider
   reached through `find_prefix` with a two-letter prefix.
+
+### WP-72 — An SQL syntax profile
+
+**Purpose.** An editor over a database's own language had no profile to lex
+it with, so an application embedding one showed plain text or shipped a
+private lexer.
+
+**Work.**
+
+- `register_standard_syntax_profiles()` also registers `sql` (D-071):
+  keywords, declared types, numbers with hex and exponents, `--` and `/* */`
+  comments (the block one stateful), `'...'` text with the doubled-quote
+  escape (stateful when unclosed), `"..."`/`[...]`/`` `...` `` quoted names
+  and every spelling of a bound parameter as names, and a word before `(` as
+  a call. Detection by `.sql` or a leading statement word, above YAML's
+  content score. The editor page says so.
+
+**Acceptance.**
+
+- Unit coverage: detection by suffix, by statement word, against YAML's
+  colon rule and against prose; keywords, types, numbers, calls, operators
+  and an untouched ordinary name; the three quoted-name brackets and the
+  doubled quote; every parameter spelling and the lone `:`; the block
+  comment and the unclosed text carried across lines, and a line comment
+  ending at its line.
 
 ### WP-50 — Windows ConPTY child sessions and embedded-terminal matrix
 

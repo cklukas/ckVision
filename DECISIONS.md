@@ -1766,3 +1766,21 @@ clock, so a test drives it with a `ManualClock`. A provider answers the
 search through the existing `find_prefix`, whose prefix may now be longer
 than one letter. *Rejected:* a visible search field in every list (a chooser
 is not a filter; the search is momentary and the rows never move).
+
+**D-071 — SQL is one of the standard syntax profiles, and it paints a quoted
+name as a name.** An editor over a database's own language had nothing to
+lex it with, so every application embedding one either shipped a private
+profile or showed plain text. SQL now joins the standard set, detected by a
+`.sql` name or by a leading statement word — which outranks YAML's "there is
+a colon somewhere", since a statement's bound parameters put one in most of
+them. Its two deliberate rules are about where SQL misleads: only `'...'` is
+text, and `"..."`, `[...]` and `` `...` `` are quoted NAMES painted as names,
+so `"abc"` visibly is not the text `abc` — the mistake an engine's own
+permissiveness invites; and a bound parameter (`:name`, `@name`, `$name`,
+`?`, `?1`) is a name as well, because it is what a saved statement leaves for
+its caller. A word immediately before `(` is a call, which keeps the profile
+true for every engine's function set and for the ones an application adds.
+*Rejected:* a list of built-in function names (one engine's list, wrong in
+the next, and stale by the following release); a dialect flag (the spelling
+differences a terminal editor can see are the quoting brackets, and all three
+are accepted as names).
