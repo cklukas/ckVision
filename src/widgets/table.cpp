@@ -444,6 +444,13 @@ bool Table::on_key(const KeyEvent& event) {
         case Key::Enter:
             return begin_edit();
         case Key::Char:
+            // A letter with Alt, Ctrl or Super is a chord — Alt+X for the
+            // application's Exit, Ctrl+P for its palette — never the first
+            // character of an edit.
+            if (has_modifier(event.chord.modifiers, Modifier::Alt) ||
+                has_modifier(event.chord.modifiers, Modifier::Ctrl) ||
+                has_modifier(event.chord.modifiers, Modifier::Super))
+                return false;
             if (begin_edit()) {
                 edit_text_.clear();
                 return on_text(TextEvent{event.chord.text, false});
