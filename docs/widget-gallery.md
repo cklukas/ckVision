@@ -435,6 +435,48 @@ clock->on_click = [] { /* drop a calendar under it */ };
 ```
 <!-- /ckvision-snippet -->
 
+## BigClockView
+
+Header: `include/cvision/widgets/big_clock.hpp`. A clock face that fills
+whatever it is given: the time, the date, or both (`BigClockContent`), in
+block glyphs five rows tall, centred. The glyphs are the seven-segment
+display's shapes — except the 1, a centred stem with a flag and a foot, since
+the segment 1 leaves a gap in front of it that reads as a space — drawn in
+cells of the theme's lit colour, the progress bar's fill role, on the text-view
+body. Where they do not fit, because the view is
+narrower or shorter than the glyphs need, the same lines are drawn centred as
+plain text, so a small window still tells the time; the view re-decides on
+every draw, so a face follows its window as it is resized in either direction.
+
+The reading comes from an injected `DateTimeValue` provider, as ClockView's
+does, and for the same reason. Seconds, twelve- or twenty-four-hour display and
+the meridiem words — drawn as a plain caption under the digits, since they are
+words — are options. Like ClockView it ticks once a second and repaints only
+when what it shows has changed. A face is put up to stay while the reader works
+elsewhere, so losing the focus dismisses nothing; a key while it has the
+keyboard, or a completed click on a face that already had it, fires
+`on_dismiss` — the click that only brings it back into focus does not, and
+neither does a key the application has bound to a command, which the face
+leaves unhandled so the command runs with the face still up. The face
+does not remove itself, because whoever put it up knows what it covers. `big_glyph_rows()` and `big_glyph_width()` expose the glyphs
+themselves, as `'#'`/`' '` masks, for a host that wants to draw them somewhere
+else.
+
+![BigClockView showing a date and a time](generated/screenshots/widget-bigclockview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="bigclockview" -->
+```cpp
+face->set_content(widgets::BigClockContent::DateAndTime);
+face->set_show_seconds(false);
+face->set_moment_provider([] {
+    return widgets::DateTimeValue{widgets::DateValue{2026, 9, 23}, widgets::TimeValue{14, 5, 0}};
+});
+face->on_dismiss = [] { /* take the face down again */ };
+```
+<!-- /ckvision-snippet -->
+
 ## CalendarDropdown
 
 Header: `include/cvision/widgets/common_components.hpp`. A month, framed and
@@ -486,6 +528,13 @@ in the source-backed control setup below.
 
 Header: `include/cvision/widgets/common_components.hpp`. A plain hour/minute/
 second value used by TimePicker; it has no implicit system-clock behavior.
+
+## DateTimeValue
+
+Header: `include/cvision/widgets/common_components.hpp`. A DateValue and a
+TimeValue read together, as BigClockView's provider returns them: one reading
+rather than two, so a face showing both cannot pair one day's date with the
+next day's time when it is asked just after midnight.
 
 ## DatePicker
 
@@ -2376,6 +2425,15 @@ title control automatically shows the U+2195 restore glyph even though `zoomed()
 remains false (there is no transient geometry to restore). Its maximize/restore
 control uses the theme's `ckv.window.control` accent while its brackets retain
 the frame background and foreground.
+
+`set_content_cover()` lays a second view over the content for a while — a
+BigClockView, a read-only history, a "working…" sheet — without taking the
+content's place: the content keeps running underneath, and the window keeps
+the cover exactly on `content_rect()`, above the content, through every move,
+resize and margin change. Because the cover is the window's own child it is
+stacked with the window, so a window in front covers it too, and it goes when
+the window does. `content_rect()` is in the window's own coordinates, which is
+why a cover is not a desktop popup placed there by hand.
 
 A third control, `[_]`, sits immediately left of the maximize/restore one and
 **minimizes** the window — `set_minimized(true)`, which is what a click on it

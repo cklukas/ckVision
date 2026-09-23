@@ -22,6 +22,7 @@ column as `widget_shots`.
 | Public header | Client guide | Compiled example | Screenshot | Test family |
 |---|---|---|---|---|
 | `include/cvision/widgets/application_shell.hpp` | [Hello](tutorial-hello.md) | hello | hello-initial | test_hello_golden |
+| `include/cvision/widgets/big_clock.hpp` | [Gallery](widget-gallery.md#bigclockview) | widget_shots | widget-bigclockview | test_big_clock |
 | `include/cvision/widgets/button.hpp` | [Gallery](widget-gallery.md#button) | forms/widget_shots | widget-button | test_widgets, test_forms_smoke |
 | `include/cvision/widgets/canvas.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-canvas/widget-canvas-no-graphics | test_graphics_smoke |
 | `include/cvision/widgets/combo_box.hpp` | [Gallery](widget-gallery.md#combobox) | forms/workbench/widget_shots | widget-combobox/widget-combobox-open | test_combo_box |

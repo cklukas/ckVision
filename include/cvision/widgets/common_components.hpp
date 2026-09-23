@@ -61,6 +61,16 @@ struct TimeValue {
     friend bool operator==(const TimeValue&, const TimeValue&) = default;
 };
 
+// A date and a time of day, read together. One reading rather than two, so a
+// display showing both can never pair one day's date with the next day's time
+// when it is asked just after midnight.
+struct DateTimeValue {
+    DateValue date;
+    TimeValue time;
+
+    friend bool operator==(const DateTimeValue&, const DateTimeValue&) = default;
+};
+
 // Locale-free interchange for typed time controls. Parsing accepts canonical
 // HH:MM and HH:MM:SS forms only; formatting includes seconds when requested.
 bool is_valid_time(TimeValue time) noexcept;

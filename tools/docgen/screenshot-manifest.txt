@@ -64,6 +64,7 @@ widget-canvas
 widget-canvas-no-graphics
 widget-cellgrid
 widget-checkgroup
+widget-bigclockview
 widget-clockview
 widget-combobox
 widget-combobox-open

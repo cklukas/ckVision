@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "cvision/widgets/big_clock.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/cell_grid.hpp"
 #include "cvision/widgets/common_components.hpp"
@@ -255,6 +256,24 @@ void shot_clock_view(const std::filesystem::path& dir) {
     stage.save_window(dir, "widget-clockview");
 }
 
+void shot_big_clock_view(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    auto face = std::make_unique<widgets::BigClockView>();
+
+    // ckvision-doc: bigclockview
+    face->set_content(widgets::BigClockContent::DateAndTime);
+    face->set_show_seconds(false);
+    face->set_moment_provider([] {
+        return widgets::DateTimeValue{widgets::DateValue{2026, 9, 23}, widgets::TimeValue{14, 5, 0}};
+    });
+    face->on_dismiss = [] { /* take the face down again */ };
+    // ckvision-doc-end: bigclockview
+
+    stage.window_with_content("Clock", Rect{10, 4, 60, 15}, std::move(face));
+    stage.step();
+    stage.save_window(dir, "widget-bigclockview");
+}
+
 void shot_scrollbar(const std::filesystem::path& dir) {
     WidgetStage stage;
     ui::View& content = stage.window("Log", Rect{26, 5, 28, 12});
@@ -382,6 +401,7 @@ void capture_data_shots(const std::filesystem::path& dir) {
     shot_calendar_view(dir);
     shot_calendar_dropdown(dir);
     shot_clock_view(dir);
+    shot_big_clock_view(dir);
     shot_scrollbar(dir);
     shot_scroll_viewport(dir);
     shot_splitter(dir);

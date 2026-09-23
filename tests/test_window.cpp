@@ -1600,3 +1600,56 @@ CK_TEST(a_window_with_no_footer_draws_an_unbroken_bottom_border) {
     plain.draw(painter);
     for (int x = 1; x < 19; ++x) CK_CHECK(s.at(ckv::Point{x, 3}).grapheme() != " ");
 }
+
+// --- Content cover -------------------------------------------------------
+
+CK_TEST(a_content_cover_sits_exactly_on_the_content_and_follows_the_window) {
+    // The cover is in the window's own coordinates, over the interior, and
+    // it stays there through a resize, a margin change and a move — the
+    // owner never places it. Placing a cover by hand in the desktop's
+    // coordinates with content_rect() is how one landed at the desktop's
+    // corner instead of over its window.
+    Fixture f;
+    auto window = make_window(f);
+    window->set_bounds(Rect{10, 5, 30, 12});
+    window->set_content(std::make_unique<View>());
+    View* const cover = window->content_cover();
+    CK_CHECK(cover == nullptr);
+    View* const added = [&] {
+        auto view = std::make_unique<View>();
+        View* observer = view.get();
+        CK_CHECK(window->set_content_cover(std::move(view)) == nullptr);
+        return observer;
+    }();
+    CK_CHECK(window->content_cover() == added);
+    CK_CHECK(added->bounds() == window->content_rect());
+    CK_CHECK(added->bounds() == window->content()->bounds());
+
+    window->set_bounds(Rect{2, 3, 50, 20});
+    CK_CHECK(added->bounds() == window->content_rect());
+    CK_CHECK(added->bounds().width == 48);
+    window->set_content_margin(2, 1);
+    CK_CHECK(added->bounds() == window->content_rect());
+    CK_CHECK(added->bounds() == window->content()->bounds());
+    window->set_bounds(Rect{20, 1, 50, 20});  // a pure move
+    CK_CHECK(added->bounds() == window->content_rect());
+}
+
+CK_TEST(a_content_cover_stays_above_content_that_arrives_after_it) {
+    Fixture f;
+    auto window = make_window(f);
+    window->set_bounds(Rect{0, 0, 20, 8});
+    window->set_content(std::make_unique<View>());
+    auto view = std::make_unique<View>();
+    View* const cover = view.get();
+    window->set_content_cover(std::move(view));
+    (void)window->set_content(std::make_unique<View>());
+    // Painted and hit-tested last means on top.
+    CK_CHECK(window->children().back().get() == cover);
+
+    // Removing it hands it back and leaves the content alone.
+    std::unique_ptr<View> removed = window->set_content_cover(nullptr);
+    CK_CHECK(removed.get() == cover);
+    CK_CHECK(window->content_cover() == nullptr);
+    CK_CHECK(window->content() != nullptr);
+}

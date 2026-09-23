@@ -152,6 +152,19 @@ std::unique_ptr<ui::View> Window::set_content(std::unique_ptr<ui::View> content)
     if (content != nullptr) {
         content_ = add_child(std::move(content));
         content_->set_bounds(content_rect());
+        // New content is added last and would otherwise paint over a cover
+        // that was put up to hide whatever the content is.
+        if (content_cover_ != nullptr) raise_to_front(content_cover_);
+    }
+    return previous;
+}
+
+std::unique_ptr<ui::View> Window::set_content_cover(std::unique_ptr<ui::View> cover) {
+    std::unique_ptr<ui::View> previous = content_cover_ != nullptr ? remove_child(content_cover_) : nullptr;
+    content_cover_ = nullptr;
+    if (cover != nullptr) {
+        content_cover_ = add_child(std::move(cover));
+        content_cover_->set_bounds(content_rect());
     }
     return previous;
 }
@@ -400,6 +413,7 @@ void Window::set_content_margins(int left, int top, int right, int bottom) {
     right_content_margin_ = std::max(0, right);
     bottom_content_margin_ = std::max(0, bottom);
     if (content_ != nullptr) content_->set_bounds(content_rect());
+    if (content_cover_ != nullptr) content_cover_->set_bounds(content_rect());
     invalidate();
 }
 
@@ -468,6 +482,7 @@ void Window::on_resized() {
     if (!backing_surface_ || backing_surface_->size() != Size{bounds().width, bounds().height})
         backing_dirty_ = true;
     if (content_ != nullptr) content_->set_bounds(content_rect());
+    if (content_cover_ != nullptr) content_cover_->set_bounds(content_rect());
     relayout_frame_overlays();
 }
 
