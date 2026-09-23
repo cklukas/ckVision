@@ -204,6 +204,54 @@ CK_TEST(toolbar_and_command_palette_are_command_registry_surfaces) {
     CK_CHECK(ran == 2);
 }
 
+CK_TEST(command_palette_lists_and_runs_what_the_place_it_was_opened_from_allows) {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    int saved = 0;
+    const ckv::ui::CommandId save = app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.save", .title = "Save", .category = "test",
+                                   .scope = {.contexts = {"document"}},
+                                   .handler = [&] { ++saved; }});
+
+    auto* document = app.root().add(std::make_unique<ckv::ui::View>());
+    document->set_command_context("document");
+    document->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    app.set_focus(document);
+
+    // A palette in a place of its own offers what that place allows.
+    auto palette = std::make_unique<CommandPalette>();
+    CommandPalette* palette_ptr = palette.get();
+    app.root().add(std::move(palette));
+    palette_ptr->set_query("save");
+    app.set_focus(palette_ptr);
+    CK_CHECK(!palette_ptr->highlighted_command().has_value());
+
+    // Told where the reader was, it offers and runs that place's commands.
+    palette_ptr->set_invocation_contexts(ckv::ui::command_context_path(document));
+    CK_CHECK(palette_ptr->highlighted_command() == save);
+    CK_CHECK(palette_ptr->on_key(key(Key::Enter)));
+    CK_CHECK(saved == 1);
+
+    // The reader types the title as the row shows it, mnemonic marker and all
+    // left out.
+    const ckv::ui::CommandId save_as = app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.save-as", .title = "Save &as...", .category = "test",
+                                   .handler = [] {}});
+    palette_ptr->set_query("save as");
+    CK_CHECK(palette_ptr->highlighted_command() == save_as);
+
+    // Placed inside the document itself, its own focus path already says so.
+    auto nested = std::make_unique<CommandPalette>();
+    CommandPalette* nested_ptr = nested.get();
+    document->add(std::move(nested));
+    nested_ptr->set_query("save");
+    app.set_focus(nested_ptr);
+    CK_CHECK(nested_ptr->highlighted_command() == save);
+    CK_CHECK(nested_ptr->on_key(key(Key::Enter)));
+    CK_CHECK(saved == 2);
+}
+
 CK_TEST(property_inspector_wizard_notifications_and_tooltip_cover_utility_components) {
     Standalone s;
     PropertyInspector inspector;
@@ -241,6 +289,30 @@ CK_TEST(property_inspector_wizard_notifications_and_tooltip_cover_utility_compon
     CK_CHECK(tooltip.shown());
     tooltip.hide();
     CK_CHECK(!tooltip.shown());
+}
+
+CK_TEST(the_command_palette_accepts_ordinary_typed_characters) {
+    // The same regression as the search box's: a terminal reports typed
+    // characters as Key::Char events, and the palette's query only ever
+    // took TextEvent, so a reader could not type into it.
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app(term, clock);
+    static_cast<void>(app.commands().declare(ckv::ui::CommandDescriptor{
+        .key = "test.build", .title = "Build", .category = "test", .handler = [] {}}));
+    auto palette = std::make_unique<CommandPalette>();
+    CommandPalette* palette_ptr = palette.get();
+    app.root().add(std::move(palette));
+    const auto type = [palette_ptr](const char* text, Modifier modifiers = Modifier::None) {
+        return palette_ptr->on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, modifiers, text}});
+    };
+    CK_CHECK(type("b"));
+    CK_CHECK(type("u"));
+    CK_CHECK(palette_ptr->query() == "bu");
+    CK_CHECK(palette_ptr->highlighted_command().has_value());
+    // A chord is the registry's, not the query's.
+    CK_CHECK(!type("x", Modifier::Alt));
+    CK_CHECK(palette_ptr->query() == "bu");
 }
 
 CK_TEST(a_search_box_accepts_ordinary_typed_characters) {
@@ -324,11 +396,18 @@ CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_dra
 }
 
 CK_TEST(a_focused_search_box_shows_a_caret_where_typing_will_land) {
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    ckv::ui::RoleRegistry registry;
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
+    const ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
     ckv::widgets::SearchBox box;
+    box.set_context(ckv::ui::Context{&theme, &registry, &app});
     box.set_bounds(ckv::Rect{0, 0, 20, 1});
     CK_CHECK(!box.cursor_state().has_value());  // unfocused: no caret
 
-    box.on_focus(ckv::FocusEvent{true});
+    app.set_focus(&box);
     const auto empty_caret = box.cursor_state();
     CK_CHECK(empty_caret.has_value());
     CK_CHECK(empty_caret->visible);
@@ -763,7 +842,8 @@ CK_TEST(the_year_steppers_move_a_year_at_a_time) {
 CK_TEST(a_typed_year_takes_digits_only_and_moves_the_calendar_on_enter) {
     DroppedCalendar c;
     c.press(ckv::Key::Tab);
-    c.press(ckv::Key::Tab);  // onto the year field
+    c.press(ckv::Key::Tab);  // onto the year field, its year selected
+    c.press(ckv::Key::End);  // kept, the caret after it
     c.press(ckv::Key::Backspace);
     c.press(ckv::Key::Char, ckv::Modifier::None, "x");  // not part of a year
     c.press(ckv::Key::Char, ckv::Modifier::None, "5");
@@ -776,6 +856,7 @@ CK_TEST(leaving_the_year_field_commits_what_was_typed) {
     DroppedCalendar c;
     c.press(ckv::Key::Tab);
     c.press(ckv::Key::Tab);
+    c.press(ckv::Key::End);
     c.press(ckv::Key::Backspace);
     c.press(ckv::Key::Char, ckv::Modifier::None, "4");
     c.press(ckv::Key::Tab);  // moving on says the same thing as Enter

@@ -56,6 +56,33 @@ enum class CommandVisibility {
     Hidden,
 };
 
+// Where a command can be used (M9/WP-13, WP-59). A context is a named
+// scope: an application pushes one on the registry, or a view names one
+// for its focus ancestry (View::set_command_context). A command bound to
+// contexts is available while any of them is active — an editor's Save
+// belongs to the document and to the outline beside it — and a command
+// bound to none is available everywhere.
+//
+// `outside_contexts` adds the one place a list of names cannot state:
+// where no context is active at all — nothing pushed, and nothing on the
+// focus path naming one, which is the bare desktop with no window focused
+// or a window that declares no context of its own. An application whose
+// Open belongs to the desktop and to its document windows, but not to the
+// field where the reader is typing a value, says exactly that with
+// {.contexts = {"document"}, .outside_contexts = true}. A scope naming no
+// contexts and outside_contexts is available only where no context is
+// active.
+struct CommandScope {
+    std::vector<std::string> contexts{};
+    bool outside_contexts = false;
+
+    // Available everywhere: no context named and no restriction to the
+    // context-free places.
+    bool unrestricted() const noexcept { return contexts.empty() && !outside_contexts; }
+
+    friend bool operator==(const CommandScope&, const CommandScope&) = default;
+};
+
 struct CommandInfo {
     CommandId id = kInvalidCommand;
     // The identity this command was declared under, e.g.
@@ -64,7 +91,7 @@ struct CommandInfo {
     std::string title;
     std::string category;
     std::optional<KeyChord> default_chord;
-    std::string context;
+    CommandScope scope;
     CommandVisibility visibility = CommandVisibility::Palette;
 };
 
@@ -93,17 +120,22 @@ struct CommandDescriptor {
     // Owned rather than a view, like every other field here: a
     // descriptor may be built in one place and declared in another, and
     // a computed key must not have to outlive that.
-    std::string key;
-    std::string title;
-    std::string category;
-    std::string context;
+    //
+    // Every member carries an explicit initializer, empty though most are:
+    // descriptors are declared with designated initializers naming only what
+    // a command needs, and a member without one trips
+    // -Wmissing-field-initializers at every declaration that leaves it out.
+    std::string key{};
+    std::string title{};
+    std::string category{};
+    CommandScope scope{};
     // Default chord in KeyChord::parse() spelling, e.g. "Alt+G"; empty
     // means no default chord. A caller holding an already-built
     // KeyChord (rather than a source literal) declares without one and
     // calls bind_key() instead.
-    std::string chord;
+    std::string chord{};
     CommandVisibility visibility = CommandVisibility::Palette;
-    std::function<void()> handler;
+    std::function<void()> handler{};
 };
 
 // The library's own standard commands (D-013 materialized, M9/WP-12),
@@ -292,10 +324,17 @@ public:
     // failure a recycled handle invites.
     void withdraw(CommandId id);
 
-    void set_command_context(CommandId id, std::string context);
+    void set_command_scope(CommandId id, CommandScope scope);
     ContextScopeId push_context(std::string context);
     bool pop_context(ContextScopeId id);
+    // Whether `context` is pushed. The empty name is always active.
     bool context_active(std::string_view context) const noexcept;
+    // Whether one of the contexts `id`'s scope names is active — pushed, or
+    // among `focus_contexts` — ignoring enablement and outside_contexts.
+    // This is what a modal scope admits a command by: a context the modal's
+    // own controls name is a deliberate invitation, while being usable
+    // "where no context is active" says nothing about the modal at all.
+    bool in_named_context(CommandId id, const std::vector<std::string>& focus_contexts) const;
 
     // Changes whether a declared command is browsable — see
     // CommandVisibility. The one common use is opting a standard
@@ -304,6 +343,9 @@ public:
 
     void set_enabled_predicate(CommandId id, std::function<bool()> predicate);
     bool is_enabled(CommandId id) const; // true if no predicate registered
+    // Enabled, and in scope: its scope is unrestricted, one of the contexts
+    // it names is active (pushed, or among `focus_contexts`), or it is
+    // usable outside contexts and none is active at all.
     bool is_available(CommandId id, const std::vector<std::string>& focus_contexts = {}) const;
 
     // The active keymap: chord -> command. Rebindable at runtime;

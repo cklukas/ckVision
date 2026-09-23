@@ -122,7 +122,86 @@ CK_TEST(hint_updates_when_focus_moves_to_a_different_view) {
     CK_CHECK(status.current_hint() == "b");
 }
 
+CK_TEST(with_nothing_focused_the_hint_resolves_from_the_roots_help_context_key) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_hint_provider([](const std::string& key) { return "Hint for " + key; });
+    // An empty desktop: the root's key stands for the application as a whole.
+    app.root().set_help_context_key("desktop");
+    CK_CHECK(app.focused() == nullptr);
+    CK_CHECK(status.current_hint() == "Hint for desktop");
+    // A focused view with a key of its own outranks the root's.
+    auto* view = app.root().add_child(std::make_unique<View>());
+    view->set_focus_policy(FocusPolicy::TabStop);
+    view->set_help_context_key("topic.a");
+    app.set_focus(view);
+    CK_CHECK(status.current_hint() == "Hint for topic.a");
+    // A focused view without one inherits the root's, as any ancestor's.
+    auto* plain = app.root().add_child(std::make_unique<View>());
+    plain->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(plain);
+    CK_CHECK(status.current_hint() == "Hint for desktop");
+}
+
 // --- Items -----------------------------------------------------------
+
+CK_TEST(the_items_follow_the_focused_views_command_context) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    StatusLine status;
+    status.set_context(ui::Context{&f.theme, &f.registry, &app});
+    status.set_bounds(Rect{0, 0, 60, 1});
+    const ui::CommandId open = app.commands().declare({.key = "test.open", .title = "Open"});
+    const ui::CommandId save = app.commands().declare({.key = "test.save", .title = "Save"});
+    const ui::CommandId refresh = app.commands().declare({.key = "test.refresh", .title = "Refresh"});
+    bool refreshed = false;
+    app.set_command_handler(refresh, [&] { refreshed = true; });
+    status.set_items({StatusLineItem{"Open", open, 0}});
+    status.set_context_items("editor", {StatusLineItem{"Save", save, 0}});
+    status.set_context_items("preview", {StatusLineItem{"Refresh", refresh, 0}});
+
+    auto* editor_pane = app.root().add_child(std::make_unique<View>());
+    editor_pane->set_command_context("editor");
+    auto* editor = editor_pane->add_child(std::make_unique<View>());
+    editor->set_focus_policy(FocusPolicy::TabStop);
+    auto* preview = app.root().add_child(std::make_unique<View>());
+    preview->set_command_context("preview");
+    preview->set_focus_policy(FocusPolicy::TabStop);
+    auto* plain = app.root().add_child(std::make_unique<View>());
+    plain->set_focus_policy(FocusPolicy::TabStop);
+    auto* other = app.root().add_child(std::make_unique<View>());
+    other->set_command_context("tree");
+    other->set_focus_policy(FocusPolicy::TabStop);
+
+    CK_CHECK(status.shown_items().front().command == open);  // no focus: the ordinary items
+    app.set_focus(editor);                                     // context found on an ancestor
+    CK_CHECK(status.shown_items().front().command == save);
+    app.set_focus(preview);
+    CK_CHECK(status.shown_items().front().command == refresh);
+    // A click reaches the item that is on the line now.
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                              std::nullopt, Modifier::None}));
+    CK_CHECK(status.on_mouse(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{2, 0},
+                                              std::nullopt, Modifier::None}));
+    CK_CHECK(refreshed);
+    app.set_focus(plain);                                      // no context
+    CK_CHECK(status.shown_items().front().command == open);
+    app.set_focus(other);                                      // a context without a set of its own
+    CK_CHECK(status.shown_items().front().command == open);
+    status.set_context_items("preview", {});                  // removed
+    app.set_focus(preview);
+    CK_CHECK(status.shown_items().front().command == open);
+    app.set_focus(editor);
+    status.clear_context_items();
+    CK_CHECK(status.shown_items().front().command == open);
+}
+
 
 CK_TEST(clicking_an_items_label_fires_its_command) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});

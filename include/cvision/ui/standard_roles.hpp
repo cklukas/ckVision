@@ -98,6 +98,13 @@ struct StandardRoles {
     // Muted rather than absent: the list must still remember its place.
     RoleId list_selected_inactive;
     RoleId table_header;     // Table: the column-header row
+    // CellGrid (D-067). A family of its own rather than the list's: a grid of
+    // cells is a document surface the reader works in, and a theme wants it
+    // to read differently from a list of choices beside it.
+    RoleId cell_grid_normal;     // a cell that states no colour of its own
+    RoleId cell_grid_header;     // the column header row and the row gutter
+    RoleId cell_grid_cursor;     // the cursor cell
+    RoleId cell_grid_selection;  // a selected cell other than the cursor
     RoleId memo_normal;
     RoleId memo_focused;
     RoleId memo_invalid;  // a failed descriptor-form validator

@@ -528,7 +528,7 @@ CK_TEST(a_menu_bar_keeps_the_invoking_views_command_context_while_open) {
     mf.app.set_focus(editor);
 
     const ui::CommandId save = mf.app.commands().declare(
-        {.key = "test.contextual-save", .title = "Save", .context = "document"});
+        {.key = "test.contextual-save", .title = "Save", .scope = {.contexts = {"document"}}});
     bool ran = false;
     mf.app.set_command_handler(save, [&] { ran = true; });
     auto bar_owned = std::make_unique<MenuBar>(
@@ -540,6 +540,35 @@ CK_TEST(a_menu_bar_keeps_the_invoking_views_command_context_while_open) {
     CK_CHECK(mf.app.dispatch(key(Key::Enter)));
     CK_CHECK(ran);
     CK_CHECK(mf.app.focused() == editor);
+}
+
+CK_TEST(a_menu_opened_from_the_bare_desktop_offers_what_is_usable_outside_contexts) {
+    MenuBarFixture mf;
+    const ui::CommandId open = mf.app.commands().declare(
+        {.key = "test.contextual-open",
+         .title = "Open",
+         .scope = {.contexts = {"document"}, .outside_contexts = true}});
+    const ui::CommandId save = mf.app.commands().declare(
+        {.key = "test.contextual-save", .title = "Save", .scope = {.contexts = {"document"}}});
+    int opened = 0;
+    int saved = 0;
+    mf.app.set_command_handler(open, [&] { ++opened; });
+    mf.app.set_command_handler(save, [&] { ++saved; });
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&File", {MenuItem::command(open), MenuItem::command(save)}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+
+    mf.app.set_focus(nullptr);
+    bar->activate();
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    CK_CHECK(mf.app.dispatch(key(Key::Enter)));
+    CK_CHECK(opened == 1);
+
+    bar->activate();
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    CK_CHECK(mf.app.dispatch(key(Key::Down)));
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(saved == 0);
 }
 
 // Regression (M8/WP-2): Application::dispatch's new click-to-focus must
@@ -1598,7 +1627,7 @@ CK_TEST(a_context_menu_keeps_the_invoking_views_command_context_while_open) {
     ckv::ui::View* previous = host->add(std::move(origin));
     app.set_focus(previous);
     const ui::CommandId save = app.commands().declare(
-        {.key = "test.context-menu-save", .title = "Save", .context = "document"});
+        {.key = "test.context-menu-save", .title = "Save", .scope = {.contexts = {"document"}}});
     bool ran = false;
     app.set_command_handler(save, [&] { ran = true; });
 
@@ -1894,4 +1923,71 @@ CK_TEST(a_command_row_cannot_be_told_it_is_available_when_its_command_is_not) {
     // Enablement has one source per kind, so a menu cannot disagree with
     // the palette about whether a verb can be used.
     CK_EXPECT_ABORT({ (void)MenuItem::command(ui::kInvalidCommand).with_enabled(false); });
+}
+
+CK_TEST(activating_the_trailing_title_from_the_keyboard_ends_the_walk_first) {
+    // Enter on the trailing title hands off to whatever the title opens -- a
+    // calendar, say -- and that hand-off ends the walk the way choosing an item
+    // does. Done in the other order, the calendar's modal scope saved a focused
+    // BAR and gave it back when the calendar closed: a bar standing highlighted
+    // on its first menu that nobody had asked for.
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Left));  // onto the trailing title
+    CK_CHECK(probe->highlighted());
+    mf.app.dispatch(key(Key::Enter));
+    CK_CHECK(probe->activations == 1);
+    CK_CHECK(!bar->active());
+    CK_CHECK(!probe->highlighted());
+    CK_CHECK(mf.app.focused() == other);
+}
+
+CK_TEST(a_pointer_on_the_trailing_title_ends_the_walk_before_the_title_reacts) {
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+
+    bar->activate();
+    CK_CHECK(bar->active());
+    // What the Application tells every ancestor of a pointer-down target
+    // before the target itself hears of it (the architecture §5, pointer
+    // delivery): the bar sees the press on its trailing title coming.
+    bar->on_descendant_mouse_down(*probe);
+    CK_CHECK(!bar->active());
+    CK_CHECK(!probe->highlighted());
+    CK_CHECK(mf.app.focused() == other);
+}
+
+CK_TEST(losing_focus_to_another_view_ends_the_walk_and_its_trailing_highlight) {
+    // Focus can leave the bar without the bar's own doing -- a view opened
+    // from the trailing title takes it. Whatever the walk had lit, the bar's
+    // title or the trailing one, goes out with it, and the bookmark goes too:
+    // a deactivate() that came later must not carry focus back to a view the
+    // reader left long ago.
+    MenuBarFixture mf;
+    auto* other = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    other->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    auto* taker = mf.app.root().add_child(std::make_unique<ckv::ui::View>());
+    taker->set_focus_policy(ckv::ui::FocusPolicy::TabStop);
+    mf.app.set_focus(other);
+    TrailingProbe* probe = nullptr;
+    MenuBar* bar = bar_with_trailing_probe(mf, &probe);
+
+    bar->activate();
+    mf.app.dispatch(key(Key::Left));
+    CK_CHECK(probe->highlighted());
+    mf.app.set_focus(taker);
+    CK_CHECK(!bar->active());
+    CK_CHECK(!probe->highlighted());
+    bar->deactivate();  // nothing to end; must not move focus anywhere
+    CK_CHECK(mf.app.focused() == taker);
 }

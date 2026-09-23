@@ -10,7 +10,9 @@
 #include <utility>
 #include <vector>
 
+#include "cvision/widgets/big_clock.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/cell_grid.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/scroll_viewport.hpp"
@@ -130,6 +132,48 @@ void shot_table(const std::filesystem::path& dir) {
     stage.save_window(dir, "widget-table-editing");
 }
 
+void shot_cell_grid(const std::filesystem::path& dir) {
+    // The provider outlives the grid, so it is declared before the stage
+    // that will own the grid's window.
+    widgets::MaterializedCellGridModel sheet;
+    WidgetStage stage;
+    auto grid = std::make_unique<widgets::CellGrid>();
+
+    // ckvision-doc: cellgrid
+    sheet.set_cells({
+        {"Region", "Q1", "Q2", "Total"},
+        {"North", "1240", "1310", "2550"},
+        {"South", "980", "1105", "2085"},
+        {"West", "1530", "1490", "3020"},
+        {"Sum", "3750", "3905", "7655"},
+    });
+    sheet.set_column_widths({8, 7, 7, 7});
+    sheet.set_frozen(1, 0);  // the title row stays while the body scrolls
+    for (widgets::GridIndex column = 0; column < sheet.column_count(); ++column) {
+        widgets::GridCell title = sheet.cell_at({0, column});
+        title.style.attributes = Attr::Bold;
+        sheet.set_cell({0, column}, title);
+    }
+    for (widgets::GridIndex row = 1; row < sheet.row_count(); ++row)
+        for (widgets::GridIndex column = 1; column < sheet.column_count(); ++column) {
+            widgets::GridCell figure = sheet.cell_at({row, column});
+            figure.alignment = widgets::CellAlignment::End;  // figures end at the right edge
+            sheet.set_cell({row, column}, figure);
+        }
+    sheet.place_cursor({2, 1}, false);
+    sheet.navigate(widgets::GridMove::Right, true);  // Shift+Right: a two-cell selection
+    grid->set_model(sheet);
+    grid->on_activate = [] { /* edit the cursor cell */ };
+    grid->on_type_ahead = [](const std::string& text) { (void)text; /* start editing with it */ };
+    // ckvision-doc-end: cellgrid
+
+    widgets::CellGrid* view = grid.get();
+    stage.window_with_content("Quarterly", Rect{14, 4, 44, 10}, std::move(grid));
+    stage.focus(view);
+    stage.step();
+    stage.save_window(dir, "widget-cellgrid");
+}
+
 void shot_property_inspector(const std::filesystem::path& dir) {
     WidgetStage stage;
     ui::View& content = stage.dialog_window("Properties", Rect{22, 6, 36, 9});
@@ -210,6 +254,24 @@ void shot_clock_view(const std::filesystem::path& dir) {
 
     stage.step();
     stage.save_window(dir, "widget-clockview");
+}
+
+void shot_big_clock_view(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    auto face = std::make_unique<widgets::BigClockView>();
+
+    // ckvision-doc: bigclockview
+    face->set_content(widgets::BigClockContent::DateAndTime);
+    face->set_show_seconds(false);
+    face->set_moment_provider([] {
+        return widgets::DateTimeValue{widgets::DateValue{2026, 9, 23}, widgets::TimeValue{14, 5, 0}};
+    });
+    face->on_dismiss = [] { /* take the face down again */ };
+    // ckvision-doc-end: bigclockview
+
+    stage.window_with_content("Clock", Rect{10, 4, 60, 15}, std::move(face));
+    stage.step();
+    stage.save_window(dir, "widget-bigclockview");
 }
 
 void shot_scrollbar(const std::filesystem::path& dir) {
@@ -334,10 +396,12 @@ void capture_data_shots(const std::filesystem::path& dir) {
     shot_list_view(dir);
     shot_tree_view(dir);
     shot_table(dir);
+    shot_cell_grid(dir);
     shot_property_inspector(dir);
     shot_calendar_view(dir);
     shot_calendar_dropdown(dir);
     shot_clock_view(dir);
+    shot_big_clock_view(dir);
     shot_scrollbar(dir);
     shot_scroll_viewport(dir);
     shot_splitter(dir);

@@ -103,6 +103,14 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 
 ![Invalid profile dialog](generated/screenshots/forms-invalid-dialog.svg)
 
+The labels that stand beside a control — every field but a `Check`, a `Note`
+and a stacked `Radio`, which captions its own choices above them — form one
+column as wide as the widest of them, so each control starts at the same
+place and the answers read straight down the form. A `Radio` laid out in
+`columns` whose choices share one row is labelled beside that row like any
+other field; a stacked list keeps its caption above however many entries it
+holds, so a form does not change shape with the number it offers.
+
 ## Fields that are not text
 
 `FieldDescriptor::kind` selects what a field materializes as. `Text` is the
@@ -110,7 +118,10 @@ default; `Check` is a single checkbox carrying `label` as its own text; `Note`
 is text the form states rather than asks. `Memo` is a multi-line, word-wrapped
 text field; use `memo_rows` to request its visible height (five rows by
 default). `Radio`, `Combo`, `Number`, `Date`, and `Time` materialize their
-corresponding typed ckVision controls.
+corresponding typed ckVision controls. A `Radio` field's `label` captions its
+choices, mnemonic included, and `columns` lets the choices flow into columns:
+a form that asks "keep, on, off or reset" of four properties names four
+columns and takes four rows for it rather than twenty.
 
 ```cpp
 descriptor.fields.push_back(widgets::FieldDescriptor{
@@ -138,6 +149,42 @@ the default button from anywhere in the dialog, a focused checkbox or radio
 group included.
 
 Notes take no focus, so `Tab` still moves between the fields a reader answers.
+
+## Describing the focused field
+
+A form with more fields than room for a line of help beside each can keep one
+explanation in view instead. Give each field a `description` and reserve rows
+for it with `DialogDescriptor::field_description_rows`: a panel between the
+fields and the buttons shows the focused field's description, word-wrapped and
+broken at `'\n'`, and keeps the last one while a button has the focus. The
+panel never scrolls with the fields, so the explanation stays beside whichever
+field the reader is on however long the form is.
+
+```cpp
+descriptor.field_description_rows = 3;
+descriptor.fields.push_back(widgets::FieldDescriptor{
+    .label = "&Network name",
+    .description = "The network's SSID, exactly as it is broadcast.\nExample: Home"});
+```
+
+## Checking the whole answer
+
+A field's `validate` answers for its own text. What only the whole answer can
+be wrong about — an abbreviation with no expansion, a range whose end comes
+before its start — goes in `DialogDescriptor::check`, which runs when the reader
+accepts and every field has passed, with the `DialogResult` the dialog would
+complete with. Returning a `DialogVeto` keeps the dialog open with everything
+the reader entered: the field it names is marked and takes the focus, and its
+message stands in the description panel until the focus moves on. A descriptor
+with a check always has that panel, two rows tall when it reserved none.
+
+```cpp
+descriptor.check = [](const widgets::DialogResult& answers) -> std::optional<widgets::DialogVeto> {
+    if (answers.selected[0] == kAbbreviation && answers.values[1].empty())
+        return widgets::DialogVeto{"An abbreviation needs its expansion.", 1};
+    return std::nullopt;
+};
+```
 Consecutive notes lay out as one paragraph with no blank row between them: the
 form's own spacing separates questions, not the lines of a sentence.
 
@@ -178,6 +225,14 @@ deliberate whitespace around compact content.
 
 For file/directory selection, help, and window lists use the matching standard
 presentation headers shown in [the API index](api-index.md#dialogs-and-client-services).
+
+A presentation's completion handler runs only while the presentation is kept.
+An application with a handful of dialogs keeps one member per dialog; one that
+asks many questions keeps a single
+[`PendingDialogs`](widget-gallery.md#pendingdialogs) and hands it every
+presentation together with what to do with the answer. Each is released when
+its answer arrives and before that answer runs, so a confirmation can present
+the error box that follows it without a second member to hold it.
 
 ## Wizard: state-dependent Next
 

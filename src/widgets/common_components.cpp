@@ -353,10 +353,7 @@ bool CalendarView::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void CalendarView::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void CalendarView::on_focus(const FocusEvent&) { invalidate(); }
 
 ui::SizeHint CalendarView::horizontal_size_hint() const { return ui::SizeHint{21, show_iso_week_numbers_ ? 24 : 21, ui::kUnboundedExtent}; }
 ui::SizeHint CalendarView::vertical_size_hint() const { return ui::SizeHint{8, 8, 8}; }
@@ -928,7 +925,7 @@ bool DatePicker::open_calendar() {
 }
 
 void DatePicker::draw(scene::Painter& painter) {
-    const ui::RoleId role = !valid_ ? invalid_role_ : (focused_ ? focused_role_ : normal_role_);
+    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_);
     const Style style = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     const bool has_dropdown = calendar_app_ != nullptr && calendar_desktop_ != nullptr && bounds().width >= 2;
@@ -942,7 +939,7 @@ void DatePicker::draw(scene::Painter& painter) {
     const std::string rendered = format_iso_date(*value_);
     painter.draw_text(Point{0, 0}, text::clip_to_width(rendered, value_width), style);
     if (has_dropdown) painter.draw_text(Point{bounds().width - 1, 0}, "▾", style);
-    if (!focused_) return;
+    if (!has_focus()) return;
     const int start = active_field_ == 0 ? 0 : (active_field_ == 1 ? 5 : 8);
     const int width = active_field_ == 0 ? 4 : 2;
     if (start >= value_width) return;
@@ -1007,11 +1004,7 @@ bool DatePicker::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void DatePicker::on_focus(const FocusEvent& event) {
-    if (focused_ == event.gained) return;
-    focused_ = event.gained;
-    invalidate();
-}
+void DatePicker::on_focus(const FocusEvent&) { invalidate(); }
 
 void DatePicker::on_attached() {
     if (normal_role_ == ui::kInvalidRole) normal_role_ = context().roles->find("ckv.input.normal");
@@ -1084,7 +1077,7 @@ void TimePicker::adjust(int delta) {
 }
 
 void TimePicker::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(!valid_ ? invalid_role_ : has_focus_ ? focused_role_ : role_);
+    const Style style = context().theme->resolve(!valid_ ? invalid_role_ : has_focus() ? focused_role_ : role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     painter.draw_text(Point{0, 0}, text::clip_to_width(time_text(value_, show_seconds_, twenty_four_hour_), bounds().width), style);
 }
@@ -1117,7 +1110,7 @@ bool TimePicker::on_mouse(const MouseEvent& event) {
     return true;
 }
 
-void TimePicker::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void TimePicker::on_focus(const FocusEvent&) { invalidate(); }
 void TimePicker::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
@@ -1139,7 +1132,7 @@ void SpinBox::set_value(int value) {
 }
 void SpinBox::adjust(int delta) { set_value(value_ + delta * step_); }
 void SpinBox::draw(scene::Painter& painter) {
-    const Style style = context().theme->resolve(has_focus_ ? focused_role_ : role_);
+    const Style style = context().theme->resolve(has_focus() ? focused_role_ : role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", style));
     painter.draw_text(Point{0, 0}, text::clip_to_width("< " + std::to_string(value_) + " >", bounds().width), style);
 }
@@ -1154,7 +1147,7 @@ bool SpinBox::on_mouse(const MouseEvent& event) {
     adjust(event.cell.x - absolute_bounds().x >= bounds().width / 2 ? 1 : -1);
     return true;
 }
-void SpinBox::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void SpinBox::on_focus(const FocusEvent&) { invalidate(); }
 void SpinBox::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
@@ -1185,7 +1178,7 @@ void Slider::draw(scene::Painter& painter) {
     const int pos = value_from_x(bounds().width - 1) == minimum_ ? 0 :
         (value_ - minimum_) * std::max(1, bounds().width - 1) / std::max(1, maximum_ - minimum_);
     painter.fill(Rect{0, 0, std::clamp(pos, 0, bounds().width - 1), 1}, Cell::from_grapheme("━", fill));
-    painter.draw_text(Point{std::clamp(pos, 0, std::max(0, bounds().width - 1)), 0}, has_focus_ ? "◆" : "●", fill);
+    painter.draw_text(Point{std::clamp(pos, 0, std::max(0, bounds().width - 1)), 0}, has_focus() ? "◆" : "●", fill);
 }
 bool Slider::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -1200,7 +1193,7 @@ bool Slider::on_mouse(const MouseEvent& event) {
     set_value(value_from_x(event.cell.x - absolute_bounds().x));
     return true;
 }
-void Slider::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void Slider::on_focus(const FocusEvent&) { invalidate(); }
 void Slider::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.list.normal");
     if (fill_role_ == ui::kInvalidRole) fill_role_ = context().roles->find("ckv.menu.bar.active");
@@ -1226,7 +1219,7 @@ void SearchBox::draw(scene::Painter& painter) {
     // read as a caption, and put the clear control wherever the query
     // happened to end — nowhere near the columns that actually respond to a
     // click on it.
-    const Style style = context().theme->resolve(has_focus_ ? focused_role_ : role_);
+    const Style style = context().theme->resolve(has_focus() ? focused_role_ : role_);
     const Style label = context().theme->resolve(label_role_);
     const int width = bounds().width;
     if (width <= 0) return;
@@ -1253,7 +1246,7 @@ void SearchBox::draw(scene::Painter& painter) {
 std::optional<CursorState> SearchBox::cursor_state() const {
     // The caret is the other half of "you can type here", and it also tells
     // the reader which pane the keyboard is in.
-    if (!has_focus_) return std::nullopt;
+    if (!has_focus()) return std::nullopt;
     const int width = bounds().width;
     const int prompt_width = std::min(static_cast<int>(std::string_view("Search ").size()), width);
     const int clear_width = query_.empty() ? 0 : kClearControlWidth;
@@ -1292,7 +1285,7 @@ bool SearchBox::on_mouse(const MouseEvent& event) {
     // A click anywhere else in the field is a request to type in it.
     return true;
 }
-void SearchBox::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void SearchBox::on_focus(const FocusEvent&) { invalidate(); }
 void SearchBox::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
@@ -1339,12 +1332,23 @@ CommandPalette::CommandPalette() {
     set_preferred_size(Size{40, 8});
 }
 void CommandPalette::set_query(std::string query) { query_ = std::move(query); highlighted_ = 0; invalidate(); }
+void CommandPalette::set_invocation_contexts(std::vector<std::string> contexts) {
+    invocation_contexts_ = std::move(contexts);
+    highlighted_ = 0;
+    invalidate();
+}
+bool CommandPalette::available(ui::CommandId id) const {
+    if (invocation_contexts_) return context().app->commands().is_available(id, *invocation_contexts_);
+    return context().app->command_available(id);
+}
 std::vector<ui::CommandInfo> CommandPalette::filtered_commands() const {
     if (context().app == nullptr) return {};
     std::vector<ui::CommandInfo> out;
     for (const ui::CommandInfo& info : context().app->commands().all())
-        if (info.visibility == ui::CommandVisibility::Palette && contains_ci(info.title, query_) &&
-            context().app->commands().is_available(info.id))
+        // The reader types what the row shows, so the match is against the
+        // title as displayed: "Save as" finds "Save &as...".
+        if (info.visibility == ui::CommandVisibility::Palette &&
+            contains_ci(parse_mnemonic(info.title).display, query_) && available(info.id))
             out.push_back(info);
     return out;
 }
@@ -1422,17 +1426,26 @@ void CommandPalette::draw(scene::Painter& painter) {
 }
 bool CommandPalette::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
+    // A typed character reaches the query the way a terminal reports it:
+    // as a Key::Char event. Alt, Ctrl and Super chords stay the registry's.
+    if (event.chord.key == Key::Char && !event.chord.text.empty() &&
+        !has_modifier(event.chord.modifiers, Modifier::Alt) && !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
+        !has_modifier(event.chord.modifiers, Modifier::Super))
+        return on_text(TextEvent{event.chord.text, false});
     const auto commands = filtered_commands();
     if (event.chord.key == Key::Down && !commands.empty()) { highlighted_ = std::min(highlighted_ + 1, commands.size() - 1); invalidate(); return true; }
     if (event.chord.key == Key::Up && highlighted_ > 0) { --highlighted_; invalidate(); return true; }
     if (event.chord.key == Key::Backspace && !query_.empty()) { query_.pop_back(); highlighted_ = 0; invalidate(); return true; }
     if (event.chord.key == Key::Enter && context().app != nullptr) {
-        if (auto command = highlighted_command()) return context().app->commands().execute(*command);
+        if (auto command = highlighted_command()) {
+            if (invocation_contexts_) return context().app->commands().execute(*command, *invocation_contexts_);
+            return context().app->execute_command(*command);
+        }
     }
     return false;
 }
 bool CommandPalette::on_text(const TextEvent& event) { set_query(query_ + event.text); return true; }
-void CommandPalette::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void CommandPalette::on_focus(const FocusEvent&) { invalidate(); }
 void CommandPalette::on_attached() {
     if (input_role_ == ui::kInvalidRole) input_role_ = context().roles->find("ckv.input.normal");
     if (result_role_ == ui::kInvalidRole) result_role_ = context().roles->find("ckv.option.normal");
@@ -1457,7 +1470,7 @@ void BreadcrumbBar::draw(scene::Painter& painter) {
     int x = 0;
     for (std::size_t i = 0; i < segments_.size() && x < bounds().width; ++i) {
         painter.draw_text(Point{x, 0}, text::clip_to_width(segments_[i], bounds().width - x),
-                          has_focus_ && i == focused_ ? focused : normal);
+                          has_focus() && i == focused_ ? focused : normal);
         x += text::text_width(segments_[i]);
         if (i + 1 < segments_.size()) {
             painter.draw_text(Point{x, 0}, separator_, normal);
@@ -1481,7 +1494,7 @@ bool BreadcrumbBar::on_mouse(const MouseEvent& event) {
     invalidate();
     return true;
 }
-void BreadcrumbBar::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void BreadcrumbBar::on_focus(const FocusEvent&) { invalidate(); }
 void BreadcrumbBar::on_attached() {
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.label.text");
     if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.list.selected");
@@ -1518,7 +1531,7 @@ bool PropertyInspector::on_text(const TextEvent& event) {
     invalidate();
     return true;
 }
-void PropertyInspector::on_focus(const FocusEvent& event) { has_focus_ = event.gained; invalidate(); }
+void PropertyInspector::on_focus(const FocusEvent&) { invalidate(); }
 void PropertyInspector::on_attached() {
     set_focus_policy(ui::FocusPolicy::TabStop);
     if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.list.normal");

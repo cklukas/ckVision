@@ -100,7 +100,7 @@ CommandId CommandRegistry::declare(CommandDescriptor descriptor) {
                                 std::move(descriptor.title),
                                 std::move(descriptor.category),
                                 chord,
-                                std::move(descriptor.context),
+                                std::move(descriptor.scope),
                                 descriptor.visibility};
     if (chord) bind_key(*chord, id);
     if (descriptor.handler) set_handler(id, std::move(descriptor.handler));
@@ -143,10 +143,10 @@ void CommandRegistry::withdraw(CommandId id) {
                   keymap_.end());
 }
 
-void CommandRegistry::set_command_context(CommandId id, std::string context) {
+void CommandRegistry::set_command_scope(CommandId id, CommandScope scope) {
     auto it = commands_.find(id);
     CKV_ASSERT(it != commands_.end());
-    it->second.context = std::move(context);
+    it->second.scope = std::move(scope);
 }
 
 CommandRegistry::ContextScopeId CommandRegistry::push_context(std::string context) {
@@ -189,14 +189,25 @@ bool CommandRegistry::is_enabled(CommandId id) const {
     return it->second ? it->second() : true;
 }
 
+bool CommandRegistry::in_named_context(CommandId id,
+                                       const std::vector<std::string>& focus_contexts) const {
+    const auto info = commands_.find(id);
+    if (info == commands_.end()) return false;
+    for (const std::string& context : info->second.scope.contexts) {
+        if (context_active(context)) return true;
+        if (std::find(focus_contexts.begin(), focus_contexts.end(), context) != focus_contexts.end())
+            return true;
+    }
+    return false;
+}
+
 bool CommandRegistry::is_available(CommandId id,
                                    const std::vector<std::string>& focus_contexts) const {
     if (!is_enabled(id)) return false;
     const auto info = commands_.find(id);
-    if (info == commands_.end() || info->second.context.empty()) return true;
-    if (context_active(info->second.context)) return true;
-    return std::find(focus_contexts.begin(), focus_contexts.end(), info->second.context) !=
-           focus_contexts.end();
+    if (info == commands_.end() || info->second.scope.unrestricted()) return true;
+    if (in_named_context(id, focus_contexts)) return true;
+    return info->second.scope.outside_contexts && active_contexts_.empty() && focus_contexts.empty();
 }
 
 void CommandRegistry::bind_key(KeyChord chord, CommandId id) {

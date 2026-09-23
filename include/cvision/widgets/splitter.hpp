@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include "cvision/ui/theme.hpp"
@@ -45,8 +46,24 @@ using ui::View;
 // through the same clamped set_split_position() the keys use, so both
 // routes obey one rule about how small a pane may get.
 //
+// Which pane keeps its size is a choice (set_resize_anchor): the first by
+// default, as above, and the second for a side panel on the far edge — a
+// preview beside a document keeps its width while the window, and with it
+// the document, grows. The anchored pane's extent is remembered as asked for
+// (set_anchored_extent), not as last clamped, so a window made briefly too
+// small gives the panel its width back when it grows again, and a width
+// restored before the splitter has any size of its own is honoured at its
+// first layout.
+//
+// A pane that is not visible takes no room: the other one fills the splitter,
+// no divider is drawn or grabbed, and the splitter is no tab stop until both
+// panes show again — so hiding a side panel is set_visible(false) on it, with
+// nothing left behind where it was.
+//
 // Resolves its own theme roles from context() once attached (M9 WP-7,
 // D-028): "ckv.splitter.normal/focused".
+enum class SplitterPane { First, Second };
+
 class Splitter : public View {
 public:
     Splitter(Rect bounds, std::unique_ptr<View> first, std::unique_ptr<View> second,
@@ -62,6 +79,23 @@ public:
     // left to painting-time clipping, the same "v1 scope" distribute_
     // main_axis's own comment already documents for that case).
     void set_split_position(int position);
+
+    // The pane that keeps its extent when the splitter itself is resized.
+    // First by default. Changing it keeps the current arrangement.
+    void set_resize_anchor(SplitterPane pane);
+    SplitterPane resize_anchor() const noexcept { return anchor_; }
+    // The extent, in cells along the main axis, the anchored pane is asked to
+    // have: kept across resizes, clamped only when laid out. What an
+    // application remembers and restores.
+    int anchored_extent() const noexcept { return anchored_extent_; }
+    void set_anchored_extent(int extent);
+
+    // Whether one pane is hidden and the other fills the splitter.
+    bool collapsed() const noexcept;
+
+    // Fired after the reader moved the divider, by key or by pointer. A
+    // programmatic change does not fire it: its caller already knows.
+    std::function<void()> on_split_moved;
 
     // Overrides the theme-resolved divider roles. A splitter on a dialog
     // surface otherwise keeps the document-window colouring its theme
@@ -94,6 +128,10 @@ private:
     void relayout();
     int clamp_split(int position) const;
     int main_extent() const noexcept;
+    // The split position the anchored extent asks for, before clamping.
+    int requested_split() const noexcept;
+    // The divider moved to `position` because the reader moved it.
+    void move_split(int position);
 
     static constexpr int kDividerExtent = 1;
 
@@ -101,7 +139,8 @@ private:
     View* second_ = nullptr;
     Orientation orientation_;
     int split_position_ = 0;
-    bool has_focus_ = false;
+    SplitterPane anchor_ = SplitterPane::First;
+    int anchored_extent_ = 0;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     bool dragging_ = false;

@@ -6,8 +6,10 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_application.cpp
     test_application_render.cpp
     test_base64.cpp
+    test_big_clock.cpp
     test_box_drawing.cpp
     test_canvas.cpp
+    test_cell_grid.cpp
     test_clock_diagnostics_error.cpp
     test_color_style_cell.cpp
     test_command.cpp
@@ -15,6 +17,8 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_compositor.cpp
     test_combo_box.cpp
     test_filesystem.cpp
+    test_focus.cpp
+    test_frame_text.cpp
     test_desktop.cpp
     test_desktop_dialog_golden.cpp
     test_dialog.cpp

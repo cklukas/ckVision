@@ -40,7 +40,12 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
-    ui::Context ctx() { return ui::Context{&theme, &registry, nullptr}; }
+    // Focus is the Application's to give (D-065): a widget drawn focused has
+    // been given it by this one, through the context the fixture hands out.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ui::Context ctx() { return ui::Context{&theme, &registry, &app}; }
 };
 
 Surface make_surface(int w, int h) { return Surface(ckv::Size{w, h}, ckv::Cell::from_grapheme(" ", ckv::Style{})); }
@@ -216,9 +221,10 @@ CK_TEST(button_with_no_on_press_handler_does_not_crash_when_pressed) {
 CK_TEST(button_escape_cancels_a_key_press_in_flight_and_is_consumed) {
     Fixture f;
     Button button("OK");
+    button.set_context(f.ctx());
     int presses = 0;
     button.on_press = [&] { ++presses; };
-    button.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&button);
 
     const KeyChord space{Key::Char, Modifier::None, " "};
     const KeyChord escape{Key::Escape, Modifier::None, ""};
@@ -350,7 +356,7 @@ CK_TEST(a_focused_buttons_face_uses_the_focused_style) {
     Button button("OK");
     button.set_context(f.ctx());
     button.set_bounds(Rect{0, 0, 12, 2});
-    button.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&button);
     Painter painter(s, Rect{0, 0, 14, 3});
     button.draw(painter);
     CK_CHECK(s.at(ckv::Point{5, 0}).style() == f.theme.resolve(f.roles.button_focused));
@@ -689,7 +695,7 @@ CK_TEST(draw_does_not_crash_when_the_field_is_empty_and_focused) {
     InputLine input;
     input.set_context(f.ctx());
     input.set_bounds(Rect{0, 0, 10, 1});
-    input.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&input);
     Painter root(s, Rect{0, 0, 20, 3});
     input.draw(root);
     CK_CHECK(true);
@@ -751,6 +757,146 @@ CK_TEST(input_line_uses_word_navigation_and_legacy_insert_clipboard_bindings) {
     CK_CHECK(input.text() == "one three");
     CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Insert, Modifier::Shift, ""}}));
     CK_CHECK(input.text() == "one two three");
+}
+
+namespace {
+
+/// An input line on the application's root with a preset, and the
+/// application focusing it as a dialog opening on it would.
+struct PresetField {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    ckv::ui::Application app{term, clock};
+    InputLine* input = nullptr;
+    ui::View* elsewhere = nullptr;
+
+    explicit PresetField(std::string preset) {
+        auto line = std::make_unique<InputLine>();
+        line->set_fills_root(false);
+        line->set_text(std::move(preset));
+        input = static_cast<InputLine*>(app.root().add_child(std::move(line)));
+        input->set_bounds(ckv::Rect{2, 2, 30, 1});
+        auto other = std::make_unique<InputLine>();
+        other->set_fills_root(false);
+        elsewhere = app.root().add_child(std::move(other));
+        elsewhere->set_bounds(ckv::Rect{2, 4, 30, 1});
+        app.set_focus(input);
+    }
+    void key(Key k, Modifier m = Modifier::None) { input->on_key(ckv::KeyEvent{KeyChord{k, m, ""}}); }
+    void type(const std::string& text) {
+        for (char c : text) input->on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, std::string(1, c)}});
+    }
+};
+
+}  // namespace
+
+CK_TEST(input_line_arrived_at_from_the_keyboard_offers_its_preset_selected) {
+    // The classic dialog convention, observed: the preset is selected with the
+    // caret at its end, so typing replaces it and one caret key keeps it.
+    {
+        PresetField f("https://");
+        const std::pair<std::size_t, std::size_t> all{0U, 8U};
+        CK_CHECK(f.input->selection_range() == all);
+        CK_CHECK(f.input->cursor() == 8U);
+        f.type("x");
+        CK_CHECK(f.input->text() == "x");
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Right);
+        f.type("x");
+        CK_CHECK(f.input->text() == "https://x");
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Left);  // one step in from the end
+        f.type("x");
+        CK_CHECK(f.input->text() == "https:/x/");
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Home);
+        f.type("x");
+        CK_CHECK(f.input->text() == "xhttps://");
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Backspace);  // erases the whole preset
+        CK_CHECK(f.input->text().empty());
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Delete);
+        CK_CHECK(f.input->text().empty());
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Left, Modifier::Ctrl);  // a word back from the end: punctuation is part of the word
+        f.type("x");
+        CK_CHECK(f.input->text() == "xhttps://");
+    }
+    {
+        PresetField f("https://");
+        f.key(Key::Insert);  // a mode switch keeps the text
+        CK_CHECK(!f.input->has_selection());
+        f.type("x");
+        CK_CHECK(f.input->text() == "https://x");
+    }
+}
+
+CK_TEST(input_line_selects_again_when_the_focus_comes_back_and_not_under_a_click) {
+    PresetField f("hello");
+    f.key(Key::End);
+    CK_CHECK(!f.input->has_selection());
+    f.app.set_focus(f.elsewhere);
+    f.app.set_focus(f.input);  // back from the keyboard: selected again
+    CK_CHECK(f.input->has_selection());
+
+    f.app.set_focus(f.elsewhere);
+    // A press in the field places the caret where it lands, selecting nothing.
+    f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{4, 2}, std::nullopt,
+                                   Modifier::None});
+    f.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{4, 2}, std::nullopt,
+                                   Modifier::None});
+    CK_CHECK(f.app.focused() == f.input);
+    CK_CHECK(!f.input->has_selection());
+    CK_CHECK(f.input->cursor() == 2U);
+
+    PresetField empty("");
+    CK_CHECK(!empty.input->has_selection());
+}
+
+CK_TEST(input_line_reports_each_edit_the_reader_makes_and_nothing_else) {
+    Fixture f;
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    InputLine input;
+    input.set_context(ui::Context{&f.theme, &f.registry, &app});
+    int edits = 0;
+    input.on_edited = [&edits] { ++edits; };
+
+    input.set_text("abc");  // the owner's change, not the reader's
+    CK_CHECK(edits == 0);
+    CK_CHECK(input.on_text(ckv::TextEvent{"d", false}));
+    CK_CHECK(edits == 1);
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}}));
+    CK_CHECK(edits == 1);  // a caret move changes nothing
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::Backspace, Modifier::None, ""}}));
+    CK_CHECK(edits == 2);
+    // A paste reached through its key is one edit, not one per layer.
+    input.on_key(ckv::KeyEvent{KeyChord{Key::Left, Modifier::Shift, ""}});
+    CK_CHECK(input.on_key(ctrl_char("c")));
+    CK_CHECK(input.on_key(ctrl_char("v")));
+    CK_CHECK(edits == 2);  // the selection replaced by its own text
+    CK_CHECK(input.on_key(ckv::KeyEvent{KeyChord{Key::End, Modifier::None, ""}}));
+    CK_CHECK(input.on_key(ctrl_char("v")));
+    CK_CHECK(edits == 3);
+    CK_CHECK(input.undo());
+    CK_CHECK(edits == 4);
+    input.set_grapheme_filter([](std::string_view grapheme) { return grapheme != "!"; });
+    CK_CHECK(input.on_text(ckv::TextEvent{"!", false}));
+    CK_CHECK(edits == 4);  // refused, so unchanged
 }
 
 CK_TEST(input_line_undo_restores_the_previous_text_and_selection_state) {
@@ -1176,4 +1322,25 @@ CK_TEST(an_input_line_exactly_as_wide_as_its_text_shows_all_of_it) {
     // Scrolling to make room for a cursor past the last character would cost
     // the first one, which is not a trade a field that fits should make.
     CK_CHECK(row_text(surface, 0) == "2026");
+}
+
+CK_TEST(an_owner_places_the_caret_and_the_selection_goes_with_it) {
+    PresetField f("=SUM(");
+    CK_CHECK(f.input->has_selection());  // arrived at from the keyboard: offered whole
+    f.input->set_cursor(1);
+    CK_CHECK(!f.input->has_selection());
+    CK_CHECK(f.input->cursor() == 1U);
+    f.type("x");
+    CK_CHECK(f.input->text() == "=xSUM(");
+    f.input->set_cursor(100);  // past the end: the end
+    CK_CHECK(f.input->cursor() == 6U);
+
+    // A masked field has fixed places to type into; the caret lands on one.
+    Fixture g;
+    InputLine masked;
+    masked.set_context(g.ctx());
+    masked.on_attached();
+    masked.set_mask("99-99");
+    masked.set_cursor(2);
+    CK_CHECK(masked.cursor() == 3U);
 }

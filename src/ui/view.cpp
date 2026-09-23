@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/ui/application.hpp"
 
 namespace ckv::ui {
 
@@ -144,6 +145,9 @@ void View::set_visible(bool visible) {
     if (visible == visible_) return;
     visible_ = visible;
     invalidate();
+    // A container lays out only what shows, so a child appearing or going
+    // away changes its arrangement exactly as a changed size hint does.
+    if (parent_ != nullptr) parent_->on_child_size_hint_changed(*this);
 }
 
 void View::set_enabled(bool enabled) {
@@ -247,6 +251,13 @@ const std::string* View::resolve_help_context_key() const noexcept {
     return nullptr;
 }
 
+std::vector<std::string> command_context_path(const View* view) {
+    std::vector<std::string> contexts;
+    for (const View* current = view; current != nullptr; current = current->parent())
+        if (current->command_context()) contexts.push_back(*current->command_context());
+    return contexts;
+}
+
 void View::propagate_dirty_rect_sink(const DirtyRectSink& sink) {
     dirty_rect_sink_ = sink;
     for (auto& child : children_) child->propagate_dirty_rect_sink(sink);
@@ -294,6 +305,10 @@ void View::notify_detaching_recursive() {
     if (detach_sink_) detach_sink_(*this);
     on_detaching();
     for (auto& child : children_) child->notify_detaching_recursive();
+}
+
+bool View::has_focus() const noexcept {
+    return context_.app != nullptr && context_.app->focused() == this;
 }
 
 }  // namespace ckv::ui

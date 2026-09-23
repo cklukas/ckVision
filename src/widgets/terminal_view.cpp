@@ -239,7 +239,6 @@ void TerminalView::on_attached() {
 }
 
 void TerminalView::on_focus(const FocusEvent& event) {
-    focused_ = event.gained;
     if (session_ != nullptr && session_->status().focus_reporting_enabled)
         session_->send_input(event.gained ? "\x1b[I" : "\x1b[O");
     invalidate();
@@ -268,7 +267,7 @@ void TerminalView::on_terminal_subsession_changed(const core::TerminalSubsession
 }
 
 std::optional<CursorState> TerminalView::cursor_state() const {
-    if (!focused_ || scrollback_offset_ != 0 || session_ == nullptr || bounds().width <= 0 || bounds().height <= 0)
+    if (!has_focus() || scrollback_offset_ != 0 || session_ == nullptr || bounds().width <= 0 || bounds().height <= 0)
         return std::nullopt;
     const core::TerminalStatus snapshot = session_->status();
     if (!snapshot.cursor.visible || snapshot.cursor.position.x < 0 || snapshot.cursor.position.y < 0)

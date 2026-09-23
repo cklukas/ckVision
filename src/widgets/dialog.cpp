@@ -12,6 +12,7 @@
 #include "cvision/ui/layout_metrics.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/dialog_presentation.hpp"
+#include "cvision/widgets/text_layout.hpp"
 
 namespace ckv::widgets {
 
@@ -67,6 +68,101 @@ void reveal_in_scroll_viewport(ui::View& view) {
 // and does not stay the same afterwards: terminals are resized, docks
 // appear, the desktop shrinks and grows. A tree that chose its shape once
 // would be right until the first resize.
+// The focused field's description, word-wrapped. It asks the Application
+// which view has the focus when it paints rather than listening for focus
+// changes: every focus move inside a dialog invalidates the field it leaves
+// and the one it reaches, which repaints the window this panel is part of.
+class FieldDescriptionView final : public ui::View {
+public:
+    struct Entry {
+        ui::View* field = nullptr;
+        std::weak_ptr<void> liveness;
+        std::string description;
+    };
+
+    explicit FieldDescriptionView(int rows) noexcept : rows_(std::max(1, rows)) {}
+
+    void add(ui::View& field, std::string description) {
+        entries_.push_back(Entry{&field, field.lifetime_token(), std::move(description)});
+        if (shown_ >= entries_.size()) shown_ = 0;
+    }
+
+    // The description on show right now; exposed for tests.
+    const std::string& shown_description() const {
+        refresh_shown();
+        if (veto_active()) return veto_;
+        static const std::string empty;
+        return shown_ < entries_.size() ? entries_[shown_].description : empty;
+    }
+
+    // A veto's message, standing while the focus stays on `focus`.
+    void set_veto(std::string message, const ui::View* focus) {
+        veto_ = std::move(message);
+        veto_focus_ = focus;
+        veto_liveness_ = focus != nullptr ? focus->lifetime_token() : std::weak_ptr<void>{};
+        invalidate();
+    }
+
+    ui::SizeHint horizontal_size_hint() const override { return ui::SizeHint{0, 0, ui::kUnboundedExtent}; }
+    ui::SizeHint vertical_size_hint() const override { return ui::SizeHint{rows_, rows_, rows_}; }
+    int rows() const noexcept { return rows_; }
+
+    void on_attached() override {
+        if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.static.text");
+        if (veto_role_ == ui::kInvalidRole) veto_role_ = context().roles->find("ckv.message.error.text");
+    }
+
+    void draw(scene::Painter& painter) override {
+        const Style style = context().theme->resolve(veto_active() ? veto_role_ : role_);
+        painter.fill(Rect{0, 0, bounds().width, bounds().height}, Cell::from_grapheme(" ", style));
+        const std::string& text = shown_description();
+        int y = 0;
+        std::size_t begin = 0;
+        while (y < bounds().height && begin <= text.size()) {
+            const std::size_t end = std::min(text.find('\n', begin), text.size());
+            const std::string_view line(text.data() + begin, end - begin);
+            for (const WrapSegment& segment :
+                 wrap_text(line, WrapOptions{std::max(1, bounds().width), WrapMode::Word, 0})) {
+                if (y >= bounds().height) break;
+                painter.draw_text(Point{0, y++}, line.substr(segment.begin, segment.end - segment.begin), style);
+            }
+            begin = end + 1;
+        }
+    }
+
+private:
+    void refresh_shown() const {
+        const ui::Application* const app = context().app;
+        if (app == nullptr) return;
+        for (const ui::View* view = app->focused(); view != nullptr; view = view->parent()) {
+            for (std::size_t index = 0; index < entries_.size(); ++index) {
+                if (entries_[index].field != view || entries_[index].liveness.expired()) continue;
+                shown_ = index;
+                return;
+            }
+        }
+    }
+
+    // Whether the veto still stands: set, and the focus where it put it.
+    bool veto_active() const {
+        if (veto_.empty()) return false;
+        const ui::Application* const app = context().app;
+        const bool stands = app != nullptr && veto_focus_ != nullptr && !veto_liveness_.expired() &&
+                            app->focused() == veto_focus_;
+        if (!stands) veto_.clear();
+        return stands;
+    }
+
+    int rows_;
+    std::vector<Entry> entries_;
+    mutable std::size_t shown_ = 0;
+    ui::RoleId role_ = ui::kInvalidRole;
+    ui::RoleId veto_role_ = ui::kInvalidRole;
+    mutable std::string veto_;
+    const ui::View* veto_focus_ = nullptr;
+    std::weak_ptr<void> veto_liveness_;
+};
+
 class DialogPane final : public ui::View {
 public:
     DialogPane(ui::Alignment button_alignment, bool anchor_buttons_to_bottom) noexcept
@@ -95,6 +191,14 @@ public:
         relayout();
     }
 
+    FieldDescriptionView* set_description(std::unique_ptr<FieldDescriptionView> description) {
+        CKV_ASSERT(description_ == nullptr);
+        CKV_ASSERT(description != nullptr);
+        description_ = add(std::move(description));
+        relayout();
+        return description_;
+    }
+
     ui::SizeHint horizontal_size_hint() const override {
         // The cross axis maxes, exactly as the Column this replaced did.
         // Deliberately no allowance for the vertical bar: a dialog must not
@@ -121,6 +225,10 @@ public:
             hint.min += fields.min;
             hint.preferred += fields.preferred;
         }
+        if (description_ != nullptr) {
+            hint.min += description_->rows() + kFieldSpacing;
+            hint.preferred += description_->rows() + kFieldSpacing;
+        }
         if (buttons_ != nullptr) {
             const ui::SizeHint buttons = buttons_->vertical_size_hint();
             const int between = field_button_gap() + anchor_slack();
@@ -133,6 +241,7 @@ public:
     int height_for_width(int width) const override {
         const int usable = std::max(0, width);
         int total = fields_ != nullptr ? fields_->height_for_width(usable) : 0;
+        if (description_ != nullptr) total += description_->rows() + kFieldSpacing;
         if (buttons_ != nullptr)
             total += field_button_gap() + anchor_slack() +
                      ui::detail::preferred_height_for_width(*buttons_, button_row_width(usable));
@@ -204,18 +313,23 @@ private:
             buttons_ != nullptr ? std::max(1, buttons_->vertical_size_hint().preferred) : 0;
         const int natural =
             fields_ != nullptr ? ui::detail::preferred_height_for_width(*fields_, width) : 0;
+        // The description panel sits under the fields and never scrolls with
+        // them: it is about whichever field has the focus, wherever that is.
+        const int description_height = description_ != nullptr ? description_->rows() + kFieldSpacing : 0;
 
         // THE decision, and the only one: is there room for the whole form
         // AND its buttons? An anchored dialog takes the same branch as one
         // that does not fit, because both mean "buttons at the bottom edge".
-        const bool fits = natural + gap + buttons_height <= height;
+        const bool fits = natural + description_height + gap + buttons_height <= height;
         const int viewport_height = (fits && !anchor_buttons_to_bottom_)
                                         ? natural
-                                        : std::max(0, height - gap - buttons_height);
+                                        : std::max(0, height - description_height - gap - buttons_height);
         viewport_->set_bounds(Rect{0, 0, width, viewport_height});
+        if (description_ != nullptr)
+            description_->set_bounds(Rect{0, viewport_height + kFieldSpacing, width, description_->rows()});
         if (buttons_ == nullptr) return;
         // Never past this pane's own last row, however little height there is.
-        const int y = std::min(viewport_height + gap, std::max(0, height - buttons_height));
+        const int y = std::min(viewport_height + description_height + gap, std::max(0, height - buttons_height));
         const auto [x, button_width] = ui::align_cross_axis(
             width, buttons_->horizontal_size_hint().preferred, button_alignment_, 0, 0);
         buttons_->set_bounds(Rect{x, y, button_width, buttons_height});
@@ -223,6 +337,7 @@ private:
 
     ScrollViewport* viewport_ = nullptr;
     ui::View* fields_ = nullptr;  // owned by viewport_; kept for measurement
+    FieldDescriptionView* description_ = nullptr;
     Row* buttons_ = nullptr;
     ui::Alignment button_alignment_ = ui::Alignment::Start;
     bool anchor_buttons_to_bottom_ = false;
@@ -245,7 +360,39 @@ std::optional<long long> parse_number(const FieldDescriptor& field, std::string_
     return value;
 }
 
-// Gives every ButtonRole::Dismiss button the rest of what its role promises:
+// Runs the descriptor's check over the answers the dialog would complete with.
+// On a veto the field it names is marked and focused, the message stands in
+// the description panel, and the answers are not accepted.
+bool passes_check(const DialogDescriptor& descriptor, const DialogResult& answers,
+                  const std::vector<InputLine*>& inputs, const std::vector<Memo*>& memos,
+                  const std::vector<CheckGroup*>& checks, const std::vector<RadioGroup*>& radios,
+                  const std::vector<ComboBox*>& combos, const std::vector<DatePicker*>& dates,
+                  const std::vector<TimePicker*>& times, ui::View* description, ui::Application& app) {
+    if (!descriptor.check) return true;
+    const std::optional<DialogVeto> veto = descriptor.check(answers);
+    if (!veto) return true;
+    if (veto->field && *veto->field < inputs.size()) {
+        const std::size_t i = *veto->field;
+        if (inputs[i] != nullptr) inputs[i]->set_valid(false);
+        if (memos[i] != nullptr) memos[i]->set_valid(false);
+        if (dates[i] != nullptr) dates[i]->set_valid(false);
+        if (times[i] != nullptr) times[i]->set_valid(false);
+        for (ui::View* control : {static_cast<ui::View*>(inputs[i]), static_cast<ui::View*>(memos[i]),
+                                  static_cast<ui::View*>(checks[i]), static_cast<ui::View*>(radios[i]),
+                                  static_cast<ui::View*>(combos[i]), static_cast<ui::View*>(dates[i]),
+                                  static_cast<ui::View*>(times[i])}) {
+            if (control != nullptr && control->focusable()) {
+                app.set_focus(control);
+                break;
+            }
+        }
+    }
+    if (description != nullptr)
+        static_cast<FieldDescriptionView*>(description)->set_veto(veto->message, app.focused());
+    return false;
+}
+
+// Gives every ButtonRole::Dismiss button the rest of what its role promises:// Gives every ButtonRole::Dismiss button the rest of what its role promises:
 // its own handler, and then the dialog gone. Called by whoever put the
 // materialized tree into a window, since `dismiss` is that window's cancel
 // path -- a dismissing button and Esc must not be two behaviours.
@@ -433,6 +580,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     }
     Button* const default_button = materialized.default_button;
     ui::View* const initial_focus = materialized.initial_focus;
+    ui::View* const description = materialized.field_description;
 
     auto window = std::make_unique<Window>(retained_descriptor->title);
     if (!retained_descriptor->help_context_key.empty())
@@ -460,7 +608,7 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
     window->accept_request = [window_ptr, completion, retained_descriptor, inputs, memos, checks, radios, combos,
-                              dates, times, accept_press, &app]() {
+                              dates, times, description, accept_press, &app]() {
         // This closure is owned by Window itself. Retain everything needed
         // after the descriptor callback before entering user code: that
         // callback is allowed to detach and destroy its own Window, which
@@ -468,11 +616,15 @@ BuiltDescriptorDialog build_descriptor_dialog(DialogDescriptor descriptor, const
         const std::shared_ptr<DescriptorDialogCompletion> held_completion = completion;
         Window* const held_window = window_ptr;
         if (!validate_inputs(inputs, memos, *retained_descriptor, dates, times, app)) return;
+        DialogResult answers =
+            accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times);
+        if (!passes_check(*retained_descriptor, answers, inputs, memos, checks, radios, combos, dates, times,
+                          description, app))
+            return;
         // Record before application code runs: a descriptor button handler
         // may detach or destroy this Window synchronously, but its successful
         // acceptance still has one stable typed result after detachment.
-        held_completion->selected_result =
-            accepted_result(*retained_descriptor, inputs, memos, checks, radios, combos, dates, times);
+        held_completion->selected_result = std::move(answers);
         if (accept_press) accept_press();
         if (!held_completion->closed && !held_completion->window_liveness.expired()) held_window->close();
     };
@@ -540,6 +692,8 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
 
     MaterializedDialog result;
     auto column = std::make_unique<Column>();
+    // The labels that stand beside a control, lined up below.
+    std::vector<Label*> beside_labels;
     column->set_spacing(kFieldSpacing);
 
     for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
@@ -603,16 +757,32 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         }
 
         if (field.kind == FieldKind::Radio) {
-            // The group carries its own caption above its choices, rather
-            // than a Label beside them: a set of alternatives is one thing a
-            // form asks about, and a label in the left column would put the
-            // question level with the first answer.
+            // A stacked group carries its own caption above its choices,
+            // rather than a Label beside them: a set of alternatives is one
+            // thing a form asks about, and a label in the left column would
+            // put the question level with the first answer. A group the
+            // descriptor lays out in columns, and whose choices then share
+            // one row, has no such row to be level with, so it is labelled
+            // beside, in the column every other field's label stands in
+            // (D-068). A stacked list that happens to hold one choice is
+            // still a list: its caption stays above, so a form does not
+            // change shape with the number of entries it offers.
             auto radio = std::make_unique<RadioGroup>(field.options);
-            if (!field.label.empty()) radio->set_group_label(field.label);
+            radio->set_columns(field.columns);
             radio->set_selected(field.initial_selection);
+            const bool one_row = field.columns > 1 && radio->vertical_size_hint().preferred <= 1;
+            Label* beside = nullptr;
+            if (!field.label.empty() && one_row) {
+                auto label = std::make_unique<Label>(field.label);
+                beside = static_cast<Label*>(row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
+                beside_labels.push_back(beside);
+            } else if (!field.label.empty()) {
+                radio->set_group_label(field.label);
+            }
             auto* radio_ptr =
                 static_cast<RadioGroup*>(row->add_item(std::move(radio), LayoutSpec{SizePolicy::Expanding, 1}));
-            result.labels.push_back(nullptr);
+            if (beside != nullptr) beside->set_buddy(radio_ptr);
+            result.labels.push_back(beside);
             result.inputs.push_back(nullptr);
             result.memos.push_back(nullptr);
             result.checks.push_back(nullptr);
@@ -620,7 +790,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             result.combos.push_back(nullptr);
             result.dates.push_back(nullptr);
             result.times.push_back(nullptr);
-            const int rows = static_cast<int>(field.options.size()) + (field.label.empty() ? 0 : 1);
+            const int rows = radio_ptr->vertical_size_hint().preferred;
             column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, std::max(1, rows)});
             continue;
         }
@@ -629,6 +799,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         if (!field.label.empty()) {
             auto label = std::make_unique<Label>(field.label);
             label_ptr = static_cast<Label*>(row->add_item(std::move(label), LayoutSpec{SizePolicy::Fixed, 1}));
+            beside_labels.push_back(label_ptr);
         }
 
         if (field.kind == FieldKind::Combo) {
@@ -735,11 +906,38 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
         column->add_item(std::move(row), LayoutSpec{SizePolicy::Fixed, 1});
     }
 
+    // The labels beside controls are one column, as wide as the widest of
+    // them, so every control starts at the same place and a reader's eye
+    // runs straight down the answers.
+    int label_column = 0;
+    for (const Label* label : beside_labels)
+        label_column = std::max(label_column, label->horizontal_size_hint().preferred);
+    for (Label* label : beside_labels) label->set_column_width(label_column);
+
     // The fields go into the pane's viewport whatever their height: there is
     // one tree shape, and the fit is decided in layout (see DialogPane).
     auto pane = std::make_unique<DialogPane>(descriptor.button_alignment,
                                              descriptor.anchor_buttons_to_bottom);
     result.content_viewport = pane->set_fields(std::move(column));
+
+    if (descriptor.field_description_rows > 0 || descriptor.check) {
+        // A veto needs somewhere to say why; two rows hold a sentence of it.
+        const int rows = descriptor.field_description_rows > 0 ? descriptor.field_description_rows : 2;
+        auto description = std::make_unique<FieldDescriptionView>(rows);
+        for (std::size_t index = 0; index < descriptor.fields.size(); ++index) {
+            // The field's own control — whichever of the parallel slots it
+            // filled; a note has none and so no description to show.
+            ui::View* control = nullptr;
+            for (ui::View* candidate :
+                 {static_cast<ui::View*>(result.inputs[index]), static_cast<ui::View*>(result.memos[index]),
+                  static_cast<ui::View*>(result.checks[index]), static_cast<ui::View*>(result.radios[index]),
+                  static_cast<ui::View*>(result.combos[index]), static_cast<ui::View*>(result.dates[index]),
+                  static_cast<ui::View*>(result.times[index])})
+                if (candidate != nullptr) control = candidate;
+            if (control != nullptr) description->add(*control, descriptor.fields[index].description);
+        }
+        result.field_description = pane->set_description(std::move(description));
+    }
 
     if (!descriptor.buttons.empty()) {
         auto button_row = std::make_unique<Row>();
@@ -786,10 +984,14 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     // so cannot be captured into a std::function at all.
     std::vector<InputLine*> inputs = dialog.inputs;
     std::vector<Memo*> memos = dialog.memos;
+    std::vector<CheckGroup*> checks = dialog.checks;
+    std::vector<RadioGroup*> radios = dialog.radios;
+    std::vector<ComboBox*> combos = dialog.combos;
     std::vector<Button*> buttons = dialog.buttons;
     std::vector<DatePicker*> dates = dialog.dates;
     std::vector<TimePicker*> times = dialog.times;
     Button* default_button = dialog.default_button;
+    ui::View* description = dialog.field_description;
 
     window.set_content(std::move(dialog.root));
     if (!descriptor.help_context_key.empty()) window.set_help_context_key(descriptor.help_context_key);
@@ -808,10 +1010,16 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 
     const std::function<void()> accept_press =
         default_button != nullptr ? default_button->on_press : std::function<void()>{};
-    window.accept_request = [&window, &app, inputs, memos, dates, times, &descriptor, accept_press, close_state]() {
+    window.accept_request = [&window, &app, inputs, memos, checks, radios, combos, dates, times, description,
+                             &descriptor, accept_press, close_state]() {
         const std::shared_ptr<CloseState> held_close_state = close_state;
         Window* const held_window = &window;
         if (!validate_inputs(inputs, memos, descriptor, dates, times, app)) return;
+        if (descriptor.check &&
+            !passes_check(descriptor,
+                          accepted_result(descriptor, inputs, memos, checks, radios, combos, dates, times),
+                          inputs, memos, checks, radios, combos, dates, times, description, app))
+            return;
         if (accept_press) accept_press();
         if (!held_close_state->closed && !held_close_state->window_liveness.expired()) held_window->close();
     };

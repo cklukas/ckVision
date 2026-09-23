@@ -145,13 +145,6 @@ bool is_descendant_of(const ui::View& view, const ui::View& ancestor) noexcept {
     return false;
 }
 
-std::vector<std::string> command_contexts_for(const ui::View* view) {
-    std::vector<std::string> contexts;
-    for (const ui::View* current = view; current != nullptr; current = current->parent())
-        if (current->command_context()) contexts.push_back(*current->command_context());
-    return contexts;
-}
-
 }  // namespace
 
 // --- DropdownMenu ------------------------------------------------------
@@ -776,18 +769,18 @@ void MenuBar::activate() {
     // pressed F10 expects — a selection carried over from the last visit
     // would make the following `A`, `C` land somewhere they never looked.
     highlighted_ = 0;
-    if (active_) {
+    if (has_focus()) {
         close_dropdown();
         invalidate();
         return;
     }
-    invocation_contexts_ = command_contexts_for(app_->focused());
+    invocation_contexts_ = ui::command_context_path(app_->focused());
     previously_focused_ = app_->save_focus();
-    app_->set_focus(this);  // on_focus(true) below flips active_
+    app_->set_focus(this);  // on_focus(true) below paints the walk
 }
 
 void MenuBar::deactivate() {
-    if (!active_) return;
+    if (!has_focus()) return;
     if (MenuBarAccessory* const accessory = trailing_accessory()) accessory->set_menu_highlighted(false);
     close_dropdown();
     const std::optional<ui::Application::FocusBookmark> restore = previously_focused_;
@@ -798,11 +791,19 @@ void MenuBar::deactivate() {
 }
 
 void MenuBar::on_focus(const FocusEvent& event) {
-    active_ = event.gained;
     if (!event.gained) {
+        // The walk is over however focus left -- Escape, a chosen item, or
+        // another view taking it, such as a calendar dropped from the
+        // trailing title. Nothing of it may stay behind: not the bar's
+        // highlight, not the trailing title's, and not the bookmark, which
+        // would otherwise send a later deactivate() back to a view the
+        // reader left long ago.
         highlighted_ = 0;
         close_dropdown();
+        previously_focused_.reset();
+        invocation_contexts_.clear();
     }
+    sync_trailing_highlight();
     invalidate();
 }
 
@@ -884,7 +885,7 @@ SizeHint MenuBar::horizontal_size_hint() const { return SizeHint{0, 0, ui::kUnbo
 SizeHint MenuBar::vertical_size_hint() const { return SizeHint{1, 1, 1}; }
 
 bool MenuBar::on_key(const KeyEvent& event) {
-    if (!active_ || menus_.empty()) return false;
+    if (!has_focus() || menus_.empty()) return false;
     // Keyboard focus remains on the bar while its popup owns mouse capture, so
     // the bar is the only route by which an open menu — or a submenu opened out
     // of one — can be reached from the keyboard at all. Deliver to the
@@ -947,9 +948,7 @@ bool MenuBar::on_key(const KeyEvent& event) {
         case Key::Down:
         case Key::Enter:
             if (trailing_slot_highlighted()) {
-                // What drops out of a trailing title is the caller's; the bar
-                // only says when.
-                trailing_accessory()->activate_from_menu_bar();
+                activate_trailing_accessory();
                 return true;
             }
             open_dropdown(highlighted_);
@@ -963,7 +962,7 @@ bool MenuBar::on_key(const KeyEvent& event) {
             // an ordinary character, so it is handled with the mnemonics
             // rather than as a key of its own.
             if (event.chord.text == " " && trailing_slot_highlighted()) {
-                trailing_accessory()->activate_from_menu_bar();
+                activate_trailing_accessory();
                 return true;
             }
             for (std::size_t i = 0; i < menus_.size(); ++i) {
@@ -988,7 +987,7 @@ bool MenuBar::on_mouse(const MouseEvent& event) {
         const int x = menu_bar_offset_for(menus_, i);
         const int w = text::text_width(parse_mnemonic(menus_[i].label).display);
         if (local_x >= x - 1 && local_x < x + w + 1) {
-            if (!active_) activate();
+            if (!has_focus()) activate();
             open_dropdown(i, MenuOpenReason::PointerPress);
             if (open_dropdown_ != nullptr) open_dropdown_->begin_pointer_press();
             return true;
@@ -1032,13 +1031,36 @@ void MenuBar::set_bar_highlight(std::size_t slot) {
     invalidate();
 }
 
+void MenuBar::activate_trailing_accessory() {
+    // What drops out of a trailing title is the caller's; the bar only says
+    // when -- and it says so AFTER ending the walk, the way choosing an item
+    // ends it. Focus goes back to where the reader was before F10 first, so
+    // whatever the title opens -- a calendar -- saves and later restores that
+    // view, not a bar that would wake up highlighted when the calendar closed.
+    MenuBarAccessory* const accessory = trailing_accessory();
+    deactivate();
+    accessory->activate_from_menu_bar();
+}
+
+void MenuBar::on_descendant_mouse_down(ui::View& target) {
+    // A pointer on the trailing title while the bar is being walked ends the
+    // walk for the same reason: the click is a hand-off, and the title's own
+    // reaction to it must not find the bar still standing.
+    if (!has_focus() || trailing_view_ == nullptr) return;
+    for (const ui::View* view = &target; view != nullptr; view = view->parent())
+        if (view == trailing_view_) {
+            deactivate();
+            return;
+        }
+}
+
 void MenuBar::sync_trailing_highlight() {
     // The trailing title is a view, not a label the bar paints, so it has to
     // be told when the walk is standing on it -- and told just as promptly
     // when it is not, or it goes on wearing the active colours beside a menu
     // that is now the highlighted one.
     if (MenuBarAccessory* const accessory = trailing_accessory())
-        accessory->set_menu_highlighted(active_ && trailing_slot_highlighted());
+        accessory->set_menu_highlighted(has_focus() && trailing_slot_highlighted());
 }
 
 MenuBarAccessory* MenuBar::trailing_accessory() const noexcept {
@@ -1050,7 +1072,7 @@ std::size_t MenuBar::navigable_slots() const noexcept {
 }
 
 bool MenuBar::trailing_slot_highlighted() const noexcept {
-    return active_ && trailing_accessory() != nullptr && highlighted_ == menus_.size();
+    return has_focus() && trailing_accessory() != nullptr && highlighted_ == menus_.size();
 }
 
 ui::View* MenuBar::set_trailing_view_impl(std::unique_ptr<ui::View> view) {
@@ -1094,8 +1116,8 @@ void MenuBar::draw(scene::Painter& painter) {
     for (std::size_t i = 0; i < menus_.size(); ++i) {
         const int x = menu_bar_offset_for(menus_, i);
         if (x >= bounds().width) break;
-        const Style style = (active_ && i == highlighted_) ? theme.resolve(active_role_) : base;
-        if (active_ && i == highlighted_ && x > 0)
+        const Style style = (has_focus() && i == highlighted_) ? theme.resolve(active_role_) : base;
+        if (has_focus() && i == highlighted_ && x > 0)
             painter.fill(Rect{x - 1, 0, std::min(bounds().width - (x - 1),
                                                   text::text_width(parse_mnemonic(menus_[i].label).display) + 2),
                               1},
@@ -1106,7 +1128,7 @@ void MenuBar::draw(scene::Painter& painter) {
 }
 
 bool MenuBar::navigate_pointer(const MouseEvent& event) {
-    if (!active_ || menus_.empty() || event.cell.y != absolute_bounds().y) return false;
+    if (!has_focus() || menus_.empty() || event.cell.y != absolute_bounds().y) return false;
     const int local_x = event.cell.x - absolute_bounds().x;
     for (std::size_t i = 0; i < menus_.size(); ++i) {
         const int x = menu_bar_offset_for(menus_, i);
@@ -1130,7 +1152,7 @@ bool MenuBar::navigate_pointer(const MouseEvent& event) {
 DropdownMenu* show_context_menu(std::vector<MenuItem> items, Point screen_position,
                                  ui::Application& app, Desktop& desktop) {
     const ui::Application::FocusBookmark previous_focus = app.save_focus();
-    const std::vector<std::string> invocation_contexts = command_contexts_for(app.focused());
+    const std::vector<std::string> invocation_contexts = ui::command_context_path(app.focused());
     auto menu = std::make_unique<DropdownMenu>(std::move(items));
     menu->set_invocation_contexts(invocation_contexts);
     const Rect desktop_abs = desktop.absolute_bounds();

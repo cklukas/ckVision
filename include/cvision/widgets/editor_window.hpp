@@ -16,7 +16,7 @@
 
 namespace ckv::widgets {
 
-class StaticText;
+class FrameText;
 
 class EditorWindow final : public Window {
 public:
@@ -42,7 +42,7 @@ private:
     std::string base_title_;
     FileEditorController controller_;
     TextEditor* editor_ = nullptr;
-    StaticText* status_ = nullptr;
+    FrameText* status_ = nullptr;
     EditorDocument::ObserverId observer_ = 0;
 };
 

@@ -28,9 +28,9 @@ Application
 | Object | Ownership/insertion | Focus and events | Paint and resize | Header |
 |---|---|---|---|---|
 | `Application` | Host constructs it from `Terminal`, `Clock`, and optional clipboard. | Central dispatch: modal/focused view first, then command bindings. | Composes the root into a terminal frame; dispatches terminal resize. | `include/cvision/ui/application.hpp` |
-| `View` | Parent receives `std::unique_ptr<View>` through `add_child`. | A view opts into tab focus and may consume key/text/mouse input. | Parent bounds define its coordinate space; children paint in tree order. | `include/cvision/ui/view.hpp` |
+| `View` | Parent receives `std::unique_ptr<View>` through `add_child`. | A view opts into tab focus and may consume key/text/mouse input; when it paints it asks `has_focus()`, which is the Application's answer, never a remembered one. | Parent bounds define its coordinate space; children paint in tree order. | `include/cvision/ui/view.hpp` |
 | `Desktop` | App inserts it beneath `Application::root()`. | Activates windows, manages transient popup/modal state. | Re-pins docks and reclamps windows on resize. | `include/cvision/widgets/desktop.hpp` |
-| `Window` | Desktop takes ownership with `add_window`. | Its content participates in normal focus traversal. | Draws frame/shadow and gives its content the inner rectangle. | `include/cvision/widgets/window.hpp` |
+| `Window` | Desktop takes ownership with `add_window`. | Its content participates in normal focus traversal, and an arrow the focused control has no use for walks the window's controls (Down/Right forward, Up/Left back). | Draws frame/shadow and gives its content the inner rectangle. | `include/cvision/widgets/window.hpp` |
 | Layout | Window/content parent owns it. | Layouts are normally not focused. | Allocates child bounds during layout/resizes. | `include/cvision/ui/layout.hpp` and related headers |
 
 ## The common construction sequence
@@ -81,7 +81,10 @@ small dialog; `Row`, `Column`, `Grid`, `Dock`, `AnchorPane`, `Overlay`, and
 
 A custom control declares tab focus in its base initializer and implements the
 event hooks it consumes. Construction makes the policy true from the start, so
-the view cannot be attached briefly with the wrong traversal behavior.
+the view cannot be attached briefly with the wrong traversal behavior. Whether
+the view is focused is asked, not remembered: paint with `has_focus()`, and
+treat `on_focus()` as the moment to react — repaint, drop a press in flight —
+never as a flag to cache (D-065).
 
 ```cpp
 class ItemSurface final : public ckv::ui::View {

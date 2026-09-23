@@ -36,6 +36,13 @@ public:
 
     const std::string& mnemonic() const noexcept { return mnemonic_; }
 
+    // The width of the column this label stands in, beside others: the
+    // label is at least that wide, its text at the start and the rest blank,
+    // so the controls beside a column of labels line up. Zero, the default,
+    // is exactly the text's own width.
+    void set_column_width(int cells);
+    int column_width() const noexcept { return column_width_; }
+
     void set_role_override(ui::RoleId text_role, ui::RoleId mnemonic_role) noexcept {
         text_role_ = text_role;
         mnemonic_role_ = mnemonic_role;
@@ -54,11 +61,14 @@ private:
     ui::RoleId mnemonic_role_ = ui::kInvalidRole;
     View* buddy_ = nullptr;
     std::weak_ptr<void> buddy_liveness_;
+    int column_width_ = 0;
 };
 
 // Widgets-layer mnemonic routing for containers that own Label subtrees.
 // Handles Alt+Char key presses, finds the first visible/enabled matching
-// Label inside `scope`, and focuses its still-live, focusable buddy.
+// Label inside `scope`, and focuses its still-live, focusable buddy. An
+// option group's caption is its own label: a CheckGroup or RadioGroup whose
+// caption marks the letter is focused the same way (D-068).
 bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app);
 
 // Extends label-to-buddy mnemonics with direct Button accelerators. Windows

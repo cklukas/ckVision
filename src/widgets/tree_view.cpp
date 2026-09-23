@@ -471,10 +471,34 @@ void TreeView::on_resized() {
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
     const std::size_t count = model_ != nullptr ? model_visible_count() : visible_entries().size();
     scrollbar_->set_range(scrollbar_range(count), std::max(1, bounds().height));
+    if (reveal_pending_ && bounds().height > 0) {
+        if (const std::optional<std::size_t> row = cursor_row())
+            ensure_cursor_visible(static_cast<int>(
+                std::min(*row, static_cast<std::size_t>(std::numeric_limits<int>::max()))));
+        reveal_pending_ = false;
+    }
+}
+
+std::optional<std::size_t> TreeView::cursor_row() {
+    if (model_ != nullptr) return model_row_of(model_cursor_id_);
+    if (cursor_node_ == nullptr) return std::nullopt;
+    const auto& entries = visible_entries();
+    for (std::size_t index = 0; index < entries.size(); ++index)
+        if (entries[index].node == cursor_node_) return index;
+    return std::nullopt;
 }
 
 void TreeView::ensure_cursor_visible(int cursor_index) {
     if (scrollbar_ == nullptr) return;
+    // A tree with no rows on screen yet has nowhere to show the cursor. The
+    // request waits for the tree's first real size instead of scrolling as
+    // though the viewport were one row tall, which would leave the rows
+    // above the cursor scrolled away once the tree is laid out.
+    if (bounds().height <= 0) {
+        reveal_pending_ = true;
+        return;
+    }
+    reveal_pending_ = false;
     if (cursor_index < scrollbar_->position()) {
         scrollbar_->set_position(cursor_index);
     } else if (cursor_index >= scrollbar_->position() + scrollbar_->viewport_size()) {
@@ -555,6 +579,31 @@ void TreeView::set_expanded(TreeNode& node, bool expanded) {
 }
 
 bool TreeView::on_key(const KeyEvent& event) {
+    // Reaching the ends and paging are the same for a provider model and a
+    // materialized tree: Home and End go to the first and the last visible
+    // row, PageUp and PageDown a viewport's height, as a list does.
+    switch (event.chord.key) {
+        case Key::Home:
+        case Key::End: {
+            const std::size_t count = model_ != nullptr ? model_visible_count() : visible_entries().size();
+            if (count == 0) return true;
+            const int last = model_ != nullptr
+                                 ? scrollbar_range(count) - 1
+                                 : static_cast<int>(std::min(count - 1, static_cast<std::size_t>(std::numeric_limits<int>::max())));
+            const int current = static_cast<int>(
+                std::min(cursor_row().value_or(0), static_cast<std::size_t>(std::numeric_limits<int>::max())));
+            move_cursor((event.chord.key == Key::Home ? 0 : last) - current);
+            return true;
+        }
+        case Key::PageUp:
+            move_cursor(-std::max(1, bounds().height));
+            return true;
+        case Key::PageDown:
+            move_cursor(std::max(1, bounds().height));
+            return true;
+        default:
+            break;
+    }
     if (model_ != nullptr) {
         switch (event.chord.key) {
             case Key::Up:

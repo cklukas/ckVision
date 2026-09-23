@@ -53,6 +53,7 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 
 | Header | Primary types | Guide/example |
 |---|---|---|
+| `include/cvision/widgets/frame_text.hpp` | `FrameText` | [Widget gallery](widget-gallery.md#frametext) |
 | `include/cvision/widgets/label.hpp` | `Label` | [Widget gallery](widget-gallery.md#label) |
 | `include/cvision/widgets/static_text.hpp` | `StaticText` | [Widget gallery](widget-gallery.md#statictext) |
 | `include/cvision/widgets/button.hpp` | `Button` | [Widget gallery](widget-gallery.md#button) |
@@ -77,7 +78,9 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 | `include/cvision/widgets/list_view.hpp` | `ListView`, `ListModel`, `ListItem` | [Data views](data-views.md) |
 | `include/cvision/widgets/tree_view.hpp` | `TreeView`, `TreeNode`, `TreeModel`, `TreeItem` | [Data views](data-views.md#tree-providers) |
 | `include/cvision/widgets/table.hpp` | `Table`, `TableModel`, `TableCell` | [Data views](data-views.md) |
+| `include/cvision/widgets/cell_grid.hpp` | `CellGrid`, `CellGridModel`, `GridCell`, `GridFrame`, `MaterializedCellGridModel` | [Data views](data-views.md#cell-grid-providers) |
 | `include/cvision/widgets/tab_control.hpp` | `TabControl` | [Widget gallery](widget-gallery.md#tabcontrol) |
+| `include/cvision/widgets/big_clock.hpp` | `BigClockView`, `BigClockContent` | [Widget gallery](widget-gallery.md#bigclockview) |
 | `include/cvision/widgets/progress.hpp` | `Progress` | [Widget gallery](widget-gallery.md#progress) |
 | `include/cvision/widgets/scrollbar.hpp` | `Scrollbar` | [Widget gallery](widget-gallery.md#scrollbar) |
 | `include/cvision/widgets/scroll_viewport.hpp` | `ScrollViewport` | [Widget gallery](widget-gallery.md#scrollviewport) |

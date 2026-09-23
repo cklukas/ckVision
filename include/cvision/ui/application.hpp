@@ -427,6 +427,13 @@ public:
     bool focus_next();
     bool focus_previous();
 
+    // The same walk confined to `scope`'s subtree, wrapping within it: what
+    // a Window offers its controls for the arrow keys they did not use
+    // (the architecture §5, D-065). Returns false when the subtree has no
+    // focusable view, or lies outside the active modal scope.
+    bool focus_next_within(View& scope);
+    bool focus_previous_within(View& scope);
+
     // --- Commands --------------------------------------------------------
 
     // Forwards to commands().set_handler()/execute() (M9/WP-10 moved
@@ -650,6 +657,8 @@ private:
     void update_hover(Point absolute_point, View* holder);
     static void collect_focusable(View& view, std::vector<View*>& out);
     const std::vector<View*>& focusable_views();
+    const std::vector<View*>& focusable_views_within(View& scope);
+    bool advance_focus(const std::vector<View*>& views, bool forward);
     const std::vector<std::string>& focused_command_contexts();
     // The innermost active modal, or nullptr if none — the single spot
     // dispatch()/topmost_view_at()/focusable_views() all consult to

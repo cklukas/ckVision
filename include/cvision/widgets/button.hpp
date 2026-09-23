@@ -126,7 +126,7 @@ private:
     // happens to be resting -- so hover is the first to be overruled.
     ui::RoleId face_role() const noexcept {
         if (pressed_) return pressed_role_;
-        if (has_focus_) return focused_role_;
+        if (has_focus()) return focused_role_;
         if (hovered()) return hovered_role_;
         return is_default_ ? default_role_ : normal_role_;
     }
@@ -145,7 +145,6 @@ private:
     bool flat_ = false;
     bool is_default_ = false;
     int minimum_width_ = kClassicMinimumWidth;
-    bool has_focus_ = false;
     // Whether the button is drawn depressed right now. It follows the
     // pointer or the key, and is not by itself a promise that releasing
     // will act — `armed_` is.

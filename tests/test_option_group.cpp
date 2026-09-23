@@ -3,10 +3,14 @@
 #include "cvision/widgets/option_group.hpp"
 
 #include "cvision/testing/cktest.hpp"
+#include "cvision/core/clock.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/window.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -29,6 +33,12 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    // Focus is the Application's to give (D-065), so the fixture carries one
+    // for the tests that need a group to hold it.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, &app}; }
 };
 
 ckv::KeyEvent key(ckv::Key k, std::string text = "") {
@@ -157,7 +167,7 @@ CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     Fixture f;
     CheckGroup group({"First", "Second"});
     group.set_group_label("Choices");
-    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_context(f.ctx());
     group.set_bounds(Rect{0, 0, 16, 3});
     CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{3, 3, 3}));
 
@@ -173,7 +183,7 @@ CK_TEST(a_check_group_caption_owns_a_row_and_turns_white_with_group_focus) {
                                              std::nullopt, Modifier::None}));
     CK_CHECK(group.checked(0));
 
-    group.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&group);
     Surface focused(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter focused_painter(focused, Rect{0, 0, 16, 3});
     group.draw(focused_painter);
@@ -316,7 +326,7 @@ CK_TEST(a_radio_group_caption_owns_a_row_and_turns_white_with_group_focus) {
     Fixture f;
     RadioGroup group({"First", "Second"});
     group.set_group_label("Mode");
-    group.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    group.set_context(f.ctx());
     group.set_bounds(Rect{0, 0, 16, 3});
     CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{3, 3, 3}));
 
@@ -332,7 +342,7 @@ CK_TEST(a_radio_group_caption_owns_a_row_and_turns_white_with_group_focus) {
                                              std::nullopt, Modifier::None}));
     CK_CHECK(group.selected() == 1);
 
-    group.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&group);
     Surface focused(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
     Painter focused_painter(focused, Rect{0, 0, 16, 3});
     group.draw(focused_painter);
@@ -471,4 +481,199 @@ CK_TEST(a_radio_group_likewise_leaves_enter_to_the_form) {
     // Arrows already select as they move, so Enter had nothing left to do.
     CK_CHECK(!group.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}}));
     CK_CHECK(group.selected() == 1);
+}
+
+// --- captions with mnemonics, choices in columns (D-068) ------------------
+
+CK_TEST(a_caption_marks_its_mnemonic_and_draws_without_the_marker) {
+    Fixture f;
+    RadioGroup group({"First", "Second"});
+    group.set_group_label("&Mode:");
+    CK_CHECK(group.group_label() == "&Mode:");
+    CK_CHECK(group.group_mnemonic() == "M");
+    group.set_context(f.ctx());
+    group.set_bounds(Rect{0, 0, 16, 3});
+    Surface s(ckv::Size{16, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 16, 3});
+    group.draw(painter);
+    CK_CHECK(s.at(Point{0, 0}).grapheme() == "M");
+    CK_CHECK(s.at(Point{1, 0}).grapheme() == "o");
+    CK_CHECK(s.at(Point{5, 0}).grapheme() == " ");
+    CK_CHECK(s.at(Point{0, 0}).style().fg == f.theme.resolve(f.roles.label_mnemonic).fg);
+    CK_CHECK(s.at(Point{1, 0}).style() == f.theme.resolve(f.roles.label_text));
+    // A caption without a marker has no mnemonic to route.
+    CheckGroup plain({"Only"});
+    plain.set_group_label("Options");
+    CK_CHECK(plain.group_mnemonic().empty());
+}
+
+CK_TEST(alt_and_the_caption_letter_focus_the_group_from_anywhere_in_its_window) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+
+    auto* window = app.root().add(std::make_unique<ckv::widgets::Window>("Form"));
+    window->set_bounds(Rect{0, 0, 40, 10});
+    auto& pane = window->content_pane();
+    auto* flags = pane.add(std::make_unique<CheckGroup>(std::vector<std::string>{"&Optimize"}));
+    flags->set_group_label("&Compilation");
+    auto* target = pane.add(std::make_unique<RadioGroup>(std::vector<std::string>{"&Static", "S&hared"}));
+    target->set_group_label("&Library");
+    app.set_focus(flags);
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "l"}}));
+    CK_CHECK(app.focused() == target);
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "C"}}));
+    CK_CHECK(app.focused() == flags);
+    // The letter alone, without Alt, is not a route: it is the focused
+    // group's own key, and "l" marks no choice of the check group.
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "l"}}));
+    CK_CHECK(app.focused() == flags);
+}
+
+CK_TEST(choices_flow_into_columns_row_major_each_as_wide_as_the_widest) {
+    Fixture f;
+    RadioGroup group({"Keep", "On", "Off", "Reset"});
+    group.set_columns(4);
+    CK_CHECK(group.columns() == 4);
+    // One row packs its choices: each column is as wide as the one choice
+    // in it, and three gaps of two lie between them.
+    CK_CHECK((group.horizontal_size_hint() == ckv::ui::SizeHint{36, 36, 36}));
+    CK_CHECK((group.vertical_size_hint() == ckv::ui::SizeHint{1, 1, 1}));
+    group.set_selected(1);
+    group.set_context(f.ctx());
+    group.set_bounds(Rect{0, 0, 36, 1});
+    Surface s(ckv::Size{36, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 36, 1});
+    group.draw(painter);
+    std::string row;
+    for (int x = 0; x < 36; ++x) row += s.at(Point{x, 0}).grapheme();
+    CK_CHECK(row == "( ) Keep  (•) On  ( ) Off  ( ) Reset");
+
+    // Two rows align as a table, each column as wide as its widest choice.
+    RadioGroup table({"Keep", "Reset/Normal", "Double", "Single acct"});
+    table.set_columns(2);
+    CK_CHECK((table.horizontal_size_hint() == ckv::ui::SizeHint{28, 28, 28}));
+    table.set_context(f.ctx());
+    table.set_bounds(Rect{0, 0, 28, 2});
+    Surface u(ckv::Size{28, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter table_painter(u, Rect{0, 0, 28, 2});
+    table.draw(table_painter);
+    std::string first, second;
+    for (int x = 0; x < 28; ++x) first += u.at(Point{x, 0}).grapheme();
+    for (int x = 0; x < 28; ++x) second += u.at(Point{x, 1}).grapheme();
+    CK_CHECK(first == "( ) Keep    ( ) Reset/Normal");
+    CK_CHECK(second == "( ) Double  ( ) Single acct ");
+
+    // Five choices in two columns take three rows, the last one half full;
+    // a caption adds its row and indents the choices under it.
+    RadioGroup five({"A", "B", "C", "D", "E"});
+    five.set_columns(2);
+    five.set_group_label("Letters");
+    CK_CHECK((five.vertical_size_hint() == ckv::ui::SizeHint{4, 4, 4}));
+    CK_CHECK((five.horizontal_size_hint() == ckv::ui::SizeHint{13, 13, 13}));
+    five.set_context(f.ctx());
+    five.set_bounds(Rect{0, 0, 13, 4});
+    Surface t(ckv::Size{13, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    Painter five_painter(t, Rect{0, 0, 13, 4});
+    five.draw(five_painter);
+    CK_CHECK(t.at(Point{5, 1}).grapheme() == "A");
+    CK_CHECK(t.at(Point{12, 1}).grapheme() == "B");
+    CK_CHECK(t.at(Point{5, 2}).grapheme() == "C");
+    CK_CHECK(t.at(Point{12, 2}).grapheme() == "D");
+    CK_CHECK(t.at(Point{5, 3}).grapheme() == "E");
+    CK_CHECK(t.at(Point{12, 3}).grapheme() == " ");
+
+    // More columns than choices is one row; a count below one is one column.
+    RadioGroup two({"Yes", "No"});
+    two.set_columns(9);
+    CK_CHECK((two.vertical_size_hint() == ckv::ui::SizeHint{1, 1, 1}));
+    two.set_columns(0);
+    CK_CHECK(two.columns() == 1);
+    CK_CHECK((two.vertical_size_hint() == ckv::ui::SizeHint{2, 2, 2}));
+}
+
+CK_TEST(left_and_right_step_through_a_row_and_up_and_down_are_not_its_own) {
+    Fixture f;
+    RadioGroup group({"Keep", "On", "Off", "Reset"});
+    group.set_columns(4);
+    group.set_selected(0);
+    CK_CHECK(group.on_key(key(Key::Right)));
+    CK_CHECK(group.selected() == 1);
+    CK_CHECK(group.on_key(key(Key::Left)));
+    CK_CHECK(group.selected() == 0);
+    CK_CHECK(group.on_key(key(Key::Left)));  // wraps to the end of the row
+    CK_CHECK(group.selected() == 3);
+    // Every column holds one choice, so Up and Down go on to the window.
+    CK_CHECK(!group.on_key(key(Key::Up)));
+    CK_CHECK(!group.on_key(key(Key::Down)));
+    CK_CHECK(group.selected() == 3);
+}
+
+CK_TEST(up_and_down_move_within_a_column_and_wrap_there) {
+    Fixture f;
+    // Two columns: A C E down the first, B D down the second.
+    RadioGroup group({"A", "B", "C", "D", "E"});
+    group.set_columns(2);
+    group.set_selected(1);
+    CK_CHECK(group.on_key(key(Key::Down)));
+    CK_CHECK(group.selected() == 3);
+    CK_CHECK(group.on_key(key(Key::Down)));  // the second column ends at D
+    CK_CHECK(group.selected() == 1);
+    CK_CHECK(group.on_key(key(Key::Up)));
+    CK_CHECK(group.selected() == 3);
+    group.set_selected(4);
+    CK_CHECK(group.on_key(key(Key::Down)));  // E is last in the first column
+    CK_CHECK(group.selected() == 0);
+    CK_CHECK(group.on_key(key(Key::Right)));  // and Right still walks the sequence
+    CK_CHECK(group.selected() == 1);
+
+    // A stacked group keeps its old contract: Up from the top wraps.
+    CheckGroup stacked({"One", "Two", "Three"});
+    CK_CHECK(stacked.on_key(key(Key::Up)));
+    CK_CHECK(stacked.on_key(key(Key::Char, " ")));
+    CK_CHECK(stacked.checked(2));
+}
+
+CK_TEST(a_lone_choice_leaves_every_arrow_to_the_window) {
+    Fixture f;
+    CheckGroup box({"Ask for a filename every time"});
+    CK_CHECK(!box.on_key(key(Key::Up)));
+    CK_CHECK(!box.on_key(key(Key::Down)));
+    CK_CHECK(!box.on_key(key(Key::Left)));
+    CK_CHECK(!box.on_key(key(Key::Right)));
+    CK_CHECK(box.on_key(key(Key::Char, " ")));
+    CK_CHECK(box.checked(0));
+}
+
+CK_TEST(a_press_lands_on_the_choice_whose_column_it_is_in) {
+    Fixture f;
+    CheckGroup group({"Keep", "On", "Off", "Reset"});
+    group.set_columns(4);
+    group.set_context(f.ctx());
+    group.set_bounds(Rect{0, 0, 42, 1});
+    const auto press = [](int x, int y) {
+        return ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, Point{x, y}, std::nullopt,
+                               Modifier::None};
+    };
+    CK_CHECK(group.on_mouse(press(11, 0)));  // the second choice's marker, at 10
+    CK_CHECK(group.checked(1));
+    CK_CHECK(group.on_mouse(press(9, 0)));  // the gap after the first choice is still its own
+    CK_CHECK(group.checked(0));
+    CK_CHECK(group.on_mouse(press(41, 0)));  // the last column runs to the edge
+    CK_CHECK(group.checked(3));
+    CK_CHECK(!group.on_mouse(press(3, 1)));  // no second row
+
+    // The half-full last row of a two-column group has nothing in its
+    // second column.
+    RadioGroup five({"A", "B", "C", "D", "E"});
+    five.set_columns(2);
+    five.set_context(f.ctx());
+    five.set_bounds(Rect{0, 0, 12, 3});
+    CK_CHECK(five.on_mouse(press(8, 1)));
+    CK_CHECK(five.selected() == 3);
+    CK_CHECK(!five.on_mouse(press(8, 2)));
+    CK_CHECK(five.selected() == 3);
 }

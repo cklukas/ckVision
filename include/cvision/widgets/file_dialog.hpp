@@ -43,9 +43,17 @@ struct FileDialogFilter {
 };
 
 struct FileDialogOptions {
-    std::vector<FileDialogFilter> filters;
+    std::vector<FileDialogFilter> filters{};
     std::size_t active_filter = 0;
     bool show_hidden = false;
+
+    // A name to offer, for a dialog that is saving something the application
+    // can already name: Save As a document called "notes.md", an export beside
+    // it as "notes.html". The path field then reads the shown directory with
+    // this name, in whichever directory the reader browses to, and has the
+    // focus, so Enter accepts the suggestion and typing replaces it. A file
+    // chosen from the list replaces the name. Empty offers none.
+    std::string suggested_name{};
 
     // Optional recent-location registry. The dialog records the current
     // directory on accept and shows still-existing directories as navigable

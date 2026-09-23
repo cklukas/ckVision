@@ -296,9 +296,15 @@ void Application::set_focus(View* view) {
         const bool requested_is_attached = view != nullptr && tree_contains(root_, view);
         const std::optional<ViewHandle> requested =
             requested_is_attached ? std::optional{make_view_handle(*view)} : std::nullopt;
-        if (focused_ != nullptr)
-            focused_->on_focus(FocusEvent{false});
+        // The pointer is cleared BEFORE the departing view hears of it, so
+        // that inside its on_focus(false) — and from then on — has_focus()
+        // already answers no. A view that asks during that callback is
+        // deciding what to leave on screen, and the answer must be the one
+        // the Application has already settled on.
+        View* const departing = focused_;
         focused_ = nullptr;
+        if (departing != nullptr)
+            departing->on_focus(FocusEvent{false});
         // Focus loss is user code: it may remove, destroy, hide, disable, or
         // reparent the requested view. Resolve the capability only after that
         // callback, rather than trusting its original raw pointer.
@@ -440,42 +446,44 @@ const std::vector<std::string>& Application::focused_command_contexts() {
     return out;
 }
 
-bool Application::focus_next() {
-    const std::vector<View*>& views = focusable_views();
+const std::vector<View*>& Application::focusable_views_within(View& scope) {
+    std::vector<View*>& out = focus_scratch_;
+    out.clear();
+    // While a modal owns the scope, a subtree outside it has no traversal to
+    // offer: the keys never reach it, and a walk that did would carry focus
+    // out of the modal.
+    if (modal_root() != nullptr && !in_modal_scope(scope))
+        return out;
+    collect_focusable(scope, out);
+    return out;
+}
+
+bool Application::advance_focus(const std::vector<View*>& views, bool forward) {
     if (views.empty())
         return false;
-    if (focused_ == nullptr) {
-        set_focus(views.front());
-        return true;
-    }
     auto it = std::find(views.begin(), views.end(), focused_);
     // Entering a modal leaves its saved background focus intact until the
     // presentation operation selects an initial child. If a Tab arrives in
-    // that interval (or a focused view was detached), traversal must enter
-    // at the first focusable view, not skip it as though an invisible item
-    // preceded the scope.
+    // that interval (or a focused view was detached, or focus is outside the
+    // walk's scope), traversal must enter at the walk's own first or last
+    // view, not skip one as though an invisible item preceded the scope.
     if (it == views.end()) {
-        set_focus(views.front());
+        set_focus(forward ? views.front() : views.back());
         return true;
     }
     const std::size_t index = static_cast<std::size_t>(it - views.begin());
-    set_focus(views[(index + 1) % views.size()]);
+    set_focus(views[forward ? (index + 1) % views.size() : (index + views.size() - 1) % views.size()]);
     return true;
 }
 
-bool Application::focus_previous() {
-    const std::vector<View*>& views = focusable_views();
-    if (views.empty())
-        return false;
-    if (focused_ == nullptr) {
-        set_focus(views.back());
-        return true;
-    }
-    auto it = std::find(views.begin(), views.end(), focused_);
-    const std::size_t index =
-        (it == views.end()) ? 0 : static_cast<std::size_t>(it - views.begin());
-    set_focus(views[(index + views.size() - 1) % views.size()]);
-    return true;
+bool Application::focus_next() { return advance_focus(focusable_views(), true); }
+
+bool Application::focus_previous() { return advance_focus(focusable_views(), false); }
+
+bool Application::focus_next_within(View& scope) { return advance_focus(focusable_views_within(scope), true); }
+
+bool Application::focus_previous_within(View& scope) {
+    return advance_focus(focusable_views_within(scope), false);
 }
 
 void Application::set_clipboard_text(std::string text) {
@@ -657,10 +665,8 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     if (scope_root != nullptr) {
                         if (auto id = commands_.command_for_key(e.chord)) {
                             const std::vector<std::string>& contexts = focused_command_contexts();
-                            const CommandInfo* info = commands_.find(*id);
                             const bool modal_context_command =
-                                info != nullptr && !info->context.empty() &&
-                                commands_.is_available(*id, contexts);
+                                commands_.is_enabled(*id) && commands_.in_named_context(*id, contexts);
                             if (is_modal_scope_command(commands_.standard(), *id) ||
                                 modal_context_command)
                                 return commands_.execute(*id, contexts);
@@ -1309,8 +1315,19 @@ bool Application::run_until(const std::function<bool()>& done) {
 Application::ModalScopeId Application::push_modal(View& modal_root) {
     CKV_ASSERT(tree_contains(root_, &modal_root));
     std::optional<ViewHandle> restore;
-    if (focused_ != nullptr && tree_contains(root_, focused_))
+    if (focused_ != nullptr && tree_contains(root_, focused_)) {
         restore = make_view_handle(*focused_);
+    } else if (pending_modal_focus_restore_) {
+        // A modal that has just ended has not yet handed focus back — this
+        // one opens from inside its departure, the way a dialog chain
+        // presents its next step once the first answers. Focus is nowhere
+        // for that moment, and the departed scope's restoration can no
+        // longer apply inside this new scope. This scope takes it over, so
+        // that when the chain ends focus returns where the first dialog
+        // found it rather than nowhere.
+        restore = std::move(pending_modal_focus_restore_);
+        pending_modal_focus_restore_.reset();
+    }
     const ModalScopeId id = next_modal_scope_id_++;
     CKV_ASSERT(id != 0); // wraparound would make a retained identity ambiguous
     modal_stack_.push_back(ModalScope{id, &modal_root, std::move(restore)});

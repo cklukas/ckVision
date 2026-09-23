@@ -21,8 +21,12 @@ struct Fixture {
     ckv::ui::RoleRegistry registry;
     ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
     ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
+    // Focus is the Application's to give (D-065), so the fixture carries one.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
 
-    ckv::ui::Context context() { return ckv::ui::Context{&theme, &registry, nullptr}; }
+    ckv::ui::Context context() { return ckv::ui::Context{&theme, &registry, &app}; }
 };
 
 // A session that counts the reads a view makes of it, forwarding everything to
@@ -236,14 +240,16 @@ CK_TEST(terminal_view_publishes_its_focused_private_cursor_in_absolute_coordinat
     ckv::term::TerminalCapabilityProfile profile = ckv::term::embedded_xterm_sixel_profile();
     profile.cells = ckv::Size{8, 2};
     ckv::term::TerminalEmulator session(profile);
+    Fixture f;
     ckv::widgets::TerminalView view(session);
+    view.set_context(f.context());
     view.set_bounds(ckv::Rect{3, 4, 8, 2});
-    view.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&view);
     const std::optional<ckv::CursorState> cursor = view.cursor_state();
     CK_CHECK(cursor.has_value());
     CK_CHECK(cursor->position == (ckv::Point{3, 4}));
     CK_CHECK(cursor->blink);
-    view.on_focus(ckv::FocusEvent{false});
+    f.app.set_focus(nullptr);
     CK_CHECK(!view.cursor_state().has_value());
 }
 

@@ -7,6 +7,7 @@
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/ui/dock.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -32,6 +33,12 @@ struct Fixture {
     RoleRegistry registry;
     StandardRoles roles = intern_standard_roles(registry);
     Theme theme = make_classic_theme(registry, roles);
+    // Focus is the Application's to give (D-065), so the fixture carries one
+    // for the tests that need a list to hold it.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 10}};
+    ckv::ManualClock clock;
+    ckv::ui::Application app{terminal, clock};
+    ckv::ui::Context ctx() { return ckv::ui::Context{&theme, &registry, &app}; }
 };
 
 ListView make_list(Fixture&, bool multi = false) { return ListView(multi); }
@@ -81,7 +88,7 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     // marks its place, but in the muted form.
     Fixture f;
     auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_context(f.ctx());
     list.on_attached();
     list.set_items({"one", "two"});
     list.set_bounds(Rect{0, 0, 8, 2});
@@ -93,14 +100,43 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
     CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
 
-    list.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&list);
     list.draw(painter);
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected));
     CK_CHECK(surface.at(ckv::Point{0, 1}).style() == f.theme.resolve(f.roles.list_normal));
 
-    list.on_focus(ckv::FocusEvent{false});
+    f.app.set_focus(nullptr);
     list.draw(painter);
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
+}
+
+CK_TEST(a_cursor_placed_before_layout_is_revealed_once_the_list_has_a_height) {
+    // Placed while the list had no size, the cursor is shown when the size
+    // arrives — from the top when it fits, rather than scrolled as though
+    // the viewport had been one row tall.
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.on_attached();
+    std::vector<std::string> items;
+    for (int index = 0; index < 10; ++index) items.push_back("item" + std::to_string(index));
+    list.set_items(items);
+    list.set_cursor(2);
+    list.set_bounds(Rect{0, 0, 8, 4});
+    ckv::scene::Surface surface(ckv::Size{8, 4}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 4});
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "0");
+
+    auto later = make_list(f);
+    later.set_context(f.ctx());
+    later.on_attached();
+    later.set_items(items);
+    later.set_cursor(7);
+    later.set_bounds(Rect{0, 0, 8, 4});
+    later.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{4, 0}).grapheme() == "4");
+    CK_CHECK(surface.at(ckv::Point{4, 3}).grapheme() == "7");
 }
 
 CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {
@@ -109,9 +145,9 @@ CK_TEST(a_selection_is_a_highlight_bar_rather_than_an_underline) {
     // underline alone reads as a text field or a hyperlink.
     Fixture f;
     auto list = make_list(f);
-    list.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    list.set_context(f.ctx());
     list.on_attached();
-    list.on_focus(ckv::FocusEvent{true});
+    f.app.set_focus(&list);
     list.set_items({"one", "two"});
     list.set_bounds(Rect{0, 0, 8, 2});
     ckv::scene::Surface surface(ckv::Size{8, 2}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
@@ -264,6 +300,65 @@ CK_TEST(keyboard_search_with_no_match_is_unhandled) {
     auto list = make_list(f);
     list.set_items({"apple", "banana"});
     CK_CHECK(!list.on_key(key(Key::Char, "z")));
+}
+
+CK_TEST(letters_typed_together_form_one_prefix_and_the_same_letter_again_steps_on) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.set_items({"parts.csv", "sample.db", "sample.db-wal", "second"});
+    // "s" reaches the first s-row; "a" right after keeps it, since it still
+    // begins with "sa"; "e" then makes "sae", which nothing begins with,
+    // so the search restarts on the next letter.
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list.on_key(key(Key::Char, "a")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(!list.on_key(key(Key::Char, "e")));
+    CK_CHECK(list.cursor() == 1);
+    // "s" then "e" typed together: the second letter moves past the row
+    // that only matches the first.
+    f.clock.advance(2'000'000'000);
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 2);
+    CK_CHECK(list.on_key(key(Key::Char, "e")));
+    CK_CHECK(list.cursor() == 3);
+    // The same letter again, quickly, steps to the next row beginning with
+    // it rather than searching for "ss".
+    f.clock.advance(2'000'000'000);
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list.on_key(key(Key::Char, "s")));
+    CK_CHECK(list.cursor() == 2);
+    // A letter with a command modifier is a chord, not a search.
+    CK_CHECK(!list.on_key(ckv::KeyEvent{ckv::KeyChord{Key::Char, ckv::Modifier::Alt, "p"}}));
+    CK_CHECK(list.cursor() == 2);
+}
+
+CK_TEST(the_prefix_search_reaches_a_provider_through_find_prefix) {
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    struct Names final : public ckv::widgets::ListModel {
+        std::vector<std::string> rows{"alpha", "beta", "bravo", "gamma"};
+        std::size_t item_count() const override { return rows.size(); }
+        ckv::widgets::ListItem item_at(std::size_t index) const override { return {index + 1, rows[index], {}}; }
+        std::optional<std::size_t> index_of(ckv::widgets::ListItemId id) const override {
+            return id >= 1 && id <= rows.size() ? std::optional<std::size_t>(id - 1) : std::nullopt;
+        }
+        std::optional<std::size_t> find_prefix(std::string_view prefix, std::size_t after) const override {
+            for (std::size_t step = 1; step <= rows.size(); ++step) {
+                const std::size_t index = (after + step) % rows.size();
+                if (rows[index].rfind(prefix, 0) == 0) return index;
+            }
+            return std::nullopt;
+        }
+    } names;
+    list.set_model(names);
+    CK_CHECK(list.on_key(key(Key::Char, "b")));
+    CK_CHECK(list.cursor() == 1);
+    CK_CHECK(list.on_key(key(Key::Char, "r")));
+    CK_CHECK(list.cursor() == 2);
 }
 
 // --- Activation --------------------------------------------------------
@@ -572,4 +667,51 @@ CK_TEST(a_list_says_how_much_room_its_contents_want) {
     wide.set_items({"a", "a much longer entry than the others"});
     CK_CHECK(wide.horizontal_size_hint().preferred >= 35);
     CK_CHECK(wide.horizontal_size_hint().preferred > list.horizontal_size_hint().preferred);
+}
+
+// --- The width a container gives a list -------------------------------------
+
+namespace {
+struct ThreeRows final : ListModel {
+    std::size_t item_count() const override { return 3; }
+    ListItem item_at(std::size_t index) const override {
+        static const char* const rows[] = {"1  Field Report  title", "2  Findings  notes  steps 3",
+                                           "3  Method  two-content"};
+        return ListItem{static_cast<ListItemId>(index + 1), rows[index], std::nullopt};
+    }
+    std::optional<std::size_t> index_of(ListItemId id) const override {
+        return id >= 1 && id <= 3 ? std::optional<std::size_t>(id - 1) : std::nullopt;
+    }
+};
+}  // namespace
+
+CK_TEST(a_docked_list_widens_when_its_model_gains_items) {
+    Fixture f;
+    ckv::ui::Dock dock;
+    dock.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    auto* list = static_cast<ListView*>(dock.add_item(std::make_unique<ListView>(), ckv::ui::DockEdge::Left));
+    dock.set_bounds(Rect{0, 0, 80, 20});
+    // Empty: the sliver an empty list is allowed to be.
+    CK_CHECK(list->bounds().width == 8);
+    ThreeRows rows;
+    list->set_model(rows);
+    // The dock heard the hint change and laid the column out for the rows.
+    CK_CHECK(list->bounds().width == 2 + 1 + static_cast<int>(std::string("2  Findings  notes  steps 3").size()));
+    list->model_changed();
+    CK_CHECK(list->bounds().width > 8);
+}
+
+CK_TEST(an_explicit_preferred_width_outranks_the_measured_one) {
+    Fixture f;
+    ckv::ui::Dock dock;
+    dock.set_context(ckv::ui::Context{&f.theme, &f.registry, nullptr});
+    auto list_view = std::make_unique<ListView>();
+    list_view->set_preferred_size(ckv::Size{30, 0});
+    auto* list = static_cast<ListView*>(dock.add_item(std::move(list_view), ckv::ui::DockEdge::Left));
+    dock.set_bounds(Rect{0, 0, 80, 20});
+    CK_CHECK(list->bounds().width == 30);
+    ThreeRows rows;
+    list->set_model(rows);
+    CK_CHECK(list->bounds().width == 30);
+    CK_CHECK(list->horizontal_size_hint().preferred == 30);
 }

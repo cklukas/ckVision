@@ -243,52 +243,55 @@ TodoApp::~TodoApp() {
 }
 
 void TodoApp::declare_commands() {
+    // The board's verbs belong to the lanes; the note verbs to the note editor.
+    const ui::CommandScope board_scope{.contexts = {"todo.board"}};
+    const ui::CommandScope note_scope{.contexts = {"todo.note"}};
     add_task_command_ = app_.commands().declare(
-        {.key = std::string(kAddTaskKey), .title = "&Add task...", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kAddTaskKey), .title = "&Add task...", .category = "Tasks", .scope = board_scope,
          .handler = [this] { present_task_dialog(false); }});
     edit_task_command_ = app_.commands().declare(
-        {.key = std::string(kEditTaskKey), .title = "&Edit task...", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kEditTaskKey), .title = "&Edit task...", .category = "Tasks", .scope = board_scope,
          .handler = [this] { present_task_dialog(true); }});
     edit_note_command_ = app_.commands().declare(
-        {.key = std::string(kEditNoteKey), .title = "Edit &note", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kEditNoteKey), .title = "Edit &note", .category = "Tasks", .scope = board_scope,
          .handler = [this] { open_note_editor(); }});
     note_undo_command_ = app_.commands().declare(
-        {.key = "todo.note.undo", .title = "&Undo", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.undo", .title = "&Undo", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->document->undo();
          }});
     note_redo_command_ = app_.commands().declare(
-        {.key = "todo.note.redo", .title = "&Redo", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.redo", .title = "&Redo", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->document->redo();
          }});
     note_cut_command_ = app_.commands().declare(
-        {.key = "todo.note.cut", .title = "Cu&t", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.cut", .title = "Cu&t", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->cut_selection_to_clipboard();
          }});
     note_copy_command_ = app_.commands().declare(
-        {.key = "todo.note.copy", .title = "&Copy", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.copy", .title = "&Copy", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->copy_selection_to_clipboard();
          }});
     note_paste_command_ = app_.commands().declare(
-        {.key = "todo.note.paste", .title = "&Paste", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.paste", .title = "&Paste", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->paste_from_clipboard();
          }});
     note_find_selection_command_ = app_.commands().declare(
         {.key = "todo.note.find-selection", .title = "&Find selection", .category = "Note",
-         .context = "todo.note", .handler = [this] {
+         .scope = note_scope, .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->use_selection_as_search_query();
          }});
     note_find_next_command_ = app_.commands().declare(
-        {.key = "todo.note.find-next", .title = "Find &next", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.find-next", .title = "Find &next", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) (void)note->editor->find_next();
          }});
     note_wrap_command_ = app_.commands().declare(
-        {.key = "todo.note.wrap", .title = "&Word wrap", .category = "Note", .context = "todo.note",
+        {.key = "todo.note.wrap", .title = "&Word wrap", .category = "Note", .scope = note_scope,
          .handler = [this] {
              if (NoteSession* note = focused_note()) {
                  const bool wrapped = note->editor->wrap_mode() == widgets::WrapMode::Word;
@@ -297,43 +300,43 @@ void TodoApp::declare_commands() {
              }
          }});
     archive_task_command_ = app_.commands().declare(
-        {.key = std::string(kArchiveTaskKey), .title = "&Archive task...", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kArchiveTaskKey), .title = "&Archive task...", .category = "Tasks", .scope = board_scope,
          .handler = [this] { present_archive_confirmation(); }});
     delete_task_command_ = app_.commands().declare(
-        {.key = std::string(kDeleteTaskKey), .title = "&Delete task...", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kDeleteTaskKey), .title = "&Delete task...", .category = "Tasks", .scope = board_scope,
          .handler = [this] { present_delete_confirmation(); }});
     move_task_command_ = app_.commands().declare(
-        {.key = std::string(kMoveTaskKey), .title = "&Move task", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kMoveTaskKey), .title = "&Move task", .category = "Tasks", .scope = board_scope,
          .handler = [this] { toggle_move(); }});
     cancel_move_command_ = app_.commands().declare(
-        {.key = std::string(kCancelMoveKey), .title = "Cancel move", .category = "Tasks", .context = "todo.board",
+        {.key = std::string(kCancelMoveKey), .title = "Cancel move", .category = "Tasks", .scope = board_scope,
          .visibility = ui::CommandVisibility::Hidden, .handler = [this] { cancel_move(); }});
     lane_actions_command_ = app_.commands().declare(
-        {.key = std::string(kLaneActionsKey), .title = "Lane &actions...", .category = "Lanes", .context = "todo.board",
+        {.key = std::string(kLaneActionsKey), .title = "Lane &actions...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_actions(); }});
     lane_rename_command_ = app_.commands().declare(
-        {.key = "todo.rename-lane", .title = "&Rename...", .category = "Lanes", .context = "todo.board",
+        {.key = "todo.rename-lane", .title = "&Rename...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_rename(); }});
     lane_color_command_ = app_.commands().declare(
-        {.key = "todo.color-lane", .title = "&Color...", .category = "Lanes", .context = "todo.board",
+        {.key = "todo.color-lane", .title = "&Color...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_color(); }});
     lane_insert_left_command_ = app_.commands().declare(
-        {.key = "todo.insert-lane-left", .title = "Insert &left...", .category = "Lanes", .context = "todo.board",
+        {.key = "todo.insert-lane-left", .title = "Insert &left...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_insert(true); }});
     lane_insert_right_command_ = app_.commands().declare(
-        {.key = "todo.insert-lane-right", .title = "Insert &right...", .category = "Lanes", .context = "todo.board",
+        {.key = "todo.insert-lane-right", .title = "Insert &right...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_insert(false); }});
     lane_merge_command_ = app_.commands().declare(
-        {.key = "todo.merge-lane", .title = "&Merge into...", .category = "Lanes", .context = "todo.board",
+        {.key = "todo.merge-lane", .title = "&Merge into...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_merge(); }});
     lane_archive_command_ = app_.commands().declare(
-        {.key = "todo.archive-lane", .title = "Archive lane...", .category = "Lanes", .context = "todo.board",
+        {.key = "todo.archive-lane", .title = "Archive lane...", .category = "Lanes", .scope = board_scope,
          .handler = [this] { present_lane_archive(); }});
     for (std::size_t index = 0; index < lane_sort_commands_.size(); ++index) {
         const SortMode sort = static_cast<SortMode>(index);
         lane_sort_commands_[index] = app_.commands().declare(
             {.key = std::string(kSortCommandKeys[index]), .title = kSortNames[index], .category = "Lanes",
-             .context = "todo.board", .handler = [this, sort] { set_lane_sort(sort); }});
+             .scope = board_scope, .handler = [this, sort] { set_lane_sort(sort); }});
     }
     for (std::size_t index = 0; index < theme_commands_.size(); ++index) {
         const TodoTheme theme = static_cast<TodoTheme>(index);
@@ -343,10 +346,10 @@ void TodoApp::declare_commands() {
     }
     board_manager_command_ = app_.commands().declare(
         {.key = std::string(kBoardManagerKey), .title = "&Board Manager...", .category = "Boards",
-         .context = "todo.board", .handler = [this] { present_board_manager(); }});
+         .scope = board_scope, .handler = [this] { present_board_manager(); }});
     new_board_command_ = app_.commands().declare(
         {.key = std::string(kNewBoardKey), .title = "&New Board...", .category = "Boards",
-         .context = "todo.board", .handler = [this] { present_new_board(); }});
+         .scope = board_scope, .handler = [this] { present_new_board(); }});
     keyboard_help_command_ = app_.commands().declare(
         {.key = "todo.keyboard-help", .title = "&Keyboard reference", .category = "Help",
          .handler = [this] { show_help_topic("todo.keyboard"); }});
@@ -357,11 +360,11 @@ void TodoApp::declare_commands() {
         {.key = "todo.resolve-conflict", .title = "&Resolve conflict...", .category = "File",
          .handler = [this] { present_conflict_resolution(); }});
     board_help_command_ = app_.commands().declare(
-        {.key = "todo.board-help", .title = "Board help", .category = "Help", .context = "todo.board",
+        {.key = "todo.board-help", .title = "Board help", .category = "Help", .scope = board_scope,
          .visibility = ui::CommandVisibility::Hidden,
          .handler = [this] { app_.execute_command(app_.commands().standard().help); }});
     board_quit_command_ = app_.commands().declare(
-        {.key = "todo.board-quit", .title = "Board quit", .category = "File", .context = "todo.board",
+        {.key = "todo.board-quit", .title = "Board quit", .category = "File", .scope = board_scope,
          .visibility = ui::CommandVisibility::Hidden,
          .handler = [this] { app_.execute_command(app_.commands().standard().quit); }});
 

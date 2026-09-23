@@ -7,6 +7,7 @@
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/label.hpp"
 #include "cvision/widgets/scroll_viewport.hpp"
 #include "cvision/widgets/window.hpp"
 
@@ -27,6 +28,7 @@ using ckv::widgets::ButtonRole;
 using ckv::widgets::Desktop;
 using ckv::widgets::DialogDescriptor;
 using ckv::widgets::FieldDescriptor;
+using ckv::widgets::FieldKind;
 using ckv::widgets::materialize_dialog;
 using ckv::widgets::ScrollViewport;
 using ckv::widgets::validate_dialog;
@@ -73,6 +75,35 @@ CK_TEST(one_field_and_one_button_produce_one_input_and_one_button_in_order) {
     CK_CHECK(dialog.labels[0] != nullptr);
     CK_CHECK(dialog.inputs[0]->text() == "initial");
     CK_CHECK(dialog.buttons[0]->text() == "OK");
+}
+
+CK_TEST(the_labels_beside_a_forms_controls_share_one_column) {
+    // Controls that start wherever their own label happens to end make a
+    // ragged form; the labels beside them are one column, as wide as the
+    // widest, so every control starts at the same place.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{"&Name", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{"&Hidden network", "", nullptr});
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Remember", .kind = FieldKind::Check});
+    FieldDescriptor size{"&Size", "", nullptr};
+    size.kind = FieldKind::Combo;
+    size.options = {"small", "large"};
+    descriptor.fields.push_back(std::move(size));
+    auto dialog = materialize_dialog(descriptor);
+
+    const int widest = static_cast<int>(std::string("Hidden network").size());
+    CK_CHECK(dialog.labels[0]->horizontal_size_hint().preferred == widest);
+    CK_CHECK(dialog.labels[1]->horizontal_size_hint().preferred == widest);
+    CK_CHECK(dialog.labels[3]->horizontal_size_hint().preferred == widest);
+    CK_CHECK(dialog.labels[2] == nullptr);  // a check box carries its own text
+
+    ckv::widgets::Label alone{"&Title"};
+    CK_CHECK(alone.horizontal_size_hint().preferred == 5);
+    alone.set_column_width(12);
+    CK_CHECK(alone.horizontal_size_hint().preferred == 12);
+    alone.set_column_width(2);  // never narrower than its own text
+    CK_CHECK(alone.horizontal_size_hint().preferred == 5);
 }
 
 CK_TEST(classic_buttons_keep_a_ten_cell_footprint_and_can_be_widened) {
@@ -847,4 +878,161 @@ CK_TEST(a_presented_dialog_scrolls_when_the_terminal_shrinks_and_recovers_when_i
     CK_CHECK(viewport->bounds().height == 15);
     CK_CHECK(save->absolute_bounds().y - window->absolute_bounds().y == 18);
     (void)presentation;
+}
+
+CK_TEST(a_description_panel_shows_the_focused_fields_description_and_keeps_the_last_one_on_a_button) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles app_roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), app_roles);
+    auto* desktop =
+        static_cast<Desktop*>(app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 80, 24})));
+
+    DialogDescriptor descriptor;
+    descriptor.title = "Wi-Fi access";
+    FieldDescriptor network;
+    network.label = "&Network name";
+    network.description = "The network's SSID.\nExample: Home";
+    FieldDescriptor password;
+    password.label = "&Password";
+    password.description = "Leave empty for an open network.";
+    FieldDescriptor note;
+    note.kind = ckv::widgets::FieldKind::Note;
+    note.label = "A note has no control, so no description.";
+    descriptor.fields = {network, password, note};
+    descriptor.buttons.push_back({"&OK", ButtonRole::Accept, {}});
+    descriptor.field_description_rows = 3;
+
+    CK_CHECK(materialize_dialog(descriptor).field_description != nullptr);
+
+    auto presentation = ckv::widgets::present_dialog(descriptor, app, *desktop, app_roles);
+    app.step(0);
+    const auto frame = [&app] {
+        std::string out;
+        const auto& surface = app.composed_surface();
+        for (int y = 0; y < surface.size().height; ++y) {
+            for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, y}).grapheme();
+            out += '\n';
+        }
+        return out;
+    };
+    std::string text = frame();
+    CK_CHECK(text.find("The network's SSID.") != std::string::npos);
+    CK_CHECK(text.find("Example: Home") != std::string::npos);
+    CK_CHECK(text.find("Leave empty for an open network.") == std::string::npos);
+
+    CK_CHECK(app.dispatch(ckv::term::TerminalEvent{ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}}));
+    app.step(0);
+    text = frame();
+    CK_CHECK(text.find("Leave empty for an open network.") != std::string::npos);
+    CK_CHECK(text.find("The network's SSID.") == std::string::npos);
+
+    // On the button the last field's description stays.
+    CK_CHECK(app.dispatch(ckv::term::TerminalEvent{ckv::KeyEvent{KeyChord{Key::Tab, Modifier::None, ""}}}));
+    app.step(0);
+    CK_CHECK(frame().find("Leave empty for an open network.") != std::string::npos);
+    (void)presentation;
+}
+
+CK_TEST(a_checked_form_stays_open_on_a_veto_with_the_field_marked_focused_and_the_reason_shown) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    StandardRoles app_roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), app_roles);
+    auto* desktop =
+        static_cast<Desktop*>(app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 80, 24})));
+
+    DialogDescriptor descriptor;
+    descriptor.title = "Semantic text";
+    FieldDescriptor role;
+    role.label = "&Role";
+    role.kind = ckv::widgets::FieldKind::Combo;
+    role.options = {"command", "abbr"};
+    role.initial_selection = 1;
+    FieldDescriptor expansion;
+    expansion.label = "&Expansion";
+    descriptor.fields = {role, expansion};
+    descriptor.buttons.push_back({"&OK", ButtonRole::Accept, {}});
+    int checks = 0;
+    descriptor.check = [&checks](const ckv::widgets::DialogResult& answers) -> std::optional<ckv::widgets::DialogVeto> {
+        ++checks;
+        if (answers.selected[0] == 1 && answers.values[1].empty())
+            return ckv::widgets::DialogVeto{"An abbreviation needs its expansion.", 1};
+        return std::nullopt;
+    };
+    // A check brings a panel to give its reasons in.
+    CK_CHECK(materialize_dialog(descriptor).field_description != nullptr);
+
+    auto presentation = ckv::widgets::present_dialog(descriptor, app, *desktop, app_roles);
+    app.step(0);
+    const auto frame = [&app] {
+        std::string out;
+        const auto& surface = app.composed_surface();
+        for (int y = 0; y < surface.size().height; ++y) {
+            for (int x = 0; x < surface.size().width; ++x) out += surface.at(ckv::Point{x, y}).grapheme();
+            out += '\n';
+        }
+        return out;
+    };
+    const auto press = [&app](Key key, std::string text = {}) {
+        CK_CHECK(app.dispatch(ckv::term::TerminalEvent{ckv::KeyEvent{KeyChord{key, Modifier::None, std::move(text)}}}));
+        app.step(0);
+    };
+
+    press(Key::Enter);
+    CK_CHECK(checks == 1);
+    CK_CHECK(!presentation.completed());
+    // Word-wrapped in the panel, as a description is.
+    CK_CHECK(frame().find("needs its expansion.") != std::string::npos);
+    auto* expansion_input = dynamic_cast<ckv::widgets::InputLine*>(app.focused());
+    CK_CHECK(expansion_input != nullptr);
+    CK_CHECK(expansion_input != nullptr && !expansion_input->valid());
+
+    // Moving on retires the reason; the answer is what counts next time.
+    press(Key::Tab);
+    CK_CHECK(frame().find("needs its expansion.") == std::string::npos);
+    CK_CHECK(app.dispatch(ckv::term::TerminalEvent{ckv::KeyEvent{KeyChord{Key::Tab, Modifier::Shift, ""}}}));
+    app.step(0);
+    CK_CHECK(app.focused() == expansion_input);
+    app.dispatch(ckv::term::TerminalEvent{ckv::TextEvent{"application binary interface"}});
+    app.step(0);
+    press(Key::Enter);
+    CK_CHECK(checks == 2);
+    CK_CHECK(presentation.completed());
+    CK_CHECK(presentation.result()->accepted);
+    CK_CHECK(presentation.result()->values[1] == "application binary interface");
+}
+
+CK_TEST(a_window_wired_to_a_checked_form_honours_the_veto_too) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    DialogDescriptor descriptor;
+    bool ok_ran = false;
+    descriptor.fields.push_back(FieldDescriptor{"&A:", "x", nullptr});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, [&] { ok_ran = true; }});
+    bool allow = false;
+    descriptor.check = [&allow](const ckv::widgets::DialogResult&) -> std::optional<ckv::widgets::DialogVeto> {
+        if (allow) return std::nullopt;
+        return ckv::widgets::DialogVeto{"Not yet.", 0};
+    };
+    auto dialog = materialize_dialog(descriptor);
+    auto* input = dialog.inputs[0];
+
+    Window window = make_window(f);
+    bool closed = false;
+    window.on_closed = [&] { closed = true; };
+    wire_dialog_window(window, std::move(dialog), descriptor, app, nullptr);
+
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(!ok_ran);
+    CK_CHECK(!closed);
+    CK_CHECK(!input->valid());
+    allow = true;
+    CK_CHECK(window.on_key(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(ok_ran);
+    CK_CHECK(closed);
 }

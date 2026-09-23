@@ -102,7 +102,8 @@ detector, and line highlighter registered by an application.
 ## SyntaxProfileRegistry
 
 Header: `include/cvision/widgets/syntax_profile.hpp`. Instance-owned language
-profile registry; the editor guide registers JSON, YAML, Bash, and plain text.
+profile registry; the editor guide registers JSON, YAML, Bash, Markdown, and
+plain text.
 
 ## SyntaxCacheLine
 
@@ -140,7 +141,34 @@ performs one-transaction replace-all; see [Editor](editor.md#search-and-files).
 ## EditorStatus
 
 Header: `include/cvision/widgets/text_editor.hpp`. Line/column, selection,
-modified, overwrite, and profile data a client can place in its own status UI.
+modified, overwrite, virtual-caret, and profile data a client can place in its
+own status UI.
+
+## EditorKeyBinding
+
+Header: `include/cvision/widgets/text_editor.hpp`. One chord and the
+`EditorCommand` it runs. `TextEditor::set_key_bindings()` replaces the list, so
+an application with its own command table and keyboard scheme decides which
+chords the editor answers itself; see [Editor](editor.md#commands-and-key-bindings).
+
+## VirtualCaret
+
+Header: `include/cvision/widgets/text_editor.hpp`. A provisional caret past the
+text — a logical line, which may lie below the last one, and a cell column. It
+writes nothing until text arrives; see [Editor](editor.md#a-caret-past-the-text).
+
+## EditRequest
+
+Header: `include/cvision/widgets/text_editor.hpp`. One text change the reader
+asked for — its `EditKind`, text, and the replacement the editor would commit —
+handed to an edit handler before anything changes; see
+[Editor](editor.md#edit-requests).
+
+## HighlightSpan
+
+Header: `include/cvision/widgets/text_editor.hpp`. A host-computed byte range
+of the document and the theme role it is painted in; see
+[Editor](editor.md#host-colouring).
 
 ## EditorStatusModel
 
@@ -407,6 +435,48 @@ clock->on_click = [] { /* drop a calendar under it */ };
 ```
 <!-- /ckvision-snippet -->
 
+## BigClockView
+
+Header: `include/cvision/widgets/big_clock.hpp`. A clock face that fills
+whatever it is given: the time, the date, or both (`BigClockContent`), in
+block glyphs five rows tall, centred. The glyphs are the seven-segment
+display's shapes — except the 1, a centred stem with a flag and a foot, since
+the segment 1 leaves a gap in front of it that reads as a space — drawn in
+cells of the theme's lit colour, the progress bar's fill role, on the text-view
+body. Where they do not fit, because the view is
+narrower or shorter than the glyphs need, the same lines are drawn centred as
+plain text, so a small window still tells the time; the view re-decides on
+every draw, so a face follows its window as it is resized in either direction.
+
+The reading comes from an injected `DateTimeValue` provider, as ClockView's
+does, and for the same reason. Seconds, twelve- or twenty-four-hour display and
+the meridiem words — drawn as a plain caption under the digits, since they are
+words — are options. Like ClockView it ticks once a second and repaints only
+when what it shows has changed. A face is put up to stay while the reader works
+elsewhere, so losing the focus dismisses nothing; a key while it has the
+keyboard, or a completed click on a face that already had it, fires
+`on_dismiss` — the click that only brings it back into focus does not, and
+neither does a key the application has bound to a command, which the face
+leaves unhandled so the command runs with the face still up. The face
+does not remove itself, because whoever put it up knows what it covers. `big_glyph_rows()` and `big_glyph_width()` expose the glyphs
+themselves, as `'#'`/`' '` masks, for a host that wants to draw them somewhere
+else.
+
+![BigClockView showing a date and a time](generated/screenshots/widget-bigclockview.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="bigclockview" -->
+```cpp
+face->set_content(widgets::BigClockContent::DateAndTime);
+face->set_show_seconds(false);
+face->set_moment_provider([] {
+    return widgets::DateTimeValue{widgets::DateValue{2026, 9, 23}, widgets::TimeValue{14, 5, 0}};
+});
+face->on_dismiss = [] { /* take the face down again */ };
+```
+<!-- /ckvision-snippet -->
+
 ## CalendarDropdown
 
 Header: `include/cvision/widgets/common_components.hpp`. A month, framed and
@@ -458,6 +528,13 @@ in the source-backed control setup below.
 
 Header: `include/cvision/widgets/common_components.hpp`. A plain hour/minute/
 second value used by TimePicker; it has no implicit system-clock behavior.
+
+## DateTimeValue
+
+Header: `include/cvision/widgets/common_components.hpp`. A DateValue and a
+TimeValue read together, as BigClockView's provider returns them: one reading
+rather than two, so a face showing both cannot pair one day's date with the
+next day's time when it is asked just after midnight.
 
 ## DatePicker
 
@@ -596,7 +673,11 @@ Header: `include/cvision/widgets/common_components.hpp`. Use for searchable
 command discovery. It presents an inset search field and an independently
 scrollable result viewport, excludes framework-only commands, preserves
 mnemonics, and activates through the registry command path rather than a
-palette-only callback.
+palette-only callback. It offers what its focus path allows; a palette opened
+in a window of its own takes the focus away from the place whose commands it
+should list, so give it that place's contexts with
+`set_invocation_contexts(ui::command_context_path(view))`, exactly as a menu
+walk keeps them.
 
 ![CommandPalette with filtered commands](generated/screenshots/widget-commandpalette.svg)
 
@@ -932,8 +1013,9 @@ Header: `include/cvision/widgets/dialog.hpp`. A label/initial-value/validator
 record used to materialize a descriptor dialog. `kind` selects the control:
 `Text` (an `InputLine`, the default), `Memo` (a multi-line text field whose
 `memo_rows` controls its requested visible height), `Check` (a checkbox carrying
-the label as its own text) or `Note` (text the form states rather than asks). See
-[Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
+the label as its own text) or `Note` (text the form states rather than asks). Its
+`description` is what a form's description panel shows while the field has the
+focus. See [Dialogs](dialogs-and-commands.md#fields-that-are-not-text).
 
 ## ButtonDescriptor
 
@@ -965,6 +1047,7 @@ Its public configuration is synchronized directly from the declaration:
 | `minimum_window_size` | `Size` | `{}` |
 | `button_alignment` | `ui::Alignment` | `ui::Alignment::Start` |
 | `anchor_buttons_to_bottom` | `bool` | `false` |
+| `field_description_rows` | `int` | `0` |
 | `help_context_key` | `std::string` | `{}` |
 <!-- /ckvision-fields -->
 
@@ -1048,6 +1131,13 @@ grip, so the size is theirs. `wire_dialog_window` does not re-fit a
 caller-owned window at all; the window and its geometry policy belong to the
 caller.
 
+## DialogVeto
+
+Header: `include/cvision/widgets/dialog.hpp`. What `DialogDescriptor::check`
+returns when the answers as a whole cannot be accepted: the message the form's
+description panel shows, and the field to put right. See
+[Checking the whole answer](dialogs-and-commands.md#checking-the-whole-answer).
+
 ## DialogResult
 
 Header: `include/cvision/widgets/dialog.hpp`. Typed completion payload for a
@@ -1058,6 +1148,17 @@ descriptor dialog. Inspect it in the presentation completion handler.
 Header: `include/cvision/widgets/dialog_presentation.hpp`. Presentation helper
 that restores the invoking focus after modal close; use the public presentation
 functions rather than constructing it directly.
+
+## PendingDialogs
+
+Header: `include/cvision/widgets/dialog_presentation.hpp`. The dialogs an owner
+is waiting on. A presentation delivers its completion only while it is kept, so
+an application that asks many questions hands each presentation to one
+`PendingDialogs` member with what to do with the answer —
+`pending.await(present_dialog(...), on_answer)` —
+instead of keeping an optional member per dialog. Each is released as its
+answer arrives, before the answer runs, so a completion may present the next
+dialog of a chain; destroying the set withdraws every answer still outstanding.
 
 ## DialogPresentationAccess
 
@@ -1093,7 +1194,13 @@ filter for the standard open/save dialog.
 ## FileDialogOptions
 
 Header: `include/cvision/widgets/file_dialog.hpp`. Options record for the
-standard file dialog, including mode and filters.
+standard file dialog, including mode and filters. `suggested_name` offers a
+name for something the application can already name — Save As for
+`notes.md`, an export beside it as `notes.html`: the path field reads the
+shown directory with that name wherever the reader browses, and has the focus,
+so Enter accepts it. In either mode, choosing a file in the list puts its path
+in the path field and the focus there: Enter accepts the file, typing edits the
+name.
 
 ![File dialog with filters and file list](generated/screenshots/widget-filedialog.svg)
 
@@ -1236,6 +1343,30 @@ flow->on_link_activate = [](const std::string& target) { (void)target; /* follow
 ```
 <!-- /ckvision-snippet -->
 
+## FrameText
+
+Header: `include/cvision/widgets/frame_text.hpp`. Use for a short readout set
+into a window's border — a line and column, a page count, the path being
+browsed — with `Window::add_frame_overlay`. It wears the border's own style
+(`Window::frame_style()`), so it follows the window's activation and any role
+override the window carries, and paints only its text and a space either side:
+the rest of its reserved width stays border line. `set_reserved_width` keeps a
+changing readout from moving along the border; `set_alignment` places the text
+within that width.
+
+![A line and column readout on a window's bottom border](generated/screenshots/widget-frametext.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_controls.cpp" region="frametext" -->
+```cpp
+auto* position = window.add_frame_overlay(std::make_unique<widgets::FrameText>("12:4"),
+                                          widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::Start, 1});
+position->set_reserved_width(10);  // a longer line number does not move it
+position->set_text("12:4  *");     // the caret moved and the page changed
+```
+<!-- /ckvision-snippet -->
+
 ## InputLine
 
 Header: `include/cvision/widgets/input_line.hpp`. Use for one-line text with
@@ -1246,6 +1377,15 @@ cursor/selection. Ctrl+Left/Right moves by word, Ctrl+Home/End reaches the
 field boundaries, and Shift extends any cursor motion. Ctrl+C/X/V and
 Ctrl+Insert/Shift+Insert copy, cut, and paste; Ctrl+Backspace/Delete erase by
 word, while Shift+Delete cuts the selection. Forms shows a labelled field.
+`on_accept` reports Enter; `on_edited` reports each change the reader makes to
+the text — what a search box filters on as it is typed into — and not the
+owner's own `set_text()`. A field the focus reaches from the keyboard — a dialog
+opening on it, Tab, the focus coming back — offers its text selected with the
+caret at the end: typing replaces it, Backspace or Delete clears it, and Right,
+End, Left, Home or Insert keep it and edit from there. A pointer press places
+the caret where it lands instead (D-066), and so does an owner's `set_cursor()`
+— a formula line seeded with the reader's first keystroke, say, continues
+after it rather than offering it for replacement.
 
 ![InputLine text editing control](generated/screenshots/widget-inputline.svg)
 
@@ -1310,7 +1450,9 @@ label->set_buddy(shortcut);
 
 Header: `include/cvision/widgets/label.hpp`. Use a mnemonic label next to a
 control; it participates in mnemonic focus routing. Use StaticText for passive
-wrapped copy.
+wrapped copy. In a column of labels laid out in rows, `set_column_width(cells)`
+makes each label at least the column's width, so the controls beside them start
+at the same place — descriptor dialogs line up their labels this way.
 
 ![Mnemonic Label associated with an input](generated/screenshots/widget-label.svg)
 
@@ -1344,7 +1486,10 @@ selection survives refreshes and reordering; see [Data views](data-views.md).
 Header: `include/cvision/widgets/list_view.hpp`. Use a linear selectable
 collection. Arrow keys select and Enter activates; File Browser connects it to
 TreeView selection. For dynamic or large data, set a ListModel rather than
-materializing rows.
+materializing rows. Typing searches: letters typed within a second of each
+other form one prefix, so `sa` reaches "sample" past "parts", while a letter
+typed alone — or the same letter again — steps to the next row beginning
+with it (D-070); a provider answers the search through `find_prefix`.
 
 ![Multi-select ListView](generated/screenshots/widget-listview.svg)
 
@@ -1566,7 +1711,15 @@ choices. Arrows select a row and Space toggles it; optionally enable tri-state
 values as shown in Forms. Its visual contract is square `[ ]`/`[X]` markers.
 `set_group_label()` gives the group an owned caption one row above the choices;
 the caption changes from its normal label colour to the focused-option
-foreground while the group owns keyboard focus.
+foreground while the group owns keyboard focus. The caption is the group's
+label in the sense a `Label` is a field's: it may carry a `&`-marked mnemonic,
+and Alt with that letter, pressed anywhere in the group's window, gives the
+group the focus. `set_columns()` lets the choices flow into columns, row-major,
+each column as wide as the widest choice in it, so one row packs its choices
+and several rows align as a table; Left and Right step through the choices in
+order, Up and Down move within a column, and an arrow that would not move the
+cursor — Up on a single row, any arrow on a lone box — walks the window's
+controls instead, as D-065 has every dialog do.
 
 ![CheckGroup with mnemonic options](generated/screenshots/widget-checkgroup.svg)
 
@@ -1625,7 +1778,12 @@ Header: `include/cvision/widgets/option_group.hpp`. Use exactly one choice.
 Arrows and mnemonics change its selected index. Its visual contract is rounded
 `( )`/`(U+2022)` markers. `set_group_label()` gives the group an owned caption
 one row above the choices; the caption changes from its normal label colour to
-the focused-option foreground while the group owns keyboard focus. Use
+the focused-option foreground while the group owns keyboard focus, and its
+`&`-marked letter reaches the group from anywhere in its window, as a
+[CheckGroup](#checkgroup)'s does. `set_columns()` lays the choices out in
+columns the same way: the figure's second group asks one question of four
+short answers in two columns rather than four rows, which is how a form that
+asks the same short question several times over stays on one screen. Use
 `set_column_width()` only for a measured form column; it clips long labels at
 that specified edge rather than changing the control's interaction model.
 
@@ -1637,10 +1795,17 @@ The compiled scene below is the source of this figure.
 ```cpp
 auto* target = content.make<widgets::RadioGroup>(
     std::vector<std::string>{"&Static", "S&hared"});
-target->set_group_label("Library");
+target->set_group_label("&Library");  // Alt+L focuses the group
 target->set_bounds(Rect{26, 1, 14, 3});
 target->set_selected(1);
 target->on_changed = [](int index) { (void)index; };
+
+auto* level = content.make<widgets::RadioGroup>(
+    std::vector<std::string>{"None", "Size", "Speed", "Full"});
+level->set_group_label("&Optimization");
+level->set_columns(2);  // two choices per row, each column as wide as its widest
+level->set_bounds(Rect{20, 5, 21, 3});
+level->set_selected(2);
 ```
 <!-- /ckvision-snippet -->
 
@@ -1755,6 +1920,16 @@ Header: `include/cvision/widgets/splitter.hpp`. Use exactly two adjacent panes
 with user-controlled division. Focus it and use its directional keys, or drag
 the divider. [Layout guide](layout-guide.md) and File Browser show it.
 
+The first pane keeps its size when the splitter resizes; `set_resize_anchor`
+gives that to the second instead, which is what a side panel on the far edge
+wants. `set_anchored_extent` asks for the anchored pane's size — kept as asked
+across resizes, and honoured even when set before the splitter has a size, so a
+remembered width restores exactly — and `on_split_moved` reports the reader
+moving the divider, which is when to remember it. A pane set invisible takes no
+room: the other fills the splitter and no divider remains until it shows again.
+Two splitters, one inside the other with opposite anchors, make a document with
+a panel on each side.
+
 ![Splitter between two panes](generated/screenshots/widget-splitter.svg)
 
 The compiled scene below is the source of this figure.
@@ -1820,7 +1995,14 @@ short status surface entry used by StatusLine.
 Header: `include/cvision/widgets/status_line.hpp`. Dock it at Desktop bottom
 for command hints and contextual help. Its command item executes the same
 registry action as a menu item; the registered key chord automatically uses
-the same `ckv.hotkey` accent as menu mnemonics.
+the same `ckv.hotkey` accent as menu mnemonics. `set_context_items()` gives a
+command context (`View::set_command_context`) an item set of its own, shown
+instead of the ordinary items while focus is inside that context — an editor's
+keys while the editor has the focus, a list's while the list does. The hint
+is resolved through the focused view's nearest help-context key, and with
+nothing focused — an empty desktop — through the root's (D-069): an
+application that gives `Application::root()` a key has a hint before its
+first window opens.
 
 ![StatusLine command hints](generated/screenshots/widget-statusline.svg)
 
@@ -1929,6 +2111,91 @@ table->on_edit_committed = [](widgets::TableCellRef cell,
     (void)cell;
     (void)result;
 };
+```
+<!-- /ckvision-snippet -->
+
+## GridPosition
+
+Header: `include/cvision/widgets/cell_grid.hpp`. A row and a column in a
+CellGridModel's own index space — where the cursor is, where a press landed.
+
+## GridRange
+
+Header: `include/cvision/widgets/cell_grid.hpp`. An inclusive rectangle of
+grid positions with its corners ordered: a selection, or a merged span.
+
+## GridCellStyle
+
+Header: `include/cvision/widgets/cell_grid.hpp`. What one cell changes about
+the grid's cell style — a foreground, a background, the attributes, the
+underline shape — with every member it leaves empty kept as the theme's.
+
+## GridCell
+
+Header: `include/cvision/widgets/cell_grid.hpp`. One cell as a CellGridModel
+answers it: its text, what it changes about the grid's cell style
+(`GridCellStyle`), and where the text sits in the cell.
+
+## GridFrame
+
+Header: `include/cvision/widgets/cell_grid.hpp`. The rows and columns a
+CellGrid shows, each frozen band first, and the merged spans that reach into
+them.
+
+## CellGridModel
+
+Header: `include/cvision/widgets/cell_grid.hpp`. The caller-owned provider of
+a CellGrid. Unlike the list, tree and table providers it also owns the cursor,
+the selection and the scroll origin, and is asked to move them (D-067); see
+[Data views](data-views.md#cell-grid-providers).
+
+## MaterializedCellGridModel
+
+Header: `include/cvision/widgets/cell_grid.hpp`. A CellGridModel over a table
+of values held in the model, with the generic rules: the cursor clamps to the
+table, a page is the body's height, a jump reaches the table's edge.
+
+## CellGrid
+
+Header: `include/cvision/widgets/cell_grid.hpp`. Use for a surface of cells: a
+worksheet, a query result, a matrix. Arrows move the cursor, Shift extends the
+selection, Ctrl jumps, Home and End reach the row's ends and, with Ctrl, the
+grid's; Enter or F2 activate the cursor cell, a printable key starts
+type-ahead, and Delete asks to clear. A press places the cursor, a drag
+extends, a double click activates, the wheel scrolls the body. The provider
+owns the cursor and is asked to move it.
+
+![CellGrid over a materialized model](generated/screenshots/widget-cellgrid.svg)
+
+The compiled scene below is the source of this figure.
+
+<!-- ckvision-snippet source="tools/docgen/widget_shots_data.cpp" region="cellgrid" -->
+```cpp
+sheet.set_cells({
+    {"Region", "Q1", "Q2", "Total"},
+    {"North", "1240", "1310", "2550"},
+    {"South", "980", "1105", "2085"},
+    {"West", "1530", "1490", "3020"},
+    {"Sum", "3750", "3905", "7655"},
+});
+sheet.set_column_widths({8, 7, 7, 7});
+sheet.set_frozen(1, 0);  // the title row stays while the body scrolls
+for (widgets::GridIndex column = 0; column < sheet.column_count(); ++column) {
+    widgets::GridCell title = sheet.cell_at({0, column});
+    title.style.attributes = Attr::Bold;
+    sheet.set_cell({0, column}, title);
+}
+for (widgets::GridIndex row = 1; row < sheet.row_count(); ++row)
+    for (widgets::GridIndex column = 1; column < sheet.column_count(); ++column) {
+        widgets::GridCell figure = sheet.cell_at({row, column});
+        figure.alignment = widgets::CellAlignment::End;  // figures end at the right edge
+        sheet.set_cell({row, column}, figure);
+    }
+sheet.place_cursor({2, 1}, false);
+sheet.navigate(widgets::GridMove::Right, true);  // Shift+Right: a two-cell selection
+grid->set_model(sheet);
+grid->on_activate = [] { /* edit the cursor cell */ };
+grid->on_type_ahead = [](const std::string& text) { (void)text; /* start editing with it */ };
 ```
 <!-- /ckvision-snippet -->
 
@@ -2090,8 +2357,9 @@ refresh without enumerating the whole forest. See [Data views](data-views.md#tre
 ## TreeView
 
 Header: `include/cvision/widgets/tree_view.hpp`. Use hierarchical navigation.
-Arrows select/expand, Enter activates, and `on_expand_request` supports lazy
-children. `reveal_and_select(id)` opens the ancestors of a materialized node
+Arrows select/expand, Home and End reach the first and last visible row,
+PageUp and PageDown move a viewport's height, Enter activates, and
+`on_expand_request` supports lazy children. `reveal_and_select(id)` opens the ancestors of a materialized node
 and selects it, which lets a result list or search controller navigate a tree
 without synthesizing input. File Browser uses the public selection callback to
 update a ListView. TreeView retains its flattened visible entries until roots
@@ -2157,6 +2425,15 @@ title control automatically shows the U+2195 restore glyph even though `zoomed()
 remains false (there is no transient geometry to restore). Its maximize/restore
 control uses the theme's `ckv.window.control` accent while its brackets retain
 the frame background and foreground.
+
+`set_content_cover()` lays a second view over the content for a while — a
+BigClockView, a read-only history, a "working…" sheet — without taking the
+content's place: the content keeps running underneath, and the window keeps
+the cover exactly on `content_rect()`, above the content, through every move,
+resize and margin change. Because the cover is the window's own child it is
+stacked with the window, so a window in front covers it too, and it goes when
+the window does. `content_rect()` is in the window's own coordinates, which is
+why a cover is not a desktop popup placed there by hand.
 
 A third control, `[_]`, sits immediately left of the maximize/restore one and
 **minimizes** the window — `set_minimized(true)`, which is what a click on it

@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "cvision/core/key.hpp"
 #include "cvision/ui/theme.hpp"
 #include "cvision/ui/view.hpp"
 #include "cvision/widgets/scrollbar.hpp"
@@ -30,21 +31,121 @@ struct EditorStatus {
     std::size_t selection_bytes = 0;
     bool modified = false;
     bool overwrite = false;
+    // The caret is a provisional position past the text (see VirtualCaret):
+    // line and column above name that position, not a place in the document.
+    bool virtual_caret = false;
     std::string profile_id = "plain";
     DocumentEncoding encoding = DocumentEncoding::Utf8;
     DocumentNewline newline = DocumentNewline::Lf;
+};
+
+// What a chord asks an editor to do beyond moving the caret and changing the
+// text at it. These are the verbs an application commonly also offers from a
+// menu, which is why they are data: an application that owns its own command
+// table and keyboard scheme gives the editor exactly the bindings it wants,
+// or none, and reaches the same verbs through perform().
+enum class EditorCommand {
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+    FindSelection,
+    FindNext,
+    FindPrevious,
+    ToggleOverwrite,
+};
+
+struct EditorKeyBinding {
+    KeyChord chord;
+    EditorCommand command = EditorCommand::Undo;
+
+    friend bool operator==(const EditorKeyBinding&, const EditorKeyBinding&) = default;
+};
+
+// The bindings every TextEditor starts with: Ctrl+Z undo, Ctrl+Y redo,
+// Ctrl+X / Shift+Delete cut, Ctrl+C / Ctrl+Insert copy, Ctrl+V / Shift+Insert
+// paste, Ctrl+A select all, Ctrl+F find the selection, F3 / Shift+F3 find
+// next / previous, and Insert toggling overwrite.
+std::vector<EditorKeyBinding> default_editor_key_bindings();
+
+// A caret the reader placed past the text: right of a line's end, or below the
+// last line. Nothing is written when it is placed. The first insertion at it
+// supplies the line breaks and spaces needed to reach it together with the
+// inserted text, as one edit; any caret motion, and any deletion, abandons it.
+struct VirtualCaret {
+    // Logical line, which may lie below the document's last line.
+    std::size_t line = 0;
+    // Display cells from the start of that line.
+    std::size_t column = 0;
+
+    friend bool operator==(const VirtualCaret&, const VirtualCaret&) = default;
+};
+
+// The kind of text change the reader asked for.
+enum class EditKind {
+    Insert,              // text typed at the caret
+    Paste,               // text arriving from the clipboard or a terminal paste
+    LineBreak,           // Enter
+    Indent,              // Tab
+    DeleteBackward,      // Backspace
+    DeleteForward,       // Delete
+    DeleteWordBackward,  // Ctrl+Backspace
+    DeleteWordForward,   // Ctrl+Delete
+    Cut,                 // the selection, taken to the clipboard
+};
+
+// One text change the reader asked for, described twice: as the reader's
+// intent (kind, text, virtual caret), and as the replacement the editor would
+// commit on its own (range, replacement). A host that keeps its own editing
+// rules — a session with named undo steps, a structured editor — acts on the
+// intent; a host that only wants to observe or veto can commit the
+// replacement itself.
+struct EditRequest {
+    EditKind kind = EditKind::Insert;
+    // The typed or pasted text, "\n" for a line break, the indentation for
+    // Indent, the selected text for Cut; empty for the deletions.
+    std::string text;
+    // The current text the editor would replace: the selection, the grapheme
+    // or word beside the caret, the graphemes overwrite mode covers, or an
+    // empty range at the insertion point.
+    DocumentRange range;
+    // What the editor would put in its place, including any line breaks and
+    // spaces a virtual caret needs.
+    std::string replacement;
+    // The provisional caret the change starts from, when there is one.
+    std::optional<VirtualCaret> virtual_caret;
+};
+
+// Host-computed colouring for one byte range of the document, resolved
+// through the theme by role. A grapheme takes the style of the span that
+// contains its first byte.
+struct HighlightSpan {
+    std::size_t begin_byte = 0;
+    std::size_t end_byte = 0;
+    ui::RoleId role = ui::kInvalidRole;
+
+    friend bool operator==(const HighlightSpan&, const HighlightSpan&) = default;
 };
 
 class TextEditor final : public ui::View {
 public:
     using StatusObserverId = std::uint64_t;
     using StatusObserver = std::function<void(const EditorStatus&)>;
-    // Called for an Enter key before the editor inserts its ordinary newline.
-    // Return true after handling the key (for example, by committing a
-    // language-aware document transaction and restoring a current selection);
-    // return false to retain the editor's standard newline insertion. The
-    // handler is not called for a read-only editor or pasted newline text.
-    using NewlineHandler = std::function<bool(TextEditor&)>;
+    // Called for every text change the reader asks for, before the editor
+    // commits anything. Return true after handling it — typically by
+    // committing a transaction of the host's own and restoring a current
+    // selection with set_selection() — and the editor does nothing further;
+    // return false, having changed nothing, and the editor commits
+    // `request.replacement` over `request.range` itself. Never called for a
+    // read-only or disabled editor.
+    using EditHandler = std::function<bool(TextEditor&, const EditRequest&)>;
+    // Called when the reader asks for a context menu: a right click, a
+    // Ctrl+click (for terminals that keep the right button for themselves), or
+    // Shift+F10. A click places the caret first unless it lands inside the
+    // selection. `screen_cell` is where the menu belongs, in screen cells.
+    using ContextMenuHandler = std::function<void(TextEditor&, Point screen_cell)>;
 
     explicit TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRegistry* profiles = nullptr);
     ~TextEditor() override;
@@ -54,8 +155,10 @@ public:
     std::optional<DocumentRange> selection() const noexcept;
     // Selects a current, grapheme-aligned document range. Controllers that
     // apply a document transaction can restore the semantic selection around
-    // the transformed content without synthesizing keyboard input.
+    // the transformed content without synthesizing keyboard input. A virtual
+    // caret is abandoned.
     bool set_selection(DocumentRange range);
+    bool select_all();
     EditorStatus status() const;
 
     void set_show_line_numbers(bool enabled);
@@ -80,7 +183,54 @@ public:
     bool read_only() const noexcept { return read_only_; }
     void set_overwrite(bool value);
     bool overwrite() const noexcept { return overwrite_; }
-    void set_newline_handler(NewlineHandler handler) { newline_handler_ = std::move(handler); }
+    // The number of spaces Tab inserts (at least one).
+    void set_tab_width(int spaces);
+    int tab_width() const noexcept { return tab_width_; }
+
+    // The chords this editor answers itself. Replacing the list rebinds them;
+    // an empty list leaves every verb to the application's own commands,
+    // which reach it through perform().
+    void set_key_bindings(std::vector<EditorKeyBinding> bindings);
+    const std::vector<EditorKeyBinding>& key_bindings() const noexcept { return key_bindings_; }
+    // Runs one editor verb. Returns whether it did anything: an undo with
+    // nothing to undo, or a find with nothing selected, returns false.
+    bool perform(EditorCommand command);
+
+    void set_edit_handler(EditHandler handler) { edit_handler_ = std::move(handler); }
+
+    // Where the editor's undo and redo keys go. Without a handler they walk
+    // the document's own history. With one, they are handed to it — the
+    // host that keeps the authoritative journal elsewhere (an application
+    // session whose undo steps are named and shared with every other view
+    // of the same document) answers them, and the document's own history
+    // is left out of the reader's hands so the two can never disagree
+    // about what "undo" reverses. `redo` says which of the two was asked.
+    using HistoryHandler = std::function<bool(TextEditor&, bool redo)>;
+    void set_history_handler(HistoryHandler handler) { history_handler_ = std::move(handler); }
+
+    // Whether a double-click past the text places a virtual caret there
+    // (see VirtualCaret). Off by default: a double-click past the text then
+    // places an ordinary caret at the nearest position.
+    void set_virtual_space(bool enabled);
+    bool virtual_space() const noexcept { return virtual_space_; }
+    const std::optional<VirtualCaret>& virtual_caret() const noexcept { return virtual_caret_; }
+    // Places a virtual caret, as a host restoring one after its own
+    // transaction does. Refused (false) when virtual space is off or the
+    // position is not past the text.
+    bool set_virtual_caret(VirtualCaret caret);
+
+    // Colours the document from spans a host computed over the text at
+    // `revision`, in place of the syntax profile's colouring. Refused
+    // (false) unless `revision` is the document's current one and the spans
+    // are ordered, non-overlapping and inside the document. An edit keeps
+    // the spans it does not touch — shifted with the text — and drops the
+    // ones it does, until the host supplies new ones.
+    bool set_highlights(DocumentRevision revision, std::vector<HighlightSpan> spans);
+    // Returns to the syntax profile's colouring.
+    void clear_highlights();
+    bool has_highlights() const noexcept { return highlights_active_; }
+
+    void set_context_menu_handler(ContextMenuHandler handler) { context_menu_handler_ = std::move(handler); }
 
     void set_file_name(std::string name);
     void set_profile(std::optional<std::string> profile_id);
@@ -148,6 +298,9 @@ private:
     // reads this cache and paints its visible rows.
     const std::vector<DisplayRow>& display_rows(int content_width) const;
     std::size_t cursor_display_row(const std::vector<DisplayRow>& rows) const;
+    // The display row and cell column the caret is drawn at, counting rows
+    // below the text and cells past a line's end for a virtual caret.
+    std::pair<int, int> caret_display_cell(const std::vector<DisplayRow>& rows) const;
     void ensure_cursor_visible();
     void relayout_scrollbars();
     // Cells from the start of a display row to `byte` within it.
@@ -155,16 +308,27 @@ private:
     void notify_status_changed();
     void refresh_search();
     bool activate_search_match(std::size_t index);
-    void move_cursor(DocumentPosition target, bool extend);
+    // Moves the caret. Every motion abandons a virtual caret; only vertical
+    // motion keeps the column the caret is trying to return to.
+    void move_cursor(DocumentPosition target, bool extend, bool keep_desired_column = false);
+    void move_vertically(std::ptrdiff_t lines, bool extend);
     std::optional<DocumentPosition> position_for_screen_cell(Point absolute_cell) const;
-    bool replace_selection(std::string text);
-    bool erase_backward();
-    bool erase_forward();
-    bool erase_backward_word();
-    bool erase_forward_word();
+    // The virtual caret a double-click at `absolute_cell` places, when the
+    // cell lies past the text.
+    std::optional<VirtualCaret> virtual_caret_for_screen_cell(Point absolute_cell) const;
+    // The document position a virtual caret's padding is inserted at, and
+    // the padding itself.
+    DocumentPosition virtual_caret_anchor(const VirtualCaret& caret) const;
+    std::string virtual_caret_padding(const VirtualCaret& caret) const;
+    // Asks for one text change: the edit handler first, then the editor's
+    // own commit. The one path every typed, pasted, and erased change takes.
+    bool submit_edit(EditRequest request);
+    bool submit_text(EditKind kind, std::string text);
+    bool erase(EditKind kind);
     std::size_t gutter_width() const;
-    Style style_for(std::size_t line, std::size_t line_byte, bool selected) const;
+    Style style_for(std::size_t line, std::size_t line_byte, bool selected, ui::RoleId highlight) const;
     void clamp_cursor();
+    void carry_highlights(const DocumentChange& change);
 
     std::shared_ptr<EditorDocument> document_;
     SyntaxProfileRegistry* profiles_ = nullptr;
@@ -179,6 +343,10 @@ private:
     mutable bool display_rows_dirty_ = true;
     DocumentPosition cursor_;
     std::optional<DocumentPosition> selection_anchor_;
+    // The grapheme column vertical motion returns to; set by the first
+    // vertical move after any other motion or edit.
+    std::optional<std::size_t> desired_column_;
+    std::optional<VirtualCaret> virtual_caret_;
     EditorSearchQuery search_query_;
     std::vector<EditorSearchMatch> search_matches_;
     std::optional<std::size_t> active_search_match_;
@@ -195,9 +363,14 @@ private:
     WrapMode wrap_mode_ = WrapMode::None;
     bool read_only_ = false;
     bool overwrite_ = false;
-    NewlineHandler newline_handler_;
-    bool has_focus_ = false;
+    bool virtual_space_ = false;
+    int tab_width_ = 4;
+    std::vector<EditorKeyBinding> key_bindings_ = default_editor_key_bindings();
+    EditHandler edit_handler_;
+    ContextMenuHandler context_menu_handler_;
     bool dragging_ = false;
+    bool highlights_active_ = false;
+    std::vector<HighlightSpan> highlights_;
 
     ui::RoleId text_role_ = ui::kInvalidRole;
     ui::RoleId gutter_role_ = ui::kInvalidRole;
@@ -205,6 +378,7 @@ private:
     ui::RoleId search_role_ = ui::kInvalidRole;
     std::vector<ui::RoleId> syntax_roles_;
     std::function<void(const EditorStatus&)> status_changed_;
+    HistoryHandler history_handler_;
     StatusObserverId next_status_observer_id_ = 1;
     std::vector<std::pair<StatusObserverId, StatusObserver>> status_observers_;
 };

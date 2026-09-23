@@ -13,6 +13,7 @@
 #include "cvision/core/event.hpp"
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/combo_box.hpp"
+#include "cvision/widgets/frame_text.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/key_chord_capture.hpp"
@@ -171,20 +172,27 @@ void shot_option_groups(const std::filesystem::path& dir) {
     // ckvision-doc: radiogroup
     auto* target = content.make<widgets::RadioGroup>(
         std::vector<std::string>{"&Static", "S&hared"});
-    target->set_group_label("Library");
+    target->set_group_label("&Library");  // Alt+L focuses the group
     target->set_bounds(Rect{26, 1, 14, 3});
     target->set_selected(1);
     target->on_changed = [](int index) { (void)index; };
+
+    auto* level = content.make<widgets::RadioGroup>(
+        std::vector<std::string>{"None", "Size", "Speed", "Full"});
+    level->set_group_label("&Optimization");
+    level->set_columns(2);  // two choices per row, each column as wide as its widest
+    level->set_bounds(Rect{20, 5, 21, 3});
+    level->set_selected(2);
     // ckvision-doc-end: radiogroup
 
     stage.focus(flags);
     stage.step();
     stage.save_window(dir, "widget-checkgroup");
-    // The radio group's own figure, cut from the same composed screen, so
+    // The radio groups' own figure, cut from the same composed screen, so
     // the two are photographed under identical conditions.
     stage.focus(target);
     stage.step();
-    stage.save_content(dir, "widget-radiogroup", Rect{26, 0, 15, 5});
+    stage.save_content(dir, "widget-radiogroup", Rect{20, 0, 22, 9});
 }
 
 void shot_combo_box(const std::filesystem::path& dir) {
@@ -315,6 +323,21 @@ void shot_pickers(const std::filesystem::path& dir) {
     stage.save_content(dir, "widget-timepicker", Rect{1, 3, 25, 1});
 }
 
+void shot_frame_text(const std::filesystem::path& dir) {
+    WidgetStage stage;
+    widgets::Window& window = stage.window_with_content("notes.md", Rect{16, 5, 44, 6}, std::make_unique<ui::View>());
+
+    // ckvision-doc: frametext
+    auto* position = window.add_frame_overlay(std::make_unique<widgets::FrameText>("12:4"),
+                                              widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::Start, 1});
+    position->set_reserved_width(10);  // a longer line number does not move it
+    position->set_text("12:4  *");     // the caret moved and the page changed
+    // ckvision-doc-end: frametext
+
+    stage.step();
+    stage.save_window(dir, "widget-frametext");
+}
+
 void shot_search_box(const std::filesystem::path& dir) {
     WidgetStage stage;
     ui::View& content = stage.dialog_window("Contacts", Rect{20, 7, 40, 6});
@@ -337,6 +360,7 @@ void shot_search_box(const std::filesystem::path& dir) {
 void capture_control_shots(const std::filesystem::path& dir) {
     shot_button(dir);
     shot_label(dir);
+    shot_frame_text(dir);
     shot_static_text(dir);
     shot_input_line(dir);
     shot_key_chord_capture(dir);

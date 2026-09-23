@@ -77,6 +77,12 @@ enum class DocumentEditStatus {
     LimitExceeded,
 };
 
+// One change, described as a single replacement covering everything it
+// touched: the old bytes [replaced_begin_byte, replaced_end_byte) became the
+// `inserted_bytes` bytes that now start at replaced_begin_byte. A transaction
+// of several separated edits is reported as the one span from its first edit
+// to its last, and an undo or redo as the whole document, so an observer can
+// always carry a position through a change with the same arithmetic.
 struct DocumentChange {
     DocumentRevision previous_revision = 0;
     DocumentRevision revision = 0;

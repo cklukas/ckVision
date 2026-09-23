@@ -158,7 +158,6 @@ private:
     // may be read any number of times drives an action that happens once.
     std::uint64_t forwarded_clipboard_serial_ = 0;
     bool has_explicit_cell_metrics_ = false;
-    bool focused_ = false;
 };
 
 }  // namespace ckv::widgets

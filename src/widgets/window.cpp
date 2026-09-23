@@ -152,6 +152,19 @@ std::unique_ptr<ui::View> Window::set_content(std::unique_ptr<ui::View> content)
     if (content != nullptr) {
         content_ = add_child(std::move(content));
         content_->set_bounds(content_rect());
+        // New content is added last and would otherwise paint over a cover
+        // that was put up to hide whatever the content is.
+        if (content_cover_ != nullptr) raise_to_front(content_cover_);
+    }
+    return previous;
+}
+
+std::unique_ptr<ui::View> Window::set_content_cover(std::unique_ptr<ui::View> cover) {
+    std::unique_ptr<ui::View> previous = content_cover_ != nullptr ? remove_child(content_cover_) : nullptr;
+    content_cover_ = nullptr;
+    if (cover != nullptr) {
+        content_cover_ = add_child(std::move(cover));
+        content_cover_->set_bounds(content_rect());
     }
     return previous;
 }
@@ -400,6 +413,7 @@ void Window::set_content_margins(int left, int top, int right, int bottom) {
     right_content_margin_ = std::max(0, right);
     bottom_content_margin_ = std::max(0, bottom);
     if (content_ != nullptr) content_->set_bounds(content_rect());
+    if (content_cover_ != nullptr) content_cover_->set_bounds(content_rect());
     invalidate();
 }
 
@@ -468,6 +482,7 @@ void Window::on_resized() {
     if (!backing_surface_ || backing_surface_->size() != Size{bounds().width, bounds().height})
         backing_dirty_ = true;
     if (content_ != nullptr) content_->set_bounds(content_rect());
+    if (content_cover_ != nullptr) content_cover_->set_bounds(content_rect());
     relayout_frame_overlays();
 }
 
@@ -616,17 +631,20 @@ bool Window::corner_shows_grip(Corner corner) const noexcept {
     return corner == Corner::BottomRight;
 }
 
+Style Window::frame_style() const {
+    if (context().theme == nullptr) return Style{};
+    Style style = context().theme->resolve(active_ ? frame_active_role_ : frame_inactive_role_);
+    if (chrome_background_override_) style.bg = *chrome_background_override_;
+    return style;
+}
+
 void Window::draw(scene::Painter& painter) {
     const Rect b = Rect{0, 0, bounds().width, bounds().height};
-    const ui::RoleId frame_role = active_ ? frame_active_role_ : frame_inactive_role_;
     const ui::RoleId title_role = active_ ? title_active_role_ : title_inactive_role_;
     const ui::Theme& theme = *context().theme;
-    Style frame_style = theme.resolve(frame_role);
+    const Style border_style = frame_style();
     Style title_style = theme.resolve(title_role);
-    if (chrome_background_override_) {
-        frame_style.bg = *chrome_background_override_;
-        title_style.bg = *chrome_background_override_;
-    }
+    if (chrome_background_override_) title_style.bg = *chrome_background_override_;
     // A control contributes its foreground/attributes only. Its background
     // must remain the active or inactive frame beneath it, including when a
     // dialog overrides the window's chrome roles.
@@ -638,11 +656,11 @@ void Window::draw(scene::Painter& painter) {
     const Style control_role_style = theme.resolve(control_role_);
     const Style pressed_role_style = theme.resolve(control_pressed_role_);
     const Style pressed_style{pressed_role_style.fg, pressed_role_style.bg,
-                              frame_style.attrs | pressed_role_style.attrs};
+                              border_style.attrs | pressed_role_style.attrs};
     const Style control_style =
-        active_ ? Style{control_role_style.fg, frame_style.bg,
-                        frame_style.attrs | control_role_style.attrs}
-                : frame_style;
+        active_ ? Style{control_role_style.fg, border_style.bg,
+                        border_style.attrs | control_role_style.attrs}
+                : border_style;
 
     // The interior fills with the SAME style as the frame — matching
     // the convention's own "the window's palette is uniform across
@@ -656,13 +674,13 @@ void Window::draw(scene::Painter& painter) {
     // to the window, so those cells must carry the window's own surface
     // rather than whatever the frame buffer last held there.
     if (b.width > 2 && b.height > 2)
-        painter.fill(Rect{1, 1, b.width - 2, b.height - 2}, Cell::from_grapheme(" ", frame_style));
+        painter.fill(Rect{1, 1, b.width - 2, b.height - 2}, Cell::from_grapheme(" ", border_style));
 
     // Active windows get a DOUBLE-line frame, inactive ones single —
     // the classic windowed-desktop convention for "this is the one
     // that has focus," and (unlike relying on color alone) still
     // legible on a monochrome terminal.
-    painter.draw_box(b, active_ ? scene::LineStyle::Double : scene::LineStyle::Single, frame_style);
+    painter.draw_box(b, active_ ? scene::LineStyle::Double : scene::LineStyle::Single, border_style);
     if (active_ && resizable_ && b.width > 1 && b.height > 1) {
         // A focused, resizable window keeps single-line corner grips against
         // the double-line frame. They run a short way along the bottom border
@@ -688,7 +706,7 @@ void Window::draw(scene::Painter& painter) {
         const int bottom = b.height - 1;
         const auto mark = [&](Corner corner, Point at, std::string_view elbow, int inward) {
             if (!corner_shows_grip(corner)) return;
-            const Style style = corner == Corner::BottomRight ? control_style : frame_style;
+            const Style style = corner == Corner::BottomRight ? control_style : border_style;
             painter.draw_text(at, std::string(elbow), style);
             for (int i = 1; i < grip; ++i)
                 painter.draw_text(Point{at.x + inward * i, at.y}, "─", style);
@@ -712,7 +730,7 @@ void Window::draw(scene::Painter& painter) {
         // un-highlights the moment the pointer leaves, which is the window
         // saying what would happen if the button came up now.
         const bool armed = held_control_ == Control::Close && held_inside_;
-        const Style face = armed ? pressed_style : frame_style;
+        const Style face = armed ? pressed_style : border_style;
         painter.draw_text(Point{2, 0}, "[", face);
         painter.draw_text(Point{3, 0}, "■", armed ? pressed_style : control_style);
         painter.draw_text(Point{4, 0}, "]", face);
@@ -726,7 +744,7 @@ void Window::draw(scene::Painter& painter) {
         // done to close it.
         const int control_x = b.width - 8;
         const bool armed = held_control_ == Control::Minimize && held_inside_;
-        const Style face = armed ? pressed_style : frame_style;
+        const Style face = armed ? pressed_style : border_style;
         painter.draw_text(Point{control_x, 0}, "[", face);
         painter.draw_text(Point{control_x + 1, 0}, "_", armed ? pressed_style : control_style);
         painter.draw_text(Point{control_x + 2, 0}, "]", face);
@@ -736,7 +754,7 @@ void Window::draw(scene::Painter& painter) {
         // A fixed-size dialog does not draw or expose this control.
         const int control_x = b.width - 5;
         const bool armed = held_control_ == Control::Zoom && held_inside_;
-        const Style face = armed ? pressed_style : frame_style;
+        const Style face = armed ? pressed_style : border_style;
         painter.draw_text(Point{control_x, 0}, "[", face);
         painter.draw_text(Point{control_x + 1, 0}, maximized() ? "↕" : "↑",
                           armed ? pressed_style : control_style);
@@ -749,9 +767,9 @@ void Window::draw(scene::Painter& painter) {
         const int reserved = resizable_ ? 8 : 4;
         const std::string shown = text::elide_to_width(footer_, std::max(0, b.width - reserved));
         if (!shown.empty()) {
-            painter.draw_text(Point{2, b.height - 1}, " ", frame_style);
+            painter.draw_text(Point{2, b.height - 1}, " ", border_style);
             painter.draw_text(Point{3, b.height - 1}, shown, title_style);
-            painter.draw_text(Point{3 + text::text_width(shown), b.height - 1}, " ", frame_style);
+            painter.draw_text(Point{3 + text::text_width(shown), b.height - 1}, " ", border_style);
         }
     }
     if (b.width > 8) {
@@ -784,10 +802,10 @@ void Window::draw(scene::Painter& painter) {
             const std::string shown = text::elide_to_width(title_, available);
             const int shown_width = text::text_width(shown);
             const int start = (b.width - shown_width) / 2;
-            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
+            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", border_style);
             painter.draw_text(Point{start, 0}, shown, title_style);
             if (start + shown_width < b.width)
-                painter.draw_text(Point{start + shown_width, 0}, " ", frame_style);
+                painter.draw_text(Point{start + shown_width, 0}, " ", border_style);
         } else {
             // A fixed dialog has only the close control, but its caption is
             // still centered on the complete frame rather than the remaining
@@ -799,10 +817,10 @@ void Window::draw(scene::Painter& painter) {
             const int shown_width = text::text_width(shown);
             const int start = std::clamp((b.width - shown_width) / 2, b.width > 6 ? 5 : 1,
                                          std::max(0, b.width - 1 - shown_width));
-            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", frame_style);
+            if (start > 0) painter.draw_text(Point{start - 1, 0}, " ", border_style);
             painter.draw_text(Point{start, 0}, shown, title_style);
             if (start + shown_width < b.width - 1)
-                painter.draw_text(Point{start + shown_width, 0}, " ", frame_style);
+                painter.draw_text(Point{start + shown_width, 0}, " ", border_style);
         }
     }
 }
@@ -819,6 +837,25 @@ bool Window::on_key(const KeyEvent& event) {
         }
         if (context().app != nullptr && activate_control_mnemonic(*this, event, *context().app))
             return true;
+        // An arrow the focused control did not use walks this window's
+        // controls the way Tab does: Down and Right to the next, Up and Left
+        // to the previous, wrapping within the window (the architecture §5,
+        // D-065). A control that means something by an arrow — an input
+        // line by Left, a list by Down, a radio group by Up — has consumed
+        // it before it reaches here, so only the arrows that would otherwise
+        // do nothing move the focus.
+        if (context().app != nullptr && event.chord.modifiers == Modifier::None) {
+            switch (event.chord.key) {
+                case Key::Down:
+                case Key::Right:
+                    return context().app->focus_next_within(*this);
+                case Key::Up:
+                case Key::Left:
+                    return context().app->focus_previous_within(*this);
+                default:
+                    break;
+            }
+        }
         return false;
     }
 

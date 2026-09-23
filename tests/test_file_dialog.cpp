@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/file_dialog.hpp"
 
+#include <algorithm>
+
 #include <optional>
 #include <string>
 #include <string_view>
@@ -114,29 +116,36 @@ CK_TEST(activating_a_directory_entry_navigates_into_it_and_activating_dotdot_nav
     CK_CHECK(results.empty());      // navigation never fires on_result
 }
 
-CK_TEST(activating_a_file_entry_fills_the_path_field_rather_than_navigating) {
+CK_TEST(activating_a_file_entry_fills_the_path_field_and_a_second_enter_accepts_it) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
     Fixture f;
     auto fs = sample_fs();
     int result_calls = 0;
+    std::string accepted_path;
     auto handle = make_file_dialog(FileDialogMode::Open, "/home/user", fs, f.roles, app, nullptr,
-                                    [&](FileDialogResult) { ++result_calls; });
+                                    [&](FileDialogResult result) {
+                                        ++result_calls;
+                                        accepted_path = result.path;
+                                    });
     ckv::widgets::Window* window_ptr = handle.window.get();
     app.root().add_child(std::move(handle.window));
     app.set_focus(handle.initial_focus);
 
-    app.dispatch(key(Key::Down));   // move to "readme.txt" (row 1, after "docs/")
+    app.dispatch(key(Key::Down));   // "docs/", after ".."
+    app.dispatch(key(Key::Down));   // "readme.txt"
     app.dispatch(key(Key::Enter));  // activate the file entry
     // Selecting the file must NOT close the dialog — activation only
     // fills the path field; on_result must not have fired yet.
     CK_CHECK(result_calls == 0);
 
-    // Confirm the field now holds the selected file's full path by
-    // accepting through the default button and checking the result.
-    window_ptr->accept_request();
+    // The focus followed the path into the field, so Enter accepts the file.
+    CK_CHECK(app.focused() != nullptr && app.focused() != handle.initial_focus);
+    app.dispatch(key(Key::Enter));
     CK_CHECK(result_calls == 1);
+    CK_CHECK(accepted_path == "/home/user/readme.txt");
+    static_cast<void>(window_ptr);
 }
 
 CK_TEST(filters_limit_visible_files_and_the_filter_button_cycles_filters) {
@@ -477,4 +486,36 @@ CK_TEST(exec_file_dialog_host_quit_returns_cancellation_and_detaches_the_open_di
     CK_CHECK(app.quit_requested());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
+}
+
+CK_TEST(a_suggested_name_is_offered_in_every_directory_and_enter_accepts_it) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    auto fs = sample_fs();
+    std::vector<FileDialogResult> results;
+    ckv::widgets::FileDialogOptions options;
+    options.suggested_name = "notes.html";
+    auto handle = make_file_dialog(FileDialogMode::Save, "/home/user", fs, options, f.roles, app, nullptr,
+                                   [&](FileDialogResult r) { results.push_back(r); });
+    ckv::widgets::Window* window_ptr = handle.window.get();
+    auto* path_field = dynamic_cast<ckv::widgets::InputLine*>(handle.initial_focus);
+    CK_CHECK(path_field != nullptr);
+    CK_CHECK(path_field != nullptr && path_field->text() == "/home/user/notes.html");
+    app.root().add_child(std::move(handle.window));
+
+    // Browsing into a directory keeps offering the name there.
+    auto* list = find_descendant<ckv::widgets::ListView>(*window_ptr);
+    CK_CHECK(list != nullptr);
+    const auto& rows = list->items();
+    const auto docs = std::find(rows.begin(), rows.end(), std::string("docs/"));
+    CK_CHECK(docs != rows.end());
+    list->on_activate(static_cast<std::size_t>(docs - rows.begin()));
+    CK_CHECK(path_field->text() == "/home/user/docs/notes.html");
+
+    window_ptr->accept_request();
+    CK_CHECK(results.size() == 1);
+    CK_CHECK(results[0].accepted);
+    CK_CHECK(results[0].path == "/home/user/docs/notes.html");
 }

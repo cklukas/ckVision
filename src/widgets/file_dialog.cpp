@@ -199,7 +199,9 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
             visible_items->push_back(FileListItem{FileListItemKind::Entry, {}, i});
         }
         list_ptr->set_items(std::move(labels));
-        path_field_ptr->set_text(*current_dir);
+        path_field_ptr->set_text(options_state->suggested_name.empty()
+                                     ? *current_dir
+                                     : fs.join(*current_dir, options_state->suggested_name));
         if (!options_state->filters.empty()) {
             filter_ptr->set_text(strings.filter + ": " + options_state->filters[options_state->active_filter].label);
         } else {
@@ -242,7 +244,7 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     };
     path_field_ptr->complete_request = complete_path;
 
-    list_ptr->on_activate = [&fs, current_dir, current_entries, visible_items, refresh, path_field_ptr](
+    list_ptr->on_activate = [&fs, &app, current_dir, current_entries, visible_items, refresh, path_field_ptr](
                                 std::size_t index) {
         if (index >= visible_items->size()) return;
         const FileListItem& item = (*visible_items)[index];
@@ -263,7 +265,13 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
             *current_dir = fs.join(*current_dir, entry.name);
             (*refresh)();
         } else {
+            // Chosen, not yet accepted: the path goes to the field and the
+            // focus with it, so Enter accepts the file and typing edits the
+            // name — rather than leaving the focus on a list where a second
+            // Enter would only choose the same file again.
             path_field_ptr->set_text(fs.join(*current_dir, entry.name));
+            if (path_field_ptr->focusable()) app.set_focus(path_field_ptr);
+
         }
     };
 
@@ -307,7 +315,8 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
         if (!held_window_liveness.expired()) schedule_self_detach(*held_window, app);
     };
 
-    return WindowHandle{std::move(window), list_ptr};
+    const bool suggests = !options_state->suggested_name.empty();
+    return WindowHandle{std::move(window), suggests ? static_cast<ui::View*>(path_field_ptr) : list_ptr};
 }
 
 FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,

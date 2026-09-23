@@ -12,7 +12,10 @@
 #include "cvision/widgets/window_list_dialog.hpp"
 
 #include <optional>
+#include <vector>
 
+#include "cvision/core/golden.hpp"
+#include "cvision/scene/golden_capture.hpp"
 #include "cvision/testing/cktest.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/command.hpp"
@@ -173,9 +176,10 @@ CK_TEST(descriptor_dialog_presentation_returns_typed_values_only_after_detachmen
     CK_CHECK(default_pressed);
     // The self-detach is deferred until the button callback unwinds, then
     // drained by this same step's ordinary posted-work phase.
+    // The field opened with its preset selected, so the typing replaced it.
     CK_CHECK((presentation.result() ==
               DialogResult{true,
-                           {"localhost"},
+                           {"host"},
                            {false},
                            {-1},
                            {std::nullopt},
@@ -275,8 +279,7 @@ CK_TEST(pressing_the_accepting_button_accepts_with_the_typed_values) {
         CK_CHECK(presentation.result()->accepted);
         CK_CHECK(!presentation.result()->values.empty());
         if (!presentation.result()->values.empty())
-            CK_CHECK(presentation.result()->values.front() == "typedlocal" ||
-                     presentation.result()->values.front() == "localtyped");
+            CK_CHECK(presentation.result()->values.front() == "typed");  // over the selected preset
     }
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(f.desktop->windows().empty());
@@ -608,6 +611,66 @@ CK_TEST(a_radio_group_reports_what_the_reader_moved_to_rather_than_what_it_opene
     CK_CHECK(presentation.result()->selected == std::vector<int>{1});
 }
 
+CK_TEST(a_radio_field_lays_its_choices_in_the_columns_it_names) {
+    // FieldDescriptor::columns (D-068). Four toggles of four choices each
+    // take four rows, not twenty, and the caption's letter reaches each.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.title = "Format";
+    for (const char* label : {"&Bold:", "&Italic:"})
+        descriptor.fields.push_back(FieldDescriptor{.label = label,
+                                                     .kind = ckv::widgets::FieldKind::Radio,
+                                                     .options = {"Keep", "On", "Off", "Reset"},
+                                                     .initial_selection = 0,
+                                                     .columns = 4});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    const std::string frame = ckv::golden::serialize(
+        ckv::scene::capture(f.app.composed_surface(), f.app.current_cursor()));
+    // The label is drawn without its marker, beside the one row its four
+    // choices share, as a text field's label would be.
+    CK_CHECK(frame.find("&Bold") == std::string::npos);
+    const std::size_t bold = frame.find("Bold:");
+    CK_CHECK(bold != std::string::npos);
+    const std::size_t choices = frame.find("(•) Keep  ( ) On  ( ) Off  ( ) Reset");
+    CK_CHECK(choices != std::string::npos);
+    CK_CHECK(frame.find('\n', bold) == frame.find('\n', choices));
+
+    // Alt+I reaches the second group; Right picks On there; Enter accepts.
+    f.terminal.inject_bytes("\x1bi", 0);
+    CK_CHECK(f.app.step(0));
+    f.terminal.inject_bytes("\x1b[C", 0);
+    CK_CHECK(f.app.step(0));
+    f.terminal.inject_bytes("\r", 0);
+    CK_CHECK(f.app.step(0));
+    CK_CHECK(presentation.completed());
+    CK_CHECK((presentation.result()->selected == std::vector<int>{0, 1}));
+}
+
+CK_TEST(a_stacked_radio_field_of_one_entry_keeps_its_caption_above) {
+    // A list of recent documents that happens to hold one document is still
+    // a list: its caption stays above the entry, where it will be when there
+    // are three, so the form does not change shape with the count.
+    Fixture f;
+    DialogDescriptor descriptor;
+    descriptor.fields.push_back(FieldDescriptor{.label = "&Document",
+                                                 .kind = ckv::widgets::FieldKind::Radio,
+                                                 .options = {"report.pdf"},
+                                                 .initial_selection = 0});
+    descriptor.buttons.push_back(ButtonDescriptor{"OK", ButtonRole::Accept, nullptr});
+    auto presentation = present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    f.app.step(0);
+    const std::string frame = ckv::golden::serialize(
+        ckv::scene::capture(f.app.composed_surface(), f.app.current_cursor()));
+    const std::size_t caption = frame.find("Document");
+    const std::size_t entry = frame.find("(•) report.pdf");
+    CK_CHECK(caption != std::string::npos);
+    CK_CHECK(entry != std::string::npos);
+    CK_CHECK(frame.find('\n', caption) < entry);
+}
+
 CK_TEST(a_combo_field_answers_with_its_index_and_its_text) {
     // FieldKind::Combo, for a list too long to show at once. Both answers are
     // filled: an index for what was picked, and the text for a caller that
@@ -818,4 +881,61 @@ CK_TEST(an_owner_destroyed_before_its_application_is_not_called_back_during_tear
     f.app.step(0);
 
     CK_CHECK(!called_after_owner_died);
+}
+
+CK_TEST(pending_dialogs_keep_each_presentation_until_it_answers_and_let_the_answer_ask_again) {
+    Fixture f;
+    ckv::widgets::PendingDialogs pending;
+    std::vector<MessageBoxResult> answers;
+
+    pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                  [&](MessageBoxResult first) {
+                      answers.push_back(first);
+                      // The answer asks the next question: the first dialog is
+                      // already released, and the second is kept in its place.
+                      CK_CHECK(pending.empty());
+                      pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                                    [&](MessageBoxResult second) { answers.push_back(second); });
+                  });
+    CK_CHECK(pending.size() == 1);
+    CK_CHECK(f.desktop->windows().back()->close());
+    f.app.step(0);
+    CK_CHECK(answers.size() == 1);
+    CK_CHECK(pending.size() == 1);
+    CK_CHECK(f.desktop->windows().size() == 1);
+
+    CK_CHECK(f.desktop->windows().back()->close());
+    f.app.step(0);
+    CK_CHECK((answers == std::vector<MessageBoxResult>{MessageBoxResult::Cancel, MessageBoxResult::Cancel}));
+    CK_CHECK(pending.empty());
+}
+
+CK_TEST(pending_dialogs_withdraw_every_outstanding_answer_when_their_owner_goes) {
+    Fixture f;
+    bool called_after_owner_died = false;
+    {
+        ckv::widgets::PendingDialogs pending;
+        pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()),
+                      [&](MessageBoxResult) { called_after_owner_died = true; });
+        // A notice with no answer to act on is kept all the same.
+        pending.await(present_message_box(f.app, *f.desktop, f.roles, confirmation()));
+        CK_CHECK(pending.size() == 2);
+    }
+    while (!f.desktop->windows().empty())
+        CK_CHECK(f.desktop->remove_window(f.desktop->windows().back()) != nullptr);
+    f.app.step(0);
+    CK_CHECK(!called_after_owner_died);
+}
+
+CK_TEST(pending_dialogs_answer_at_once_for_a_presentation_that_already_completed) {
+    Fixture f;
+    ckv::widgets::PendingDialogs pending;
+    auto presentation = present_message_box(f.app, *f.desktop, f.roles, confirmation());
+    CK_CHECK(f.desktop->windows().back()->close());
+    f.app.step(0);
+    CK_CHECK(presentation.completed());
+    std::optional<MessageBoxResult> answer;
+    pending.await(std::move(presentation), [&](MessageBoxResult result) { answer = result; });
+    CK_CHECK(answer == MessageBoxResult::Cancel);
+    CK_CHECK(pending.empty());
 }

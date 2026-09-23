@@ -58,15 +58,14 @@ void KeyChordCapture::on_attached() {
 }
 
 void KeyChordCapture::on_focus(const FocusEvent& event) {
-    focused_ = event.gained;
-    if (!focused_) cancel_capture();
+    if (!event.gained) cancel_capture();
     invalidate();
 }
 
 void KeyChordCapture::draw(scene::Painter& painter) {
     const int width = bounds().width;
     if (width <= 0 || bounds().height <= 0) return;
-    const Style style = context().theme->resolve(focused_ ? focused_role_ : normal_role_);
+    const Style style = context().theme->resolve(has_focus() ? focused_role_ : normal_role_);
     painter.fill(Rect{0, 0, width, 1}, Cell::from_grapheme(" ", style));
     const std::string shown = capturing_ ? "Press a shortcut..." : chord_ ? format(*chord_) : "Unbound";
     painter.draw_text(Point{0, 0}, text::clip_to_width(shown, width), style);

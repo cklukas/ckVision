@@ -19,6 +19,7 @@ Splitter::Splitter(Rect bounds, std::unique_ptr<View> first, std::unique_ptr<Vie
 
     const int usable = std::max(0, main_extent() - kDividerExtent);
     split_position_ = clamp_split(usable / 2);
+    anchored_extent_ = split_position_;
     relayout();
 }
 
@@ -48,14 +49,49 @@ int Splitter::clamp_split(int position) const {
 
 void Splitter::set_split_position(int position) {
     const int clamped = clamp_split(position);
+    const int usable = std::max(0, main_extent() - kDividerExtent);
+    anchored_extent_ = anchor_ == SplitterPane::First ? clamped : usable - clamped;
     if (clamped == split_position_) return;
-    split_position_ = clamped;
     relayout();
     invalidate();
 }
 
+void Splitter::set_resize_anchor(SplitterPane pane) {
+    if (pane == anchor_) return;
+    const int usable = std::max(0, main_extent() - kDividerExtent);
+    anchor_ = pane;
+    anchored_extent_ = anchor_ == SplitterPane::First ? split_position_ : usable - split_position_;
+}
+
+void Splitter::set_anchored_extent(int extent) {
+    anchored_extent_ = std::max(0, extent);
+    relayout();
+    invalidate();
+}
+
+bool Splitter::collapsed() const noexcept { return !first_->visible() || !second_->visible(); }
+
+int Splitter::requested_split() const noexcept {
+    const int usable = std::max(0, main_extent() - kDividerExtent);
+    return anchor_ == SplitterPane::First ? anchored_extent_ : usable - anchored_extent_;
+}
+
+void Splitter::move_split(int position) {
+    const int before = split_position_;
+    set_split_position(position);
+    if (split_position_ != before && on_split_moved) on_split_moved();
+}
+
 void Splitter::relayout() {
-    split_position_ = clamp_split(split_position_);
+    const bool both = first_->visible() && second_->visible();
+    set_focus_policy(both ? ui::FocusPolicy::TabStop : ui::FocusPolicy::None);
+    if (!both) {
+        const Rect whole{0, 0, bounds().width, bounds().height};
+        if (first_->visible()) first_->set_bounds(whole);
+        if (second_->visible()) second_->set_bounds(whole);
+        return;
+    }
+    split_position_ = clamp_split(requested_split());
     const int usable = std::max(0, main_extent() - kDividerExtent);
     const int second_extent = std::max(0, usable - split_position_);
     const int after = split_position_ + kDividerExtent;
@@ -70,7 +106,8 @@ void Splitter::relayout() {
 }
 
 void Splitter::draw(scene::Painter& painter) {
-    const ui::RoleId role = has_focus_ ? focused_role_ : normal_role_;
+    if (collapsed()) return;
+    const ui::RoleId role = has_focus() ? focused_role_ : normal_role_;
     const Style style = context().theme->resolve(role);
     if (orientation_ == Orientation::Horizontal) {
         painter.vline(Point{split_position_, 0}, bounds().height, scene::LineStyle::Single, style);
@@ -112,23 +149,24 @@ SizeHint Splitter::vertical_size_hint() const {
 }
 
 bool Splitter::on_key(const KeyEvent& event) {
+    if (collapsed()) return false;
     const Key key = event.chord.key;
     if (orientation_ == Orientation::Horizontal) {
         if (key == Key::Left) {
-            set_split_position(split_position_ - 1);
+            move_split(split_position_ - 1);
             return true;
         }
         if (key == Key::Right) {
-            set_split_position(split_position_ + 1);
+            move_split(split_position_ + 1);
             return true;
         }
     } else {
         if (key == Key::Up) {
-            set_split_position(split_position_ - 1);
+            move_split(split_position_ - 1);
             return true;
         }
         if (key == Key::Down) {
-            set_split_position(split_position_ + 1);
+            move_split(split_position_ + 1);
             return true;
         }
     }
@@ -144,7 +182,7 @@ bool Splitter::on_mouse(const MouseEvent& event) {
                                                               : event.cell.y - abs.y;
 
     if (event.action == MouseAction::Down) {
-        if (event.button != MouseButton::Left) return false;
+        if (event.button != MouseButton::Left || collapsed()) return false;
         // Only the divider itself. A press anywhere else belongs to
         // whichever pane is there, and claiming it would swallow clicks
         // meant for the list or the document beside it.
@@ -159,7 +197,7 @@ bool Splitter::on_mouse(const MouseEvent& event) {
         // The divider goes where the pointer is, not where it started plus
         // a delta: the grab point IS the divider, one cell wide, so there
         // is no offset to carry and none to accumulate error in.
-        set_split_position(along);
+        move_split(along);
         return true;
     }
 
@@ -170,9 +208,6 @@ bool Splitter::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void Splitter::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void Splitter::on_focus(const FocusEvent&) { invalidate(); }
 
 }  // namespace ckv::widgets

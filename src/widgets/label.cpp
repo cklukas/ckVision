@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/label.hpp"
 
+#include <algorithm>
 #include <cctype>
 
 #include "cvision/core/text.hpp"
@@ -9,6 +10,7 @@
 #include "cvision/widgets/button.hpp"
 #include "cvision/widgets/mnemonic.hpp"
 #include "cvision/widgets/mnemonic_internal.hpp"
+#include "cvision/widgets/option_group.hpp"
 
 namespace ckv::widgets {
 
@@ -37,16 +39,31 @@ bool is_label_mnemonic_request(const KeyEvent& event) noexcept {
            !event.chord.text.empty();
 }
 
-bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
-                                       ui::Application& app) {
-    if (!view.visible() || !view.enabled()) return false;
+// A label's buddy, or an option group whose caption is its own label: the
+// control `query` should give the focus to, when `view` names one.
+ui::View* labeled_target(ui::View& view, ui::View& scope, const std::string& query) {
     if (auto* label = dynamic_cast<Label*>(&view); label != nullptr &&
         !label->mnemonic().empty() && ascii_ci_equal(label->mnemonic(), query)) {
         ui::View* const buddy = label->buddy();
-        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) {
-            app.set_focus(buddy);
-            return true;
-        }
+        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) return buddy;
+    }
+    if (auto* checks = dynamic_cast<CheckGroup*>(&view); checks != nullptr &&
+        !checks->group_mnemonic().empty() && ascii_ci_equal(checks->group_mnemonic(), query) &&
+        checks->focusable())
+        return checks;
+    if (auto* radios = dynamic_cast<RadioGroup*>(&view); radios != nullptr &&
+        !radios->group_mnemonic().empty() && ascii_ci_equal(radios->group_mnemonic(), query) &&
+        radios->focusable())
+        return radios;
+    return nullptr;
+}
+
+bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
+                                       ui::Application& app) {
+    if (!view.visible() || !view.enabled()) return false;
+    if (ui::View* const target = labeled_target(view, scope, query); target != nullptr) {
+        app.set_focus(target);
+        return true;
     }
     for (const auto& child : view.children())
         if (activate_label_mnemonic_recursive(*child, scope, query, app)) return true;
@@ -56,13 +73,9 @@ bool activate_label_mnemonic_recursive(ui::View& view, ui::View& scope, const st
 bool activate_control_mnemonic_recursive(ui::View& view, ui::View& scope, const std::string& query,
                                          ui::Application& app) {
     if (!view.visible() || !view.enabled()) return false;
-    if (auto* label = dynamic_cast<Label*>(&view); label != nullptr &&
-        !label->mnemonic().empty() && ascii_ci_equal(label->mnemonic(), query)) {
-        ui::View* const buddy = label->buddy();
-        if (buddy != nullptr && is_descendant_of(*buddy, scope) && buddy->focusable()) {
-            app.set_focus(buddy);
-            return true;
-        }
+    if (ui::View* const target = labeled_target(view, scope, query); target != nullptr) {
+        app.set_focus(target);
+        return true;
     }
     if (auto* button = dynamic_cast<Button*>(&view); button != nullptr &&
         button->activate_mnemonic(query))
@@ -109,9 +122,19 @@ void Label::draw(scene::Painter& painter) {
                   bounds().width, theme.resolve(text_role_), theme.resolve(mnemonic_role_));
 }
 
+void Label::set_column_width(int cells) {
+    const int width = std::max(0, cells);
+    if (width == column_width_) return;
+    column_width_ = width;
+    size_hint_changed();
+    invalidate();
+}
+
 SizeHint Label::horizontal_size_hint() const {
-    const int width = text::text_width(display_text_);
-    return SizeHint{width, width, width};  // a label never stretches or shrinks its text
+    // A label never stretches or shrinks its text; standing in a column, it
+    // takes the column's width.
+    const int width = std::max(text::text_width(display_text_), column_width_);
+    return SizeHint{width, width, width};
 }
 
 bool activate_label_mnemonic(View& scope, const KeyEvent& event, ui::Application& app) {

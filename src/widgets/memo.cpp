@@ -615,13 +615,10 @@ bool Memo::on_mouse(const MouseEvent& event) {
     return true;
 }
 
-void Memo::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
-    invalidate();
-}
+void Memo::on_focus(const FocusEvent&) { invalidate(); }
 
 void Memo::draw(scene::Painter& painter) {
-    const Style base = context().theme->resolve(!valid_ ? invalid_role_ : (has_focus_ ? focused_role_ : normal_role_));
+    const Style base = context().theme->resolve(!valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_));
     const int visible_width = viewport_width_;
     const std::vector<VisualRow> rows = visual_rows(visible_width);
     const int top = scrollbar_ != nullptr ? scrollbar_->position() : 0;
@@ -652,7 +649,7 @@ void Memo::draw(scene::Painter& painter) {
                 style.attrs |= Attr::Reverse;
             painter.draw_text(Point{x, row}, line[static_cast<std::size_t>(i)], style);
         }
-        if (has_focus_ && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
+        if (has_focus() && line_index == cursor_.line && cursor_.column >= visual_row.begin &&
             cursor_.column <= visual_row.end) {
             const int cursor_x = column_x(visual_row, cursor_.column) - left;
             if (cursor_x >= 0 && cursor_x < visible_width) {

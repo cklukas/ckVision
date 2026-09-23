@@ -124,6 +124,13 @@ public:
     // model — how many items, and how wide the widest of the ones worth
     // measuring — never from live bounds, which would feed a container's own
     // resize back into the next layout pass.
+    // The widest of the first items, plus the scrollbar and a margin — the
+    // list's own measure — unless set_preferred_size() named a positive
+    // width, which then wins: a container that gives a list a column of a
+    // stated width must not see it grow with the longest title. Either
+    // way the content's changes reach the container: every model or item
+    // change reports a changed hint, so a Dock or Column lays the list
+    // out again rather than keeping the width it had while empty.
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
 
@@ -199,17 +206,28 @@ private:
     ListModel* model_ = nullptr;
     std::vector<ListItemId> selected_ids_;
     ListItemId cursor_id_ = kInvalidListItemId;
+    // The row's text, from the model or the materialized items.
+    std::string text_at(std::size_t index) const;
+
     int cursor_ = -1;
+    // Keyboard search (D-070): letters typed within kTypeaheadWindowNanos
+    // of each other form one prefix, so "sa" reaches "sample" past "parts";
+    // a letter typed alone, or the same letter again, steps to the next row
+    // beginning with it. The application's clock times the window, never
+    // a wall clock.
+    std::string typeahead_;
+    std::int64_t typeahead_at_ = 0;
     bool multi_select_;
     int last_click_index_ = -1;
     std::int64_t last_click_nanos_ = -1;
 
     Scrollbar* scrollbar_ = nullptr;
+    // The cursor was placed before the list had a height to show it in.
+    bool reveal_pending_ = false;
 
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId selected_inactive_role_ = ui::kInvalidRole;
-    bool focused_ = false;
 };
 
 }  // namespace ckv::widgets

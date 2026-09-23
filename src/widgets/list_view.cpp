@@ -6,10 +6,39 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
+#include <string>
+#include <string_view>
 
 #include "cvision/ui/application.hpp"
 
 namespace ckv::widgets {
+namespace {
+
+// Letters typed this close together form one search prefix.
+constexpr std::int64_t kTypeaheadWindowNanos = 1'000'000'000;
+
+std::string fold_typeahead(std::string_view text) {
+    std::string folded;
+    for (const char c : text) folded.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    return folded;
+}
+
+std::string repeated(const std::string& unit, std::size_t times) {
+    std::string out;
+    for (std::size_t i = 0; i < times; ++i) out += unit;
+    return out;
+}
+
+bool starts_with_folded(std::string_view text, const std::string& folded_prefix) {
+    if (text.size() < folded_prefix.size()) return false;
+    for (std::size_t i = 0; i < folded_prefix.size(); ++i)
+        if (static_cast<char>(std::tolower(static_cast<unsigned char>(text[i]))) != folded_prefix[i]) return false;
+    return true;
+}
+
+}  // namespace
+
 
 ListView::ListView(bool multi_select) : multi_select_(multi_select) {
     scrollbar_ = make<Scrollbar>(Orientation::Vertical);
@@ -23,9 +52,7 @@ void ListView::on_attached() {
         selected_inactive_role_ = context().roles->find("ckv.list.selected.inactive");
 }
 
-void ListView::on_focus(const FocusEvent& event) {
-    if (focused_ == event.gained) return;
-    focused_ = event.gained;
+void ListView::on_focus(const FocusEvent&) {
     // The selection changes appearance, so the rows have to be repainted even
     // though nothing about the model moved.
     invalidate();
@@ -42,6 +69,7 @@ void ListView::set_model(ListModel& model) {
     resolve_model_identities();
     on_resized();
     invalidate();
+    size_hint_changed();
 }
 
 void ListView::clear_model() {
@@ -51,6 +79,7 @@ void ListView::clear_model() {
     cursor_ = -1;
     if (scrollbar_ != nullptr) scrollbar_->set_range(0, std::max(1, bounds().height));
     invalidate();
+    size_hint_changed();
 }
 
 void ListView::model_changed() {
@@ -58,6 +87,9 @@ void ListView::model_changed() {
     on_resized();
     ensure_cursor_visible();
     invalidate();
+    // The measure above may have moved: a container that sized this list
+    // while its model was empty is told so, or it keeps the sliver.
+    size_hint_changed();
 }
 
 void ListView::set_items(std::vector<std::string> items) {
@@ -71,6 +103,7 @@ void ListView::set_items(std::vector<std::string> items) {
     on_resized();
     ensure_cursor_visible();
     invalidate();
+    size_hint_changed();
 }
 
 std::size_t ListView::item_count() const { return model_ != nullptr ? model_->item_count() : items_.size(); }
@@ -97,6 +130,12 @@ std::optional<ListItemId> ListView::cursor_id() const noexcept {
 }
 
 ui::SizeHint ListView::horizontal_size_hint() const {
+    // A width the owner asked for outranks the measure: it is the owner
+    // who knows what column the list has been given.
+    if (preferred_size().width > 0) {
+        const int asked = preferred_size().width;
+        return ui::SizeHint{std::min(8, asked), asked, ui::kUnboundedExtent};
+    }
     // The widest of the items worth measuring, plus the room the scrollbar takes
     // when it is there. A minimum of a few columns so an empty list is still a
     // list rather than a sliver.
@@ -197,6 +236,15 @@ void ListView::move_cursor(int new_cursor, bool select_on_move) {
 
 void ListView::ensure_cursor_visible() {
     if (cursor_ < 0 || scrollbar_ == nullptr) return;
+    // A list with no rows on screen yet has nowhere to show the cursor. The
+    // request waits for the list's first real size instead of scrolling as
+    // though the viewport were one row tall, which would leave the rows
+    // above the cursor scrolled away once the list is laid out.
+    if (bounds().height <= 0) {
+        reveal_pending_ = true;
+        return;
+    }
+    reveal_pending_ = false;
     if (cursor_ < scrollbar_->position()) {
         scrollbar_->set_position(cursor_);
     } else if (cursor_ >= scrollbar_->position() + scrollbar_->viewport_size()) {
@@ -223,6 +271,12 @@ void ListView::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
     scrollbar_->set_range(static_cast<int>(item_count()), std::max(1, bounds().height));
+    if (reveal_pending_) ensure_cursor_visible();
+}
+
+std::string ListView::text_at(std::size_t index) const {
+    if (model_ != nullptr) return index < model_->item_count() ? model_->item_at(index).text : std::string();
+    return index < items_.size() ? items_[index] : std::string();
 }
 
 bool ListView::on_key(const KeyEvent& event) {
@@ -262,22 +316,45 @@ bool ListView::on_key(const KeyEvent& event) {
                 return true;
             }
             if (!event.chord.text.empty() && item_count() != 0) {
-                const char query = static_cast<char>(std::tolower(static_cast<unsigned char>(event.chord.text[0])));
-                const std::string folded(1, query);
+                // A letter with a command modifier is a chord, not a search.
+                if (has_modifier(event.chord.modifiers, Modifier::Alt) ||
+                    has_modifier(event.chord.modifiers, Modifier::Ctrl) ||
+                    has_modifier(event.chord.modifiers, Modifier::Super))
+                    return false;
+                const std::int64_t now = context().app != nullptr ? context().app->clock().now_nanos() : 0;
+                const std::string letter = fold_typeahead(event.chord.text);
+                const bool continues = !typeahead_.empty() && now - typeahead_at_ <= kTypeaheadWindowNanos;
+                // The same letter again is a step to the next row beginning
+                // with it, not a longer prefix; any other letter extends.
+                const bool repeats = continues && typeahead_.size() >= letter.size() &&
+                                     typeahead_ == repeated(letter, typeahead_.size() / letter.size());
+                if (continues && !repeats) typeahead_ += letter;
+                else typeahead_ = letter;
+                typeahead_at_ = now;
+                const bool extends = continues && !repeats;
+                // An extended prefix may still describe the cursor's row; a
+                // fresh or repeated letter searches from the next row on.
+                const std::size_t cursor = static_cast<std::size_t>(std::max(0, cursor_));
+                if (extends && cursor < item_count() && starts_with_folded(text_at(cursor), typeahead_)) return true;
+                std::optional<std::size_t> found;
                 if (model_ != nullptr) {
-                    const auto found = model_->find_prefix(folded, static_cast<std::size_t>(std::max(0, cursor_)));
-                    if (!found || *found >= item_count()) return false;
-                    move_cursor(static_cast<int>(*found), !multi_select_);
-                    return true;
-                }
-                const std::size_t n = items_.size();
-                for (std::size_t step = 1; step <= n; ++step) {
-                    const std::size_t index = (static_cast<std::size_t>(cursor_) + step) % n;
-                    if (!items_[index].empty() && std::tolower(static_cast<unsigned char>(items_[index][0])) == query) {
-                        move_cursor(static_cast<int>(index), !multi_select_);
-                        return true;
+                    found = model_->find_prefix(typeahead_, cursor);
+                    if (found && *found >= item_count()) found.reset();
+                } else {
+                    const std::size_t n = items_.size();
+                    for (std::size_t step = 1; step <= n && !found; ++step) {
+                        const std::size_t index = (cursor + step) % n;
+                        if (starts_with_folded(items_[index], typeahead_)) found = index;
                     }
                 }
+                if (!found) {
+                    // Nothing begins with the prefix: it is dropped, so the
+                    // next letter starts afresh rather than compounding a miss.
+                    typeahead_.clear();
+                    return false;
+                }
+                move_cursor(static_cast<int>(*found), !multi_select_);
+                return true;
             }
             return false;
         default:
@@ -333,7 +410,7 @@ void ListView::draw(scene::Painter& painter) {
         // active, and the reader cannot tell which one their arrow keys will
         // move; the muted form still says "this list's place is here".
         const ui::RoleId selection_role =
-            focused_ || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
+            has_focus() || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
                                                                     : selected_inactive_role_;
         Style style = item.id != kInvalidListItemId &&
                                   (item.id == cursor_id_ || is_selected_id(item.id))

@@ -61,6 +61,16 @@ struct TimeValue {
     friend bool operator==(const TimeValue&, const TimeValue&) = default;
 };
 
+// A date and a time of day, read together. One reading rather than two, so a
+// display showing both can never pair one day's date with the next day's time
+// when it is asked just after midnight.
+struct DateTimeValue {
+    DateValue date;
+    TimeValue time;
+
+    friend bool operator==(const DateTimeValue&, const DateTimeValue&) = default;
+};
+
 // Locale-free interchange for typed time controls. Parsing accepts canonical
 // HH:MM and HH:MM:SS forms only; formatting includes seconds when requested.
 bool is_valid_time(TimeValue time) noexcept;
@@ -241,7 +251,6 @@ private:
     int header_row() const noexcept { return show_title_ ? 1 : 0; }
     int grid_top() const noexcept { return header_row() + 1; }
     bool show_iso_week_numbers_ = false;
-    bool has_focus_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
     ui::RoleId disabled_role_ = ui::kInvalidRole;
@@ -351,7 +360,6 @@ private:
     int active_field_ = 0;  // 0 year, 1 month, 2 day
     bool empty_allowed_ = true;
     bool valid_ = true;
-    bool focused_ = false;
     ui::Application* calendar_app_ = nullptr;
     Desktop* calendar_desktop_ = nullptr;
     CalendarDropdown* calendar_dropdown_ = nullptr;
@@ -386,7 +394,6 @@ private:
     bool show_seconds_ = true;
     bool twenty_four_hour_ = true;
     bool valid_ = true;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId invalid_role_ = ui::kInvalidRole;
@@ -413,7 +420,6 @@ private:
     int maximum_ = 100;
     int step_ = 1;
     int value_ = 0;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
 };
@@ -440,7 +446,6 @@ private:
     int maximum_ = 100;
     int step_ = 1;
     int value_ = 0;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId fill_role_ = ui::kInvalidRole;
 };
@@ -469,7 +474,6 @@ private:
     static constexpr int kClearControlWidth = 3;
 
     std::string query_;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId label_role_ = ui::kInvalidRole;
@@ -509,6 +513,13 @@ public:
     // Palette-visible, title-matching, currently available — in the
     // order the commands were declared.
     std::vector<ui::CommandInfo> filtered_commands() const;
+    // The command contexts the palette answers for (ui::command_context_path
+    // of the view the reader was on when it opened), instead of its own
+    // focus path. A palette presented in a window of its own takes the focus
+    // from the place whose commands it lists, exactly as a menu walk does,
+    // and without this it would offer what the palette's window allows —
+    // no context-bound command at all.
+    void set_invocation_contexts(std::vector<std::string> contexts);
     std::optional<ui::CommandId> highlighted_command() const;
 
     void draw(scene::Painter& painter) override;
@@ -518,9 +529,11 @@ public:
     void on_attached() override;
 
 private:
+    bool available(ui::CommandId id) const;
+
     std::string query_;
     std::size_t highlighted_ = 0;
-    bool has_focus_ = false;
+    std::optional<std::vector<std::string>> invocation_contexts_;
     ui::RoleId input_role_ = ui::kInvalidRole;
     ui::RoleId result_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
@@ -544,7 +557,6 @@ private:
     std::vector<std::string> segments_;
     std::string separator_ = "/";
     std::size_t focused_ = 0;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId focused_role_ = ui::kInvalidRole;
 };
@@ -572,7 +584,6 @@ private:
     std::vector<PropertyItem> items_;
     int cursor_ = 0;
     bool editing_ = false;
-    bool has_focus_ = false;
     ui::RoleId role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
 };

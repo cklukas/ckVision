@@ -62,7 +62,7 @@ CK_TEST(command_contexts_activate_through_explicit_scopes_and_focus_ancestry) {
     const ui::CommandId scoped = f.app.commands().declare({.key = "test.scoped",
                                                            .title = "Scoped",
                                                            .category = "Test",
-                                                           .context = "editor",
+                                                           .scope = {.contexts = {"editor"}},
                                                            .handler = [&] { ++ran; }});
 
     CK_CHECK(!f.app.execute_command(scoped));
@@ -89,7 +89,7 @@ CK_TEST(modal_dispatch_allows_modal_focus_context_commands_but_not_unscoped_back
     f.app.commands().declare({.key = "test.scoped",
                               .title = "Scoped",
                               .category = "Test",
-                              .context = "editor",
+                              .scope = {.contexts = {"editor"}},
                               .chord = "Ctrl+E",
                               .handler = [&] { ++scoped; }});
     f.app.commands().declare({.key = "test.background",
@@ -109,6 +109,111 @@ CK_TEST(modal_dispatch_allows_modal_focus_context_commands_but_not_unscoped_back
     CK_CHECK(scoped == 1);
     CK_CHECK(!f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "b"}}));
     CK_CHECK(background == 0);
+}
+
+CK_TEST(a_command_bound_to_several_contexts_runs_wherever_one_of_them_is_active) {
+    AppFixture f;
+    int ran = 0;
+    const ui::CommandId save = f.app.commands().declare(
+        {.key = "test.save",
+         .title = "Save",
+         .category = "Test",
+         .scope = {.contexts = {"document", "outline"}},
+         .handler = [&] { ++ran; }});
+
+    auto* document = f.app.root().add(std::make_unique<View>());
+    auto* outline = f.app.root().add(std::make_unique<View>());
+    auto* tree = f.app.root().add(std::make_unique<View>());
+    document->set_command_context("document");
+    outline->set_command_context("outline");
+    tree->set_command_context("tree");
+    for (View* view : {document, outline, tree}) view->set_focus_policy(FocusPolicy::TabStop);
+
+    f.app.set_focus(document);
+    CK_CHECK(f.app.execute_command(save));
+    f.app.set_focus(outline);
+    CK_CHECK(f.app.execute_command(save));
+    f.app.set_focus(tree);
+    CK_CHECK(!f.app.execute_command(save));
+    f.app.set_focus(nullptr);
+    CK_CHECK(!f.app.command_available(save));
+    const auto scope = f.app.commands().push_context("outline");
+    CK_CHECK(f.app.execute_command(save));
+    CK_CHECK(f.app.commands().pop_context(scope));
+    CK_CHECK(ran == 3);
+
+    // Scope is metadata like any other: restated, it governs at once.
+    f.app.commands().set_command_scope(save, {});
+    f.app.set_focus(tree);
+    CK_CHECK(f.app.command_available(save));
+}
+
+CK_TEST(a_command_usable_outside_contexts_is_available_only_where_none_is_active_or_one_it_names_is) {
+    AppFixture f;
+    const ui::CommandId open = f.app.commands().declare(
+        {.key = "test.open",
+         .title = "Open",
+         .category = "Test",
+         .scope = {.contexts = {"document"}, .outside_contexts = true},
+         .handler = [] {}});
+    const ui::CommandId bare = f.app.commands().declare(
+        {.key = "test.bare",
+         .title = "Arrange",
+         .category = "Test",
+         .scope = {.outside_contexts = true},
+         .handler = [] {}});
+
+    auto* window = f.app.root().add(std::make_unique<View>());
+    auto* document = window->add(std::make_unique<View>());
+    auto* field = f.app.root().add(std::make_unique<View>());
+    auto* plain = f.app.root().add(std::make_unique<View>());
+    document->set_command_context("document");
+    field->set_command_context("value-entry");
+    for (View* view : {document, field, plain}) view->set_focus_policy(FocusPolicy::TabStop);
+
+    // Nothing focused and nothing pushed: the bare desktop.
+    CK_CHECK(f.app.command_available(open));
+    CK_CHECK(f.app.command_available(bare));
+    // A view that names no context of its own is no context either.
+    f.app.set_focus(plain);
+    CK_CHECK(f.app.command_available(open));
+    CK_CHECK(f.app.command_available(bare));
+    // A context the scope names.
+    f.app.set_focus(document);
+    CK_CHECK(f.app.command_available(open));
+    CK_CHECK(!f.app.command_available(bare));
+    // A context it does not name, whether focused or pushed.
+    f.app.set_focus(field);
+    CK_CHECK(!f.app.command_available(open));
+    CK_CHECK(!f.app.command_available(bare));
+    f.app.set_focus(nullptr);
+    const auto pushed = f.app.commands().push_context("value-entry");
+    CK_CHECK(!f.app.command_available(open));
+    CK_CHECK(f.app.commands().pop_context(pushed));
+    CK_CHECK(f.app.command_available(open));
+}
+
+CK_TEST(a_modal_admits_a_command_by_a_context_it_names_never_by_being_usable_outside_contexts) {
+    AppFixture f;
+    int ran = 0;
+    f.app.commands().declare({.key = "test.open",
+                              .title = "Open",
+                              .category = "Test",
+                              .scope = {.contexts = {"document"}, .outside_contexts = true},
+                              .chord = "Ctrl+O",
+                              .handler = [&] { ++ran; }});
+
+    auto* modal = f.app.root().add(std::make_unique<View>(Rect{0, 0, 20, 5}));
+    auto* field = modal->add(std::make_unique<View>(Rect{1, 1, 4, 1}));
+    field->set_focus_policy(FocusPolicy::TabStop);
+    f.app.set_focus(field);
+    f.app.push_modal(*modal);
+
+    CK_CHECK(!f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "o"}}));
+    CK_CHECK(ran == 0);
+    field->set_command_context("document");
+    CK_CHECK(f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "o"}}));
+    CK_CHECK(ran == 1);
 }
 
 CK_TEST(command_withdrawal_removes_metadata_handler_enablement_and_key_binding) {

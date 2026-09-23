@@ -133,7 +133,6 @@ private:
     MemoPosition cursor_;
     std::optional<MemoPosition> selection_anchor_;
     std::vector<EditState> undo_stack_;
-    bool has_focus_ = false;
     WrapMode wrap_mode_ = WrapMode::Word;
     bool dragging_selection_ = false;
     bool valid_ = true;

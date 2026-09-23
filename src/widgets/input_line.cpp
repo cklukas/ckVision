@@ -45,6 +45,11 @@ void InputLine::set_text(std::string text) {
     revalidate();
 }
 
+void InputLine::set_cursor(std::size_t grapheme) {
+    const std::size_t at = std::min(grapheme, graphemes_.size());
+    move_cursor(has_mask() ? mask_next_editable(at) : at, false);
+}
+
 std::string InputLine::text() const {
     std::string out;
     for (const auto& g : graphemes_) out += g;
@@ -99,7 +104,26 @@ void InputLine::record_undo_state() {
     undo_stack_.push_back(EditState{graphemes_, cursor_, selection_anchor_, overwrite_mode_});
 }
 
+bool InputLine::reporting_edits(const std::function<bool()>& action) {
+    const bool outermost = edit_depth_ == 0;
+    std::vector<std::string> before;
+    if (outermost && on_edited) before = graphemes_;
+    // The action may reach application code (on_accept) that closes the
+    // dialog this field is in; nothing of this field is touched after that.
+    const std::weak_ptr<void> alive = lifetime_token();
+    ++edit_depth_;
+    const bool handled = action();
+    if (alive.expired()) return handled;
+    --edit_depth_;
+    if (outermost && on_edited && graphemes_ != before) on_edited();
+    return handled;
+}
+
 bool InputLine::undo() {
+    return reporting_edits([this] { return handle_undo(); });
+}
+
+bool InputLine::handle_undo() {
     if (undo_stack_.empty()) return false;
     EditState state = std::move(undo_stack_.back());
     undo_stack_.pop_back();
@@ -158,6 +182,10 @@ bool InputLine::copy_selection_to_clipboard() {
 }
 
 bool InputLine::cut_selection_to_clipboard() {
+    return reporting_edits([this] { return handle_cut(); });
+}
+
+bool InputLine::handle_cut() {
     if (!selection_anchor_ || selected_text().empty()) return false;
     if (context().app == nullptr) return false;
     record_undo_state();
@@ -389,6 +417,10 @@ void InputLine::move_cursor(std::size_t new_cursor, bool extend_selection) {
 }
 
 bool InputLine::on_key(const KeyEvent& event) {
+    return reporting_edits([this, &event] { return handle_key(event); });
+}
+
+bool InputLine::handle_key(const KeyEvent& event) {
     if (event.chord.key == Key::Enter && event.chord.modifiers == Modifier::None && on_accept) {
         on_accept();
         return true;
@@ -489,7 +521,9 @@ bool InputLine::on_key(const KeyEvent& event) {
             }
             return true;
         case Key::Insert:
+            // Switching modes is a choice to keep editing the text as it is.
             overwrite_mode_ = !overwrite_mode_;
+            selection_anchor_.reset();
             invalidate();
             return true;
         default:
@@ -498,6 +532,10 @@ bool InputLine::on_key(const KeyEvent& event) {
 }
 
 bool InputLine::on_text(const TextEvent& event) {
+    return reporting_edits([this, &event] { return handle_text(event); });
+}
+
+bool InputLine::handle_text(const TextEvent& event) {
     if (!enabled()) return false;
     if (has_mask()) return on_text_masked(event);
     std::vector<std::string> graphemes;
@@ -520,6 +558,9 @@ bool InputLine::on_mouse(const MouseEvent& event) {
     }
     if (event.action != MouseAction::Down) return false;
     if (!contains(absolute_bounds(), event.cell)) return false;
+    // The focus first, so arriving selects nothing the press is about to
+    // place a caret in.
+    if (!has_focus() && focusable() && context().app != nullptr) context().app->set_focus(this);
     dragging_selection_ = true;
     move_cursor(cursor_index_at(event.cell), false);
     return true;
@@ -543,7 +584,16 @@ std::size_t InputLine::cursor_index_at(Point absolute_cell) const {
 }
 
 void InputLine::on_focus(const FocusEvent& event) {
-    has_focus_ = event.gained;
+    // A field the reader arrives at from the keyboard — a dialog opening on
+    // it, Tab, the focus coming back — offers its text selected, the caret at
+    // the end: typing replaces it, Backspace and Delete clear it, and a caret
+    // key keeps it and moves from the end. A pointer press places the caret
+    // where it lands instead; on_mouse takes the focus before it does. A
+    // masked field has fixed positions to type into, and is left as it is.
+    if (event.gained && !has_mask() && !graphemes_.empty()) {
+        selection_anchor_ = 0;
+        cursor_ = graphemes_.size();
+    }
     invalidate();
 }
 
@@ -578,7 +628,7 @@ int InputLine::scroll_offset_for_display() const {
 }
 
 void InputLine::draw(scene::Painter& painter) {
-    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus_ ? focused_role_ : normal_role_);
+    const ui::RoleId role = !valid_ ? invalid_role_ : (has_focus() ? focused_role_ : normal_role_);
     const Style base = context().theme->resolve(role);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", base));
 
@@ -598,7 +648,7 @@ void InputLine::draw(scene::Painter& painter) {
         painter.draw_text(Point{x, 0}, glyph, style);
     }
 
-    if (has_focus_) {
+    if (has_focus()) {
         const int cursor_x = col_of[cursor_] - col_of[scroll];
         if (cursor_x >= 0 && cursor_x < bounds().width) {
             Style cursor_style = base;

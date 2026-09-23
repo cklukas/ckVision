@@ -9,6 +9,9 @@
 // an injected provider, which returns the hint text to display — the
 // library defines no help content format, same as F1's provider.
 //
+// The item set can follow focus too: a command context may carry its own
+// items, which replace the ordinary ones while focus is inside it.
+//
 // An item referencing a command (M9/WP-11) stops carrying its own
 // label text: it renders "{chord} {title}" composed live from
 // CommandRegistry (e.g. "Alt+X Quit"), chord omitted if nothing is
@@ -64,9 +67,23 @@ public:
     void set_items(std::vector<StatusLineItem> items);
     const std::vector<StatusLineItem>& items() const noexcept { return items_; }
 
+    // Items for one command context (View::set_command_context), shown
+    // instead of the ordinary items while the focused view's nearest context
+    // is `context` — so the legend offers what the reader can do where they
+    // are: an editor's keys in the editor, a list's keys in the list. An
+    // empty list removes the context's set.
+    void set_context_items(std::string context, std::vector<StatusLineItem> items);
+    void clear_context_items();
+    // The items on the line right now: the focused context's set when it
+    // has one, the ordinary items otherwise.
+    const std::vector<StatusLineItem>& shown_items() const;
+
     // Maps a resolved help-context key to the hint text to display.
     // Unset (or a resolved key with no mapping — an empty return is
-    // treated the same as "no hint") shows the item list only.
+    // treated the same as "no hint") shows the item list only. The key is
+    // the focused view's nearest, or — with nothing focused, an empty
+    // desktop — the root's (D-069), so an application whose root carries a
+    // key has a hint before its first window opens.
     void set_hint_provider(std::function<std::string(const std::string&)> provider);
 
     // A hint that outranks the focus-derived one until it is cleared
@@ -113,6 +130,7 @@ private:
     std::vector<LaidOutItem> visible_items() const;
 
     std::vector<StatusLineItem> items_;
+    std::vector<std::pair<std::string, std::vector<StatusLineItem>>> context_items_;
     std::function<std::string(const std::string&)> hint_provider_;
     std::string transient_hint_;
     // The item currently held down by the pointer, and whether the pointer

@@ -342,6 +342,24 @@ CK_TEST(provider_backed_table_commits_a_typed_edit_to_its_model) {
     CK_CHECK(std::get<std::int64_t>(*model.committed_value) == 42);
 }
 
+CK_TEST(a_letter_with_a_command_modifier_is_a_chord_not_the_start_of_an_edit) {
+    Fixture f;
+    Provider model;
+    auto table = make_table(f);
+    table.set_columns({TableColumn{"Count", 8, 3, ckv::widgets::TableCellType::Integer, true}});
+    table.set_model(model);
+    // Alt+X is an application's Exit and Ctrl+P its palette: the table
+    // leaves both to whoever bound them, and starts no edit.
+    CK_CHECK(!table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "x"}}));
+    CK_CHECK(!table.editing());
+    CK_CHECK(!table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Ctrl, "p"}}));
+    CK_CHECK(!table.editing());
+    // Shift is part of a typed letter, so a capital starts an edit.
+    CK_CHECK(table.on_key(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Shift, "X"}}));
+    CK_CHECK(table.editing());
+    CK_CHECK(table.edit_text() == "X");
+}
+
 CK_TEST(real_cells_format_and_commit_without_locale_or_partial_parses) {
     CK_CHECK(format_cell_value(ckv::widgets::CellValue{1.25}) == "1.25");
 

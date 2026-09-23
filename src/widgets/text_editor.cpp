@@ -10,6 +10,7 @@
 
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/menu.hpp"
 
 namespace ckv::widgets {
 namespace {
@@ -65,7 +66,29 @@ std::size_t word_end(std::string_view value, std::size_t byte) {
     return byte;
 }
 
+KeyChord chord(Key key, Modifier modifiers = Modifier::None, std::string text = {}) {
+    return KeyChord{key, modifiers, std::move(text)};
+}
+
 }  // namespace
+
+std::vector<EditorKeyBinding> default_editor_key_bindings() {
+    return {
+        {chord(Key::Char, Modifier::Ctrl, "z"), EditorCommand::Undo},
+        {chord(Key::Char, Modifier::Ctrl, "y"), EditorCommand::Redo},
+        {chord(Key::Char, Modifier::Ctrl, "x"), EditorCommand::Cut},
+        {chord(Key::Delete, Modifier::Shift), EditorCommand::Cut},
+        {chord(Key::Char, Modifier::Ctrl, "c"), EditorCommand::Copy},
+        {chord(Key::Insert, Modifier::Ctrl), EditorCommand::Copy},
+        {chord(Key::Char, Modifier::Ctrl, "v"), EditorCommand::Paste},
+        {chord(Key::Insert, Modifier::Shift), EditorCommand::Paste},
+        {chord(Key::Char, Modifier::Ctrl, "a"), EditorCommand::SelectAll},
+        {chord(Key::Char, Modifier::Ctrl, "f"), EditorCommand::FindSelection},
+        {chord(Key::F3), EditorCommand::FindNext},
+        {chord(Key::F3, Modifier::Shift), EditorCommand::FindPrevious},
+        {chord(Key::Insert), EditorCommand::ToggleOverwrite},
+    };
+}
 
 TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRegistry* profiles)
     : document_(std::move(document)), profiles_(profiles) {
@@ -82,6 +105,26 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     profile_id_ = profile_->id;
     cursor_ = document_->begin();
     observer_ = document_->subscribe([this](const DocumentChange& change) {
+        // The caret stays on the same text through an edit this editor did
+        // not make — a host writing the document from elsewhere, another
+        // view's change mirrored in: bytes inserted or removed before it
+        // carry it along, and a replacement that swallows it leaves it at
+        // the replacement's end. The editor's own edits set the caret
+        // explicitly afterwards, so this costs them nothing.
+        const auto carry = [&change](DocumentPosition& position) {
+            const std::size_t removed = change.replaced_end_byte - change.replaced_begin_byte;
+            if (change.replaced_end_byte <= position.byte)
+                position.byte = position.byte - removed + change.inserted_bytes;
+            else if (change.replaced_begin_byte < position.byte)
+                position.byte = change.replaced_begin_byte + change.inserted_bytes;
+        };
+        carry(cursor_);
+        if (selection_anchor_) carry(*selection_anchor_);
+        // A provisional caret names a place relative to the text as it was;
+        // once the text has changed underneath it that place may be text.
+        virtual_caret_.reset();
+        desired_column_.reset();
+        carry_highlights(change);
         clamp_cursor();
         rebuild_lines(change.first_affected_line);
         refresh_search();
@@ -141,6 +184,33 @@ void TextEditor::set_overwrite(bool value) {
     invalidate();
 }
 
+void TextEditor::set_tab_width(int spaces) { tab_width_ = std::max(1, spaces); }
+
+void TextEditor::set_key_bindings(std::vector<EditorKeyBinding> bindings) { key_bindings_ = std::move(bindings); }
+
+bool TextEditor::perform(EditorCommand command) {
+    switch (command) {
+        case EditorCommand::Undo:
+        case EditorCommand::Redo: {
+            const bool redo = command == EditorCommand::Redo;
+            if (history_handler_) return history_handler_(*this, redo);
+            return redo ? document_->redo() : document_->undo();
+        }
+        case EditorCommand::Cut: return cut_selection_to_clipboard();
+        case EditorCommand::Copy: return copy_selection_to_clipboard();
+        case EditorCommand::Paste: return paste_from_clipboard();
+        case EditorCommand::SelectAll: return select_all();
+        case EditorCommand::FindSelection: return use_selection_as_search_query();
+        case EditorCommand::FindNext: return find_next(true);
+        case EditorCommand::FindPrevious: return find_next(false);
+        // Through set_overwrite, so that the mode reaches the status observers
+        // with the keystroke that changed it: a toggle that only invalidated
+        // left the frame reading INS until the next cursor move republished it.
+        case EditorCommand::ToggleOverwrite: set_overwrite(!overwrite_); return true;
+    }
+    return false;
+}
+
 void TextEditor::set_status_changed_handler(std::function<void(const EditorStatus&)> handler) {
     status_changed_ = std::move(handler);
     notify_status_changed();
@@ -193,6 +263,8 @@ bool TextEditor::activate_search_match(std::size_t index) {
     if (range.begin.revision != document_->revision() || range.end.revision != document_->revision()) return false;
     selection_anchor_ = range.begin;
     cursor_ = range.end;
+    virtual_caret_.reset();
+    desired_column_.reset();
     active_search_match_ = index;
     ensure_cursor_visible();
     notify_status_changed();
@@ -261,6 +333,47 @@ void TextEditor::refresh_syntax() {
     rebuild_lines();
 }
 
+bool TextEditor::set_highlights(DocumentRevision revision, std::vector<HighlightSpan> spans) {
+    if (revision != document_->revision()) return false;
+    const std::size_t size = document_->byte_size();
+    for (std::size_t index = 0; index < spans.size(); ++index) {
+        const HighlightSpan& span = spans[index];
+        if (span.begin_byte > span.end_byte || span.end_byte > size) return false;
+        if (index > 0U && span.begin_byte < spans[index - 1U].end_byte) return false;
+    }
+    highlights_ = std::move(spans);
+    highlights_active_ = true;
+    invalidate();
+    return true;
+}
+
+void TextEditor::clear_highlights() {
+    if (!highlights_active_) return;
+    highlights_active_ = false;
+    highlights_.clear();
+    invalidate();
+}
+
+void TextEditor::carry_highlights(const DocumentChange& change) {
+    if (!highlights_active_) return;
+    // Spans the edit did not touch keep colouring the same text; a span the
+    // edit overlaps described text that is gone, so it goes with it. The
+    // host's next set_highlights() replaces the lot.
+    std::vector<HighlightSpan> carried;
+    carried.reserve(highlights_.size());
+    for (const HighlightSpan& span : highlights_) {
+        if (span.end_byte <= change.replaced_begin_byte) {
+            carried.push_back(span);
+        } else if (span.begin_byte >= change.replaced_end_byte) {
+            const std::size_t begin = span.begin_byte - change.replaced_end_byte;
+            const std::size_t length = span.end_byte - span.begin_byte;
+            const std::size_t shifted = change.replaced_begin_byte + change.inserted_bytes + begin;
+            carried.push_back(HighlightSpan{shifted, shifted + length, span.role});
+        }
+    }
+    highlights_ = std::move(carried);
+}
+
 const std::vector<TextEditor::DisplayRow>& TextEditor::display_rows(int content_width) const {
     const int width = std::max(content_width, 1);
     if (!display_rows_dirty_ && display_rows_width_ == width) return display_rows_cache_;
@@ -293,6 +406,34 @@ std::size_t TextEditor::cursor_display_row(const std::vector<DisplayRow>& rows) 
         if (byte < row.end_byte || (byte == row.end_byte && !row.continues)) return index;
     }
     return rows.empty() ? 0U : rows.size() - 1U;
+}
+
+std::pair<int, int> TextEditor::caret_display_cell(const std::vector<DisplayRow>& rows) const {
+    if (!virtual_caret_) {
+        const std::size_t index = cursor_display_row(rows);
+        if (index >= rows.size()) return {0, 0};
+        const DisplayRow& row = rows[index];
+        const std::size_t within =
+            row.line < lines_.size() ? cursor_.byte - std::min(cursor_.byte, lines_[row.line].start_byte) : 0U;
+        return {static_cast<int>(index), column_x(row, within)};
+    }
+    const VirtualCaret& caret = *virtual_caret_;
+    if (lines_.empty() || rows.empty()) return {0, 0};
+    const std::size_t last_line = lines_.size() - 1U;
+    if (caret.line > last_line) {
+        const int below = static_cast<int>(caret.line - last_line);
+        return {static_cast<int>(rows.size()) - 1 + below, static_cast<int>(caret.column)};
+    }
+    // Past a line's end: on that line's last display row, counted from where
+    // that row starts.
+    for (std::size_t index = rows.size(); index-- > 0;) {
+        const DisplayRow& row = rows[index];
+        if (row.line != caret.line) continue;
+        const DisplayRow from_line_start{row.line, 0U, row.begin_byte, false};
+        const int before = column_x(from_line_start, row.begin_byte);
+        return {static_cast<int>(index), static_cast<int>(caret.column) - before};
+    }
+    return {0, 0};
 }
 
 int TextEditor::left_column() const noexcept {
@@ -335,26 +476,36 @@ void TextEditor::relayout_scrollbars() {
     if (v_scrollbar_ == nullptr || h_scrollbar_ == nullptr) return;
     const int gutter = static_cast<int>(gutter_width());
 
+    // The extent a virtual caret reaches is content too: a caret the reader
+    // placed below the text or past a line's end must be scrollable into view.
+    const auto extent = [this](const std::vector<DisplayRow>& rows) {
+        int widest = 0;
+        for (const DisplayRow& row : rows) widest = std::max(widest, column_x(row, row.end_byte));
+        int height = static_cast<int>(rows.size());
+        if (virtual_caret_) {
+            const auto [row, column] = caret_display_cell(rows);
+            widest = std::max(widest, column + 1);
+            height = std::max(height, row + 1);
+        }
+        return Size{widest, height};
+    };
+
     // The gutter is chrome, not content: it is subtracted before the text
     // area is measured, and it never scrolls sideways with the text.
     const ScrollGeometry geometry = resolve_scroll_geometry(
         Size{std::max(0, bounds().width - gutter), bounds().height}, v_scrollbar_->policy(),
-        h_scrollbar_->policy(), [this](int viewport_width) {
-            const auto& rows = display_rows(std::max(1, viewport_width));
-            int widest = 0;
-            for (const DisplayRow& row : rows) widest = std::max(widest, column_x(row, row.end_byte));
-            return Size{widest, static_cast<int>(rows.size())};
+        h_scrollbar_->policy(), [this, &extent](int viewport_width) {
+            return extent(display_rows(std::max(1, viewport_width)));
         });
 
     viewport_width_ = geometry.viewport_width;
     viewport_height_ = geometry.viewport_height;
-    const auto& rows = display_rows(std::max(1, viewport_width_));
-    content_width_ = 0;
-    for (const DisplayRow& row : rows) content_width_ = std::max(content_width_, column_x(row, row.end_byte));
+    const Size content = extent(display_rows(std::max(1, viewport_width_)));
+    content_width_ = content.width;
 
     const int v_width = geometry.show_vertical ? std::min(1, bounds().width) : 0;
     const int h_height = geometry.show_horizontal ? std::min(1, bounds().height) : 0;
-    v_scrollbar_->set_range(static_cast<int>(rows.size()), std::max(1, geometry.viewport_height));
+    v_scrollbar_->set_range(content.height, std::max(1, geometry.viewport_height));
     h_scrollbar_->set_range(content_width_, std::max(1, geometry.viewport_width));
     v_scrollbar_->set_bounds(Rect{std::max(0, bounds().width - v_width), 0, v_width,
                                   std::max(0, bounds().height - h_height)});
@@ -370,23 +521,17 @@ void TextEditor::ensure_cursor_visible() {
                                               ? viewport_width_
                                               : bounds().width - static_cast<int>(gutter_width()));
     const auto& rows = display_rows(content_width);
-    const int cursor_row = static_cast<int>(cursor_display_row(rows));
+    const auto [cursor_row, cursor_x] = caret_display_cell(rows);
     const int height = std::max(1, viewport_height_ > 0 ? viewport_height_ : bounds().height);
+    const int extent = std::max(static_cast<int>(rows.size()), cursor_row + 1);
     if (cursor_row < top_display_row_) top_display_row_ = cursor_row;
     if (cursor_row >= top_display_row_ + height) top_display_row_ = cursor_row - height + 1;
-    top_display_row_ = std::clamp(top_display_row_, 0, std::max(0, static_cast<int>(rows.size()) - height));
+    top_display_row_ = std::clamp(top_display_row_, 0, std::max(0, extent - height));
     if (v_scrollbar_ != nullptr) v_scrollbar_->set_position(top_display_row_);
 
     // And sideways: without wrapping, a cursor walking along a long line
     // would otherwise leave the viewport and keep going unseen.
-    if (h_scrollbar_ == nullptr || cursor_row < 0 ||
-        static_cast<std::size_t>(cursor_row) >= rows.size())
-        return;
-    const DisplayRow& row = rows[static_cast<std::size_t>(cursor_row)];
-    if (row.line >= lines_.size()) return;
-    // The same line-relative byte cursor_display_row() works in.
-    const std::size_t within = cursor_.byte - std::min(cursor_.byte, lines_[row.line].start_byte);
-    const int cursor_x = column_x(row, within);
+    if (h_scrollbar_ == nullptr) return;
     if (cursor_x < h_scrollbar_->position()) {
         h_scrollbar_->set_position(cursor_x);
     } else if (cursor_x >= h_scrollbar_->position() + content_width) {
@@ -451,6 +596,21 @@ bool TextEditor::set_selection(DocumentRange range) {
 
     selection_anchor_ = range.begin;
     cursor_ = range.end;
+    virtual_caret_.reset();
+    desired_column_.reset();
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    notify_status_changed();
+    invalidate();
+    return true;
+}
+
+bool TextEditor::select_all() {
+    if (document_->byte_size() == 0U) return false;
+    selection_anchor_ = document_->begin();
+    cursor_ = document_->end();
+    virtual_caret_.reset();
+    desired_column_.reset();
     ensure_cursor_visible();
     notify_status_changed();
     invalidate();
@@ -459,7 +619,18 @@ bool TextEditor::set_selection(DocumentRange range) {
 
 EditorStatus TextEditor::status() const {
     EditorStatus result;
-    if (const auto line_column = document_->line_column(cursor_)) {
+    if (virtual_caret_) {
+        result.virtual_caret = true;
+        result.line = virtual_caret_->line + 1U;
+        std::size_t column = virtual_caret_->column;
+        if (virtual_caret_->line < lines_.size()) {
+            // Graphemes up to the line's end, then one column per blank cell.
+            const std::string& text = lines_[virtual_caret_->line].text;
+            const auto width = static_cast<std::size_t>(text::text_width(text));
+            column = grapheme_count(text) + (column - std::min(column, width));
+        }
+        result.column = column + 1U;
+    } else if (const auto line_column = document_->line_column(cursor_)) {
         result.line = line_column->line + 1U;
         result.column = line_column->column + 1U;
     }
@@ -478,26 +649,129 @@ void TextEditor::clamp_cursor() {
     if (selection_anchor_) selection_anchor_ = document_->position_at_byte(std::min(selection_anchor_->byte, document_->byte_size()));
 }
 
-void TextEditor::move_cursor(DocumentPosition target, bool extend) {
+void TextEditor::move_cursor(DocumentPosition target, bool extend, bool keep_desired_column) {
     if (target.revision != document_->revision()) return;
+    const bool had_virtual_caret = virtual_caret_.has_value();
+    virtual_caret_.reset();
+    if (!keep_desired_column) desired_column_.reset();
     if (extend) {
         if (!selection_anchor_) selection_anchor_ = cursor_;
     } else {
         selection_anchor_.reset();
     }
     cursor_ = target;
+    if (had_virtual_caret) relayout_scrollbars();
     ensure_cursor_visible();
     notify_status_changed();
     invalidate();
 }
 
-bool TextEditor::replace_selection(std::string value) {
-    if (read_only_) return false;
-    DocumentRange target = selection().value_or(DocumentRange{cursor_, cursor_});
+void TextEditor::move_vertically(std::ptrdiff_t lines, bool extend) {
+    const auto line_column = document_->line_column(cursor_);
+    if (!line_column) return;
+    if (!desired_column_) desired_column_ = line_column->column;
+    const std::ptrdiff_t last = static_cast<std::ptrdiff_t>(document_->line_count()) - 1;
+    const std::size_t target_line = static_cast<std::size_t>(
+        std::clamp(static_cast<std::ptrdiff_t>(line_column->line) + lines, std::ptrdiff_t{0}, last));
+    const std::size_t column = std::min(*desired_column_, grapheme_count(lines_[target_line].text));
+    const auto target = document_->position_at_line_column(target_line, column);
+    if (target) move_cursor(*target, extend, /*keep_desired_column=*/true);
+}
+
+DocumentPosition TextEditor::virtual_caret_anchor(const VirtualCaret& caret) const {
+    if (caret.line < lines_.size()) {
+        const Line& line = lines_[caret.line];
+        return document_->position_at_byte(line.start_byte + line.text.size()).value_or(document_->end());
+    }
+    return document_->end();
+}
+
+std::string TextEditor::virtual_caret_padding(const VirtualCaret& caret) const {
+    if (lines_.empty()) return {};
+    const std::size_t last_line = lines_.size() - 1U;
+    if (caret.line <= last_line) {
+        const auto width = static_cast<std::size_t>(text::text_width(lines_[caret.line].text));
+        return std::string(caret.column - std::min(caret.column, width), ' ');
+    }
+    return std::string(caret.line - last_line, '\n') + std::string(caret.column, ' ');
+}
+
+void TextEditor::set_virtual_space(bool enabled) {
+    if (virtual_space_ == enabled) return;
+    virtual_space_ = enabled;
+    if (!enabled && virtual_caret_) {
+        virtual_caret_.reset();
+        relayout_scrollbars();
+        ensure_cursor_visible();
+        notify_status_changed();
+        invalidate();
+    }
+}
+
+bool TextEditor::set_virtual_caret(VirtualCaret caret) {
+    if (!virtual_space_ || lines_.empty()) return false;
+    if (caret.line < lines_.size()) {
+        const auto width = static_cast<std::size_t>(text::text_width(lines_[caret.line].text));
+        if (caret.column <= width) return false;
+    }
+    selection_anchor_.reset();
+    desired_column_.reset();
+    cursor_ = virtual_caret_anchor(caret);
+    virtual_caret_ = caret;
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    notify_status_changed();
+    invalidate();
+    return true;
+}
+
+bool TextEditor::submit_edit(EditRequest request) {
+    if (read_only_ || !enabled()) return false;
+    // The request carries the provisional caret; whatever happens next, the
+    // editor no longer holds it — a host that wants one after its own
+    // transaction places it again.
+    const bool had_virtual_caret = virtual_caret_.has_value();
+    virtual_caret_.reset();
+    desired_column_.reset();
+    if (edit_handler_ && edit_handler_(*this, request)) {
+        if (had_virtual_caret && !virtual_caret_) relayout_scrollbars();
+        ensure_cursor_visible();
+        notify_status_changed();
+        invalidate();
+        return true;
+    }
+    if (request.kind == EditKind::Cut) {
+        if (context().app == nullptr) return false;
+        context().app->set_clipboard_text(request.text);
+    }
+    const DocumentEditResult result = document_->replace(request.range, std::move(request.replacement));
+    if (!result || !result.change) return false;
+    cursor_ = document_->position_at_byte(result.change->replaced_begin_byte + result.change->inserted_bytes).value_or(document_->end());
+    selection_anchor_.reset();
+    if (had_virtual_caret) relayout_scrollbars();
+    ensure_cursor_visible();
+    notify_status_changed();
+    return true;
+}
+
+bool TextEditor::submit_text(EditKind kind, std::string value) {
+    if (read_only_ || !enabled()) return false;
+    EditRequest request;
+    request.kind = kind;
+    if (virtual_caret_) {
+        const DocumentPosition anchor = virtual_caret_anchor(*virtual_caret_);
+        request.range = DocumentRange{anchor, anchor};
+        request.replacement = virtual_caret_padding(*virtual_caret_) + value;
+        request.virtual_caret = virtual_caret_;
+        request.text = std::move(value);
+        return submit_edit(std::move(request));
+    }
+    request.range = selection().value_or(DocumentRange{cursor_, cursor_});
     // Overwrite replaces complete following graphemes on the current logical
-    // line. Newline-bearing input retains ordinary insertion semantics: it
-    // must never silently consume a line boundary.
-    if (!selection() && overwrite_ && value.find('\n') == std::string::npos && cursor_.byte < document_->byte_size()) {
+    // line, for typing only. Newline-bearing input retains ordinary insertion
+    // semantics: it must never silently consume a line boundary.
+    if (kind == EditKind::Insert && !selection() && overwrite_ && value.find('\n') == std::string::npos &&
+        cursor_.byte < document_->byte_size()) {
         const auto line_column = document_->line_column(cursor_);
         if (line_column && line_column->line < lines_.size()) {
             const std::size_t line_end = lines_[line_column->line].start_byte + lines_[line_column->line].text.size();
@@ -508,16 +782,50 @@ bool TextEditor::replace_selection(std::string value) {
                 end = text::grapheme_end(current, end);
                 ++replaced;
             }
-            if (const auto position = document_->position_at_byte(end)) target.end = *position;
+            if (const auto position = document_->position_at_byte(end)) request.range.end = *position;
         }
     }
-    const DocumentEditResult result = document_->replace(target, std::move(value));
-    if (!result || !result.change) return false;
-    cursor_ = document_->position_at_byte(result.change->replaced_begin_byte + result.change->inserted_bytes).value_or(document_->end());
-    selection_anchor_.reset();
-    ensure_cursor_visible();
-    notify_status_changed();
-    return true;
+    request.replacement = value;
+    request.text = std::move(value);
+    return submit_edit(std::move(request));
+}
+
+bool TextEditor::erase(EditKind kind) {
+    if (read_only_ || !enabled()) return false;
+    // Erasing at a provisional caret has nothing to erase: it abandons the
+    // caret and leaves the text as it was.
+    if (virtual_caret_) {
+        virtual_caret_.reset();
+        relayout_scrollbars();
+        ensure_cursor_visible();
+        notify_status_changed();
+        invalidate();
+        return true;
+    }
+    EditRequest request;
+    request.kind = kind;
+    if (const auto selected = selection()) {
+        request.range = *selected;
+        return submit_edit(std::move(request));
+    }
+    const std::string value = document_->text();
+    std::size_t begin = cursor_.byte;
+    std::size_t end = cursor_.byte;
+    switch (kind) {
+        case EditKind::DeleteBackward: begin = previous_grapheme(value, cursor_.byte); break;
+        case EditKind::DeleteWordBackward: begin = previous_word(value, cursor_.byte); break;
+        case EditKind::DeleteForward:
+            end = cursor_.byte < value.size() ? text::grapheme_end(value, cursor_.byte) : cursor_.byte;
+            break;
+        case EditKind::DeleteWordForward: end = next_word(value, cursor_.byte); break;
+        default: return false;
+    }
+    if (begin == end) return false;
+    const auto first = document_->position_at_byte(begin);
+    const auto last = document_->position_at_byte(end);
+    if (!first || !last) return false;
+    request.range = DocumentRange{*first, *last};
+    return submit_edit(std::move(request));
 }
 
 bool TextEditor::copy_selection_to_clipboard() {
@@ -531,80 +839,35 @@ bool TextEditor::copy_selection_to_clipboard() {
 }
 
 bool TextEditor::cut_selection_to_clipboard() {
-    if (read_only_ || !copy_selection_to_clipboard()) return false;
-    return replace_selection({});
+    const auto target = selection();
+    if (!target) return false;
+    EditRequest request;
+    request.kind = EditKind::Cut;
+    request.text = document_->text(*target);
+    request.range = *target;
+    if (request.text.empty()) return false;
+    return submit_edit(std::move(request));
 }
 
 bool TextEditor::paste_from_clipboard() {
-    return context().app != nullptr && !context().app->clipboard_text().empty() && replace_selection(context().app->clipboard_text());
-}
-
-bool TextEditor::erase_backward() {
-    if (read_only_) return false;
-    if (selection()) return replace_selection({});
-    if (cursor_.byte == 0U) return false;
-    const std::string value = document_->text();
-    const std::size_t begin = previous_grapheme(value, cursor_.byte);
-    const auto first = document_->position_at_byte(begin);
-    if (!first) return false;
-    const DocumentEditResult result = document_->replace(DocumentRange{*first, cursor_}, "");
-    if (!result || !result.change) return false;
-    cursor_ = document_->position_at_byte(begin).value_or(document_->begin());
-    selection_anchor_.reset();
-    ensure_cursor_visible();
-    notify_status_changed();
-    return true;
-}
-
-bool TextEditor::erase_forward() {
-    if (read_only_) return false;
-    if (selection()) return replace_selection({});
-    if (cursor_.byte >= document_->byte_size()) return false;
-    const std::string value = document_->text();
-    const std::size_t end = text::grapheme_end(value, cursor_.byte);
-    const auto last = document_->position_at_byte(end);
-    if (!last) return false;
-    const DocumentEditResult result = document_->replace(DocumentRange{cursor_, *last}, "");
-    return static_cast<bool>(result);
-}
-
-bool TextEditor::erase_backward_word() {
-    if (read_only_) return false;
-    if (selection()) return replace_selection({});
-    if (cursor_.byte == 0U) return false;
-    const std::string value = document_->text();
-    const auto begin = document_->position_at_byte(previous_word(value, cursor_.byte));
-    if (!begin) return false;
-    const DocumentEditResult result = document_->replace(DocumentRange{*begin, cursor_}, "");
-    if (!result || !result.change) return false;
-    cursor_ = *begin;
-    selection_anchor_.reset();
-    ensure_cursor_visible();
-    notify_status_changed();
-    return true;
-}
-
-bool TextEditor::erase_forward_word() {
-    if (read_only_) return false;
-    if (selection()) return replace_selection({});
-    if (cursor_.byte >= document_->byte_size()) return false;
-    const std::string value = document_->text();
-    const auto end = document_->position_at_byte(next_word(value, cursor_.byte));
-    if (!end) return false;
-    const DocumentEditResult result = document_->replace(DocumentRange{cursor_, *end}, "");
-    return static_cast<bool>(result);
+    if (context().app == nullptr || context().app->clipboard_text().empty()) return false;
+    return submit_text(EditKind::Paste, context().app->clipboard_text());
 }
 
 std::size_t TextEditor::gutter_width() const {
     return show_line_numbers_ ? decimal_width(lines_.size()) + 1U : 0U;
 }
 
-Style TextEditor::style_for(std::size_t line, std::size_t line_byte, bool selected) const {
+Style TextEditor::style_for(std::size_t line, std::size_t line_byte, bool selected, ui::RoleId highlight) const {
     if (selected) return context().theme->resolve(selected_role_);
     const std::size_t absolute = line < lines_.size() ? lines_[line].start_byte + line_byte : 0U;
     for (const EditorSearchMatch& match : search_matches_)
         if (match.range.begin.revision == document_->revision() && absolute >= match.range.begin.byte && absolute < match.range.end.byte)
             return context().theme->resolve(search_role_);
+    // Host colouring replaces the profile's entirely: text it leaves
+    // unmarked is plain text, not whatever a line lexer would have made of it.
+    if (highlights_active_)
+        return context().theme->resolve(highlight != ui::kInvalidRole ? highlight : text_role_);
     SyntaxTokenKind kind = SyntaxTokenKind::Plain;
     if (line < lines_.size())
         for (const SyntaxSpan& span : lines_[line].spans)
@@ -623,7 +886,9 @@ void TextEditor::draw(scene::Painter& painter) {
     const int left = left_column();
     const auto selected = selection();
     const auto& rows = display_rows(std::max(1, content_width));
-    const int max_top = std::max(0, static_cast<int>(rows.size()) - std::max(1, rows_shown));
+    const int extent = std::max(static_cast<int>(rows.size()),
+                                virtual_caret_ ? caret_display_cell(rows).first + 1 : 0);
+    const int max_top = std::max(0, extent - std::max(1, rows_shown));
     top_display_row_ = std::clamp(top_display_row_, 0, max_top);
     constexpr std::string_view reflow_marker = "\xE2\x86\xAA";  // U+21AA ↪
     const Style marker_style = context().theme->resolve(gutter_role_);
@@ -642,6 +907,15 @@ void TextEditor::draw(scene::Painter& painter) {
                 : std::string(gutter, ' ');
             painter.draw_text(Point{0, row}, padded, context().theme->resolve(gutter_role_));
         }
+        // The first host span that could colour this row; the walk below only
+        // ever advances it, so a row costs one search however many spans the
+        // document has.
+        auto highlight = highlights_.cbegin();
+        if (highlights_active_) {
+            const std::size_t row_begin = line.start_byte + display.begin_byte;
+            highlight = std::partition_point(highlights_.cbegin(), highlights_.cend(),
+                                             [row_begin](const HighlightSpan& span) { return span.end_byte <= row_begin; });
+        }
         // Walk the row in its own columns and subtract the scroll offset, so
         // a horizontally scrolled row starts part-way through rather than
         // being dropped. The gutter is drawn above at column 0 regardless:
@@ -657,10 +931,15 @@ void TextEditor::draw(scene::Painter& painter) {
             const int x = content_x + cell_x - left;
             cell_x += width;
             byte = end;
+            ui::RoleId role = ui::kInvalidRole;
+            if (highlights_active_) {
+                while (highlight != highlights_.cend() && highlight->end_byte <= absolute) ++highlight;
+                if (highlight != highlights_.cend() && highlight->begin_byte <= absolute) role = highlight->role;
+            }
             if (x + width <= content_x) continue;               // off to the left
             if (x >= content_x + content_width) break;          // past the right edge
             if (x < content_x || x + width > content_x + content_width) continue;
-            painter.draw_text(Point{x, row}, grapheme, style_for(display.line, start_byte, highlighted));
+            painter.draw_text(Point{x, row}, grapheme, style_for(display.line, start_byte, highlighted, role));
         }
         if (display.continues && content_width > text::text_width(reflow_marker))
             painter.draw_text(Point{content_x + content_width - text::text_width(reflow_marker), row}, reflow_marker, marker_style);
@@ -670,64 +949,46 @@ void TextEditor::draw(scene::Painter& painter) {
 bool TextEditor::on_key(const KeyEvent& event) {
     if (!enabled()) return false;
     if (event.action == KeyAction::Release) return false;
-    const bool has_ctrl = has_modifier(event.chord.modifiers, Modifier::Ctrl);
-    const bool has_shift = has_modifier(event.chord.modifiers, Modifier::Shift);
+    if (context_menu_handler_ && is_keyboard_context_menu_request(event)) {
+        const Rect absolute = absolute_bounds();
+        const std::optional<CursorState> caret = cursor_state();
+        context_menu_handler_(*this, caret ? caret->position : Point{absolute.x, absolute.y});
+        return true;
+    }
+    for (const EditorKeyBinding& binding : key_bindings_)
+        if (binding.chord == event.chord) return perform(binding.command);
+    const bool control = has_modifier(event.chord.modifiers, Modifier::Ctrl);
+    const bool extend = has_modifier(event.chord.modifiers, Modifier::Shift);
     const bool has_alt_or_super = has_modifier(event.chord.modifiers, Modifier::Alt) ||
                                   has_modifier(event.chord.modifiers, Modifier::Super);
-    if (event.chord.key == Key::Insert && !has_alt_or_super) {
-        if (has_ctrl) return copy_selection_to_clipboard();
-        if (has_shift) return paste_from_clipboard();
-    }
-    if (event.chord.key == Key::Delete && has_shift && !has_ctrl && !has_alt_or_super)
-        return cut_selection_to_clipboard();
-    const bool extend = has_modifier(event.chord.modifiers, Modifier::Shift);
-    if (has_modifier(event.chord.modifiers, Modifier::Ctrl) && event.chord.key == Key::Char) {
-        if (event.chord.text == "z" || event.chord.text == "Z") return document_->undo();
-        if (event.chord.text == "y" || event.chord.text == "Y") return document_->redo();
-        if (event.chord.text == "c" || event.chord.text == "C") return copy_selection_to_clipboard();
-        if (event.chord.text == "x" || event.chord.text == "X") return cut_selection_to_clipboard();
-        if (event.chord.text == "v" || event.chord.text == "V") return paste_from_clipboard();
-        if (event.chord.text == "f" || event.chord.text == "F") return use_selection_as_search_query();
-    }
-    if (event.chord.key == Key::F3) return find_next(!has_modifier(event.chord.modifiers, Modifier::Shift));
     // Shift participates in producing ordinary text; it does not turn that
     // text into a command chord. This is the same editing-boundary contract
     // as InputLine and Memo. Alt/Ctrl/Super remain available to command
     // routing, while the terminal-provided text stays authoritative for the
     // shifted or composed character.
-    if (event.chord.key == Key::Char && !event.chord.text.empty() && !has_alt_or_super && !has_ctrl)
-        return replace_selection(event.chord.text);
+    if (event.chord.key == Key::Char && !event.chord.text.empty() && !has_alt_or_super && !control)
+        return submit_text(EditKind::Insert, event.chord.text);
+    if (event.chord.key == Key::Tab && !extend && !control && !has_alt_or_super)
+        return submit_text(EditKind::Indent, std::string(static_cast<std::size_t>(tab_width_), ' '));
     const auto line_column = document_->line_column(cursor_);
     if (!line_column) return false;
-    const bool control = has_modifier(event.chord.modifiers, Modifier::Ctrl);
-    if (event.chord.key == Key::Tab && !has_modifier(event.chord.modifiers, Modifier::Shift)) return replace_selection("    ");
     switch (event.chord.key) {
         case Key::Left: {
-            if (cursor_.byte == 0U) return true;
             const std::string value = document_->text();
-            move_cursor(*document_->position_at_byte(control ? previous_word(value, cursor_.byte) : previous_grapheme(value, cursor_.byte)), extend);
+            const std::size_t target = cursor_.byte == 0U ? 0U
+                : control ? previous_word(value, cursor_.byte) : previous_grapheme(value, cursor_.byte);
+            move_cursor(*document_->position_at_byte(target), extend);
             return true;
         }
         case Key::Right: {
-            if (cursor_.byte == document_->byte_size()) return true;
             const std::string value = document_->text();
-            move_cursor(*document_->position_at_byte(control ? next_word(value, cursor_.byte) : text::grapheme_end(value, cursor_.byte)), extend);
+            const std::size_t target = cursor_.byte == document_->byte_size() ? cursor_.byte
+                : control ? next_word(value, cursor_.byte) : text::grapheme_end(value, cursor_.byte);
+            move_cursor(*document_->position_at_byte(target), extend);
             return true;
         }
-        case Key::Up:
-            if (line_column->line > 0U) {
-                const std::size_t line = line_column->line - 1U;
-                const auto target = document_->position_at_line_column(line, std::min(line_column->column, grapheme_count(lines_[line].text)));
-                if (target) move_cursor(*target, extend);
-            }
-            return true;
-        case Key::Down:
-            if (line_column->line + 1U < document_->line_count()) {
-                const std::size_t line = line_column->line + 1U;
-                const auto target = document_->position_at_line_column(line, std::min(line_column->column, grapheme_count(lines_[line].text)));
-                if (target) move_cursor(*target, extend);
-            }
-            return true;
+        case Key::Up: move_vertically(-1, extend); return true;
+        case Key::Down: move_vertically(1, extend); return true;
         case Key::Home: move_cursor(control ? document_->begin() : *document_->position_at_line_column(line_column->line, 0), extend); return true;
         case Key::End: {
             if (control) { move_cursor(document_->end(), extend); return true; }
@@ -736,40 +997,44 @@ bool TextEditor::on_key(const KeyEvent& event) {
             if (target) move_cursor(*target, extend);
             return true;
         }
-        case Key::PageUp: top_display_row_ = std::max(0, top_display_row_ - std::max(1, bounds().height)); invalidate(); return true;
+        case Key::PageUp:
         case Key::PageDown: {
-            const int width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
-            const int maximum = std::max(0, static_cast<int>(display_rows(width).size()) - 1);
-            top_display_row_ = std::min(maximum, top_display_row_ + std::max(1, bounds().height));
-            invalidate();
+            // A page is the viewport less the row that stays in sight as the
+            // reader's anchor. The view scrolls by the same amount, so the
+            // caret keeps its place on screen while the text moves under it.
+            const int height = viewport_height_ > 0 ? viewport_height_ : bounds().height;
+            const int page = std::max(1, height - 1);
+            const int direction = event.chord.key == Key::PageUp ? -1 : 1;
+            const auto& rows = display_rows(std::max(1, viewport_width_ > 0 ? viewport_width_
+                                                                            : bounds().width - static_cast<int>(gutter_width())));
+            top_display_row_ = std::clamp(top_display_row_ + direction * page, 0,
+                                          std::max(0, static_cast<int>(rows.size()) - std::max(1, height)));
+            move_vertically(direction * page, extend);
             return true;
         }
-        case Key::Backspace: return control ? erase_backward_word() : erase_backward();
-        case Key::Delete: return control ? erase_forward_word() : erase_forward();
+        case Key::Backspace: return erase(control ? EditKind::DeleteWordBackward : EditKind::DeleteBackward);
+        case Key::Delete: return erase(control ? EditKind::DeleteWordForward : EditKind::DeleteForward);
         case Key::Enter:
             if (read_only_) return false;
-            if (newline_handler_ && newline_handler_(*this)) return true;
-            return replace_selection("\n");
-        // Through set_overwrite, so that the mode reaches the status observers
-        // with the keystroke that changed it: a toggle that only invalidated
-        // left the frame reading INS until the next cursor move republished it.
-        case Key::Insert: set_overwrite(!overwrite_); return true;
+            return submit_text(EditKind::LineBreak, "\n");
         default: return false;
     }
 }
 
 bool TextEditor::on_text(const TextEvent& event) {
-    return enabled() && !event.text.empty() && replace_selection(event.text);
+    return enabled() && !event.text.empty() &&
+           submit_text(event.from_paste ? EditKind::Paste : EditKind::Insert, event.text);
 }
 
 std::optional<DocumentPosition> TextEditor::position_for_screen_cell(Point cell) const {
     const Rect absolute = absolute_bounds();
     const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
     const auto& rows = display_rows(content_width);
-    const int row = cell.y - absolute.y + top_display_row_;
-    if (row < 0 || static_cast<std::size_t>(row) >= rows.size()) return std::nullopt;
-    const int x = cell.x - absolute.x - static_cast<int>(gutter_width()) + left_column();
-    if (x < 0) return std::nullopt;
+    if (rows.empty()) return std::nullopt;
+    // A cell below the text lands on its last row, and one in the gutter on a
+    // row's start: a click anywhere in the editor places the caret somewhere.
+    const int row = std::clamp(cell.y - absolute.y + top_display_row_, 0, static_cast<int>(rows.size()) - 1);
+    const int x = std::max(0, cell.x - absolute.x - static_cast<int>(gutter_width()) + left_column());
     const DisplayRow& display = rows[static_cast<std::size_t>(row)];
     const Line& line = lines_[display.line];
     int columns = 0;
@@ -783,6 +1048,26 @@ std::optional<DocumentPosition> TextEditor::position_for_screen_cell(Point cell)
     return document_->position_at_byte(line.start_byte + display.end_byte);
 }
 
+std::optional<VirtualCaret> TextEditor::virtual_caret_for_screen_cell(Point cell) const {
+    if (!virtual_space_ || lines_.empty()) return std::nullopt;
+    const Rect absolute = absolute_bounds();
+    const int content_width = std::max(1, bounds().width - static_cast<int>(gutter_width()));
+    const auto& rows = display_rows(content_width);
+    const int row = cell.y - absolute.y + top_display_row_;
+    const int x = cell.x - absolute.x - static_cast<int>(gutter_width()) + left_column();
+    if (row < 0 || x < 0 || rows.empty()) return std::nullopt;
+    if (static_cast<std::size_t>(row) >= rows.size()) {
+        const std::size_t below = static_cast<std::size_t>(row) - (rows.size() - 1U);
+        return VirtualCaret{lines_.size() - 1U + below, static_cast<std::size_t>(x)};
+    }
+    const DisplayRow& display = rows[static_cast<std::size_t>(row)];
+    // Past the end of a row that wraps onward is still inside its line.
+    if (display.continues || x <= column_x(display, display.end_byte)) return std::nullopt;
+    const DisplayRow from_line_start{display.line, 0U, display.begin_byte, false};
+    const int before = column_x(from_line_start, display.begin_byte);
+    return VirtualCaret{display.line, static_cast<std::size_t>(before + x)};
+}
+
 bool TextEditor::on_mouse(const MouseEvent& event) {
     if (!enabled()) return false;
     if (event.action == MouseAction::Wheel) {
@@ -792,8 +1077,21 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         invalidate();
         return true;
     }
+    const bool context_request = event.action == MouseAction::Down &&
+        (event.button == MouseButton::Right ||
+         (event.button == MouseButton::Left && has_modifier(event.modifiers, Modifier::Ctrl)));
+    if (context_request && context_menu_handler_) {
+        if (const auto target = position_for_screen_cell(event.cell)) {
+            const auto selected = selection();
+            const bool inside = selected && target->byte >= selected->begin.byte && target->byte < selected->end.byte;
+            if (!inside) move_cursor(*target, false);
+        }
+        context_menu_handler_(*this, event.cell);
+        return true;
+    }
     if (event.button != MouseButton::Left) return false;
     if (event.action == MouseAction::DoubleClick) {
+        if (const auto caret = virtual_caret_for_screen_cell(event.cell)) return set_virtual_caret(*caret);
         const auto target = position_for_screen_cell(event.cell);
         if (!target) return false;
         const std::string value = document_->text();
@@ -804,12 +1102,7 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         const auto first = document_->position_at_byte(begin);
         const auto last = document_->position_at_byte(end);
         if (!first || !last) return false;
-        selection_anchor_ = *first;
-        cursor_ = *last;
-        ensure_cursor_visible();
-        notify_status_changed();
-        invalidate();
-        return true;
+        return set_selection(DocumentRange{*first, *last});
     }
     if (event.action == MouseAction::Down) {
         const auto target = position_for_screen_cell(event.cell);
@@ -837,31 +1130,27 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
     return false;
 }
 
-void TextEditor::on_focus(const FocusEvent& event) { has_focus_ = event.gained; notify_status_changed(); invalidate(); }
+void TextEditor::on_focus(const FocusEvent&) {
+    notify_status_changed();
+    invalidate();
+}
 void TextEditor::on_resized() {
     rebuild_lines();
     relayout_scrollbars();
 }
 
 std::optional<CursorState> TextEditor::cursor_state() const {
-    if (!has_focus_ || bounds().width <= 0 || bounds().height <= 0) return std::nullopt;
+    if (!has_focus() || bounds().width <= 0 || bounds().height <= 0) return std::nullopt;
     const int gutter = static_cast<int>(gutter_width());
     const int content_width = bounds().width - gutter;
     if (content_width <= 0) return std::nullopt;
     const auto& rows = display_rows(content_width);
-    const std::size_t display_row = cursor_display_row(rows);
-    const int local_y = static_cast<int>(display_row) - top_display_row_;
+    const auto [display_row, cell_x] = caret_display_cell(rows);
+    const int local_y = display_row - top_display_row_;
     if (local_y < 0 || local_y >= bounds().height) return std::nullopt;
-    const DisplayRow& display = rows[display_row];
-    if (display.line >= lines_.size()) return std::nullopt;
-    const Line& line = lines_[display.line];
-    const std::size_t local_byte = cursor_.byte - std::min(cursor_.byte, line.start_byte);
-    int local_x = gutter;
-    for (std::size_t byte = display.begin_byte; byte < display.end_byte && byte < local_byte;) {
-        const std::size_t end = text::grapheme_end(line.text, byte);
-        local_x += text::grapheme_width(std::string_view(line.text).substr(byte, end - byte));
-        byte = end;
-    }
+    // Measured in the row's own cells and then shifted by the horizontal
+    // scroll, exactly as draw() places the text it sits in.
+    const int local_x = gutter + cell_x - left_column();
     if (local_x < gutter || local_x >= bounds().width) return std::nullopt;
     const Rect absolute = absolute_bounds();
     return CursorState{true, Point{absolute.x + local_x, absolute.y + local_y},

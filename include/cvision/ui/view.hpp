@@ -244,6 +244,10 @@ public:
     // where that padding is already present.
     virtual bool trailing_row_is_shadow() const noexcept { return false; }
     void set_preferred_size(Size size) { preferred_size_ = size; }
+    // The size a caller asked for, as set_preferred_size() left it; the
+    // default hints above read it, and a widget that measures its own
+    // content consults it so an explicit request can still win.
+    Size preferred_size() const noexcept { return preferred_size_; }
 
     // Fired on the immediate parent (M9/WP-16, E10) whenever one of its
     // direct children calls size_hint_changed() below — a container
@@ -266,6 +270,8 @@ public:
     virtual int height_for_width(int /*width*/) const { return preferred_size_.height; }
 
     bool visible() const noexcept { return visible_; }
+    // A change tells the parent (on_child_size_hint_changed), since a
+    // container lays out only the children that show.
     void set_visible(bool visible);
 
     // This view AND every ancestor visible, which is what "on the frame at
@@ -454,6 +460,15 @@ public:
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }
     void set_focus_policy(FocusPolicy policy) { focus_policy_ = policy; }
     bool focusable() const noexcept { return focus_policy_ == FocusPolicy::TabStop && visible_ && enabled_; }
+    // Whether this view is the one its Application has focused. The answer
+    // is the Application's, asked at the moment it matters — painting a
+    // face, publishing a caret, deciding whether a key release fires — and
+    // never a flag kept here from the last on_focus(): a view that left the
+    // tree while focused, was put back, or otherwise missed a notification
+    // would go on drawing itself focused beside the view that really is
+    // (the architecture §5 "Focus and traversal", D-065). A view whose
+    // context names no Application is never focused.
+    bool has_focus() const noexcept;
 
     // --- Help context (the architecture §5 "Commands and help", D-027) ---
 
@@ -560,5 +575,12 @@ private:
     std::shared_ptr<void> liveness_ = std::make_shared<int>(0);
     Context context_;
 };
+
+// The command contexts named on the path from `view` up to its root,
+// nearest first; empty for nullptr. What a surface that borrows the focus
+// for a moment — a menu walk, a context menu, a command palette — records as
+// it opens, so the commands it offers are the ones the reader's own place
+// allows rather than the ones the surface itself would.
+std::vector<std::string> command_context_path(const View* view);
 
 }  // namespace ckv::ui

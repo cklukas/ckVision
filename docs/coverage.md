@@ -22,6 +22,7 @@ column as `widget_shots`.
 | Public header | Client guide | Compiled example | Screenshot | Test family |
 |---|---|---|---|---|
 | `include/cvision/widgets/application_shell.hpp` | [Hello](tutorial-hello.md) | hello | hello-initial | test_hello_golden |
+| `include/cvision/widgets/big_clock.hpp` | [Gallery](widget-gallery.md#bigclockview) | widget_shots | widget-bigclockview | test_big_clock |
 | `include/cvision/widgets/button.hpp` | [Gallery](widget-gallery.md#button) | forms/widget_shots | widget-button | test_widgets, test_forms_smoke |
 | `include/cvision/widgets/canvas.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-canvas/widget-canvas-no-graphics | test_graphics_smoke |
 | `include/cvision/widgets/combo_box.hpp` | [Gallery](widget-gallery.md#combobox) | forms/workbench/widget_shots | widget-combobox/widget-combobox-open | test_combo_box |
@@ -41,6 +42,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/image_view.hpp` | [Graphics](graphics.md) | graphics/widget_shots | widget-imageview/graphics-no-graphics-image | test_graphics_smoke |
 | `include/cvision/widgets/input_line.hpp` | [Gallery](widget-gallery.md#inputline) | forms/widget_shots | widget-inputline | test_widgets |
 | `include/cvision/widgets/key_chord_capture.hpp` | [Gallery](widget-gallery.md#keychordcapture) | widget_shots | widget-keychordcapture | test_key_chord_capture |
+| `include/cvision/widgets/frame_text.hpp` | [Gallery](widget-gallery.md#frametext) | widget_shots, EditorWindow | widget-frametext | test_frame_text |
 | `include/cvision/widgets/label.hpp` | [Gallery](widget-gallery.md#label) | layouts/widget_shots | widget-label | test_widgets |
 | `include/cvision/widgets/list_view.hpp` | [Data views](data-views.md) | filebrowser/widget_shots | widget-listview | test_list_view |
 | `include/cvision/widgets/memo.hpp` | [Gallery](widget-gallery.md#memo) | workbench/widget_shots | widget-memo | test_memo |
@@ -61,6 +63,7 @@ column as `widget_shots`.
 | `include/cvision/widgets/status_line.hpp` | [Hello](tutorial-hello.md) | hello/widget_shots | widget-statusline | test_status_line |
 | `include/cvision/widgets/tab_control.hpp` | [Gallery](widget-gallery.md#tabcontrol) | workbench/graphics/widget_shots | widget-tabcontrol | test_tab_control |
 | `include/cvision/widgets/table.hpp` | [Data views](data-views.md) | workbench/widget_shots | widget-table/widget-table-editing | test_table |
+| `include/cvision/widgets/cell_grid.hpp` | [Data views](data-views.md#cell-grid-providers) | widget_shots | widget-cellgrid | test_cell_grid |
 | `include/cvision/widgets/terminal_report_dialog.hpp` | [Gallery](widget-gallery.md#terminal-report-dialog) | spin/widget_shots | widget-terminalreportdialog | test_terminal_report_dialog |
 | `include/cvision/widgets/terminal_scrollbar.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | interactive session | test_terminal_scrollbar |
 | `include/cvision/widgets/terminal_view.hpp` | [Embedded terminal](embedded-terminal.md) | ckvision_terminal | terminal-initial | test_terminal_view, test_terminal_app, terminal_redraw_contract |

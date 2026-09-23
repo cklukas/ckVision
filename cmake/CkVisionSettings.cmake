@@ -24,9 +24,19 @@ check_cxx_compiler_flag(-Wmissing-designated-field-initializers
 # nothing while looking like one.
 check_cxx_compiler_flag(-Wshadow-all CKVISION_HAS_WSHADOW_ALL)
 
+# The zero-warning bar is enforced by default. A build against a newer toolchain
+# than the development one can surface diagnostics that are not code defects;
+# such a build — a downstream consumer or a documentation deploy, not a code
+# gate — may turn it off with -DCKVISION_WARNINGS_AS_ERRORS=OFF. It stays ON for
+# the development and pull-request builds that are the actual gate.
+option(CKVISION_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
+
 function(ckvision_strict target)
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX /permissive- /utf-8 /EHsc)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /EHsc)
+        if(CKVISION_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE /WX)
+        endif()
         # MSVC deprecates `std::getenv` and `std::fopen` and `/WX` turns the
         # notice into an error. Both are standard C++ used correctly here, and
         # the deprecation is Microsoft's opinion about the C runtime rather
@@ -51,7 +61,10 @@ function(ckvision_strict target)
         target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
     else()
         target_compile_options(${target} PRIVATE
-            -Wall -Wextra -Wpedantic -Wshadow -Werror)
+            -Wall -Wextra -Wpedantic -Wshadow)
+        if(CKVISION_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE -Werror)
+        endif()
         if(CKVISION_HAS_WSHADOW_ALL)
             # See the probe above: the superset shadow class fails here, on
             # the developer's machine, instead of rounds later on a runner.

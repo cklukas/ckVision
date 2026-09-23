@@ -4,6 +4,9 @@
 
 #include "cvision/widgets/syntax_profile.hpp"
 
+#include <string_view>
+#include <vector>
+
 using ckv::widgets::LanguageDetectionInput;
 using ckv::widgets::SyntaxProfileRegistry;
 using ckv::widgets::SyntaxTokenKind;
@@ -120,3 +123,239 @@ CK_TEST(profile_lexing_uses_explicit_ascii_source_grammar_without_locale_classif
     for (const auto& span : first.spans) error = error || span.kind == SyntaxTokenKind::Error;
     CK_CHECK(error);
 }
+
+namespace {
+
+using ckv::widgets::SyntaxSpan;
+
+std::vector<SyntaxSpan> markdown_spans(std::string_view line, std::string_view state = "body") {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    return registry.find("markdown")->highlight_line(line, state).spans;
+}
+
+}  // namespace
+
+CK_TEST(markdown_profile_is_detected_by_file_suffix_and_by_content) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "talk.md", {}, {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "README.markdown", {}, {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "\n# Release notes\n\n- item\n", {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled",
+                                                    "---\ntitle: Field Report\nformat: slides\n---\n\n# Field Report\n", {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled",
+                                                    "---\ntitle: Field Report\n# reviewed\ntags:\n  - field\n---\n", {}}).id == "markdown");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "#hashtag first\n", {}}).id == "plain");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "#!/usr/bin/env bash\n# heading?\n", {}}).id == "bash");
+}
+
+CK_TEST(markdown_profile_leaves_yaml_that_only_looks_like_front_matter_to_yaml) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    // A document that opens with `---` but never closes the block is YAML.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "---\nname: ckVision\nversion: 1\n", {}}).id == "yaml");
+    // A line that is not `key: value` before the closing `---` ends the claim.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "---\nname: ckVision\nnot a key\n---\n", {}}).id == "yaml");
+    // The file suffix outranks a front-matter-shaped prefix.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "deck.yml", "---\ntitle: Field Report\n---\n", {}}).id == "yaml");
+}
+
+CK_TEST(markdown_profile_marks_atx_headings_whole) {
+    const std::vector<SyntaxSpan> expected{{0, 22, SyntaxTokenKind::Keyword}};
+    CK_CHECK(markdown_spans("# Field Report {a=b}  ") == expected);
+    CK_CHECK(markdown_spans("###### Deep") == std::vector<SyntaxSpan>({{0, 11, SyntaxTokenKind::Keyword}}));
+    CK_CHECK(markdown_spans("####### Not a heading").empty());
+    CK_CHECK(markdown_spans("#hashtag").empty());
+}
+
+CK_TEST(markdown_profile_marks_emphasis_strong_emphasis_and_escapes) {
+    const std::vector<SyntaxSpan> expected{{6, 17, SyntaxTokenKind::Type}, {31, 42, SyntaxTokenKind::Keyword}};
+    CK_CHECK(markdown_spans("Costs *warehouse* fell; margin **doubled**.") == expected);
+    CK_CHECK(markdown_spans("__strong__ and _em_") ==
+             std::vector<SyntaxSpan>({{0, 10, SyntaxTokenKind::Keyword}, {15, 19, SyntaxTokenKind::Type}}));
+    // Intraword underscores and unbalanced stars are text.
+    CK_CHECK(markdown_spans("snake_case_name * 2").empty());
+    CK_CHECK(markdown_spans("a \\* literal star") == std::vector<SyntaxSpan>({{2, 4, SyntaxTokenKind::Escape}}));
+}
+
+CK_TEST(markdown_profile_marks_inline_code_by_matching_backtick_runs) {
+    CK_CHECK(markdown_spans("run `make` now") == std::vector<SyntaxSpan>({{4, 10, SyntaxTokenKind::String}}));
+    CK_CHECK(markdown_spans("`` a ` b `` tail") == std::vector<SyntaxSpan>({{0, 11, SyntaxTokenKind::String}}));
+    CK_CHECK(markdown_spans("an unmatched ` stays text").empty());
+}
+
+CK_TEST(markdown_profile_carries_the_fence_state_until_the_closing_fence) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& markdown = *registry.find("markdown");
+    const auto opening = markdown.highlight_line("```cpp", "body");
+    CK_CHECK(opening.next_state == "fence:```");
+    CK_CHECK(opening.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}, {3, 6, SyntaxTokenKind::Type}}));
+    const auto body = markdown.highlight_line("# not a heading, *not* emphasis", opening.next_state);
+    CK_CHECK(body.next_state == "fence:```");
+    CK_CHECK(body.spans == std::vector<SyntaxSpan>({{0, 31, SyntaxTokenKind::String}}));
+    const auto shorter = markdown.highlight_line("``", body.next_state);
+    CK_CHECK(shorter.next_state == "fence:```");
+    const auto closing = markdown.highlight_line("````  ", shorter.next_state);
+    CK_CHECK(closing.next_state == "body");
+    CK_CHECK(closing.spans == std::vector<SyntaxSpan>({{0, 4, SyntaxTokenKind::Operator}}));
+    // A backtick fence's info string may not contain a backtick: that line is inline code.
+    CK_CHECK(markdown.highlight_line("``` a ` b ```", "body").next_state == "body");
+    CK_CHECK(markdown.highlight_line("~~~", "body").next_state == "fence:~~~");
+}
+
+CK_TEST(markdown_profile_marks_links_and_images) {
+    CK_CHECK(markdown_spans("see [the report](https://example.org/r?a=(1)) now") ==
+             std::vector<SyntaxSpan>({{4, 16, SyntaxTokenKind::Property}, {16, 45, SyntaxTokenKind::String}}));
+    CK_CHECK(markdown_spans("![alt][ref]") == std::vector<SyntaxSpan>({{0, 11, SyntaxTokenKind::Property}}));
+    CK_CHECK(markdown_spans("- [ ] a task").size() == 1U);
+    CK_CHECK(markdown_spans("[bare] brackets").empty());
+}
+
+CK_TEST(markdown_profile_marks_block_quotes_list_markers_and_rules) {
+    CK_CHECK(markdown_spans("> quoted **text**") ==
+             std::vector<SyntaxSpan>({{0, 1, SyntaxTokenKind::Operator}, {1, 17, SyntaxTokenKind::Comment}}));
+    CK_CHECK(markdown_spans("- Revenue grew *fast*") ==
+             std::vector<SyntaxSpan>({{0, 1, SyntaxTokenKind::Operator}, {15, 21, SyntaxTokenKind::Type}}));
+    CK_CHECK(markdown_spans("  12. twelfth") ==
+             std::vector<SyntaxSpan>({{2, 5, SyntaxTokenKind::Number}}));
+    CK_CHECK(markdown_spans("-no space, not a list").empty());
+    CK_CHECK(markdown_spans("* * *") == std::vector<SyntaxSpan>({{0, 5, SyntaxTokenKind::Operator}}));
+    CK_CHECK(markdown_spans("===") == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+}
+
+CK_TEST(markdown_profile_opens_front_matter_only_at_the_document_start) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& markdown = *registry.find("markdown");
+    const auto opening = markdown.highlight_line("---", "");
+    CK_CHECK(opening.next_state == "front");
+    CK_CHECK(opening.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    const auto key = markdown.highlight_line("title: Field Report", opening.next_state);
+    CK_CHECK(key.next_state == "front");
+    CK_CHECK(key.spans == std::vector<SyntaxSpan>({{0, 5, SyntaxTokenKind::Property},
+                                                   {5, 6, SyntaxTokenKind::Operator},
+                                                   {7, 19, SyntaxTokenKind::Plain}}));
+    const auto closing = markdown.highlight_line("---", key.next_state);
+    CK_CHECK(closing.next_state == "body");
+    CK_CHECK(closing.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    // The same `---` after body text is a thematic break, and the body state is kept.
+    const auto rule = markdown.highlight_line("---", closing.next_state);
+    CK_CHECK(rule.next_state == "body");
+    CK_CHECK(rule.spans == std::vector<SyntaxSpan>({{0, 3, SyntaxTokenKind::Operator}}));
+    // A document that does not start with `---` is body from its first line.
+    CK_CHECK(markdown.highlight_line("# Title", "").next_state == "body");
+}
+
+CK_TEST(markdown_profile_marks_directive_lines) {
+    CK_CHECK(markdown_spans("::steps") == std::vector<SyntaxSpan>({{0, 7, SyntaxTokenKind::Command}}));
+    CK_CHECK(markdown_spans("::step{at=2-3}") ==
+             std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::Command}, {6, 14, SyntaxTokenKind::Property}}));
+    CK_CHECK(markdown_spans("::") == std::vector<SyntaxSpan>({{0, 2, SyntaxTokenKind::Command}}));
+    CK_CHECK(markdown_spans("::figure{src=a.png} *caption*") ==
+             std::vector<SyntaxSpan>({{0, 8, SyntaxTokenKind::Command}, {8, 19, SyntaxTokenKind::Property},
+                                      {20, 29, SyntaxTokenKind::Type}}));
+    CK_CHECK(markdown_spans("::step{unclosed") ==
+             std::vector<SyntaxSpan>({{0, 6, SyntaxTokenKind::Command}, {6, 15, SyntaxTokenKind::Property}}));
+}
+
+namespace {
+
+std::vector<SyntaxSpan> sql_spans(std::string_view line, std::string_view state = "") {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    return registry.find("sql")->highlight_line(line, state).spans;
+}
+
+/// The kind covering `text` in `line`, or Plain when nothing covers it.
+SyntaxTokenKind sql_kind_of(std::string_view line, std::string_view text) {
+    const std::size_t at = line.find(text);
+    if (at == std::string_view::npos) return SyntaxTokenKind::Error;
+    for (const SyntaxSpan& span : sql_spans(line))
+        if (span.begin_byte <= at && at + text.size() <= span.end_byte) return span.kind;
+    return SyntaxTokenKind::Plain;
+}
+
+}  // namespace
+
+CK_TEST(sql_profile_is_detected_by_file_suffix_and_by_a_leading_statement_word) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "report.sql", {}, {}}).id == "sql");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "select 1", {}}).id == "sql");
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled", "  CREATE TABLE t (id INTEGER)", {}}).id == "sql");
+    // A statement's bound parameters put a colon in most of them, which is
+    // all YAML's content rule asks for; the statement word outranks it.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "untitled",
+                                                     "SELECT company FROM customers WHERE revenue > :least", {}})
+                 .id == "sql");
+    // Prose that merely mentions a table is nobody's source.
+    CK_CHECK(registry.detect(LanguageDetectionInput{std::nullopt, "notes.txt", "the customers table", {}}).id == "plain");
+}
+
+CK_TEST(sql_profile_marks_keywords_types_numbers_calls_and_operators) {
+    const std::string_view line = "SELECT count(id), price * 1.5e2, 0xFF FROM items WHERE ok = true;";
+    CK_CHECK(sql_kind_of(line, "SELECT") == SyntaxTokenKind::Keyword);
+    CK_CHECK(sql_kind_of(line, "FROM") == SyntaxTokenKind::Keyword);
+    // A word before '(' is a call, whoever defined it.
+    CK_CHECK(sql_kind_of(line, "count") == SyntaxTokenKind::Command);
+    CK_CHECK(sql_kind_of(line, "1.5e2") == SyntaxTokenKind::Number);
+    CK_CHECK(sql_kind_of(line, "0xFF") == SyntaxTokenKind::Number);
+    CK_CHECK(sql_kind_of(line, "true") == SyntaxTokenKind::Number);
+    CK_CHECK(sql_kind_of(line, "*") == SyntaxTokenKind::Operator);
+    // An ordinary name is left alone, so the marked words stand out.
+    CK_CHECK(sql_kind_of(line, "items") == SyntaxTokenKind::Plain);
+    const std::string_view ddl = "create table t (id integer primary key, name TEXT not null)";
+    CK_CHECK(sql_kind_of(ddl, "integer") == SyntaxTokenKind::Type);
+    CK_CHECK(sql_kind_of(ddl, "TEXT") == SyntaxTokenKind::Type);
+    CK_CHECK(sql_kind_of(ddl, "create") == SyntaxTokenKind::Keyword);
+}
+
+CK_TEST(sql_profile_paints_a_quoted_name_as_a_name_and_only_single_quotes_as_text) {
+    // SQL's own trap: "abc" is a NAME, not the text abc, and an engine that
+    // accepts it where no such column exists changes what the statement means.
+    const std::string_view line = "SELECT \"company\", [order], `qty` FROM t WHERE name = 'it''s'";
+    CK_CHECK(sql_kind_of(line, "\"company\"") == SyntaxTokenKind::Property);
+    CK_CHECK(sql_kind_of(line, "[order]") == SyntaxTokenKind::Property);
+    CK_CHECK(sql_kind_of(line, "`qty`") == SyntaxTokenKind::Property);
+    // The doubled quote is one quote inside the text, not its end.
+    CK_CHECK(sql_kind_of(line, "'it''s'") == SyntaxTokenKind::String);
+}
+
+CK_TEST(sql_profile_marks_every_spelling_of_a_bound_parameter) {
+    const std::string_view line = "SELECT * FROM t WHERE a = :least AND b = @name AND c = $id AND d = ? AND e = ?1";
+    for (const std::string_view parameter : {":least", "@name", "$id", "?1"})
+        CK_CHECK(sql_kind_of(line, parameter) == SyntaxTokenKind::Property);
+    // A lone '?' is a parameter too; a lone ':' is punctuation.
+    CK_CHECK(sql_kind_of("SELECT ?", "?") == SyntaxTokenKind::Property);
+    CK_CHECK(sql_kind_of("SELECT a : b", ":") == SyntaxTokenKind::Operator);
+}
+
+CK_TEST(sql_profile_carries_a_block_comment_and_an_unclosed_string_across_lines) {
+    SyntaxProfileRegistry registry;
+    ckv::widgets::register_standard_syntax_profiles(registry);
+    const auto& sql = *registry.find("sql");
+    const auto opened = sql.highlight_line("SELECT 1 /* why this", "");
+    CK_CHECK(opened.next_state == "comment");
+    const auto inside = sql.highlight_line("still the comment", opened.next_state);
+    CK_CHECK(inside.next_state == "comment");
+    CK_CHECK(inside.spans.size() == 1U && inside.spans.front().kind == SyntaxTokenKind::Comment);
+    const auto closed = sql.highlight_line("ends */ FROM t", inside.next_state);
+    CK_CHECK(closed.next_state.empty());
+    bool keyword = false;
+    for (const auto& span : closed.spans) keyword = keyword || span.kind == SyntaxTokenKind::Keyword;
+    CK_CHECK(keyword);
+
+    const auto open_text = sql.highlight_line("SELECT 'unterminated", "");
+    CK_CHECK(open_text.next_state == "string");
+    const auto end_text = sql.highlight_line("still text' FROM t", open_text.next_state);
+    CK_CHECK(end_text.next_state.empty());
+    CK_CHECK(end_text.spans.front().kind == SyntaxTokenKind::String);
+
+    // A line comment ends at the line, whatever follows it.
+    const auto commented = sql.highlight_line("SELECT 1 -- a note with 'quotes' and /*", "");
+    CK_CHECK(commented.next_state.empty());
+    CK_CHECK(commented.spans.back().kind == SyntaxTokenKind::Comment);
+}
+

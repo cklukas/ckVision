@@ -131,11 +131,29 @@ public:
     void set_active(bool active);
     bool active() const noexcept { return active_; }
 
+    // The style the border is drawn in now: the active or the inactive frame
+    // role, with the chrome background override applied. Text set into the
+    // border (FrameText) wears it, so it follows the window's activation.
+    // Meaningful once the window is attached and its roles are resolved.
+    Style frame_style() const;
+
     // The sole content child, positioned to fill the interior (inside
     // the 1-cell frame border). Replaces and returns ownership of any
     // previous content (nullptr if there was none).
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
+
+    // A view laid over the content for a while — a clock face, a history
+    // being read, a "working…" sheet — without taking the content's place.
+    // The content stays where it is and keeps running underneath; the cover
+    // is kept exactly on content_rect(), above the content and below nothing
+    // else of this window's, through every move, resize and margin change,
+    // and it is stacked with this window, so another window in front of this
+    // one is in front of the cover too. Replaces and returns any previous
+    // cover; nullptr removes it. The cover is a child of this window, so it
+    // goes when the window does.
+    std::unique_ptr<ui::View> set_content_cover(std::unique_ptr<ui::View> cover);
+    ui::View* content_cover() const noexcept { return content_cover_; }
 
     // The framed content's intrinsic size plus the two-cell frame. Desktop
     // presentation uses these hints to give an otherwise unpositioned modal
@@ -461,6 +479,7 @@ private:
     std::optional<Color> chrome_background_override_;
 
     ui::View* content_ = nullptr;
+    ui::View* content_cover_ = nullptr;
     std::unordered_map<ui::View*, FrameSlot> frame_overlays_;
     ui::View* add_frame_overlay_impl(std::unique_ptr<ui::View> view, FrameSlot slot);
 
