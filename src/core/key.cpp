@@ -22,7 +22,7 @@ struct NamedKey {
 // every existing comment and test name in this codebase already
 // spells it that way (grep the repo — "Esc" appears dozens of times,
 // "Escape" only as the enumerator name itself).
-constexpr std::array<NamedKey, 26> kNamedKeys{{
+constexpr std::array<NamedKey, 35> kNamedKeys{{
     {Key::Enter, "Enter"},
     {Key::Escape, "Esc"},
     {Key::Tab, "Tab"},
@@ -49,6 +49,15 @@ constexpr std::array<NamedKey, 26> kNamedKeys{{
     {Key::F10, "F10"},
     {Key::F11, "F11"},
     {Key::F12, "F12"},
+    {Key::LeftShift, "LeftShift"},
+    {Key::LeftCtrl, "LeftCtrl"},
+    {Key::LeftAlt, "LeftAlt"},
+    {Key::LeftSuper, "LeftSuper"},
+    {Key::RightShift, "RightShift"},
+    {Key::RightCtrl, "RightCtrl"},
+    {Key::RightAlt, "RightAlt"},
+    {Key::RightSuper, "RightSuper"},
+    {Key::Menu, "Menu"},
 }};
 
 bool ascii_ci_equal(std::string_view a, std::string_view b) noexcept {
@@ -143,6 +152,9 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
     KeyChord result;
     result.modifiers = modifiers;
     if (const auto named = key_from_name(remaining)) {
+        // A standalone key never reaches a command binding (D-074), so a
+        // chord naming one would be a binding that can never fire.
+        if (is_standalone_key(*named)) return std::nullopt;
         result.key = *named;
     } else {
         const std::vector<std::string_view> graphemes = text::split_graphemes(remaining);

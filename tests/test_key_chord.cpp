@@ -19,12 +19,26 @@ CK_TEST(key_name_round_trips_through_key_from_name_for_every_named_key) {
                          Key::Home,    Key::End,      Key::PageUp, Key::PageDown,
                          Key::F1,      Key::F2,       Key::F3,   Key::F4,        Key::F5,
                          Key::F6,      Key::F7,       Key::F8,   Key::F9,        Key::F10,
-                         Key::F11,     Key::F12};
+                         Key::F11,     Key::F12,
+                         Key::LeftShift, Key::LeftCtrl, Key::LeftAlt, Key::LeftSuper,
+                         Key::RightShift, Key::RightCtrl, Key::RightAlt, Key::RightSuper,
+                         Key::Menu};
     for (Key k : keys) {
         const auto looked_up = key_from_name(key_name(k));
         CK_CHECK(looked_up.has_value());
         CK_CHECK(*looked_up == k);
     }
+}
+
+CK_TEST(standalone_keys_have_names_but_no_chord) {
+    CK_CHECK(key_name(Key::LeftSuper) == "LeftSuper");
+    CK_CHECK(key_name(Key::Menu) == "Menu");
+    CK_CHECK(ckv::is_standalone_key(Key::LeftShift));
+    CK_CHECK(ckv::is_standalone_key(Key::Menu));
+    CK_CHECK(!ckv::is_standalone_key(Key::Char));
+    CK_CHECK(!ckv::is_standalone_key(Key::F12));
+    CK_CHECK(!KeyChord::parse("RightSuper").has_value());
+    CK_CHECK(!KeyChord::parse("Alt+LeftShift").has_value());
 }
 
 CK_TEST(escape_is_named_esc_not_escape) {

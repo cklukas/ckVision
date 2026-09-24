@@ -391,6 +391,13 @@ public:
     // behavior a second time when a kitty-enabled terminal reports it.
     virtual bool on_key(const KeyEvent&) { return false; }
     virtual bool on_key_release(const KeyEvent&) { return false; }
+    // Opts this view into the standalone keys (is_standalone_key: the
+    // modifier keys, Super and Menu reported on their own, D-074). Views
+    // that do not opt in are skipped on the route for those events — and
+    // no command binding ever sees one — so a control written for chords
+    // never receives a key it has no meaning for. A view that forwards
+    // physical keys (an emulator's keyboard) answers true.
+    virtual bool accepts_standalone_keys() const noexcept { return false; }
     virtual bool on_text(const TextEvent&) { return false; }
     virtual bool on_mouse(const MouseEvent&) { return false; }
     virtual void on_focus(const FocusEvent&) {}

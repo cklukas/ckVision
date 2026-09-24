@@ -42,6 +42,9 @@ public:
     int focus_lost = 0;
     bool consume_keys = false;
     bool consume_key_releases = false;
+    bool standalone_keys = false;
+
+    bool accepts_standalone_keys() const noexcept override { return standalone_keys; }
 
     bool on_key(const ckv::KeyEvent&) override {
         ++key_events;
@@ -553,6 +556,54 @@ CK_TEST(key_release_uses_the_dedicated_route_and_never_activates_a_command) {
     CK_CHECK(probe->key_events == 0);
     CK_CHECK(probe->key_release_events == 1);
     CK_CHECK(!command_ran);
+}
+
+CK_TEST(standalone_keys_reach_only_views_that_opt_in_and_never_a_command) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    auto* container = static_cast<ProbeView*>(app.root().add_child(std::make_unique<ProbeView>()));
+    auto* leaf = static_cast<ProbeView*>(container->add_child(std::make_unique<ProbeView>()));
+    leaf->set_focus_policy(FocusPolicy::TabStop);
+    app.set_focus(leaf);
+    // Even a binding somehow spelled for a standalone key cannot be made:
+    // no chord names one (D-074).
+    CK_CHECK(!KeyChord::parse("LeftCtrl").has_value());
+    CK_CHECK(!KeyChord::parse("Ctrl+Menu").has_value());
+    const ckv::ui::CommandId any = app.commands().declare(
+        {.key = "test.menu", .title = "Menu", .category = "App", .chord = "F10"});
+    bool command_ran = false;
+    app.set_command_handler(any, [&] { command_ran = true; });
+
+    // Nobody opted in: the key is delivered to no one and left unhandled.
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::LeftSuper, Modifier::None, ""}}));
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::LeftCtrl, Modifier::Ctrl, ""},
+                                         ckv::KeyAction::Release}));
+    CK_CHECK(leaf->key_events == 0);
+    CK_CHECK(leaf->key_release_events == 0);
+    CK_CHECK(container->key_events == 0);
+
+    // An ancestor that opts in receives them past a leaf that did not, on
+    // the same press and release routes as any other key.
+    container->standalone_keys = true;
+    container->consume_keys = true;
+    container->consume_key_releases = true;
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""}}));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Menu, Modifier::None, ""},
+                                        ckv::KeyAction::Release}));
+    CK_CHECK(leaf->key_events == 0);
+    CK_CHECK(container->key_events == 1);
+    CK_CHECK(container->key_release_events == 1);
+
+    // An opted-in view that declines still does not hand it to a command.
+    container->consume_keys = false;
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::RightAlt, Modifier::Alt, ""}}));
+    CK_CHECK(container->key_events == 2);
+    CK_CHECK(!command_ran);
+
+    // Ordinary chords are untouched by the opt-in.
+    CK_CHECK(!app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}));
+    CK_CHECK(leaf->key_events == 1);
 }
 
 CK_TEST(unconsumed_key_walks_up_through_ancestors_until_one_consumes_it) {

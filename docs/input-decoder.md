@@ -38,9 +38,13 @@ is deliberately deferred, and why — the same discipline as
   (Enter/Tab/Escape/Backspace), arbitrary Unicode codepoints as `Key::Char`,
   and the functional private-use block 57344–63743: the keypad's navigation
   keys map to their named keys, the keypad's character keys type their
-  canonical character, and every other functional code — modifier and lock
-  keys, media keys, F13 and beyond — is consumed deliberately rather than
-  delivered as private-use text. The alternate-key subparameters are parsed
+  canonical character, the modifier keys, both Super keys and Menu decode
+  as standalone keys (`Key::LeftShift` … `Key::RightSuper`, `Key::Menu`;
+  D-074) that `Application` routes only to a view whose
+  `View::accepts_standalone_keys()` is true and never to a command, and
+  every other functional code — lock keys, Hyper and Meta, media keys, F13
+  and beyond — is consumed deliberately rather than delivered as
+  private-use text. The alternate-key subparameters are parsed
   and ignored (D-047: the model carries a key and the text it produced, not
   the layout behind them); the associated-text field is authoritative for
   `Key::Char` text, because under the all-keys-as-escape-codes enhancement

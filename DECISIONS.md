@@ -1784,3 +1784,25 @@ true for every engine's function set and for the ones an application adds.
 the next, and stale by the following release); a dialect flag (the spelling
 differences a terminal editor can see are the quoting brackets, and all three
 are accepted as names).
+
+**D-074 — The modifier, Super and Menu keys are keys in their own right, for a
+view that asks.** Under kitty's all-keys-as-escape-codes enhancement a host
+reports every modifier key's press and release, both Super keys and the Menu
+key as events of their own. The decoder used to consume them, because no
+control had a meaning for them. An emulator does: a guest that reads raw scan
+codes must see Ctrl go down before Esc and Win arrive with nothing else at
+all. So `Key` names them (`LeftShift` … `RightSuper`, `Menu`;
+`is_standalone_key()`), the decoder delivers them with their event type and
+release promise like every escape-coded key, and `Application` routes them
+only to views whose `View::accepts_standalone_keys()` answers true, skipping
+every other view on the route and never consulting a command binding. A
+chord cannot name one (`KeyChord::parse` refuses), so no binding can wait for
+a key it will never receive. A legacy session never produces them, and an
+application whose views do not opt in sees exactly the events it saw before.
+Lock keys, Hyper, Meta and the media keys stay consumed: nothing yet asks for
+them. *Rejected:* delivering them to every view (a text field or menu would
+start receiving keys it can only misread, and a bare Alt could begin to act
+as an accelerator); a new `TerminalEvent` alternative (every exhaustive
+visitor in every embedding breaks for a key that is still a key); a
+session-wide decoder switch (the question is which view wants physical keys,
+and it moves with focus).

@@ -297,10 +297,11 @@ CK_TEST(kitty_functional_private_use_block_policy) {
     caps.keyboard_protocol = KeyboardProtocol::Kitty;
     caps.kitty_keyboard_flags = kKittyRequestedFlags;
 
-    // A lone modifier key is a real key this model does not name:
+    // A lock key, Hyper or Meta is a real key this model does not name:
     // consumed, press and release alike, never private-use text.
-    CK_CHECK(decode_all("\x1B[57441u", caps).empty());
-    CK_CHECK(decode_all("\x1B[57441;1:3u", caps).empty());
+    CK_CHECK(decode_all("\x1B[57358u", caps).empty());         // CAPS_LOCK
+    CK_CHECK(decode_all("\x1B[57445;1:3u", caps).empty());     // LEFT_HYPER
+    CK_CHECK(decode_all("\x1B[57452;9u", caps).empty());       // RIGHT_META
 
     // Keypad Enter is an Enter wherever it sits; keypad navigation maps to
     // the named keys, releases included.
@@ -324,6 +325,67 @@ CK_TEST(kitty_functional_private_use_block_policy) {
     auto kp_five_bare = decode_all("\x1B[57404u", bare);
     CK_CHECK(as_key(kp_five_bare[0]).chord.text == "5");
     CK_CHECK(decode_all("\x1B[57404;1:3u", caps).empty());
+}
+
+CK_TEST(kitty_standalone_modifier_super_and_menu_keys) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+
+    // Each modifier key, both Super keys and Menu decode as their own
+    // standalone key (D-074), carrying the host's modifier state and the
+    // event type, and promising a release like every escape-coded key.
+    struct Case {
+        const char* bytes;
+        Key key;
+    };
+    const Case cases[] = {
+        {"\x1B[57441;2u", Key::LeftShift},  {"\x1B[57442;5u", Key::LeftCtrl},
+        {"\x1B[57443;3u", Key::LeftAlt},    {"\x1B[57444;9u", Key::LeftSuper},
+        {"\x1B[57447;2u", Key::RightShift}, {"\x1B[57448;5u", Key::RightCtrl},
+        {"\x1B[57449;3u", Key::RightAlt},   {"\x1B[57450;9u", Key::RightSuper},
+        {"\x1B[57363u", Key::Menu},
+    };
+    for (const Case& c : cases) {
+        auto events = decode_all(c.bytes, caps);
+        CK_CHECK(events.size() == 1);
+        const KeyEvent& event = as_key(events[0]);
+        CK_CHECK(event.chord.key == c.key);
+        CK_CHECK(is_standalone_key(event.chord.key));
+        CK_CHECK(event.chord.text.empty());
+        CK_CHECK(event.action == KeyAction::Press);
+        CK_CHECK(event.reports_release);
+    }
+    auto ctrl = decode_all("\x1B[57442;5u", caps);
+    CK_CHECK(as_key(ctrl[0]).chord.modifiers == Modifier::Ctrl);
+
+    // Releases and repeats keep their transition; a release reports the
+    // modifier state after the key went up.
+    auto super_release = decode_all("\x1B[57444;1:3u", caps);
+    CK_CHECK(as_key(super_release[0]).chord.key == Key::LeftSuper);
+    CK_CHECK(as_key(super_release[0]).action == KeyAction::Release);
+    CK_CHECK(as_key(super_release[0]).chord.modifiers == Modifier::None);
+    auto shift_repeat = decode_all("\x1B[57447;2:2u", caps);
+    CK_CHECK(as_key(shift_repeat[0]).chord.key == Key::RightShift);
+    CK_CHECK(as_key(shift_repeat[0]).action == KeyAction::Repeat);
+
+    // Ctrl+Esc as a host reporting physical keys sends it: four events in
+    // physical order, the Escape carrying the held Ctrl.
+    auto chord = decode_all("\x1B[57442;5u\x1B[27;5u\x1B[27;5:3u\x1B[57442;1:3u", caps);
+    CK_CHECK(chord.size() == 4);
+    CK_CHECK(as_key(chord[0]).chord.key == Key::LeftCtrl);
+    CK_CHECK(as_key(chord[1]).chord.key == Key::Escape);
+    CK_CHECK(as_key(chord[1]).chord.modifiers == Modifier::Ctrl);
+    CK_CHECK(as_key(chord[2]).action == KeyAction::Release);
+    CK_CHECK(as_key(chord[3]).chord.key == Key::LeftCtrl);
+    CK_CHECK(as_key(chord[3]).action == KeyAction::Release);
+
+    // Outside a kitty session the same bytes are no key at all.
+    Capabilities legacy = baseline_capabilities();
+    for (const Case& c : cases)
+        for (const TerminalEvent& event : decode_all(c.bytes, legacy))
+            CK_CHECK(!std::holds_alternative<KeyEvent>(event) ||
+                     !is_standalone_key(std::get<KeyEvent>(event).chord.key));
 }
 
 CK_TEST(kitty_event_types_on_legacy_form_functional_keys) {

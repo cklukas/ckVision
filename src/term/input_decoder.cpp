@@ -144,12 +144,14 @@ bool session_reports_escape_coded_releases(const Capabilities& caps) noexcept {
 }
 
 // kitty's functional keys occupy the Unicode private-use block 57344-63743.
-// The ones ckVision's key model names are mapped here; the keypad's
-// character keys carry a canonical character so a numeric keypad still
-// types under the all-keys-as-escape-codes enhancement; every other code in
-// the block — the modifier and lock keys, the media keys, F13 and beyond —
-// is a real key this model does not name, consumed deliberately rather than
-// delivered to text controls as private-use garbage.
+// The ones ckVision's key model names are mapped here — the standalone
+// modifier, Super and Menu keys among them (D-074), which Application routes
+// only to a view that asks for them; the keypad's character keys carry a
+// canonical character so a numeric keypad still types under the
+// all-keys-as-escape-codes enhancement; every other code in the block — the
+// lock keys, Hyper and Meta, the media keys, F13 and beyond — is a real key
+// this model does not name, consumed deliberately rather than delivered to
+// text controls as private-use garbage.
 constexpr int kKittyFunctionalFirst = 57344;
 constexpr int kKittyFunctionalLast = 63743;
 
@@ -166,6 +168,15 @@ std::optional<Key> kitty_functional_key(int code) noexcept {
         case 57424: return Key::End;
         case 57425: return Key::Insert;
         case 57426: return Key::Delete;
+        case 57363: return Key::Menu;
+        case 57441: return Key::LeftShift;
+        case 57442: return Key::LeftCtrl;
+        case 57443: return Key::LeftAlt;
+        case 57444: return Key::LeftSuper;
+        case 57447: return Key::RightShift;
+        case 57448: return Key::RightCtrl;
+        case 57449: return Key::RightAlt;
+        case 57450: return Key::RightSuper;
         default: return std::nullopt;
     }
 }

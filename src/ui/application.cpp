@@ -633,11 +633,21 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                     // Its lifetime is explicitly caller-owned; preserve that
                     // narrow facility while all Application-owned routes use
                     // lifetime handles below.
+                    // A standalone key (a modifier, Super or Menu on its
+                    // own, D-074) reaches only views that asked for it and
+                    // never a command binding: every other control keeps
+                    // seeing exactly the chords it saw before hosts began
+                    // reporting these keys.
+                    const bool standalone = is_standalone_key(e.chord.key);
+                    const auto deliver = [&e, standalone](View& v) {
+                        if (standalone && !v.accepts_standalone_keys()) return false;
+                        return e.action == KeyAction::Release ? v.on_key_release(e) : v.on_key(e);
+                    };
                     if (scope_root == nullptr && start != nullptr && !tree_contains(root_, start)) {
                         for (View* v = start; v != nullptr; v = v->parent())
-                            if (e.action == KeyAction::Release ? v->on_key_release(e) : v->on_key(e))
+                            if (deliver(*v))
                                 return true;
-                        if (e.action == KeyAction::Release) return false;
+                        if (e.action == KeyAction::Release || standalone) return false;
                         if (auto id = commands_.command_for_key(e.chord))
                             return commands_.execute(*id, focused_command_contexts());
                         return false;
@@ -654,14 +664,14 @@ bool Application::dispatch(const term::TerminalEvent& event) {
                         if (v == nullptr ||
                             (scope_root != nullptr && !is_ancestor_of(*scope_root, *v)))
                             break;
-                        if (e.action == KeyAction::Release ? v->on_key_release(e) : v->on_key(e))
+                        if (deliver(*v))
                             return true;
                     }
                     // Commands are activations, never releases. This is a
                     // security boundary as well as compatibility behavior:
                     // a kitty release must not execute an accelerator that
                     // older controls would interpret as a second press.
-                    if (e.action == KeyAction::Release) return false;
+                    if (e.action == KeyAction::Release || standalone) return false;
                     if (scope_root != nullptr) {
                         if (auto id = commands_.command_for_key(e.chord)) {
                             const std::vector<std::string>& contexts = focused_command_contexts();

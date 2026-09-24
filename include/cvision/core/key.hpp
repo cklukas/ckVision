@@ -30,7 +30,29 @@ enum class Key : std::uint16_t {
     PageDown,
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
     Char,  // a printable character; see KeyChord::text
+    // Standalone keys: the modifier keys themselves, the two Super (Windows)
+    // keys and the Menu key, each reported as a key in its own right rather
+    // than as a bit on some other key's chord. Only a host that reports
+    // physical keys (kitty's all-keys-as-escape-codes enhancement) produces
+    // them, and Application routes them only to a view that asks
+    // (View::accepts_standalone_keys) — never to a command binding. See
+    // is_standalone_key() and DECISIONS.md D-074.
+    LeftShift,
+    LeftCtrl,
+    LeftAlt,
+    LeftSuper,
+    RightShift,
+    RightCtrl,
+    RightAlt,
+    RightSuper,
+    Menu,
 };
+
+// Whether `key` is one of the standalone keys above: a key that is a
+// physical event of its own and names no chord an application binds.
+constexpr bool is_standalone_key(Key key) noexcept {
+    return key >= Key::LeftShift && key <= Key::Menu;
+}
 
 enum class Modifier : std::uint8_t {
     None = 0,
@@ -65,7 +87,8 @@ struct KeyChord {
     // chords are represented everywhere else in the library). Returns
     // nullopt for anything that doesn't parse — an unknown modifier
     // token, an empty or multi-character trailing segment that isn't
-    // a known key name, or an empty string.
+    // a known key name, a standalone key (which no binding can ever
+    // receive), or an empty string.
     static std::optional<KeyChord> parse(std::string_view text);
 };
 
