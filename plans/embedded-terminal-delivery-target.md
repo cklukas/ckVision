@@ -124,7 +124,7 @@ not promote the complete WP-50 package or WP-37 release matrix.
 | Resize | **Done** | Live parent grip changed child ConPTY 64×17 → 57×15; held Sixel resize restored its image and child content; native two-child resize storm passed |
 | Close, child loss, and fresh allocation | **Done** | Individual window close, nonzero child exit, forced and FailFast child loss, surviving peer input, and fresh private-host allocation |
 | Resource-limit recovery | **Done** | Live 4.2 MiB Sixel rejection followed by valid image, peer input, close, and normal-demo restoration; native 128-byte limit case passed |
-| Portable contained-scene goldens | **Done** | The 79-file cell/RGBA/symbolic manifest matched byte for byte on macOS, Linux, and Windows |
+| Portable contained-scene goldens | **Done** | Contained-scene files remain byte-identical within the current 85-file cell/RGBA/symbolic manifest on macOS, Linux, and Windows |
 
 **WP-50 overall: In progress.** The installed Windows Terminal Stable and
 Preview hosts do not advertise SGR pixel-mouse mode 1016; the native private

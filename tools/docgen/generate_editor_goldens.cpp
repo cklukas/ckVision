@@ -34,13 +34,24 @@ int main(int argc, char** argv) {
     ckv::editor_example::EditorApp editor(app);
     app.step(0);
     bool complete = write("editor_initial", app);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.set_theme(ckv::ui::make_dark_theme(app.roles(), roles));
+    app.step(0);
+    complete = write("editor_initial_dark", app) && complete;
+    app.set_theme(ckv::ui::make_light_theme(app.roles(), roles));
+    app.step(0);
+    complete = write("editor_initial_light", app) && complete;
+    app.set_theme(ckv::ui::make_mono_theme(app.roles(), roles));
+    app.step(0);
+    complete = write("editor_initial_mono", app) && complete;
+    app.set_theme(ckv::ui::make_classic_theme(app.roles(), roles));
+    app.step(0);
     for (int index = 0; index < 4; ++index)
         app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Right, ckv::Modifier::Shift, ""}});
     app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Ctrl, "f"}});
     app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::F3, ckv::Modifier::None, ""}});
     app.step(0);
     complete = write("editor_search", app) && complete;
-    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
     app.set_theme(ckv::ui::make_dark_theme(app.roles(), roles));
     app.step(0);
     complete = write("editor_search_dark", app) && complete;
@@ -60,5 +71,15 @@ int main(int argc, char** argv) {
     (void)close_editor.window()->close();
     close_app.step(0);
     complete = write("editor_close_confirm", close_app) && complete;
+    const ckv::ui::StandardRoles close_roles = ckv::ui::intern_standard_roles(close_app.roles());
+    close_app.set_theme(ckv::ui::make_dark_theme(close_app.roles(), close_roles));
+    close_app.step(0);
+    complete = write("editor_close_confirm_dark", close_app) && complete;
+    close_app.set_theme(ckv::ui::make_light_theme(close_app.roles(), close_roles));
+    close_app.step(0);
+    complete = write("editor_close_confirm_light", close_app) && complete;
+    close_app.set_theme(ckv::ui::make_mono_theme(close_app.roles(), close_roles));
+    close_app.step(0);
+    complete = write("editor_close_confirm_mono", close_app) && complete;
     return complete ? 0 : 1;
 }

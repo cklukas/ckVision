@@ -52,6 +52,17 @@ std::string read_file(const char* path) {
 std::string capture(const Fixture& fixture) {
     return ckv::golden::serialize(ckv::scene::capture(fixture.app.composed_surface(), fixture.app.current_cursor()));
 }
+
+void check_scheme_frame(Fixture& fixture, std::string_view command_key, const char* golden_path) {
+    const auto command = fixture.app.commands().id_for(command_key);
+    CK_CHECK(command.has_value());
+    if (!command) return;
+    CK_CHECK(fixture.app.commands().execute(*command));
+    fixture.app.step(0);
+    const std::string expected = read_file(golden_path);
+    CK_CHECK(!expected.empty());
+    CK_CHECK(capture(fixture) == expected);
+}
 }  // namespace
 
 CK_TEST(the_editor_about_dialog_carries_the_project_copyright) {
@@ -70,6 +81,9 @@ CK_TEST(the_editor_example_initial_frame_matches_its_pinned_visual_contract) {
     const std::string expected = read_file("golden/editor_initial.dump");
     CK_CHECK(!expected.empty());
     CK_CHECK(actual == expected);
+    check_scheme_frame(f, "editor.scheme.dark", "golden/editor_initial_dark.dump");
+    check_scheme_frame(f, "editor.scheme.light", "golden/editor_initial_light.dump");
+    check_scheme_frame(f, "editor.scheme.mono", "golden/editor_initial_mono.dump");
 }
 
 CK_TEST(the_editor_example_search_highlight_matches_its_pinned_visual_contract) {
@@ -148,6 +162,11 @@ CK_TEST(the_editor_example_dirty_close_prompt_matches_its_pinned_visual_contract
     (void)f.editor.window()->close();
     f.app.step(0);
     CK_CHECK(capture(f) == read_file("golden/editor_close_confirm.dump"));
+    check_scheme_frame(f, "editor.scheme.dark", "golden/editor_close_confirm_dark.dump");
+    check_scheme_frame(f, "editor.scheme.light", "golden/editor_close_confirm_light.dump");
+    check_scheme_frame(f, "editor.scheme.mono", "golden/editor_close_confirm_mono.dump");
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.editor.document()->modified());
 }
 
 CK_TEST(the_editor_example_renders_document_chrome_and_yaml_source) {

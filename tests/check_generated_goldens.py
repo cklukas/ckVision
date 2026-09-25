@@ -16,11 +16,17 @@ OUTPUTS = {
     "generate_hello_golden": ("hello_initial.dump", "hello_greeting.dump"),
     "generate_editor_goldens": (
         "editor_initial.dump",
+        "editor_initial_dark.dump",
+        "editor_initial_light.dump",
+        "editor_initial_mono.dump",
         "editor_search.dump",
         "editor_search_dark.dump",
         "editor_search_light.dump",
         "editor_search_mono.dump",
         "editor_close_confirm.dump",
+        "editor_close_confirm_dark.dump",
+        "editor_close_confirm_light.dump",
+        "editor_close_confirm_mono.dump",
     ),
     "generate_window_activation_goldens": (
         "window_activation_before.dump",
