@@ -1433,3 +1433,40 @@ This closes the observed supplementary-Unicode editor defect and the exercised
 live editor input/search/save/reopen row. WP-37 and WP-50 remain open for the
 remaining host capability, graphics/mouse, isolation, and release matrix rows;
 none of those rows is inferred from this test.
+
+## Native Windows two-Application isolation — 2026-09-25
+
+The existing Windows nested-application fixture now runs twice at once, with
+one `WindowsTerminal` and `Application` inside each independent private ConPTY
+host. The parent sends `go` only to the first instance and observes its
+`NESTED-INPUT-OK` frame while the second remains on its original frame. It
+then sends `go` to the second, exits the first with `q`, verifies the second is
+still running with its frame intact, and exits the second independently with
+status zero. This is the explicit WP-37 native two-Application isolation row;
+it is distinct from the previously completed two-window embedded-terminal row.
+A simultaneous two-outer-application interaction under the signed-in Windows
+Terminal GUI remains open as a separate interactive acceptance step.
+
+The VM had no running ckVision example or test process before the build. The
+active source and Release build were
+`C:\Users\klukas\ckvision-wp50-20260924a\src` and
+`C:\Users\klukas\ckvision-wp50-20260924a\build`; the obsolete
+`C:\Users\klukas\ckvision-clikeys-d074\b` build output was removed while
+retaining that directory's source and evidence logs. The changed test source
+SHA-256 was `7100A9F2B840CE3335C15FBA0329D60472A9D330F3ECB9B9BE20C84C9F196A67`.
+The strict MSVC ARM64 Release `cvision_tests` build ran
+18:57:34.446–18:57:41.719 UTC (7.27 seconds) with zero warnings. Its log names
+`test_windows_terminal_subsession.cpp` as the compiled input and the linked
+runner changed from SHA-256
+`36DF800727A91ED3D7EA4ACAD39F0AA79AAEC3E1C32D38D47152E3AE3930242B`
+to `C8F4E94EAFFA6649F51BC04332159003CBBBC66EBA1756C062833DBA01ADD89E`
+after the source copy. The shorter run versus the prior comparable
+10.79-second incremental all-target build is consistent with this one-source,
+one-target build; the compile and link lines confirm freshness.
+
+The exact new native case passed **1/1**. Its owning ConPTY CTest suite passed
+**1/1** in 4.13 seconds, and the full Windows Release CTest matrix passed
+**164/164** in 13.66 seconds. Build, CTest, and source/output identity records
+are retained under `/Volumes/PRO-BLADE/tmp/ckvision-wp37-isolation-20260925`.
+WP-37 stays **In progress** for live pixel mouse, the two-outer-application GUI
+row, real legacy-console refusal, and the remaining global release matrix.

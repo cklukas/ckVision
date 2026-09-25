@@ -300,6 +300,39 @@ CK_TEST(windows_conpty_nested_ckvision_application_receives_input_inside_the_par
     CK_CHECK(session.status().exit_code == 0);
 }
 
+CK_TEST(windows_conpty_two_ckvision_applications_keep_input_and_lifetime_isolated) {
+    const auto launch = [] {
+        auto spec = ckv::term::TerminalLaunchSpec::program(CKV_NESTED_TERMINAL_CHILD_PATH);
+        spec.profile.cells = {40, 12};
+        spec.exit_policy = ckv::term::TerminalExitPolicy::TerminateAfterGrace;
+        return WindowsTerminalSubsession::launch(std::move(spec));
+    };
+    auto first = launch();
+    auto second = launch();
+    CK_CHECK(first->state() != TerminalSubsessionState::Failed);
+    CK_CHECK(second->state() != TerminalSubsessionState::Failed);
+    CK_CHECK(pump_until(*first, "NESTED-CKVISION"));
+    CK_CHECK(pump_until(*second, "NESTED-CKVISION"));
+
+    first->send_input("go");
+    CK_CHECK(pump_until(*first, "NESTED-INPUT-OK"));
+    (void)second->drain(16 * 1024);
+    CK_CHECK(screen_text(second->snapshot()).find("NESTED-INPUT-OK") == std::string::npos);
+    CK_CHECK(second->state() == TerminalSubsessionState::Running);
+
+    second->send_input("go");
+    CK_CHECK(pump_until(*second, "NESTED-INPUT-OK"));
+    first->send_input("q");
+    CK_CHECK(pump_until_exit(*first));
+    CK_CHECK(first->exit_code() == 0);
+    CK_CHECK(second->state() == TerminalSubsessionState::Running);
+    CK_CHECK(screen_text(second->snapshot()).find("NESTED-INPUT-OK") != std::string::npos);
+
+    second->send_input("q");
+    CK_CHECK(pump_until_exit(*second));
+    CK_CHECK(second->exit_code() == 0);
+}
+
 CK_TEST(windows_conpty_child_sixel_degrades_under_an_explicit_no_graphics_profile) {
     auto text_only = child({"sixel"});
     text_only.profile.sixel = false;
