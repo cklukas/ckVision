@@ -2955,8 +2955,9 @@ native clipboard export/import, the editor's Unicode input/highlighting/search
 and injected Save/reopen workflow, plain-VT ConPTY degradation, live
 two-outer-Application isolation, and the 67-file byte-identical portable
 golden manifest on macOS, Linux, and Windows.
-Live SGR pixel mouse is **Open** because the installed Windows Terminal hosts
-do not advertise mode 1016. Native two-Application isolation across
+Live SGR pixel mouse is **Open**: the installed Windows Terminal hosts
+do not advertise mode 1016, and the signed-in mintty ConPTY trial delivered
+only cell coordinates. Native two-Application isolation across
 independent private ConPTY hosts is **Done**. The separate live
 two-outer-Application GUI isolation route is also **Done**. The real
 legacy-console refusal route and final cross-platform release audit are **Open**.

@@ -1553,3 +1553,41 @@ actually starts in legacy mode. The previously passing pipe-handle refusal
 case verifies the constructor's invalid-handle diagnostic, not this host
 capability path. No additional ckVision test is warranted from a host launch
 that never reached ckVision.
+
+## Live mintty ConPTY pixel-mouse host audit — 2026-09-25
+
+Mintty's published [changelog](https://github.com/mintty/mintty/wiki/Changelog)
+claims support for mouse mode 1016 with pixel coordinates, and its
+[manual](https://mintty.github.io/mintty.1.html) documents `-P on` to enable
+ConPTY for native Windows programs. Git for Windows 2.55.0.3 was installed
+from its verified ARM64 installer on the VM disk backed by PRO-BLADE. The
+bundle's mintty 3.8.3 identified itself as `Msys-x86_64`; Windows ARM64 ran it
+under emulation. Its SHA-256 was
+`C42538DCB59DDC4B46001D50480FB2C5962E957C3022AADC70A8CA0266221FF7`.
+The source-matched ARM64 `windows_terminal_child.exe` was staged from the
+verified strict Release build, SHA-256
+`084A1B72A8793395901B7DBD6610B8BE6E0F8EE6728D720BBA8A7031E77433C8`.
+No ckVision or mintty instance was running beforehand.
+
+A signed-in Session 1 mintty window started with `-P on`; the process record
+shows mintty PIDs 7512 and 1464, its headless ConPTY `conhost.exe` PID 6580,
+and the native ARM64 fixture PID 7616. The actual VM framebuffer capture
+shows the fixture's instruction in that mintty window. The fixture reported
+`mouse_protocol=2`, `pixel_mouse=0`, `cell_pixels=7x14`, and `sixel=0`.
+A real QMP left-button down, five held moves, and release inside the window
+produced eight mouse events. The left-button events moved from cell `18,6` to
+`32,6`; every event recorded `pixel=none`. The fixture's own end marker
+confirmed `down=1 held_move=1 up=1`.
+
+This proves live SGR **cell** mouse forwarding through this mintty/ConPTY
+path. It does **not** prove mode-1016 pixel input for a native ckVision
+application. The capture cannot distinguish whether mintty omitted a required
+capability reply or whether the ConPTY route normalized its pixel reports;
+that specific cause is unverified. The live pixel-mouse row remains **Open**.
+The fixture already exercises the relevant native path, so this observation
+does not justify another synthetic test. The mintty window and one-off task
+were closed. Git for Windows, which was installed solely for this trial, was
+uninstalled successfully; its staged fixture and guest temporary files were
+removed. The exact process summary, full mouse-event log, install/uninstall
+records, and actual VM capture are under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-mintty-20260925`.

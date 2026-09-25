@@ -129,8 +129,10 @@ not promote the complete WP-50 package or WP-37 release matrix.
 **WP-50 overall: In progress.** The installed Windows Terminal Stable and
 Preview hosts do not advertise SGR pixel-mouse mode 1016; the native private
 ConPTY path passes when that capability is supplied, but a real capable-host
-gesture is still unverified. The broader degraded-host and release acceptance
-matrix remains for WP-37/WP-38. A completed named scenario above is not a
+gesture is still unverified. A signed-in mintty 3.8.3 `-P on` trial delivered a
+real held drag only as SGR cell coordinates; its exact record is in
+[WP-37 Windows evidence](windows-wp37-evidence.md). The broader
+degraded-host and release acceptance matrix remains for WP-37/WP-38. A completed named scenario above is not a
 reason to rerun it without a code change or a concrete regression risk.
 
 ## Current evidence map
