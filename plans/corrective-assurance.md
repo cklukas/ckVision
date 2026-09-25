@@ -3008,6 +3008,13 @@ and prevent milestone status from outrunning verification again.
   each milestone is changed individually only when its own exit row is fully
   supported by the report.
 
+**Current WP-38 status (2026-09-25): In progress.** The
+[M7 Windows traceability slice](windows-m7-traceability.md) maps every literal
+M7 exit item to implementation, executable and live evidence, public reference,
+and its remaining gap. It does not close M7: live pixel-mouse interaction and
+real legacy-console refusal remain Open. The complete M0–M11 appearance,
+example, reference, and release-gate audit remains Open.
+
 ## Review finding traceability
 
 | Finding from the 2026-08-08 critical review | Owning package(s) |

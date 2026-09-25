@@ -386,7 +386,7 @@ executable: `conpty.dll` in the executable directory and the matching
 `OpenConsole.exe` in the package's `arm64/`, `x64/`, or `x86/` subdirectory.
 The adapter loads only the app-local DLL and reports `sixel=true` when it is
 usable. No extra package is needed to build ckVision or to run text-only
-Windows child sessions. The named VM passes the 20-case ConPTY suite with both the inbox and
+Windows child sessions. The named VM passes the 21-case ConPTY suite with both the inbox and
 pinned modern runtime; the modern host delivers decoded red and green
 Sixel rasters and keeps a graphics peer alive after another child exits
 abruptly. The native VT outer backend
