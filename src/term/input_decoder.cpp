@@ -1080,7 +1080,6 @@ InputDecoder::ParseResult InputDecoder::parse_paste_continuation(std::string_vie
     const std::size_t safe_len = buf.size() > tail_reserve ? buf.size() - tail_reserve : 0;
     if (safe_len == 0) return {Status::Incomplete, 0, std::nullopt, std::nullopt};
     append_data(buf.substr(0, safe_len));
-    if (paste_end_candidate_) paste_recovered_ = true;
     return {Status::Complete, safe_len, std::nullopt, std::nullopt};
 }
 
@@ -1096,7 +1095,33 @@ std::optional<TerminalEvent> InputDecoder::finish_paste_if_quiet(std::int64_t no
     if (!pending_.empty()) {
         paste_candidate_tail_.append(pending_);
         pending_.clear();
-        paste_recovered_ = true;
+    }
+    // A kitty host reports the release of the paste shortcut immediately
+    // after its bracketed-paste end marker. The quiet guard must still hold
+    // that suffix out of normal key dispatch, but it is not clipboard text.
+    // Only discard a tail consisting entirely of verified release events;
+    // any press, ordinary text, or incomplete sequence remains sanitized
+    // paste data so an embedded end marker cannot inject a command.
+    if (!paste_candidate_tail_.empty() && session_reports_escape_coded_releases(caps_)) {
+        bool only_releases = true;
+        std::size_t offset = 0;
+        while (offset < paste_candidate_tail_.size()) {
+            const std::string_view tail(paste_candidate_tail_.data() + offset,
+                                        paste_candidate_tail_.size() - offset);
+            if (!tail.starts_with("\x1B[")) {
+                only_releases = false;
+                break;
+            }
+            const ParseResult parsed = parse_csi(tail);
+            const auto* const key = parsed.event ? std::get_if<KeyEvent>(&*parsed.event) : nullptr;
+            if (parsed.status != Status::Complete || parsed.consumed == 0 ||
+                parsed.updated_caps || key == nullptr || key->action != KeyAction::Release) {
+                only_releases = false;
+                break;
+            }
+            offset += parsed.consumed;
+        }
+        if (only_releases) paste_candidate_tail_.clear();
     }
     std::string recovered = std::move(paste_accum_);
     recovered += paste_candidate_tail_;

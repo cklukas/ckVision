@@ -9,12 +9,9 @@ belong to the thread that calls `step()` or `run()`.
 
 ## Driving the loop
 
-For a standalone terminal program, construct one `PosixClock`, pass that same
-object to one `PosixTerminal` and one `Application`, then call `run()`. The
-clock must outlive the terminal. `run()` does not install a shutdown or SIGINT
-handler. `PosixTerminal` owns only the terminal session handlers described
-below. Input remains poll-driven; applications do not need to set their
-terminal descriptor non-blocking.
+For a standalone terminal program, construct one platform clock, pass that same
+object to one platform terminal and one `Application`, then call `run()`. The
+clock must outlive the terminal. On POSIX use `PosixClock` and `PosixTerminal`; on Windows use `WindowsClock` and `WindowsTerminal`. `run()` does not install a shutdown or SIGINT handler. `PosixTerminal` owns only the terminal session handlers described below. Input remains poll-driven; applications do not need to set their terminal descriptor non-blocking.
 
 ## Platform-service composition
 
@@ -34,6 +31,35 @@ ckv::term::PosixTerminal terminal(clock);
 ckv::term::TerminalClipboardWriter clipboard(terminal);
 ckv::ui::Application app(terminal, clock, clipboard);
 ```
+
+On Windows, use `WindowsClock` and `WindowsTerminal` in the same composition.
+The terminal requires console stdin/stdout with VT mode support; construction
+fails with an actionable diagnostic when those handles are redirected or the
+host refuses VT input/output. It saves and restores the original console modes
+and code pages, decodes VT input with the same `InputDecoder`, and uses native
+`CF_UNICODETEXT` for clipboard export. The first frame uses conservative
+capabilities; a bounded response window may refine Sixel, pixel mouse,
+colors, geometry, and the keyboard protocol. A verified kitty reply triggers a
+session-owned flag push and readback; restoration pops that stack entry before
+leaving the alternate screen. A silent host returns to cell mouse coordinates
+and legacy keyboard input when the window expires. The named Windows Terminal
+1.24 Stable host lacks kitty support; 1.25 Preview advertises it.
+Resize notifications are read from the console input buffer because VT
+supplies no equivalent. Bracketed paste enters as a paste-marked text event;
+native `CF_UNICODETEXT` is used for export. The named VM's live Stable and Preview sessions deliver SGR cell-mouse
+press/release events; both report a positive 10×20 cell-pixel metric and Sixel,
+but neither confirms SGR pixel-mouse mode 1016. The backend therefore keeps
+cell mouse input and leaves `Capabilities::pixel_mouse` false. A live gallery
+click opens its modal and redraws the partially occluded Sixel image after
+dismissal. Microsoft's [mode 1016 feature request](https://github.com/microsoft/terminal/issues/18591)
+is still open. A live Preview round trip exported a known Unicode string through
+`CF_UNICODETEXT` and returned the same bytes as a paste-marked Ctrl+V event.
+A native Windows private-ConPTY integration test supplies positive mode-1016
+and cell-size replies, then verifies the backend delivers left press, motion,
+and release with both pixel and derived cell coordinates. This proves the
+verified-host code path. Pixel-mouse acceptance on a capable live Windows
+host, abnormal-exit restoration, and complete three-platform acceptance
+remain WP-37 work.
 
 `Application` also has the compact two-argument constructor; it owns an
 equivalent terminal-backed clipboard adapter for that instance. The
@@ -57,8 +83,9 @@ owning UI thread is intentionally backpressured with it.
 An embedding host drives the application by calling `step()` on its owning
 thread. `Application::wait_handles()` exposes a borrowed, read-only set of
 backend-native wait sources; for `PosixTerminal` it contains the terminal input
-descriptor and the private wake descriptor, followed by the readiness sources
-of every attached child terminal session. `Application::next_timer_deadline_nanos()`
+descriptor and the private wake descriptor; for `WindowsTerminal` it contains
+the console input handle and a private wake event. Child terminal readiness
+sources follow either outer backend. `Application::next_timer_deadline_nanos()`
 reports the earliest application timer, if any. The host waits on those handles
 alongside its own sources until the earlier of its deadline and that timer, then
 calls `step(clock.now_nanos())`. It must not close, reconfigure, or retain the

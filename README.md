@@ -69,7 +69,7 @@ headlessly in a test.
 - **Backends** — POSIX (real termios, signals, PTY-tested), headless, and
   record/replay. macOS is the verified platform; Linux builds and is close
   behind, with GCC's stricter warning set still being worked through;
-  Windows/ConPTY is a target, not yet a claim.
+  Windows now has a VT outer backend and ConPTY child adapter with native ARM64 smoke evidence; full Windows Terminal and three-platform acceptance are still open.
 
 Zero mandatory dependencies. C++20. `find_package(ckvision)` gives you one
 target: `ckvision::cvision`.

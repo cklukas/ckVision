@@ -5,6 +5,8 @@
 
 #if !defined(_WIN32)
 #include "cvision/term/posix_terminal_subsession.hpp"
+#else
+#include "cvision/term/windows_terminal_subsession.hpp"
 #endif
 
 namespace ckv::term {
@@ -14,9 +16,7 @@ std::unique_ptr<TerminalSubsession> launch_terminal_subsession(TerminalLaunchSpe
 #if !defined(_WIN32)
     return PosixTerminalSubsession::launch(std::move(spec), std::move(options));
 #else
-    auto failed = std::make_unique<TerminalEmulator>(spec.profile, options);
-    failed->mark_failed("Windows ConPTY terminal subsessions are not available in this build");
-    return failed;
+    return WindowsTerminalSubsession::launch(std::move(spec), std::move(options));
 #endif
 }
 

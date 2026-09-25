@@ -42,10 +42,71 @@ profile, and containment semantics may not be weakened.
 | WP-50 | Windows ConPTY child-session adapter and three-platform embedded-terminal matrix | Named Windows Terminal/ConPTY evidence plus byte-identical platform-independent goldens and degraded rows |
 
 WP-45 through WP-49 are platform-independent in their contracts and may proceed
-on the present macOS/Linux host. WP-50 is explicitly host-blocked until a
-Windows/Windows Terminal environment is available. WP-37 consumes WP-50 rather
-than treating a general backend test as a substitute for embedded-terminal
-acceptance.
+on the present macOS/Linux host. A named external-drive Windows ARM64 VM is
+available for WP-50 development. Its inbox and optional-modern ConPTY suites
+pass, including contained child Sixel through the modern runtime. A clean
+Windows ARM64 build and live Terminal Preview session show paste, nested
+ckVision input/exit, contained Sixel, a clicked File menu, concurrent children,
+individual close, nonzero child exit, isolated private-host failure/recovery,
+and app-wide teardown/relaunch. A newer live two-window pass also proves
+distinct command streams and preserved private scrollback across window
+switches; the documented File-menu pointer drag launches a fresh child. The
+same verified GUI shows the Sixel text fallback under Windows Console Host.
+The live cell-mouse route passes in Stable and Preview; Preview also passes
+a held-motion nested-child route, a parent mouse-grip resize with a measured
+private ConPTY size change, and live Sixel clipping plus private-child cleanup
+after a mouse resize and individual close. The retained scene now dims
+child raster pixels under higher-window shadows; three paired cell/RGBA
+states cover overlap, coincident-shadow union, and exact restoration. The
+three-platform 67-file manifest passes byte for byte, and a live Preview
+File menu visibly dims a contained Sixel raster and restores it when closed.
+A guarded live Preview title-bar drag moves that raster with 57,186 interior
+RGB pixels matching exactly after translation while the vacated parent region
+is uncovered.
+A live child `cls` clears 46,280 sampled raster pixels without changing
+78,480 sampled pixels outside the raster; closing that child frees its private host, and reopening
+allocates a fresh host whose raster matches 46,020 known-good pixels exactly.
+A real covering-window resize also exposed and corrected a fractional-scale
+raster seam: a decoded-Sixel regression and fresh macOS/Linux/Windows full
+suites pass, and the new Preview GUI preserves 36,640/36,640 exposed pixels
+and restores 59,640/59,640 after close.
+In another signed-in Preview run, a held Sixel-window resize shows its
+mandatory cell fallback, as the documented gesture policy requires; the
+raster and right-of-picture child content then restore 59,640/59,640
+and 89,846/89,846 pixels exactly, and the same private PowerShell accepts a new command.
+A strict live Console Host fixture records a complete degraded cell-mouse
+press/release. A separate modern-ConPTY integration case verifies two concurrent
+red/green rasters, peer close, survivor input, and graphics reallocation; the
+inbox runtime passes the corresponding text-fallback lifecycle. Neither installed Windows Terminal host advertises SGR pixel-mouse
+mode. A native private-ConPTY case now verifies mode-1016-plus-cell-metric
+promotion and dual-space press, motion, and release through the real Windows
+backend. A private-ConPTY abrupt-child-exit case also verifies that a
+graphics peer survives and a replacement session allocates after the
+terminated child is closed; the inbox runtime passes its text fallback. A new
+native resource-limit case likewise rejects an oversized Sixel payload,
+recovers to a valid picture, and leaves a concurrent graphics peer usable;
+the modern suite passes 21/21 after a new concurrent resize-storm case; the full Windows matrix passes 164/164.
+The same route now passes in the signed-in Preview GUI: forced child loss
+retains its last Sixel frame, closing the exited window removes it, the
+File menu allocates a new graphics child, and the original cmd peer accepts
+new input. The reopened image and right-of-picture child content match the pre-loss
+capture at 59,640/59,640 and 89,846/89,846 sampled pixels. Three genuine
+outer-desktop strips also match at 23,120/23,120 pixels across that route.
+A separate live Preview test deliberately triggers .NET FailFast in the
+contained Sixel PowerShell. Windows runtime, Application Error, and Error
+Reporting events confirm the fatal path; the GUI and original cmd survive,
+the image remains until the exited window closes, a fresh private child
+restores the image exactly, and the original cmd accepts new input. The same
+three outside-window strips match at 23,120/23,120 through every phase.
+A live resource-limit test now writes more than 4 MiB of Sixel from a
+contained PowerShell, observes the visible limit diagnostic and following
+text, renders a valid red picture in that same session, verifies cmd peer
+input, then closes and reopens a normal Sixel demo with exact raster
+restoration. Outside-window desktop strips remain unchanged throughout.
+Live pixel mouse, other crash classes, the remaining isolation and cell/pixel
+scenarios, other degraded paths, and the release matrix remain open. WP-37
+consumes WP-50 rather than treating a general backend test as a substitute for
+embedded-terminal acceptance.
 
 ## Current evidence map
 
@@ -57,9 +118,9 @@ the public path it exercises:
 | WP-45 | `tests/test_terminal_emulator.cpp`, `tests/test_terminal_cell_golden.cpp`, `tests/golden/terminal_cells.visual`, `tests/golden/terminal_child_sixel.visual`, and `fuzz/fuzz_terminal_emulator.cpp` |
 | WP-46 | `tests/test_posix_terminal_subsession.cpp` (Bash, alternate-screen, exit, resize, and two-session cases), `tests/posix_terminal_launch_contract.cpp`, `Application::wait_handles()`'s combined external set, and `src/ui/application.cpp`'s bounded readiness drain |
 | WP-47 | `tests/test_terminal_view.cpp`, `tests/terminal_redraw_contract.cpp`, and the nested-child cases in `tests/test_posix_terminal_subsession.cpp` |
-| WP-48 | `tests/test_virtual_display_visual_golden.cpp`, `tests/test_terminal_view.cpp`, `tests/test_virtual_display.cpp`, `tests/fixtures/snake.six`, and the outer pixel-containment assertion in the retained-window case |
+| WP-48 | `tests/test_virtual_display_visual_golden.cpp`, `tests/test_terminal_view.cpp`, `tests/test_virtual_display.cpp`, `tests/fixtures/snake.six`, the outer pixel-containment assertion in the retained-window case, and paired raw RGBA/cell goldens for real TerminalView move, resize, overlap, shadow/union/restore, clear, repaint, close, NoGraphics, and five-stage resize sequences |
 | WP-49 | `examples/terminal`, `docs/embedded-terminal.md`, `tools/docgen/capture_terminal_screenshots.cpp` (shell, full-screen, nested, menu, and Sixel captures), and the `terminal_visual_capture` CTest |
-| WP-50 | Intentionally pending a real Windows/Windows Terminal host; the non-Windows build reports an explicit unavailable adapter state and is not acceptance evidence |
+| WP-50 | `src/term/windows_terminal_subsession.cpp`, `tests/test_windows_terminal_subsession.cpp`, and `tests/windows_terminal_child.cpp` provide the in-progress native adapter and passing inbox/modern ConPTY suites; `tools/docgen/generate_terminal_plane_goldens.cpp` and six `contained_pair_*` fixtures pin simultaneous child rasters, individual close, and replacement on all three platforms. [Named Windows evidence](windows-wp50-evidence.md) records live Preview lifecycle and private-host failure/recovery, Console Host fallback, no-enhanced-reply plain-VT ConPTY, and the repaired Sixel Demo prompt placement. True pixel mouse and the remaining matrix/release rows stay open. |
 
 The map is an audit aid, not a substitute for the complete release matrix:
 the final global gate still requires the named Windows host evidence for WP-50.

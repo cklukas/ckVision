@@ -18,6 +18,8 @@ jobs:
         run: cmake --build build --config Release
       - name: Test inventory
         run: ctest --test-dir build -C Release -V -R '^test_inventory$'
+      - name: Test complete hosted suite
+        run: ctest --test-dir build -C Release --output-on-failure
       - name: Test unit suites
         run: ctest --test-dir build -C Release --output-on-failure -L unit
       - name: Test scripted and policy gates
@@ -35,9 +37,13 @@ jobs:
       - name: Test POSIX PTY contracts
         if: runner.os != 'Windows'
         run: ctest --test-dir build -C Release --output-on-failure -L pty --repeat until-pass:2
-      - name: Test Windows ConPTY contracts (WP-37 pending)
+      - name: Test Windows ConPTY child contracts
         if: runner.os == 'Windows'
-        run: echo "No ConPTY suite is registered yet; WP-37 owns this platform backend gate."
+        run: ctest --test-dir build -C Release --output-on-failure -L conpty
+      - name: Test app-local modern ConPTY graphics
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/ci/test_conpty_modern.ps1 -BuildDir build
       - name: Fuzz corpus inventory (WP-33 pending)
         run: ctest --test-dir build -C Release -V -R '^test_inventory$'
       - name: Test benchmark budget gate

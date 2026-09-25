@@ -705,6 +705,45 @@ CK_TEST(bracketed_paste_large_content_across_many_feeds) {
     CK_CHECK(as_text(completed[0]).text == expected);
 }
 
+CK_TEST(bracketed_paste_drops_only_immediate_kitty_key_releases) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+    // Observed in Windows Terminal Preview: Ctrl+V supplies a bracketed
+    // paste, then release events for V and Ctrl before the quiet guard ends.
+    const std::string wire =
+        "\x1B[200~cd Documents\\ckvision-test\\bin\x1B[201~"
+        "\x1B[118;5:3u\x1B[57442;1:3u";
+    // The opening marker has already identified this as paste; vary every
+    // following backend read boundary, including the release suffix.
+    for (std::size_t split = 6; split <= wire.size(); ++split) {
+        InputDecoder decoder(caps);
+        auto events = decoder.feed(wire.substr(0, split), 0);
+        const auto second = decoder.feed(wire.substr(split), 0);
+        events.insert(events.end(), second.begin(), second.end());
+        const auto completed = decoder.poll_timeout(kPasteTerminationQuietNanos);
+        events.insert(events.end(), completed.begin(), completed.end());
+        CK_CHECK(events.size() == 1);
+        CK_CHECK(as_text(events[0]).text == "cd Documents\\ckvision-test\\bin");
+        CK_CHECK(as_text(events[0]).from_paste);
+        CK_CHECK(!as_text(events[0]).paste_recovered);
+    }
+}
+
+CK_TEST(bracketed_paste_keeps_press_after_release_in_sanitized_recovery) {
+    Capabilities caps = baseline_capabilities();
+    caps.keyboard_protocol = KeyboardProtocol::Kitty;
+    caps.kitty_keyboard_flags = kKittyRequestedFlags;
+    // A press or other data after a candidate end remains paste, even if a
+    // release precedes it. It cannot become an injected command.
+    const auto events = decode_all(
+        "\x1B[200~safe\x1B[201~\x1B[118;5:3u\x1B[13u", caps);
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(as_text(events[0]).from_paste);
+    CK_CHECK(as_text(events[0]).paste_recovered);
+    CK_CHECK(as_text(events[0]).text == "safe\xEF\xBF\xBD[118;5:3u\xEF\xBF\xBD[13u");
+}
+
 CK_TEST(bracketed_paste_embedded_terminator_is_recovered_as_paste_not_key_input) {
     // An embedded end marker is indistinguishable from the final marker on
     // the wire. The quiet-period policy therefore keeps bytes following the

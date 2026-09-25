@@ -10,7 +10,12 @@
 namespace ckv::ui {
 
 DockRects compute_dock_layout(Rect available, DockEdgeExtents edges) noexcept {
-    Rect remaining = available;
+    // AnchorPane can retain a negative extent while a stretched child is
+    // squeezed past zero, so a later grow restores its original geometry.
+    // Dock lays out the visible area of that child: an empty axis has zero
+    // available cells, never a negative upper bound for std::clamp.
+    Rect remaining{available.x, available.y, std::max(0, available.width),
+                   std::max(0, available.height)};
     DockRects rects{};
 
     if (edges.top) {

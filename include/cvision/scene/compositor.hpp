@@ -74,13 +74,8 @@ std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 // more per logical raster region, as its occlusion-sliced output — the
 // core-typed hand-off to term::Presenter (ARCHITECTURE.md §1/§4).
 //
-// Scope note: unlike cells, a slice here carries no shadow-dimming
-// state. Cell-style shadow dimming (resolve_cell) is a style transform
-// on discrete text cells; dimming raster PIXEL content needs image-
-// level compositing math (or a policy decision to suppress the image
-// and fall back to text under a shadow), which is presenter/term-layer
-// territory once real image encoding exists — out of scope for M2/M3,
-// which only establish anchoring/occlusion-slicing/fallback.
+// A slice is split at higher-layer shadow footprints. Its shadowed bit is
+// interpreted by the presenter with the same one-half RGB transform as cells.
 
 class Compositor {
 public:
@@ -111,6 +106,11 @@ public:
     std::size_t last_compose_cells_touched() const noexcept { return cells_touched_; }
 
 private:
+    struct RasterFragment {
+        Rect rect;
+        bool shadowed = false;
+    };
+
     struct PreviousLayer {
         int id;
         Rect rect;
@@ -122,7 +122,8 @@ private:
                         const ShadowSpec& shadow);
     Cell resolve_cell(Point p, const std::vector<Layer>& layers, const ShadowSpec& shadow,
                        std::size_t exclusive_top, const Surface& background) const;
-    void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background);
+    void compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background,
+                                 const ShadowSpec& shadow);
 
     Surface frame_;
     CursorState cursor_;
@@ -135,6 +136,8 @@ private:
     std::vector<Rect> clipped_damage_;
     std::vector<Rect> rect_scratch_a_;
     std::vector<Rect> rect_scratch_b_;
+    std::vector<RasterFragment> raster_scratch_a_;
+    std::vector<RasterFragment> raster_scratch_b_;
     std::size_t cells_touched_ = 0;
 };
 

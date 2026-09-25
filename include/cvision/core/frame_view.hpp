@@ -41,14 +41,15 @@ private:
 
 // A raster region's visible remainder after occlusion, in frame-
 // absolute coordinates — the core-typed counterpart of a compositor's
-// per-frame raster output. See scene/compositor.hpp for how this is
-// produced (occlusion slicing) and the shadow-dimming scope note.
+// per-frame raster output. The compositor splits slices at occlusion and
+// shadow boundaries so the presenter can dim only the shadowed pixels.
 struct RasterSlice {
     int id = 0;
     Rect visible_rect;  // frame-absolute; a sub-rect of full_anchor
     Rect full_anchor;   // frame-absolute; the region's complete anchor
     std::shared_ptr<const Image> image;
     bool fallback_active = true;
+    bool shadowed = false;  // binary union of higher-layer shadow footprints
 };
 
 }  // namespace ckv

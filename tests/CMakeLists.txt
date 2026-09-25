@@ -142,19 +142,31 @@ ckvision_strict(terminal_redraw_contract)
 add_test(NAME terminal_redraw_contract COMMAND terminal_redraw_contract)
 set_tests_properties(terminal_redraw_contract PROPERTIES LABELS "contract;portable;terminal" TIMEOUT 30)
 
-if(UNIX)
-    set(CKVISION_POSIX_TEST_SOURCES
-        test_posix_filesystem.cpp
-        test_posix_terminal_subsession.cpp
-        test_posix_terminal.cpp)
-    target_sources(cvision_tests PRIVATE ${CKVISION_POSIX_TEST_SOURCES})
-
+if(WIN32 OR UNIX)
     add_executable(terminal_nested_child terminal_nested_child.cpp)
     target_link_libraries(terminal_nested_child PRIVATE ckvision::cvision)
     ckvision_strict(terminal_nested_child)
     add_dependencies(cvision_tests terminal_nested_child)
     target_compile_definitions(cvision_tests PRIVATE
         CKV_NESTED_TERMINAL_CHILD_PATH="$<TARGET_FILE:terminal_nested_child>")
+endif()
+
+if(WIN32)
+    add_executable(windows_terminal_child windows_terminal_child.cpp)
+    target_link_libraries(windows_terminal_child PRIVATE cvision)
+    ckvision_strict(windows_terminal_child)
+    target_sources(cvision_tests PRIVATE test_windows_terminal_subsession.cpp)
+    target_compile_definitions(cvision_tests PRIVATE
+        CKV_WINDOWS_TERMINAL_CHILD_PATH="$<TARGET_FILE:windows_terminal_child>")
+    add_dependencies(cvision_tests windows_terminal_child)
+endif()
+
+if(UNIX)
+    set(CKVISION_POSIX_TEST_SOURCES
+        test_posix_filesystem.cpp
+        test_posix_terminal_subsession.cpp
+        test_posix_terminal.cpp)
+    target_sources(cvision_tests PRIVATE ${CKVISION_POSIX_TEST_SOURCES})
 
     add_executable(posix_terminal_launch_contract posix_terminal_launch_contract.cpp)
     target_link_libraries(posix_terminal_launch_contract PRIVATE ckvision::cvision)
@@ -349,6 +361,10 @@ foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
     ckvision_add_test_suite(${test_source} "${test_labels}")
 endforeach()
 
+if(WIN32)
+    ckvision_add_test_suite(test_windows_terminal_subsession.cpp "platform;windows;conpty")
+endif()
+
 if(UNIX)
     foreach(test_source IN LISTS CKVISION_POSIX_TEST_SOURCES)
         set(test_labels "platform;posix")
@@ -456,6 +472,8 @@ add_test(NAME install_package_smoke
         -DCKVISION_SMOKE_DIR=${CMAKE_BINARY_DIR}/test-artifacts/install-package
         -DCKVISION_EXPECT_TERMINAL=$<BOOL:$<TARGET_EXISTS:ckvision_terminal>>
         -DCKVISION_EXPECT_PROFILE_SAMPLE=$<BOOL:$<TARGET_EXISTS:ckvision_editor_profile_sample>>
+        -DCKVISION_EXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+        -DCKVISION_CONFIG=$<CONFIG>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/install_package_smoke.cmake)
 # Both package tests drive `cmake --install` / `cmake --build` against the
 # one shared build tree. Run concurrently under `ctest -j`, they race each
@@ -478,6 +496,28 @@ endif()
 # Python is build/CI tooling, not a library dependency (D-004 untouched).
 # REQUIRED so the layer/include enforcement gate can never vanish silently.
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+# Regenerate the pinned scene dumps and decoded pixel planes in an isolated build-owned
+# directory and compare raw bytes. This makes each host validate the same
+# portable output without modifying the reviewed source fixtures.
+if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
+   TARGET generate_window_activation_goldens AND TARGET generate_root_resize_goldens AND
+   TARGET generate_desktop_dialog_goldens AND TARGET generate_window_z_order_golden AND
+   TARGET generate_terminal_plane_goldens)
+    add_test(NAME generated_golden_bytes
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_generated_goldens.py
+            --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden
+            --scratch ${CMAKE_BINARY_DIR}/test-artifacts/generated-goldens
+            --generator "generate_hello_golden=$<TARGET_FILE:generate_hello_golden>"
+            --generator "generate_editor_goldens=$<TARGET_FILE:generate_editor_goldens>"
+            --generator "generate_window_activation_goldens=$<TARGET_FILE:generate_window_activation_goldens>"
+            --generator "generate_root_resize_goldens=$<TARGET_FILE:generate_root_resize_goldens>"
+            --generator "generate_desktop_dialog_goldens=$<TARGET_FILE:generate_desktop_dialog_goldens>"
+            --generator "generate_window_z_order_golden=$<TARGET_FILE:generate_window_z_order_golden>"
+            --generator "generate_terminal_plane_goldens=$<TARGET_FILE:generate_terminal_plane_goldens>")
+    set_tests_properties(generated_golden_bytes PROPERTIES
+        LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
+endif()
+
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
 set_tests_properties(layer_check PROPERTIES LABELS "script;architecture" TIMEOUT 30)
@@ -549,5 +589,5 @@ endif()
 
 add_test(NAME test_inventory
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/report_test_inventory.py
-            --test-dir ${CMAKE_BINARY_DIR})
+            --test-dir ${CMAKE_BINARY_DIR} --ctest ${CMAKE_CTEST_COMMAND})
 set_tests_properties(test_inventory PROPERTIES LABELS "script;ci" TIMEOUT 30)

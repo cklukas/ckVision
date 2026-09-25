@@ -25,7 +25,7 @@ namespace {
 void write_dump(const std::filesystem::path& dir, const std::string& name, Application& app) {
     const ckv::golden::Document doc = ckv::scene::capture(app.composed_surface(), app.current_cursor());
     const std::string text = ckv::golden::serialize(doc);
-    std::ofstream out(dir / (name + ".dump"));
+    std::ofstream out(dir / (name + ".dump"), std::ios::binary);
     out << text;
     std::fprintf(stderr, "wrote %s\n", (dir / (name + ".dump")).string().c_str());
 }

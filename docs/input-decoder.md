@@ -79,8 +79,11 @@ is deliberately deferred, and why — the same discipline as
   atomic, sanitized `TextEvent` (D-040's paste rule: C0 stripped except
   tab/newline, C1 and malformed bytes replaced with U+FFFD). An end marker is
   a candidate for 50 ms: bytes arriving before that quiet boundary remain
-  paste text, never ordinary key/mouse/OSC input. Large pastes are accumulated
-  without re-scanning already-confirmed-safe bytes on every `feed()` call.
+  paste text, never ordinary key/mouse/OSC input. The one protocol exception
+  is a tail consisting solely of valid kitty key-release events after the
+  final marker; those releases are discarded rather than inserted or
+  dispatched. Large pastes are accumulated without re-scanning
+  already-confirmed-safe bytes on every `feed()` call.
 - **Focus events** (`CSI I` / `CSI O`).
 
 Focus events and bracketed paste are likewise accepted only when their
@@ -151,8 +154,12 @@ It retains the newest candidate for `kPasteTerminationQuietNanos` (50 ms). A
 later byte before that deadline is recovered as paste text; a later end marker
 makes the earlier one visible as sanitized literal text (`U+FFFD[201~`). When
 the deadline expires, the newest marker closes the paste and the atomic
-`TextEvent` is emitted. `paste_recovered` is true for an ambiguous tail,
-multiple candidates, or disconnect. An input widget therefore visibly receives
+`TextEvent` is emitted. A verified kitty session can send release events for
+Ctrl+V immediately after that marker. If the tail consists only of parsed
+key-release events, the decoder consumes it without inserting it into the
+paste or replaying it as input. Any press, text, or incomplete escape keeps
+the whole tail in sanitized recovery. `paste_recovered` is true for an
+ambiguous tail, multiple candidates, or disconnect. An input widget therefore visibly receives
 the recovered text and an application can surface an additional warning from
 that flag.
 

@@ -21,7 +21,9 @@ while **Window → Tile** and **Window → Cascade** arrange every open terminal
 window. Shift-dragging in a terminal selects visible cells and copies them to
 the application clipboard. Choose **File → New Sixel Demo** to open a second
 private child that emits a small Sixel sample before starting its interactive
-shell. With an outer Sixel profile the sample is a clipped raster; with
+shell. The child positions its prompt below the sample so its own text does
+not erase the first row of pixels. With an outer Sixel profile the sample is
+a clipped raster; with
 `NoGraphics` the same private session uses its deterministic text fallback and
 emits no outer raster bytes.
 
@@ -51,6 +53,7 @@ open dropdown before release.
 term::TerminalLaunchSpec shell = term::TerminalLaunchSpec::program("/bin/sh", {"-i"});
 shell.profile = term::embedded_xterm_sixel_profile();
 shell.environment = {{"TERM", "xterm-256color"}, {"COLORTERM", "truecolor"}};
+shell.exit_policy = core::TerminalExitPolicy::TerminateAfterGrace;
 
 term::TerminalSubsession& session = app.launch_terminal_subsession(std::move(shell));
 auto terminal = std::make_unique<widgets::TerminalView>(session);
@@ -90,19 +93,23 @@ leaves early then stops ending the way pipelines end, and starts printing
 broken-pipe complaints on the reader's screen. Nothing a host does to its own
 signals reaches a child through this library.
 
-`WaitForExit` requests a terminal hangup and waits for a graceful
-process-group exit during teardown; `TerminateAfterGrace` adds a bounded grace
-interval before escalating to process-group termination. Both policies close
-the private PTY first. Use `TerminateAfterGrace` when teardown must remain
-bounded even if a child deliberately ignores the hangup and termination
-signals.
+`WaitForExit` requests graceful termination and waits without escalation;
+`TerminateAfterGrace` escalates after a bounded grace period. POSIX sends a
+hangup and termination request to the process group, then kills it if the
+bounded policy expires. Windows sends Control-C through ConPTY, then terminates
+the child process job if the bounded policy expires. The private PTY or ConPTY
+endpoint remains owned by the adapter throughout teardown. Use the bounded
+policy when a child may ignore the graceful request.
 
 `Application` owns every launched session and drains each session through its
 ordinary step loop with a fixed bounded budget. A `TerminalView` borrows the
 session, so it must be detached before its owning application is destroyed.
 Launch failures are reported in the child view as a stable diagnostic state;
 they do not throw through the application's event loop or alter the parent's
-terminal session.
+terminal session. On Windows, a ConPTY input write or completion failure while
+the child is still running also changes that session to `Failed` with its
+Win32 diagnostic. The adapter discards that session's unwritable input queue;
+a child that has already exited follows the ordinary exit path.
 
 The emulator also keeps a bounded child-output queue. If one adapter read is
 larger than the parser work budget, its accepted tail is processed on later
@@ -346,7 +353,15 @@ separate from ordinary CSI/OSC control strings so realistic images are not
 mistaken for malformed control traffic. `TerminalView` adds
 that snapshot through the normal scene painter, which supplies a text fallback
 when outer graphics are unavailable. The normal compositor consequently owns
-clipping, occlusion, resize damage, and removal when the child clears or exits.
+clipping, occlusion, shadow dimming, resize damage, and removal when the
+child clears or exits. A higher window's cast shadow halves the covered raster
+RGB channels; overlapping shadows dim the image once, and moving or closing
+the window restores the original child pixels. A partly visible image is
+sampled in its full-image coordinate system: exposing or repainting a slice
+keeps each visible pixel identical to the same pixel of the full image, even
+when image dimensions are not whole multiples of cell dimensions.
+Sixel's percentage palette can
+round a displayed half-channel value by one level.
 The parser suite also decodes the original 256 KiB `snake.six` sample from
 libsixel as a raw byte fixture; this guards against accidentally testing an
 HTML download or a text-transcribed escape sequence instead of real Sixel.
@@ -361,7 +376,36 @@ cmake --build build --target ckvision_terminal cvision_tests
 ctest --test-dir build -R 'suite_test_(terminal_emulator|terminal_view|posix_terminal_subsession|terminal_app)|terminal_visual_capture' --output-on-failure
 ```
 
-The Windows ConPTY adapter and its host matrix are a separate platform
-acceptance requirement. A deterministic failure state is used on a build where
-that adapter is unavailable; it is not a substitute for Windows evidence.
+The Windows build includes a private ConPTY child-session adapter and a
+`conpty` CTest suite. Its named ARM64 VM passes the native child, resize,
+lifecycle, and no-graphics cases. That VM's inbox ConPTY consumes child Sixel
+before ckVision sees it, so the adapter's effective profile reports
+`sixel=false` on that path. For nested Sixel, an application can deploy the
+optional Microsoft `Microsoft.Windows.Console.ConPTY` package beside its
+executable: `conpty.dll` in the executable directory and the matching
+`OpenConsole.exe` in the package's `arm64/`, `x64/`, or `x86/` subdirectory.
+The adapter loads only the app-local DLL and reports `sixel=true` when it is
+usable. No extra package is needed to build ckVision or to run text-only
+Windows child sessions. The named VM passes the 20-case ConPTY suite with both the inbox and
+pinned modern runtime; the modern host delivers decoded red and green
+Sixel rasters and keeps a graphics peer alive after another child exits
+abruptly. The native VT outer backend
+builds the Windows gallery, editor, and contained-terminal examples. In a live
+Windows Terminal Preview session, the contained-terminal example shows a
+nested ckVision child, clipped Sixel raster, clean paste, resize, individual
+child-window close, and recovery after a nonzero child exit. A further
+signed-in Preview run retained the Sixel image after its child was forcibly
+terminated, removed it when the exited window closed, and restored the exact
+image in a fresh private child while the other shell remained responsive.
+A separate live .NET FailFast invocation in the contained PowerShell produced
+Windows fatal-error events; the GUI retained its last Sixel image, released
+the failed child and private host on close, and allocated a new graphics
+child while the original cmd terminal accepted more input.
+A live over-limit Sixel payload in that same Preview GUI displays the
+configured-limit diagnostic, then allows a valid image, independent peer
+input, individual close, and fresh graphics allocation.
+Launched directly under Windows Console Host, the same verified example displays `[sixel]` as a
+text fallback for the Sixel demo instead of drawing a raster. The live
+observations, executable hashes, process snapshots, and remaining WP-50/WP-37
+gates are in [Windows WP-50 evidence](../plans/windows-wp50-evidence.md).
 {% endraw %}

@@ -558,6 +558,47 @@ CK_TEST(occluded_slice_crops_to_its_sub_rect_not_the_whole_image) {
     CK_CHECK(term.written_bytes().find("0;0;100") == std::string_view::npos);        // blue absent: cropped out
 }
 
+CK_TEST(occlusion_crop_preserves_full_image_pixel_sampling) {
+    // The image-to-cell ratio is deliberately non-integral: independently
+    // scaling a cropped slice can shift a color boundary by one output pixel.
+    Capabilities caps = headless_sixel_profile();
+    caps.cell_pixels = Size{4, 4};
+    HeadlessTerminal full_term(Size{4, 4}, caps);
+    HeadlessTerminal clipped_term(Size{4, 4}, caps);
+    Presenter full_presenter(full_term);
+    Presenter clipped_presenter(clipped_term);
+    Surface surface = make_surface(4, 4);
+    auto image = std::make_shared<Image>(10, 10);
+    for (int y = 0; y < 10; ++y) {
+        for (int x = 0; x < 10; ++x) {
+            image->set_pixel(x, y, Image::Rgba{static_cast<std::uint8_t>(x * 20),
+                                               static_cast<std::uint8_t>(y * 20), 0, 255});
+        }
+    }
+
+    const Rect anchor{0, 0, 3, 3};
+    const Rect visible{1, 1, 2, 2};
+    full_presenter.present(surface.view(), CursorState{}, 0,
+                           {{1, anchor, anchor, image, true}});
+    clipped_presenter.present(surface.view(), CursorState{}, 0,
+                              {{1, visible, anchor, image, true}});
+
+    std::size_t mismatches = 0;
+    for (int y = 4; y < 12; ++y) {
+        for (int x = 4; x < 12; ++x) {
+            const Image::Rgba full = full_term.display().raster_plane().pixel(x, y);
+            const Image::Rgba clipped = clipped_term.display().raster_plane().pixel(x, y);
+            if (full.r != clipped.r || full.g != clipped.g || full.b != clipped.b ||
+                full.a != clipped.a) {
+                ++mismatches;
+            }
+        }
+    }
+    CK_CHECK(full_term.display().raster_plane().pixel(4, 4).a == 255);
+    CK_CHECK(clipped_term.display().raster_plane().pixel(4, 4).a == 255);
+    CK_CHECK(mismatches == 0);
+}
+
 CK_TEST(raster_slice_is_positioned_at_its_visible_rect) {
     Capabilities caps = baseline_capabilities();
     caps.sixel_graphics = true;

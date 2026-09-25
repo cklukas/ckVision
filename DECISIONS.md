@@ -185,7 +185,9 @@ protocols are tracked in D-OPEN-7.
 **D-020 — Windows input is VT-first.**
 The Windows backend enables VT input and feeds the same decoder as
 POSIX — one decoder everywhere, kitty keyboard protocol and bracketed
-paste work where the host supports them (Windows Terminal does). The
+paste work where the host supports them. [Windows Terminal 1.25 Preview](https://github.com/microsoft/terminal/discussions/19947)
+implements the kitty keyboard protocol; the named 1.24 Stable host does not,
+so it must keep the legacy keyboard fallback. The
 console API is used only where VT has no channel (e.g. buffer-size
 change notification). Per-host downgrades (plain-VT ConPTY hosts without
 enhanced input) are recorded in the capability report and tested as
@@ -588,7 +590,14 @@ literal replacement text and the final candidate is held again. An incomplete
 or disconnected paste likewise produces a recovered, sanitized paste text
 event. `TextEvent::paste_recovered` tells applications that the delivered text
 crossed this conservative recovery path, so they can show their own status if
-appropriate.
+appropriate. A negotiated kitty host may report the release of the paste
+shortcut immediately after the end marker. A candidate tail consisting only
+of valid kitty key-release events is consumed as protocol bookkeeping; it is
+neither inserted into the pasted text nor dispatched as keys. Any press,
+ordinary byte, or incomplete sequence keeps the entire tail in sanitized
+paste recovery. As with the marker itself, an intentionally pasted suffix
+identical to those release bytes cannot be distinguished from a real release
+and may be omitted; it cannot become a command.
 
 The quiet period is deliberately a usability/security trade-off, not a trust
 oracle. After it expires, a later byte is ordinary terminal input; an entity
@@ -1166,23 +1175,23 @@ rate).
 
 **D-061 — A terminal's exit policy is named by its caller, never defaulted.**
 `TerminalExitPolicy` carries `Unspecified` as its first enumerator, and a
-`TerminalLaunchSpec` that still holds it is refused by `launch()` before the
-fork, as a Failed session with a diagnostic naming both real choices. There is
+`TerminalLaunchSpec` that still holds it is refused by `launch()` before
+native child creation, as a Failed session with a diagnostic naming both real
+choices. There is
 no default.
 
 The two policies differ in whether `close()` is BOUNDED, and `close()` runs
-from the destructor. `WaitForExit` sends SIGHUP then SIGTERM and waits for the
-child to honour them, never escalating — a legitimate choice for a child whose
-output must never be lost, and a poor thing to acquire by omission, because a
-child that ignores those signals blocks the destructor for as long as it likes.
+from the destructor. `WaitForExit` requests graceful termination and waits for
+the child without escalating — SIGHUP/SIGTERM on POSIX, Control-C through
+ConPTY on Windows. It is a legitimate choice for a child whose output must
+never be lost, and a poor thing to acquire by omission, because a child that
+ignores the request blocks the destructor for as long as it likes.
 An interactive shell ignores SIGTERM by design. This library's own
 `bash -i` test hung in roughly one run in three for exactly that reason, having
 never said which policy it wanted; four sessions read the 60-second timeout as
 one of the test's waits rather than as its destructor, and the helper that
 would have refuted that reading — bounded at five seconds — went unopened for
-hours. ckmux's serverless client had the same defect in shipping code, unnoticed
-because its server path named the policy and a check of that one path was
-generalised to the product.
+hours.
 
 Rejected: flipping the default to the bounded policy (it makes the accident
 quieter rather than absent, and silently changes what every existing consumer's
@@ -1784,6 +1793,59 @@ true for every engine's function set and for the ones an application adds.
 the next, and stale by the following release); a dialect flag (the spelling
 differences a terminal editor can see are the quoting brackets, and all three
 are accepted as names).
+
+**D-072 — ConPTY exit is a drained close, with one owned shutdown call.** A
+Windows child can exit while its host still owns the pseudoconsole and its
+output pipe remains open. Publishing `Exited` at the process signal would lose
+ConPTY's final VT bytes; waiting for pipe EOF without closing the pseudoconsole
+can wait forever. `ClosePseudoConsole` may itself write a final frame and block
+on releases before Windows 11 24H2, so calling it on the owner thread while
+that same thread drains output can deadlock. On observed child exit, the adapter
+starts one short-lived, session-owned native thread whose sole operation is
+`ClosePseudoConsole`. The owner continues bounded overlapped reads and marks
+`Exited` only after the close operation has finished and output reaches EOF.
+The thread never touches the emulator, scene, or UI and is joined during native
+teardown. The Windows process job still supplies bounded escalation for a
+child tree that ignores graceful close. Its grace uses the platform's
+monotonic uptime deadline, because counting short sleeps stretched a nominal
+one-second grace to nearly fifteen seconds under the named ARM64 VM. This is
+a platform transport timing decision, not a wall-clock read in deterministic
+core/UI code. This is the sole exception to the
+architecture's no-worker rule; ordinary transport and parsing remain on the
+owner thread. The behavior follows Microsoft's
+[ConPTY close contract](https://learn.microsoft.com/en-us/windows/console/closepseudoconsole).
+*Rejected:* treating process exit alone as terminal exit (drops the tail);
+waiting for EOF with a live pseudoconsole (can never finish); closing the
+output sink before reading it (drops the tail); a persistent reader thread
+(duplicates the application readiness loop).
+
+**D-073 — Windows child graphics use an optional app-local modern ConPTY.**
+The inbox `CreatePseudoConsole` remains the dependency-free Windows baseline.
+On the named ARM64 Windows 11 host its console server (version 10.0.26100.1)
+consumes a child Sixel DCS before it reaches the host pipe, even when the
+child enables VT output processing. An application may place Microsoft's
+published `Microsoft.Windows.Console.ConPTY` runtime files alongside its
+executable (`conpty.dll` and the architecture-matched `OpenConsole.exe` in the
+package's prescribed subdirectory). The Windows adapter looks only beside
+its own executable, loads that DLL with a restricted search path, and uses
+its documented create/resize/close exports for one session. The module stays
+loaded until the session's close operation has joined. No binary, header,
+package manager, or test-only package becomes a mandatory ckVision build or
+runtime dependency. If the app-local runtime is absent, the adapter uses the
+inbox APIs and changes the **effective** child profile to `sixel=false`;
+callers read that profile and must not advertise graphics to the child.
+Incomplete or incompatible app-local deployments fail with an actionable
+error rather than silently claiming Sixel support. The choice is made at the
+platform adapter boundary, with no registry, process-global mutable state, or
+core/UI filesystem access. Evidence is the named Windows Sixel probe using
+the [Microsoft ConPTY package](https://www.nuget.org/packages/Microsoft.Windows.Console.ConPTY/1.24.260710001)
+and the [published ConPTY API](https://learn.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session).
+*Rejected:* treating an installed Windows Terminal GUI as an update to the
+inbox `CreatePseudoConsole` server (it is not); passing child DCS bytes around
+ConPTY (cannot preserve console API behavior or the private endpoint); always
+advertising Sixel on the inbox path (false capability claim); bundling a
+mandatory third-party runtime into the library (violates the zero-dependency
+charter).
 
 **D-074 — The modifier, Super and Menu keys are keys in their own right, for a
 view that asks.** Under kitty's all-keys-as-escape-codes enhancement a host

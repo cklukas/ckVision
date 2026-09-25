@@ -100,8 +100,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
-| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Blocked — Windows host explicitly deferred** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | Blocked | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — fresh Windows 164/164; inbox/modern ConPTY 15/15 each; live Preview nested ckVision, paste, Sixel, File-menu mouse, concurrent hosts, individual close, nonzero child exit, and isolated private-host failure/recovery pass; real Console Host text fallback and concurrent modern-ConPTY raster isolation/reallocation pass; pixel-mouse/remaining lifecycle/matrix gates pending** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — VT backend and live Preview keyboard/native clipboard round trip/nested/Sixel/File-menu mouse, Stable gallery Greet click/graphics redraw, and Console Host no-graphics fallback; Stable/Preview report no pixel-mouse mode; hosted Release 177/177 Mac, 177/177 Linux, fresh 164/164 Windows; 16 symbolic goldens byte-identical; pixel mouse and remaining matrix gates pending** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
@@ -112,9 +112,12 @@ never the acceptance criteria silently.
 
 The dependency order deliberately puts correctness, lifetime, security, and
 architecture before convenience work. WP-45…WP-49 now have current-host
-implementation evidence; WP-50 is the next host-blocked package after the
+implementation evidence; WP-50 and the outer-backend portion of WP-37 are in progress on the named Windows ARM64 VM after the
 editor/file-workflow implementation packages. WP-39…WP-44 remain in the
 queue until WP-37/WP-38 complete their cross-platform and release-audit gates.
+The WP-37 outer backend began before WP-50 acceptance so the Windows
+contained-terminal example can run under a real host; WP-37 acceptance still
+depends on the unfinished WP-50 interactive matrix.
 A package may be split into reviewable
 commits, but its queue row stays `In progress` until every acceptance item is
 met. New findings discovered while implementing a package are added to that
@@ -2878,8 +2881,8 @@ private lexer.
 
 **Purpose.** Provide the Windows-specific child session implementation and
 evidence rather than assuming the outer ConPTY backend covers nested terminal
-processes. This package is blocked on a real Windows/Windows Terminal host and
-uses [embedded-terminal-architecture.md](embedded-terminal-architecture.md) and
+processes. A named Windows ARM64 VM is now available; interactive Windows Terminal
+acceptance is still required. This package uses [embedded-terminal-architecture.md](embedded-terminal-architecture.md) and
 [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md).
 
 **Work.**

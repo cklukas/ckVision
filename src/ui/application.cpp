@@ -320,14 +320,7 @@ void Application::set_focus(View* view) {
         }
     } catch (...) {
         terminal_.terminate_after_callback_failure();
-        std::abort();  // the [[noreturn]] contract, locally enforced —
-                       // see the first call site in this file
-        // Unreachable while every Terminal override honours the base's
-        // [[noreturn]] — which nothing but convention makes an override
-        // do. Enforced here so a host that breaks the contract aborts
-        // deterministically instead of letting control fall off a
-        // non-void function, which is undefined behaviour and exactly
-        // what GCC's -Wreturn-type flagged at five call sites.
+        // Enforce the [[noreturn]] contract if a host override breaks it.
         std::abort();
     }
 }

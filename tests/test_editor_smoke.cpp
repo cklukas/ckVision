@@ -107,7 +107,9 @@ CK_TEST(the_editor_example_keeps_search_selection_and_caret_state_across_all_bui
     f.app.root().invalidate();
     f.app.step(0);
     const std::string mono = capture(f);
-    CK_CHECK(!dark.empty() && !light.empty() && !mono.empty());
+    CK_CHECK(dark == read_file("golden/editor_search_dark.dump"));
+    CK_CHECK(light == read_file("golden/editor_search_light.dump"));
+    CK_CHECK(mono == read_file("golden/editor_search_mono.dump"));
     CK_CHECK(dark != classic);
     CK_CHECK(light != classic);
     CK_CHECK(mono != classic);

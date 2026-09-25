@@ -14,6 +14,16 @@ option(CKVISION_BUILD_FUZZERS
 if(CKVISION_BUILD_FUZZERS AND MSVC)
     message(FATAL_ERROR "CKVISION_BUILD_FUZZERS requires a Clang-family compiler")
 endif()
+if(MSVC AND CKVISION_SANITIZE STREQUAL "address")
+    # ARM64 MSVC can silently ignore /fsanitize=address with D9002 while
+    # continuing to build uninstrumented binaries. Reject that configuration
+    # before it can be mistaken for sanitizer evidence.
+    check_cxx_compiler_flag("/fsanitize=address" CKVISION_HAS_MSVC_ADDRESS_SANITIZER)
+    if(NOT CKVISION_HAS_MSVC_ADDRESS_SANITIZER)
+        message(FATAL_ERROR
+            "This MSVC toolchain/target does not support /fsanitize=address")
+    endif()
+endif()
 
 add_library(cvision
     src/core/assert.cpp
@@ -191,8 +201,7 @@ if(CKVISION_BUILD_FUZZERS)
     target_compile_options(cvision PRIVATE -fsanitize=fuzzer-no-link)
 endif()
 
-# The POSIX backend (termios/signal-based) only compiles on UNIX-like
-# systems; the Windows (ConPTY) backend is M7 scope (ROADMAP.md).
+# Platform-owned terminal sessions stay out of the portable model/presenter.
 if(UNIX)
     target_sources(cvision PRIVATE src/term/posix_terminal.cpp src/term/posix_terminal_subsession.cpp src/term/posix_clock.cpp
         src/term/posix_filesystem.cpp)
@@ -200,6 +209,10 @@ if(UNIX)
     if(NOT APPLE)
         target_link_libraries(cvision PRIVATE util)
     endif()
+endif()
+if(WIN32)
+    target_sources(cvision PRIVATE src/term/windows_terminal_subsession.cpp
+        src/term/windows_clock.cpp src/term/windows_terminal.cpp)
 endif()
 
 option(CKVISION_BUILD_EXAMPLES

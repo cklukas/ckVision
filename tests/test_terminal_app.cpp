@@ -209,6 +209,44 @@ CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {
         on_screen = f.terminal.display().has_raster_pixels();
     }
     CK_CHECK(on_screen);
+
+    // The demo becomes an interactive shell after drawing. Send a command
+    // through that real child so the prompt and echoed text have arrived
+    // before checking that they did not erase any of the picture.
+    view->session().send_input("echo CKV_SIXEL_PROMPT_READY\r");
+    bool marker_below_picture = false;
+    const auto prompt_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!marker_below_picture && std::chrono::steady_clock::now() < prompt_deadline) {
+        f.app.step(0);
+        const auto snapshot = view->session().snapshot();
+        if (snapshot.rasters.empty()) continue;
+        const auto& raster = snapshot.rasters.front();
+        for (int y = raster.anchor.y + raster.cell_extent.height; y < snapshot.cells.height; ++y) {
+            std::string line;
+            for (int x = 0; x < snapshot.cells.width; ++x) {
+                const auto& cell = snapshot.cell_buffer[static_cast<std::size_t>(y) *
+                                                       static_cast<std::size_t>(snapshot.cells.width) +
+                                                       static_cast<std::size_t>(x)];
+                if (!cell.is_continuation()) line += cell.grapheme();
+            }
+            if (line.find("CKV_SIXEL_PROMPT_READY") != std::string::npos)
+                marker_below_picture = true;
+        }
+    }
+    CK_CHECK(marker_below_picture);
+    const auto snapshot = view->session().snapshot();
+    CK_CHECK(!snapshot.rasters.empty());
+    if (!snapshot.rasters.empty()) {
+        CK_CHECK(snapshot.rasters.front().image != nullptr);
+        if (snapshot.rasters.front().image != nullptr) {
+            const ckv::Image& picture = *snapshot.rasters.front().image;
+            bool intact = true;
+            for (int y = 0; y < picture.height(); ++y)
+                for (int x = 0; x < picture.width(); ++x)
+                    intact = intact && picture.pixel(x, y).a == 255;
+            CK_CHECK(intact);
+        }
+    }
 }
 
 CK_TEST(the_help_command_answers_with_an_about_box) {

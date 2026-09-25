@@ -162,6 +162,7 @@ private:
         int target_width = 0;
         int target_height = 0;
         int color_registers = 0;
+        bool shadowed = false;
 
         friend bool operator==(const EncodeKey&, const EncodeKey&) = default;
     };

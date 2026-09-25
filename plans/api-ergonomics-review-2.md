@@ -30,7 +30,7 @@ ROADMAP.md, DECISIONS.md, and then the corrective plan.
 | Widget catalog closure | WP-34A through WP-34C | Reopened |
 | Theme, command, example ergonomics, and Hello acceptance | WP-35 | Reopened |
 | Layout/dialog/tree literal acceptance | WP-36 | Reopened |
-| Windows backend and three-platform matrix | WP-37 | Open / host-blocked |
+| Windows backend and three-platform matrix | WP-37 | In progress; named ARM64 Windows host available, interactive acceptance open |
 | Golden, script, reference, and release-gate closure | WP-38 | Blocked by queue |
 
 ## Historical evidence policy

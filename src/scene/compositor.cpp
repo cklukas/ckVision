@@ -204,7 +204,8 @@ Cell Compositor::resolve_cell(Point p, const std::vector<Layer>& layers, const S
     return result;
 }
 
-void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background) {
+void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const Surface& background,
+                                         const ShadowSpec& shadow) {
     visible_rasters_.clear();
     // Every slice is clipped to the frame. A window dragged past an edge
     // still anchors its raster at the window's own position, so the
@@ -215,11 +216,43 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
     // intact while clipping `visible` is what makes the crop a crop.
     const Rect frame_bounds{0, 0, frame_.size().width, frame_.size().height};
     const auto push_visible = [this, &frame_bounds](const Rect& visible, const Rect& full_anchor,
-                                                     const RasterRegion& region) {
+                                                     const RasterRegion& region, bool shadowed) {
         const Rect clipped = visible.intersected(frame_bounds);
         if (clipped.empty()) return;
         visible_rasters_.push_back(
-            RasterSlice{region.id, clipped, full_anchor, region.image, region.fallback_active});
+            RasterSlice{region.id, clipped, full_anchor, region.image, region.fallback_active, shadowed});
+    };
+    const auto push_shadowed = [this, &layers, &shadow, &push_visible](
+                                   const Rect& full_anchor, const RasterRegion& region,
+                                   std::size_t first_higher_layer) {
+        raster_scratch_a_.clear();
+        for (const Rect& visible : rect_scratch_a_)
+            raster_scratch_a_.push_back(RasterFragment{visible, false});
+        for (std::size_t index = first_higher_layer; index < layers.size(); ++index) {
+            const Layer& higher = layers[index];
+            if (!higher.casts_shadow) continue;
+            rect_scratch_b_.clear();
+            append_shadow_footprint(layer_rect(higher), shadow, higher.shadow_clip,
+                                    rect_scratch_b_);
+            for (const Rect& footprint : rect_scratch_b_) {
+                raster_scratch_b_.clear();
+                for (const RasterFragment& fragment : raster_scratch_a_) {
+                    const Rect covered = fragment.rect.intersected(footprint);
+                    if (fragment.shadowed || covered.empty()) {
+                        raster_scratch_b_.push_back(fragment);
+                        continue;
+                    }
+                    rect_scratch_a_.clear();
+                    append_difference(fragment.rect, footprint, rect_scratch_a_);
+                    for (const Rect& remainder : rect_scratch_a_)
+                        raster_scratch_b_.push_back(RasterFragment{remainder, false});
+                    raster_scratch_b_.push_back(RasterFragment{covered, true});
+                }
+                raster_scratch_a_.swap(raster_scratch_b_);
+            }
+        }
+        for (const RasterFragment& fragment : raster_scratch_a_)
+            push_visible(fragment.rect, full_anchor, region, fragment.shadowed);
     };
     // The root/base surface is also a legal Painter target. Its rasters have
     // no layer offset, but windows and popups above them still occlude them
@@ -236,7 +269,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
             rect_scratch_a_.swap(rect_scratch_b_);
             if (rect_scratch_a_.empty()) break;
         }
-        for (const Rect& visible : rect_scratch_a_) push_visible(visible, full_anchor, region);
+        push_shadowed(full_anchor, region, 0);
     }
     for (std::size_t i = 0; i < layers.size(); ++i) {
         const Layer& layer = layers[i];
@@ -257,7 +290,7 @@ void Compositor::compute_visible_rasters(const std::vector<Layer>& layers, const
                 rect_scratch_a_.swap(rect_scratch_b_);
                 if (rect_scratch_a_.empty()) break;
             }
-            for (const Rect& visible : rect_scratch_a_) push_visible(visible, full_anchor, region);
+            push_shadowed(full_anchor, region, i + 1);
         }
     }
 }
@@ -284,7 +317,7 @@ void Compositor::compose(const std::vector<Layer>& layers, Surface& background,
     for (const Layer& l : layers)
         previous_layers_.push_back(PreviousLayer{l.id, layer_rect(l), l.casts_shadow, l.shadow_clip});
 
-    compute_visible_rasters(layers, background);
+    compute_visible_rasters(layers, background, shadow);
 }
 
 void Compositor::resize(Size new_size) {

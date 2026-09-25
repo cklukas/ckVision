@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include "cvision/widgets/common_components.hpp"
 #include <ctime>
+#include "cvision/core/base64.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 #include <iterator>
 #include <cstdint>
@@ -55,18 +56,27 @@ std::string environment_value(const char* name) {
 // The shell its reader actually uses, since that is what a terminal is for.
 // Reading the environment is the host application's job and never the
 // library's: a TerminalLaunchSpec has to name its program outright, and only
-// the application around it knows whose machine this is. /bin/sh is the
-// fallback because a POSIX system is required to have one, not because it is
-// anybody's preference.
+// the application around it knows whose machine this is. The platform
+// fallback is used only when the caller did not supply its usual shell.
 std::string user_shell() {
+#if defined(_WIN32)
+    std::string shell = environment_value("COMSPEC");
+    return shell.empty() ? std::string("C:\\Windows\\System32\\cmd.exe") : shell;
+#else
     std::string shell = environment_value("SHELL");
     return shell.empty() ? std::string("/bin/sh") : shell;
+#endif
 }
 
 // A shell opens where a shell opens.
 std::string home_directory() {
+#if defined(_WIN32)
+    std::string home = environment_value("USERPROFILE");
+    return home.empty() ? std::string("C:\\Users\\Public") : home;
+#else
     std::string home = environment_value("HOME");
     return home.empty() ? std::string("/") : home;
+#endif
 }
 
 }  // namespace
@@ -157,7 +167,11 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
 }
 
 widgets::Window* TerminalApp::new_terminal() {
+#if defined(_WIN32)
+    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(user_shell());
+#else
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(user_shell(), {"-i"});
+#endif
     // Bounded, and this example is exactly why the policy must be named. The
     // child is an INTERACTIVE shell: it ignores SIGTERM by design, so the
     // unbounded policy would let a single unclosed terminal block teardown for
@@ -214,31 +228,54 @@ Image demo_picture(Size cell_pixels, Size cells) {
 }  // namespace
 
 widgets::Window* TerminalApp::new_sixel_demo() {
-    // /bin/sh here is the interpreter for the four lines of setup below, not
-    // a choice about anybody's shell: the script is written to POSIX sh so it
-    // runs the same everywhere, and its last act is to hand the window over
-    // to the reader's own shell.
+    // This child first writes its own raster into the private terminal.
+    // The POSIX script then execs the user's shell; the Windows PowerShell
+    // process remains interactive after its command finishes.
+#if defined(_WIN32)
+    term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program(
+        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", {});
+#else
     term::TerminalLaunchSpec launch = term::TerminalLaunchSpec::program("/bin/sh", {});
-    // Bounded for the same reason as the plain terminal above: this script's
-    // last act is to exec the reader's own shell, so what this window ends up
-    // holding is interactive whatever it started as.
+#endif
+    // Bounded for the same reason as the plain terminal above: the child
+    // remains interactive after displaying the raster.
     launch.exit_policy = core::TerminalExitPolicy::TerminateAfterGrace;
     launch.profile = term::embedded_xterm_sixel_profile();
     // Sized from the child's own cell metric, so the picture lands on whole
     // cells whatever the profile is configured with.
-    const std::string picture =
-        term::encode_sixel(demo_picture(launch.profile.cell_pixels, Size{44, 10}), 256);
+    constexpr Size picture_cells{44, 10};
+    std::string picture = term::encode_sixel(demo_picture(launch.profile.cell_pixels, picture_cells), 256);
+    // The child terminal leaves its text cursor at the Sixel origin. If the
+    // interactive shell starts there, its prompt erases cells from the
+    // picture's first row. Put the prompt on the first row below the sample.
+    // The POSIX intro occupies two rows before the raster; Windows -NoLogo
+    // writes the raster at row zero.
+#if defined(_WIN32)
+    constexpr int picture_start_row = 0;
+#else
+    constexpr int picture_start_row = 2;
+#endif
+    picture += "\x1B[" + std::to_string(picture_start_row + picture_cells.height + 1) + ";1H";
     // The bytes travel as an argument rather than inside the command text.
     // They contain an ESC and a good deal of punctuation, and quoting that
     // into a shell string is how a demo comes to break silently. The child
     // owns them; the Sixel decoder turns them into a scene raster before the
     // outer presenter sees anything, and the interactive shell afterwards
     // leaves the window usable.
+#if defined(_WIN32)
+    // The raster travels as Base64 in a PowerShell argument; the child
+    // decodes and writes the original bytes, then remains interactive.
+    launch.arguments = {
+        "-NoLogo", "-NoProfile", "-NoExit", "-Command",
+        "$picture=[Convert]::FromBase64String('" + base64::encode(picture) +
+            "'); $out=[Console]::OpenStandardOutput(); $out.Write($picture,0,$picture.Length)"};
+#else
     launch.arguments = {
         "-c",
         "printf '%s\n\n' 'ckVision embedded terminal: Sixel from a child process'; "
-        "printf '%s' \"$1\"; printf '\n\n'; exec \"$2\" -i",
+        "printf '%s' \"$1\"; exec \"$2\" -i",
         "sixel-demo", picture, user_shell()};
+#endif
     launch.environment = demo_environment();
     launch.working_directory = home_directory();
     return open_terminal(std::move(launch), "Sixel Demo " + std::to_string(next_terminal_number_++));

@@ -89,6 +89,37 @@ the encoder-produced pixel extent must be fully opaque. The symbolic dump
 remains intentionally diff-friendly; the decoded visual capture tests the
 protocol path it cannot.
 
+## Raw terminal-plane companion fixtures
+
+`tests/golden/*.rgba` are byte-exact companions to the textual cell dumps.
+Their format is the ASCII header `ckvision-rgba 1\n`, followed by a decimal
+`<width> <height>\n` line and exactly `width * height * 4` bytes of
+row-major RGBA pixels. Each channel is one unsigned byte; transparent pixels
+are `(0, 0, 0, 0)`. The dimensions describe the complete decoded plane, not
+only its opaque bounds. These files are test fixtures, separate from the
+version-1 golden dump grammar above.
+
+`generate_terminal_plane_goldens` obtains the cells and raster bytes from
+`VirtualDisplay`, the embedded child emulator, Presenter output, the real
+Gallery application object graph, and a child `TerminalView` in an
+`ApplicationShell` window. The contained child fixtures pin the decoded outer
+plane after initial paint, parent move and resize, overlap, child clear,
+repaint, parent close, and a NoGraphics fallback. A separate contained-child
+sequence pins initial, clipped shrink, move, restore, and several bounds changes
+coalesced into one frame; its generator checks exact opaque-pixel counts and
+rejects every pixel outside the current child content rectangle. The restored
+and coalesced frames match the earlier enlarged frame byte for byte.
+A three-stage two-child sequence pins simultaneous red and green contained
+rasters, green after the red window closes, and green with a newly opened blue
+window. The generator checks exact color counts and rejects opaque pixels
+outside the visible child content rectangles at each stage.
+`generated_golden_bytes` compares all of those bytes with the pinned fixtures
+on each platform. The paired dumps make
+the cell fallback under NoGraphics and the blank cells below visible Sixel
+slices reviewable alongside the raw raster plane. The existing small visual
+manifests still pin bounds and hashes as convenient diagnostics; they are not
+the byte-equality oracle.
+
 ## Virtual-display protocol subset
 
 The virtual display is an intentionally bounded test decoder, not a general

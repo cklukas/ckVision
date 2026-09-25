@@ -10,19 +10,49 @@
 // exercised headlessly (byte-for-byte) by
 // tests/test_gallery_smoke.cpp — this file is the interactive shell
 // around exactly that same, already-tested object graph.
+#if defined(_WIN32)
+#include "cvision/term/windows_clock.hpp"
+#include "cvision/term/windows_terminal.hpp"
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
+#else
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
+#endif
 #include "cvision/term/terminal_clipboard.hpp"
 #include "cvision/ui/application.hpp"
 
 #include "gallery_app.hpp"
 
-int main() {
+namespace {
+
+void run_example() {
+#if defined(_WIN32)
+    ckv::term::WindowsClock clock;
+    ckv::term::WindowsTerminal terminal(clock);
+#else
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
+#endif
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock, clipboard);
     ckv::gallery::GalleryApp gallery(app);
     app.run();
+}
+
+}  // namespace
+
+int main() {
+#if defined(_WIN32)
+    try {
+        run_example();
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s\n", error.what());
+        return EXIT_FAILURE;
+    }
+#else
+    run_example();
+#endif
     return 0;
 }

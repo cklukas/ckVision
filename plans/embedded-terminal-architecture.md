@@ -100,7 +100,41 @@ subsession, maps view-relative input to it, and paints a snapshot through a
 clipped `scene::Painter`. Session-change notifications traverse only the live
 view tree, so detaching a view removes it from future delivery; the owning
 application keeps the session alive until all consumers are gone. No global
-child registry or background worker is permitted.
+child registry or persistent transport worker is permitted; D-072 allows a
+short-lived, per-session native close thread while the owner drains ConPTY
+output on Windows.
+
+On Windows, the ConPTY-facing pipe handles use synchronous I/O as required by
+`CreatePseudoConsole`, while the host ends are overlapped named-pipe handles.
+The adapter exposes their completion events as borrowed `WindowsHandle`
+readiness sources and consumes output only through `drain()`'s byte budget.
+Child startup explicitly supplies null standard handles with
+`STARTF_USESTDHANDLES`; otherwise a console host launched from a redirected
+parent can duplicate the parent's streams into the child, bypassing ConPTY
+([Microsoft Terminal discussion](https://github.com/microsoft/terminal/discussions/15814)).
+D-073 keeps the inbox ConPTY API as the dependency-free baseline. The
+Windows adapter looks for Microsoft's optional `conpty.dll` next to its
+executable and uses that runtime's create/resize/close calls for the whole
+session when present; the architecture-matched `OpenConsole.exe` remains in
+the package's prescribed subdirectory. The DLL stays loaded until the owned
+close operation joins. Without it, the effective child profile has
+`sixel=false`, because the named inbox host consumed child Sixel before the
+adapter pipe. This is a platform capability decision; core and UI do not
+inspect the filesystem or a process-global registry.
+
+No persistent transport thread or raw child-byte forwarding is added. A
+short-lived, owned close thread runs only `ClosePseudoConsole` after the child
+exits, while the owner continues draining the final output (D-072). A child is assigned
+to a private Windows job before its first thread resumes, so bounded teardown
+can end descendants as well as the initial process. Pending I/O is cancelled
+and observed before its buffers are released. The output sink is closed before
+`ClosePseudoConsole`, which may otherwise block while emitting its final frame
+on older Windows releases. These choices follow Microsoft's
+[ConPTY session](https://learn.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session),
+[close](https://learn.microsoft.com/en-us/windows/console/closepseudoconsole),
+[named-pipe I/O](https://learn.microsoft.com/en-us/windows/win32/ipc/synchronous-and-overlapped-input-and-output),
+and [job object](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+contracts.
 
 `TerminalLaunchSpec` is an explicit value: executable plus argument vector,
 working directory, declared child environment additions/replacements, terminal

@@ -274,6 +274,37 @@ CK_TEST(visible_rasters_are_sliced_by_a_higher_occluding_layer) {
     CK_CHECK(total_area == 4 * 4 - 2 * 2);  // full anchor minus the occluder's overlap
 }
 
+CK_TEST(higher_window_shadows_split_raster_slices_as_a_binary_union) {
+    Compositor c(ckv::Size{10, 6});
+    Surface bg = make_surface(10, 6, ".");
+    const auto image = std::make_shared<ckv::Image>(12, 6);
+    bg.add_raster_region(ckv::scene::RasterRegion{
+        7, ckv::Rect{1, 1, 6, 3}, image, true, ckv::Rect{1, 1, 6, 3}});
+    Surface first = make_surface(2, 2, "A");
+    Surface second = make_surface(2, 2, "B");
+    std::vector<Layer> layers{
+        {1, &first, ckv::Point{2, 0}, true},
+        {2, &second, ckv::Point{2, 0}, true},
+    };
+    c.compose(layers, bg);
+    int shadowed_area = 0;
+    int plain_area = 0;
+    for (const ckv::RasterSlice& slice : c.visible_rasters()) {
+        CK_CHECK(slice.id == 7);
+        CK_CHECK(slice.full_anchor == (ckv::Rect{1, 1, 6, 3}));
+        const int area = slice.visible_rect.width * slice.visible_rect.height;
+        if (slice.shadowed) shadowed_area += area;
+        else plain_area += area;
+    }
+    CK_CHECK(shadowed_area == 4);
+    CK_CHECK(plain_area == 12);
+
+    c.compose({}, bg);
+    CK_CHECK(c.visible_rasters().size() == 1U);
+    CK_CHECK(c.visible_rasters()[0].visible_rect == (ckv::Rect{1, 1, 6, 3}));
+    CK_CHECK(!c.visible_rasters()[0].shadowed);
+}
+
 CK_TEST(visible_rasters_fully_occluded_region_yields_no_slices) {
     Compositor c(ckv::Size{10, 10});
     Surface bg = make_surface(10, 10, ".");

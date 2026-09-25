@@ -43,12 +43,26 @@ std::string standard_library_name() {
 
 std::string cxx_standard_name() {
     // The language level this translation unit was actually compiled at,
-    // which is not necessarily the one the build system asked for.
-    if (__cplusplus > 202302L) return "C++26 or later";
-    if (__cplusplus >= 202302L) return "C++23";
-    if (__cplusplus >= 202002L) return "C++20";
-    if (__cplusplus >= 201703L) return "C++17";
+    // which is not necessarily the one the build system asked for. MSVC
+    // reports its selected language level through _MSVC_LANG unless the
+    // optional /Zc:__cplusplus switch is enabled.
+#if defined(_MSVC_LANG)
+#define CKV_SYSINFO_CXX_STANDARD _MSVC_LANG
+#else
+#define CKV_SYSINFO_CXX_STANDARD __cplusplus
+#endif
+#if CKV_SYSINFO_CXX_STANDARD > 202302L
+    return "C++26 or later";
+#elif CKV_SYSINFO_CXX_STANDARD >= 202302L
+    return "C++23";
+#elif CKV_SYSINFO_CXX_STANDARD >= 202002L
+    return "C++20";
+#elif CKV_SYSINFO_CXX_STANDARD >= 201703L
+    return "C++17";
+#else
     return "C++14 or earlier";
+#endif
+#undef CKV_SYSINFO_CXX_STANDARD
 }
 
 #undef CKV_SYSINFO_STRINGIFY

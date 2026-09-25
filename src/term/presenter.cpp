@@ -301,6 +301,7 @@ Presenter::EncodeKey Presenter::encode_key(const RasterSlice& slice, std::uint64
     EncodeKey key;
     key.fingerprint = fingerprint;
     key.color_registers = terminal_.capabilities().sixel_color_registers;
+    key.shadowed = slice.shadowed;
     const Rect& anchor = slice.full_anchor;
     if (anchor.width <= 0 || anchor.height <= 0 || slice.image == nullptr) return key;
     const int img_w = slice.image->width();
@@ -475,16 +476,39 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
             const bool copy_would_be_identity = px_x0 == 0 && px_y0 == 0 && crop_w == image.width() &&
                                                 crop_h == image.height() && target_w == crop_w &&
                                                 target_h == crop_h;
-            if (copy_would_be_identity) {
+            if (copy_would_be_identity && !slice.shadowed) {
                 active.encoded = std::make_shared<const std::string>(
                     encode_sixel(image, active.key.color_registers));
             } else {
                 Image cropped(target_w, target_h);
+                const Size outer_cell = terminal_.capabilities().cell_pixels;
+                const auto source_at = [](int visible_start, int anchor_start, int offset,
+                                          int source_extent, int anchor_cells, int cell_pixels,
+                                          int natural_crop_start) {
+                    if (cell_pixels <= 0) return natural_crop_start + offset;
+                    const std::int64_t full_target = static_cast<std::int64_t>(anchor_cells) * cell_pixels;
+                    const std::int64_t target =
+                        (static_cast<std::int64_t>(visible_start) - anchor_start) * cell_pixels + offset;
+                    return static_cast<int>(target * source_extent / full_target);
+                };
+                // Sample in the full image's coordinate system. Scaling each
+                // cropped fragment from its own rounded pixel bounds shifts a
+                // color boundary when the source-to-cell ratio is fractional.
+                // A partial repaint must show the same source pixel as the
+                // unoccluded image at every global target pixel.
                 for (int y = 0; y < target_h; ++y) {
-                    const int src_y = px_y0 + (target_h == crop_h ? y : y * crop_h / target_h);
+                    const int src_y = source_at(slice.visible_rect.y, anchor.y, y, image.height(),
+                                                anchor.height, outer_cell.height, px_y0);
                     for (int x = 0; x < target_w; ++x) {
-                        const int src_x = px_x0 + (target_w == crop_w ? x : x * crop_w / target_w);
-                        cropped.set_pixel(x, y, image.pixel(src_x, src_y));
+                        const int src_x = source_at(slice.visible_rect.x, anchor.x, x, image.width(),
+                                                    anchor.width, outer_cell.width, px_x0);
+                        Image::Rgba pixel = image.pixel(src_x, src_y);
+                        if (slice.shadowed) {
+                            pixel.r = static_cast<std::uint8_t>(pixel.r / 2);
+                            pixel.g = static_cast<std::uint8_t>(pixel.g / 2);
+                            pixel.b = static_cast<std::uint8_t>(pixel.b / 2);
+                        }
+                        cropped.set_pixel(x, y, pixel);
                     }
                 }
                 active.encoded = std::make_shared<const std::string>(

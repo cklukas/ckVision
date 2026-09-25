@@ -591,9 +591,21 @@ CK_TEST(spin_asks_for_nothing_while_the_terminal_has_not_finished_the_last_frame
     CK_CHECK(f.app.frames_awaiting_terminal() >= 1U);
 
     const std::size_t rendered = f.spin.frames().frames_rendered();
-    for (int tick = 0; tick < 5; ++tick) f.run_for(f.spin.frame_interval_nanos());
-    // Five ticks, and not one of them asked for a frame: the terminal is
-    // still behind, and the animation clock is still running.
+    // The application deliberately writes off an unanswered DSR after its
+    // patience deadline. Exercise ticks strictly before that deadline:
+    // counting five variable-length ticks can cross it under a busy host
+    // and then a new render is the correct behavior.
+    std::int64_t advanced = 0;
+    int ticks = 0;
+    constexpr std::int64_t budget = ckv::ui::kFrameCompletionTimeoutNanos / 2;
+    while (ticks < 5) {
+        const std::int64_t interval = f.spin.frame_interval_nanos();
+        if (advanced + interval >= budget) break;
+        f.run_for(interval);
+        advanced += interval;
+        ++ticks;
+    }
+    CK_CHECK(ticks > 0);
     CK_CHECK(f.spin.frames().frames_rendered() == rendered);
     CK_CHECK(f.spin.animating());
 

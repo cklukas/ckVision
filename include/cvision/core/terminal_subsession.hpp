@@ -114,12 +114,12 @@ constexpr TerminalKeyboardFlags supported_terminal_keyboard_flags() noexcept {
 //
 // The two policies differ in whether they are BOUNDED, which is the property a
 // caller must choose knowingly:
-//   * `WaitForExit` sends SIGHUP then SIGTERM and waits for the child to
-//     honour them, never escalating. It cannot be hurried, so a child that
-//     ignores those signals — an interactive shell does, by design — blocks
-//     the destructor for as long as it likes.
-//   * `TerminateAfterGrace` escalates to SIGKILL once the grace expires, so
-//     `close()` returns whatever the child does.
+//   * `WaitForExit` requests platform-native graceful termination (SIGHUP and
+//     SIGTERM on POSIX, Control-C through ConPTY on Windows) and waits for the
+//     child to exit without escalating. A child that ignores that request can
+//     block the destructor indefinitely.
+//   * `TerminateAfterGrace` escalates after the grace period (SIGKILL on
+//     POSIX, termination of the child process job on Windows).
 //
 // The unbounded one is a legitimate choice for a child whose output must never
 // be lost. It is not a reasonable thing to acquire by omission, which is what

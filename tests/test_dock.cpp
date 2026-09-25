@@ -66,6 +66,14 @@ CK_TEST(a_non_zero_available_origin_offsets_every_resulting_rect_the_same_way) {
     CK_CHECK(rects.center == (Rect{10, 8, 40, 17}));
 }
 
+CK_TEST(negative_available_extents_are_empty_for_dock_layout) {
+    const DockRects rects = compute_dock_layout(Rect{7, 9, -3, -2},
+                                                DockEdgeExtents{.top = 2, .left = 4});
+    CK_CHECK(rects.top == (Rect{7, 9, 0, 0}));
+    CK_CHECK(rects.left == (Rect{7, 9, 0, 0}));
+    CK_CHECK(rects.center == (Rect{7, 9, 0, 0}));
+}
+
 // --- Dock ------------------------------------------------------------------
 
 namespace {
@@ -91,6 +99,21 @@ public:
     int height_for_width(int width) const override { return width <= 5 ? 4 : 2; }
 };
 }  // namespace
+
+CK_TEST(a_dock_with_signed_empty_bounds_recovers_its_children_after_growth) {
+    Dock dock(Rect{0, 0, 10, 6});
+    auto* top = dock.add_item(std::make_unique<HintedView>(0, 2), DockEdge::Top);
+    auto* left = dock.add_item(std::make_unique<HintedView>(4, 0), DockEdge::Left);
+    auto* center = dock.add_item(std::make_unique<View>(), DockEdge::Center);
+    dock.set_bounds(Rect{0, 0, -3, -2});
+    CK_CHECK(top->bounds() == (Rect{0, 0, 0, 0}));
+    CK_CHECK(left->bounds() == (Rect{0, 0, 0, 0}));
+    CK_CHECK(center->bounds() == (Rect{0, 0, 0, 0}));
+    dock.set_bounds(Rect{0, 0, 10, 6});
+    CK_CHECK(top->bounds() == (Rect{0, 0, 10, 2}));
+    CK_CHECK(left->bounds() == (Rect{0, 2, 4, 4}));
+    CK_CHECK(center->bounds() == (Rect{4, 2, 6, 4}));
+}
 
 CK_TEST(a_center_only_child_fills_the_whole_dock) {
     Dock dock(Rect{0, 0, 40, 20});
