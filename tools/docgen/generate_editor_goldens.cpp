@@ -41,16 +41,13 @@ int main(int argc, char** argv) {
     app.step(0);
     complete = write("editor_search", app) && complete;
     const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
-    app.theme() = ckv::ui::make_dark_theme(app.roles(), roles);
-    app.root().invalidate();
+    app.set_theme(ckv::ui::make_dark_theme(app.roles(), roles));
     app.step(0);
     complete = write("editor_search_dark", app) && complete;
-    app.theme() = ckv::ui::make_light_theme(app.roles(), roles);
-    app.root().invalidate();
+    app.set_theme(ckv::ui::make_light_theme(app.roles(), roles));
     app.step(0);
     complete = write("editor_search_light", app) && complete;
-    app.theme() = ckv::ui::make_mono_theme(app.roles(), roles);
-    app.root().invalidate();
+    app.set_theme(ckv::ui::make_mono_theme(app.roles(), roles));
     app.step(0);
     complete = write("editor_search_mono", app) && complete;
 

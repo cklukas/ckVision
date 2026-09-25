@@ -332,6 +332,8 @@ public:
 
     void invalidate();              // whole view
     void invalidate(Rect local_rect);
+    // Repaint every retained surface after a shared visual dependency changes.
+    void invalidate_subtree();
 
     // Installed by the owning Application/root; called with the
     // ABSOLUTE rect that became dirty. A view with no ancestor chain

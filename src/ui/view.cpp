@@ -182,6 +182,11 @@ void View::clear_theme_override() {
 
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }
 
+void View::invalidate_subtree() {
+    invalidate();
+    for (auto& child : children_) child->invalidate_subtree();
+}
+
 void View::invalidate(Rect local_rect) {
     invalidate(local_rect, InvalidationKind::Content);
 }

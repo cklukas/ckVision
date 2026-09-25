@@ -208,6 +208,9 @@ public:
 
     RoleRegistry& roles() noexcept { return roles_; }
     Theme& theme() noexcept { return theme_; }
+    const Theme& theme() const noexcept { return theme_; }
+    // Replace the active scheme and repaint retained views on the next step.
+    void set_theme(Theme theme);
 
     HistoryRegistry& history() noexcept { return history_; }
 

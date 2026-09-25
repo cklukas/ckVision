@@ -38,6 +38,12 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 ```
 <!-- /ckvision-snippet -->
 
+For a scheme change after the first frame, call `Application::set_theme(new_theme)`
+and then run the next application step. This invalidates the desktop, retained
+window surfaces, and popup surfaces together so the visible frame adopts the
+new roles. Directly assigning through `theme()` configures a theme before the
+first paint; it does not request a repaint of retained surfaces.
+
 The result is deterministic: clients supply services rather than having the UI
 read wall-clock, locale, environment, or filesystem state behind their backs.
 Paint calls are coordinated by `Application::step()`/`run()`; a client should

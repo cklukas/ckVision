@@ -1187,6 +1187,11 @@ void Application::invalidate_all() {
     presenter_.invalidate();
 }
 
+void Application::set_theme(Theme theme) {
+    theme_ = std::move(theme);
+    root_.invalidate_subtree();
+}
+
 void Application::paint_and_present() {
     if (!dirty_)
         return;

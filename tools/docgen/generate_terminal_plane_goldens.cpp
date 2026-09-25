@@ -321,6 +321,17 @@ bool contained_terminal_cases(const std::filesystem::path& directory) {
     if (terminal.written_bytes().find("\x1bP") == std::string_view::npos ||
         !contained_stage(directory, "contained_initial", terminal, observer, 240)) return false;
 
+    const auto themed_stage = [&](auto factory, std::string_view name) {
+        app.set_theme(factory(app.roles(), roles));
+        app.step(0);
+        return contained_stage(directory, name, terminal, observer, 240);
+    };
+    if (!themed_stage(ui::make_dark_theme, "contained_initial_dark") ||
+        !themed_stage(ui::make_light_theme, "contained_initial_light") ||
+        !themed_stage(ui::make_mono_theme, "contained_initial_mono")) return false;
+    app.set_theme(ui::make_classic_theme(app.roles(), roles));
+    app.step(0);
+
     observer->set_bounds(Rect{8, 3, 12, 7});
     app.step(0);
     if (!contained_stage(directory, "contained_move", terminal, observer, 240)) return false;
@@ -471,9 +482,18 @@ bool contained_terminal_cases(const std::filesystem::path& directory) {
     fallback_child.feed_output("\x1bPq#0;2;100;0;0!48~\x1b\\");
     fallback_app.root().notify_terminal_subsession_changed(fallback_child);
     fallback_app.step(0);
-    return fallback.written_bytes().find("\x1bP") == std::string_view::npos &&
-           contained_stage(directory, "contained_no_graphics", fallback,
-                           fallback_observer, 0);
+    if (fallback.written_bytes().find("\x1bP") != std::string_view::npos ||
+        !contained_stage(directory, "contained_no_graphics", fallback,
+                         fallback_observer, 0)) return false;
+    const auto fallback_themed_stage = [&](auto factory, std::string_view name) {
+        fallback_app.set_theme(factory(fallback_app.roles(), fallback_roles));
+        fallback_app.step(0);
+        return contained_stage(directory, name, fallback, fallback_observer, 0);
+    };
+    return fallback_themed_stage(ui::make_dark_theme, "contained_no_graphics_dark") &&
+           fallback_themed_stage(ui::make_light_theme, "contained_no_graphics_light") &&
+           fallback_themed_stage(ui::make_mono_theme, "contained_no_graphics_mono") &&
+           fallback.written_bytes().find("\x1bP") == std::string_view::npos;
 }
 
 }  // namespace

@@ -15,7 +15,7 @@ alone would otherwise be weak evidence.
 | Editor initial and close-confirm states | `tests/test_editor_smoke.cpp` compares `editor_initial.dump` and `editor_close_confirm.dump` | `editor-initial.svg`, `editor-json.svg`, `editor-close-confirm.svg` | Dark/light/mono byte-exact initial and close-confirm states are **Open** |
 | Terminal initial shell across four schemes | `tests/test_terminal_app.cpp` exercises the public menu path with all four theme factories; this is scripted behavior, not four byte-exact frames | `terminal-initial.svg`, `terminal-initial-dark.svg`, `terminal-initial-light.svg`, `terminal-initial-mono.svg` | Scheme-specific symbolic and RGBA goldens are **Open** |
 | Terminal full-screen child and nested ckVision | `tests/test_terminal_app.cpp`, `tests/test_terminal_view.cpp`, and the POSIX/Windows child-session suites cover public and private interaction; the named Windows Terminal GUI run is in [WP-50 evidence](windows-wp50-evidence.md) | `terminal-full-screen.svg`, `terminal-nested.svg` | State × scheme byte-exact visual captures are **Open** |
-| Contained Sixel and no-graphics fallback | `tests/test_virtual_display_visual_golden.cpp` and the generated `contained_no_graphics.dump`/`.rgba` pair pin the declared default-profile scene; [WP-50 evidence](windows-wp50-evidence.md) records both live Windows Terminal Sixel and Console Host fallback | `terminal-sixel.svg`, `terminal-no-graphics.svg` | Other scheme × graphics-profile combinations are **Open** |
+| Contained Sixel and no-graphics fallback | `tests/test_virtual_display_visual_golden.cpp` and the generated `contained_no_graphics.dump`/`.rgba` pair pin the declared default-profile scene; [WP-50 evidence](windows-wp50-evidence.md) records both live Windows Terminal Sixel and Console Host fallback | `terminal-sixel.svg`, `terminal-no-graphics.svg` | The initial contained scene now has paired symbolic/RGBA goldens under all four schemes in both Sixel and no-graphics profiles; later state × scheme/profile combinations remain **Open** |
 | Contained move, resize, overlap, shadow, clear, repaint, close, and two-child replacement | `tests/test_virtual_display_visual_golden.cpp` plus paired `contained_*.dump`/`.rgba` goldens cover the default scheme/profile; `tests/check_generated_goldens.py` enumerates the portable manifest | Generated terminal scenario captures and [Windows live evidence](windows-wp50-evidence.md) cover representative states | The default-profile cell/pixel pairs are **Done**; four-scheme and wide-text/shrink combinations remain **Open** |
 
 The existing `generated_golden_bytes` gate covers the named checked-in files,
@@ -24,3 +24,9 @@ The broader widget/chrome appearance rows in [WP-38](corrective-assurance.md#wp-
 remain outside this slice. This audit makes the unfilled combinations explicit
 before adding captures; it is not a reason to rerun completed live Windows
 scenarios without a relevant code change.
+
+Runtime scheme switching initially left retained desktop/window surfaces in
+the previous colors. `Application::set_theme()` now invalidates the subtree;
+the four generated contained-scene dumps differ by scheme while the decoded
+Sixel plane remains the same image. The no-graphics profile has a transparent
+pixel plane under every scheme.
