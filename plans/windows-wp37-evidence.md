@@ -1339,3 +1339,30 @@ modern ConPTY suites pass **21/21** each; hosted Windows CTest passes
 **164/164**. [WP-50 evidence](windows-wp50-evidence.md) records the source
 and output hashes, timing, and exact logs. This is native transport coverage;
 the remaining live GUI resize, pixel-mouse, and degraded-host rows stay open.
+
+
+## Fresh Linux Clang sanitizer and fuzz corpus matrix — 2026-09-25
+
+A fresh ARM64 Linux build from the committed worktree snapshot used Debian
+Clang 19.1.7, Debug, `CKVISION_SANITIZE=address,undefined`, and
+`CKVISION_BUILD_FUZZERS=ON`. The source snapshot included the WP-50 ConPTY
+test changes and 67-file golden manifest; the portable generator and manifest
+SHA-256 values were
+`99c0e87b29143755001f3a02417eb75a62217166ef2f1e1ba63a4313c30d7c08`
+and `b52fe52ac7de0caaceea7cf6e462fad39b6791bf130b77a3ff624e53f7614abf`.
+The build ran 17:54:23–17:57:33 UTC (190 seconds) in
+`/home/klukas.guest/ckvision-wp37-san-fuzz-20260925/build`, completing all
+403 logged compile/link steps with no warnings. The prior comparable GCC
+ASan/UBSan clean build took 235 seconds; the compiler, source set, and fuzz
+targets differ, so elapsed time alone is not a freshness claim. The
+instrumented test runner SHA-256 is
+`16ea0be70db11aa8fa2862afc0ec0514f8e8dc8315c681741e203532e8fee458`
+and the terminal-plane generator SHA-256 is
+`17358116a484ab481a7db92cc495a9ade39b95714064c277d32ad87433230088`.
+Full CTest ran 17:57:33–17:59:19 UTC and passed **186/186** in 106.09
+seconds, including all nine bounded fuzz corpora, `generated_golden_bytes`,
+and both mandatory provenance gates, with no sanitizer diagnostic. Exact
+configure/build/test logs, timing, and hashes are retained under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-san-fuzz-20260925`. This advances the
+portable sanitizer/fuzz gate; it does not instrument Windows-only ConPTY
+source or close live Windows host acceptance.
