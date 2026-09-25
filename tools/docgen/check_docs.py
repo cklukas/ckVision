@@ -10,6 +10,10 @@ import re
 import sys
 
 
+def public_headers(root: pathlib.Path) -> list[str]:
+    return [path.relative_to(root).as_posix() for path in sorted((root / "include/cvision").rglob("*.hpp"))]
+
+
 def public_widget_headers(root: pathlib.Path) -> list[str]:
     return [path.relative_to(root).as_posix() for path in sorted((root / "include/cvision/widgets").glob("*.hpp"))]
 
@@ -90,11 +94,17 @@ def main() -> int:
             coverage_text = coverage.read_text(encoding="utf-8")
             gallery_text = gallery.read_text(encoding="utf-8")
             api_text = api_index.read_text(encoding="utf-8")
+            listed_headers = re.findall(r"^\| `(include/cvision/[^`]+\.hpp)` \|", api_text, re.MULTILINE)
+            installed_headers = set(public_headers(root))
+            for header in sorted(installed_headers):
+                count = listed_headers.count(header)
+                if count != 1:
+                    errors.append(f"api-index.md must list installed header {header} exactly once (found {count})")
+            for header in sorted(set(listed_headers) - installed_headers):
+                errors.append(f"api-index.md lists absent header {header}")
             for header in public_widget_headers(root):
                 if header not in coverage_text:
                     errors.append(f"coverage.md omits public widget header {header}")
-                if header not in api_text:
-                    errors.append(f"api-index.md omits public widget header {header}")
             widget_names = re.findall(r'^(?:class|struct) (\w+)', "\n".join(
                 (root / header).read_text(encoding="utf-8") for header in public_widget_headers(root)), re.MULTILINE)
             for name in widget_names:

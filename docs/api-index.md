@@ -12,6 +12,8 @@ This is an index, not a replacement for the learning path:
 [getting started](getting-started.md) -> [Hello](tutorial-hello.md) ->
 [object model](object-model.md) → the focused guides. Every public widget
 header has an entry below and a corresponding row in [coverage](coverage.md).
+Every installed header appears once in the tables, including headers for testing
+and implementation support; their descriptions identify the intended entry point.
 
 ## Application and layout
 
@@ -30,6 +32,8 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 
 ## Embedded terminal
 
+| Header | Primary types | Start here |
+|---|---|---|
 | `include/cvision/core/terminal_subsession.hpp` | deterministic child-session snapshot contract, capability profile and policies | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/term/terminal_subsession.hpp` | launch specification and platform adapter seam | [Embedded terminal](embedded-terminal.md) |
 | `include/cvision/core/palette.hpp` | what a palette index names, and colour resolution | [Themes and rendering](themes-and-rendering.md) |
@@ -114,3 +118,77 @@ header has an entry below and a corresponding row in [coverage](coverage.md).
 The public terminal hosts live under `include/cvision/term/`; use
 `headless_terminal.hpp` in tests and the platform backend header appropriate to
 your host. [Platform services](platform-services.md) covers the boundary.
+
+## Core values, text, and services
+
+| Header | Primary contract | Start here |
+|---|---|---|
+| `include/cvision/core/assert.hpp` | always-on `CKV_ASSERT` contract checks | [Host diagnostics](terminal-host-integration.md#diagnostics) |
+| `include/cvision/core/cell.hpp` | `Cell` and grapheme/style storage | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/clipboard.hpp` | `ClipboardWriter`, `MemoryClipboardWriter` | [Platform services](platform-services.md) |
+| `include/cvision/core/clock.hpp` | `Clock`, `ManualClock` | [Platform services](platform-services.md) |
+| `include/cvision/core/color.hpp` | `Color` and colour kinds | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/cursor.hpp` | `CursorState`, `CursorShape` | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/diagnostics.hpp` | `DiagnosticsSink`, `BufferedDiagnostics` | [Host diagnostics](terminal-host-integration.md#diagnostics) |
+| `include/cvision/core/error.hpp` | `Error`, `ErrorCode` | [Platform services](platform-services.md) |
+| `include/cvision/core/event.hpp` | key, text, mouse, resize, focus, and paste events | [Input decoder](input-decoder.md) |
+| `include/cvision/core/filesystem.hpp` | injected `FileSystem` and file result contracts | [Platform services](platform-services.md) |
+| `include/cvision/core/frame_view.hpp` | `FrameView`, `RasterSlice` | [Graphics](graphics.md) |
+| `include/cvision/core/generated_unicode_15_1.hpp` | generated Unicode tables; implementation support, not the client text entry point | [Text width](text-width.md) |
+| `include/cvision/core/geometry.hpp` | `Point`, `Size`, `Rect`, `PixelPoint`, `PixelSize` | [Object model](object-model.md) |
+| `include/cvision/core/golden.hpp` | symbolic scene `golden::Document` and records | [Golden format](golden-format.md) |
+| `include/cvision/core/image.hpp` | `Image`, `Rgba` | [Graphics](graphics.md) |
+| `include/cvision/core/key.hpp` | `Key`, `Modifier`, `KeyChord` | [Input decoder](input-decoder.md) |
+| `include/cvision/core/pointer_shape.hpp` | `PointerShape` vocabulary | [Terminal capability profiles](terminal-profiles.md) |
+| `include/cvision/core/style.hpp` | `Style`, attributes, underline shape | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/core/text.hpp` | deterministic text and grapheme helpers | [Text width](text-width.md) |
+| `include/cvision/core/utf8.hpp` | UTF-8 validation and conversion helpers | [Text width](text-width.md) |
+| `include/cvision/core/version.hpp` | `Version` and library version | [Getting started](getting-started.md) |
+
+## Scene composition and capture
+
+| Header | Primary contract | Start here |
+|---|---|---|
+| `include/cvision/scene/box_drawing.hpp` | box junction and line-style resolution | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/scene/compositor.hpp` | `Compositor`, layers, shadows, raster visibility | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/scene/cursor.hpp` | scene cursor placement helpers | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/scene/golden_capture.hpp` | scene and frame capture into golden documents | [Golden format](golden-format.md) |
+| `include/cvision/scene/painter.hpp` | `Painter` drawing API | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/scene/rect_ops.hpp` | rectangle set operations for damage and clipping | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/scene/surface.hpp` | `Surface`, damage spans, raster regions | [Themes and rendering](themes-and-rendering.md) |
+
+## Terminal hosts, protocols, and diagnostics
+
+| Header | Primary contract | Start here |
+|---|---|---|
+| `include/cvision/term/capabilities.hpp` | `Capabilities`, terminal profiles, colour and input protocol enums | [Terminal capability profiles](terminal-profiles.md) |
+| `include/cvision/term/capability_report.hpp` | structured capability report entries | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/graphics_log.hpp` | opt-in graphics diagnostic log | [Graphics](graphics.md) |
+| `include/cvision/term/headless_terminal.hpp` | deterministic `HeadlessTerminal` test host | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/input_decoder.hpp` | `InputDecoder` and capability-update policy | [Input decoder](input-decoder.md) |
+| `include/cvision/term/pointer_shape_names.hpp` | pointer-shape protocol names and support map | [Terminal capability profiles](terminal-profiles.md) |
+| `include/cvision/term/posix_clock.hpp` | `PosixClock` | [Platform services](platform-services.md) |
+| `include/cvision/term/posix_filesystem.hpp` | `PosixFileSystem` | [Platform services](platform-services.md) |
+| `include/cvision/term/posix_terminal.hpp` | POSIX `PosixTerminal` session backend | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/posix_terminal_subsession.hpp` | private POSIX child PTY adapter | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/term/presenter.hpp` | `Presenter` cell and raster VT encoder | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/term/record_replay_terminal.hpp` | deterministic terminal I/O recording and replay | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/sixel_decoder.hpp` | bounded Sixel image decoder | [Graphics](graphics.md) |
+| `include/cvision/term/sixel_encoder.hpp` | Sixel image encoder | [Graphics](graphics.md) |
+| `include/cvision/term/terminal.hpp` | `Terminal`, capability events, and wait handles | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/terminal_clipboard.hpp` | `TerminalClipboardWriter` | [Platform services](platform-services.md) |
+| `include/cvision/term/terminal_emulator.hpp` | `TerminalEmulator` for contained child output | [Embedded terminal](embedded-terminal.md) |
+| `include/cvision/term/virtual_display.hpp` | `VirtualDisplay` for deterministic VT presentation | [Graphics](graphics.md) |
+| `include/cvision/term/windows_clock.hpp` | `WindowsClock` | [Platform services](platform-services.md) |
+| `include/cvision/term/windows_terminal.hpp` | Windows `WindowsTerminal` session backend | [Terminal host integration](terminal-host-integration.md) |
+| `include/cvision/term/windows_terminal_subsession.hpp` | private Windows ConPTY child adapter | [Embedded terminal](embedded-terminal.md) |
+
+## UI support and testing
+
+| Header | Primary contract | Start here |
+|---|---|---|
+| `include/cvision/ui/context.hpp` | `Context` for application-owned services | [Object model](object-model.md) |
+| `include/cvision/ui/history.hpp` | `HistoryRegistry` for scoped interaction history | [Object model](object-model.md) |
+| `include/cvision/ui/layout_metrics.hpp` | layout measurement helpers | [Layout guide](layout-guide.md) |
+| `include/cvision/ui/standard_roles.hpp` | `StandardRoles` for theme role lookup | [Themes and rendering](themes-and-rendering.md) |
+| `include/cvision/testing/cktest.hpp` | repository test harness; testing support, not an application dependency | [Contributing](../CONTRIBUTING.md) |

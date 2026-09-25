@@ -3013,8 +3013,11 @@ and prevent milestone status from outrunning verification again.
 [M7 Windows traceability slice](windows-m7-traceability.md) maps every literal
 M7 exit item to implementation, executable and live evidence, public reference,
 and its remaining gap. It does not close M7: live pixel-mouse interaction and
-real legacy-console refusal remain Open. The complete M0–M11 appearance,
-example, reference, and release-gate audit remains Open.
+real legacy-console refusal remain Open. The
+[API index](../docs/api-index.md) now enumerates all 124 installed headers
+exactly once, enforced by the documentation checker. This closes the
+header-inventory gap; per-API reference depth and the complete M0–M11
+appearance, example, and release-gate audit remain Open.
 
 ## Review finding traceability
 
