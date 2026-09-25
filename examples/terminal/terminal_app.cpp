@@ -96,6 +96,28 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
         .handler = [this] { (void)new_sixel_demo(); },
     });
 
+    // Keep theme changes in the ordinary command/menu path so a running
+    // terminal and its contained graphics demonstrate live repainting.
+    const auto scheme_command = [this, roles](std::string_view key,
+                                              std::string_view title, auto factory) {
+        return app_.commands().declare(ui::CommandDescriptor{
+            .key = std::string(key),
+            .title = std::string(title),
+            .category = "View",
+            .handler = [this, roles, factory] {
+                app_.set_theme(factory(app_.roles(), roles));
+            },
+        });
+    };
+    const ui::CommandId classic_scheme =
+        scheme_command("terminal.scheme.classic", "&Classic", ui::make_classic_theme);
+    const ui::CommandId dark_scheme =
+        scheme_command("terminal.scheme.dark", "&Dark", ui::make_dark_theme);
+    const ui::CommandId light_scheme =
+        scheme_command("terminal.scheme.light", "&Light", ui::make_light_theme);
+    const ui::CommandId mono_scheme =
+        scheme_command("terminal.scheme.mono", "&Mono", ui::make_mono_theme);
+
     widgets::MenuBarItem file_menu{
         "&File",
         {
@@ -115,6 +137,15 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
             widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().cascade}),
         },
     };
+    widgets::MenuBarItem view_menu{
+        "&View",
+        {
+            widgets::MenuItem::command(widgets::CommandPresentation{classic_scheme}),
+            widgets::MenuItem::command(widgets::CommandPresentation{dark_scheme}),
+            widgets::MenuItem::command(widgets::CommandPresentation{light_scheme}),
+            widgets::MenuItem::command(widgets::CommandPresentation{mono_scheme}),
+        },
+    };
     // A focused terminal forwards its keys to the child, F1 included --
     // which is what a terminal is for. So this application also carries the
     // About where it can always be reached.
@@ -125,7 +156,8 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     };
     widgets::ApplicationShell shell(
         app_, {.theme = ui::make_classic_theme(app_.roles(), roles),
-               .menus = {std::move(file_menu), std::move(window_menu), std::move(help_menu)},
+               .menus = {std::move(file_menu), std::move(window_menu),
+                         std::move(view_menu), std::move(help_menu)},
                .status_items = {
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().next_window}},

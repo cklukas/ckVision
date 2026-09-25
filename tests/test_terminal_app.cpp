@@ -54,14 +54,58 @@ CK_TEST(terminal_example_exposes_new_terminal_and_window_arrangement_commands) {
 
     auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.example.desktop().top_dock());
     CK_CHECK(menu_bar != nullptr);
-    CK_CHECK(menu_bar->menus().size() == 3U);
+    CK_CHECK(menu_bar->menus().size() == 4U);
     CK_CHECK(menu_has_command(menu_bar->menus()[0], f.example.new_terminal_command()));
     CK_CHECK(menu_has_command(menu_bar->menus()[0], f.example.new_sixel_demo_command()));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).next_window));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).previous_window));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).tile));
     CK_CHECK(menu_has_command(menu_bar->menus()[1], standard(f.app).cascade));
-    CK_CHECK(menu_has_command(menu_bar->menus()[2], standard(f.app).help));
+    CK_CHECK(menu_has_command(menu_bar->menus()[3], standard(f.app).help));
+}
+
+CK_TEST(terminal_example_view_menu_repaints_open_terminal_windows_in_all_schemes) {
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(f.app.commands().execute(f.example.new_sixel_demo_command()));
+    f.app.step(0);
+    CK_CHECK(f.example.desktop().windows().size() == 2U);
+    auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.example.desktop().top_dock());
+    CK_CHECK(menu_bar != nullptr);
+    if (menu_bar == nullptr) return;
+
+    using ThemeFactory = ckv::ui::Theme (*)(const ckv::ui::RoleRegistry&,
+                                             const ckv::ui::StandardRoles&);
+    struct Scheme {
+        std::string_view key;
+        ThemeFactory factory;
+    };
+    constexpr std::array<Scheme, 4> schemes{{
+        {"terminal.scheme.dark", ckv::ui::make_dark_theme},
+        {"terminal.scheme.light", ckv::ui::make_light_theme},
+        {"terminal.scheme.mono", ckv::ui::make_mono_theme},
+        {"terminal.scheme.classic", ckv::ui::make_classic_theme},
+    }};
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(f.app.roles());
+    for (const Scheme& scheme : schemes) {
+        const std::optional<ckv::ui::CommandId> command = f.app.commands().id_for(scheme.key);
+        CK_CHECK(command.has_value());
+        if (!command) continue;
+        CK_CHECK(menu_has_command(menu_bar->menus()[2], *command));
+        CK_CHECK(f.app.commands().execute(*command));
+        f.app.step(0);
+        const ckv::ui::Theme expected = scheme.factory(f.app.roles(), roles);
+        CK_CHECK(f.app.current_frame().at(ckv::Point{0, 1}).style() ==
+                 expected.resolve(roles.desktop_background));
+        ckv::widgets::Window* const active = f.example.desktop().active_window();
+        CK_CHECK(active != nullptr);
+        if (active != nullptr) {
+            const ckv::Rect frame = active->absolute_bounds();
+            CK_CHECK(f.app.current_frame().at(ckv::Point{frame.x, frame.y + 2}).style() ==
+                     expected.resolve(roles.window_frame_active));
+        }
+        CK_CHECK(f.example.desktop().windows().size() == 2U);
+    }
 }
 
 CK_TEST(terminal_example_opens_switches_arranges_and_closes_independent_terminal_windows) {

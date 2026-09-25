@@ -267,8 +267,8 @@ Highlighters return semantic `SyntaxSpan` values for one logical line and a
 next lexical state. `TextEditor` turns those categories into semantic theme
 roles (`ckv.editor.syntax.*`) while preserving selection priority.
 The editor smoke suite also verifies that an active search selection and caret
-survive all four built-in schemes after the retained tree is explicitly
-invalidated for the theme change.
+survive all four built-in schemes when `Application::set_theme()` repaints
+the retained tree after the theme change.
 
 `SyntaxCache` is the deterministic incremental layer behind `TextEditor`.
 It retains each line's incoming state, spans, and outgoing state; after an

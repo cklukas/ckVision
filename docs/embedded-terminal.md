@@ -31,6 +31,11 @@ emits no outer raster bytes.
 |---|---|---|---|---|
 | ![Interactive shell](generated/screenshots/terminal-initial.svg) | ![Full-screen child](generated/screenshots/terminal-full-screen.svg) | ![Nested child](generated/screenshots/terminal-nested.svg) | ![Contained Sixel](generated/screenshots/terminal-sixel.svg) | ![Sixel fallback](generated/screenshots/terminal-no-graphics.svg) |
 
+Choose **View → Classic**, **Dark**, **Light**, or **Mono** while the shell
+and Sixel Demo windows are open. The menu changes the outer desktop and
+window chrome immediately; the child terminal keeps its own VT colors and
+its decoded image.
+
 The same shell path is exercised through every built-in presentation scheme,
 so menu chrome and terminal content remain visible as the application theme
 changes:
