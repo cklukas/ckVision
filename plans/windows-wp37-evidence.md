@@ -1633,3 +1633,45 @@ The bridge and fixture processes exited or were stopped by their exact PID;
 the one-off guest build directory and iTerm window were removed. The compact
 byte captures, build record, and temporary relay source are retained under
 `/Volumes/PRO-BLADE/tmp/ckvision-wp37-iterm-20260925`.
+
+## Contour pixel-host feasibility on the signed-in ARM64 VM — 2026-09-25
+
+The project's [terminal comparison](https://github.com/contour-terminal/terminal-comparison)
+lists SGR-pixel mode 1016. To seek a Windows host for the still-open live
+pixel row, the named VM tried Contour 0.6.3.8249's official x64 portable ZIP
+on its PRO-BLADE-backed disk. The 81,269,269-byte archive matched the release
+asset's published SHA-256
+`2F18D6304EC643282DF62FBDC9D4391B364E03B94D5582A2E82F3FE0EA506515`;
+`contour.exe version` reported `0.6.3.8249`. The executable SHA-256 was
+`399AD8FC7B13CAFEBBD0C77D499EA465FDE397C10AAE803A5FEF52EDD30B51B9`.
+The existing ARM64 `windows_terminal_child.exe` fixture was byte-verified
+against SHA-256 `084A1B72A8793395901B7DBD6610B8BE6E0F8EE6728D720BBA8A7031E77433C8`.
+No new ckVision test was made.
+
+The first limited `LIMA\cktest` scheduled-task launch failed with access denied
+because extracted files retained the `klukas` profile ACL. After staging in a
+Public guest test directory and granting `cktest` read/execute access, the
+single signed-in Session 1 launch created Contour PID 7264, private
+`OpenConsole.exe` PID 4884, and the fixture PID 3408. The fixture wrote
+`CAP mouse_protocol=2 pixel_mouse=0 cell_pixels=0x0 sixel=0`. Yet a QMP
+framebuffer capture taken while those processes were present showed only the
+Windows desktop, with no visible Contour window. A guarded mouse drag at the
+previous test coordinate generated no fixture events. This is **not** proof
+that Contour's protocol lacks mode 1016: the GUI was not available for a live
+inside-window gesture on this VM.
+
+The portable bundle contained Qt's `opengl32sw.dll`. A final isolated task
+used Qt's documented software-renderer environment settings on the same
+signed-in desktop. At four seconds, the only Contour process had
+`MainWindowHandle=0`, the fixture had not started, and no GUI appeared; that
+task then exited. This does not close the live pixel row. The one-off tasks,
+processes, and extracted guest runtimes were removed. The compact process and
+fixture records plus actual framebuffer capture are retained under
+`/Volumes/PRO-BLADE/tmp/ckvision-contour-probe-20260925` with SHA-256
+`7472247F713F8D01B4A801E4CE3C472AD2DCCC0897D30DDA` for the process
+record, `FBF86F312D628EE53F0AD172C6E665FAF97767789A2A4F2375EDE5BB26066053`
+for the fixture log, and
+`295AC8CFC7B699268C03CCBE256F2FF9F554616E379902E7E640C14CB810409A`
+for the framebuffer JPEG. The live SGR pixel mouse row remains **Open**;
+the finished Windows Terminal, cell-mouse, graphics, clipboard, and 79-file
+golden rows remain **Done**.
