@@ -380,7 +380,9 @@ while showing the exact client-side lifetime and command wiring.
 The File > Open Sample submenu drives that same controller path for
 `config.yaml`, `settings.json`, `sample.sh`, and `notes.txt`. It is a runnable
 profile-detection tour: YAML, JSON, Bash, and the plain-text fallback are each
-selected from explicit filename/content metadata, with no host probing.
+selected from explicit filename/content metadata, with no host probing. The
+window title follows the opened sample, and a dirty-close confirmation names
+that same file.
 
 | Command | Where | What it proves |
 |---|---|---|

@@ -170,13 +170,24 @@ CK_TEST(the_editor_example_opens_json_bash_and_plain_samples_through_its_public_
     CK_CHECK(f.editor.open_sample("settings.json") == ckv::widgets::EditorFileStatus::Ok);
     CK_CHECK(f.editor.editor()->profile_id() == "json");
     CK_CHECK(f.editor.document()->text().find("\"enabled\"") != std::string::npos);
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "Editor — settings.json"));
     CK_CHECK(f.editor.open_sample("sample.sh") == ckv::widgets::EditorFileStatus::Ok);
     CK_CHECK(f.editor.editor()->profile_id() == "bash");
     CK_CHECK(f.editor.document()->text().starts_with("#!/usr/bin/env bash"));
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "Editor — sample.sh"));
     CK_CHECK(f.editor.open_sample("notes.txt") == ckv::widgets::EditorFileStatus::Ok);
     CK_CHECK(f.editor.editor()->profile_id() == "plain");
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "Editor — notes.txt"));
     CK_CHECK(f.editor.open_sample("config.yaml") == ckv::widgets::EditorFileStatus::Ok);
     CK_CHECK(f.editor.editor()->profile_id() == "yaml");
+    CK_CHECK(f.editor.open_sample("settings.json") == ckv::widgets::EditorFileStatus::Ok);
+    f.app.dispatch(ckv::TextEvent{"#", false});
+    CK_CHECK(!f.editor.window()->close());
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "Save changes to settings.json?"));
 }
 
 CK_TEST(the_editor_example_publishes_a_wrap_aware_visible_caret_for_the_focused_editor) {

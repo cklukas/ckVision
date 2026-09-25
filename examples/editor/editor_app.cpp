@@ -16,6 +16,13 @@
 #include "cvision/widgets/window.hpp"
 
 namespace ckv::editor_example {
+namespace {
+std::string document_name(std::string_view path) {
+    const std::size_t separator = path.find_last_of("/\\");
+    return std::string(path.substr(separator == std::string_view::npos ? 0U : separator + 1U));
+}
+}  // namespace
+
 EditorApp::EditorApp(ui::Application& application)
     : application_(application), roles_(ui::intern_standard_roles(application.roles())),
       document_(std::make_shared<widgets::EditorDocument>()), file_controller_(document_, filesystem_) {
@@ -148,11 +155,11 @@ EditorApp::EditorApp(ui::Application& application)
                        widgets::StatusLineItem{widgets::CommandPresentation{commands.standard().quit}}});
     desktop_->dock_bottom(std::move(status));
 
-    auto window = std::make_unique<widgets::Window>("Editor — config.yaml");
+    auto window = std::make_unique<widgets::Window>("Editor — " + document_name(file_controller_.path()));
     window->set_bounds(Rect{2, 2, 74, 20});
     window->set_grow_policy(widgets::DesktopGrowPolicy::AnchorEdges);
     auto editor = std::make_unique<widgets::TextEditor>(document_, &profiles_);
-    editor->set_file_name("config.yaml");
+    editor->set_file_name(document_name(file_controller_.path()));
     editor->set_show_line_numbers(true);
     editor->set_wrap_mode(widgets::WrapMode::Word);
     editor_ = editor.get();
@@ -189,7 +196,8 @@ void EditorApp::refresh_status() {
 widgets::EditorFileStatus EditorApp::open_sample(std::string_view path) {
     const widgets::EditorFileStatus status = file_controller_.open(std::string(path));
     if (status == widgets::EditorFileStatus::Ok && editor_ != nullptr) {
-        editor_->set_file_name(file_controller_.path());
+        editor_->set_file_name(document_name(file_controller_.path()));
+        if (window_ != nullptr) window_->set_title("Editor — " + document_name(file_controller_.path()));
         refresh_status();
     }
     return status;
@@ -200,7 +208,8 @@ void EditorApp::request_close() {
     close_confirmation_.emplace(widgets::present_message_box(
         application_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Save changes",
-                                      "Save changes to config.yaml?", widgets::MessageBoxButtons::YesNoCancel}));
+                                      "Save changes to " + document_name(file_controller_.path()) + "?",
+                                      widgets::MessageBoxButtons::YesNoCancel}));
     close_confirmation_->set_completion_handler([this](widgets::MessageBoxResult result) {
         if (window_ == nullptr) return;
         switch (result) {
