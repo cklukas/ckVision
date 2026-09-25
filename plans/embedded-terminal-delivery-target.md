@@ -108,6 +108,31 @@ scenarios, other degraded paths, and the release matrix remain open. WP-37
 consumes WP-50 rather than treating a general backend test as a substitute for
 embedded-terminal acceptance.
 
+## WP-50 named Windows scenario status — 2026-09-25
+
+The following requested signed-in Windows Terminal scenarios are **Done** on
+the named ARM64 VM. The observations and exact process/build evidence are in
+[the WP-50 Windows record](windows-wp50-evidence.md). These row statuses do
+not promote the complete WP-50 package or WP-37 release matrix.
+
+| Scenario | Status | Evidence in the Windows record |
+|---|---|---|
+| Contained terminal in signed-in Windows Terminal Preview | **Done** | Live Preview GUI and clean verified GUI checkpoints |
+| Nested ckVision input and exit | **Done** | Live Preview nested frame, `go` response, and return to its private shell |
+| Child Sixel containment | **Done** | Live raster clipping, move, overlap/shadow, clear, individual close, and outside-window checks |
+| No-graphics fallback | **Done** | Same verified GUI under Console Host displayed `[sixel]`; inbox ConPTY native fallback passed |
+| Resize | **Done** | Live parent grip changed child ConPTY 64×17 → 57×15; held Sixel resize restored its image and child content; native two-child resize storm passed |
+| Close, child loss, and fresh allocation | **Done** | Individual window close, nonzero child exit, forced and FailFast child loss, surviving peer input, and fresh private-host allocation |
+| Resource-limit recovery | **Done** | Live 4.2 MiB Sixel rejection followed by valid image, peer input, close, and normal-demo restoration; native 128-byte limit case passed |
+| Portable contained-scene goldens | **Done** | The 67-file cell/RGBA/symbolic manifest matched byte for byte on macOS, Linux, and Windows |
+
+**WP-50 overall: In progress.** The installed Windows Terminal Stable and
+Preview hosts do not advertise SGR pixel-mouse mode 1016; the native private
+ConPTY path passes when that capability is supplied, but a real capable-host
+gesture is still unverified. The broader degraded-host and release acceptance
+matrix remains for WP-37/WP-38. A completed named scenario above is not a
+reason to rerun it without a code change or a concrete regression risk.
+
 ## Current evidence map
 
 The present POSIX/headless implementation keeps each acceptance proof next to

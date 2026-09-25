@@ -100,8 +100,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
-| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — fresh Windows 164/164; inbox/modern ConPTY 15/15 each; live Preview nested ckVision, paste, Sixel, File-menu mouse, concurrent hosts, individual close, nonzero child exit, and isolated private-host failure/recovery pass; real Console Host text fallback and concurrent modern-ConPTY raster isolation/reallocation pass; pixel-mouse/remaining lifecycle/matrix gates pending** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — VT backend and live Preview keyboard/native clipboard round trip/nested/Sixel/File-menu mouse, Stable gallery Greet click/graphics redraw, and Console Host no-graphics fallback; Stable/Preview report no pixel-mouse mode; hosted Release 177/177 Mac, 177/177 Linux, fresh 164/164 Windows; 16 symbolic goldens byte-identical; pixel mouse and remaining matrix gates pending** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — named live Preview nested, Sixel/fallback, resize, close/fault/reallocation, resource recovery, and 67 portable golden scenarios Done; true live pixel mouse and remaining host matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, and 67 byte-identical three-platform goldens Done; true pixel mouse, multi-Application isolation, legacy-console refusal, and final release matrix Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
@@ -2905,6 +2905,15 @@ acceptance is still required. This package uses [embedded-terminal-architecture.
   Windows, with byte-identical platform-independent cells/pixels where the
   declared profiles match.
 
+**Current WP-50 status (2026-09-25):** In progress overall. The requested
+signed-in Windows Terminal scenarios—nested ckVision, contained Sixel and its
+no-graphics fallback, resize, close/child loss, and resource recovery—are
+**Done** with named-host evidence. The portable 67-file three-platform
+contained-scene golden set is also **Done**. The exact row-by-row status is in
+[embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md#wp-50-named-windows-scenario-status--2026-09-25).
+True live pixel mouse on a capable Windows host and the remaining WP-37/WP-38
+acceptance matrix remain open; they do not reopen the finished rows.
+
 ### WP-37 — Windows backend and three-platform matrix
 
 **Purpose.** Put M7 in the same executable queue as every other remaining
@@ -2938,6 +2947,18 @@ obligation so “next open WP” cannot skip the Windows release gate.
   deterministically under the declared no-graphics/plain-VT profiles.
 - The queue may remain `Blocked` on an unavailable Windows host, but neither M7
   nor WP-38 may be marked `Done` in its place.
+
+**Current WP-37 status (2026-09-25): In progress.** The following named
+rows are **Done** with [Windows evidence](windows-wp37-evidence.md): live
+keyboard and cell mouse, Sixel graphics and Console Host text fallback,
+native clipboard export/import, the editor's Unicode input/highlighting/search
+and injected Save/reopen workflow, plain-VT ConPTY degradation, and the
+67-file byte-identical portable golden manifest on macOS, Linux, and Windows.
+Live SGR pixel mouse is **Open** because the installed Windows Terminal hosts
+do not advertise mode 1016. Multi-Application isolation, the real legacy-console
+refusal route, and the remaining full sanitizer/benchmark/release matrix are
+also **Open**. Finished rows stay finished while those specific rows are
+completed and audited.
 
 ### WP-38 — Golden, script, reference, and release-gate closure
 
