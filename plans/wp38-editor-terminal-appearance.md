@@ -57,3 +57,15 @@ updates the same menu items without reconstructing the menu. The focused menu,
 Editor, and Terminal command-path checks pass in the 177-test macOS Release
 suite; this is a usability feature within the appearance slice, not closure
 of the remaining state × scheme/profile matrix.
+
+At `27cac4b`, the Editor example also follows the active sample filename in
+its window title and dirty-close prompt; `suite_test_editor_smoke` checks the
+JSON, Bash, and plain-text titles and the JSON close prompt. This corrects a
+visible stale-name defect without changing the pinned default YAML frames.
+The current source passed the full macOS and Linux ARM64 Release suites
+(177/177 each) and Windows ARM64 Release (164/164), with zero build warnings.
+The 79-file `generated_golden_bytes` and both provenance gates passed on all
+three hosts. The Linux and Windows source trees used the same SHA-256-verified
+`b40779785376e3b62b4e971c242aa7d5bceae47d65a10bb58854b9c06f81e293` `cc450ba` archive plus the three `27cac4b` file changes,
+whose SHA-256 hashes were checked after staging. The remaining WP-38 state,
+reference, and release audit stays Open.
