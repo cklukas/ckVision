@@ -2908,8 +2908,8 @@ acceptance is still required. This package uses [embedded-terminal-architecture.
 **Current WP-50 status (2026-09-25):** In progress overall. The requested
 signed-in Windows Terminal scenarios—nested ckVision, contained Sixel and its
 no-graphics fallback, resize, close/child loss, and resource recovery—are
-**Done** with named-host evidence. The portable 67-file three-platform
-contained-scene golden set is also **Done**. The exact row-by-row status is in
+**Done** with named-host evidence. The portable 79-file three-platform
+golden manifest is also **Done**. The exact row-by-row status is in
 [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md#wp-50-named-windows-scenario-status--2026-09-25).
 True live pixel mouse on a capable Windows host and the remaining WP-37/WP-38
 acceptance matrix remain open; they do not reopen the finished rows.
@@ -2953,7 +2953,7 @@ rows are **Done** with [Windows evidence](windows-wp37-evidence.md): live
 keyboard and cell mouse, Sixel graphics and Console Host text fallback,
 native clipboard export/import, the editor's Unicode input/highlighting/search
 and injected Save/reopen workflow, plain-VT ConPTY degradation, live
-two-outer-Application isolation, and the 67-file byte-identical portable
+two-outer-Application isolation, and the 79-file byte-identical portable
 golden manifest on macOS, Linux, and Windows.
 Live SGR pixel mouse is **Open**: the installed Windows Terminal hosts
 do not advertise mode 1016, and signed-in mintty plus raw iTerm-to-Windows
@@ -3022,8 +3022,8 @@ identifies the exact default-profile and four-scheme evidence already present
 and the combinations still missing. Runtime scheme changes now repaint retained
 views, and the Editor and Terminal examples expose all four schemes in their
 View menus. Their 69-file editor/terminal visual slice matches byte for byte
-on macOS, Linux, and Windows ARM64 at `4b41188`; the full 79-file manifest
-needs its own three-host audit. Per-API reference depth and the complete
+on macOS, Linux, and Windows ARM64 at `4b41188`; all seven generators
+subsequently matched the full 79-file manifest on those three hosts. Per-API reference depth and the complete
 M0–M11 appearance, example, and release-gate audit remain Open.
 
 ## Review finding traceability

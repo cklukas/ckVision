@@ -58,7 +58,7 @@ private ConPTY size change, and live Sixel clipping plus private-child cleanup
 after a mouse resize and individual close. The retained scene now dims
 child raster pixels under higher-window shadows; three paired cell/RGBA
 states cover overlap, coincident-shadow union, and exact restoration. The
-three-platform 67-file manifest passes byte for byte, and a live Preview
+three-platform 79-file manifest passes byte for byte, and a live Preview
 File menu visibly dims a contained Sixel raster and restores it when closed.
 A guarded live Preview title-bar drag moves that raster with 57,186 interior
 RGB pixels matching exactly after translation while the vacated parent region
@@ -124,7 +124,7 @@ not promote the complete WP-50 package or WP-37 release matrix.
 | Resize | **Done** | Live parent grip changed child ConPTY 64×17 → 57×15; held Sixel resize restored its image and child content; native two-child resize storm passed |
 | Close, child loss, and fresh allocation | **Done** | Individual window close, nonzero child exit, forced and FailFast child loss, surviving peer input, and fresh private-host allocation |
 | Resource-limit recovery | **Done** | Live 4.2 MiB Sixel rejection followed by valid image, peer input, close, and normal-demo restoration; native 128-byte limit case passed |
-| Portable contained-scene goldens | **Done** | The 67-file cell/RGBA/symbolic manifest matched byte for byte on macOS, Linux, and Windows |
+| Portable contained-scene goldens | **Done** | The 79-file cell/RGBA/symbolic manifest matched byte for byte on macOS, Linux, and Windows |
 
 **WP-50 overall: In progress.** The installed Windows Terminal Stable and
 Preview hosts do not advertise SGR pixel-mouse mode 1016; the native private
