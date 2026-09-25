@@ -48,6 +48,10 @@
 <text x="153" y="14" xml:space="preserve" fill="#000000">r</text>
 <text x="162" y="14" xml:space="preserve" fill="#000000">c</text>
 <text x="171" y="14" xml:space="preserve" fill="#000000">h</text>
+<text x="198" y="14" xml:space="preserve" fill="#aa0000">V</text>
+<text x="207" y="14" xml:space="preserve" fill="#000000">i</text>
+<text x="216" y="14" xml:space="preserve" fill="#000000">e</text>
+<text x="225" y="14" xml:space="preserve" fill="#000000">w</text>
 <g data-box-drawing="double">
 <path d="M 22.5 54.5 L 22.5 45 L 27.5 45" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="butt" stroke-linejoin="miter"/>
 <path d="M 22.5 54.5 L 22.5 45 L 27.5 45" fill="none" stroke="#0000aa" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>

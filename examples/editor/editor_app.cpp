@@ -78,6 +78,25 @@ EditorApp::EditorApp(ui::Application& application)
     const ui::CommandId open_plain = commands.declare({.key = "editor.open-plain-sample", .title = "Open &plain-text sample", .category = "File", .handler = [this] {
         (void)open_sample("notes.txt");
     }});
+    const auto scheme_command = [this, &commands](ui::CommandDescriptor descriptor,
+                                                    auto factory) {
+        descriptor.handler = [this, factory] {
+            application_.set_theme(factory(application_.roles(), roles_));
+        };
+        return commands.declare(std::move(descriptor));
+    };
+    const ui::CommandId classic_scheme = scheme_command(
+        {.key = "editor.scheme.classic", .title = "&Classic", .category = "View"},
+        ui::make_classic_theme);
+    const ui::CommandId dark_scheme = scheme_command(
+        {.key = "editor.scheme.dark", .title = "&Dark", .category = "View"},
+        ui::make_dark_theme);
+    const ui::CommandId light_scheme = scheme_command(
+        {.key = "editor.scheme.light", .title = "&Light", .category = "View"},
+        ui::make_light_theme);
+    const ui::CommandId mono_scheme = scheme_command(
+        {.key = "editor.scheme.mono", .title = "&Mono", .category = "View"},
+        ui::make_mono_theme);
     commands.set_enabled_predicate(save, [this] { return file_controller_.has_path() && document_->modified(); });
     commands.set_enabled_predicate(undo, [this] { return document_->can_undo(); });
     commands.set_enabled_predicate(redo, [this] { return document_->can_redo(); });
@@ -108,8 +127,13 @@ EditorApp::EditorApp(ui::Application& application)
                                           widgets::MenuItem::command(widgets::CommandPresentation{toggle_wrap})}};
     widgets::MenuBarItem search{"&Search", {widgets::MenuItem::command(widgets::CommandPresentation{find_selection}),
                                               widgets::MenuItem::command(widgets::CommandPresentation{find_next})}};
+    widgets::MenuBarItem view{"&View", {
+        widgets::MenuItem::command(widgets::CommandPresentation{classic_scheme}),
+        widgets::MenuItem::command(widgets::CommandPresentation{dark_scheme}),
+        widgets::MenuItem::command(widgets::CommandPresentation{light_scheme}),
+        widgets::MenuItem::command(widgets::CommandPresentation{mono_scheme})}};
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{
-        std::move(file), std::move(edit), std::move(search)}));
+        std::move(file), std::move(edit), std::move(search), std::move(view)}));
     auto status = std::make_unique<widgets::StatusLine>();
     status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{commands.standard().focus_next}},
                        widgets::StatusLineItem{widgets::CommandPresentation{save}},

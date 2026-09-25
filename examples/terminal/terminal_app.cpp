@@ -98,25 +98,25 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
 
     // Keep theme changes in the ordinary command/menu path so a running
     // terminal and its contained graphics demonstrate live repainting.
-    const auto scheme_command = [this, roles](std::string_view key,
-                                              std::string_view title, auto factory) {
-        return app_.commands().declare(ui::CommandDescriptor{
-            .key = std::string(key),
-            .title = std::string(title),
-            .category = "View",
-            .handler = [this, roles, factory] {
-                app_.set_theme(factory(app_.roles(), roles));
-            },
-        });
+    const auto scheme_command = [this, roles](ui::CommandDescriptor descriptor,
+                                               auto factory) {
+        descriptor.handler = [this, roles, factory] {
+            app_.set_theme(factory(app_.roles(), roles));
+        };
+        return app_.commands().declare(std::move(descriptor));
     };
-    const ui::CommandId classic_scheme =
-        scheme_command("terminal.scheme.classic", "&Classic", ui::make_classic_theme);
-    const ui::CommandId dark_scheme =
-        scheme_command("terminal.scheme.dark", "&Dark", ui::make_dark_theme);
-    const ui::CommandId light_scheme =
-        scheme_command("terminal.scheme.light", "&Light", ui::make_light_theme);
-    const ui::CommandId mono_scheme =
-        scheme_command("terminal.scheme.mono", "&Mono", ui::make_mono_theme);
+    const ui::CommandId classic_scheme = scheme_command(
+        {.key = "terminal.scheme.classic", .title = "&Classic", .category = "View"},
+        ui::make_classic_theme);
+    const ui::CommandId dark_scheme = scheme_command(
+        {.key = "terminal.scheme.dark", .title = "&Dark", .category = "View"},
+        ui::make_dark_theme);
+    const ui::CommandId light_scheme = scheme_command(
+        {.key = "terminal.scheme.light", .title = "&Light", .category = "View"},
+        ui::make_light_theme);
+    const ui::CommandId mono_scheme = scheme_command(
+        {.key = "terminal.scheme.mono", .title = "&Mono", .category = "View"},
+        ui::make_mono_theme);
 
     widgets::MenuBarItem file_menu{
         "&File",

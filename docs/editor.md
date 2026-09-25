@@ -266,6 +266,11 @@ register another language without private headers.
 Highlighters return semantic `SyntaxSpan` values for one logical line and a
 next lexical state. `TextEditor` turns those categories into semantic theme
 roles (`ckv.editor.syntax.*`) while preserving selection priority.
+Choose **View → Classic**, **Dark**, **Light**, or **Mono** in the runnable
+editor to change the scheme without losing the document, search selection, or
+caret. The scheme command calls `Application::set_theme()` while the editor
+window is open.
+
 The editor smoke suite also verifies that an active search selection and caret
 survive all four built-in schemes when `Application::set_theme()` repaints
 the retained tree after the theme change.
