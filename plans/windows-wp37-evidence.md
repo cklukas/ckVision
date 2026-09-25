@@ -1517,3 +1517,39 @@ independent input, retained peer state, individual exit, and continued peer
 input under the named GUI host. WP-37 remains **In progress** for true live
 pixel mouse on a capable outer host, real legacy-console refusal, and the
 final cross-platform release audit.
+
+## Legacy Console Host availability audit — 2026-09-25
+
+WP-37 still requires a real non-VT legacy-console refusal with an actionable
+ckVision diagnostic. Microsoft documents the per-user
+[`HKEY_CURRENT_USER\Console\ForceV2` switch](https://learn.microsoft.com/en-us/windows-server/administration/windows-console-changes):
+`1` enables the newer Console Host features and `0` selects legacy mode for
+new console sessions. The signed-in `LIMA\cktest` account on the named
+Windows 11 25H2 ARM64 VM began with `ForceV2=1`. No ckVision or terminal GUI
+process was running before this check.
+
+The exact verified Gallery executable (SHA-256
+`FA1257BD8162D1856FF6CB6CFC14BE1DFF7A376CB42CFC4633F3BBC6E58CF98E`)
+launched under `C:\Windows\System32\conhost.exe` with `ForceV2=1`.
+The process record names conhost PID 3756 and child Gallery PID 2712; an actual
+VM framebuffer capture shows the Gallery frame and the documented `[image]`
+text fallback in Console Host. Gallery exited through its Alt+X command, and
+the subsequent process inventory was clear.
+
+With the same executable, scheduled-task action, account, and working
+directory, changing only `cktest`'s `ForceV2` to `0` produced Task Scheduler
+result `0x80070057` (decimal 2147942487). No Gallery or conhost process was
+present three seconds after task start. A separate attempted legacy `cmd.exe`
+host had the same result. This is evidence that the named VM did not start a
+usable legacy Console Host in these attempts; it is **not** evidence of
+ckVision's non-VT refusal diagnostic. The setting was restored to its original
+`ForceV2=1` after each attempt, the one-off tasks were removed, and a final
+inventory found no test GUI process. Exact control/legacy process JSON and the
+control framebuffer capture are retained under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-legacy-20260925`.
+
+The **real legacy-console refusal row remains Open** pending a host that
+actually starts in legacy mode. The previously passing pipe-handle refusal
+case verifies the constructor's invalid-handle diagnostic, not this host
+capability path. No additional ckVision test is warranted from a host launch
+that never reached ckVision.

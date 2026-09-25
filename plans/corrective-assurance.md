@@ -101,7 +101,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — named live Preview nested, Sixel/fallback, resize, close/fault/reallocation, resource recovery, and 67 portable golden scenarios Done; true live pixel mouse and remaining host matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 67 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse, legacy-console refusal, and final release audit Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 67 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse, legacy-console refusal (VM host launch failed), and final release audit Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
@@ -2960,6 +2960,8 @@ do not advertise mode 1016. Native two-Application isolation across
 independent private ConPTY hosts is **Done**. The separate live
 two-outer-Application GUI isolation route is also **Done**. The real
 legacy-console refusal route and final cross-platform release audit are **Open**.
+The named VM does not start a usable `ForceV2=0` legacy host; the matched
+normal/legacy launch results are in [Windows evidence](windows-wp37-evidence.md).
 Supported macOS/Linux sanitizer gates, the nine Linux fuzz corpora, and the
 three-host benchmark gates are **Done**; the installed Windows ARM64 MSVC
 toolchain rejects ASan instrumentation and that limitation is recorded in
