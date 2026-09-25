@@ -190,6 +190,49 @@ CK_TEST(the_editor_example_opens_json_bash_and_plain_samples_through_its_public_
     CK_CHECK(display_contains(f.term.display(), "Save changes to settings.json?"));
 }
 
+CK_TEST(the_editor_sample_menu_confirms_save_discard_or_cancel_before_switching_a_dirty_document) {
+    Fixture f;
+    f.app.step(0);
+    const auto json = f.app.commands().id_for("editor.open-json-sample");
+    const auto bash = f.app.commands().id_for("editor.open-bash-sample");
+    CK_CHECK(json.has_value());
+    CK_CHECK(bash.has_value());
+    if (!json || !bash) return;
+
+    CK_CHECK(f.app.dispatch(ckv::TextEvent{"#", false}));
+    CK_CHECK(f.app.execute_command(*json));
+    CK_CHECK(f.app.is_modal());
+    f.app.step(0);
+    CK_CHECK(display_contains(f.term.display(), "Save changes to config.yaml before opening settings.json?"));
+    CK_CHECK(f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}}));
+    f.app.step(0);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.editor.document()->modified());
+    CK_CHECK(f.editor.editor()->profile_id() == "yaml");
+
+    CK_CHECK(f.app.execute_command(*json));
+    CK_CHECK(f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}}));
+    f.app.step(0);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(!f.editor.document()->modified());
+    CK_CHECK(f.editor.editor()->profile_id() == "json");
+
+    CK_CHECK(f.app.dispatch(ckv::TextEvent{"#", false}));
+    CK_CHECK(f.app.execute_command(*bash));
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Tab, ckv::Modifier::None, ""}}));
+    CK_CHECK(f.app.dispatch(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Enter, ckv::Modifier::None, ""}}));
+    f.app.step(0);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.editor.editor()->profile_id() == "bash");
+    CK_CHECK(!f.editor.document()->modified());
+
+    CK_CHECK(f.editor.open_sample("settings.json") == ckv::widgets::EditorFileStatus::Ok);
+    CK_CHECK(f.editor.document()->text().starts_with("{\n"));
+    CK_CHECK(f.editor.open_sample("config.yaml") == ckv::widgets::EditorFileStatus::Ok);
+    CK_CHECK(f.editor.document()->text().starts_with('#'));
+}
+
 CK_TEST(the_editor_example_publishes_a_wrap_aware_visible_caret_for_the_focused_editor) {
     Fixture f;
     f.app.step(0);

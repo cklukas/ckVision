@@ -3,6 +3,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -51,8 +52,13 @@ private:
     widgets::StaticText* status_ = nullptr;
     int active_scheme_ = 0;
     std::optional<widgets::MessageBoxPresentation> close_confirmation_;
+    std::optional<widgets::MessageBoxPresentation> open_confirmation_;
+    std::optional<widgets::MessageBoxPresentation> file_error_;
 
     void refresh_status();
+    widgets::EditorFileStatus open_sample_with_options(std::string_view path, widgets::EditorOpenOptions options);
+    void request_open_sample(std::string path);
+    void show_file_error(std::string message);
     void request_close();
 };
 

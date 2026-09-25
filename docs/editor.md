@@ -382,7 +382,11 @@ The File > Open Sample submenu drives that same controller path for
 profile-detection tour: YAML, JSON, Bash, and the plain-text fallback are each
 selected from explicit filename/content metadata, with no host probing. The
 window title follows the opened sample, and a dirty-close confirmation names
-that same file.
+that same file. Choosing another sample with unsaved edits opens a
+Save/Discard/Cancel choice. Save must complete before the new file opens;
+Discard explicitly drops those edits; Cancel keeps the current document.
+A failed save or open leaves the current document visible and reports the
+failure instead of silently ignoring the menu command.
 
 | Command | Where | What it proves |
 |---|---|---|

@@ -44,7 +44,8 @@ EditorApp::EditorApp(ui::Application& application)
     // the framework's own commands or another library's.
     ui::CommandRegistry& commands = application_.commands();
     const ui::CommandId save = commands.declare({.key = "editor.save", .title = "&Save", .category = "File", .chord = "Ctrl+S", .handler = [this] {
-        (void)file_controller_.save();
+        if (file_controller_.save() != widgets::EditorFileStatus::Ok)
+            show_file_error("Could not save " + document_name(file_controller_.path()) + ". The document remains open.");
     }});
     const ui::CommandId undo = commands.declare({.key = "editor.undo", .title = "&Undo", .category = "Edit", .chord = "Ctrl+Z", .handler = [this] { document_->undo(); }});
     const ui::CommandId redo = commands.declare({.key = "editor.redo", .title = "&Redo", .category = "Edit", .chord = "Ctrl+Y", .handler = [this] { document_->redo(); }});
@@ -74,16 +75,16 @@ EditorApp::EditorApp(ui::Application& application)
         (void)editor_->find_next();
     }});
     const ui::CommandId open_yaml = commands.declare({.key = "editor.open-yaml-sample", .title = "Open &YAML sample", .category = "File", .handler = [this] {
-        (void)open_sample("config.yaml");
+        request_open_sample("config.yaml");
     }});
     const ui::CommandId open_json = commands.declare({.key = "editor.open-json-sample", .title = "Open &JSON sample", .category = "File", .handler = [this] {
-        (void)open_sample("settings.json");
+        request_open_sample("settings.json");
     }});
     const ui::CommandId open_bash = commands.declare({.key = "editor.open-bash-sample", .title = "Open &Bash sample", .category = "File", .handler = [this] {
-        (void)open_sample("sample.sh");
+        request_open_sample("sample.sh");
     }});
     const ui::CommandId open_plain = commands.declare({.key = "editor.open-plain-sample", .title = "Open &plain-text sample", .category = "File", .handler = [this] {
-        (void)open_sample("notes.txt");
+        request_open_sample("notes.txt");
     }});
     const auto scheme_command = [this, &commands](ui::CommandDescriptor descriptor,
                                                     auto factory, int index) {
@@ -194,13 +195,55 @@ void EditorApp::refresh_status() {
 }
 
 widgets::EditorFileStatus EditorApp::open_sample(std::string_view path) {
-    const widgets::EditorFileStatus status = file_controller_.open(std::string(path));
+    return open_sample_with_options(path, {});
+}
+
+widgets::EditorFileStatus EditorApp::open_sample_with_options(std::string_view path,
+                                                               widgets::EditorOpenOptions options) {
+    const widgets::EditorFileStatus status = file_controller_.open(std::string(path), options);
     if (status == widgets::EditorFileStatus::Ok && editor_ != nullptr) {
         editor_->set_file_name(document_name(file_controller_.path()));
         if (window_ != nullptr) window_->set_title("Editor — " + document_name(file_controller_.path()));
         refresh_status();
     }
     return status;
+}
+
+void EditorApp::request_open_sample(std::string path) {
+    if (window_ == nullptr || open_confirmation_ || close_confirmation_ || file_error_) return;
+    if (!document_->modified()) {
+        if (open_sample(path) != widgets::EditorFileStatus::Ok)
+            show_file_error("Could not open " + document_name(path) + ". The current document remains open.");
+        return;
+    }
+    open_confirmation_.emplace(widgets::present_message_box(
+        application_, *desktop_, roles_,
+        widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Save changes",
+                                      "Save changes to " + document_name(file_controller_.path()) + " before opening " +
+                                          document_name(path) + "?",
+                                      widgets::MessageBoxButtons::YesNoCancel}));
+    open_confirmation_->set_completion_handler([this, target = std::move(path)](widgets::MessageBoxResult result) {
+        widgets::EditorFileStatus status = widgets::EditorFileStatus::Ok;
+        if (result == widgets::MessageBoxResult::Yes) {
+            status = file_controller_.save();
+            if (status == widgets::EditorFileStatus::Ok) status = open_sample(target);
+        } else if (result == widgets::MessageBoxResult::No) {
+            status = open_sample_with_options(
+                target, widgets::EditorOpenOptions{.modified_document = widgets::EditorOpenModifiedPolicy::Discard});
+        }
+        open_confirmation_.reset();
+        if (status != widgets::EditorFileStatus::Ok)
+            show_file_error("Could not save or open " + document_name(target) + ". The current document remains open.");
+    });
+}
+
+void EditorApp::show_file_error(std::string message) {
+    if (file_error_ || window_ == nullptr) return;
+    file_error_.emplace(widgets::present_message_box(
+        application_, *desktop_, roles_,
+        widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Error, "File operation failed",
+                                      std::move(message), widgets::MessageBoxButtons::Ok}));
+    file_error_->set_completion_handler([this](widgets::MessageBoxResult) { file_error_.reset(); });
 }
 
 void EditorApp::request_close() {
@@ -211,11 +254,17 @@ void EditorApp::request_close() {
                                       "Save changes to " + document_name(file_controller_.path()) + "?",
                                       widgets::MessageBoxButtons::YesNoCancel}));
     close_confirmation_->set_completion_handler([this](widgets::MessageBoxResult result) {
-        if (window_ == nullptr) return;
+        if (window_ == nullptr) {
+            close_confirmation_.reset();
+            return;
+        }
+        bool save_failed = false;
         switch (result) {
             case widgets::MessageBoxResult::Yes:
                 if (file_controller_.request_close(widgets::EditorCloseChoice::Save) == widgets::EditorFileStatus::Ok)
                     (void)window_->close();
+                else
+                    save_failed = true;
                 break;
             case widgets::MessageBoxResult::No:
                 if (file_controller_.request_close(widgets::EditorCloseChoice::Discard) == widgets::EditorFileStatus::Ok)
@@ -226,6 +275,8 @@ void EditorApp::request_close() {
                 break;
         }
         close_confirmation_.reset();
+        if (save_failed)
+            show_file_error("Could not save " + document_name(file_controller_.path()) + ". The document remains open.");
     });
 }
 
