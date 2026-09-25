@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
         if (!record) return 105;
         ckv::term::WindowsClock clock;
         ckv::term::WindowsTerminal terminal(clock);
-        const std::string expected = "CKV-LIVE-CLIPBOARD-\xE2\x9C\x93";
+        const std::string expected = "CKV-LIVE-CLIPBOARD-\xE2\x9C\x93-\xF0\x9F\x98\x80";
         terminal.write_clipboard(expected);
         record << "EXPORTED bytes=" << expected.size() << '\n' << std::flush;
         terminal.write("Press Ctrl+V to round-trip the native clipboard.\r\n");
@@ -180,7 +180,12 @@ int main(int argc, char** argv) {
                 if (const auto* text = std::get_if<ckv::TextEvent>(&event); text && text->from_paste) {
                     matched = text->text == expected;
                     record << "PASTE bytes=" << text->text.size() << " matched=" << matched
-                           << '\n' << std::flush;
+                           << " hex=";
+                    constexpr char digits[] = "0123456789ABCDEF";
+                    for (const unsigned char byte : text->text) {
+                        record << digits[byte >> 4] << digits[byte & 0x0F];
+                    }
+                    record << '\n' << std::flush;
                 }
             }
         }
@@ -198,7 +203,8 @@ int main(int argc, char** argv) {
             for (const auto& event : terminal.poll(deadline)) {
                 const auto* text = std::get_if<ckv::TextEvent>(&event);
                 if (text != nullptr && text->from_paste &&
-                    text->text == "clipboard text") pasted = true;
+                    text->text == "clipboard text \xCE\xA9\xE4\xB8\xAD\xF0\x9F\x98\x80")
+                    pasted = true;
             }
         }
         terminal.restore();

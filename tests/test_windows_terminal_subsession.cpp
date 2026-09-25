@@ -155,11 +155,11 @@ CK_TEST(windows_outer_terminal_keeps_cell_mouse_on_a_plain_vt_conpty) {
     CK_CHECK(screen_text(session->snapshot()).find("PLAIN-VT-MOUSE-OK") != std::string::npos);
 }
 
-CK_TEST(windows_outer_terminal_imports_bracketed_paste_over_conpty) {
+CK_TEST(windows_outer_terminal_imports_unicode_bracketed_paste_over_conpty) {
     auto session = WindowsTerminalSubsession::launch(child({"outer-paste"}));
     CK_CHECK(session->state() != TerminalSubsessionState::Failed);
     CK_CHECK(pump_until(*session, "OUTER-PASTE-READY"));
-    session->send_input("\x1B[200~clipboard text\x1B[201~");
+    session->send_input("\x1B[200~clipboard text \xCE\xA9\xE4\xB8\xAD\xF0\x9F\x98\x80\x1B[201~");
     CK_CHECK(pump_until_exit(*session, 8'000));
     CK_CHECK(session->exit_code() == 0);
     CK_CHECK(screen_text(session->snapshot()).find("OUTER-PASTE-OK") != std::string::npos);

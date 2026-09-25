@@ -1,12 +1,16 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// Windows console modes, VT byte transport, and native clipboard are confined
-// to the terminal layer. Input records supplement VT only for resize (D-020).
+// Windows console modes, VT character transport, and native clipboard are
+// confined to the terminal layer. Input records supplement VT only for resize
+// (D-020).
 #include "cvision/term/windows_terminal.hpp"
+
+#include "cvision/core/utf8.hpp"
 
 #include <algorithm>
 #include <cstdlib>
+#include <iterator>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -231,9 +235,10 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
     if (result == WAIT_FAILED) throw win32_error("WaitForMultipleObjects");
     if (result == WAIT_OBJECT_0 + 1) ::ResetEvent(wake_event_);
     if (result == WAIT_OBJECT_0) {
-        // ReadFile is the VT byte path. Console records are inspected only to
-        // remove non-byte records, especially buffer-size notifications that
-        // ReadFile would discard or could leave blocking behind a resize.
+        // ReadConsoleW preserves supplementary Unicode in the VT character
+        // stream. ReadFile with CP_UTF8 replaces each UTF-16 surrogate half
+        // before the shared decoder can see it. Console records are inspected
+        // only for non-character events, especially resize notifications.
         for (int batch = 0; batch < 64; ++batch) {
             INPUT_RECORD record{};
             DWORD pending = 0;
@@ -247,14 +252,36 @@ std::vector<TerminalEvent> WindowsTerminal::poll(
                 if (record.EventType == WINDOW_BUFFER_SIZE_EVENT) observe_resize(events);
                 continue;
             }
-            char bytes[4096];
+            wchar_t units[4096];
             DWORD count = 0;
-            if (!::ReadFile(input_, bytes, static_cast<DWORD>(sizeof(bytes)), &count, nullptr))
-                throw win32_error("ReadFile input");
+            if (!::ReadConsoleW(input_, units, static_cast<DWORD>(std::size(units)), &count, nullptr))
+                throw win32_error("ReadConsoleW input");
             if (count == 0) break;
+            std::string bytes;
+            bytes.reserve(static_cast<std::size_t>(count) * 3);
+            for (DWORD i = 0; i < count; ++i) {
+                const auto unit = static_cast<char32_t>(units[i]);
+                if (pending_high_surrogate_ != 0) {
+                    if (unit >= 0xDC00 && unit <= 0xDFFF) {
+                        const auto high = static_cast<char32_t>(pending_high_surrogate_);
+                        utf8::encode(0x10000 + ((high - 0xD800) << 10) + (unit - 0xDC00), bytes);
+                        pending_high_surrogate_ = 0;
+                        continue;
+                    }
+                    utf8::encode(utf8::replacement_char, bytes);
+                    pending_high_surrogate_ = 0;
+                }
+                if (unit >= 0xD800 && unit <= 0xDBFF) {
+                    pending_high_surrogate_ = units[i];
+                } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+                    utf8::encode(utf8::replacement_char, bytes);
+                } else {
+                    utf8::encode(unit, bytes);
+                }
+            }
             const std::int64_t observed = clock_.now_nanos();
             if (probe_deadline_nanos_ >= 0 && observed >= probe_deadline_nanos_) finish_probes(events);
-            append_decoded(decoder_.feed(std::string_view(bytes, count), observed), events);
+            if (!bytes.empty()) append_decoded(decoder_.feed(bytes, observed), events);
         }
     }
     const std::int64_t after_wait = clock_.now_nanos();

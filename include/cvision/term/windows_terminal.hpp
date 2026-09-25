@@ -79,6 +79,7 @@ private:
     bool kitty_flags_negotiated_ = false;
     bool kitty_push_active_ = false;
     bool kitty_demoted_ = false;
+    wchar_t pending_high_surrogate_ = 0;
     bool active_ = false;
 };
 

@@ -1366,3 +1366,70 @@ configure/build/test logs, timing, and hashes are retained under
 `/Volumes/PRO-BLADE/tmp/ckvision-wp37-san-fuzz-20260925`. This advances the
 portable sanitizer/fuzz gate; it does not instrument Windows-only ConPTY
 source or close live Windows host acceptance.
+
+## Supplementary Unicode in live Windows editor input — 2026-09-25
+
+A new live editor pass on the named Windows 11 ARM64 VM exposed a Windows input
+transport defect while exercising WP-37's Unicode editor row. In Windows
+Terminal Preview 1.25.1912.0, the `cktest` session-1 clipboard held the exact
+UTF-16 sequence `03A9 4E2D D83D DE00` for `Ω中😀`. The pre-fix editor
+rendered the emoji as two replacement glyphs, and copying the selected line
+returned `03A9 4E2D FFFD FFFD`. The then-current `ReadFile`/CP_UTF8 VT input
+route was the cause: the live `outer-live-clipboard` fixture exported a known
+27-byte UTF-8 payload with `F09F9880`, but its paste event was 29 bytes and
+ended `EFBFBD EFBFBD` (`matched=0`). A bounded diagnostic `ReadConsoleW`
+fixture on the same host and clipboard returned the intact `D83D DE00` code
+units. The diagnostic fixture was removed after the observation; its byte log
+is retained with the validation records. Microsoft's
+[ReadConsole documentation](https://learn.microsoft.com/en-us/windows/console/readconsole)
+describes the wide-character console input path.
+
+D-020 and the Windows architecture description were updated before code. The
+backend now reads the same VT character stream with `ReadConsoleW`, combines
+surrogate pairs across reads, replaces only malformed lone surrogates, and
+encodes scalars as UTF-8 for the unchanged shared `InputDecoder`. It still uses
+console records only to consume non-character events and observe resize. The
+Windows-only live clipboard fixture now includes `✓-😀` and logs received
+bytes. The automated ConPTY bracketed-paste test now sends `Ω中😀` as well as
+ASCII text and requires an exact paste-marked event.
+
+The fixed fixture, running under Preview in the real `cktest` desktop, received
+all 27 bytes including `F09F9880` (`matched=1`, `END matched=1`). The rebuilt
+editor executable SHA-256 was
+`0E9866EED17B484EC14F5A3C59668F03AC36533579267FD36ACAF3CA72831887`,
+launched as PID 1540 under Preview PID 4684. Its actual window displayed a
+single emoji glyph. Pasting ` live-Ω中😀 ckVision`, selecting the line, and
+copying it back returned the exact original UTF-16 units. Save cleared the
+dirty marker; switching to the JSON sample and reopening the YAML sample
+restored the edited line, and a second copy after reopen again returned
+`D83D DE00` with `ExactMatch=true`. The final editor and Terminal processes
+exited. The three captured window states have SHA-256 values
+`d1e65e24d528bacb71bc3f4df8e70d568ce6917a6eb3766d242b3090ded75905`
+(paste), `ed29e2102d98c09ce24b65b729988084fae05300cd1f61a3e12a877dbd96e44d`
+(JSON), and `bf7cff5fcbff195336140b5584cca0a963fddcd2152dc7d5e716516a01c8018c`
+(reopened YAML).
+
+The final ARM64 Release `ALL_BUILD` ran 18:28:27–18:28:38 UTC in 10.79 seconds
+with zero compiler or linker diagnostics. Its log explicitly recompiles
+`windows_terminal_child.cpp` and `test_windows_terminal_subsession.cpp`; the
+Windows backend and header were compiled into `cvision.lib` in the preceding
+18:23:50–18:23:56 UTC build, after their source timestamps, and reused unchanged.
+Final source SHA-256 values were `31BD959F9ACD911491914EED2A7AC89F6965517071CAF2E540CB492532331E78`
+(backend), `9DEE9C518D32460E5288E9D13CE39A919A089A0A7F0A95A93C08CB71D2807FCF`
+(header), `D4D1B0CC93A2BCDB676FC7A7732A58DDC294B1AD206CC20858E24A53BD96524B`
+(fixture), and `CE3621C1BD4F820B57B90EE48B65C5A48D4E45E8CCA4EBEA33A89A703AD262BE`
+(ConPTY test). Final `cvision.lib`, test runner, and fixture SHA-256 values were
+`E40233F34D0EB91B4C57624DAD44B921FD9DEAF06BB8DD29AC403CB215377D96`,
+`36DF800727A91ED3D7EA4ACAD39F0AA79AAEC3E1C32D38D47152E3AE3930242B`, and
+`084A1B72A8793395901B7DBD6610B8BE6E0F8EE6728D720BBA8A7031E77433C8`.
+The full Windows Release CTest passed **164/164** in 47.23 seconds; the exact
+new Unicode ConPTY case passed separately **1/1**. Both Mac provenance gates
+passed **2/2**. The previous macOS/Linux matrix remains the latest full run for
+those targets; this patch changes Windows-only implementation and tests.
+Build reports, logs, fixture byte records, and window captures are under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp50-vnc-20260925`.
+
+This closes the observed supplementary-Unicode editor defect and the exercised
+live editor input/search/save/reopen row. WP-37 and WP-50 remain open for the
+remaining host capability, graphics/mouse, isolation, and release matrix rows;
+none of those rows is inferred from this test.

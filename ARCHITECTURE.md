@@ -150,7 +150,8 @@ event stream, frame presentation, clipboard write, title, notifications
 - **windows**: Windows Terminal and ConPTY hosts, **VT-first** (D-020):
   VT processing on output, VT input mode feeding the same decoder as
   POSIX (kitty keyboard protocol and bracketed paste work where the host
-  supports them); the console API is used only where VT has no channel
+  supports them). The UTF-16 VT character stream is converted to UTF-8 at
+  the platform boundary; the console API is used only where VT has no channel
   (e.g. buffer-size change notification), and per-host downgrades are
   recorded in the capability report. Non-VT hosts are refused with a
   clear diagnostic.

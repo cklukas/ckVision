@@ -185,7 +185,14 @@ protocols are tracked in D-OPEN-7.
 **D-020 — Windows input is VT-first.**
 The Windows backend enables VT input and feeds the same decoder as
 POSIX — one decoder everywhere, kitty keyboard protocol and bracketed
-paste work where the host supports them. [Windows Terminal 1.25 Preview](https://github.com/microsoft/terminal/discussions/19947)
+paste work where the host supports them. Its console input transport reads
+the VT character stream with `ReadConsoleW`, combines UTF-16 surrogate pairs
+across reads, and encodes Unicode scalars as UTF-8 before that decoder.
+`ReadFile` with console code page UTF-8 replaces each half of a supplementary
+scalar with U+FFFD on the named Windows Terminal Preview host; a live
+clipboard roundtrip proved this while `ReadConsoleW` preserved both halves.
+Reading VT characters as UTF-16 does not interpret console key semantics or
+fork the VT decoder. [Windows Terminal 1.25 Preview](https://github.com/microsoft/terminal/discussions/19947)
 implements the kitty keyboard protocol; the named 1.24 Stable host does not,
 so it must keep the legacy keyboard fallback. The
 console API is used only where VT has no channel (e.g. buffer-size
