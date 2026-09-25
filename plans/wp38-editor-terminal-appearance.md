@@ -50,3 +50,10 @@ The Terminal and Editor examples now expose live scheme changes in their View
 menus. The terminal's two-window command path and the editor's preserved
 search selection/caret path are scripted. Remaining state × scheme/profile
 combinations and WP-38 release gates stay Open.
+
+Live Editor and Terminal View menus now expose the selected scheme as a radio
+mark. The menu model reads its mark provider at draw time, so switching schemes
+updates the same menu items without reconstructing the menu. The focused menu,
+Editor, and Terminal command-path checks pass in the 177-test macOS Release
+suite; this is a usability feature within the appearance slice, not closure
+of the remaining state × scheme/profile matrix.

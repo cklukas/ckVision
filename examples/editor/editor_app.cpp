@@ -79,24 +79,31 @@ EditorApp::EditorApp(ui::Application& application)
         (void)open_sample("notes.txt");
     }});
     const auto scheme_command = [this, &commands](ui::CommandDescriptor descriptor,
-                                                    auto factory) {
-        descriptor.handler = [this, factory] {
+                                                    auto factory, int index) {
+        descriptor.handler = [this, factory, index] {
             application_.set_theme(factory(application_.roles(), roles_));
+            active_scheme_ = index;
         };
         return commands.declare(std::move(descriptor));
     };
     const ui::CommandId classic_scheme = scheme_command(
         {.key = "editor.scheme.classic", .title = "&Classic", .category = "View"},
-        ui::make_classic_theme);
+        ui::make_classic_theme, 0);
     const ui::CommandId dark_scheme = scheme_command(
         {.key = "editor.scheme.dark", .title = "&Dark", .category = "View"},
-        ui::make_dark_theme);
+        ui::make_dark_theme, 1);
     const ui::CommandId light_scheme = scheme_command(
         {.key = "editor.scheme.light", .title = "&Light", .category = "View"},
-        ui::make_light_theme);
+        ui::make_light_theme, 2);
     const ui::CommandId mono_scheme = scheme_command(
         {.key = "editor.scheme.mono", .title = "&Mono", .category = "View"},
-        ui::make_mono_theme);
+        ui::make_mono_theme, 3);
+    const auto scheme_item = [this](ui::CommandId command, int index) {
+        return widgets::MenuItem::command(widgets::CommandPresentation{command})
+            .with_mark_provider([this, index] {
+                return active_scheme_ == index ? widgets::MenuMark::RadioOn : widgets::MenuMark::RadioOff;
+            });
+    };
     commands.set_enabled_predicate(save, [this] { return file_controller_.has_path() && document_->modified(); });
     commands.set_enabled_predicate(undo, [this] { return document_->can_undo(); });
     commands.set_enabled_predicate(redo, [this] { return document_->can_redo(); });
@@ -128,10 +135,10 @@ EditorApp::EditorApp(ui::Application& application)
     widgets::MenuBarItem search{"&Search", {widgets::MenuItem::command(widgets::CommandPresentation{find_selection}),
                                               widgets::MenuItem::command(widgets::CommandPresentation{find_next})}};
     widgets::MenuBarItem view{"&View", {
-        widgets::MenuItem::command(widgets::CommandPresentation{classic_scheme}),
-        widgets::MenuItem::command(widgets::CommandPresentation{dark_scheme}),
-        widgets::MenuItem::command(widgets::CommandPresentation{light_scheme}),
-        widgets::MenuItem::command(widgets::CommandPresentation{mono_scheme})}};
+        scheme_item(classic_scheme, 0),
+        scheme_item(dark_scheme, 1),
+        scheme_item(light_scheme, 2),
+        scheme_item(mono_scheme, 3)}};
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(std::vector<widgets::MenuBarItem>{
         std::move(file), std::move(edit), std::move(search), std::move(view)}));
     auto status = std::make_unique<widgets::StatusLine>();

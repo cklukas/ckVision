@@ -54,6 +54,7 @@ private:
     widgets::ClockView* clock_ = nullptr;
     void open_calendar();
     std::size_t next_terminal_number_ = 1;
+    int active_scheme_ = 0;
 };
 
 }  // namespace ckv::terminal_example

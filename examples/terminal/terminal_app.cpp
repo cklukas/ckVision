@@ -99,24 +99,31 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     // Keep theme changes in the ordinary command/menu path so a running
     // terminal and its contained graphics demonstrate live repainting.
     const auto scheme_command = [this, roles](ui::CommandDescriptor descriptor,
-                                               auto factory) {
-        descriptor.handler = [this, roles, factory] {
+                                               auto factory, int index) {
+        descriptor.handler = [this, roles, factory, index] {
             app_.set_theme(factory(app_.roles(), roles));
+            active_scheme_ = index;
         };
         return app_.commands().declare(std::move(descriptor));
     };
     const ui::CommandId classic_scheme = scheme_command(
         {.key = "terminal.scheme.classic", .title = "&Classic", .category = "View"},
-        ui::make_classic_theme);
+        ui::make_classic_theme, 0);
     const ui::CommandId dark_scheme = scheme_command(
         {.key = "terminal.scheme.dark", .title = "&Dark", .category = "View"},
-        ui::make_dark_theme);
+        ui::make_dark_theme, 1);
     const ui::CommandId light_scheme = scheme_command(
         {.key = "terminal.scheme.light", .title = "&Light", .category = "View"},
-        ui::make_light_theme);
+        ui::make_light_theme, 2);
     const ui::CommandId mono_scheme = scheme_command(
         {.key = "terminal.scheme.mono", .title = "&Mono", .category = "View"},
-        ui::make_mono_theme);
+        ui::make_mono_theme, 3);
+    const auto scheme_item = [this](ui::CommandId command, int index) {
+        return widgets::MenuItem::command(widgets::CommandPresentation{command})
+            .with_mark_provider([this, index] {
+                return active_scheme_ == index ? widgets::MenuMark::RadioOn : widgets::MenuMark::RadioOff;
+            });
+    };
 
     widgets::MenuBarItem file_menu{
         "&File",
@@ -140,10 +147,10 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     widgets::MenuBarItem view_menu{
         "&View",
         {
-            widgets::MenuItem::command(widgets::CommandPresentation{classic_scheme}),
-            widgets::MenuItem::command(widgets::CommandPresentation{dark_scheme}),
-            widgets::MenuItem::command(widgets::CommandPresentation{light_scheme}),
-            widgets::MenuItem::command(widgets::CommandPresentation{mono_scheme}),
+            scheme_item(classic_scheme, 0),
+            scheme_item(dark_scheme, 1),
+            scheme_item(light_scheme, 2),
+            scheme_item(mono_scheme, 3),
         },
     };
     // A focused terminal forwards its keys to the child, F1 included --

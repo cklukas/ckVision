@@ -87,12 +87,19 @@ CK_TEST(terminal_example_view_menu_repaints_open_terminal_windows_in_all_schemes
         {"terminal.scheme.classic", ckv::ui::make_classic_theme},
     }};
     const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(f.app.roles());
+    for (std::size_t index = 0; index < menu_bar->menus()[2].items.size(); ++index)
+        CK_CHECK(menu_bar->menus()[2].items[index].mark() ==
+                 (index == 0 ? ckv::widgets::MenuMark::RadioOn : ckv::widgets::MenuMark::RadioOff));
     for (const Scheme& scheme : schemes) {
         const std::optional<ckv::ui::CommandId> command = f.app.commands().id_for(scheme.key);
         CK_CHECK(command.has_value());
         if (!command) continue;
         CK_CHECK(menu_has_command(menu_bar->menus()[2], *command));
         CK_CHECK(f.app.commands().execute(*command));
+        const auto& choices = menu_bar->menus()[2].items;
+        for (const auto& choice : choices)
+            CK_CHECK(choice.mark() == (choice.command() == *command
+                         ? ckv::widgets::MenuMark::RadioOn : ckv::widgets::MenuMark::RadioOff));
         f.app.step(0);
         const ckv::ui::Theme expected = scheme.factory(f.app.roles(), roles);
         CK_CHECK(f.app.current_frame().at(ckv::Point{0, 1}).style() ==

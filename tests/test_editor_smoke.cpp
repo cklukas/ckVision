@@ -15,6 +15,7 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/minimized_window_stub.hpp"
+#include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/text_editor.hpp"
 #include "cvision/widgets/window.hpp"
 #include "editor_app.hpp"
@@ -95,22 +96,37 @@ CK_TEST(the_editor_example_keeps_search_selection_and_caret_state_across_all_bui
     CK_CHECK(selected.has_value());
     CK_CHECK(f.app.current_cursor().visible);
     CK_CHECK(display_contains(f.term.display(), "View"));
+    auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.editor.desktop()->top_dock());
+    CK_CHECK(menu_bar != nullptr);
+    if (menu_bar == nullptr) return;
+    const auto& choices = menu_bar->menus()[3].items;
+    CK_CHECK(choices.size() == 4U);
+    CK_CHECK(choices[0].mark() == ckv::widgets::MenuMark::RadioOn);
     const auto dark_command = f.app.commands().id_for("editor.scheme.dark");
     CK_CHECK(dark_command.has_value());
     if (!dark_command) return;
     CK_CHECK(f.app.commands().execute(*dark_command));
+    for (std::size_t index = 0; index < choices.size(); ++index)
+        CK_CHECK(choices[index].mark() == (index == 1U
+                     ? ckv::widgets::MenuMark::RadioOn : ckv::widgets::MenuMark::RadioOff));
     f.app.step(0);
     const std::string dark = capture(f);
     const auto light_command = f.app.commands().id_for("editor.scheme.light");
     CK_CHECK(light_command.has_value());
     if (!light_command) return;
     CK_CHECK(f.app.commands().execute(*light_command));
+    for (std::size_t index = 0; index < choices.size(); ++index)
+        CK_CHECK(choices[index].mark() == (index == 2U
+                     ? ckv::widgets::MenuMark::RadioOn : ckv::widgets::MenuMark::RadioOff));
     f.app.step(0);
     const std::string light = capture(f);
     const auto mono_command = f.app.commands().id_for("editor.scheme.mono");
     CK_CHECK(mono_command.has_value());
     if (!mono_command) return;
     CK_CHECK(f.app.commands().execute(*mono_command));
+    for (std::size_t index = 0; index < choices.size(); ++index)
+        CK_CHECK(choices[index].mark() == (index == 3U
+                     ? ckv::widgets::MenuMark::RadioOn : ckv::widgets::MenuMark::RadioOff));
     f.app.step(0);
     const std::string mono = capture(f);
     CK_CHECK(dark == read_file("golden/editor_search_dark.dump"));

@@ -451,6 +451,27 @@ CK_TEST(checkable_items_render_a_stable_check_column) {
     CK_CHECK(row_text(s, 1).find("   Unchecked") == 0);
 }
 
+CK_TEST(a_menu_mark_provider_reflects_current_state_without_rebuilding_the_menu) {
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    bool selected = false;
+    const MenuItem choice = MenuItem::action("&Scheme", [] {})
+        .with_mark_provider([&selected] {
+            return selected ? MenuMark::RadioOn : MenuMark::RadioOff;
+        });
+    auto menu = make_dropdown(f, app, {choice});
+    menu->set_bounds(Rect{0, 0, 16, 1});
+    Surface surface(ckv::Size{16, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(surface, Rect{0, 0, 16, 1});
+    menu->draw(painter);
+    CK_CHECK(row_text(surface, 0).find("   Scheme") == 0);
+    selected = true;
+    menu->draw(painter);
+    CK_CHECK(row_text(surface, 0).find(" \u2022 Scheme") == 0);
+}
+
 // --- MenuBar: activation, navigation, dismissal ---------------------------
 
 namespace {

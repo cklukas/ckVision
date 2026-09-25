@@ -104,6 +104,9 @@ public:
 
     // --- refinements, chainable ----------------------------------------
     [[nodiscard]] MenuItem with_mark(MenuMark mark) const;
+    // Read current application state when drawing a menu that remains open
+    // across command changes (for example, a selected theme or view mode).
+    [[nodiscard]] MenuItem with_mark_provider(std::function<MenuMark()> provider) const;
     // The help topic F1 resolves while this row is highlighted. Menus are
     // where a reader looks for a verb they do not know yet, so this is
     // where explaining one belongs.
@@ -131,7 +134,7 @@ public:
     const std::string& label() const noexcept { return label_; }
     const std::function<void()>& action() const noexcept { return action_; }
     const std::vector<MenuItem>& children() const noexcept { return children_; }
-    MenuMark mark() const noexcept { return mark_; }
+    MenuMark mark() const { return mark_provider_ ? mark_provider_() : mark_; }
     const std::string& help_context() const noexcept { return help_context_; }
     const std::string& disabled_reason() const noexcept { return disabled_reason_; }
     // Only meaningful for Action/Submenu; a Command row asks the registry.
@@ -146,6 +149,7 @@ private:
     std::function<void()> action_;
     std::vector<MenuItem> children_;
     MenuMark mark_ = MenuMark::None;
+    std::function<MenuMark()> mark_provider_;
     std::string help_context_;
     std::string disabled_reason_;
     bool enabled_ = true;
@@ -331,7 +335,7 @@ private:
     void set_pointer_navigation(std::function<bool(const MouseEvent&)> navigation) {
         pointer_navigation_ = std::move(navigation);
     }
-    bool has_check_column() const noexcept;
+    bool has_check_column() const;
     ui::CommandId item_command(const MenuItem& item) const noexcept;
     std::string item_presentation_label(const MenuItem& item) const;
 

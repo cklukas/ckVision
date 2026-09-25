@@ -49,6 +49,7 @@ private:
     widgets::Window* window_ = nullptr;
     widgets::TextEditor* editor_ = nullptr;
     widgets::StaticText* status_ = nullptr;
+    int active_scheme_ = 0;
     std::optional<widgets::MessageBoxPresentation> close_confirmation_;
 
     void refresh_status();

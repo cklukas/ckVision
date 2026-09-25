@@ -53,6 +53,13 @@ MenuItem MenuItem::separator() {
 MenuItem MenuItem::with_mark(MenuMark mark) const {
     MenuItem copy = *this;
     copy.mark_ = mark;
+    copy.mark_provider_ = {};
+    return copy;
+}
+
+MenuItem MenuItem::with_mark_provider(std::function<MenuMark()> provider) const {
+    MenuItem copy = *this;
+    copy.mark_provider_ = std::move(provider);
     return copy;
 }
 
@@ -388,7 +395,7 @@ void DropdownMenu::close_submenu(bool restore_capture) {
     invalidate();
 }
 
-bool DropdownMenu::has_check_column() const noexcept {
+bool DropdownMenu::has_check_column() const {
     return std::any_of(items_.begin(), items_.end(), [](const MenuItem& item) {
         return item.mark() != MenuMark::None;
     });

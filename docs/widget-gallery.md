@@ -1556,8 +1556,11 @@ about them. A callback row is for a genuinely local action — opening a
 contextual dialog — and carries its own label and its own enabled flag,
 because nothing else could know either.
 
-Refinements chain onto any row: `.with_mark()` puts a check box or a radio
-mark in the left column, `.with_help()` names the topic F1 answers with while
+Refinements chain onto any row: `.with_mark()` puts a fixed check box or radio
+mark in the left column. `.with_mark_provider()` reads a callback for a live
+mark when application state changes after menu construction; return `RadioOn`
+for the selected choice and `RadioOff` for its peers. The callback must remain
+valid while the menu item exists. `.with_help()` names the topic F1 answers with while
 the row is highlighted, and `.with_disabled_reason()` gives a surface the
 words to explain a grey verb instead of leaving the reader to guess.
 
