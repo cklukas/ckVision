@@ -100,9 +100,9 @@ dependent row's package prerequisite; `Blocked` does not.
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
-| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — named live Preview nested, Sixel/fallback, resize, close/fault/reallocation, resource recovery, and 67 portable golden scenarios Done; true live pixel mouse and remaining host matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 67 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse, legacy-console refusal (VM host launch failed), and final release audit Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | Blocked | WP-37 | M0–M11 global gates |
+| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — native child adapter, all seven named signed-in Windows scenarios, and 79 portable golden files Done; capable-host pixel mouse and global acceptance matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 79 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 79-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3025,7 +3025,11 @@ and the combinations still missing. Runtime scheme changes now repaint retained
 views, and the Editor and Terminal examples expose all four schemes in their
 View menus. Their 69-file editor/terminal visual slice matches byte for byte
 on macOS, Linux, and Windows ARM64 at `4b41188`; all seven generators
-subsequently matched the full 79-file manifest on those three hosts. Per-API reference depth and the complete
+subsequently matched the full 79-file manifest on those three hosts. The
+Editor example now names the active sample in its window and dirty-close
+prompt and asks Save/Discard/Cancel before switching samples with unsaved edits;
+full current-source Release suites and portable goldens passed on macOS, Linux
+ARM64, and Windows ARM64 at `bbdd972`. Per-API reference depth and the complete
 M0–M11 appearance, example, and release-gate audit remain Open.
 
 ## Review finding traceability
