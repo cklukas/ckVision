@@ -3016,8 +3016,11 @@ and its remaining gap. It does not close M7: live pixel-mouse interaction and
 real legacy-console refusal remain Open. The
 [API index](../docs/api-index.md) now enumerates all 124 installed headers
 exactly once, enforced by the documentation checker. This closes the
-header-inventory gap; per-API reference depth and the complete M0–M11
-appearance, example, and release-gate audit remain Open.
+header-inventory gap. The
+[editor/contained-terminal appearance audit](wp38-editor-terminal-appearance.md)
+identifies the exact default-profile and four-scheme evidence already present
+and the combinations still missing. Per-API reference depth and the complete
+M0–M11 appearance, example, and release-gate audit remain Open.
 
 ## Review finding traceability
 
