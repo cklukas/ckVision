@@ -1470,3 +1470,50 @@ The exact new native case passed **1/1**. Its owning ConPTY CTest suite passed
 are retained under `/Volumes/PRO-BLADE/tmp/ckvision-wp37-isolation-20260925`.
 WP-37 stays **In progress** for live pixel mouse, the two-outer-application GUI
 row, real legacy-console refusal, and the remaining global release matrix.
+
+## Live signed-in two-outer-Application isolation — 2026-09-25
+
+The named Windows 11 25H2 ARM64 VM (build 26200.9457) ran Windows Terminal
+Preview 1.25.1912.0 under signed-in `LIMA\cktest` Session 1. Before launch,
+there was no ckVision or Windows Terminal GUI process and the actual desktop
+capture was clear. Current guest source hashes for `windows_terminal.cpp` and
+the Gallery/Terminal example inputs matched the Mac worktree. Their strict
+Release executables were written at 18:26:00.488 and 18:26:01.353 UTC, after
+the latest relevant source timestamp (18:23:49.392 UTC), and were copied byte
+for byte to the test account. Gallery SHA-256 was
+`FA1257BD8162D1856FF6CB6CFC14BE1DFF7A376CB42CFC4633F3BBC6E58CF98E`;
+Terminal SHA-256 was
+`E608FD7AAF01B7C1D9C75ABD2CE3DD052CDA52179C5D74DC059B05CE4718C5BA`.
+The previously recorded full strict Windows Release build and 164/164 CTest
+pass cover these executable inputs; this checkpoint changes no source and did
+not rerun a build.
+
+Two separate Windows Terminal Preview windows hosted Gallery PID 2392 and
+Terminal PID 3048. The outer Preview process was PID 6908 and assigned distinct
+OpenConsole hosts (PIDs 8372 and 8388) to the two windows. Terminal separately
+owned private OpenConsole PID 8896 and `cmd.exe` PID 7636. QMP framebuffer
+captures of the actual signed-in desktop showed both windows and their
+user-facing frames. A focused click into Terminal's child accepted
+`echo secondalive` and displayed `secondalive`. Switching to Gallery left
+that output intact. Gallery independently accepted `outerone` in its Name
+field and displayed `Hello, outerone!` after a real Greet click. Returning to
+Terminal showed the original shell output unchanged.
+
+Gallery then exited through its Alt+X command. Its process disappeared while
+Terminal PID 3048 and its private shell remained. Terminal accepted a fresh
+`echo stillalive` and displayed `stillalive` after Gallery's exit. Terminal
+then exited through its visible File → Quit action. A settled process check
+found no Session 1 ckVision application, WindowsTerminal, OpenConsole, or child
+shell; the final framebuffer capture showed the clear desktop. Both one-off
+scheduled tasks were unregistered. The process lineage and cleanup JSON plus
+actual desktop captures (`two-launched-small.jpg`,
+`terminal-focused-marker-small.jpg`, `gallery-input-small.jpg`,
+`terminal-return-small.jpg`, `after-gallery-quit-small.jpg`,
+`terminal-after-peer-exit-small.jpg`, and `final-desktop-small.jpg`) are under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-two-gui-20260925`.
+
+This closes WP-37's **live two-outer-Application isolation** row. It proves
+independent input, retained peer state, individual exit, and continued peer
+input under the named GUI host. WP-37 remains **In progress** for true live
+pixel mouse on a capable outer host, real legacy-console refusal, and the
+final cross-platform release audit.
