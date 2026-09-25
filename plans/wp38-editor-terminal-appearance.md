@@ -31,11 +31,18 @@ the four generated contained-scene dumps differ by scheme while the decoded
 Sixel plane remains the same image. The no-graphics profile has a transparent
 pixel plane under every scheme.
 
-At `2646d0a`, the full macOS CTest suite passed 177/177. A fresh Linux
-Release build from the committed source and a clean Windows ARM64 Release
-build from a hash-verified archive each generated the same 63 terminal
-graphics files and six editor files as the checked-in goldens. This is
-three-host byte identity for this 69-file editor/terminal slice; the full
-79-file manifest and the broader WP-38 release gates still need their own
-three-host audit. The Terminal example now exposes live scheme changes in its
-View menu; the two-window command path is scripted.
+At `4b41188`, the full macOS build and CTest suite passed 177/177;
+`generated_golden_bytes` covered the current 79-file manifest. Linux Release
+and Windows ARM64 Release built both runnable examples and the terminal/editor
+generators from the current source. Each host regenerated 63 terminal graphics
+files and six editor files with no mismatch against the pinned bytes. The
+Windows source was staged from a SHA-256-verified `b3a54c1` archive plus the
+two `4b41188` source changes, whose destination hashes were checked before
+the build. This establishes three-host byte identity for the 69-file
+editor/terminal slice. The full 79-file manifest has not yet been audited on
+all three hosts.
+
+The Terminal and Editor examples now expose live scheme changes in their View
+menus. The terminal's two-window command path and the editor's preserved
+search selection/caret path are scripted. Remaining state × scheme/profile
+combinations and WP-38 release gates stay Open.

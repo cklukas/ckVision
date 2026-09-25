@@ -3019,7 +3019,11 @@ exactly once, enforced by the documentation checker. This closes the
 header-inventory gap. The
 [editor/contained-terminal appearance audit](wp38-editor-terminal-appearance.md)
 identifies the exact default-profile and four-scheme evidence already present
-and the combinations still missing. Per-API reference depth and the complete
+and the combinations still missing. Runtime scheme changes now repaint retained
+views, and the Editor and Terminal examples expose all four schemes in their
+View menus. Their 69-file editor/terminal visual slice matches byte for byte
+on macOS, Linux, and Windows ARM64 at `4b41188`; the full 79-file manifest
+needs its own three-host audit. Per-API reference depth and the complete
 M0–M11 appearance, example, and release-gate audit remain Open.
 
 ## Review finding traceability
