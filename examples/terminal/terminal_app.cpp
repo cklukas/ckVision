@@ -81,7 +81,8 @@ std::string home_directory() {
 
 }  // namespace
 
-TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
+TerminalApp::TerminalApp(ui::Application& app, TerminalAppServices services)
+    : app_(app), services_(std::move(services)) {
     const ui::StandardRoles roles = ui::intern_standard_roles(app_.roles());
     new_terminal_command_ = app_.commands().declare(ui::CommandDescriptor{
         .key = std::string(kNewTerminalKey),
@@ -178,16 +179,20 @@ TerminalApp::TerminalApp(ui::Application& app) : app_(app) {
     // remembering where the edge was.
     if (widgets::MenuBar* const menu_bar = shell.menu_bar()) {
         auto clock = std::make_unique<widgets::ClockView>();
-        clock->set_time_provider([] {
-            const std::time_t now = std::time(nullptr);
-            std::tm local{};
+        if (services_.local_time) {
+            clock->set_time_provider(services_.local_time);
+        } else {
+            clock->set_time_provider([] {
+                const std::time_t now = std::time(nullptr);
+                std::tm local{};
 #if defined(_WIN32)
-            ::localtime_s(&local, &now);
+                ::localtime_s(&local, &now);
 #else
-            ::localtime_r(&now, &local);
+                ::localtime_r(&now, &local);
 #endif
-            return widgets::TimeValue{local.tm_hour, local.tm_min, local.tm_sec};
-        });
+                return widgets::TimeValue{local.tm_hour, local.tm_min, local.tm_sec};
+            });
+        }
         clock->set_blinking_separator(true);
         clock_ = menu_bar->set_trailing_view(std::move(clock));
         // Clicking the clock drops a calendar out of it -- the two widgets
@@ -347,7 +352,9 @@ widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std
     auto window = std::make_unique<widgets::Window>(std::move(title));
     window->set_bounds(Rect{2, 2, 76, 20});
 
-    term::TerminalSubsession& session = app_.launch_terminal_subsession(std::move(launch));
+    term::TerminalSubsession& session = services_.make_subsession
+        ? app_.adopt_terminal_subsession(services_.make_subsession(std::move(launch)))
+        : app_.launch_terminal_subsession(std::move(launch));
     auto view = std::make_unique<widgets::TerminalView>(session);
     widgets::TerminalView* const terminal_view = view.get();
     view->set_bounds(window->content_rect());

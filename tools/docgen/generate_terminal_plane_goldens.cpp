@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "cvision/core/golden.hpp"
@@ -30,6 +31,7 @@
 #include "cvision/widgets/terminal_view.hpp"
 #include "cvision/widgets/window.hpp"
 #include "gallery_app.hpp"
+#include "terminal_app.hpp"
 
 namespace {
 
@@ -109,6 +111,41 @@ bool gallery_case(const std::filesystem::path& directory) {
            fallback.written_bytes().find("\x1B" "P") == std::string_view::npos &&
            write_cells(directory / "gallery_no_graphics.dump", fallback.display().frame(),
                        fallback.display().cursor());
+}
+
+bool terminal_initial_cases(const std::filesystem::path& directory) {
+    HeadlessTerminal terminal(Size{100, 30}, headless_no_graphics_profile());
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    terminal_example::TerminalAppServices services;
+    services.make_subsession = [](TerminalLaunchSpec launch) -> std::unique_ptr<TerminalSubsession> {
+        auto child = std::make_unique<TerminalEmulator>(launch.profile);
+        child->feed_output("ckvision$ ");
+        return child;
+    };
+    services.local_time = [] { return widgets::TimeValue{12, 34, 56}; };
+    terminal_example::TerminalApp example(app, std::move(services));
+    app.step(0);
+    if (example.desktop().windows().size() != 1U ||
+        example.desktop().windows().front()->title() != "Terminal 1" ||
+        dynamic_cast<widgets::TerminalView*>(example.desktop().windows().front()->content()) == nullptr)
+        return false;
+
+    const auto record = [&](std::string_view name) {
+        const VirtualDisplay& display = terminal.display();
+        if (display.has_raster_pixels()) return false;
+        return write_cells(directory / (std::string(name) + ".dump"), display.frame(), display.cursor()) &&
+               write_pixels(directory / (std::string(name) + ".rgba"), display.raster_plane());
+    };
+    if (!record("terminal_initial")) return false;
+    for (const std::string_view scheme : {"dark", "light", "mono"}) {
+        const std::string key = "terminal.scheme." + std::string(scheme);
+        const auto command = app.commands().id_for(key);
+        if (!command || !app.commands().execute(*command)) return false;
+        app.step(0);
+        if (!record("terminal_initial_" + std::string(scheme))) return false;
+    }
+    return true;
 }
 
 bool presenter_cases(const std::filesystem::path& directory) {
@@ -506,8 +543,9 @@ int main(int argc, char** argv) {
     const std::filesystem::path directory = argv[1];
     std::filesystem::create_directories(directory);
     if (!protocol_case(directory) || !embedded_child_case(directory) ||
-        !gallery_case(directory) || !presenter_cases(directory) ||
-        !contained_terminal_cases(directory) || !contained_pair_cases(directory)) {
+        !gallery_case(directory) || !terminal_initial_cases(directory) ||
+        !presenter_cases(directory) || !contained_terminal_cases(directory) ||
+        !contained_pair_cases(directory)) {
         std::fprintf(stderr, "terminal plane capture failed\n");
         return 1;
     }

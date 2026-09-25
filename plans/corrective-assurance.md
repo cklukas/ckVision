@@ -100,9 +100,9 @@ dependent row's package prerequisite; `Blocked` does not.
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
-| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — native child adapter, all seven named signed-in Windows scenarios, and 85 portable golden files Done; capable-host pixel mouse and global acceptance matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 85 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 85-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
+| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — native child adapter, all seven named signed-in Windows scenarios, and 93 portable golden files Done; capable-host pixel mouse and global acceptance matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 93 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 93-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -2908,7 +2908,7 @@ acceptance is still required. This package uses [embedded-terminal-architecture.
 **Current WP-50 status (2026-09-25):** In progress overall. The requested
 signed-in Windows Terminal scenarios—nested ckVision, contained Sixel and its
 no-graphics fallback, resize, close/child loss, and resource recovery—are
-**Done** with named-host evidence. The portable 85-file three-platform
+**Done** with named-host evidence. The portable 93-file three-platform
 golden manifest is also **Done**. The exact row-by-row status is in
 [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md#wp-50-named-windows-scenario-status--2026-09-25).
 True live pixel mouse on a capable Windows host and the remaining WP-37/WP-38
@@ -2953,7 +2953,7 @@ rows are **Done** with [Windows evidence](windows-wp37-evidence.md): live
 keyboard and cell mouse, Sixel graphics and Console Host text fallback,
 native clipboard export/import, the editor's Unicode input/highlighting/search
 and injected Save/reopen workflow, plain-VT ConPTY degradation, live
-two-outer-Application isolation, and the 85-file byte-identical portable
+two-outer-Application isolation, and the 93-file byte-identical portable
 golden manifest on macOS, Linux, and Windows.
 Live SGR pixel mouse is **Open**: the installed Windows Terminal hosts
 do not advertise mode 1016, and signed-in mintty plus raw iTerm-to-Windows
@@ -3030,8 +3030,14 @@ Editor example now names the active sample in its window and dirty-close
 prompt and asks Save/Discard/Cancel before switching samples with unsaved edits;
 full current-source Release suites and portable goldens passed on macOS, Linux
 ARM64, and Windows ARM64 at `bbdd972`. Eight Editor initial/dirty-close symbolic
-frames now cover all four schemes; the current 85-file manifest and full
-three-host Release suites pass. Per-API reference depth and the complete
+frames now cover all four schemes; the then-current 85-file manifest and full
+three-host Release suites pass. The shipped Terminal example now supplies a deterministic child and clock through
+explicit host services for its four-scheme initial-shell capture. Eight new
+cell/RGBA files bring the current three-host byte-identical manifest to **93**;
+macOS and Linux ARM64 pass 177/177, Windows ARM64 passes 164/164, and both
+provenance gates pass on each host. The Terminal initial-shell appearance row is
+Done; full-screen/nested and the broader matrix remain Open.
+Per-API reference depth and the complete
 M0–M11 appearance, example, and release-gate audit remain Open.
 
 ## Review finding traceability

@@ -44,6 +44,13 @@ changes:
 |---|---|---|---|
 | ![Classic terminal](generated/screenshots/terminal-initial.svg) | ![Dark terminal](generated/screenshots/terminal-initial-dark.svg) | ![Light terminal](generated/screenshots/terminal-initial-light.svg) | ![Mono terminal](generated/screenshots/terminal-initial-mono.svg) |
 
+The four initial-shell frames are pinned as cell and RGBA goldens from the
+actual `TerminalApp` window and `TerminalView` graph. The generator supplies
+an owned, deterministic child session and fixed local time through
+`TerminalAppServices`; normal construction still launches the host shell
+and reads the host clock. A supplied session factory must return a non-null
+`TerminalSubsession`, which the application then owns.
+
 The menu is regular ckVision chrome, including its opaque framed dropdown; it
 does not ask a child terminal to paint any parent UI. Menu pointer activation
 uses the normal press–drag–release contract: moving off an item cancels it,

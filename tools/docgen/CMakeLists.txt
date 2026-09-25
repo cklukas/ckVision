@@ -26,7 +26,7 @@ target_link_libraries(generate_window_z_order_golden PRIVATE ckvision::cvision)
 ckvision_strict(generate_window_z_order_golden)
 
 add_executable(generate_terminal_plane_goldens generate_terminal_plane_goldens.cpp)
-target_link_libraries(generate_terminal_plane_goldens PRIVATE gallery_app ckvision::cvision)
+target_link_libraries(generate_terminal_plane_goldens PRIVATE gallery_app terminal_app ckvision::cvision)
 ckvision_strict(generate_terminal_plane_goldens)
 
 if(NOT TARGET docgen_frame_svg)
