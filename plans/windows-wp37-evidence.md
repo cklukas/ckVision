@@ -1591,3 +1591,45 @@ uninstalled successfully; its staged fixture and guest temporary files were
 removed. The exact process summary, full mouse-event log, install/uninstall
 records, and actual VM capture are under
 `/Volumes/PRO-BLADE/tmp/ckvision-wp37-mintty-20260925`.
+
+## Direct iTerm and raw Windows ConPTY pixel boundary — 2026-09-25
+
+The Mac has iTerm 3.6.11. A direct, foreground iTerm byte probe enabled
+SGR mouse tracking and mode 1016, then issued DECRQM 1016 and XTWINOPS 16/14.
+It received `CSI ? 1016 ; 4 $ y` and a text-area reply of 890×637 pixels.
+Despite that reset-status answer, one real automated held drag produced 19
+SGR reports with x coordinates 206–516 and y coordinates 150–220. Every
+report exceeded the 80×25 cell grid. These are direct **pixel-coordinate
+reports**, independently observed from the native Windows app. The full
+287-byte capture is `direct-iterm.log`, SHA-256
+`F229CC8E175AB9C86FE918DF85CCFCCA11EE14B39FAB663A7F0EDDC7CDCE4536`.
+The temporary probe restored the terminal modes and closed its own window.
+
+A source-matched ARM64 `windows_terminal_child.exe` run through iTerm's normal
+`ssh -tt` Windows console route recorded a complete 47-event held drag with
+`pixel_mouse=0`, 11×25 cell metrics, and `pixel=none` on every event. A
+separate no-PTY `ssh -T` control preserved a supplied SGR byte sequence
+exactly. To bypass OpenSSH's allocated console, a one-off ARM64 relay connected
+that raw pipe to an inbox private ConPTY using Microsoft's published
+[CreatePseudoConsole API](https://learn.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session).
+Its `/W4 /WX` build source/output SHA-256 values were
+`95901784DAFC93A4E0AEF908BAE1C3184DD165CFE8FDCE5781DCEDD49BA327B6`
+and `BF3C008995A0B8E6B1CB797075FC74D76684676446A31E3BA403A59701FD1606`.
+It launched the previously verified fixture, SHA-256
+`084A1B72A8793395901B7DBD6610B8BE6E0F8EE6728D720BBA8A7031E77433C8`,
+as PID 8412. That fixture completed a real 38-event held drag with
+`down=1 held_move=1 up=1`, yet still reported `pixel_mouse=0` and only cell
+coordinates. The relay's 493-byte raw input capture contained those 38
+in-grid reports, no mode-1016 reply, and no pixel coordinates. The raw input
+SHA-256 is `7B51C0A630A3BB13F20428E532BD620AFF1984E87808E5FC4D7CFD3178F0FB1`;
+the fixture record is SHA-256
+`86C6EC312F8A72DEC5A42BEE038D947D4659325D69BD9229C13A172B4C33249F`.
+
+The direct host is capable of producing pixel reports, but neither Windows
+route delivered them to ckVision. The captures do not isolate whether inbox
+ConPTY consumed the query, transformed it, or whether another element of the
+route did so. This trial therefore changes no WP-37 acceptance row to Done.
+The bridge and fixture processes exited or were stopped by their exact PID;
+the one-off guest build directory and iTerm window were removed. The compact
+byte captures, build record, and temporary relay source are retained under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-iterm-20260925`.

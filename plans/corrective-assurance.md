@@ -2956,8 +2956,9 @@ and injected Save/reopen workflow, plain-VT ConPTY degradation, live
 two-outer-Application isolation, and the 67-file byte-identical portable
 golden manifest on macOS, Linux, and Windows.
 Live SGR pixel mouse is **Open**: the installed Windows Terminal hosts
-do not advertise mode 1016, and the signed-in mintty ConPTY trial delivered
-only cell coordinates. Native two-Application isolation across
+do not advertise mode 1016, and signed-in mintty plus raw iTerm-to-Windows
+ConPTY trials delivered only cell coordinates. Direct iTerm produced genuine
+pixel reports, but that Windows route did not. Native two-Application isolation across
 independent private ConPTY hosts is **Done**. The separate live
 two-outer-Application GUI isolation route is also **Done**. The real
 legacy-console refusal route and final cross-platform release audit are **Open**.
