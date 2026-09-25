@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/ui/view.hpp"
 
+#include <functional>
+
 #include "cvision/testing/cktest.hpp"
 #include "cvision/ui/context.hpp"
 
@@ -104,6 +106,26 @@ CK_TEST(a_views_lifetime_token_expires_with_that_specific_view_instance) {
         CK_CHECK(!token.expired());
     }
     CK_CHECK(token.expired());
+}
+
+CK_TEST(invalidate_subtree_skips_a_sibling_detached_by_an_invalidation_callback) {
+    struct CallbackView final : View {
+        std::function<void()> action;
+        void on_invalidated(Rect, InvalidationKind) override {
+            if (action) action();
+        }
+    };
+    View root(Rect{0, 0, 5, 5});
+    auto* first = static_cast<CallbackView*>(root.add_child(std::make_unique<CallbackView>()));
+    auto* second = static_cast<CallbackView*>(root.add_child(std::make_unique<CallbackView>()));
+    int detached_invalidations = 0;
+    first->action = [&] { (void)root.remove_child(second); };
+    second->action = [&] { ++detached_invalidations; };
+
+    root.invalidate_subtree();
+    CK_CHECK(root.children().size() == 1U);
+    CK_CHECK(root.children().front().get() == first);
+    CK_CHECK(detached_invalidations == 0);
 }
 
 // --- Geometry ----------------------------------------------------------

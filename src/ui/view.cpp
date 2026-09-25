@@ -183,8 +183,25 @@ void View::clear_theme_override() {
 void View::invalidate() { invalidate(Rect{0, 0, bounds_.width, bounds_.height}); }
 
 void View::invalidate_subtree() {
+    const std::weak_ptr<void> self_liveness = lifetime_token();
     invalidate();
-    for (auto& child : children_) child->invalidate_subtree();
+    if (self_liveness.expired()) return;
+
+    // Invalidation hooks can detach a sibling. Snapshot identities and check
+    // ownership after every callback instead of iterating a mutable vector.
+    struct ChildHandle {
+        View* view = nullptr;
+        std::weak_ptr<void> liveness;
+    };
+    std::vector<ChildHandle> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_)
+        children.push_back(ChildHandle{child.get(), child->lifetime_token()});
+    for (const ChildHandle& child : children) {
+        if (self_liveness.expired()) return;
+        if (child.liveness.expired() || child.view->parent_ != this) continue;
+        child.view->invalidate_subtree();
+    }
 }
 
 void View::invalidate(Rect local_rect) {
