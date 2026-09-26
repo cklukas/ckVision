@@ -78,6 +78,7 @@ private:
 // them. A default-constructed trace, or one missing either part, traces nothing, and the
 // graphics path then builds no message and reads no clock.
 struct GraphicsTrace {
+    // The borrowed sink the lines go to, and the borrowed clock that times them.
     DiagnosticsSink* sink = nullptr;
     const Clock* clock = nullptr;
 

@@ -31,8 +31,22 @@ Of the 516 public overrides, the 134 that narrow their base contract are
 documented; the other 209 without a comment of their own keep it. The
 change was verified comment-only. Stripping blank lines and comments leaves
 every header byte-identical, apart from three trailing comments that were
-corrected. About 35 existing comments were found wrong and corrected. A
-mechanical gate that keeps coverage at zero is WP-38 work still Open.
+corrected. About 35 existing comments were found wrong and corrected.
+
+The `doc_api_comments` CTest gate keeps coverage at zero. It runs
+`tools/docgen/check_api_comments.py`, a lexical scanner that needs no
+compiler, so it runs on every host. It applies the rule above to every
+declaration at namespace scope, or in a public section, and to every macro.
+It exempts forward declarations, using-declarations that re-export a name,
+friend class grants, deleted functions, overrides, and enumerators. On the
+tree before the documentation commit it reports 1,434 undocumented
+declarations out of 2,901; the libclang count differs because it treats
+enumerators and overrides differently. Its first run on the current tree
+found six more: three in the D-077 trace types, two in the editor's new
+`DocumentSelection`, and one hidden behind a platform `#if`. All six are now
+documented, and the gate reports zero. `doc_api_comments_self_test` proves on
+24 cases that the scanner tells a documented declaration from an
+undocumented one.
 
 ## Suspected defects
 

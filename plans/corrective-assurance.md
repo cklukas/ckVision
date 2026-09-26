@@ -3096,9 +3096,10 @@ A1–A50 is fixed with a regression test, or closed with a reason (A41d
 excepted). Their rules are recorded as D-077…D-080: injected graphics trace
 and output capture, the error model, `SizeHint::max` and hidden children in
 layout, and the removal of the raster fallback flag. A41d, which retypes
-pixel extents as `PixelSize`, a mechanical coverage gate for the
-documentation, and the complete M0–M11 traceability and release-gate audit
-remain Open.
+pixel extents as `PixelSize`, remains Open. The `doc_api_comments` gate
+now keeps the reference documentation complete: every public declaration in
+the installed headers carries a comment. The complete M0–M11 traceability and
+release-gate audit remain Open.
 
 ## Review finding traceability
 

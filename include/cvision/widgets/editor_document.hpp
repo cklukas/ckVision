@@ -128,6 +128,7 @@ enum class DocumentEditStatus {
 // Unlike a DocumentPosition it names no revision, because it is history metadata: it is stored
 // with an undo step and handed back for the text that step restores.
 struct DocumentSelection {
+    // Where the selection began, and its moving end.
     std::size_t anchor_byte = 0;
     std::size_t caret_byte = 0;
 

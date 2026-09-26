@@ -66,8 +66,9 @@ round-trips through the golden format parser/serializer byte-exactly
 
 Geometry and pixel-space types, Color/Style/Cell (with control-character
 neutralization at the text-to-Cell boundary), Image, key model, event
-structs, Error, Clock; UTF-8 grapheme segmentation and column-width from
-versioned compiled-in tables; the diagnostics sink interface.
+structs, Clock (the error model is D-078); UTF-8 grapheme segmentation and
+column-width from versioned compiled-in tables; the diagnostics sink
+interface.
 
 **Exit:** width/grapheme corpus tests green (ASCII, East Asian wide,
 combining, zero-width, emoji sequences — including the known

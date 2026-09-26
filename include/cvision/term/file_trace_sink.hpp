@@ -18,6 +18,7 @@
 
 namespace ckv::term {
 
+// Writes trace lines to a file it owns or to standard error, one flushed line at a time.
 class FileTraceSink final : public DiagnosticsSink {
 public:
     // How opening a file treats what is already there. A host and the contained child it

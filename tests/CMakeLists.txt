@@ -601,6 +601,18 @@ add_test(NAME doc_generation_smoke
             --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set_tests_properties(doc_generation_smoke PROPERTIES LABELS "script;documentation" TIMEOUT 30)
 
+# WP-38: every public declaration in the installed headers carries a
+# reference comment; the self-test proves the scanner still tells a
+# documented declaration from an undocumented one.
+add_test(NAME doc_api_comments
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_api_comments.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(doc_api_comments PROPERTIES LABELS "script;documentation" TIMEOUT 30)
+add_test(NAME doc_api_comments_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_api_comments.py
+            --self-test)
+set_tests_properties(doc_api_comments_self_test PROPERTIES LABELS "script;documentation" TIMEOUT 30)
+
 # D-012/WP-23: scan every tracked and non-ignored text artifact for
 # prohibited source-fidelity claims, and separately prove that the checker
 # rejects representative positive cases while accepting clean-room wording.
