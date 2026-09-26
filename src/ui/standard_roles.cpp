@@ -121,10 +121,11 @@ StandardRoles intern_standard_roles(RoleRegistry& registry) {
     // classic visual hierarchy in dense preference dialogs.
     r.option_normal = registry.intern("ckv.option.normal", Style{kBlack, kCyan, Attr{}});
     r.option_focused = registry.intern("ckv.option.focused", Style{kWhite, kCyan, Attr{}});
-    // The classic scrollbar is a cyan-on-blue dotted page area with a
-    // continuous cyan scroll box, matching the established CP437 desktop
-    // convention. The blue field stays visually quiet; the glyphs
-    // themselves are selected by Scrollbar.
+    // The classic scrollbar is a blank blue page area under a continuous
+    // cyan scroll box, with cyan arrows at its ends. The page area carries
+    // no texture by design: a blank field stays visually quiet and meets
+    // the thumb's half blocks without a seam. The glyphs themselves are
+    // selected by Scrollbar.
     // Disabled controls (D-076): the convention's dark gray on each family's
     // own surface, and the gray used for disabled menu items where the
     // surface is blue.

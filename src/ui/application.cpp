@@ -313,22 +313,45 @@ void Application::set_focus(View* view) {
         // Focus loss is user code: it may remove, destroy, hide, disable, or
         // reparent the requested view. Resolve the capability only after that
         // callback, rather than trusting its original raw pointer.
+        View* arrived = nullptr;
         if (requested) {
             View* const next = resolve_attached_view(*requested);
             if (next != nullptr && next->focusable()) {
-                focused_ = next;
+                focused_ = arrived = next;
                 focused_->on_focus(FocusEvent{true});
             }
         } else if (view != nullptr) {
-            focused_ = view;
+            focused_ = arrived = view;
             focused_->on_focus(FocusEvent{true});
         }
+        // The ancestors hear of the arrival only while it still stands: a
+        // focus-in handler that moved the focus on has made a later request,
+        // and that request delivers its own notification.
+        if (arrived != nullptr && focused_ == arrived)
+            notify_descendant_focused(*arrived);
         if (focused_ != departing)
             notify_attention(AttentionChange::Focus);
     } catch (...) {
         terminal_.terminate_after_callback_failure();
         // Enforce the [[noreturn]] contract if a host override breaks it.
         std::abort();
+    }
+}
+
+void Application::notify_descendant_focused(View& target) {
+    // No parent pointer is held across a callback. While `target` is still
+    // the focused view it is attached (detachment clears the focus), so its
+    // ancestry can be walked afresh from it before each notification; the
+    // ancestry is short, and focus changes are not a per-frame path.
+    for (int depth = 1;; ++depth) {
+        View* ancestor = target.parent();
+        for (int step = 1; ancestor != nullptr && step < depth; ++step)
+            ancestor = ancestor->parent();
+        if (ancestor == nullptr)
+            return;
+        ancestor->on_descendant_focused(target);
+        if (focused_ != &target)
+            return;
     }
 }
 

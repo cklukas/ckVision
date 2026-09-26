@@ -730,15 +730,21 @@ std::unique_ptr<ui::View> Desktop::remove_child(ui::View* child) {
     return detached;
 }
 
-void Desktop::on_descendant_mouse_down(ui::View& target) {
+Window* Desktop::owned_window_containing(ui::View& target) const noexcept {
     for (ui::View* v = &target; v != nullptr; v = v->parent()) {
         auto it = std::find_if(windows_.begin(), windows_.end(),
                                 [v](Window* w) { return static_cast<ui::View*>(w) == v; });
-        if (it != windows_.end()) {
-            activate(*it);
-            return;
-        }
+        if (it != windows_.end()) return *it;
     }
+    return nullptr;
+}
+
+void Desktop::on_descendant_mouse_down(ui::View& target) {
+    if (Window* window = owned_window_containing(target)) activate(window);
+}
+
+void Desktop::on_descendant_focused(ui::View& target) {
+    if (Window* window = owned_window_containing(target)) activate(window);
 }
 
 void Desktop::window_gesture_changed(bool active) {

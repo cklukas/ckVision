@@ -594,8 +594,13 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
     }
     if (event.action == MouseAction::Down) {
         if (!inside) {
-            dismiss();  // light dismiss: this event only reaches us via input capture
-            return false;
+            // Light dismiss: this press only reaches us via input capture,
+            // and it is outside every menu of the chain. It ends the whole
+            // menu interaction and is consumed by doing so: the popup
+            // convention never lets the press that dismisses a popup act on
+            // what lies beneath it as well.
+            dismiss(MenuDismissReason::Outside);
+            return true;
         }
         chain_pointer_pressed() = true;
         if (highlighted_ != candidate) {
@@ -629,7 +634,7 @@ bool DropdownMenu::on_mouse(const MouseEvent& event) {
         const bool was_pressed = chain_pointer_pressed();
         chain_pointer_pressed() = false;
         if (was_pressed && candidate >= 0) activate(candidate);
-        else if (!inside) dismiss();
+        else if (!inside) dismiss(MenuDismissReason::Outside);  // a gesture let go of outside every menu
         return was_pressed || inside;
     }
     return false;
@@ -701,8 +706,12 @@ void DropdownMenu::draw(scene::Painter& painter) {
                     shown.mnemonic_byte_offset = std::string::npos;
             }
             const int label_end_x = label_x + text::text_width(shown.display);
+            // A disabled row shows no mnemonic accent (D-076): its letter is
+            // drawn like the rest of the label, in the disabled style, as the
+            // status line draws an unavailable item. An accent there would
+            // advertise a key the row does not answer.
             draw_mnemonic(painter, Point{label_x, item_top + i}, shown, label_columns, style,
-                          accent_style(style, theme.resolve(hotkey_role_)));
+                          enabled ? accent_style(style, theme.resolve(hotkey_role_)) : style);
             // A clipped label has taken the room the right-hand column
             // wanted; drawing into it anyway would overprint the label's
             // last cells rather than say anything.
@@ -896,9 +905,11 @@ void MenuBar::open_dropdown(std::size_t menu_index, MenuOpenReason reason) {
     // (a mnemonic, a resize that hid the open one), so the list opens on it.
     if (overflow && reason == MenuOpenReason::Keyboard) raw->set_highlighted(static_cast<int>(menu_index - visible));
     raw->on_dismiss = [this](MenuDismissReason dismiss_reason) {
-        // A chosen item ends the menu interaction; anything else only
-        // closes the popup and leaves the bar where the reader left it.
-        if (dismiss_reason == MenuDismissReason::ItemChosen)
+        // A chosen item and a press outside every menu both end the menu
+        // interaction: the bar deactivates and the focus goes back to where
+        // it was. Esc only closes the popup and leaves the bar where the
+        // reader left it, one level at a time.
+        if (dismiss_reason == MenuDismissReason::ItemChosen || dismiss_reason == MenuDismissReason::Outside)
             deactivate();
         else
             close_dropdown();

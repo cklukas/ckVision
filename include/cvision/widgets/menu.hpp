@@ -200,14 +200,23 @@ enum class MenuOpenReason {
 
 // Why a menu is going away. Choosing an item ends the whole menu
 // interaction, not merely the popup: the reader asked for a command and is
-// done with the menu. Cancelling leaves the menu system to decide how far
-// to unwind. The distinction matters beyond appearances — whatever the
-// command then does (open a dialog, say) sees the focus the menu left
-// behind, so a bar that stays focused hands the command a focus target the
-// reader never chose, and it comes back highlighted once the dialog closes.
+// done with the menu. Cancelling (Esc) leaves the menu system to decide how
+// far to unwind, one level at a time. The distinction matters beyond
+// appearances — whatever the command then does (open a dialog, say) sees the
+// focus the menu left behind, so a bar that stays focused hands the command a
+// focus target the reader never chose, and it comes back highlighted once the
+// dialog closes.
+//
+// Outside is the light dismiss (ARCHITECTURE.md §5 "Windows, popups"): a
+// pointer press outside every menu of the chain, or the release of a gesture
+// that ended outside all of them. The reader has turned to something else, so
+// it too ends the whole menu interaction: a menu bar deactivates and hands the
+// focus back to where it found it, and nothing runs. The press itself is
+// consumed by the dismissal and never reaches what lies beneath the menu.
 enum class MenuDismissReason {
     Cancelled,
     ItemChosen,
+    Outside,
 };
 
 // One open menu popup: a framed column of MenuItem rows, with a left mark
@@ -255,8 +264,9 @@ public:
         invalidate();
     }
 
-    // Fires on Esc, on a click outside the dropdown's own bounds (light
-    // dismiss), after a successful item activation (carrying
+    // Fires on Esc (MenuDismissReason::Cancelled), on a press outside every
+    // menu of its chain (light dismiss, MenuDismissReason::Outside), after a
+    // successful item activation (carrying
     // MenuDismissReason::ItemChosen — and BEFORE the command runs, so the
     // handler can settle focus first), AND unconditionally
     // from the destructor — so an owner (MenuBar) always learns the

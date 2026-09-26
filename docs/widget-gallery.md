@@ -531,7 +531,11 @@ one with `show_calendar_dropdown()`, which hangs it under an anchor with their
 right edges aligned, the way a submenu hangs from the right end of a bar, and
 pulls it back inside the desktop rather than letting it run off the edge. It
 scopes input while it is up, so Tab walks its own three controls — days, month,
-year — and reaches nothing behind it.
+year — and reaches nothing behind it. `request_dismiss()` closes it as Escape
+does, for the control that opened it when something else ends the
+interaction; a DatePicker given a host with `set_calendar_host()` drops one on
+Space or its `▾`, and `DatePicker::close_calendar()` takes it away again without
+choosing, as a PropertyInspector does when new rows end a date edit.
 
 ![CalendarDropdown with its calendar open](generated/screenshots/widget-calendardropdown.svg)
 
@@ -804,7 +808,15 @@ content->add_child(std::move(slider));
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a query field
 with search affordance. It owns query editing; the application decides how and
-when to execute the search. `set_status()` shows what the search found in the
+when to execute the search. The query field is an [InputLine](#inputline),
+reached through `field()`, and it is the box's focus stop: focus it with
+`Application::set_focus(&box.field())`. The query is therefore edited as any
+one-line field is -- caret movement, Shift and mouse selection, the clipboard
+and undo keys -- and every edit reports through `on_change`. The keys the
+field leaves unhandled reach the box: Escape clears a query (and with none is
+left for the enclosing dialog), and Enter records it in the history (and is
+left for the dialog's default button). A press on the prompt or the status
+puts the keyboard in the field. `set_status()` shows what the search found in the
 host's words ("2 of 7", "no match"), right-aligned between the field and the
 `[x]` clear control. The box only draws it: set it again from `on_change`
 after counting. On a narrow box the status is elided before the field gives
@@ -1166,6 +1178,12 @@ later one inward of it, so a tool bar docked after the menu bar sits under it
 and one docked after the status line sits above it. `docked(edge)` lists a
 stack from the edge inward; every docked view reserves its rows from
 `content_area()`, and removing one closes the stack up.
+
+Focus and activation are one answer: focusing a view inside a window — by a
+click, Tab, a mnemonic, a focus restoration or the application's own
+`Application::set_focus()` — activates and raises that window
+(`View::on_descendant_focused`), so the keyboard never sits in a window drawn
+inactive. Focusing a docked bar or a popup leaves the activation alone.
 
 ![Desktop containing overlapping windows](generated/screenshots/widget-desktop.svg)
 
@@ -1989,7 +2007,11 @@ its release arrives after the new submenu has taken the capture over — so
 every pointer event goes to the menu of the chain the pointer is actually
 over, and to the chain's root when it is over none of them. A press that ends
 up outside every one of them therefore closes the whole chain in one click,
-not one level of it.
+not one level of it. That press is the light dismiss
+(`MenuDismissReason::Outside`): it ends the menu interaction the way choosing
+an entry does, so a [MenuBar](#menubar) deactivates and hands the keyboard
+back to the view it came from, and the press is consumed by the dismissal —
+whatever lies beneath the menu does not also receive it.
 
 ![Open dropdown menu with command items](generated/screenshots/widget-dropdownmenu.svg)
 
@@ -2013,7 +2035,11 @@ Header: `include/cvision/widgets/menu.hpp`. Dock it at the Desktop top. F10
 activates the standard menu command, mnemonics enter menus, and Escape closes
 one level at a time — a submenu, then the dropdown, leaving the walk on its
 title — until a last Escape on the bar itself restores the preceding focus.
-Its mnemonic letters use the shared `ckv.hotkey` accent.
+A press outside every open menu ends the walk at once: the bar deactivates and
+the preceding focus comes back.
+Its mnemonic letters use the shared `ckv.hotkey` accent. A disabled row draws
+its mnemonic like the rest of its label, in the disabled style, since it does
+not answer that key (D-076).
 Focus stays on the bar for as long as any of its menus is open, so the bar is
 what delivers keys to them — always to the innermost one, which is where the
 reader's highlight is. Left and Right walk the top-level menus, except where a

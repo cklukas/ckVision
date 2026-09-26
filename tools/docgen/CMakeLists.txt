@@ -258,8 +258,19 @@ if(TARGET echo_app)
 endif()
 
 if(TARGET editor_app)
+    # The Editor example's menu scripts, by keyboard alone and by mouse alone,
+    # played by tests/test_editor_menu_scripts.cpp and by
+    # generate_editor_goldens, which writes the frames they pin.
+    add_library(docgen_editor_scripts STATIC editor_menu_script.cpp)
+    target_link_libraries(docgen_editor_scripts PRIVATE docgen_script_support editor_app ckvision::cvision)
+    target_include_directories(docgen_editor_scripts PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        $<TARGET_PROPERTY:editor_app,INTERFACE_INCLUDE_DIRECTORIES>)
+    ckvision_strict(docgen_editor_scripts)
+
     add_executable(generate_editor_goldens generate_editor_goldens.cpp)
-    target_link_libraries(generate_editor_goldens PRIVATE editor_app ckvision::cvision)
+    target_link_libraries(generate_editor_goldens PRIVATE
+        docgen_editor_scripts docgen_script_support editor_app ckvision::cvision)
     target_include_directories(generate_editor_goldens PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/editor)
     ckvision_strict(generate_editor_goldens)

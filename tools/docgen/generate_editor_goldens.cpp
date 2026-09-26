@@ -3,7 +3,11 @@
 //
 // Deliberately explicit golden regeneration for the shipped editor example.
 // Run this tool manually after an intentional visual-contract change, review
-// the resulting dump, and commit it with the behavior change.
+// the resulting dump, and commit it with the behavior change. It also plays
+// the example's keyboard-only and mouse-only menu scripts
+// (editor_menu_script.hpp) and writes the frames they pin
+// (editor_menu_*.dump), the same scripts tests/test_editor_menu_scripts.cpp
+// plays.
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -14,6 +18,8 @@
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
 #include "editor_app.hpp"
+#include "editor_menu_script.hpp"
+#include "event_script.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -113,5 +119,10 @@ int main(int argc, char** argv) {
     replace_app.set_theme(ckv::ui::make_mono_theme(replace_app.roles(), replace_roles));
     replace_app.step(0);
     complete = write("editor_replace_mono", replace_app) && complete;
+
+    ckv::docgen::EditorMenuStage keyboard(ckv::docgen::editor_menu_keyboard_script());
+    ckv::docgen::EditorMenuStage mouse(ckv::docgen::editor_menu_mouse_script());
+    complete = ckv::docgen::write_script_goldens(keyboard.player, keyboard.app, output_directory) > 0 && complete;
+    complete = ckv::docgen::write_script_goldens(mouse.player, mouse.app, output_directory) > 0 && complete;
     return complete ? 0 : 1;
 }

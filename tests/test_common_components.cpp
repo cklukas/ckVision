@@ -161,7 +161,7 @@ CK_TEST(search_box_and_breadcrumb_emit_client_callbacks) {
     attach_standalone(crumbs, s);
     std::string query;
     search.on_change = [&](const std::string& value) { query = value; };
-    CK_CHECK(search.on_text(ckv::TextEvent{"abc", false}));
+    CK_CHECK(search.field().on_text(ckv::TextEvent{"abc", false}));
     CK_CHECK(query == "abc");
     CK_CHECK(search.on_key(key(Key::Escape)));
     CK_CHECK(search.query().empty());
@@ -334,32 +334,41 @@ CK_TEST(a_search_box_accepts_ordinary_typed_characters) {
     // terminal reports typed characters as Key::Char key events — TextEvent
     // is for IMEs and paste. The box therefore could not be typed into at
     // all, which is the one thing it exists to do.
-    ckv::widgets::SearchBox box;
+    // Driven through the Application, as a reader types: the keys go to the
+    // box's field, and what the field leaves unhandled goes on to the box.
+    ckv::term::HeadlessTerminal term{ckv::Size{40, 5}};
+    ManualClock clock;
+    Application app(term, clock);
+    auto* box = app.root().add(std::make_unique<ckv::widgets::SearchBox>());
+    box->set_bounds(ckv::Rect{0, 0, 30, 1});
+    app.set_focus(&box->field());
     std::vector<std::string> observed;
-    box.on_change = [&observed](const std::string& query) { observed.push_back(query); };
+    box->on_change = [&observed](const std::string& query) { observed.push_back(query); };
 
-    const auto type = [&box](const char* text) {
-        return box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::None, text}});
+    const auto press = [&app](ckv::Key k, const char* text = "", ckv::Modifier modifiers = ckv::Modifier::None) {
+        const bool handled = app.dispatch(ckv::KeyEvent{ckv::KeyChord{k, modifiers, text}});
+        app.step(0);
+        return handled;
     };
-    CK_CHECK(type("v"));
-    CK_CHECK(type("i"));
-    CK_CHECK(type("m"));
-    CK_CHECK(box.query() == "vim");
+    CK_CHECK(press(ckv::Key::Char, "v"));
+    CK_CHECK(press(ckv::Key::Char, "i"));
+    CK_CHECK(press(ckv::Key::Char, "m"));
+    CK_CHECK(box->query() == "vim");
     CK_CHECK(observed.size() == 3U);
     CK_CHECK(observed.back() == "vim");
 
     // Backspace and Esc keep working, and Esc reports the clear.
-    CK_CHECK(box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Backspace, ckv::Modifier::None, ""}}));
-    CK_CHECK(box.query() == "vi");
-    CK_CHECK(box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}}));
-    CK_CHECK(box.query().empty());
+    CK_CHECK(press(ckv::Key::Backspace));
+    CK_CHECK(box->query() == "vi");
+    CK_CHECK(press(ckv::Key::Escape));
+    CK_CHECK(box->query().empty());
     // With nothing left to clear, Esc is the enclosing dialog's to cancel.
-    CK_CHECK(!box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}}));
+    CK_CHECK(!press(ckv::Key::Escape));
 
     // A modified character is a chord, not text: command routing must still
     // be able to claim it.
-    CK_CHECK(!box.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Char, ckv::Modifier::Ctrl, "q"}}));
-    CK_CHECK(box.query().empty());
+    CK_CHECK(!press(ckv::Key::Char, "q", ckv::Modifier::Ctrl));
+    CK_CHECK(box->query().empty());
 }
 
 CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_drawn) {
@@ -370,68 +379,73 @@ CK_TEST(a_search_box_looks_like_a_field_and_its_clear_control_is_where_it_is_dra
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
-    ckv::ui::RoleRegistry registry;
-    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
-    ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
-
-    ckv::widgets::SearchBox box;
-    box.set_context(ckv::ui::Context{&theme, &registry, &app});
-    box.on_attached();
-    box.set_bounds(ckv::Rect{0, 0, 20, 1});
-
-    ckv::scene::Surface surface(ckv::Size{20, 1}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
-    ckv::scene::Painter painter(surface, ckv::Rect{0, 0, 20, 1});
-    box.draw(painter);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    const ckv::ui::Theme& theme = app.theme();
+    auto* box = app.root().add(std::make_unique<ckv::widgets::SearchBox>());
+    box->set_bounds(ckv::Rect{0, 0, 20, 1});
+    app.step(0);
+    const auto row = [&app] {
+        std::string out;
+        for (int x = 0; x < 20; ++x) out += app.composed_surface().at(ckv::Point{x, 0}).grapheme();
+        return out;
+    };
+    const auto press_at = [&app](int x) {
+        const bool handled = app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                                          ckv::Point{x, 0}, std::nullopt, ckv::Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{x, 0}, std::nullopt,
+                                     ckv::Modifier::None});
+        app.step(0);
+        return handled;
+    };
 
     // The field carries the input surface's own background, which is what
     // says "text goes here"; the prompt does not.
-    const ckv::Style field = surface.at(ckv::Point{10, 0}).style();
-    const ckv::Style prompt = surface.at(ckv::Point{0, 0}).style();
+    const ckv::Style field = app.composed_surface().at(ckv::Point{10, 0}).style();
+    const ckv::Style prompt = app.composed_surface().at(ckv::Point{0, 0}).style();
     CK_CHECK(field.bg == theme.resolve(roles.input_normal).bg);
     CK_CHECK(field.bg != prompt.bg);
 
-    // With no query there is nothing to clear, so no control is offered...
-    std::string row;
-    for (int x = 0; x < 20; ++x) row += surface.at(ckv::Point{x, 0}).grapheme();
-    CK_CHECK(row.find("[x]") == std::string::npos);
-    CK_CHECK(!box.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                            ckv::Point{19, 0}, std::nullopt, ckv::Modifier::None}) == false);
+    // With no query there is nothing to clear, so no control is offered: a
+    // press on the last column is a press in the field.
+    CK_CHECK(row().find("[x]") == std::string::npos);
+    CK_CHECK(press_at(19));
+    CK_CHECK(app.focused() == &box->field());
 
     // ...and once there is, it is drawn at the right edge, exactly where a
     // click on it is answered.
-    box.set_query("vim");
-    box.draw(painter);
-    row.clear();
-    for (int x = 0; x < 20; ++x) row += surface.at(ckv::Point{x, 0}).grapheme();
-    CK_CHECK(row.find("vim") != std::string::npos);
-    CK_CHECK(row.rfind("[x]") == 17U);  // the last three columns of a 20-wide box
+    box->set_query("vim");
+    app.step(0);
+    CK_CHECK(row().find("vim") != std::string::npos);
+    CK_CHECK(row().rfind("[x]") == 17U);  // the last three columns of a 20-wide box
 
-    CK_CHECK(box.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                           ckv::Point{18, 0}, std::nullopt, ckv::Modifier::None}));
-    CK_CHECK(box.query().empty());
+    CK_CHECK(press_at(18));
+    CK_CHECK(box->query().empty());
 }
 
 CK_TEST(a_focused_search_box_shows_a_caret_where_typing_will_land) {
-    ckv::term::HeadlessTerminal term{ckv::Size{40, 5}};
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
     ManualClock clock;
     Application app(term, clock);
-    ckv::ui::RoleRegistry registry;
-    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(registry);
-    const ckv::ui::Theme theme = ckv::ui::make_classic_theme(registry, roles);
-    ckv::widgets::SearchBox box;
-    box.set_context(ckv::ui::Context{&theme, &registry, &app});
-    box.set_bounds(ckv::Rect{0, 0, 20, 1});
-    CK_CHECK(!box.cursor_state().has_value());  // unfocused: no caret
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), ckv::ui::intern_standard_roles(app.roles()));
+    auto* box = app.root().add(std::make_unique<ckv::widgets::SearchBox>());
+    box->set_bounds(ckv::Rect{0, 0, 20, 1});
+    app.step(0);
+    // The caret is the field's, drawn as every input line draws it: a
+    // reverse-video cell where typing lands. "Search " takes seven columns.
+    const auto caret_at = [&app](int x) {
+        return ckv::has_attr(app.composed_surface().at(ckv::Point{x, 0}).style().attrs, ckv::Attr::Reverse);
+    };
+    CK_CHECK(!caret_at(7));  // unfocused: no caret
 
-    app.set_focus(&box);
-    const auto empty_caret = box.cursor_state();
-    CK_CHECK(empty_caret.has_value());
-    CK_CHECK(empty_caret->visible);
+    app.set_focus(&box->field());
+    app.step(0);
+    CK_CHECK(caret_at(7));
 
-    box.set_query("vi");
-    const auto typed_caret = box.cursor_state();
-    CK_CHECK(typed_caret.has_value());
-    CK_CHECK(typed_caret->position.x == empty_caret->position.x + 2);  // follows the text
+    box->set_query("vi");
+    app.step(0);
+    CK_CHECK(!caret_at(7));
+    CK_CHECK(caret_at(9));  // follows the text
 }
 
 // --- Calendar: today, and a marked span --------------------------------------
@@ -1562,30 +1576,27 @@ CK_TEST(a_breadcrumb_bar_is_a_tab_stop_from_construction) {
 
 CK_TEST(a_query_longer_than_its_field_shows_its_end_with_the_caret_just_after_it) {
     Hosted h;
-    SearchBox box;
-    h.attach(box, ckv::Rect{0, 0, 20, 1});
-    h.app.set_focus(&box);
+    h.app.theme() = ckv::ui::make_classic_theme(h.app.roles(), ckv::ui::intern_standard_roles(h.app.roles()));
+    auto* box = h.app.root().add(std::make_unique<SearchBox>());
+    box->set_bounds(ckv::Rect{0, 0, 20, 1});
+    h.app.set_focus(&box->field());
     // "Search " takes seven columns and the clear control three: the field
     // is ten wide, nine for the text and one for the caret.
-    box.set_query("abcdefghijklmnop");
-    std::string row = row_of(painted(box), 0);
+    box->set_query("abcdefghijklmnop");
+    h.app.step(0);
+    std::string row = row_of(h.app.composed_surface(), 0);
     CK_CHECK(row.substr(7, 10) == "hijklmnop ");
     CK_CHECK(row.find("abc") == std::string::npos);
-    auto caret = box.cursor_state();
-    CK_CHECK(caret.has_value());
-    if (!caret) return;
-    CK_CHECK(caret->position.x == box.absolute_bounds().x + 7 + 9);
+    CK_CHECK(reversed(h.app.composed_surface(), ckv::Point{7 + 9, 0}));
 
     // Double-width text: four clusters fill eight of the nine columns, and
     // the caret follows the text it shows, not the text's full width.
-    box.set_query("一二三四五六七八");
-    row = row_of(painted(box), 0);
+    box->set_query("一二三四五六七八");
+    h.app.step(0);
+    row = row_of(h.app.composed_surface(), 0);
     CK_CHECK(row.find("五六七八") != std::string::npos);
     CK_CHECK(row.find("四") == std::string::npos);
-    caret = box.cursor_state();
-    CK_CHECK(caret.has_value());
-    if (!caret) return;
-    CK_CHECK(caret->position.x == box.absolute_bounds().x + 7 + 8);
+    CK_CHECK(reversed(h.app.composed_surface(), ckv::Point{7 + 8, 0}));
 }
 
 CK_TEST(each_notifications_mark_wears_its_severitys_colour_over_the_centres_surface) {
@@ -1669,12 +1680,12 @@ CK_TEST(backspace_in_a_search_box_and_a_palette_removes_a_whole_grapheme) {
     SearchBox search;
     attach_standalone(search, s);
     search.set_query("café");
-    CK_CHECK(search.on_key(key(Key::Backspace)));
+    CK_CHECK(search.field().on_key(key(Key::Backspace)));
     CK_CHECK(search.query() == "caf");
     search.set_query("é\U0001F44D");
-    CK_CHECK(search.on_key(key(Key::Backspace)));
+    CK_CHECK(search.field().on_key(key(Key::Backspace)));
     CK_CHECK(search.query() == "é");
-    CK_CHECK(search.on_key(key(Key::Backspace)));
+    CK_CHECK(search.field().on_key(key(Key::Backspace)));
     CK_CHECK(search.query().empty());
 
     CommandPalette palette;
@@ -2080,7 +2091,7 @@ CK_TEST(an_activated_docked_tool_bar_runs_its_command_for_the_view_it_came_from_
     auto* document = desktop->add(std::make_unique<SearchBox>());
     document->set_bounds(ckv::Rect{2, 4, 20, 1});
     document->set_command_context("document");
-    s.app.set_focus(document);
+    s.app.set_focus(&document->field());
     s.app.step(0);
 
     tools->activate();
@@ -2088,12 +2099,12 @@ CK_TEST(an_activated_docked_tool_bar_runs_its_command_for_the_view_it_came_from_
     CK_CHECK(s.app.focused() == tools);
     CK_CHECK(s.press(Key::Enter));
     CK_CHECK(saved == 1);
-    CK_CHECK(s.app.focused() == document);
+    CK_CHECK(s.app.focused() == &document->field());
 
     // Escape ends a walk with nothing run.
     tools->activate();
     CK_CHECK(s.press(Key::Escape));
-    CK_CHECK(s.app.focused() == document);
+    CK_CHECK(s.app.focused() == &document->field());
     CK_CHECK(saved == 1);
     // Without the document's context, the command is unavailable: the bar
     // shows and refuses it for where the focus really is.
@@ -2114,12 +2125,12 @@ CK_TEST(a_scripted_click_on_a_docked_tool_bar_runs_its_command_without_taking_th
     auto* document = desktop->add(std::make_unique<SearchBox>());
     document->set_bounds(ckv::Rect{2, 4, 20, 1});
     document->set_command_context("document");
-    s.app.set_focus(document);
+    s.app.set_focus(&document->field());
     s.app.step(0);
 
     CK_CHECK(s.click(ckv::Point{2, 0}));
     CK_CHECK(saved == 1);
-    CK_CHECK(s.app.focused() == document);
+    CK_CHECK(s.app.focused() == &document->field());
     // A press dragged off the button is taken back, and the keyboard still
     // goes home.
     s.app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 0}, std::nullopt,
@@ -2130,7 +2141,7 @@ CK_TEST(a_scripted_click_on_a_docked_tool_bar_runs_its_command_without_taking_th
                                    Modifier::None});
     s.app.step(0);
     CK_CHECK(saved == 1);
-    CK_CHECK(s.app.focused() == document);
+    CK_CHECK(s.app.focused() == &document->field());
 }
 
 CK_TEST(a_scripted_narrow_tool_bar_puts_what_does_not_fit_in_its_overflow_menu) {
@@ -2331,12 +2342,14 @@ CK_TEST(a_scripted_search_box_shows_the_hosts_status_between_the_query_and_the_c
         search->set_status(query.empty() ? std::string{} : std::to_string(matches) + " of 3");
     };
     s.mount(std::move(box), ckv::Rect{0, 1, 30, 1});
+    s.app.set_focus(&search->field());
     CK_CHECK(s.type("inv"));
     CK_CHECK(search->status() == "2 of 3");
     // Right-aligned against the "[x]", one blank before it.
     CK_CHECK(s.cells(0, 1, 30) == "Search inv" + std::string(11, ' ') + "2 of 3[x]");
     // The caret stays at the end of the query, not after the status.
-    CK_CHECK(s.app.current_cursor().position == (ckv::Point{10, 1}));
+    CK_CHECK(reversed(s.app.composed_surface(), ckv::Point{10, 1}));
+    CK_CHECK(!reversed(s.app.composed_surface(), ckv::Point{20, 1}));
     CK_CHECK(s.type("x"));
     CK_CHECK(s.cells(20, 1, 10) == " 0 of 3[x]");
     // The clear control still clears, and the host takes the status away.
@@ -2354,6 +2367,67 @@ CK_TEST(a_scripted_search_box_shows_the_hosts_status_between_the_query_and_the_c
     search->set_bounds(ckv::Rect{0, 1, 17, 1});
     s.app.step(0);
     CK_CHECK(s.cells(0, 1, 17) == "Search inv    [x]");
+}
+
+CK_TEST(a_scripted_search_box_edits_its_query_as_an_input_line_does) {
+    // The query field is an InputLine (plans/widgets.md: "InputLine plus
+    // clear/status affordance"): the caret moves, Shift extends a selection
+    // that typing replaces, undo works, and history recall reports on_change
+    // -- while Escape and Enter keep the meaning the box gives them.
+    Scripted s;
+    auto* search = s.mount(std::make_unique<SearchBox>(), ckv::Rect{0, 1, 30, 1});
+    search->set_history_key("find");
+    std::vector<std::string> seen;
+    search->on_change = [&seen](const std::string& query) { seen.push_back(query); };
+    const auto chord = [&s](Key k, Modifier modifiers, std::string text = {}) {
+        const bool handled = s.app.dispatch(ckv::KeyEvent{KeyChord{k, modifiers, std::move(text)}});
+        s.app.step(0);
+        return handled;
+    };
+
+    // A press on the prompt puts the keyboard in the field.
+    CK_CHECK(s.click(ckv::Point{1, 1}));
+    CK_CHECK(s.app.focused() == &search->field());
+    CK_CHECK(s.type("invoce"));
+    // The caret walks back into the word, and typing lands there.
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.type("i"));
+    CK_CHECK(search->query() == "invoice");
+    CK_CHECK(seen.back() == "invoice");
+    // "Search " is seven columns: the caret stands on the "c" after "invoi".
+    CK_CHECK(s.cells(12, 1, 1) == "c");
+    CK_CHECK(reversed(s.app.composed_surface(), ckv::Point{12, 1}));
+
+    // Home, then Shift+End, selects the query; a paste replaces the
+    // selection, as typing would.
+    CK_CHECK(s.press(Key::Home));
+    CK_CHECK(chord(Key::End, Modifier::Shift));
+    CK_CHECK(search->field().has_selection());
+    s.app.set_clipboard_text("receipt");
+    CK_CHECK(chord(Key::Char, Modifier::Ctrl, "v"));
+    CK_CHECK(search->query() == "receipt");
+    CK_CHECK(seen.back() == "receipt");
+    // Undo puts the replaced query back, and reports it.
+    CK_CHECK(chord(Key::Char, Modifier::Ctrl, "z"));
+    CK_CHECK(search->query() == "invoice");
+    CK_CHECK(seen.back() == "invoice");
+
+    // Enter records the query and is left for whatever else answers it.
+    CK_CHECK(!s.press(Key::Enter));
+    CK_CHECK((s.app.history().entries("find") == std::vector<std::string>{"invoice"}));
+    // Escape clears the query, and with nothing left to clear goes on.
+    CK_CHECK(s.press(Key::Escape));
+    CK_CHECK(search->query().empty());
+    CK_CHECK(seen.back().empty());
+    CK_CHECK(!s.press(Key::Escape));
+    // Up recalls the recorded query, as typing would report it; Down returns.
+    CK_CHECK(s.press(Key::Up));
+    CK_CHECK(search->query() == "invoice");
+    CK_CHECK(seen.back() == "invoice");
+    CK_CHECK(s.cells(0, 1, 30) == "Search invoice" + std::string(13, ' ') + "[x]");
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(search->query().empty());
 }
 
 CK_TEST(a_scripted_command_palette_filters_as_typed_and_runs_the_highlighted_command) {

@@ -510,6 +510,10 @@ public:
     // still exists.
     std::function<void()> on_dismiss;
     std::function<void()> on_closed;
+    // Closes it as a dismissal, exactly as Escape does -- for the control
+    // that opened it, when something else has ended the interaction. Nothing
+    // is chosen. The dropdown may be destroyed before this returns.
+    void request_dismiss() { dismiss(); }
 
     void draw(scene::Painter& painter) override;
     bool on_mouse(const MouseEvent& event) override;
@@ -657,6 +661,12 @@ public:
     // stays open until dismissed. Returns false without a host, and true
     // when a calendar is open, including one that already was.
     bool open_calendar();
+    // Dismisses an open calendar without choosing: the value stays as it
+    // is. What an owner calls when it ends the edit the calendar belongs to,
+    // so the calendar never outlives the field it edits. A no-op when none is
+    // open.
+    void close_calendar();
+    bool calendar_open() const noexcept { return calendar_dropdown_ != nullptr; }
     // Fires with the new value after every change, from the reader or from
     // set_value and set_empty_allowed.
     std::function<void(std::optional<DateValue>)> on_change;
@@ -936,14 +946,21 @@ private:
     ui::RoleId disabled_role_ = ui::kInvalidRole;
 };
 
-// A one-row search field: a "Search " prompt, the query in an input-coloured
-// field with a caret at its end, the host's status text, and a "[x]" clear
-// control at the right edge while there is a query. Typed characters (without
-// Alt, Ctrl or Super) and text input append to the query; Backspace removes
-// its last grapheme; Escape clears it, and with nothing to clear is left unhandled
-// for the enclosing dialog or popup. A click on the "[x]" clears it. When
-// the query is wider than the field its end is shown, the part being typed.
-// There is no caret movement: the query is edited at its end only.
+// A one-row search field: a "Search " prompt, the query field, the host's
+// status text, and a "[x]" clear control at the right edge while there is a
+// query. The query field is an InputLine (plans/widgets.md: "InputLine plus
+// clear/status affordance") and it is the box's focus stop: it edits the
+// query with everything a one-line field offers -- caret movement,
+// Shift-extended and mouse selection, the clipboard and undo keys, and the
+// shared history -- and shows its caret and selection as any input line does.
+// When the query is wider than the field it scrolls to keep the caret in view.
+//
+// The box itself is the field's container and takes no focus of its own. The
+// keys the field leaves unhandled reach it: Escape clears a query, and with
+// nothing to clear is left unhandled for the enclosing dialog or popup; Enter
+// records the query in the history and is left unhandled for whatever else
+// answers it. A press on the "[x]" clears the query; a press elsewhere on the
+// box (the prompt or the status) puts the keyboard in the field.
 //
 // The status is what the search found, in the host's words -- "3 of 12",
 // "no match" -- drawn right-aligned between the field and the clear control,
@@ -953,20 +970,24 @@ private:
 // with fewer than two columns left is not drawn.
 // With a history key, Up and Down recall earlier queries (set_history_key).
 //
-// Resolves "ckv.input.normal", "ckv.input.focused", "ckv.input.disabled",
-// "ckv.label.text" and "ckv.label.disabled" on attach.
+// Resolves "ckv.label.text" and "ckv.label.disabled" on attach for the
+// prompt, the status and the clear control; the field resolves the input
+// roles as every InputLine does.
 class SearchBox : public ui::View {
 public:
-    // A Tab stop with an empty query.
+    // An empty query in a field that is a Tab stop.
     SearchBox();
-    // Replaces the query; fires on_change if it differs, programmatic or not.
+    // Replaces the query, caret at its end; fires on_change if it differs,
+    // programmatic or not.
     void set_query(std::string query);
-    const std::string& query() const noexcept { return query_; }
+    // The query as the field holds it.
+    std::string query() const { return field_->text(); }
     // Empties the query, firing on_change if it was not empty, then fires
     // on_clear in any case. Escape and the "[x]" control come here.
     void clear();
     // Fires with the whole new query after every change: each typed
-    // character, Backspace, clearing, and set_query.
+    // character, an erase, a cut, paste or undo, a recalled history entry,
+    // clearing, and set_query.
     std::function<void(const std::string&)> on_change;
     // Fires after every clear(), including one of an already empty query.
     std::function<void()> on_clear;
@@ -976,34 +997,43 @@ public:
     const std::string& status() const noexcept { return status_; }
     // The columns the query field keeps however long the status is.
     static constexpr int kMinimumQueryColumns = 6;
-    // Names the history list this box shares: the list under `key` in the
-    // Application::history() of the Application it is attached to, which every
-    // input line, combo box, search box and dialog field naming the same key
-    // shares too. While a key is set and the box is attached, Up recalls
-    // older queries and Down newer ones, back to the query that was there
-    // before recall began, each recall firing on_change as typing does; and
-    // Enter records the query, leaving the key unhandled for whatever else
-    // answers it. Empty (the default) turns history off.
-    void set_history_key(std::string key);
-    const std::string& history_key() const noexcept { return history_key_; }
+    // Names the history list the field shares (InputLine::set_history_key):
+    // the list under `key` in the Application::history() of the Application
+    // the box is attached to, which every input line, combo box, search box
+    // and dialog field naming the same key shares too. While a key is set and
+    // the box is attached, Up recalls older queries and Down newer ones, back
+    // to the query that was there before recall began, each recall firing
+    // on_change as typing does; and Enter records the query, leaving the key
+    // unhandled for whatever else answers it. Empty (the default) turns
+    // history off.
+    void set_history_key(std::string key) { field_->set_history_key(std::move(key)); }
+    const std::string& history_key() const noexcept { return field_->history_key(); }
     // Records the query as the newest entry of the history list. An empty
     // query is not recorded, and nothing is without a key or an Application.
     void commit_to_history();
 
+    // The query field: the box's focus stop, and what an owner focuses
+    // (Application::set_focus(&box.field())), gives another focus policy, or
+    // hands keys to when the typing happens elsewhere -- a list whose
+    // type-ahead filters it, say. Edits made through it report on_change like
+    // any other. Its bounds belong to the box, which lays it out.
+    InputLine& field() noexcept { return *field_; }
+    const InputLine& field() const noexcept { return *field_; }
+
     void draw(scene::Painter& painter) override;
+    // Escape and Enter as they bubble up from the field (see above).
     bool on_key(const KeyEvent& event) override;
-    bool on_text(const TextEvent& event) override;
+    // Presses outside the field: the clear control, and the rest of the box.
     bool on_mouse(const MouseEvent& event) override;
-    void on_focus(const FocusEvent& event) override;
+    void on_resized() override;
     void on_attached() override;
-    std::optional<CursorState> cursor_state() const override;
 
 private:
     // Where the parts fall across the box's width, left to right: the
     // prompt, the query field, the status (with its leading blank) and the
-    // clear control. Drawing, the caret and hit-testing all read this one
-    // layout, which keeps what the reader sees and what answers a click the
-    // same thing.
+    // clear control. Drawing, the field's placement and hit-testing all read
+    // this one layout, which keeps what the reader sees and what answers a
+    // click the same thing.
     struct Layout {
         int prompt_width = 0;
         int field_x = 0;
@@ -1015,28 +1045,20 @@ private:
         int clear_width = 0;
     };
     Layout layout() const;
-    // The part of the query shown in a field `field_width` columns wide.
-    std::string visible_query(int field_width) const;
+    // Puts the field where layout() says it goes. The layout changes with
+    // the width, the status and whether there is a query to clear.
+    void place_field();
+    // What every change of query does: the field is placed again (the clear
+    // control comes and goes with the query) and on_change hears the query.
+    void query_changed();
     // Columns the "[x]" clear control occupies at the right edge. Drawing and
     // hit-testing both derive from this, which is what keeps the control the
     // reader can see and the region that answers a click the same thing.
     static constexpr int kClearControlWidth = 3;
-    // The application's history registry while a key is set and the box is
-    // attached; nullptr otherwise.
-    ui::HistoryRegistry* history_registry() const noexcept;
-    // Shows entry `index` of the history list, or with -1 the query from
-    // before recall began.
-    void recall_history(int index);
 
-    std::string query_;
+    InputLine* field_ = nullptr;
     std::string status_;
-    std::string history_key_;
-    int history_index_ = -1;  // -1: the reader's own query, not a recalled one
-    std::string history_saved_query_;
-    ui::RoleId role_ = ui::kInvalidRole;
-    ui::RoleId focused_role_ = ui::kInvalidRole;
     ui::RoleId label_role_ = ui::kInvalidRole;
-    ui::RoleId disabled_role_ = ui::kInvalidRole;
     ui::RoleId label_disabled_role_ = ui::kInvalidRole;
 };
 

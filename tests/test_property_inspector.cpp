@@ -223,6 +223,38 @@ CK_TEST(a_date_property_is_edited_with_the_date_picker) {
     CK_CHECK(f.row(0).starts_with("Due  2026-10-30"));
 }
 
+CK_TEST(new_items_close_the_calendar_a_date_edit_had_dropped) {
+    // set_items ends the edit, since the value it began on is gone. The
+    // calendar the picker dropped goes with it: left open, it would keep its
+    // modal scope over a picker nobody can see, and a day chosen there would
+    // edit a value that no longer exists.
+    InspectorFixture f({item("Due", "2026-09-30", PropertyKind::Date)});
+    CK_CHECK(f.press(Key::Enter));
+    auto* picker = dynamic_cast<ckv::widgets::DatePicker*>(f.app.focused());
+    CK_CHECK(picker != nullptr);
+    if (picker == nullptr) return;
+    CK_CHECK(f.press(Key::Char, Modifier::None, " "));  // Space drops the calendar
+    CK_CHECK(picker->calendar_open());
+    CK_CHECK(f.desktop->popups().size() == 1U);
+    CK_CHECK(f.app.is_modal());
+
+    // The host refreshes its model while the calendar is up.
+    f.app.post([&f] { f.inspector->set_items({item("Start", "2026-01-01", PropertyKind::Date)}); });
+    f.app.step(0);
+    CK_CHECK(!f.inspector->editing());
+    CK_CHECK(!picker->calendar_open());
+    CK_CHECK(!picker->visible());
+    CK_CHECK(f.desktop->popups().empty());
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.app.focused() == f.inspector);
+    CK_CHECK(f.row(0).starts_with("Start  2026-01-01"));
+    // The keyboard is the inspector's: Enter begins an edit of the new row.
+    CK_CHECK(f.press(Key::Enter));
+    CK_CHECK(f.app.focused() == picker);
+    CK_CHECK(picker->value() == (ckv::widgets::DateValue{2026, 1, 1}));
+    CK_CHECK(f.changes.empty());
+}
+
 CK_TEST(a_time_property_is_edited_with_the_time_picker_and_keeps_its_seconds_or_their_absence) {
     InspectorFixture f({item("Start", "09:30", PropertyKind::Time), item("Alarm", "06:00:15", PropertyKind::Time)});
     CK_CHECK(f.press(Key::Enter));

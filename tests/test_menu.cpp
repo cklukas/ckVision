@@ -300,11 +300,13 @@ CK_TEST(clicking_outside_the_dropdowns_bounds_dismisses_it_without_activating) {
     };
     // Far outside the dropdown's bounds — this only reaches the
     // dropdown at all because Application routes it here via input
-    // capture (exercised end-to-end in the MenuBar tests below).
-    CK_CHECK(!menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
-                                              ckv::Point{50, 50}, std::nullopt, Modifier::None}));
+    // capture (exercised end-to-end in the MenuBar tests below). The
+    // dismissal consumes the press: it is the light dismiss, not a click
+    // on whatever lies beneath.
+    CK_CHECK(menu->on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                             ckv::Point{50, 50}, std::nullopt, Modifier::None}));
     CK_CHECK(dismissed);
-    CK_CHECK(reason == ckv::widgets::MenuDismissReason::Cancelled);
+    CK_CHECK(reason == ckv::widgets::MenuDismissReason::Outside);
     CK_CHECK(!ran);
 }
 
@@ -1837,6 +1839,105 @@ CK_TEST(a_press_outside_every_menu_of_the_chain_closes_all_of_them_at_once) {
     CK_CHECK(pf.popups() == 0);  // not one level, and not needing a second click
 }
 
+namespace {
+// A focusable view that counts the presses it is handed.
+class PressProbe final : public ckv::ui::View {
+public:
+    PressProbe() { set_focus_policy(ckv::ui::FocusPolicy::TabStop); }
+    bool on_mouse(const ckv::MouseEvent& event) override {
+        if (event.action == ckv::MouseAction::Down) ++presses;
+        return true;
+    }
+    int presses = 0;
+};
+
+// An application as a reader meets it: a desktop filling the terminal, a
+// docked menu bar, and a window holding the focused field and, well clear of
+// every menu, a view that counts presses.
+struct LightDismissFixture {
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    StandardRoles roles = intern_standard_roles(app.roles());
+    Desktop* desktop = nullptr;
+    MenuBar* bar = nullptr;
+    ckv::widgets::InputLine* field = nullptr;
+    PressProbe* probe = nullptr;
+    int opened = 0;
+
+    LightDismissFixture() {
+        app.theme() = make_classic_theme(app.roles(), roles);
+        desktop = static_cast<Desktop*>(app.root().add_child(std::make_unique<Desktop>(Rect{0, 0, 80, 24})));
+        bar = desktop->dock_top(std::make_unique<MenuBar>(std::vector<MenuBarItem>{
+            {"&File", {MenuItem::submenu("&New", {MenuItem::action("&Text", [] {})}),
+                       MenuItem::action("&Open", [this] { ++opened; })}}}));
+        auto* window = desktop->add_window(std::make_unique<ckv::widgets::Window>("Document"));
+        window->set_bounds(Rect{30, 5, 40, 12});
+        field = window->add(std::make_unique<ckv::widgets::InputLine>());
+        field->set_bounds(Rect{2, 2, 20, 1});
+        probe = window->add(std::make_unique<PressProbe>());
+        probe->set_bounds(Rect{2, 6, 20, 3});
+        app.set_focus(field);
+        app.step(0);
+    }
+
+    void mouse(ckv::MouseAction action, ckv::Point cell) {
+        term.inject_event(ckv::MouseEvent{action, ckv::MouseButton::Left, cell, std::nullopt, Modifier::None});
+        app.step(0);
+    }
+    void press_key(Key k) {
+        term.inject_event(ckv::KeyEvent{KeyChord{k, Modifier::None, ""}});
+        app.step(0);
+    }
+    ckv::Point probe_cell() const { return ckv::Point{probe->absolute_bounds().x + 3, probe->absolute_bounds().y + 1}; }
+};
+}  // namespace
+
+CK_TEST(a_press_outside_an_open_menu_ends_the_menu_system_and_is_consumed) {
+    // The light dismiss (ARCHITECTURE.md §5): a press outside every menu of
+    // the chain closes them all, deactivates the bar and puts the focus back
+    // where the menu found it -- and it is only a dismissal: the view under
+    // the pointer never hears the press.
+    LightDismissFixture lf;
+    lf.mouse(ckv::MouseAction::Down, ckv::Point{3, 0});  // the File title
+    lf.mouse(ckv::MouseAction::Up, ckv::Point{3, 0});
+    CK_CHECK(lf.desktop->popups().size() == 1U);
+    CK_CHECK(lf.bar->active());
+
+    lf.mouse(ckv::MouseAction::Down, lf.probe_cell());
+    lf.mouse(ckv::MouseAction::Up, lf.probe_cell());
+    CK_CHECK(lf.desktop->popups().empty());
+    CK_CHECK(!lf.bar->active());
+    CK_CHECK(lf.app.focused() == lf.field);
+    CK_CHECK(lf.app.input_capture() == nullptr);
+    CK_CHECK(lf.probe->presses == 0);
+    CK_CHECK(lf.opened == 0);
+
+    // With the menu gone, the same press is an ordinary click again.
+    lf.mouse(ckv::MouseAction::Down, lf.probe_cell());
+    lf.mouse(ckv::MouseAction::Up, lf.probe_cell());
+    CK_CHECK(lf.probe->presses == 1);
+}
+
+CK_TEST(a_press_outside_a_keyboard_opened_submenu_chain_restores_the_focus_it_found) {
+    LightDismissFixture lf;
+    lf.press_key(Key::F10);
+    lf.press_key(Key::Enter);  // File drops
+    lf.press_key(Key::Right);  // into New's submenu
+    CK_CHECK(lf.desktop->popups().size() == 2U);
+    CK_CHECK(lf.app.focused() == lf.bar);
+
+    lf.mouse(ckv::MouseAction::Down, ckv::Point{75, 20});  // bare desktop
+    lf.mouse(ckv::MouseAction::Up, ckv::Point{75, 20});
+    CK_CHECK(lf.desktop->popups().empty());
+    CK_CHECK(!lf.bar->active());
+    CK_CHECK(lf.app.focused() == lf.field);
+    // The keyboard is the field's again: a key typed now lands in it.
+    lf.term.inject_event(ckv::TextEvent{"x", false});
+    lf.app.step(0);
+    CK_CHECK(lf.field->text() == "x");
+}
+
 // --- Regression: Window::toggle_zoom bypassing clamp_size (review finding #4) ---
 
 CK_TEST(zooming_into_an_area_smaller_than_the_windows_minimum_size_still_clamps) {
@@ -2387,6 +2488,50 @@ CK_TEST(an_unavailable_row_under_the_highlight_keeps_the_bar_in_the_disabled_for
         CK_CHECK(surface.at(cell).style().fg == disabled.fg);
     }
     CK_CHECK(surface.at(ckv::Point{2, 2}).style() == f.theme.resolve(f.roles.menu_dropdown_normal));
+}
+
+CK_TEST(a_disabled_row_draws_its_mnemonic_like_the_rest_of_its_label) {
+    // D-076: a disabled control shows no mnemonic accent. The letter a row
+    // would answer to is drawn in the row's own disabled style, whether or
+    // not the highlight stands on it, while an enabled row keeps its accent.
+    ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
+    ManualClock clock;
+    Application app(term, clock);
+    Fixture f;
+    const ui::CommandId unavailable = app.commands().declare({.key = "test.unavailable", .title = "&Unavailable"});
+    app.commands().set_enabled_predicate(unavailable, [] { return false; });
+    auto menu = make_dropdown(
+        f, app, {MenuItem::action("&Open", {}), MenuItem::command(unavailable), MenuItem::action("&Close", {})});
+    const int width = menu->horizontal_size_hint().preferred;
+    const int height = menu->vertical_size_hint().preferred;
+    menu->set_bounds(Rect{0, 0, width, height});
+    const ckv::Style disabled = f.theme.resolve(f.roles.menu_dropdown_disabled);
+    const ckv::Style hotkey = f.theme.resolve(f.roles.hotkey);
+    CK_CHECK(hotkey.fg != disabled.fg);
+
+    const auto render = [&] {
+        Surface surface(ckv::Size{width, height}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+        Painter painter(surface, Rect{0, 0, width, height});
+        menu->draw(painter);
+        return surface;
+    };
+
+    // Resting: the disabled row's mnemonic cell is styled exactly like the
+    // cell after it, in the disabled style.
+    const Surface resting = render();
+    CK_CHECK(resting.at(ckv::Point{2, 2}).grapheme() == "U");
+    CK_CHECK(resting.at(ckv::Point{2, 2}).style() == disabled);
+    CK_CHECK(resting.at(ckv::Point{2, 2}).style() == resting.at(ckv::Point{3, 2}).style());
+    // The enabled row below it keeps its accent.
+    CK_CHECK(resting.at(ckv::Point{2, 3}).grapheme() == "C");
+    CK_CHECK(resting.at(ckv::Point{2, 3}).style().fg == hotkey.fg);
+
+    // Under the highlight: still no accent; the bar is in the disabled foreground.
+    CK_CHECK(menu->on_key(key(Key::Down)));
+    CK_CHECK(menu->highlighted() == 1);
+    const Surface lit = render();
+    CK_CHECK(lit.at(ckv::Point{2, 2}).style() == lit.at(ckv::Point{3, 2}).style());
+    CK_CHECK(lit.at(ckv::Point{2, 2}).style().fg == disabled.fg);
 }
 
 CK_TEST(a_popup_wider_than_its_desktop_is_narrowed_to_it_and_elides_its_labels) {

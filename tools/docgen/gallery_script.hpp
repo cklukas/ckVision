@@ -41,7 +41,7 @@ public:
 
     // A cell over the Sixel Demo picture, below the rows the open
     // View > Scheme menu covers.
-    static constexpr Point kPictureCell{36, 15};
+    static constexpr Point kPictureCell{18, 12};
 };
 
 // initial; scrolled a row by the wheel; scrolled a page by PageDown once a

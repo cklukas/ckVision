@@ -59,9 +59,11 @@ struct StandardRoles {
     RoleId window_frame_inactive;
     RoleId window_title_active;
     RoleId window_title_inactive;
-    // The maximize/restore control. Its foreground is composited onto the
-    // owning frame's background, so the accent works for both document
-    // windows and dialog chrome.
+    // The active window's frame controls: close, minimize, zoom
+    // (maximize/restore) and the bottom-right resize grip. Its foreground is
+    // composited onto the owning frame's background, so the accent works for
+    // both document windows and dialog chrome; an inactive window draws its
+    // controls in the frame's own style.
     RoleId window_control;
     // A frame control with the pointer held down on it. Its own role rather
     // than an inversion the widget works out: whether a pressed control

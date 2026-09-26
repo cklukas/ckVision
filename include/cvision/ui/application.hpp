@@ -772,6 +772,10 @@ private:
     void update_hover(Point absolute_point, View* holder);
     // Calls every attention observer registered when the notification began.
     void notify_attention(AttentionChange change);
+    // Tells every ancestor of the newly focused `target`, nearest first,
+    // through View::on_descendant_focused. Stops as soon as a callback moves
+    // the focus away from `target`.
+    void notify_descendant_focused(View& target);
     static void collect_focusable(View& view, std::vector<View*>& out);
     const std::vector<View*>& focusable_views();
     const std::vector<View*>& focusable_views_within(View& scope);

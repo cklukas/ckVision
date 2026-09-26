@@ -2349,3 +2349,32 @@ its blank page area. Its thumb ends are half-block characters, and a dotted
 track would show through their empty halves. *Rejected:* halving everywhere
 (the Classic scheme would not look like the desktops it is modelled on); a
 black shadow in every scheme (it would be a black hole on the Light scheme).
+
+**D-107 — The keyboard's window is the window drawn active.** Focus and
+window activation were independent, so the Gallery could show its focus in
+one window while drawing another active, against ARCHITECTURE §5's "one
+focused view per application, always visible, always consistent". Two
+rules now keep them together. When a view inside a window gains the focus
+(Tab, a mnemonic, a click, focus restoration or the application's own
+`set_focus`), the Application tells every ancestor through
+`View::on_descendant_focused`, and the Desktop activates and raises that
+window. When a window is activated without the focus moving into it (F6,
+Alt+1…9, a title-bar click, a switcher entry), the Desktop moves the focus
+to the view that last held it in that window, which it remembers per
+window, or else to the window's first focus stop. Focusing a docked bar or
+a popup changes no activation.
+
+**D-108 — Light dismissal ends the menu interaction.** A press outside every
+menu of an open chain, or a gesture released outside it, dismisses the menu
+with `MenuDismissReason::Outside`. A menu bar then deactivates and restores
+the prior focus, as it does after a choice, but runs nothing. The press is
+consumed, not delivered to the view beneath the popup. Esc still closes one
+level (D-090).
+
+**D-109 — A search box is a composite whose field is an InputLine.** The
+catalog asks for "InputLine plus clear/status affordance". `SearchBox` holds
+an `InputLine` (`field()`) as its focus stop, so the query has full caret
+movement, selection, clipboard, undo and shared history. Escape clears a
+query, and passes through when there is nothing to clear; Enter records the
+query in the history. Both keep their box-level meaning by bubbling up from
+the field.

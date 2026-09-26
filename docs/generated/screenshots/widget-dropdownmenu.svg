@@ -245,7 +245,7 @@
 <g data-box-drawing="single">
 <path d="M 13.5 89.5 L 13.5 99 L 13.5 108.5" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter"/>
 </g>
-<text x="27" y="104" xml:space="preserve" fill="#aa0000">P</text>
+<text x="27" y="104" xml:space="preserve" fill="#aaaaaa">P</text>
 <text x="36" y="104" xml:space="preserve" fill="#aaaaaa">r</text>
 <text x="45" y="104" xml:space="preserve" fill="#aaaaaa">i</text>
 <text x="54" y="104" xml:space="preserve" fill="#aaaaaa">n</text>

@@ -86,7 +86,7 @@ CK_TEST(an_input_line_a_combo_box_and_a_search_box_naming_one_key_share_its_entr
     input->commit_to_history();
     // ...and the search box, a different widget, recalls it: one list, held
     // by the application, not a copy each widget keeps.
-    f.app.set_focus(search);
+    f.app.set_focus(&search->field());
     CK_CHECK(f.press(Key::Up));
     CK_CHECK(search->query() == "alpha");
     CK_CHECK(queries.back() == "alpha");  // a recall filters as typing does

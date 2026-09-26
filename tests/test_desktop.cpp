@@ -2031,6 +2031,54 @@ CK_TEST(knextwindow_default_activates_the_next_window_in_cycling_order) {
     CK_CHECK(af.desktop->active_window() == a);  // wraps around from the last window to the first
 }
 
+CK_TEST(focusing_a_view_inside_a_background_window_activates_and_raises_that_window) {
+    // ARCHITECTURE.md §5: one focused view, always visible, always
+    // consistent. The keyboard's window is the one drawn active, whichever
+    // way the focus got there: an application's own set_focus(), or Tab
+    // walking out of one window into the next.
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f, "A"));
+    a->set_bounds(Rect{2, 2, 30, 8});
+    auto* in_a = a->add_child(std::make_unique<CursorProbe>());
+    in_a->set_bounds(Rect{1, 1, 4, 1});
+    Window* b = af.desktop->add_window(make_window(af.f, "B"));
+    b->set_bounds(Rect{20, 6, 30, 8});
+    auto* in_b = b->add_child(std::make_unique<CursorProbe>());
+    in_b->set_bounds(Rect{1, 1, 4, 1});
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == b);  // added last
+
+    af.app.set_focus(in_a);
+    CK_CHECK(af.desktop->active_window() == a);
+    CK_CHECK(a->active() && !b->active());
+    CK_CHECK(af.desktop->children().back().get() == a);  // raised above b
+    af.app.step(0);
+    CK_CHECK(af.term.display().frame().at(ckv::Point{2, 2}).grapheme() == "╔");
+    CK_CHECK(af.term.display().frame().at(ckv::Point{31, 6}).grapheme() == "║");  // a's border over b
+
+    af.term.inject_bytes("\t", af.clock.now_nanos());
+    CK_CHECK(af.app.step(af.clock.now_nanos()));
+    CK_CHECK(af.app.focused() == in_b);
+    CK_CHECK(af.desktop->active_window() == b);
+    CK_CHECK(b->active() && !a->active());
+    CK_CHECK(af.term.display().frame().at(ckv::Point{20, 6}).grapheme() == "╔");
+}
+
+CK_TEST(focusing_a_view_outside_every_window_leaves_the_activation_alone) {
+    // A docked bar or a popup is no window: the focus visiting it is not a
+    // request to work in some other window.
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f, "A"));
+    auto* in_a = a->add_child(std::make_unique<CursorProbe>());
+    Window* b = af.desktop->add_window(make_window(af.f, "B"));
+    auto* docked = af.desktop->dock_top(std::make_unique<CursorProbe>());
+    af.app.set_focus(in_a);
+    CK_CHECK(af.desktop->active_window() == a);
+    af.app.set_focus(docked);
+    CK_CHECK(af.desktop->active_window() == a);
+    CK_CHECK(!b->active());
+}
+
 CK_TEST(kpreviouswindow_default_activates_the_previous_window_in_cycling_order) {
     // Three windows, not two — with exactly two, "next" and "previous"
     // of the active one land on the same window, which wouldn't

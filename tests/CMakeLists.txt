@@ -319,9 +319,11 @@ if(TARGET graphics_app)
 endif()
 
 if(TARGET editor_app)
-    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_editor_smoke.cpp)
-    target_sources(cvision_tests PRIVATE test_editor_smoke.cpp)
-    target_link_libraries(cvision_tests PRIVATE editor_app)
+    # The menu scripts are shared with the generator that writes their pinned
+    # frames (generate_editor_goldens).
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_editor_smoke.cpp test_editor_menu_scripts.cpp)
+    target_sources(cvision_tests PRIVATE test_editor_smoke.cpp test_editor_menu_scripts.cpp)
+    target_link_libraries(cvision_tests PRIVATE docgen_editor_scripts editor_app)
 endif()
 
 if(TARGET spin_app)

@@ -57,6 +57,10 @@ GalleryApp::GalleryApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
     // point.
     app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
 
+    // The name field starts with the focus, and focusing it activates the
+    // Controls window that holds it (ARCHITECTURE.md §5): the keyboard's
+    // window is the one drawn active. The two windows stand side by side,
+    // so the active form covers none of the picture.
     app_.set_focus(name_input_);
 
     // F1 answers with something. Silence is the one response a reader
@@ -132,7 +136,9 @@ void GalleryApp::build_controls_window() {
     auto window = std::make_unique<widgets::Window>("Controls");
     window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
                                roles_.dialog_background);
-    window->set_bounds(Rect{2, 2, 40, 10});
+    // Right of the Sixel Demo window and its shadow, and narrow enough that
+    // the pair fits a terminal nested in another application's window.
+    window->set_bounds(Rect{38, 2, 32, 10});
 
     auto content = std::make_unique<ui::View>();
     auto label = std::make_unique<widgets::Label>("&Name:");
@@ -180,7 +186,7 @@ std::shared_ptr<const Image> GalleryApp::make_demo_gradient() const {
 
 void GalleryApp::build_image_window() {
     auto window = std::make_unique<widgets::Window>("Sixel Demo");  // default document-window roles
-    window->set_bounds(Rect{20, 6, 34, 16});
+    window->set_bounds(Rect{2, 2, 34, 16});  // under the View menu, so an open menu crosses the picture
 
     // ckvision-doc: gallery-scrolled-picture
     // The picture is taller than the window, so it lives in a viewport: the

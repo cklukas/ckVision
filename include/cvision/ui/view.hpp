@@ -538,6 +538,19 @@ public:
 
     // --- Focus ------------------------------------------------------
 
+    // Fired on every ancestor of `target`, nearest first and NOT on target
+    // itself, once `target` has become the Application's focused view and
+    // has heard its own on_focus(true). Default: does nothing. Desktop
+    // overrides this to activate whichever of its owned windows contains
+    // `target`, which is what keeps focus and window activation one answer
+    // (ARCHITECTURE.md §5 "Focus and traversal"): focusing a view inside a
+    // window activates that window, whoever asked for the focus — a click,
+    // Tab, a mnemonic, a focus restoration or an application's own
+    // set_focus(). If a callback moves the focus elsewhere, the remaining
+    // ancestors are not told about `target`; the later focus change
+    // delivers its own notification.
+    virtual void on_descendant_focused(View& target) { (void)target; }
+
     // The traversal policy given at construction. Changing it does not move focus away from a
     // view that already holds it.
     FocusPolicy focus_policy() const noexcept { return focus_policy_; }

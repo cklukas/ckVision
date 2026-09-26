@@ -366,7 +366,7 @@ void shot_search_box(const std::filesystem::path& dir) {
     search->set_status("2 of 7");
     // ckvision-doc-end: searchbox
 
-    stage.focus(search);
+    stage.focus(&search->field());
     stage.step();
     stage.save_window(dir, "widget-searchbox");
 }

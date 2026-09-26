@@ -145,10 +145,10 @@ public:
             case Key::Char:
                 // A letter with a command modifier is a chord — a button's
                 // mnemonic, an accelerator — and not part of the filter.
-                if (!chord) return filter_.on_key(event);
+                if (!chord) return filter_.field().on_key(event);
                 break;
             case Key::Backspace:
-                if (!filter_.query().empty()) return filter_.on_key(event);
+                if (!filter_.query().empty()) return filter_.field().on_key(event);
                 break;
             case Key::Escape:
                 // A filter is cleared before anything is dismissed: a reader
@@ -167,7 +167,7 @@ public:
         return ListView::on_key(event);
     }
 
-    bool on_text(const TextEvent& event) override { return filter_.on_text(event); }
+    bool on_text(const TextEvent& event) override { return filter_.field().on_text(event); }
 
 private:
     WindowListModel model_;
@@ -199,7 +199,7 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
     // arrows, Enter and Delete keep meaning what they mean there. A click on
     // its clear control still clears it.
     auto filter = std::make_unique<SearchBox>();
-    filter->set_focus_policy(ui::FocusPolicy::None);
+    filter->field().set_focus_policy(ui::FocusPolicy::None);
     auto* filter_ptr = static_cast<SearchBox*>(column->add_item(std::move(filter), LayoutSpec{SizePolicy::Fixed, 1}));
 
     auto list = std::make_unique<WindowListView>(desktop, *window_ptr, *filter_ptr);

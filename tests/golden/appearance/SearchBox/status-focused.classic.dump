@@ -1,12 +1,12 @@
 ckvision-golden 1
 frame 29 6
-cursor 14 2 bar
+cursor hidden
 styles 6
 0 fg #0000AA bg #C8C8C8 attrs -
 1 fg #FFFFFF bg #C8C8C8 attrs -
 2 fg #00AA00 bg #C8C8C8 attrs bold
 3 fg #000000 bg #C8C8C8 attrs -
-4 fg #55FFFF bg #0000AA attrs -
+4 fg #55FFFF bg #0000AA attrs reverse
 5 fg #000055 bg #646464 attrs -
 grid
 |░░░░░░░░░░░░░░░░░░░░░░░░░░░░░|

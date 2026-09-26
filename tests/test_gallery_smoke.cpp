@@ -85,6 +85,23 @@ CK_TEST(the_gallery_renders_both_windows_titles_on_first_frame) {
     CK_CHECK(display_contains(f.term.display(), "Sixel Demo"));
 }
 
+CK_TEST(the_window_holding_the_focus_is_the_one_drawn_active) {
+    // The Gallery focuses its name field after adding the Sixel Demo window
+    // last. Focusing a view inside a window activates that window, so the
+    // keyboard's window is the one drawn active: double-line and coloured
+    // controls on Controls, single-line on the Sixel Demo beside it.
+    Fixture f;
+    f.app.step(0);
+    CK_CHECK(f.app.focused() == f.gallery.name_input());
+    CK_CHECK(f.gallery.desktop().active_window() == f.gallery.controls_window());
+    CK_CHECK(f.gallery.controls_window()->active());
+    CK_CHECK(!f.gallery.image_window()->active());
+    const ckv::Rect controls = f.gallery.controls_window()->absolute_bounds();
+    const ckv::Rect picture = f.gallery.image_window()->absolute_bounds();
+    CK_CHECK(f.term.display().frame().at(Point{controls.x, controls.y}).grapheme() == "╔");
+    CK_CHECK(f.term.display().frame().at(Point{picture.x, picture.y}).grapheme() == "┌");
+}
+
 CK_TEST(the_menu_bar_and_status_line_both_render) {
     Fixture f;
     f.app.step(0);
@@ -158,10 +175,10 @@ CK_TEST(clicking_greet_presents_and_completes_a_typed_message_box) {
     f.app.step(0);
 
     // Find the Greet button's absolute position by construction: the
-    // Controls window is at {2,2}, its content fills the interior
+    // Controls window is at {38,2}, its content fills the interior
     // starting 1 cell in for the frame, and the button sits at local
     // (1,3) within that content — see gallery_app.cpp's own layout.
-    const Point button_point{2 + 1 + 1, 2 + 1 + 3};
+    const Point button_point{38 + 1 + 1, 2 + 1 + 3};
     f.app.dispatch(ckv::MouseEvent{MouseAction::Down, MouseButton::Left, button_point, std::nullopt, Modifier::None});
     f.app.dispatch(ckv::MouseEvent{MouseAction::Up, MouseButton::Left, button_point, std::nullopt, Modifier::None});
     f.app.step(0);

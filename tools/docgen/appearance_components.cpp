@@ -424,13 +424,13 @@ void add_search_box(Catalog& catalog) {
     Element& e = catalog.element("SearchBox", "include/cvision/widgets/common_components.hpp",
                                  Traits{.focusable = true, .control = true, .text = true});
     state(e, "normal", kSearchScreen, [](Stage& s) { search_box(s); });
-    state(e, "focused", kSearchScreen, [](Stage& s) { s.focus(search_box(s)); });
+    state(e, "focused", kSearchScreen, [](Stage& s) { s.focus(search_box(s).field()); });
     state(e, "query", kSearchScreen, [](Stage& s) { search_box(s, "invoice"); });
-    state(e, "query-focused", kSearchScreen, [](Stage& s) { s.focus(search_box(s, "invoice")); });
+    state(e, "query-focused", kSearchScreen, [](Stage& s) { s.focus(search_box(s, "invoice").field()); });
     state(e, "disabled", kSearchScreen, [](Stage& s) { search_box(s).set_enabled(false); });
     state(e, "wide", kSearchScreen, [](Stage& s) { search_box(s, std::string(kWideText)); });
     state(e, "narrow", kSearchScreen, [](Stage& s) {
-        s.focus(search_box(s, "quarterly invoices", Rect{0, 0, 16, 1}));
+        s.focus(search_box(s, "quarterly invoices", Rect{0, 0, 16, 1}).field());
     });
     // The host's count of what the query found, right-aligned before the
     // clear control; squeezed, it is elided before the field gives way.
@@ -438,7 +438,7 @@ void add_search_box(Catalog& catalog) {
     state(e, "status-focused", kSearchScreen, [](Stage& s) {
         widgets::SearchBox& box = search_box(s, "invoice");
         box.set_status("3 of 12");
-        s.focus(box);
+        s.focus(box.field());
     });
     state(e, "status-narrow", kSearchScreen, [](Stage& s) {
         search_box(s, "invoice", Rect{0, 0, 20, 1}).set_status("3 of 12");

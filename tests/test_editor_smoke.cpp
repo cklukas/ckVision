@@ -5,6 +5,7 @@
 // public application path against HeadlessTerminal, the same object graph as
 // the interactive executable and documentation capture tool.
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <fstream>
@@ -163,8 +164,12 @@ CK_TEST(the_editor_example_keeps_search_selection_and_caret_state_across_all_bui
     auto* const menu_bar = dynamic_cast<ckv::widgets::MenuBar*>(f.editor.desktop()->top_dock());
     CK_CHECK(menu_bar != nullptr);
     if (menu_bar == nullptr) return;
-    const auto& choices = menu_bar->menus()[3].items;
-    CK_CHECK(choices.size() == 4U);
+    // View holds the checkable Line Numbers row and a separator, then the
+    // four schemes as one radio set.
+    const auto& view_items = menu_bar->menus()[3].items;
+    CK_CHECK(view_items.size() == 6U);
+    if (view_items.size() != 6U) return;
+    const std::span<const ckv::widgets::MenuItem> choices(view_items.data() + 2, 4U);
     CK_CHECK(choices[0].mark() == ckv::widgets::MenuMark::RadioOn);
     const auto dark_command = f.app.commands().id_for("editor.scheme.dark");
     CK_CHECK(dark_command.has_value());

@@ -1277,6 +1277,14 @@ bool DatePicker::open_calendar() {
     return true;
 }
 
+void DatePicker::close_calendar() {
+    if (calendar_dropdown_ == nullptr) return;
+    CalendarDropdown* const dropdown = calendar_dropdown_;
+    calendar_dropdown_ = nullptr;
+    dropdown->request_dismiss();  // closing is not choosing
+    invalidate();
+}
+
 void DatePicker::draw(scene::Painter& painter) {
     const bool enabled = enabled_in_tree();
     const ui::RoleId role = !enabled     ? disabled_role_
@@ -1860,40 +1868,25 @@ void Slider::on_attached() {
 }
 
 SearchBox::SearchBox() {
-    set_focus_policy(ui::FocusPolicy::TabStop);
     set_preferred_size(Size{20, 1});
+    // The query is typed into a real InputLine, the box's one focus stop, so
+    // it edits exactly as every other one-line field does.
+    field_ = make<InputLine>();
+    field_->on_edited = [this] { query_changed(); };
 }
 void SearchBox::set_query(std::string query) {
-    // Any change of query, typed or programmatic, is the reader's own query
-    // again; recall_history puts its index back after showing an entry.
-    history_index_ = -1;
-    if (query_ == query) return;
-    query_ = std::move(query);
+    if (field_->text() == query) return;
+    field_->set_text(std::move(query));
+    query_changed();
+}
+void SearchBox::query_changed() {
+    place_field();
     invalidate();
-    if (on_change) on_change(query_);
-}
-void SearchBox::set_history_key(std::string key) {
-    history_key_ = std::move(key);
-    history_index_ = -1;
-}
-ui::HistoryRegistry* SearchBox::history_registry() const noexcept {
-    if (history_key_.empty() || context().app == nullptr) return nullptr;
-    return &context().app->history();
+    if (on_change) on_change(query());
 }
 void SearchBox::commit_to_history() {
-    ui::HistoryRegistry* const registry = history_registry();
-    if (registry == nullptr || query_.empty()) return;
-    registry->record(history_key_, query_);
-    history_index_ = -1;
-}
-void SearchBox::recall_history(int index) {
-    const ui::HistoryRegistry* const registry = history_registry();
-    if (registry == nullptr) return;
-    const std::vector<std::string>& entries = registry->entries(history_key_);
-    if (index >= static_cast<int>(entries.size())) return;
-    if (history_index_ == -1 && index != -1) history_saved_query_ = query_;
-    set_query(index == -1 ? history_saved_query_ : entries[static_cast<std::size_t>(index)]);
-    history_index_ = index;
+    if (query().empty()) return;
+    field_->commit_to_history();
 }
 void SearchBox::clear() {
     set_query({});
@@ -1902,6 +1895,7 @@ void SearchBox::clear() {
 void SearchBox::set_status(std::string status) {
     if (status_ == status) return;
     status_ = std::move(status);
+    place_field();
     invalidate();
 }
 
@@ -1915,7 +1909,7 @@ SearchBox::Layout SearchBox::layout() const {
     parts.prompt_width = std::min(text::text_width(kSearchPrompt), width);
     // The clear control only exists while there is something to clear, and
     // only at the right edge, where it is drawn.
-    parts.clear_width = query_.empty() ? 0 : std::min(kClearControlWidth, width - parts.prompt_width);
+    parts.clear_width = query().empty() ? 0 : std::min(kClearControlWidth, width - parts.prompt_width);
     parts.clear_x = width - parts.clear_width;
     parts.field_x = parts.prompt_width;
     const int between = std::max(0, parts.clear_x - parts.field_x);
@@ -1932,16 +1926,18 @@ SearchBox::Layout SearchBox::layout() const {
     return parts;
 }
 
+void SearchBox::place_field() {
+    const Layout parts = layout();
+    field_->set_bounds(Rect{parts.field_x, 0, parts.field_width, std::min(1, std::max(0, bounds().height))});
+}
+
+void SearchBox::on_resized() { place_field(); }
+
 void SearchBox::draw(scene::Painter& painter) {
-    // A search box has to look like something you can type into. Drawing the
-    // prompt, the text and a "[x]" as one run of label-coloured cells made it
-    // read as a caption, and put the clear control wherever the query
-    // happened to end — nowhere near the columns that actually respond to a
-    // click on it.
+    // A search box has to look like something you can type into: the field
+    // draws itself, in the input surface's own colours, and the box draws the
+    // prompt, the status and the clear control around it in the label's.
     const bool enabled = enabled_in_tree();
-    const Style style = context().theme->resolve(!enabled     ? disabled_role_
-                                                 : has_focus() ? focused_role_
-                                                               : role_);
     const Style label = enabled ? context().theme->resolve(label_role_)
                                 : accent_style(context().theme->resolve(label_role_),
                                                context().theme->resolve(label_disabled_role_));
@@ -1951,11 +1947,6 @@ void SearchBox::draw(scene::Painter& painter) {
 
     const Layout parts = layout();
     painter.draw_text(Point{0, 0}, text::clip_to_width(kSearchPrompt, parts.prompt_width), label);
-    // The field's own background is what says "text goes here".
-    if (parts.field_width > 0) {
-        painter.fill(Rect{parts.field_x, 0, parts.field_width, 1}, Cell::from_grapheme(" ", style));
-        painter.draw_text(Point{parts.field_x, 0}, visible_query(parts.field_width), style);
-    }
     // Right-aligned against the clear control, so a count that changes width
     // as the reader types does not make the "[x]" jump.
     if (parts.status_width > 0) {
@@ -1965,79 +1956,42 @@ void SearchBox::draw(scene::Painter& painter) {
     if (parts.clear_width > 0) painter.draw_text(Point{parts.clear_x, 0}, text::clip_to_width("[x]", parts.clear_width), label);
 }
 
-std::string SearchBox::visible_query(int field_width) const {
-    // The whole query when it fits; otherwise its end, with the column after
-    // it left for the caret.
-    if (text::text_width(query_) < field_width) return query_;
-    return tail_to_width(query_, std::max(0, field_width - 1));
-}
-
-std::optional<CursorState> SearchBox::cursor_state() const {
-    // The caret is the other half of "you can type here", and it also tells
-    // the reader which pane the keyboard is in.
-    if (!has_focus() || !enabled_in_tree()) return std::nullopt;
-    const Layout parts = layout();
-    const int caret =
-        std::min(text::text_width(visible_query(parts.field_width)), std::max(0, parts.field_width - 1));
-    const Rect absolute = absolute_bounds();
-    return CursorState{true, Point{absolute.x + parts.field_x + caret, absolute.y}, CursorShape::Bar, false};
-}
 bool SearchBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
-    if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(without_last_grapheme(query_)); return true; }
     // Escape clears a query; with nothing to clear it is left for whatever
     // encloses the box -- a dialog's cancel, a popup's dismissal.
     if (event.chord.key == Key::Escape) {
-        if (query_.empty()) return false;
+        if (query().empty()) return false;
         clear();
         return true;
     }
-    if (history_registry() != nullptr) {
-        if (event.chord.key == Key::Up) { recall_history(history_index_ + 1); return true; }
-        if (event.chord.key == Key::Down) {
-            if (history_index_ >= 0) recall_history(history_index_ - 1);
-            return true;
-        }
-        // Enter is the reader saying "this is the query": it goes into the
-        // history, and the key goes on to whatever else answers it -- a
-        // dialog's default button, or nothing in a viewer that filters live.
-        if (event.chord.key == Key::Enter) commit_to_history();
-    }
-    // Terminals report ordinary typed characters as Key::Char events; only
-    // IMEs and bracketed paste arrive as TextEvent (the same normalization
-    // InputLine performs, for the same reason). Without this a search box
-    // cannot be typed into at all, which is its only purpose. Alt/Ctrl/Super
-    // characters stay chords so command routing still sees them; Shift is
-    // part of ordinary text production.
-    if (event.chord.key == Key::Char && !event.chord.text.empty() &&
-        !has_modifier(event.chord.modifiers, Modifier::Alt) &&
-        !has_modifier(event.chord.modifiers, Modifier::Ctrl) &&
-        !has_modifier(event.chord.modifiers, Modifier::Super))
-        return on_text(TextEvent{event.chord.text, false});
+    // Enter is the reader saying "this is the query": it goes into the
+    // history, and the key goes on to whatever else answers it -- a dialog's
+    // default button, or nothing in a viewer that filters live.
+    if (event.chord.key == Key::Enter) commit_to_history();
     return false;
 }
-bool SearchBox::on_text(const TextEvent& event) { set_query(query_ + event.text); return true; }
 bool SearchBox::on_mouse(const MouseEvent& event) {
-    if (event.action != MouseAction::Down) return false;
+    if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
     // The clear control only exists while there is something to clear, and
-    // only where it is drawn — the right edge. It used to answer clicks on
-    // the last three columns whether or not it was drawn there.
+    // only where it is drawn — the right edge.
     const Layout parts = layout();
     if (parts.clear_width > 0 && event.cell.x >= absolute_bounds().x + parts.clear_x) {
         clear();
         return true;
     }
-    // A click anywhere else in the field is a request to type in it.
+    // A press anywhere else on the box -- its prompt, its status -- is a
+    // request to type in it. The field is the box's focus stop, so the
+    // Application's click-to-focus, which looks for a focusable ancestor of
+    // what was pressed, would not find it from here.
+    if (field_->focusable() && context().app != nullptr) context().app->set_focus(field_);
     return true;
 }
-void SearchBox::on_focus(const FocusEvent&) { invalidate(); }
 void SearchBox::on_attached() {
-    if (role_ == ui::kInvalidRole) role_ = context().roles->find("ckv.input.normal");
-    if (focused_role_ == ui::kInvalidRole) focused_role_ = context().roles->find("ckv.input.focused");
     if (label_role_ == ui::kInvalidRole) label_role_ = context().roles->find("ckv.label.text");
-    if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.input.disabled");
     if (label_disabled_role_ == ui::kInvalidRole)
         label_disabled_role_ = context().roles->find("ckv.label.disabled");
+    place_field();
 }
 
 namespace {
@@ -3132,7 +3086,11 @@ void PropertyInspector::close_editor() {
     ui::View* const editor = editor_;
     clear_reason();
     editor_ = nullptr;
+    // A popup the editor dropped closes with it, before the keyboard moves:
+    // the calendar holds a modal scope of its own, and left open it would go
+    // on editing a picker nobody can see.
     if (editor == choice_editor_) choice_editor_->close_dropdown();
+    if (editor == date_editor_) date_editor_->close_calendar();
     // The keyboard comes back before the editor goes, so it is never left on
     // a view that is not there to hold it.
     if (context().app != nullptr && (editor->has_focus() || context().app->focused() == nullptr))

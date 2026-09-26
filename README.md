@@ -16,7 +16,7 @@ applications through ckVision's own headless terminal and presentation pipeline.
 
 | Gallery and Sixel graphics | TODO application |
 |:---:|:---:|
-| ![Overlapping ckVision gallery windows with a Sixel colour grid](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision TODO application showing three task lanes](docs/generated/screenshots/todo-guided.svg) |
+| ![The ckVision gallery: a Sixel picture window beside the focused Controls form](docs/generated/screenshots/gallery-initial.svg) | ![The ckVision TODO application showing three task lanes](docs/generated/screenshots/todo-guided.svg) |
 | **Text editor** | **SysInfo benchmark comparison** |
 | ![The ckVision text editor displaying a syntax-highlighted YAML document](docs/generated/screenshots/editor-search.svg) | ![The ckVision SysInfo application comparing memory-bandwidth results](docs/generated/screenshots/sysinfo-benchmarks.svg) |
 

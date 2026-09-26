@@ -72,6 +72,12 @@ EditorApp::EditorApp(ui::Application& application)
                 break;
         }
     }});
+    // A checkable command: the menu row shows the registry's checked state,
+    // so it reads the editor itself and can never disagree with it.
+    const ui::CommandId toggle_line_numbers = commands.declare({.key = "editor.toggle-line-numbers", .title = "Line &Numbers", .category = "View", .handler = [this] {
+        editor_->set_show_line_numbers(!editor_->show_line_numbers());
+    }});
+    commands.set_checked_predicate(toggle_line_numbers, [this] { return editor_->show_line_numbers(); });
     const ui::CommandId find_selection = commands.declare({.key = "editor.find-selection", .title = "&Find Selection", .category = "Search", .chord = "Ctrl+F", .handler = [this] {
         (void)editor_->use_selection_as_search_query();
     }});
@@ -166,6 +172,8 @@ EditorApp::EditorApp(ui::Application& application)
                                               widgets::MenuItem::separator(),
                                               widgets::MenuItem::command(widgets::CommandPresentation{replace})}};
     widgets::MenuBarItem view{"&View", {
+        widgets::MenuItem::command(widgets::CommandPresentation{toggle_line_numbers}),
+        widgets::MenuItem::separator(),
         scheme_item(classic_scheme, 0),
         scheme_item(dark_scheme, 1),
         scheme_item(light_scheme, 2),
@@ -188,6 +196,20 @@ EditorApp::EditorApp(ui::Application& application)
     editor->set_wrap_mode(widgets::WrapMode::Word);
     editor_ = editor.get();
     editor_->set_status_changed_handler([this](const widgets::EditorStatus&) { refresh_status(); });
+    // The editor's context menu: a right click (or Ctrl+click) where the
+    // pointer is, and the Menu key or Shift+F10 at the caret. Its rows are
+    // the Edit menu's own commands, so a row that cannot act now -- Cut and
+    // Copy with nothing selected -- is shown and greyed exactly as there.
+    editor_->set_context_menu_handler([this, cut, copy, paste, find_selection](widgets::TextEditor&, Point cell) {
+        (void)widgets::show_context_menu(
+            {widgets::MenuItem::command(widgets::CommandPresentation{cut}),
+             widgets::MenuItem::command(widgets::CommandPresentation{copy}),
+             widgets::MenuItem::command(widgets::CommandPresentation{paste}),
+             widgets::MenuItem::separator(),
+             widgets::MenuItem::action("Select &All", [this] { (void)editor_->perform(widgets::EditorCommand::SelectAll); }),
+             widgets::MenuItem::command(widgets::CommandPresentation{find_selection})},
+            cell, application_, *desktop_);
+    });
     window->set_content(std::move(editor));
     status_ = window->add_frame_overlay(std::make_unique<widgets::StaticText>("Ln 1, Col 1"),
                                         widgets::FrameSlot{widgets::Edge::Bottom, ui::Alignment::End});

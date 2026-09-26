@@ -94,6 +94,24 @@ that focus comes back level by level, pins the dialog under all four schemes,
 and scripts the mouse: wheel scrolling, a double click selecting a word, drag
 selection, and resizing the window by its grip.
 
+Its menus are the shipped demonstration of VISION 2 — every menu action
+reachable by the keyboard alone and by the mouse alone. File holds a nested
+submenu (Open Sample) and a row that cannot act on an unmodified document
+(Save); Edit greys Cut and Copy while nothing is selected; View holds a
+checkable row (Line Numbers, the registry's checked state of the
+`editor.toggle-line-numbers` command) above the radio set of schemes; and the
+editor opens its own context menu (Cut, Copy, Paste, Select All, Find
+Selection) on a right click, Ctrl+click, the Menu key or Shift+F10.
+`tests/test_editor_menu_scripts.cpp` plays two event scripts over the example
+itself (`tools/docgen/editor_menu_script.hpp`), with the frames they reach
+pinned in `tests/golden/editor_menu_*.dump` and written by
+`generate_editor_goldens`:
+
+| Script | What it drives |
+|---|---|
+| Keyboard alone | F10 onto the bar; Down onto the disabled Save, where Enter does nothing; Right into Open Sample's submenu, Left out and back; Esc once per level (submenu, dropdown, bar walk) with the focus back in the editor; Alt+V and Enter toggling Line Numbers off and on; Alt+F down into the submenu to open the JSON sample; Shift+F10 for the context menu at the caret with Cut and Copy greyed, Select All run from it, and the Menu key reopening it with them usable; Esc |
+| Mouse alone | Press on File, drag along the bar to View and down onto Line Numbers, release to toggle it; a click opening File, a click on the disabled Save doing nothing, hovering into the submenu and clicking a sample; a press on the text with a menu open dismissing the whole menu system without moving the caret; a right click opening the context menu at the pointer and an outside click dismissing it |
+
 ![Editor example](generated/screenshots/editor-initial.svg)
 
 ![Editor search](generated/screenshots/editor-search.svg)
@@ -219,7 +237,11 @@ reaches past those headers.
   default `Button` — Tab traversal, typed text, and a click all reach
   their target through the ordinary focus/dispatch machinery
   (`ui::Application::dispatch`), the same path any application's own
-  widgets use.
+  widgets use. The name field starts with the focus, so Controls is the
+  active window: focusing a view inside a window activates that window, and
+  the keyboard is never in a window drawn inactive. It stands beside the
+  Sixel Demo window rather than over it, so the active form covers none of
+  the picture.
 - **Sixel Demo window**: an `ImageView` showing a generated RGBA
   gradient, proving the raster path — `Painter::draw_image` through
   `scene::Compositor`'s occlusion slicing through `term::Presenter`'s
@@ -256,6 +278,7 @@ exists":
 | Behavior | Test |
 |---|---|
 | Both windows render, with their titles | `test_gallery_smoke.cpp`: `the_gallery_renders_both_windows_titles_on_first_frame` |
+| The window holding the focus is the one drawn active | `the_window_holding_the_focus_is_the_one_drawn_active` |
 | Menu bar + status line render | `the_menu_bar_and_status_line_both_render` |
 | Typed keyboard input reaches the field and repaints | `typing_into_the_name_field_reaches_it_and_repaints` |
 | F10 activates the menu bar via the command keymap | `f10_activates_the_menu_bar_via_the_command_keymap` |

@@ -404,7 +404,8 @@ CK_TEST(enter_in_the_search_box_does_not_dismiss_the_help_window) {
     f.app.step(0);
     ckv::widgets::SearchBox* const search = f.search_box();
     CK_CHECK(search != nullptr);
-    f.app.set_focus(search);
+    if (search == nullptr) return;
+    f.app.set_focus(&search->field());
 
     f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "z"}});
     f.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "e"}});

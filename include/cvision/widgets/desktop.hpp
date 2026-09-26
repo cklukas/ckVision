@@ -750,6 +750,14 @@ public:
     // no-op if `target` is not inside any owned window (a click on a
     // popup, or on the desktop's own background).
     void on_descendant_mouse_down(ui::View& target) override;
+    // Activates+raises whichever of windows_ contains the newly focused
+    // `target`, so the keyboard focus never sits in a window drawn inactive
+    // (ARCHITECTURE.md §5 "Focus and traversal"): Tab into another window, a
+    // focus restoration, or an application's set_focus() on a control in a
+    // background window all bring that window forward, as a click in it
+    // does. A no-op when `target` is inside no owned window (a docked menu
+    // bar, a popup) or its window is already the active one.
+    void on_descendant_focused(ui::View& target) override;
 
     void draw(scene::Painter& painter) override;
     void draw_retained(scene::Painter& painter) override;
@@ -806,6 +814,11 @@ private:
     // one place: a window leaving — by closing or by being minimized — must
     // not hand activation to something the reader cannot see.
     void activate_topmost_shown();
+    // The owned window that is `target` or an ancestor of it, or nullptr
+    // when `target` lies in no owned window (a popup, a dock, the desktop's
+    // own background). What both click-to-activate and focus-to-activate
+    // ask.
+    Window* owned_window_containing(ui::View& target) const noexcept;
     // Steps activation one place along windows()' insertion order, skipping
     // hidden windows — see activate_next/activate_previous.
     void activate_step(bool forward);

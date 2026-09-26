@@ -37,7 +37,9 @@ point where it matters.
 - A **golden** is a dump in the version-1 format of
   [docs/golden-format.md](../docs/golden-format.md). Paths are relative to
   `tests/golden/`. The pinned Gallery frames are `gallery_no_graphics.dump`
-  and `gallery_sixel.dump`; the hello frames are `hello_*.dump`; the
+  and `gallery_sixel.dump`, where the Controls window holding the focus is
+  active, and `gallery_picture_scrolled_page_no_graphics.dump`, where a click
+  on the picture has made the Sixel Demo window active; the hello frames are `hello_*.dump`; the
   appearance matrix's Classic frames are `appearance/<Element>/<state>.classic.dump`.
 - **Coordinates** are 0-based cells: `row 6 col 20` is the seventh row, the
   twenty-first column. Window-relative positions are written *local*, with
@@ -106,9 +108,7 @@ foreground on the surface it sits on, and the dimmed cells under a shadow.
 | `menu-active` | `#000000` | `#00AA00` | `-` | `ckv.menu.bar.active`, `ckv.menu.dropdown.highlighted` |
 | `menu-active-hotkey` | `#AA0000` | `#00AA00` | `-` | `ckv.hotkey` foreground on the highlight bar |
 | `menu-disabled` | `#AAAAAA` | `#C8C8C8` | `dim` | `ckv.menu.dropdown.disabled` |
-| `menu-disabled-hotkey` | `#AA0000` | `#C8C8C8` | `dim` | `ckv.hotkey` foreground on a disabled item |
 | `menu-active-disabled` | `#AAAAAA` | `#00AA00` | `dim` | a disabled item under the highlight bar |
-| `menu-active-disabled-hotkey` | `#AA0000` | `#00AA00` | `dim` | its mnemonic |
 | `status` | `#000000` | `#C8C8C8` | `-` | `ckv.statusline.normal` |
 | `status-hotkey` | `#AA0000` | `#C8C8C8` | `-` | `ckv.hotkey` on the status line |
 | `status-pressed` | `#000000` | `#00AA00` | `-` | `ckv.statusline.selected` |
@@ -299,10 +299,11 @@ Shadow coverage follows ARCHITECTURE §3 and D-037.
   an unchecked switch or an unchosen radio item.
 - **Separators.** A separator row is a single-line rule across the full popup
   width that joins the side frames as `├ … ┤` (see [Junction rules](#junction-rules)).
-- **Disabled items.** A disabled item draws in `menu-disabled` (gray, dim) and
-  its mnemonic in `menu-disabled-hotkey`; under the highlight it keeps the
-  green bar in `menu-active-disabled`, with its mnemonic in
-  `menu-active-disabled-hotkey`, so the reader sees where the highlight is.
+- **Disabled items.** A disabled item draws in `menu-disabled` (gray, dim),
+  its mnemonic included: a disabled control shows no mnemonic accent (D-076),
+  as the status line draws an unavailable item. Under the highlight it keeps
+  the green bar in `menu-active-disabled`, mnemonic included, so the reader
+  sees where the highlight is.
 - **Shadow.** Every dropdown casts the standard shadow.
 
 ## Status line
@@ -501,9 +502,9 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
    appearance/Window/normal.classic.dump rows 2-8 cols 2-2 "║" doc-frame
    appearance/Window/normal.classic.dump rows 2-8 cols 35-35 "║" doc-frame
    appearance/Window/normal.classic.dump row 9 col 2 "╚═" doc-frame
-   gallery_no_graphics.dump row 6 col 20 "╔═" doc-frame
-   gallery_no_graphics.dump rows 7-20 cols 20-20 "║" doc-frame
-   gallery_no_graphics.dump row 21 col 20 "╚═" doc-frame
+   gallery_picture_scrolled_page_no_graphics.dump row 2 col 2 "╔═" doc-frame
+   gallery_picture_scrolled_page_no_graphics.dump rows 3-16 cols 2-2 "║" doc-frame
+   gallery_picture_scrolled_page_no_graphics.dump row 17 col 2 "╚═" doc-frame
    ```
 
 3. **Inactive document frame.** An inactive document window is framed with the
@@ -514,6 +515,9 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
    appearance/Window/inactive.classic.dump row 1 col 28 "[_][↑]─┐" doc-frame-inactive
    appearance/Window/inactive.classic.dump rows 2-8 cols 2-2 "│" doc-frame-inactive
    appearance/Window/inactive.classic.dump row 9 col 2 "└" doc-frame-inactive
+   gallery_no_graphics.dump row 2 col 2 "┌─[■]─" doc-frame-inactive
+   gallery_no_graphics.dump rows 3-16 cols 2-2 "│" doc-frame-inactive
+   gallery_no_graphics.dump row 17 col 2 "└──" doc-frame-inactive
    ```
 
 4. **Active dialog frame.** An active dialog-family window is double-line in
@@ -524,17 +528,21 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
    appearance/MessageBox/error.classic.dump row 2 col 31 "╗" dlg-frame
    appearance/MessageBox/error.classic.dump row 8 col 7 "╚═══════════════════════╝" dlg-frame
    hello_greeting.dump row 8 col 27 "╔═[■]" dlg-frame*3,dlg-control,dlg-frame
+   gallery_no_graphics.dump row 2 col 38 "╔═[■]" dlg-frame*3,dlg-control,dlg-frame
+   gallery_no_graphics.dump row 2 col 69 "╗" dlg-frame
    ```
 
 5. **Inactive dialog frame.** An inactive dialog-family window is single-line
    in `dlg-frame-inactive`, controls and title included (the Gallery's
-   Controls window).
+   Controls window once a click on the picture has made the Sixel Demo window
+   active).
 
    ```classic-check
-   gallery_no_graphics.dump row 2 col 2 "┌─[■]──────────" dlg-frame-inactive
-   gallery_no_graphics.dump row 2 col 17 " Controls " dlg-frame-inactive
-   gallery_no_graphics.dump row 2 col 27 "───────[_][↑]─┐" dlg-frame-inactive
-   gallery_no_graphics.dump row 11 col 2 "└─────────────────" dlg-frame-inactive
+   gallery_picture_scrolled_page_no_graphics.dump row 2 col 38 "┌─[■]──────" dlg-frame-inactive
+   gallery_picture_scrolled_page_no_graphics.dump row 2 col 49 " Controls " dlg-frame-inactive
+   gallery_picture_scrolled_page_no_graphics.dump row 2 col 59 "───[_][↑]─┐" dlg-frame-inactive
+   gallery_picture_scrolled_page_no_graphics.dump row 11 col 38 "└─────────────────" dlg-frame-inactive
+   appearance/MessageBox/inactive.classic.dump row 2 col 8 "┌─[■]─" dlg-frame-inactive
    ```
 
 6. **Title placement.** The title is centred on the frame with one padding
@@ -543,7 +551,8 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
 
    ```classic-check
    appearance/Window/normal.classic.dump row 1 col 15 " Report " doc-frame
-   gallery_no_graphics.dump row 6 col 31 " Sixel Demo " doc-frame
+   gallery_picture_scrolled_page_no_graphics.dump row 2 col 13 " Sixel Demo " doc-frame
+   gallery_no_graphics.dump row 2 col 49 " Controls " dlg-frame
    hello_greeting.dump row 8 col 32 " Hello, World! " dlg-frame
    appearance/Window/narrow.classic.dump row 1 col 7 " Quarterl… " doc-frame
    ```
@@ -553,7 +562,8 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
 
    ```classic-check
    appearance/Window/normal.classic.dump row 1 col 4 "[■]" doc-frame,doc-control,doc-frame
-   gallery_no_graphics.dump row 6 col 22 "[■]" doc-frame,doc-control,doc-frame
+   gallery_picture_scrolled_page_no_graphics.dump row 2 col 4 "[■]" doc-frame,doc-control,doc-frame
+   gallery_no_graphics.dump row 2 col 40 "[■]" dlg-frame,dlg-control,dlg-frame
    ```
 
 8. **Minimize and zoom controls.** A resizable window ends its top border with
@@ -562,7 +572,7 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
 
    ```classic-check
    appearance/Window/normal.classic.dump row 1 col 28 "[_][↑]═╗" doc-frame,doc-control,doc-frame*2,doc-control,doc-frame*3
-   gallery_no_graphics.dump row 6 col 46 "[_][↑]═╗" doc-frame,doc-control,doc-frame*2,doc-control,doc-frame*3
+   gallery_no_graphics.dump row 2 col 62 "[_][↑]═╗" dlg-frame,dlg-control,dlg-frame*2,dlg-control,dlg-frame*3
    ```
 
 9. **Zoomed glyph.** A zoomed window shows `↕` in place of `↑`.
@@ -595,7 +605,8 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     ```classic-check
     appearance/Window/normal.classic.dump row 9 col 33 "═─┘" doc-frame,doc-control*2
     appearance/Window/normal.classic.dump row 1 col 2 "╔" doc-frame
-    gallery_no_graphics.dump row 21 col 51 "═─┘" doc-frame,doc-control*2
+    gallery_picture_scrolled_page_no_graphics.dump row 17 col 33 "═─┘" doc-frame,doc-control*2
+    gallery_no_graphics.dump row 11 col 67 "═─┘" dlg-frame,dlg-control*2
     ```
 
 13. **Grips during a resize.** While a resize is under way all four corners
@@ -652,10 +663,10 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     appearance/Window/normal.classic.dump row 1 col 36 "░░" desktop
     appearance/Window/normal.classic.dump row 10 col 2 "░░" desktop
     appearance/Window/normal.classic.dump rows 0-11 cols 38-39 "░" desktop
-    gallery_no_graphics.dump rows 7-22 cols 54-55 "░" shadow-on-desktop
-    gallery_no_graphics.dump rows 22-22 cols 22-53 "░" shadow-on-desktop
-    gallery_no_graphics.dump row 6 col 54 "░░" desktop
-    gallery_no_graphics.dump row 22 col 20 "░░" desktop
+    gallery_no_graphics.dump rows 3-12 cols 70-71 "░" shadow-on-desktop
+    gallery_no_graphics.dump rows 12-12 cols 40-71 "░" shadow-on-desktop
+    gallery_no_graphics.dump row 2 col 70 "░░" desktop
+    gallery_no_graphics.dump row 12 col 38 "░░" desktop
     ```
 
 19. **Shadow transform.** A shadowed cell keeps its glyph and attributes and
@@ -766,13 +777,13 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     appearance/DropdownMenu/marks.classic.dump row 4 col 7 "├────────────────┤" menu
     ```
 
-31. **Disabled menu items.** A disabled item is `menu-disabled` with its
-    mnemonic in `menu-disabled-hotkey`; under the highlight it keeps the green
-    bar in `menu-active-disabled`.
+31. **Disabled menu items.** A disabled item is `menu-disabled`, its mnemonic
+    included, with no accent (D-076); under the highlight it keeps the green
+    bar in `menu-active-disabled`, mnemonic included.
 
     ```classic-check
-    appearance/DropdownMenu/normal.classic.dump row 5 col 2 " Print    Ctrl+P " menu-disabled,menu-disabled-hotkey,menu-disabled*15
-    appearance/DropdownMenu/unavailable.classic.dump row 5 col 2 " Print    Ctrl+P " menu-active-disabled,menu-active-disabled-hotkey,menu-active-disabled*15
+    appearance/DropdownMenu/normal.classic.dump row 5 col 2 " Print    Ctrl+P " menu-disabled
+    appearance/DropdownMenu/unavailable.classic.dump row 5 col 2 " Print    Ctrl+P " menu-active-disabled
     ```
 
 32. **Status line layout.** The status line is the last row in `status`; items
@@ -823,7 +834,7 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     ```classic-check
     appearance/Button/default.classic.dump row 3 col 10 "   Save   " button-default*3,button-mnemonic,button-default*6
     rootdialog_initial.dump row 9 col 1 "    OK   ▄    Cancel ▄" button-shadow,button-default*3,button-mnemonic,button-default*4,button-shadow*4,button,button-mnemonic,button*5,button,button-shadow
-    gallery_no_graphics.dump row 6 col 4 "   Greet   ▄" button-shadow,button-default*2,button-mnemonic,button-default*7,button-shadow
+    gallery_no_graphics.dump row 6 col 40 "   Greet   ▄" button-shadow,button-default*2,button-mnemonic,button-default*7,button-shadow
     ```
 
 38. **Focused button.** A focused button's text is `button-focused` (white).
@@ -865,7 +876,7 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
     ```classic-check
     appearance/InputLine/focused.classic.dump row 3 col 4 "report.txt  " input-caret*11,input-focused
     appearance/InputLine/selected.classic.dump row 3 col 4 "report.txt" input-focused*7,input-caret*3
-    gallery_no_graphics.dump row 4 col 12 "   " dlg-frame-inactive,input-caret,input-focused
+    gallery_no_graphics.dump row 4 col 48 "   " dlg-frame,input-caret,input-focused
     ```
 
 43. **Label mnemonic.** A label is `label` with its mnemonic in
@@ -873,7 +884,7 @@ from the [style legend](#style-legend) (`name*N` repeats a name). The
 
     ```classic-check
     appearance/Label/normal.classic.dump row 3 col 4 "Name:" label-mnemonic,label*4
-    gallery_no_graphics.dump row 4 col 4 "Name:" label-mnemonic,label*4
+    gallery_no_graphics.dump row 4 col 40 "Name:" label-mnemonic,label*4
     ```
 
 44. **Vertical scrollbar.** A vertical scrollbar is `▲`, blank track cells, a
