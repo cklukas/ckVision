@@ -1757,3 +1757,33 @@ under `/Volumes/PRO-BLADE/tmp/ckvision-wp50-resize-storm-20260925`. No
 ckVision GUI or test process was running before the build. The VM remained
 headless. True live pixel mouse, remaining GUI/degraded-host rows, and the
 WP-37/WP-38 release matrix remain open.
+
+## Child raster snapshot ownership — 2026-09-26
+
+`ARCHITECTURE.md` §4 requires private child rasters to pass through the
+emulator, `TerminalView`, and the scene compositor. A captured raster image is
+therefore a stable frame value while the child continues writing. The live
+emulator and its `TerminalRaster` own two references to the pixel buffer; a
+snapshot or retained scene region adds another. The prior copy-on-write flag
+only remembered sharing with the Sixel decode cache. After the first text
+write detached that cache, a later write could erase pixels in an already
+captured image.
+
+`a_captured_child_picture_keeps_its_pixels_after_later_text_damage` reproduces
+that second-write mutation: it failed against the previous code and passes
+when `damage_rasters()` detaches a buffer with an external owner. The public
+child-session protocol and the 93 golden files are unchanged. This repairs
+snapshot/scene ownership; it does **not** claim that re-encoding transparent
+holes as opaque Sixel pixels is solved.
+
+The changed source and regression hashes are
+`7442d29f085a9c524e1ddf45f6703081773b93410ba77afa042158346300f90e`
+and `97eb94512c93305263936aa8fbcbfe49e8471b82fc82b2ddbfd46fc56da7e083`.
+The Release builds completed with zero warnings on macOS (22:35:29–22:35:33
+UTC for the changed test runner, followed by an all-target no-change build),
+Linux ARM64 (22:36:47–22:36:54 UTC), and Windows ARM64
+(22:37:13.710–22:37:26.222 UTC). Full CTest passed **177/177**, **177/177**,
+and **164/164** respectively; the generated-byte gate and both provenance
+gates passed on each host. Current build logs and exact output hashes are in
+`/Volumes/PRO-BLADE/tmp/ckvision-wp50-raster-cow-20260926/validation.md`.
+The remaining host and release rows retain their recorded status.

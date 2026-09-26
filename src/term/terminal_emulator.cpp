@@ -2019,10 +2019,13 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
             continue;
         }
 
-        // A snapshot may still be holding these pixels, so the first erase
-        // after one was taken copies. Repainting a whole picture is hundreds
-        // of cell writes and one copy, not one copy per cell.
-        if (coverage.handed_out) {
+        // The writable handle and the live TerminalRaster account for two
+        // owners. A snapshot or retained scene region adds another owner;
+        // only then must this write detach. The decode cache also marks a
+        // picture as handed out before it reaches this loop. Repainting a
+        // whole picture is hundreds of cell writes and one copy, not one
+        // copy per cell.
+        if (coverage.handed_out || coverage.image.use_count() > 2) {
             coverage.image = std::make_shared<Image>(*coverage.image);
             coverage.handed_out = false;
             raster.image = coverage.image;

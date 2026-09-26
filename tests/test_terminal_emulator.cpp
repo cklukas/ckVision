@@ -478,6 +478,30 @@ CK_TEST(text_written_over_a_child_picture_erases_it_the_way_a_terminal_does) {
     CK_CHECK(emulator.snapshot().rasters.empty());
 }
 
+CK_TEST(a_captured_child_picture_keeps_its_pixels_after_later_text_damage) {
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{20, 6};
+    profile.cell_pixels = Size{8, 16};
+    term::TerminalEmulator emulator(profile);
+    emulator.feed_output("\x1bPq#0;2;100;0;0!24~-!24~\x1b\\");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+
+    // The first overdraw detaches the Sixel decode cache. A subsequent
+    // snapshot owns the remaining picture while the child keeps writing.
+    emulator.feed_output("\x1b[1;1Hx");
+    const term::TerminalSnapshot captured = emulator.snapshot();
+    CK_CHECK(captured.rasters.size() == 1U);
+    CK_CHECK(captured.rasters[0].image->pixel(0, 0).a == 0);
+    CK_CHECK(captured.rasters[0].image->pixel(8, 0).a == 255);
+
+    emulator.feed_output("\x1b[1;2Hy");
+    const term::TerminalSnapshot current = emulator.snapshot();
+    CK_CHECK(current.rasters.size() == 1U);
+    CK_CHECK(current.rasters[0].image->pixel(8, 0).a == 0);
+    CK_CHECK(captured.rasters[0].image->pixel(8, 0).a == 255);
+    CK_CHECK(captured.rasters[0].image->pixel(16, 0).a == 255);
+}
+
 CK_TEST(a_child_re_sending_the_same_picture_gets_a_whole_one_back) {
     // The same bytes are decoded once and the picture reused — but a picture
     // on screen is erased cell by cell as a program writes over it, and those
