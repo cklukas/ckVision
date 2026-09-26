@@ -1802,3 +1802,56 @@ and its guest task directory. Installing the missing component resolved one
 host prerequisite but did not provide a usable legacy console in this ARM VM.
 The **live legacy-console refusal row remains Open**; this attempt did not
 execute ckVision's refusal path.
+
+## Live legacy Console Host refusal — 2026-09-26
+
+The earlier legacy attempts all named `conhost.exe` as the scheduled-task
+executable and passed the client as its argument. With `ForceV2=0` that
+explicit invocation exits with `0x80070057` before any client starts, both
+before and after the legacy capability was installed. The working route lets
+Windows allocate the console itself: the task executes `cmd.exe /k run.cmd`
+directly. The runner leaves Gallery's stdin and stdout on the console and
+redirects only stderr, so the redirected-handle diagnostic cannot stand in for
+the host-capability path.
+
+The named Windows 11 Pro ARM64 VM (build 26200) was restarted before the run;
+`cktest` signed in automatically, `Microsoft.Windows.Console.Legacy~~~~` was
+`Installed`, and `conhostv1.dll` is a 307,200-byte ARM64 image. The Gallery
+Release executable was the verified post-refinement output, SHA-256
+`280DACEEB8F235540C91F64339458EF32DA6FE509217BF2F0C5C6B6A7A3C94AD`,
+copied to `C:\Users\Public\ckvision-wp37-legacy-launch-20260926` and
+re-verified there.
+
+With `cktest`'s `ForceV2` set to `0`, the task started `cmd.exe` PID 8020 and
+its console host `conhost.exe 0x4` PID 2840. That host process had
+`ConhostV1.dll` loaded, identifying the legacy Console Host. Gallery exited
+with code `1` and wrote exactly:
+
+```text
+Windows terminal: VT output cannot be enabled (Win32 87). Use Windows Terminal or Windows Console Host with 'Use legacy console' disabled.
+```
+
+The legacy host rejected the VT output mode with `ERROR_INVALID_PARAMETER`,
+so the refusal came from `WindowsTerminal`'s first host-capability check.
+Gallery wrote no frame, and the console shows only the runner's exit line, the
+diagnostic, and the prompt:
+![Live legacy Console Host refusal](evidence/wp37-legacy-console-refusal-20260926.png)
+(capture SHA-256
+`8883C46C180EAE97EC735E1111C0082D9F95147E7129E067E5BBCD842CF4BED2`).
+
+The matched control changed only `ForceV2` to `1`. The same task route
+delegated the console to Windows Terminal 1.24.11911.0; `cmd.exe` PID 7844's
+`conhost.exe 0x4` PID 6948 did not load `ConhostV1.dll`. Gallery ran as
+PID 8020 (reused from the legacy run's `cmd.exe`) with its Sixel image:
+![Matched modern-host control](evidence/wp37-legacy-console-control-20260926.png)
+(capture SHA-256
+`F7893329FA4AC20DA98FEB503B48C4EA44EC74B6567C6B9A20C4030265F6DDCC`).
+Gallery then exited through Alt+X with code `0` and empty stderr, leaving the
+restored shell prompt. After each run the test processes and task were removed,
+and `ForceV2=1` was verified. The runner, process records, and framebuffer
+captures are retained under
+`/Volumes/PRO-BLADE/tmp/ckvision-wp37-legacy-launch-20260926`.
+
+No source changed, so no suite was rerun for this checkpoint. The executable is
+the one whose three-host Release suites were recorded in the VT refusal
+refinement above. **The live legacy-console refusal row is Done.**

@@ -101,7 +101,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, and live WezTerm pixel-mouse transport plus Gallery interaction Done; literal Windows Terminal pixel mode and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse transport plus Gallery interaction, and live legacy Console Host refusal Done; literal Windows Terminal pixel mode Open (no released Windows Terminal implements mode 1016)** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, and 119-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
@@ -2969,12 +2969,15 @@ The installed Windows Terminal hosts do not advertise mode
 not provide a usable pixel GUI route. Native two-Application isolation across
 independent private ConPTY hosts is **Done**. The separate live
 two-outer-Application GUI isolation route is also **Done**. The real
-legacy-console refusal route and final cross-platform release audit are **Open**.
-The named VM does not start a usable `ForceV2=0` legacy host; the matched
-normal/legacy launch results are in [Windows evidence](windows-wp37-evidence.md).
-Installing its previously absent legacy-console Windows capability succeeded,
-but a new signed-in launch still failed with `0x80070057` before ckVision ran;
-`ForceV2=1` was restored and the live refusal row stays Open.
+legacy-console refusal route is **Done**: once the legacy capability was
+installed and Windows allocated the console itself (an explicit `conhost.exe`
+launch fails with `0x80070057` in legacy mode), the signed-in legacy host
+loaded `ConhostV1.dll` and Gallery exited 1 with its actionable VT-output
+diagnostic; the matched modern-host route ran and exited 0. See the
+[live legacy record](windows-wp37-evidence.md#live-legacy-console-host-refusal--2026-09-26).
+Literal Windows Terminal mode-1016 pixel mouse and the final cross-platform
+release audit are **Open**; Microsoft's feature request and its implementing
+pull request are both still open, so no released Windows Terminal offers it.
 Supported macOS/Linux sanitizer gates, the nine Linux fuzz corpora, and the
 three-host benchmark gates are **Done**; the installed Windows ARM64 MSVC
 toolchain rejects ASan instrumentation and that limitation is recorded in
@@ -3023,8 +3026,8 @@ and prevent milestone status from outrunning verification again.
 **Current WP-38 status (2026-09-26): In progress.** The
 [M7 Windows traceability slice](windows-m7-traceability.md) maps every literal
 M7 exit item to implementation, executable and live evidence, public reference,
-and its remaining gap. It does not close M7: live pixel-mouse interaction and
-real legacy-console refusal remain Open. The
+and its remaining gap. It does not close M7: literal Windows Terminal
+pixel-mouse support remains Open. The
 [API index](../docs/api-index.md) now enumerates all 124 installed headers
 exactly once, enforced by the documentation checker. This closes the
 header-inventory gap. The
