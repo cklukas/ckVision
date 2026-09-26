@@ -1,0 +1,22 @@
+ckvision-golden 1
+frame 20 6
+cursor hidden
+styles 3
+0 fg #FFFFFF bg #000000 attrs -
+1 fg #FFFFFF bg #000000 attrs bold
+2 fg #000000 bg #FFFFFF attrs bold,reverse
+grid
+|  File  View  Window|
+|╔═[■] Notes [_][↑]═╗|
+|║                  ║|
+|║                  ║|
+|╚═════════════════─┘|
+| F1 Help  Alt+X Quit|
+stylemap
+|00100000100000100000|
+|11111122222111111111|
+|11111111111111111111|
+|11111111111111111111|
+|11111111111111111111|
+|01100000001111100000|
+end

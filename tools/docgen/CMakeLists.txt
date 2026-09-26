@@ -25,6 +25,19 @@ add_executable(generate_window_z_order_golden generate_window_z_order_golden.cpp
 target_link_libraries(generate_window_z_order_golden PRIVATE ckvision::cvision)
 ckvision_strict(generate_window_z_order_golden)
 
+# The appearance matrix (WP-38): every public element × state × scheme,
+# public API only, so it needs no example application.
+add_executable(generate_appearance_matrix
+    generate_appearance_matrix.cpp
+    appearance_stage.cpp
+    appearance_controls.cpp
+    appearance_data.cpp
+    appearance_chrome.cpp
+    appearance_components.cpp
+    appearance_media.cpp)
+target_link_libraries(generate_appearance_matrix PRIVATE docgen_frame_svg ckvision::cvision)
+ckvision_strict(generate_appearance_matrix)
+
 add_executable(generate_terminal_plane_goldens generate_terminal_plane_goldens.cpp)
 target_link_libraries(generate_terminal_plane_goldens PRIVATE gallery_app terminal_app ckvision::cvision)
 ckvision_strict(generate_terminal_plane_goldens)

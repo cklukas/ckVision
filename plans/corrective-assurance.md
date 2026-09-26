@@ -102,7 +102,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **Implementation complete — gate pending — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 119 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, live WezTerm pixel-mouse Gallery interaction with Windows Terminal cell-mouse degradation (D-075), and live legacy Console Host refusal verified; WP-38's global audit decides Done** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, and 119-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested dual-profile appearance slices, 119-file three-host manifest, and the mechanically complete appearance matrix (59 elements, 388 states × 4 schemes) Done; per-API reference, M0–M11 traceability, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3077,8 +3077,18 @@ Eight new cell/RGBA files bring the current manifest to **119/119** with the
 same SHA-256 on macOS, Linux ARM64, and Windows ARM64. A tenth published SVG
 shows the nested raster, and `terminal_visual_capture` now checks all ten.
 That paired-profile nested state is **Done**; the broader matrix remains Open.
-Per-API reference depth and the complete
-M0–M11 appearance, example, and release-gate audit remain Open.
+The [appearance matrix](wp38-appearance-matrix.md) now makes golden coverage
+mechanically enumerable: `generate_appearance_matrix` renders every public
+view type, the standard dialogs, and the application shell in each state its
+traits require (focused, disabled, active/inactive, wide text, narrow, Sixel
+and no-graphics) plus element-specific states, under all four schemes — 59
+elements, 388 states, 1,559 pinned files — and the `appearance_matrix` gate
+proves the set complete and each claimed state visibly distinct. Building it
+exposed 35 findings, recorded in that plan; D-076 and `742f03b` fixed them in
+the library with regression tests, one is accepted under the 80×24 sizing
+policy, and no element is exempt. The appearance acceptance criterion is
+**Done**. Per-API reference depth and the complete M0–M11 traceability and
+release-gate audit remain Open.
 
 ## Review finding traceability
 

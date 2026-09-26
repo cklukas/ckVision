@@ -1,0 +1,18 @@
+ckvision-golden 1
+frame 18 5
+cursor hidden
+styles 1
+0 fg #FFFFFF bg #AA0000 attrs -
+grid
+|Terminal too small|
+|Resize to at least|
+|80x24             |
+|                  |
+|                  |
+stylemap
+|000000000000000000|
+|000000000000000000|
+|000000000000000000|
+|000000000000000000|
+|000000000000000000|
+end

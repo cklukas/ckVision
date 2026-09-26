@@ -177,7 +177,7 @@ reference acceptance is missing.
 | Desktop typed snapshot/restore | Desktop beyond-baseline | WP-34A |
 | Comprehensive client-facing examples cover every widget, layout, dialog, graphics/degradation path, and command/theme capability through public API | Example suite / client usability | WP-36A, WP-38 |
 | Calendar, date/time picker, numeric stepper, slider, search/filter, command palette, toolbar, breadcrumb, property inspector, wizard, notifications, and tooltip/popover | Common modern components | WP-36B, WP-38 |
-| Every widget × applicable active/inactive/focused/disabled state × Classic/Dark/Light/Mono, plus scripts and reference docs | Cross-cutting acceptance; M6 exit | WP-38 |
+| Every widget × applicable active/inactive/focused/disabled state × Classic/Dark/Light/Mono, plus scripts and reference docs | Cross-cutting acceptance; M6 exit | WP-38: state × scheme goldens Done by the [appearance matrix](wp38-appearance-matrix.md); scripts and reference docs Open |
 
 The catalog currently says M6 implements both baseline and beyond-baseline
 columns. Therefore “post-0.1” is not a valid state by ledger annotation alone.

@@ -522,6 +522,19 @@ if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
         LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
 endif()
 
+# The appearance matrix (WP-38): every public element x state x built-in
+# scheme, regenerated and compared byte for byte, and proved complete against
+# the public view types and the states each element's traits require.
+if(TARGET generate_appearance_matrix)
+    add_test(NAME appearance_matrix
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_appearance_matrix.py
+            --generator $<TARGET_FILE:generate_appearance_matrix>
+            --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden/appearance
+            --scratch ${CMAKE_BINARY_DIR}/test-artifacts/appearance-matrix)
+    set_tests_properties(appearance_matrix PROPERTIES
+        LABELS "golden;visual;symbolic-scene;portable;script" TIMEOUT 120)
+endif()
+
 add_test(NAME layer_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_layers.py)
 set_tests_properties(layer_check PROPERTIES LABELS "script;architecture" TIMEOUT 30)

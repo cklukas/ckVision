@@ -1,0 +1,23 @@
+ckvision-golden 1
+frame 20 6
+cursor hidden
+styles 4
+0 fg #141414 bg #E1E1E1 attrs -
+1 fg #DC5A5A bg #E1E1E1 attrs bold
+2 fg #141414 bg #CDCDCD attrs bold
+3 fg #DC5A5A bg #CDCDCD attrs bold
+grid
+|  File  View  Window|
+|╔═[■] Notes [_][↑]═╗|
+|║                  ║|
+|║                  ║|
+|╚═════════════════─┘|
+| F1 Help  Alt+X Quit|
+stylemap
+|00100000100000100000|
+|22232222222223223222|
+|22222222222222222222|
+|22222222222222222222|
+|22222222222222222233|
+|01100000001111100000|
+end
