@@ -244,11 +244,13 @@ public:
     Hit hit_test(Point cell) const;
 
     // Draws with these roles instead of "ckv.statusline.normal" and
-    // "ckv.statusline.selected". Call it before the strip is attached, or repaint
-    // afterwards: it does not invalidate.
+    // "ckv.statusline.selected". An override set before attachment survives it; a
+    // change repaints.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (role_ == normal_role && selected_role_ == selected_role) return;
         role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
 
     // Any width from 0 up, since the strip pages to fit; exactly one row high.

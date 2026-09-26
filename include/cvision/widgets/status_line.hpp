@@ -90,12 +90,24 @@ public:
 
     // Replace the role the strip and available items are drawn with, in place
     // of "ckv.statusline.normal".
-    void set_role_override(ui::RoleId role) noexcept { role_ = role; }
+    void set_role_override(ui::RoleId role) noexcept {
+        if (role_ == role) return;
+        role_ = role;
+        invalidate();
+    }
     // Replace the role items with an unavailable command are drawn with.
-    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
     // Replace the accent role for an item's leading chord, in place of
     // "ckv.hotkey".
-    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
+    void set_hotkey_role_override(ui::RoleId role) noexcept {
+        if (hotkey_role_ == role) return;
+        hotkey_role_ = role;
+        invalidate();
+    }
 
     // The ordinary items, shown whenever the focused view's nearest command
     // context has no set of its own (see set_context_items).

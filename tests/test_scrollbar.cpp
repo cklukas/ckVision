@@ -491,3 +491,29 @@ CK_TEST(a_horizontal_thumb_uses_the_left_and_right_half_blocks) {
     CK_CHECK(s.at(Point{0, 0}).grapheme() == "◄");
     CK_CHECK(s.at(Point{11, 0}).grapheme() == "►");
 }
+
+// --- WP-38 review finding A19 ------------------------------------------------
+
+CK_TEST(only_the_primary_button_steps_pages_or_drags_a_scrollbar) {
+    // A19: a right or middle press on a bar is not a click on it.
+    Scrollbar sb(Orientation::Vertical);
+    sb.set_bounds(Rect{0, 0, 1, 10});
+    sb.set_range(100, 10);
+    sb.set_position(40);
+    for (const ckv::MouseButton button : {ckv::MouseButton::Right, ckv::MouseButton::Middle}) {
+        for (const int y : {0, 1, 8, 9}) {  // both arrows and both ends of the trough
+            CK_CHECK(!sb.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, button, Point{0, y}, std::nullopt,
+                                                  Modifier::None}));
+            CK_CHECK(sb.position() == 40);
+        }
+    }
+    // Nor does one start a drag on the thumb.
+    const int thumb_row = 1 + 40 * 8 / 100;
+    CK_CHECK(!sb.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Right, Point{0, thumb_row},
+                                          std::nullopt, Modifier::None}));
+    CK_CHECK(!sb.on_mouse(ckv::MouseEvent{ckv::MouseAction::Move, ckv::MouseButton::Right, Point{0, 8},
+                                          std::nullopt, Modifier::None}));
+    CK_CHECK(sb.position() == 40);
+    CK_CHECK(sb.on_mouse(mouse(ckv::MouseAction::Down, Point{0, 9})));
+    CK_CHECK(sb.position() == 41);
+}

@@ -105,7 +105,9 @@ bool TabControl::on_key(const KeyEvent& event) {
         activate_delta(-1);
         return true;
     }
-    if (event.chord.key == Key::Right || event.chord.key == Key::Tab) {
+    // Tab and Shift+Tab are not the strip's: they walk the focus through the
+    // form, and a strip that took them could never be left from the keyboard.
+    if (event.chord.key == Key::Right) {
         activate_delta(1);
         return true;
     }

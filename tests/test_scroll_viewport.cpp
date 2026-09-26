@@ -422,3 +422,21 @@ CK_TEST(the_corner_where_both_bars_meet_shows_no_content) {
     CK_CHECK(frame.at(ckv::Point{19, 0}).grapheme() != "#");   // the vertical bar
     CK_CHECK(frame.at(ckv::Point{0, 9}).grapheme() != "#");    // the horizontal bar
 }
+
+CK_TEST(replacing_content_moves_the_scrollbars_back_to_the_origin_too) {
+    // A25: the bars are where the offset lives. Left where the old content
+    // was scrolled to, the next arrow key stepped from there, jumping the new
+    // content far past its top.
+    Fixture f;
+    ScrollViewport viewport;
+    viewport.set_bounds(Rect{0, 0, 20, 10});
+    viewport.set_content(make_content(100, 50));
+    viewport.set_scroll(30, 20);
+    viewport.set_content(make_content(100, 50));
+    CK_CHECK(viewport.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Down, ckv::Modifier::None, ""}}));
+    CK_CHECK(viewport.scroll_y() == 1);
+    CK_CHECK(viewport.on_key(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Right, ckv::Modifier::None, ""}}));
+    CK_CHECK(viewport.scroll_x() == 1);
+    CK_CHECK(viewport.content()->bounds().y == -1);
+    CK_CHECK(viewport.content()->bounds().x == -1);
+}

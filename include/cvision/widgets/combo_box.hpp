@@ -39,8 +39,8 @@ public:
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
 
     // The choices, in list order. Replacing them keeps the selection when its
-    // index is still in range (taking that item's text) and drops it
-    // otherwise; neither callback fires.
+    // index is still in range, taking that item's text into the value and the
+    // editable field alike, and drops it otherwise; neither callback fires.
     void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
 
@@ -78,10 +78,10 @@ public:
     // Desktop, below the control (above it when too little room is below and
     // more is above), at least as wide as the control. Does nothing when it is
     // already open, when there are no items, or without an Application and a
-    // Desktop. Opening with nothing selected sets selected_index() to 0
-    // without changing the text. Choosing an item in the list selects it and
-    // fires on_select, then on_text_changed. close_dropdown dismisses the list
-    // without choosing; nothing fires.
+    // Desktop. The list's cursor starts on the selected item, or on the first
+    // when nothing is selected; opening selects nothing. Choosing an item in
+    // the list selects it and fires on_select, then on_text_changed.
+    // close_dropdown dismisses the list without choosing; nothing fires.
     void open_dropdown();
     void close_dropdown();
     bool dropdown_open() const noexcept { return popup_ != nullptr; }

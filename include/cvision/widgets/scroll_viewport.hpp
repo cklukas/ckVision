@@ -67,7 +67,7 @@ public:
     // scrollable extent, which the viewport's two Scrollbar children then
     // reflect. Replaces and returns ownership of any previous content
     // (nullptr when there was none); passing nullptr just removes it. The
-    // scroll offset returns to 0,0.
+    // scroll offset returns to 0,0, both scrollbars with it.
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 

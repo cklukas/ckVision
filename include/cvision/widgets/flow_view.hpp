@@ -82,9 +82,13 @@ public:
     // An empty document; the view takes focus by Tab.
     FlowView();
 
-    // Draws with `text_role` instead of "ckv.flow.text". Call it before the view is
-    // attached, or repaint afterwards: it does not invalidate.
-    void set_role_override(ui::RoleId text_role) noexcept { text_role_ = text_role; }
+    // Draws with `text_role` instead of "ckv.flow.text". An override set before
+    // attachment survives it; a change repaints.
+    void set_role_override(ui::RoleId text_role) noexcept {
+        if (text_role_ == text_role) return;
+        text_role_ = text_role;
+        invalidate();
+    }
     // Replaces the whole document and lays it out again. The current link becomes the
     // first link, or none when the document has none.
     void set_document(FlowDocument document);

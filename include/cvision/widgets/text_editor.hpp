@@ -108,27 +108,30 @@ enum class EditKind {
     DeleteWordBackward,  // Ctrl+Backspace
     DeleteWordForward,   // Ctrl+Delete
     Cut,                 // the selection, taken to the clipboard
+    Replace,             // the current search match, replaced
+    ReplaceAll,          // every match of the search query, replaced in one transaction
 };
 
 // One text change the reader asked for, described twice: as the reader's
-// intent (kind, text, virtual caret), and as the replacement the editor would
-// commit on its own (range, replacement). A host that keeps its own editing
-// rules — a session with named undo steps, a structured editor — acts on the
-// intent; a host that only wants to observe or veto can commit the
-// replacement itself.
+// intent (kind, text, virtual caret), and as the replacements the editor would
+// commit on its own (edits). A host that keeps its own editing rules — a
+// session with named undo steps, a structured editor — acts on the intent; a
+// host that only wants to observe or veto can commit the edits itself.
 struct EditRequest {
     // Which kind of change the reader asked for.
     EditKind kind = EditKind::Insert;
     // The typed or pasted text, "\n" for a line break, the indentation for
-    // Indent, the selected text for Cut; empty for the deletions.
+    // Indent, the selected text for Cut, the replacement text for Replace and
+    // ReplaceAll; empty for the deletions.
     std::string text;
-    // The current text the editor would replace: the selection, the grapheme
-    // or word beside the caret, the graphemes overwrite mode covers, or an
-    // empty range at the insertion point.
-    DocumentRange range;
-    // What the editor would put in its place, including any line breaks and
-    // spaces a virtual caret needs.
-    std::string replacement;
+    // The replacements the editor would commit as one transaction: ranges of
+    // the current revision, in document order, that do not overlap. ReplaceAll
+    // has one per match of the search query; every other kind has exactly one,
+    // whose range is the selection, the grapheme or word beside the caret, the
+    // graphemes overwrite mode covers, the current search match, or an empty
+    // range at the insertion point, and whose text includes any line breaks
+    // and spaces a virtual caret needs.
+    std::vector<DocumentTextEdit> edits;
     // The provisional caret the change starts from, when there is one.
     std::optional<VirtualCaret> virtual_caret;
 };
@@ -163,13 +166,15 @@ public:
     // callback; see subscribe_status.
     using StatusObserverId = std::uint64_t;
     using StatusObserver = std::function<void(const EditorStatus&)>;
-    // Called for every text change the reader asks for, before the editor
-    // commits anything. Return true after handling it — typically by
-    // committing a transaction of the host's own and restoring a current
-    // selection with set_selection() — and the editor does nothing further;
-    // return false, having changed nothing, and the editor commits
-    // `request.replacement` over `request.range` itself. Never called for a
-    // read-only or disabled editor.
+    // Called for every text change the reader asks for, including the search
+    // replacements, before the editor commits anything. Return true after
+    // handling it — typically by committing a transaction of the host's own
+    // and restoring a current selection with set_selection() — and the editor
+    // does nothing further; return false, having changed nothing, and the
+    // editor commits `request.edits` itself as one transaction, recording its
+    // selection before the edit for undo, and leaves the caret after the last
+    // of them with nothing selected. Never called for a read-only or disabled
+    // editor.
     using EditHandler = std::function<bool(TextEditor&, const EditRequest&)>;
     // Called when the reader asks for a context menu: a right click, a
     // Ctrl+click (for terminals that keep the right button for themselves), or
@@ -229,9 +234,9 @@ public:
     // would stop being an index into it.
     int content_width() const noexcept { return content_width_; }
     int left_column() const noexcept;
-    // While read-only, typing, pasting, cutting, deleting and the search replacements are
-    // refused, and the edit handler is not called; the caret, the selection, copy and find
-    // still work. The Undo and Redo verbs are not affected by this flag. Off by default.
+    // While read-only, typing, pasting, cutting, deleting, the search replacements, undo and
+    // redo are refused, and neither the edit handler nor the history handler is called; the
+    // caret, the selection, copy and find still work. Off by default.
     void set_read_only(bool value) noexcept { read_only_ = value; }
     bool read_only() const noexcept { return read_only_; }
     // Overwrite mode: typed text without a selection replaces as many following graphemes as
@@ -250,7 +255,14 @@ public:
     void set_key_bindings(std::vector<EditorKeyBinding> bindings);
     const std::vector<EditorKeyBinding>& key_bindings() const noexcept { return key_bindings_; }
     // Runs one editor verb. Returns whether it did anything: an undo with
-    // nothing to undo, or a find with nothing selected, returns false.
+    // nothing to undo, or a find with nothing selected, returns false. The
+    // verbs that change the text — undo, redo, cut and paste — are refused
+    // (false) by a read-only or disabled editor. Without a history handler,
+    // undo and redo walk the document's history and then take the selection
+    // the step restores (DocumentChange::selection): after an undo, the
+    // selection or caret the undone edit was made at; after a redo, a caret
+    // after the replayed text. Other views of the document only carry their
+    // own selections through the step.
     bool perform(EditorCommand command);
 
     // Installs the handler for text changes, replacing any earlier one; an empty function
@@ -264,6 +276,7 @@ public:
     // of the same document) answers them, and the document's own history
     // is left out of the reader's hands so the two can never disagree
     // about what "undo" reverses. `redo` says which of the two was asked.
+    // Never called for a read-only or disabled editor.
     using HistoryHandler = std::function<bool(TextEditor&, bool redo)>;
     void set_history_handler(HistoryHandler handler) { history_handler_ = std::move(handler); }
 
@@ -300,23 +313,23 @@ public:
     void set_file_name(std::string name);
     // Chooses the syntax profile: `profile_id` when it names a registered profile, otherwise
     // the registry's best detection from the file name, the first 512 bytes of the text and
-    // the first line within them, and plain text when nothing claims it. The editor keeps a
-    // pointer into the registry, so after registering further profiles call this again.
+    // the first line within them, and plain text when nothing claims it. The editor keeps its
+    // own copy of the chosen profile, so registering further profiles never disturbs it; they
+    // take part in detection from the next call. A change of profile is reported to the status
+    // handler and observers.
     void set_profile(std::optional<std::string> profile_id);
     // The active profile's id; "plain" until another is detected or chosen.
-    const std::string& profile_id() const noexcept { return profile_id_; }
+    const std::string& profile_id() const noexcept { return profile_.id; }
     // Rebuilds the editor's lines and their syntax colouring from the document with the
     // current profile. It requests no repaint by itself.
     void refresh_syntax();
 
     // Called with the new status after a change of the caret, the selection,
-    // the document's text or the overwrite mode, on a focus change, and once
-    // when installed (which also calls the status observers). Changes that
-    // reach neither the editor nor its document's observers are not reported
-    // by themselves: a new syntax profile, and the document's mark_clean,
-    // set_preferred_newline and set_utf8_bom; status() and the next report
-    // show them. The callback is application-owned; the editor never
-    // assumes a window chrome arrangement.
+    // the document's text, its clean state or its format metadata (mark_clean,
+    // set_preferred_newline, set_utf8_bom), the overwrite mode or the syntax
+    // profile, on a focus change, and once when installed (which also calls
+    // the status observers). The callback is application-owned; the editor
+    // never assumes a window chrome arrangement.
     // It is suitable for a frame-overlay status readout.
     void set_status_changed_handler(std::function<void(const EditorStatus&)> handler);
     // A status observer is independent of window chrome. This supports a
@@ -343,21 +356,23 @@ public:
     // Makes the selected text the query, case-sensitive and not whole-word. False, leaving the
     // query as it was, when nothing is selected; otherwise whether the query has any match.
     bool use_selection_as_search_query();
-    // Selects a match and makes it the current match, scrolling it into view. Forward, it is
+    // Selects a match and makes it the current match, scrolling it into view. The current
+    // match follows its text through later changes and ends when a change touches it or it no
+    // longer matches the query. Forward, it is
     // the first match that begins at or after the selection's end; backward, the last that ends
     // at or before the selection's start; without a selection, the caret stands for both.
     // Either direction wraps around the document. False when the query has no match.
     bool find_next(bool forward = true);
-    // Replaces the current match with `replacement`, leaves the caret after it with nothing
-    // selected, and clears the current match. The current match is the one find_next last
-    // selected, remembered by its index among the matches. False when there is none, when the
-    // editor is read-only, or when the document refuses the edit. It commits to the document
-    // directly, without the edit handler.
+    // Asks for a Replace edit of the current match (the one find_next last selected) with
+    // `replacement`, through the edit handler like any other edit (see EditHandler), and
+    // clears the current match. False, changing nothing, when there is no current match, for a
+    // read-only or disabled editor, or when the document refuses the edit.
     bool replace_current_search_match(std::string replacement);
-    // Replaces every match of the query in one transaction; see EditorSearch::replace_all. It
-    // commits directly, without the edit handler. A read-only editor returns an Ok result with
-    // no change, as a query without matches does.
-    DocumentEditResult replace_all_search_matches(const std::string& replacement);
+    // Asks for a ReplaceAll edit: every match of the query replaced with `replacement` in one
+    // transaction, so one revision and one undo step, through the edit handler like any other
+    // edit. False, changing nothing, when the query has no match, for a read-only or disabled
+    // editor, or when the document refuses the transaction.
+    bool replace_all_search_matches(const std::string& replacement);
 
     // The clipboard verbs, through the attached Application's clipboard. Copy puts the selected
     // text there; false without an application or a selection. Cut asks for a Cut edit of the
@@ -430,7 +445,7 @@ private:
     int column_x(const DisplayRow& row, std::size_t byte) const;
     void notify_status_changed();
     void refresh_search();
-    bool activate_search_match(std::size_t index);
+    bool activate_search_match(const DocumentRange& range);
     // Moves the caret. Every motion abandons a virtual caret; only vertical
     // motion keeps the column the caret is trying to return to.
     void move_cursor(DocumentPosition target, bool extend, bool keep_desired_column = false);
@@ -450,15 +465,21 @@ private:
     bool erase(EditKind kind);
     std::size_t gutter_width() const;
     Style style_for(std::size_t line, std::size_t line_byte, bool selected, ui::RoleId highlight) const;
+    // Brings the caret and the selection anchor, already carried through a change, to the
+    // current revision; one the change left inside a grapheme cluster moves to its start.
     void clamp_cursor();
+    // Selects the bytes an undo or redo step hands back, when they are current positions.
+    void restore_selection(DocumentSelection selection);
     void carry_highlights(const DocumentChange& change);
+    // Carries the current search match through a change it does not touch, and ends it when
+    // the change touches it.
+    void carry_search_match(const DocumentChange& change);
 
     std::shared_ptr<EditorDocument> document_;
     SyntaxProfileRegistry* profiles_ = nullptr;
     SyntaxProfileRegistry fallback_profiles_;
     SyntaxCache syntax_cache_;
-    const LanguageProfile* profile_ = nullptr;
-    std::string profile_id_ = "plain";
+    LanguageProfile profile_;
     std::string file_name_;
     std::vector<Line> lines_;
     mutable std::vector<DisplayRow> display_rows_cache_;
@@ -472,8 +493,9 @@ private:
     std::optional<VirtualCaret> virtual_caret_;
     EditorSearchQuery search_query_;
     std::vector<EditorSearchMatch> search_matches_;
-    std::optional<std::size_t> active_search_match_;
+    std::optional<DocumentRange> active_search_match_;
     EditorDocument::ObserverId observer_ = 0;
+    EditorDocument::ObserverId state_observer_ = 0;
     int top_display_row_ = 0;
     Scrollbar* v_scrollbar_ = nullptr;
     Scrollbar* h_scrollbar_ = nullptr;

@@ -3090,10 +3090,15 @@ policy, and no element is exempt. The appearance acceptance criterion is
 **Done**. Every public declaration in the 124 installed headers now carries
 reference documentation written against its implementation. A libclang scan
 counts 1,606 undocumented declarations before and zero after. The review
-raised 43 suspected defects, recorded in the
-[API review findings](wp38-api-review-findings.md). A mechanical coverage
-gate for that documentation, the fixes for those findings, and the complete
-M0–M11 traceability and release-gate audit remain Open.
+raised 43 suspected defects, and fixing them raised seven more. All are
+recorded in the [API review findings](wp38-api-review-findings.md). Each of
+A1–A50 is fixed with a regression test, or closed with a reason (A41d
+excepted). Their rules are recorded as D-077…D-080: injected graphics trace
+and output capture, the error model, `SizeHint::max` and hidden children in
+layout, and the removal of the raster fallback flag. A41d, which retypes
+pixel extents as `PixelSize`, a mechanical coverage gate for the
+documentation, and the complete M0–M11 traceability and release-gate audit
+remain Open.
 
 ## Review finding traceability
 

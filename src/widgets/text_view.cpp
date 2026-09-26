@@ -284,7 +284,11 @@ bool TextView::on_mouse(const MouseEvent& event) {
         const Rect abs = absolute_bounds();
         const int row = event.cell.y - abs.y;
         if (row < 0 || row >= bounds().height) return false;
-        const std::optional<std::size_t> link = link_at(top_line() + row, event.cell.x - abs.x);
+        const int column = event.cell.x - abs.x;
+        if (column < 0 || column >= viewport_width_) return false;
+        // The line is drawn from left_column() on, so that is where a column
+        // of the view lands in it.
+        const std::optional<std::size_t> link = link_at(top_line() + row, left_column() + column);
         if (!link) return false;
         set_current_link(link);
         return activate_current_link();

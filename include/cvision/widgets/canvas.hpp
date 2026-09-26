@@ -56,9 +56,13 @@ public:
     Canvas();
 
     // Replaces "ckv.canvas.fallback", the style of the blank fill and of the
-    // text-only fallback. An override set before attachment survives it; the
-    // call does not repaint.
-    void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
+    // text-only fallback. An override set before attachment survives it; a
+    // change repaints.
+    void set_role_override(ui::RoleId fallback_role) noexcept {
+        if (fallback_role_ == fallback_role) return;
+        fallback_role_ = fallback_role;
+        invalidate();
+    }
 
     // (width, height) in PIXELS (not cells) — the owner computes this
     // when manual sizing is desired. Reallocates the backing Image and marks

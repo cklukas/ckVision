@@ -291,14 +291,17 @@ public:
     // dropdown has to look like a dropdown, not like a list that happens to
     // be floating. The three roles are for ordinary days, the selected day
     // while the calendar has focus, and a day that cannot be chosen; the
-    // other roles still resolve on attach. Takes effect at the next repaint.
+    // other roles still resolve on attach. A change repaints.
     void set_role_override(ui::RoleId normal, ui::RoleId selected, ui::RoleId disabled) noexcept {
+        if (normal_role_ == normal && selected_role_ == selected && disabled_role_ == disabled) return;
         normal_role_ = normal;
         selected_role_ = selected;
         disabled_role_ = disabled;
+        invalidate();
     }
     // The "August 2026" line. Off when something above the grid already
     // says which month is shown -- a month picker and a year field, say.
+    // A change repaints and reports a size-hint change.
     void set_show_title(bool show);
     bool show_title() const noexcept { return show_title_; }
     // The day the week starts on, which decides both the weekday header and
@@ -306,7 +309,8 @@ public:
     void set_first_weekday(Weekday first);
     Weekday first_weekday() const noexcept { return first_weekday_; }
     // A "Wk" column of three cells at the left, labelling each row with the
-    // ISO 8601 week number of the Monday in it. Off by default.
+    // ISO 8601 week number of the Monday in it. Off by default. A change
+    // repaints and reports a size-hint change.
     void set_show_iso_week_numbers(bool show);
     bool show_iso_week_numbers() const noexcept { return show_iso_week_numbers_; }
 
@@ -319,8 +323,10 @@ public:
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     void on_focus(const FocusEvent& event) override;
-    // At least 21 cells wide, preferring 21 or 24 with week numbers, and free
-    // to stretch; always eight rows high.
+    // At least as wide as the columns drawn -- 20 cells, or 23 with week
+    // numbers -- preferring one blank more, and free to stretch; exactly as high as what is drawn: the title row when shown,
+    // the weekday heading and six week rows -- eight rows, or seven without
+    // the title.
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
     void on_attached() override;
@@ -347,6 +353,8 @@ private:
     bool show_title_ = true;
     int header_row() const noexcept { return show_title_ ? 1 : 0; }
     int grid_top() const noexcept { return header_row() + 1; }
+    // The cells the "Wk" column takes at the left, 0 while it is hidden.
+    int week_column_width() const noexcept { return show_iso_week_numbers_ ? 3 : 0; }
     bool show_iso_week_numbers_ = false;
     ui::RoleId normal_role_ = ui::kInvalidRole;
     ui::RoleId selected_role_ = ui::kInvalidRole;
@@ -481,9 +489,9 @@ public:
     // injected notion of today.
     //
     // set_value clamps the year into the drawable range and the month and
-    // day into theirs, and a date also becomes the new seed. std::nullopt
-    // becomes the seed instead when empty is not allowed. Any change clears
-    // the invalid mark and fires on_change, programmatic or not.
+    // day into theirs; it never changes the seed. std::nullopt becomes the
+    // seed instead when empty is not allowed. Any change clears the invalid
+    // mark and fires on_change, programmatic or not.
     void set_value(std::optional<DateValue> value);
     std::optional<DateValue> value() const noexcept { return value_; }
     // Clamped like a value; does not change the value.
@@ -666,7 +674,10 @@ public:
 
 private:
     void adjust(int delta);
+    // The value a press at column `x` sets, and the column the thumb is drawn
+    // in for the current value: the one proportional map, both ways.
     int value_from_x(int x) const;
+    int x_from_value() const;
     int minimum_ = 0;
     int maximum_ = 100;
     int step_ = 1;
@@ -679,7 +690,7 @@ private:
 // A one-row search field: a "Search " prompt, the query in an input-coloured
 // field with a caret at its end, and a "[x]" clear control at the right edge
 // while there is a query. Typed characters (without Alt, Ctrl or Super) and
-// text input append to the query; Backspace removes its last byte; Escape
+// text input append to the query; Backspace removes its last grapheme; Escape
 // clears it. A click on the "[x]" clears it. When the query is wider than the
 // field its end is shown, the part being typed. There is no caret movement:
 // the query is edited at its end only.
@@ -769,7 +780,7 @@ private:
 // from the fifth, each title with its mnemonic accented and its key chord in
 // parentheses, and a scroll gutter when they do not all fit. Typed characters
 // (without Alt, Ctrl or Super) append to the query, Backspace removes its last
-// byte, Up/Down move the highlight, and Enter executes the highlighted
+// grapheme, Up/Down move the highlight, and Enter executes the highlighted
 // command, within the invocation contexts when they are set. The palette does
 // not close itself; its host does that, and a detached palette lists nothing.
 // Resolves "ckv.input.normal", "ckv.option.normal" and "ckv.option.focused"
@@ -878,7 +889,7 @@ struct PropertyItem {
 // "ckv.input.focused" (the value being edited) on attach.
 class PropertyInspector : public ui::View {
 public:
-    // Replaces the rows and puts the cursor on the first.
+    // Replaces the rows, puts the cursor on the first and ends any edit.
     void set_items(std::vector<PropertyItem> items);
     // The rows, including every edit made so far.
     const std::vector<PropertyItem>& items() const noexcept { return items_; }
@@ -897,6 +908,9 @@ public:
     void on_attached() override;
 
 private:
+    // Whether an edit is open on the cursor row, which exists and is editable.
+    bool editing_cursor_row() const noexcept;
+
     std::vector<PropertyItem> items_;
     int cursor_ = 0;
     bool editing_ = false;

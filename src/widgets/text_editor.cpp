@@ -61,6 +61,25 @@ std::size_t next_word(std::string_view value, std::size_t byte) {
     return byte;
 }
 
+// The start of the word that contains the grapheme at `byte`, which must be a word grapheme.
+std::size_t word_start(std::string_view value, std::size_t byte) {
+    while (byte > 0U && word_byte(value[previous_grapheme(value, byte)])) byte = previous_grapheme(value, byte);
+    return byte;
+}
+
+// The grapheme boundary at or before `byte`: `byte` itself when it is one, else the start of the
+// cluster it falls inside. A cluster never spans a line break, so the walk starts at its line.
+std::size_t grapheme_floor(std::string_view value, std::size_t byte) {
+    byte = std::min(byte, value.size());
+    const std::size_t newline = byte == 0U ? std::string_view::npos : value.rfind('\n', byte - 1U);
+    std::size_t boundary = newline == std::string_view::npos ? 0U : newline + 1U;
+    for (std::size_t next = boundary; next < byte;) {
+        next = text::grapheme_end(value, next);
+        if (next <= byte) boundary = next;
+    }
+    return boundary;
+}
+
 std::size_t word_end(std::string_view value, std::size_t byte) {
     while (byte < value.size() && word_byte(value[byte])) byte = text::grapheme_end(value, byte);
     return byte;
@@ -101,8 +120,7 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
     v_scrollbar_->set_policy(ScrollbarPolicy::Auto);
     h_scrollbar_ = make<Scrollbar>(Orientation::Horizontal);
     h_scrollbar_->set_policy(ScrollbarPolicy::Auto);
-    profile_ = &profiles_->plain_text();
-    profile_id_ = profile_->id;
+    profile_ = profiles_->plain_text();
     cursor_ = document_->begin();
     observer_ = document_->subscribe([this](const DocumentChange& change) {
         // The caret stays on the same text through an edit this editor did
@@ -120,6 +138,7 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         };
         carry(cursor_);
         if (selection_anchor_) carry(*selection_anchor_);
+        carry_search_match(change);
         // A provisional caret names a place relative to the text as it was;
         // once the text has changed underneath it that place may be text.
         virtual_caret_.reset();
@@ -131,12 +150,15 @@ TextEditor::TextEditor(std::shared_ptr<EditorDocument> document, SyntaxProfileRe
         notify_status_changed();
         invalidate();
     });
+    // Clean state and format metadata are part of the status without being text.
+    state_observer_ = document_->subscribe_state([this] { notify_status_changed(); });
     set_focus_policy(ui::FocusPolicy::TabStop);
     refresh_syntax();
 }
 
 TextEditor::~TextEditor() {
     if (document_ && observer_ != 0U) document_->unsubscribe(observer_);
+    if (document_ && state_observer_ != 0U) document_->unsubscribe(state_observer_);
 }
 
 void TextEditor::on_attached() {
@@ -192,9 +214,16 @@ bool TextEditor::perform(EditorCommand command) {
     switch (command) {
         case EditorCommand::Undo:
         case EditorCommand::Redo: {
+            // Walking the history changes the text as much as typing does.
+            if (read_only_ || !enabled_in_tree()) return false;
             const bool redo = command == EditorCommand::Redo;
             if (history_handler_) return history_handler_(*this, redo);
-            return redo ? document_->redo() : document_->undo();
+            // Every view carries its selection through the step as through any change; the
+            // view that asked for it then takes the selection the step restores.
+            const std::optional<DocumentChange> change = redo ? document_->redo() : document_->undo();
+            if (!change) return false;
+            if (change->selection) restore_selection(*change->selection);
+            return true;
         }
         case EditorCommand::Cut: return cut_selection_to_clipboard();
         case EditorCommand::Copy: return copy_selection_to_clipboard();
@@ -245,7 +274,29 @@ void TextEditor::clear_search() {
 
 void TextEditor::refresh_search() {
     search_matches_ = EditorSearch::find_all(*document_, search_query_);
-    if (active_search_match_ && *active_search_match_ >= search_matches_.size()) active_search_match_.reset();
+    // The current match survives only as a match: text that no longer satisfies the query (a
+    // whole-word match that gained a letter beside it) ends it.
+    if (active_search_match_ &&
+        std::none_of(search_matches_.begin(), search_matches_.end(),
+                     [this](const EditorSearchMatch& match) { return match.range == *active_search_match_; }))
+        active_search_match_.reset();
+}
+
+void TextEditor::carry_search_match(const DocumentChange& change) {
+    if (!active_search_match_) return;
+    DocumentRange& match = *active_search_match_;
+    if (change.replaced_end_byte <= match.begin.byte) {
+        // Wholly before the match: the match's text moves with the difference in length.
+        const std::size_t length = match.end.byte - match.begin.byte;
+        match.begin.byte = match.begin.byte - change.replaced_end_byte + change.replaced_begin_byte + change.inserted_bytes;
+        match.end.byte = match.begin.byte + length;
+    } else if (change.replaced_begin_byte < match.end.byte) {
+        // It rewrote some of the match's text.
+        active_search_match_.reset();
+        return;
+    }
+    match.begin.revision = change.revision;
+    match.end.revision = change.revision;
 }
 
 bool TextEditor::use_selection_as_search_query() {
@@ -257,15 +308,13 @@ bool TextEditor::use_selection_as_search_query() {
     return !search_matches_.empty();
 }
 
-bool TextEditor::activate_search_match(std::size_t index) {
-    if (index >= search_matches_.size()) return false;
-    const DocumentRange range = search_matches_[index].range;
+bool TextEditor::activate_search_match(const DocumentRange& range) {
     if (range.begin.revision != document_->revision() || range.end.revision != document_->revision()) return false;
     selection_anchor_ = range.begin;
     cursor_ = range.end;
     virtual_caret_.reset();
     desired_column_.reset();
-    active_search_match_ = index;
+    active_search_match_ = range;
     ensure_cursor_visible();
     notify_status_changed();
     invalidate();
@@ -279,34 +328,36 @@ bool TextEditor::find_next(bool forward) {
     const std::size_t pivot = selected ? (forward ? selected->end.byte : selected->begin.byte) : cursor_.byte;
     if (forward) {
         for (std::size_t index = 0; index < search_matches_.size(); ++index)
-            if (search_matches_[index].range.begin.byte >= pivot) return activate_search_match(index);
-        return activate_search_match(0);
+            if (search_matches_[index].range.begin.byte >= pivot) return activate_search_match(search_matches_[index].range);
+        return activate_search_match(search_matches_.front().range);
     }
     for (std::size_t index = search_matches_.size(); index-- > 0;) {
-        if (search_matches_[index].range.end.byte <= pivot) return activate_search_match(index);
+        if (search_matches_[index].range.end.byte <= pivot) return activate_search_match(search_matches_[index].range);
     }
-    return activate_search_match(search_matches_.size() - 1U);
+    return activate_search_match(search_matches_.back().range);
 }
 
 bool TextEditor::replace_current_search_match(std::string replacement) {
-    refresh_search();
-    if (!active_search_match_ || *active_search_match_ >= search_matches_.size() || read_only_) return false;
-    const DocumentRange range = search_matches_[*active_search_match_].range;
-    const DocumentEditResult result = document_->replace(range, std::move(replacement));
-    if (!result || !result.change) return false;
-    cursor_ = document_->position_at_byte(result.change->replaced_begin_byte + result.change->inserted_bytes).value_or(document_->end());
-    selection_anchor_.reset();
+    if (!active_search_match_) return false;
+    EditRequest request;
+    request.kind = EditKind::Replace;
+    request.edits.push_back(DocumentTextEdit{*active_search_match_, replacement});
+    request.text = std::move(replacement);
+    if (!submit_edit(std::move(request))) return false;
     active_search_match_.reset();
-    ensure_cursor_visible();
-    notify_status_changed();
     return true;
 }
 
-DocumentEditResult TextEditor::replace_all_search_matches(const std::string& replacement) {
-    if (read_only_) return DocumentEditResult{};
-    const DocumentEditResult result = EditorSearch::replace_all(*document_, search_query_, replacement);
-    if (result) active_search_match_.reset();
-    return result;
+bool TextEditor::replace_all_search_matches(const std::string& replacement) {
+    if (search_matches_.empty()) return false;
+    EditRequest request;
+    request.kind = EditKind::ReplaceAll;
+    request.text = replacement;
+    request.edits.reserve(search_matches_.size());
+    for (const EditorSearchMatch& match : search_matches_) request.edits.push_back(DocumentTextEdit{match.range, replacement});
+    if (!submit_edit(std::move(request))) return false;
+    active_search_match_.reset();
+    return true;
 }
 
 void TextEditor::set_file_name(std::string name) {
@@ -322,9 +373,11 @@ void TextEditor::set_profile(std::optional<std::string> id) {
     input.content_prefix = document_text.substr(0, std::min<std::size_t>(document_text.size(), 512U));
     const std::size_t newline = input.content_prefix.find('\n');
     input.shebang = input.content_prefix.substr(0, newline);
-    profile_ = &profiles_->detect(input);
-    profile_id_ = profile_->id;
+    const LanguageProfile& detected = profiles_->detect(input);
+    const bool changed = detected.id != profile_.id;
+    profile_ = detected;
     refresh_syntax();
+    if (changed) notify_status_changed();
     invalidate();
 }
 
@@ -567,17 +620,13 @@ void TextEditor::rebuild_lines(std::size_t first_dirty_line) {
         if (newline == std::string::npos) break;
         start = newline + 1U;
     }
-    if (profile_ != nullptr) {
-        (void)syntax_cache_.update(*profile_, source_lines);
-        for (std::size_t index = 0; index < lines_.size(); ++index) {
-            const SyntaxCacheLine* cached = syntax_cache_.line(index);
-            if (cached == nullptr) continue;
-            lines_[index].spans = cached->spans;
-            lines_[index].incoming_state = cached->incoming_state;
-            lines_[index].outgoing_state = cached->outgoing_state;
-        }
-    } else {
-        syntax_cache_.clear();
+    (void)syntax_cache_.update(profile_, source_lines);
+    for (std::size_t index = 0; index < lines_.size(); ++index) {
+        const SyntaxCacheLine* cached = syntax_cache_.line(index);
+        if (cached == nullptr) continue;
+        lines_[index].spans = cached->spans;
+        lines_[index].incoming_state = cached->incoming_state;
+        lines_[index].outgoing_state = cached->outgoing_state;
     }
     if (lines_.empty()) lines_.push_back(Line{});
     ensure_cursor_visible();
@@ -603,6 +652,21 @@ bool TextEditor::set_selection(DocumentRange range) {
     notify_status_changed();
     invalidate();
     return true;
+}
+
+void TextEditor::restore_selection(DocumentSelection selection) {
+    const auto anchor = document_->position_at_byte(selection.anchor_byte);
+    const auto caret = document_->position_at_byte(selection.caret_byte);
+    if (!anchor || !caret) return;
+    cursor_ = *caret;
+    if (*anchor == *caret) selection_anchor_.reset();
+    else selection_anchor_ = *anchor;
+    virtual_caret_.reset();
+    desired_column_.reset();
+    relayout_scrollbars();
+    ensure_cursor_visible();
+    notify_status_changed();
+    invalidate();
 }
 
 bool TextEditor::select_all() {
@@ -637,16 +701,22 @@ EditorStatus TextEditor::status() const {
     if (const auto selected = selection()) result.selection_bytes = selected->end.byte - selected->begin.byte;
     result.modified = document_->modified();
     result.overwrite = overwrite_;
-    result.profile_id = profile_id_;
+    result.profile_id = profile_.id;
     result.encoding = document_->encoding();
     result.newline = document_->preferred_newline();
     return result;
 }
 
 void TextEditor::clamp_cursor() {
-    const std::size_t byte = std::min(cursor_.byte, document_->byte_size());
-    cursor_ = document_->position_at_byte(byte).value_or(document_->end());
-    if (selection_anchor_) selection_anchor_ = document_->position_at_byte(std::min(selection_anchor_->byte, document_->byte_size()));
+    const auto current = [this](DocumentPosition position) {
+        const std::size_t byte = std::min(position.byte, document_->byte_size());
+        if (const auto exact = document_->position_at_byte(byte)) return *exact;
+        // Rare: the change joined graphemes around it, so it now falls inside a cluster.
+        const std::string value = document_->text();
+        return document_->position_at_byte(grapheme_floor(value, byte)).value_or(document_->begin());
+    };
+    cursor_ = current(cursor_);
+    if (selection_anchor_) selection_anchor_ = current(*selection_anchor_);
 }
 
 void TextEditor::move_cursor(DocumentPosition target, bool extend, bool keep_desired_column) {
@@ -744,7 +814,12 @@ bool TextEditor::submit_edit(EditRequest request) {
         if (context().app == nullptr) return false;
         context().app->set_clipboard_text(request.text);
     }
-    const DocumentEditResult result = document_->replace(request.range, std::move(request.replacement));
+    DocumentTransaction transaction = document_->transaction();
+    for (DocumentTextEdit& edit : request.edits) transaction.replace(edit.range, std::move(edit.text));
+    // What an undo of this edit gives back: the selection, or the caret, it was made at.
+    transaction.set_selection_before(
+        DocumentSelection{selection_anchor_.value_or(cursor_).byte, cursor_.byte});
+    const DocumentEditResult result = document_->commit(std::move(transaction));
     if (!result || !result.change) return false;
     cursor_ = document_->position_at_byte(result.change->replaced_begin_byte + result.change->inserted_bytes).value_or(document_->end());
     selection_anchor_.reset();
@@ -760,13 +835,12 @@ bool TextEditor::submit_text(EditKind kind, std::string value) {
     request.kind = kind;
     if (virtual_caret_) {
         const DocumentPosition anchor = virtual_caret_anchor(*virtual_caret_);
-        request.range = DocumentRange{anchor, anchor};
-        request.replacement = virtual_caret_padding(*virtual_caret_) + value;
+        request.edits.push_back(DocumentTextEdit{DocumentRange{anchor, anchor}, virtual_caret_padding(*virtual_caret_) + value});
         request.virtual_caret = virtual_caret_;
         request.text = std::move(value);
         return submit_edit(std::move(request));
     }
-    request.range = selection().value_or(DocumentRange{cursor_, cursor_});
+    DocumentRange range = selection().value_or(DocumentRange{cursor_, cursor_});
     // Overwrite replaces complete following graphemes on the current logical
     // line, for typing only. Newline-bearing input retains ordinary insertion
     // semantics: it must never silently consume a line boundary.
@@ -782,10 +856,10 @@ bool TextEditor::submit_text(EditKind kind, std::string value) {
                 end = text::grapheme_end(current, end);
                 ++replaced;
             }
-            if (const auto position = document_->position_at_byte(end)) request.range.end = *position;
+            if (const auto position = document_->position_at_byte(end)) range.end = *position;
         }
     }
-    request.replacement = value;
+    request.edits.push_back(DocumentTextEdit{range, value});
     request.text = std::move(value);
     return submit_edit(std::move(request));
 }
@@ -805,7 +879,7 @@ bool TextEditor::erase(EditKind kind) {
     EditRequest request;
     request.kind = kind;
     if (const auto selected = selection()) {
-        request.range = *selected;
+        request.edits.push_back(DocumentTextEdit{*selected, {}});
         return submit_edit(std::move(request));
     }
     const std::string value = document_->text();
@@ -824,7 +898,7 @@ bool TextEditor::erase(EditKind kind) {
     const auto first = document_->position_at_byte(begin);
     const auto last = document_->position_at_byte(end);
     if (!first || !last) return false;
-    request.range = DocumentRange{*first, *last};
+    request.edits.push_back(DocumentTextEdit{DocumentRange{*first, *last}, {}});
     return submit_edit(std::move(request));
 }
 
@@ -844,7 +918,7 @@ bool TextEditor::cut_selection_to_clipboard() {
     EditRequest request;
     request.kind = EditKind::Cut;
     request.text = document_->text(*target);
-    request.range = *target;
+    request.edits.push_back(DocumentTextEdit{*target, {}});
     if (request.text.empty()) return false;
     return submit_edit(std::move(request));
 }
@@ -1096,7 +1170,7 @@ bool TextEditor::on_mouse(const MouseEvent& event) {
         if (!target) return false;
         const std::string value = document_->text();
         if (target->byte >= value.size()) { move_cursor(*target, false); return true; }
-        const std::size_t begin = word_byte(value[target->byte]) ? previous_word(value, target->byte) : target->byte;
+        const std::size_t begin = word_byte(value[target->byte]) ? word_start(value, target->byte) : target->byte;
         const std::size_t end = word_byte(value[target->byte]) ? word_end(value, target->byte)
                                                                : text::grapheme_end(value, target->byte);
         const auto first = document_->position_at_byte(begin);

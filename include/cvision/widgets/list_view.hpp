@@ -36,8 +36,9 @@ struct ListItem {
     ListItemId id = kInvalidListItemId;
     // The row's text, drawn from the list's left edge.
     std::string text;
-    // When set, replaces the style the row would otherwise wear — including
-    // the cursor and selection highlight. A disabled list still mutes it.
+    // When set, the style the row is drawn in instead of the list's normal
+    // one. A cursor or selected row keeps it under the highlight, as ListView
+    // describes; a disabled list still mutes it.
     std::optional<Style> style;
 };
 
@@ -75,6 +76,13 @@ public:
 // Scrollbar resolves its own roles the same way, independently. A disabled
 // list (D-076) draws its rows in "ckv.list.disabled"'s foreground, its
 // cursor and selected rows on the inactive selection's background.
+//
+// A cursor or selected row with a style of its own (ListItem::style) keeps
+// it under the highlight as CellGrid's cells do (D-067): a row with a colour
+// swaps its two colours, or takes the highlight's where the swapped pair
+// would not read; a row that sets no colour wears the highlight's colours
+// with its own attributes. The cursor of a multi-select list is underlined
+// while the list has the focus, styled or not.
 class ListView : public ui::View {
 public:
     // An empty tab-stop list with its vertical Scrollbar in the rightmost
@@ -85,17 +93,28 @@ public:
 
     // Replaces the roles of ordinary rows and of cursor and selected rows
     // while the list has focus. A role left kInvalidRole when the view
-    // attaches falls back to its standard one.
+    // attaches falls back to its standard one. Each of these setters repaints
+    // when it changes a role.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (normal_role_ == normal_role && selected_role_ == selected_role) return;
         normal_role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
     // The selection's appearance while the keyboard is elsewhere. Separate
     // from the two above so an existing caller that overrides only the
     // focused pair keeps working.
-    void set_selected_inactive_role_override(ui::RoleId role) noexcept { selected_inactive_role_ = role; }
+    void set_selected_inactive_role_override(ui::RoleId role) noexcept {
+        if (selected_inactive_role_ == role) return;
+        selected_inactive_role_ = role;
+        invalidate();
+    }
     // The role whose foreground every row takes while the list is disabled.
-    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
 
     // Restyles the embedded scrollbar. It resolves its own roles, which is
     // right for a list on a document window and wrong for one on a dialog

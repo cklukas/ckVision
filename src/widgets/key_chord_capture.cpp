@@ -109,7 +109,9 @@ bool KeyChordCapture::on_key(const KeyEvent& event) {
 }
 
 bool KeyChordCapture::on_mouse(const MouseEvent& event) {
-    if (!enabled_in_tree() || event.action != MouseAction::Down || !contains(absolute_bounds(), event.cell)) return false;
+    if (!enabled_in_tree() || event.action != MouseAction::Down || event.button != MouseButton::Left ||
+        !contains(absolute_bounds(), event.cell))
+        return false;
     begin_capture();
     return true;
 }

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <sstream>
 #include <utility>
@@ -18,6 +19,21 @@ namespace ckv::widgets {
 namespace {
 
 bool is_press(const KeyEvent& event) noexcept { return event.action == KeyAction::Press; }
+
+// A month is drawn on six week rows: enough for a 31-day month that begins
+// on the last day of a week. Each row is seven days, each day two digits and
+// a one-cell gap.
+constexpr int kWeekRows = 6;
+constexpr int kDayColumns = 7;
+constexpr int kDayColumnWidth = 3;
+
+// `value` moved `delta` steps of `step`, held to [minimum, maximum]. Worked in
+// 64 bits, where a step or its sum with the value cannot overflow for any
+// pair of ints, and clamped before it is narrowed back.
+int stepped(int value, int delta, int step, int minimum, int maximum) noexcept {
+    const std::int64_t moved = std::int64_t{value} + std::int64_t{delta} * step;
+    return static_cast<int>(std::clamp<std::int64_t>(moved, minimum, maximum));
+}
 
 int days_in_month(int year, int month) noexcept {
     static constexpr int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -152,6 +168,15 @@ std::string tail_to_width(std::string_view text, int columns) {
     return tail;
 }
 
+// `text` without its last grapheme cluster. Backspace takes back what one
+// keystroke or one pasted character made, never a byte of it: a byte would
+// leave half a UTF-8 scalar behind.
+std::string without_last_grapheme(std::string_view text) {
+    const std::vector<std::string_view> graphemes = text::split_graphemes(text);
+    if (graphemes.empty()) return {};
+    return std::string(text.substr(0, text.size() - graphemes.back().size()));
+}
+
 // A toolbar button's face: the command's title without its '&' marker. The
 // bar is pressed with the pointer and never takes the keyboard, so a
 // mnemonic there would name a key that does nothing.
@@ -271,6 +296,7 @@ void CalendarView::set_show_title(bool show) {
     if (show_title_ == show) return;
     show_title_ = show;
     invalidate();
+    size_hint_changed();  // one row more or fewer
 }
 
 void CalendarView::set_first_weekday(Weekday first) {
@@ -283,6 +309,7 @@ void CalendarView::set_show_iso_week_numbers(bool show) {
     if (show_iso_week_numbers_ == show) return;
     show_iso_week_numbers_ = show;
     invalidate();
+    size_hint_changed();  // the "Wk" column widens the preferred width
 }
 
 bool CalendarView::selectable(DateValue date) const {
@@ -305,11 +332,13 @@ void CalendarView::select(DateValue date, bool notify) {
 void CalendarView::move_selection(int days) { select(from_serial(serial(selected_) + days), true); }
 
 std::optional<DateValue> CalendarView::date_at_cell(Point local) const {
-    const int x_offset = show_iso_week_numbers_ ? 3 : 0;
-    if (local.y < 2 || local.y >= 8 || local.x < x_offset) return std::nullopt;
-    const int column = (local.x - x_offset) / 3;
+    const int x_offset = week_column_width();
+    if (local.x < x_offset) return std::nullopt;
+    // The six week rows start where draw() puts them, below the title only
+    // when there is one.
+    const int column = (local.x - x_offset) / kDayColumnWidth;
     const int row = local.y - grid_top();
-    if (column < 0 || column >= 7) return std::nullopt;
+    if (row < 0 || row >= kWeekRows || column >= kDayColumns) return std::nullopt;
     const int first_weekday = weekday_index(month_, first_weekday_);
     const int day = row * 7 + column - first_weekday + 1;
     if (day < 1 || day > days_in_month(month_.year, month_.month)) return std::nullopt;
@@ -342,7 +371,7 @@ void CalendarView::draw(scene::Painter& painter) {
             month_labels_[std::clamp(month_.month, 1, 12) - 1] + " " + std::to_string(month_.year);
         painter.draw_text(Point{0, 0}, text::clip_to_width(title, bounds().width), normal);
     }
-    const int x_offset = show_iso_week_numbers_ ? 3 : 0;
+    const int x_offset = week_column_width();
     // The weekday row names the columns rather than being one of them, so it
     // is set apart from the days it heads.
     Style header = normal;
@@ -365,7 +394,7 @@ void CalendarView::draw(scene::Painter& painter) {
     // The weekday names start at whichever day the week starts on.
     const int first_offset = static_cast<int>(first_weekday_);
     for (int i = 0; i < 7; ++i)
-        painter.draw_text(Point{x_offset + i * 3, header_row()}, weekday_labels_[(first_offset + i) % 7], header);
+        painter.draw_text(Point{x_offset + i * kDayColumnWidth, header_row()}, weekday_labels_[(first_offset + i) % 7], header);
     for (int day = 1; day <= days_in_month(month_.year, month_.month); ++day) {
         const DateValue date{month_.year, month_.month, day};
         const int index = weekday_index(month_, first_weekday_) + day - 1;
@@ -379,7 +408,7 @@ void CalendarView::draw(scene::Painter& painter) {
                             : (today && date == *today) ? today_style
                             : within_marked_span(date)  ? marked_style
                                                         : normal;
-        painter.draw_text(Point{x_offset + column * 3, grid_top() + row}, (day < 10 ? " " : "") + std::to_string(day), style);
+        painter.draw_text(Point{x_offset + column * kDayColumnWidth, grid_top() + row}, (day < 10 ? " " : "") + std::to_string(day), style);
     }
 }
 
@@ -415,8 +444,19 @@ bool CalendarView::on_mouse(const MouseEvent& event) {
 
 void CalendarView::on_focus(const FocusEvent&) { invalidate(); }
 
-ui::SizeHint CalendarView::horizontal_size_hint() const { return ui::SizeHint{21, show_iso_week_numbers_ ? 24 : 21, ui::kUnboundedExtent}; }
-ui::SizeHint CalendarView::vertical_size_hint() const { return ui::SizeHint{8, 8, 8}; }
+ui::SizeHint CalendarView::horizontal_size_hint() const {
+    // What draw() uses: the "Wk" column when shown, then seven day columns
+    // of three cells, the last without its trailing gap. The preferred width
+    // keeps that one blank after the last column.
+    const int drawn = week_column_width() + kDayColumns * kDayColumnWidth - 1;
+    return ui::SizeHint{drawn, drawn + 1, ui::kUnboundedExtent};
+}
+ui::SizeHint CalendarView::vertical_size_hint() const {
+    // What draw() uses: the title when shown, the weekday heading, and the
+    // six week rows the longest month can need.
+    const int rows = grid_top() + kWeekRows;
+    return ui::SizeHint{rows, rows, rows};
+}
 
 ClockView::ClockView() {
     set_focus_policy(ui::FocusPolicy::None);
@@ -576,7 +616,7 @@ ui::SizeHint ClockView::vertical_size_hint() const { return ui::SizeHint{1, 1, 1
 
 namespace {
 // The calendar grid is seven columns of three cells, less the trailing gap.
-constexpr int kGridWidth = 7 * 3 - 1;
+constexpr int kGridWidth = kDayColumns * kDayColumnWidth - 1;
 // One column of padding to the left of the content, inside the frame.
 constexpr int kContentPad = 1;
 constexpr int kContentLeft = 1 + kContentPad;  // frame, then the padding
@@ -931,10 +971,11 @@ DatePicker::DatePicker() {
 }
 
 void DatePicker::set_value(std::optional<DateValue> value) {
+    // The seed is the caller's today and stays so: a value is the date the
+    // reader chose, and making it the seed made "today" follow every choice.
     if (value) {
         value->year = std::clamp(value->year, kFirstCalendarYear, kLastCalendarYear);
         *value = clamp_day(*value);
-        seed_ = *value;
     } else if (!empty_allowed_) {
         value = seed_;
     }
@@ -1218,7 +1259,7 @@ void SpinBox::set_value(int value) {
     invalidate();
     if (on_change) on_change(value_);
 }
-void SpinBox::adjust(int delta) { set_value(value_ + delta * step_); }
+void SpinBox::adjust(int delta) { set_value(stepped(value_, delta, step_, minimum_, maximum_)); }
 void SpinBox::draw(scene::Painter& painter) {
     const Style style = context().theme->resolve(!enabled_in_tree() ? disabled_role_
                                                  : has_focus()      ? focused_role_
@@ -1266,10 +1307,19 @@ void Slider::set_value(int value) {
     invalidate();
     if (on_change) on_change(value_);
 }
-void Slider::adjust(int delta) { set_value(value_ + delta * step_); }
+void Slider::adjust(int delta) { set_value(stepped(value_, delta, step_, minimum_, maximum_)); }
 int Slider::value_from_x(int x) const {
     if (bounds().width <= 1 || maximum_ == minimum_) return minimum_;
-    return minimum_ + (maximum_ - minimum_) * std::clamp(x, 0, bounds().width - 1) / (bounds().width - 1);
+    // In 64 bits: the span of an int range needs 32, and times a column 63.
+    const std::int64_t span = std::int64_t{maximum_} - minimum_;
+    const std::int64_t offset = span * std::clamp(x, 0, bounds().width - 1) / (bounds().width - 1);
+    return static_cast<int>(minimum_ + offset);
+}
+int Slider::x_from_value() const {
+    const int last = std::max(0, bounds().width - 1);
+    if (maximum_ == minimum_) return 0;
+    const std::int64_t span = std::int64_t{maximum_} - minimum_;
+    return static_cast<int>((std::int64_t{value_} - minimum_) * last / span);
 }
 void Slider::draw(scene::Painter& painter) {
     // Disabled (D-076): the track and its filled part keep their surfaces,
@@ -1280,10 +1330,9 @@ void Slider::draw(scene::Painter& painter) {
     const Style track = shown(context().theme->resolve(role_));
     const Style fill = shown(context().theme->resolve(fill_role_));
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme("─", track));
-    const int pos = value_from_x(bounds().width - 1) == minimum_ ? 0 :
-        (value_ - minimum_) * std::max(1, bounds().width - 1) / std::max(1, maximum_ - minimum_);
-    painter.fill(Rect{0, 0, std::clamp(pos, 0, bounds().width - 1), 1}, Cell::from_grapheme("━", fill));
-    painter.draw_text(Point{std::clamp(pos, 0, std::max(0, bounds().width - 1)), 0}, enabled && has_focus() ? "◆" : "●", fill);
+    const int pos = x_from_value();
+    painter.fill(Rect{0, 0, pos, 1}, Cell::from_grapheme("━", fill));
+    painter.draw_text(Point{pos, 0}, enabled && has_focus() ? "◆" : "●", fill);
 }
 bool Slider::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
@@ -1375,7 +1424,7 @@ std::optional<CursorState> SearchBox::cursor_state() const {
 }
 bool SearchBox::on_key(const KeyEvent& event) {
     if (!is_press(event)) return false;
-    if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(query_.substr(0, query_.size() - 1)); return true; }
+    if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(without_last_grapheme(query_)); return true; }
     if (event.chord.key == Key::Escape) { clear(); return true; }
     // Terminals report ordinary typed characters as Key::Char events; only
     // IMEs and bracketed paste arrive as TextEvent (the same normalization
@@ -1574,7 +1623,7 @@ bool CommandPalette::on_key(const KeyEvent& event) {
     const auto commands = filtered_commands();
     if (event.chord.key == Key::Down && !commands.empty()) { highlighted_ = std::min(highlighted_ + 1, commands.size() - 1); invalidate(); return true; }
     if (event.chord.key == Key::Up && highlighted_ > 0) { --highlighted_; invalidate(); return true; }
-    if (event.chord.key == Key::Backspace && !query_.empty()) { query_.pop_back(); highlighted_ = 0; invalidate(); return true; }
+    if (event.chord.key == Key::Backspace && !query_.empty()) { set_query(without_last_grapheme(query_)); return true; }
     if (event.chord.key == Key::Enter && context().app != nullptr) {
         if (auto command = highlighted_command()) {
             if (invocation_contexts_) return context().app->commands().execute(*command, *invocation_contexts_);
@@ -1644,7 +1693,17 @@ void BreadcrumbBar::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
-void PropertyInspector::set_items(std::vector<PropertyItem> items) { items_ = std::move(items); cursor_ = items_.empty() ? -1 : 0; invalidate(); }
+void PropertyInspector::set_items(std::vector<PropertyItem> items) {
+    items_ = std::move(items);
+    cursor_ = items_.empty() ? -1 : 0;
+    // An edit belongs to the value it began on, and that value is gone.
+    editing_ = false;
+    invalidate();
+}
+bool PropertyInspector::editing_cursor_row() const noexcept {
+    return editing_ && cursor_ >= 0 && cursor_ < static_cast<int>(items_.size()) &&
+           items_[static_cast<std::size_t>(cursor_)].editable;
+}
 void PropertyInspector::draw(scene::Painter& painter) {
     // Disabled (D-076), drawn as a disabled list is.
     const bool enabled = enabled_in_tree();
@@ -1669,7 +1728,7 @@ void PropertyInspector::draw(scene::Painter& painter) {
         if (value_x >= width) continue;
         // A value being edited is a field: the input surface, with the caret
         // (cursor_state) at its end.
-        const bool editing_here = cursor_row && editing_ && enabled;
+        const bool editing_here = cursor_row && editing_cursor_row() && enabled;
         const Style value_style = editing_here ? context().theme->resolve(editing_role_) : style;
         if (editing_here)
             painter.fill(Rect{value_x, y, width - value_x, 1}, Cell::from_grapheme(" ", value_style));
@@ -1677,7 +1736,7 @@ void PropertyInspector::draw(scene::Painter& painter) {
     }
 }
 std::optional<CursorState> PropertyInspector::cursor_state() const {
-    if (!editing_ || !has_focus() || cursor_ < 0 || cursor_ >= static_cast<int>(items_.size())) return std::nullopt;
+    if (!editing_cursor_row() || !has_focus()) return std::nullopt;
     if (cursor_ >= bounds().height) return std::nullopt;
     const PropertyItem& item = items_[static_cast<std::size_t>(cursor_)];
     const int x = std::min(text::text_width(item.name + ": " + item.value), std::max(0, bounds().width - 1));
@@ -1691,24 +1750,22 @@ bool PropertyInspector::on_key(const KeyEvent& event) {
     if (event.chord.key == Key::Up) { cursor_ = std::max(0, cursor_ - 1); editing_ = false; invalidate(); return true; }
     if (event.chord.key == Key::Enter && items_[cursor_].editable) { editing_ = !editing_; invalidate(); return true; }
     if (event.chord.key == Key::Escape && editing_) { editing_ = false; invalidate(); return true; }
-    if (event.chord.key == Key::Backspace && editing_ && !items_[cursor_].value.empty()) {
-        // One grapheme, not one byte: a byte would split a multi-byte scalar.
+    if (event.chord.key == Key::Backspace && editing_cursor_row() && !items_[cursor_].value.empty()) {
         std::string& value = items_[cursor_].value;
-        const std::vector<std::string_view> graphemes = text::split_graphemes(value);
-        value.resize(value.size() - graphemes.back().size());
+        value = without_last_grapheme(value);
         if (on_change) on_change(static_cast<std::size_t>(cursor_), value);
         invalidate();
         return true;
     }
     // Typed characters arrive as Key::Char; an IME or paste as TextEvent.
     // Both edit the value, exactly as they would an InputLine.
-    if (editing_ && event.chord.key == Key::Char && !has_modifier(event.chord.modifiers, Modifier::Alt) &&
+    if (editing_cursor_row() && event.chord.key == Key::Char && !has_modifier(event.chord.modifiers, Modifier::Alt) &&
         !has_modifier(event.chord.modifiers, Modifier::Ctrl) && !has_modifier(event.chord.modifiers, Modifier::Super))
         return on_text(TextEvent{event.chord.text, false});
     return false;
 }
 bool PropertyInspector::on_text(const TextEvent& event) {
-    if (!editing_ || cursor_ < 0 || !items_[cursor_].editable) return false;
+    if (!editing_cursor_row()) return false;
     items_[cursor_].value += event.text;
     if (on_change) on_change(static_cast<std::size_t>(cursor_), items_[cursor_].value);
     invalidate();

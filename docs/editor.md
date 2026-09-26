@@ -58,7 +58,9 @@ search panel, and a file controller without global state or widget-local copies.
 For the common one-window case, `EditorWindow` composes a `Window`,
 `TextEditor`, `FileEditorController`, dirty title, and bottom-frame status
 overlay. Its normal close request vetoes a dirty document; map a client's
-Save/Discard/Cancel UI to `request_close()` before calling `close()`. The
+Save/Discard/Cancel UI to `request_close()` before calling `close()`. An `Ok`
+answer (a successful Save, or Discard) lets the following `close()` through
+until the text changes again. The
 lower-level `EditorDocument`, `TextEditor`, and `FileEditorController` remain
 available for applications with a different shell.
 `EditorWindow::open(path, EditorOpenOptions{...})` forwards the same explicit
@@ -145,21 +147,24 @@ verb did anything, so an undo with nothing to undo is visibly a no-op.
 ## Edit requests
 
 Every change the reader asks for — typing, a paste, Enter, Tab, the four
-deletions, a cut — is described as an `EditRequest` before anything is
-committed: its `EditKind`, the text the reader supplied, the current range the
-editor would replace, and the replacement it would put there (including any
-padding a virtual caret needs). `set_edit_handler()` receives each request
-first. Return `true` after handling it — typically by committing a transaction
-of the host's own and restoring a current selection with `set_selection()` —
-and the editor commits nothing; return `false`, having changed nothing, and the
-editor commits `replacement` over `range` itself.
+deletions, a cut, replacing the current search match or every match — is
+described as an `EditRequest` before anything is committed: its `EditKind`, the
+text the reader supplied, and the `edits` the editor would commit as one
+transaction (one current range and its replacement, including any padding a
+virtual caret needs; one per match for `ReplaceAll`). `set_edit_handler()`
+receives each request first. Return `true` after handling it — typically by
+committing a transaction of the host's own and restoring a current selection
+with `set_selection()` — and the editor commits nothing; return `false`, having
+changed nothing, and the editor commits `edits` itself.
 
 That one seam serves two kinds of host. One keeps its own editing rules —
 a language-aware line break, a session whose undo steps are named "Typing",
 "Paste" or "Cut" and which decides what folds into one step — and acts on the
 request's intent. The other only wants to observe or veto, and commits the
 described replacement. The handler is never called for a read-only or disabled
-editor, so a rule cannot bypass either safeguard.
+editor, so a rule cannot bypass either safeguard; undo and redo, which change
+the text as much as typing does, are refused there too, and the history
+handler is not called.
 
 ## A caret past the text
 
@@ -211,8 +216,23 @@ Every change notifies observers with one `DocumentChange` describing a single
 covering replacement: the old bytes `[replaced_begin_byte, replaced_end_byte)`
 became the `inserted_bytes` bytes that now start at `replaced_begin_byte`. A
 transaction of several separated edits is reported as the span from its first
-edit to its last, and an undo or redo as the whole document, so an observer
+edit to its last, an undo or redo as that same span of the transaction it
+reverts or replays, and a `set_text()` as the whole document, so an observer
 carries a position through any change with the same arithmetic.
+`undo()` and `redo()` return that change, and it carries the selection to
+restore: `DocumentTransaction::set_selection_before()` records the selection an
+edit was made at with its undo step, an undo hands it back (or a caret after
+the restored text when none was recorded), and a redo hands back a caret after
+the replayed text. `TextEditor` records it for every edit it commits, and its
+Undo and Redo verbs select what the step hands back, so the caret returns to
+where the change was; other views of the same document carry their own carets
+through the step instead. A host committing its own transactions from an edit
+handler records the selection the same way. Edits of one
+transaction that touch apply in a fixed order: insertions at one position land
+in the order they were queued, ahead of a replacement beginning there.
+`subscribe_state()` observes what is not text: `mark_clean()`,
+`set_preferred_newline()` and `set_utf8_bom()` notify it when they change the
+value, which is how a `TextEditor` republishes its status after a save.
 
 When an application-level command transforms a current selection through its
 own document transaction, it can call `TextEditor::set_selection()` with the
@@ -228,8 +248,9 @@ entire document merely to locate a line or validate a grapheme boundary.
 The document stores valid UTF-8 and normalizes line endings to LF internally.
 Malformed UTF-8 is rejected by default; applications that deliberately choose
 replacement must set `EditorDocumentOptions::invalid_utf8` to `Replace`.
-The document records a leading UTF-8 BOM separately from editable text and
-remembers the first observed line-ending convention. `FileEditorController`
+The document records a leading UTF-8 BOM of loaded text separately from
+editable text and remembers the first observed line-ending convention; in the
+text of an edit, U+FEFF is an ordinary character and is kept. `FileEditorController`
 uses those explicit metadata values to write a UTF-8 BOM and CRLF/CR/LF form
 back on save. `max_document_bytes` is an optional atomic document limit: an
 oversize `set_text()` or transaction returns `LimitExceeded` without changing
@@ -406,8 +427,11 @@ The `TextEditor` search facade keeps the current query and highlights all
 revision-current matches. `Ctrl+F` uses the current selection as the literal
 query, `F3` selects the next match, and `Shift+F3` selects the previous match.
 Applications can call `replace_current_search_match()` or
-`replace_all_search_matches()` for their own replacement UI; the latter stays
-one document undo operation. The shipped example’s Edit and Search menus use
+`replace_all_search_matches()` for their own replacement UI; both are edit
+requests like typing (refused by a read-only or disabled editor, offered to the
+edit handler first), and the latter stays one document undo operation. The
+current match follows its text through other edits and ends when an edit
+touches it. The shipped example’s Edit and Search menus use
 the same public methods and command enablement predicates.
 
 ![Search selection and highlight](generated/screenshots/editor-search.svg)

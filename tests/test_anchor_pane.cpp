@@ -114,11 +114,11 @@ CK_TEST(repeated_resizes_accumulate_correctly) {
     CK_CHECK(label->bounds().x == 54);
 }
 
-CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_anchors) {
+CK_TEST(remove_child_returns_ownership_and_stops_tracking_its_anchors) {
     AnchorPane pane(Rect{0, 0, 40, 20});
     View* raw = pane.add_item(std::make_unique<View>(Rect{1, 1, 4, 1}), Anchors{.right = true});
 
-    auto owned = pane.remove_item(raw);
+    auto owned = pane.remove_child(raw);
     CK_CHECK(owned != nullptr);
     CK_CHECK(owned.get() == raw);
 
@@ -126,10 +126,10 @@ CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_anchors) {
     CK_CHECK(pane.children().empty());
 }
 
-CK_TEST(remove_item_for_a_view_not_owned_by_this_pane_returns_null) {
+CK_TEST(remove_child_for_a_view_not_owned_by_this_pane_returns_null) {
     AnchorPane pane(Rect{0, 0, 40, 20});
     View stray;
-    CK_CHECK(pane.remove_item(&stray) == nullptr);
+    CK_CHECK(pane.remove_child(&stray) == nullptr);
 }
 
 CK_TEST(a_child_added_after_the_pane_was_already_resized_once_is_unaffected_by_that_resize) {
@@ -144,4 +144,16 @@ CK_TEST(a_child_added_after_the_pane_was_already_resized_once_is_unaffected_by_t
     pane.set_bounds(Rect{0, 0, 80, 20});  // a SECOND resize, delta = 80-60 = 20
 
     CK_CHECK(child->bounds().x == 54);  // 34 + 20, not 34 + (80 - 40)
+}
+
+CK_TEST(remove_child_forgets_a_childs_anchors_so_it_comes_back_unanchored) {
+    // A child added with add_child() counts as unanchored. One that left
+    // through remove_child() anchored right must not keep following that edge.
+    AnchorPane pane(Rect{0, 0, 40, 20});
+    View* raw = pane.add_item(std::make_unique<View>(Rect{30, 1, 4, 1}), Anchors{.right = true});
+    std::unique_ptr<View> owned = pane.remove_child(raw);
+    CK_CHECK(owned.get() == raw);
+    pane.add_child(std::move(owned));
+    pane.set_bounds(Rect{0, 0, 50, 20});
+    CK_CHECK(raw->bounds() == (Rect{30, 1, 4, 1}));
 }

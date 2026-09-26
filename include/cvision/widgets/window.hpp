@@ -103,14 +103,18 @@ public:
     // Replace the four chrome roles at once: the frame (border, interior fill,
     // footer padding) while active and inactive, and the title and footer text
     // while active and inactive. A role left as kInvalidRole is resolved from
-    // the standard names at attach; an override set after attach takes effect
-    // at the next draw.
+    // the standard names at attach; an override set after attach repaints the
+    // window.
     void set_role_override(ui::RoleId frame_active_role, ui::RoleId frame_inactive_role,
                             ui::RoleId title_active_role, ui::RoleId title_inactive_role) noexcept {
+        if (frame_active_role_ == frame_active_role && frame_inactive_role_ == frame_inactive_role &&
+            title_active_role_ == title_active_role && title_inactive_role_ == title_inactive_role)
+            return;
         frame_active_role_ = frame_active_role;
         frame_inactive_role_ = frame_inactive_role;
         title_active_role_ = title_active_role;
         title_inactive_role_ = title_inactive_role;
+        invalidate();
     }
 
     // Keeps the theme's foregrounds and attributes while replacing the
@@ -199,16 +203,19 @@ public:
     // margin, and a dialog that keeps one reads as a composed panel
     // rather than as content stuffed into a box. Zero (the default)
     // leaves the content flush with the frame, which is what a view
-    // meant to fill its window — an editor, a list — wants.
+    // meant to fill its window — an editor, a list — wants. The same
+    // margin left and right, and top and bottom:
+    // set_content_margins(horizontal, vertical, horizontal, vertical).
     void set_content_margin(int horizontal, int vertical);
-    int horizontal_content_margin() const noexcept { return horizontal_content_margin_; }
-    int vertical_content_margin() const noexcept { return vertical_content_margin_; }
 
     // Per-edge margins, for a layout whose edges do not want the same
     // padding. A button row is the usual reason: its cast shadow already
     // separates it from the frame, so a bottom margin under it reads as a
     // blank row nobody asked for, while the top of the window still wants
-    // its breathing space. Symmetric padding cannot express that.
+    // its breathing space. Symmetric padding cannot express that. Negative
+    // values are raised to 0. A change lays the content out again, repaints
+    // and reports a size-hint change: every margin is budgeted in the
+    // window's size hints and in height_for_width.
     void set_content_margins(int left, int top, int right, int bottom);
     // The area, in the parent's coordinates, within which a title-bar drag
     // must leave the window grabbable: its top row stays inside vertically
@@ -222,9 +229,11 @@ public:
     // all ask here, so a window cannot be sized for a gap it does not draw.
     int effective_top_margin() const noexcept;
     int effective_bottom_margin() const noexcept;
-    // The top and bottom margins as last requested, negative values raised
-    // to 0, before the shadow rule above is applied.
+    // The margins as last requested, negative values raised to 0, the top
+    // and bottom ones before the shadow rule above is applied.
+    int left_content_margin() const noexcept { return left_content_margin_; }
     int top_content_margin() const noexcept { return top_content_margin_; }
+    int right_content_margin() const noexcept { return right_content_margin_; }
     int bottom_content_margin() const noexcept { return bottom_content_margin_; }
 
     // The free-placement, resize-aware alternative to hand-building a
@@ -554,8 +563,6 @@ private:
     // horizontal_/vertical_ remain the symmetric setter's own record so its
     // getters keep reporting what it was given; the four below are what
     // content_rect() actually measures with.
-    int horizontal_content_margin_ = 0;
-    int vertical_content_margin_ = 0;
     int left_content_margin_ = 0;
     int top_content_margin_ = 0;
     int right_content_margin_ = 0;

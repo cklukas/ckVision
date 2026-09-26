@@ -121,7 +121,14 @@ public:
     std::optional<int> exit_code() const noexcept { return exit_code_; }
 
 private:
-    enum class ParseState : unsigned char { Ground, Escape, Csi, Osc, OscEscape, Dcs, DcsEscape, Discard, DiscardEscape, Scs, Hash };
+    // Each collecting state has a discarding twin, entered when what it
+    // collects outgrows its bound. The twin skips to the end the dropped
+    // sequence would have had — a CSI's final byte, an OSC's BEL or ST, a
+    // DCS's ST — so dropping one never swallows the output after it.
+    enum class ParseState : unsigned char {
+        Ground, Escape, Csi, CsiDiscard, Osc, OscEscape, OscDiscard, OscDiscardEscape,
+        Dcs, DcsEscape, DcsDiscard, DcsDiscardEscape, Scs, Hash
+    };
 
     // Which repertoire the printable bytes currently stand for. A program
     // drawing a frame with ncurses does not send box-drawing characters: it
@@ -220,6 +227,9 @@ private:
     // checked for alignment and how vttest starts most of its chapters.
     void screen_alignment_pattern();
     void diagnostic(TerminalDiagnostic::Kind kind, std::string message);
+    // Adds a byte to the CSI or OSC being collected. Past max_control_bytes
+    // the sequence is dropped with a diagnostic, the parser moves to the
+    // matching discarding state, and the result is false.
     bool append_control(char byte);
     // Applies a completed OSC string. A reply goes back with the same
     // terminator the child used to ask, which is what a program that accepts
@@ -249,6 +259,7 @@ private:
     void handle_clipboard(std::string_view body);
     void reply_osc(std::string_view body, bool bel_terminated);
     static std::string report_color(Color color, Color fallback);
+    // append_control() for a DCS, whose Sixel payload has its own, larger bound.
     bool append_dcs_byte(char byte);
     static int parameter(std::string_view text, std::size_t index, int default_value);
 

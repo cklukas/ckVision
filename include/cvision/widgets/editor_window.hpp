@@ -6,6 +6,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -25,8 +26,9 @@ class FrameText;
 // to its end, reads "Ln L, Col C" followed by INS or OVR and " *" when modified.
 //
 // The window installs a close_request that vetoes close() while the document is modified, so a
-// stray close never loses work. Once the application has settled the question through
-// request_close, it removes the window itself or replaces close_request.
+// stray close never loses work, unless request_close has answered Ok at the document's current
+// revision: after the application settled the question (Save succeeded, or Discard was chosen),
+// close() proceeds, until a further change of the text asks it again.
 class EditorWindow final : public Window {
 public:
     // `title` is the caption while no file is open. `document` is shared by the controller and
@@ -49,8 +51,9 @@ public:
 
     // The controller's operations of the same names, followed by a refresh of the title and the
     // status overlay (for open, only on Ok). On Ok, open and save_as also give the editor the
-    // file's path as its file name, which re-detects its syntax profile. request_close only
-    // answers whether the caller may close; it does not close the window.
+    // file's path as its file name, which re-detects its syntax profile. request_close answers
+    // whether the caller may close and does not close the window itself; an Ok answer lets a
+    // following close() through (see the class comment).
     EditorFileStatus open(std::string path, EditorOpenOptions options = {});
     EditorFileStatus save();
     EditorFileStatus save_as(std::string path, EditorSaveAsPolicy policy = EditorSaveAsPolicy::FailIfExists);
@@ -65,6 +68,8 @@ private:
     TextEditor* editor_ = nullptr;
     FrameText* status_ = nullptr;
     EditorDocument::ObserverId observer_ = 0;
+    // The revision at which request_close last answered Ok, if any.
+    std::optional<DocumentRevision> close_settled_revision_;
 };
 
 }  // namespace ckv::widgets

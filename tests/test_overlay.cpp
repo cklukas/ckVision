@@ -75,11 +75,11 @@ CK_TEST(lower_to_back_restacks_an_existing_child_below_its_siblings) {
     CK_CHECK(overlay.children()[1].get() == bottom);
 }
 
-CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_mode) {
+CK_TEST(remove_child_returns_ownership_and_stops_tracking_its_mode) {
     Overlay overlay(Rect{0, 0, 40, 20});
     View* raw = overlay.add_item(std::make_unique<View>());
 
-    auto owned = overlay.remove_item(raw);
+    auto owned = overlay.remove_child(raw);
     CK_CHECK(owned != nullptr);
     CK_CHECK(owned.get() == raw);
 
@@ -87,8 +87,20 @@ CK_TEST(remove_item_returns_ownership_and_stops_tracking_its_mode) {
     CK_CHECK(overlay.children().empty());
 }
 
-CK_TEST(remove_item_for_a_view_not_owned_by_this_overlay_returns_null) {
+CK_TEST(remove_child_for_a_view_not_owned_by_this_overlay_returns_null) {
     Overlay overlay(Rect{0, 0, 40, 20});
     View stray;
-    CK_CHECK(overlay.remove_item(&stray) == nullptr);
+    CK_CHECK(overlay.remove_child(&stray) == nullptr);
+}
+
+CK_TEST(remove_child_forgets_a_layers_mode_so_a_layer_added_back_plainly_fills) {
+    // A child added with add_child() is a Fill layer. One that left through
+    // remove_child() as a Manual layer must not come back Manual.
+    Overlay overlay(Rect{0, 0, 40, 20});
+    View* raw = overlay.add_item(std::make_unique<View>(Rect{5, 5, 3, 3}), OverlayMode::Manual);
+    std::unique_ptr<View> owned = overlay.remove_child(raw);
+    CK_CHECK(owned.get() == raw);
+    overlay.add_child(std::move(owned));
+    overlay.set_bounds(Rect{0, 0, 80, 40});
+    CK_CHECK(raw->bounds() == (Rect{0, 0, 80, 40}));
 }

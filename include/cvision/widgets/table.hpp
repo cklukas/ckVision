@@ -52,8 +52,8 @@ struct TableCell {
     // portable value (for example an ISO date or formatted currency).
     // When non-empty it is what the cell shows and the text an edit starts from.
     std::string display;
-    // When set, the style the cell is drawn in, replacing the table's normal style and the
-    // cursor highlight alike.
+    // When set, the style the cell is drawn in, replacing the table's normal style. The
+    // cursor is drawn over it as Table describes, never replaced by it.
     std::optional<Style> style;
     // Whether this cell may be edited; its column must allow editing too.
     bool editable = true;
@@ -155,14 +155,19 @@ std::string format_cell_value(const CellValue& value);
 // holds a vertical scrollbar. Columns start at the left edge, each followed by one blank
 // cell. The cursor is a single cell, highlighted with "ckv.list.selected" while the table
 // has the focus and "ckv.list.selected.inactive" otherwise; a cell being edited is drawn
-// in "ckv.input.focused" with a caret after its text.
+// in "ckv.input.focused" with a caret after its text. A cell with a style of its own (a
+// provider cell's `style`, or what the style hook returns) keeps it under the cursor as
+// CellGrid's cells do (D-067): a cell with a colour swaps its two colours, or takes the
+// highlight's where the swapped pair would not read, and the cursor cell is then bold and
+// underlined while the table has the focus (underlined only otherwise); a cell that sets
+// no colour wears the highlight's colours with its own attributes.
 //
 // Keyboard: the arrows, PageUp, PageDown, Home and End (first and last row) move the
 // cursor; Enter or F2 begins an edit, and a printable key without Alt, Ctrl or Super begins
 // one that replaces the cell's text. While editing, Enter commits, Escape cancels,
-// Backspace deletes the last grapheme and Delete clears the text. Mouse: a press on a cell
-// moves the cursor there, a press on a column title sorts by it (again to reverse), and a
-// drag from the blank cell after a title resizes that column.
+// Backspace deletes the last grapheme and Delete clears the text. Mouse, primary button
+// only: a press on a cell moves the cursor there, a press on a column title sorts by it
+// (again to reverse), and a drag from the blank cell after a title resizes that column.
 class Table : public ui::View {
 public:
     // An empty table with no columns and no rows; it is a tab stop.
@@ -170,17 +175,23 @@ public:
 
     // Draws with these roles instead of "ckv.table.header", "ckv.list.normal" and
     // "ckv.list.selected"; the inactive, disabled and editing roles are still resolved from
-    // the theme. Call it before the table is attached, or repaint afterwards: it does not
-    // invalidate.
+    // the theme. An override set before attachment survives it; a change repaints.
     void set_role_override(ui::RoleId header_role, ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (header_role_ == header_role && normal_role_ == normal_role && selected_role_ == selected_role) return;
         header_role_ = header_role;
         normal_role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
 
-    // The columns, left to right; a TableCellRef's column indexes this list. Setting them
-    // cancels any edit and pulls the cursor column back inside the new list, but keeps the
-    // rows and the sort column as they are. columns() reflects widths changed by dragging.
+    // The columns, left to right; a TableCellRef's column indexes this list. While set_rows
+    // content is shown, the new list must have exactly as many columns as each row has
+    // cells, as set_rows requires; a mismatch is a caller contract violation (asserted). To
+    // change the column count, clear the rows first (set_rows({})) or use a model. Setting
+    // them cancels any edit and pulls the cursor column back inside the new list, but keeps the
+    // rows and the sort as they are -- unless the sort column is past the new list's end,
+    // when the sort is dropped as sort_by(-1) drops it. columns() reflects widths changed by
+    // dragging.
     void set_columns(std::vector<TableColumn> columns);
     const std::vector<TableColumn>& columns() const noexcept { return columns_; }
 
@@ -200,7 +211,8 @@ public:
     void model_changed();
 
     // Compact materialized convenience. Each row must have exactly
-    // columns().size() cells; a mismatch is a caller contract violation.
+    // columns().size() cells; a mismatch is a caller contract violation (asserted), and
+    // set_columns holds the rows to the same rule.
     // Setting rows detaches any model, re-applies the current sort and puts the cursor on
     // the first displayed row's first column, without firing on_selection_changed. Each
     // value is text: it is shown as given and sorted as a string, whatever the column's type.
@@ -215,8 +227,9 @@ public:
     // Materialized-only style hook retained for compact static tables. Provider
     // cells instead carry their own optional style.
     // Called while drawing with the row's index in the vector given to set_rows (not its
-    // display position), the column index and the style the cell would otherwise wear; it
-    // returns the style to draw with. Setting it repaints.
+    // display position), the column index and the table's normal style; it returns the
+    // cell's own style. A returned style that differs from the one given styles the cell,
+    // and the cursor is drawn over it as the class comment describes. Setting it repaints.
     void set_cell_style_hook(std::function<Style(std::size_t row, std::size_t column, Style base)> hook);
 
     // The column the table is sorted by, or -1 for the natural order, and its direction.
@@ -225,9 +238,8 @@ public:
     bool sort_ascending() const noexcept { return sort_ascending_; }
     // `column` must be -1 or index a column (asserted). A materialized table re-sorts at
     // once, stably and by plain string comparison, and its cursor follows its row. A model
-    // table passes the request to TableModel::request_sort and then fires on_sort_requested,
-    // but only while a cell is selected; its owner calls model_changed() once the new order
-    // holds.
+    // table passes the request to TableModel::request_sort and then fires on_sort_requested;
+    // its owner calls model_changed() once the new order holds.
     void sort_by(int column, bool ascending);  // column == -1 requests natural provider order
 
     // The cursor's display row, or -1 when there is none, and its column index.
@@ -257,32 +269,34 @@ public:
     // the edit open with the provider's diagnostic. Returns true only when the value was
     // accepted, which closes the edit and re-finds the cursor's row.
     bool commit_edit();
-    // Abandons any edit and clears its text and diagnostic. It does not repaint.
+    // Abandons an open edit, clears its text and diagnostic and repaints the cell. Does
+    // nothing while no edit is open.
     void cancel_edit() noexcept;
 
     // Fired with the new cursor cell when the cursor moves to another cell by key, click or
     // set_selected_cell. Never fired when the table resets or re-finds the cursor itself:
     // set_model, set_rows, model_changed, sorting or a commit.
     std::function<void(TableCellRef)> on_selection_changed;
-    // Fired by sort_by on a model table while a cell is selected, after request_sort: the
-    // selected cell, the requested column (nullopt for natural order) and the direction.
-    std::function<void(TableCellRef, std::optional<std::size_t>, bool)> on_sort_requested;
+    // Fired by every sort_by on a model table, after request_sort: the selected cell
+    // (nullopt when none is), the requested column (nullopt for natural order) and the
+    // direction.
+    std::function<void(std::optional<TableCellRef>, std::optional<std::size_t>, bool)> on_sort_requested;
     // Fired after the provider (or the materialized table) has answered a commit, with the
     // edited cell and the answer, accepted or not.
     std::function<void(TableCellRef, const TableEditResult&)> on_edit_committed;
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;
-    // While editing, consumes Escape, Backspace, Delete and printable keys, and Enter only
-    // when the commit succeeds; every other key passes on, the cursor staying put. Otherwise
+    // While editing, consumes Escape, Backspace, Delete, printable keys and Enter, whether
+    // or not its commit succeeds; every other key passes on, the cursor staying put. Otherwise
     // consumes the navigation keys while there are rows and columns, and Enter, F2 or a
     // printable key only when they begin an edit.
     bool on_key(const KeyEvent& event) override;
     // Appends the text to the edit and consumes it only while editing.
     bool on_text(const TextEvent& event) override;
-    // Consumes a press of any button on a column title, a boundary cell or a data cell, and
-    // the pointer moves and the release that follow a press on a boundary cell. Wheel events
-    // are not handled here.
+    // Consumes a primary-button press on a column title, a boundary cell or a data cell, and
+    // the pointer moves and the release that follow a press on a boundary cell. A press of
+    // another button and wheel events are not handled here.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
     // The cursor's highlight follows focus, so gaining or losing it repaints.

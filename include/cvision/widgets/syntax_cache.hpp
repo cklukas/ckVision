@@ -37,9 +37,10 @@ struct SyntaxRelexReport {
     bool reached_fixed_point = true;
 };
 
-// Relexes only a changed suffix. Once an unchanged source line again receives
-// the same incoming state, output state, and spans, later cached entries are
-// valid by induction and no longer invoke the highlighter.
+// Relexes only a changed suffix. Once an unchanged source line past the last
+// changed one again receives the same incoming state, output state, and spans,
+// later cached entries are valid by induction and no longer invoke the
+// highlighter.
 class SyntaxCache {
 public:
     // Forgets every cached line, the remembered profile id and any pending pass, so the
@@ -49,12 +50,13 @@ public:
     // for small documents and deterministic tooling. Interactive clients with
     // potentially large off-screen suffixes should use update_bounded().
     //
-    // Relexing starts at the first line whose text differs from the cached text, or at
-    // line 0 when `profile` has a different id from the last update's; a profile is
-    // recognised by its id alone, so replacing a profile's highlighter under the same id
-    // needs clear() first. The cache is resized to `source_lines`, and the pass stops at
-    // the first relexed line whose text, states and spans all equal the cached ones. Lines
-    // after that point are not compared.
+    // The changed lines are every line when `profile` has a different id from the last
+    // update's (a profile is recognised by its id alone, so replacing a profile's highlighter
+    // under the same id needs clear() first), and otherwise each line whose text differs from
+    // the cached text and each line new to the cache. The cache is resized to `source_lines`;
+    // relexing starts at the first changed line and stops at the first relexed line after
+    // the last changed one whose text, states and spans all equal the cached ones, so
+    // several separated edits in one update are all relexed.
     SyntaxRelexReport update(const LanguageProfile& profile, const std::vector<std::string>& source_lines);
     // Relexes at most max_lines logical lines. If reached_fixed_point is false,
     // call this again with the same profile and current source lines from an
@@ -77,7 +79,8 @@ private:
     std::vector<SyntaxCacheLine> lines_;
     bool pending_ = false;
     std::size_t pending_line_ = 0;
-    std::size_t pending_minimum_line_ = 0;
+    // The last line the interrupted pass had to relex before a fixed point could end it.
+    std::size_t pending_settle_line_ = 0;
 };
 
 }  // namespace ckv::widgets

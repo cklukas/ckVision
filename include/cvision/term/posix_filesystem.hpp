@@ -25,11 +25,10 @@
 namespace ckv::term {
 
 // core::FileSystem over the real POSIX filesystem. Paths are handed to the system as given,
-// so a relative path resolves against the process's working directory — except in
-// create_directories(), which normalizes first and so anchors a relative path at "/".
-// Queries follow symbolic links (a dangling link does not exist). Stateless: instances are
-// interchangeable. write_file_atomic() leaves a ".ckvision-write.lock" file in each
-// directory it writes to.
+// so a relative path resolves against the process's working directory, in create_directories()
+// as everywhere else. Queries follow symbolic links (a dangling link does not exist).
+// Stateless: instances are interchangeable. write_file_atomic() leaves a
+// ".ckvision-write.lock" file in each directory it writes to.
 class PosixFileSystem final : public FileSystem {
 public:
     // Narrows the base contract's order: directories first, then files, each group sorted by

@@ -57,9 +57,11 @@ public:
     // placement — AnchorPane never positions a child itself, only
     // repositions/resizes it on a later pane resize per `anchors`).
     View* add_item(std::unique_ptr<View> child, Anchors anchors = {});
-    // Detaches `child`, forgets its anchors, and returns ownership; nullptr when `child` is not a
-    // child of this pane. The other children are not moved.
-    std::unique_ptr<View> remove_item(View* child);
+    // Detaches `child` exactly as View::remove_child() does, then forgets its anchors and
+    // returns ownership; nullptr when `child` is not a child of this pane. The other children
+    // are not moved. Every way a child leaves comes through here, so a view added back with
+    // add_child() is unanchored again.
+    std::unique_ptr<View> remove_child(View* child) override;
 
     void on_resized() override;
 

@@ -28,13 +28,16 @@ Rect apply_anchors(Rect current, Anchors anchors, int delta_width, int delta_hei
 View* AnchorPane::add_item(std::unique_ptr<View> child, Anchors anchors) {
     CKV_ASSERT(child != nullptr);
     View* observer = add_child(std::move(child));
+    // An attachment callback that detached the child, or destroyed this
+    // container, leaves nothing to place and no record to keep.
+    if (observer == nullptr) return nullptr;
     specs_[observer] = anchors;
     return observer;
 }
 
-std::unique_ptr<View> AnchorPane::remove_item(View* child) {
-    std::unique_ptr<View> owned = remove_child(child);
-    if (owned) specs_.erase(child);
+std::unique_ptr<View> AnchorPane::remove_child(View* child) {
+    std::unique_ptr<View> owned = View::remove_child(child);
+    if (owned != nullptr) specs_.erase(child);
     return owned;
 }
 

@@ -60,7 +60,8 @@ struct FileReadResult {
 enum class FileWriteStatus {
     // The new contents were published in full.
     Ok,
-    // The path cannot hold a file (MemoryFileSystem reports this when it names a directory).
+    // The path cannot hold a file (MemoryFileSystem reports this when it names a directory or
+    // lies inside a file).
     NotFound,
     // The write expectation did not hold, so nothing was written.
     Conflict,
@@ -140,9 +141,10 @@ public:
     // ("C:/", "c:\"). A bare "C:" is not absolute. The path is not normalized first.
     virtual bool is_absolute_path(std::string_view path) const noexcept;
 
-    // Forward-slash joins `directory` and `name` (collapsing a
-    // trailing/leading slash so the result never has "//"). Absolute-path
-    // acceptance is caller policy; join() treats `name` as a child fragment.
+    // Joins `directory` and `name` with one '/' and normalizes the result
+    // (normalize_path), so it never has "//" — whatever separators either
+    // part ends, starts or contains. Absolute-path acceptance is caller
+    // policy; join() treats `name` as a child fragment.
     virtual std::string join(std::string_view directory, std::string_view name) const;
 
     // The path with its last "/segment" removed; "/" for a path with
@@ -170,10 +172,10 @@ public:
 // directories and files, no real I/O.
 class MemoryFileSystem final : public FileSystem {
 public:
-    // Script the tree. Paths are normalized first, and every missing ancestor is created as a
-    // directory. add_directory on an existing file turns it into a directory; add_file on an
-    // existing node makes it a file with the given contents (empty for the one-argument form) and
-    // advances its fingerprint.
+    // Script the tree. Paths are normalized first, and every ancestor is made a directory, an
+    // existing file included. add_directory likewise turns the path itself into a directory
+    // when it names a file; add_file on an existing node makes it a file with the given contents
+    // (empty for the one-argument form) and advances its fingerprint.
     void add_directory(std::string_view path);
     void add_file(std::string_view path);
     void add_file(std::string_view path, std::string contents);
@@ -182,8 +184,8 @@ public:
     // normalized before lookup; list_directory returns entries in the order they were added;
     // fingerprints are a per-file revision count ("1" when created, plus one per write);
     // write_file_atomic creates missing parent directories and answers NotFound for a path that
-    // names a directory; create_directories checks only the final component for a conflicting
-    // file.
+    // names a directory or lies inside a file; create_directories fails when any component of
+    // the path is a file.
     std::vector<FileEntry> list_directory(std::string_view path) const override;
     bool exists(std::string_view path) const noexcept override;
     bool is_directory(std::string_view path) const noexcept override;
@@ -204,6 +206,8 @@ private:
 
     Node* find(std::string_view path) noexcept;
     const Node* find(std::string_view path) const noexcept;
+    // Whether `normalized`, or any directory it lies in, is an existing file.
+    bool file_along(std::string_view normalized) const noexcept;
 };
 
 }  // namespace ckv

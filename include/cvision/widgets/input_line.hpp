@@ -51,14 +51,21 @@ public:
     // attachment: the unfocused, focused and invalid faces, and separately
     // the disabled face. The invalid face wins over the focused one. An
     // override set before attachment survives it; ui::kInvalidRole before
-    // attachment leaves that role to the standard lookup. Neither setter
-    // repaints; the roles apply from the next paint.
+    // attachment leaves that role to the standard lookup. Either setter
+    // repaints when it changes a role.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId invalid_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role && invalid_role_ == invalid_role)
+            return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
         invalid_role_ = invalid_role;
+        invalidate();
     }
-    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
 
     // Replaces the whole text (split into graphemes), puts the caret at the
     // end, clears the selection and the undo history, and re-runs the

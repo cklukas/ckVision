@@ -63,7 +63,8 @@ public:
     // (whatever the modifiers) begins a capture and Backspace or Delete
     // clears; other keys are left unhandled.
     bool on_key(const KeyEvent& event) override;
-    // A press with any mouse button inside the control begins a capture.
+    // A primary-button press inside the control begins a capture; a press of
+    // another button is left unhandled.
     bool on_mouse(const MouseEvent& event) override;
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;

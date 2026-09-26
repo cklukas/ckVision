@@ -149,6 +149,29 @@ CK_TEST(create_directories_rejects_an_existing_file_segment) {
     CK_CHECK(!fs.create_directories(scratch.root + "/plain/child"));
 }
 
+CK_TEST(create_directories_resolves_a_relative_path_against_the_working_directory) {
+    // Like every other call here, a relative path is handed to the system as
+    // given, and POSIX.1 pathname resolution starts it at the working
+    // directory. It must never be re-anchored at "/".
+    ScratchDir scratch;
+    char previous[4096];
+    const bool saved = ::getcwd(previous, sizeof previous) != nullptr;
+    CK_CHECK(saved);
+    if (!saved || ::chdir(scratch.root.c_str()) != 0) {
+        CK_CHECK(!"could not enter the scratch directory");
+        return;
+    }
+    PosixFileSystem fs;
+    const bool created = fs.create_directories("relative_one/relative_two/");
+    const bool again = fs.create_directories("relative_one/relative_two");
+    const bool restored = ::chdir(previous) == 0;
+    CK_CHECK(restored);
+    CK_CHECK(created);
+    CK_CHECK(again);
+    CK_CHECK(fs.is_directory(scratch.root + "/relative_one/relative_two"));
+    CK_CHECK(!fs.exists("/relative_one"));
+}
+
 CK_TEST(join_and_parent_still_use_the_base_classs_default_slash_joining) {
     // PosixFileSystem doesn't override join()/parent() — verifying the
     // inherited default still behaves sanely for real filesystem paths

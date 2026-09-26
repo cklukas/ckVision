@@ -431,11 +431,17 @@ void ListView::draw(scene::Painter& painter) {
         const ui::RoleId selection_role =
             (enabled && has_focus()) || selected_inactive_role_ == ui::kInvalidRole ? selected_role_
                                                                                  : selected_inactive_role_;
-        Style style = item.id != kInvalidListItemId &&
-                                  (item.id == cursor_id_ || is_selected_id(item.id))
-                          ? context().theme->resolve(selection_role)
-                          : context().theme->resolve(normal_role_);
-        if (item.style) style = *item.style;
+        const bool highlighted =
+            item.id != kInvalidListItemId && (item.id == cursor_id_ || is_selected_id(item.id));
+        const Style highlight = context().theme->resolve(selection_role);
+        // A row that styles itself keeps its colouring under the highlight
+        // (D-067) rather than hiding it. Every highlighted row is a selected
+        // one here -- the cursor has its own mark below -- so none takes the
+        // cursor emphasis.
+        Style style = !highlighted ? item.style.value_or(context().theme->resolve(normal_role_))
+                      : item.style ? highlight_over(*item.style, sets_color(*item.style), highlight,
+                                                    /*cursor=*/false, /*active=*/false)
+                                   : highlight;
         // In a multi-select list the cursor and the selection are two
         // different things: Space toggles the row under the cursor, and the
         // reader has to see which row that is among the selected ones.

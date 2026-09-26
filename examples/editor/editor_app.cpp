@@ -47,8 +47,8 @@ EditorApp::EditorApp(ui::Application& application)
         if (file_controller_.save() != widgets::EditorFileStatus::Ok)
             show_file_error("Could not save " + document_name(file_controller_.path()) + ". The document remains open.");
     }});
-    const ui::CommandId undo = commands.declare({.key = "editor.undo", .title = "&Undo", .category = "Edit", .chord = "Ctrl+Z", .handler = [this] { document_->undo(); }});
-    const ui::CommandId redo = commands.declare({.key = "editor.redo", .title = "&Redo", .category = "Edit", .chord = "Ctrl+Y", .handler = [this] { document_->redo(); }});
+    const ui::CommandId undo = commands.declare({.key = "editor.undo", .title = "&Undo", .category = "Edit", .chord = "Ctrl+Z", .handler = [this] { (void)editor_->perform(widgets::EditorCommand::Undo); }});
+    const ui::CommandId redo = commands.declare({.key = "editor.redo", .title = "&Redo", .category = "Edit", .chord = "Ctrl+Y", .handler = [this] { (void)editor_->perform(widgets::EditorCommand::Redo); }});
     const ui::CommandId cut = commands.declare({.key = "editor.cut", .title = "Cu&t", .category = "Edit", .chord = "Ctrl+X", .handler = [this] { (void)editor_->cut_selection_to_clipboard(); }});
     const ui::CommandId copy = commands.declare({.key = "editor.copy", .title = "&Copy", .category = "Edit", .chord = "Ctrl+C", .handler = [this] { (void)editor_->copy_selection_to_clipboard(); }});
     const ui::CommandId paste = commands.declare({.key = "editor.paste", .title = "&Paste", .category = "Edit", .chord = "Ctrl+V", .handler = [this] { (void)editor_->paste_from_clipboard(); }});

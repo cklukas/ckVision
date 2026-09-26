@@ -60,8 +60,10 @@ public:
     // applied whole to the marked grapheme, background included. The
     // disabled role is not overridable.
     void set_role_override(ui::RoleId text_role, ui::RoleId mnemonic_role) noexcept {
+        if (text_role_ == text_role && mnemonic_role_ == mnemonic_role) return;
         text_role_ = text_role;
         mnemonic_role_ = mnemonic_role;
+        invalidate();
     }
 
     void draw(scene::Painter& painter) override;

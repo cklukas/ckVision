@@ -258,12 +258,12 @@ void TodoApp::declare_commands() {
     note_undo_command_ = app_.commands().declare(
         {.key = "todo.note.undo", .title = "&Undo", .category = "Note", .scope = note_scope,
          .handler = [this] {
-             if (NoteSession* note = focused_note()) (void)note->document->undo();
+             if (NoteSession* note = focused_note()) (void)note->editor->perform(widgets::EditorCommand::Undo);
          }});
     note_redo_command_ = app_.commands().declare(
         {.key = "todo.note.redo", .title = "&Redo", .category = "Note", .scope = note_scope,
          .handler = [this] {
-             if (NoteSession* note = focused_note()) (void)note->document->redo();
+             if (NoteSession* note = focused_note()) (void)note->editor->perform(widgets::EditorCommand::Redo);
          }});
     note_cut_command_ = app_.commands().declare(
         {.key = "todo.note.cut", .title = "Cu&t", .category = "Note", .scope = note_scope,

@@ -40,8 +40,12 @@ public:
 
     // Replaces "ckv.image.fallback", the style of the blank fill around or
     // instead of the image and of the "[image]" text fallback. An override
-    // set before attachment survives it; the call does not repaint.
-    void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
+    // set before attachment survives it; a change repaints.
+    void set_role_override(ui::RoleId fallback_role) noexcept {
+        if (fallback_role_ == fallback_role) return;
+        fallback_role_ = fallback_role;
+        invalidate();
+    }
 
     // The image shown, shared with the caller rather than copied, and never
     // modified by the view. nullptr, or an image with no pixels, shows the

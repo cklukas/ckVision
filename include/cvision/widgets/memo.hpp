@@ -59,13 +59,20 @@ public:
     // from the standard names at attach.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role,
                            ui::RoleId invalid_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role && invalid_role_ == invalid_role)
+            return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
         invalid_role_ = invalid_role;
+        invalidate();
     }
     // The role drawn while the memo is disabled, in place of
     // "ckv.memo.disabled".
-    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
 
     // Replaces the whole document. The text is split into lines on '\n'
     // (other control characters are kept as they are); the cursor goes to

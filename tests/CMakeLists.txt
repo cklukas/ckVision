@@ -144,6 +144,26 @@ ckvision_strict(terminal_redraw_contract)
 add_test(NAME terminal_redraw_contract COMMAND terminal_redraw_contract)
 set_tests_properties(terminal_redraw_contract PROPERTIES LABELS "contract;portable;terminal" TIMEOUT 30)
 
+# The harness's own CK_EXPECT_ABORT contract. Two of these cases are meant to
+# fail, so they run in their own program, one case per CTest test, and the
+# verdict is read from what cktest prints rather than from the exit code.
+add_executable(cktest_expect_abort_contract cktest_expect_abort_contract.cpp)
+target_link_libraries(cktest_expect_abort_contract PRIVATE ckvision::cvision)
+ckvision_strict(cktest_expect_abort_contract)
+add_test(NAME cktest_expect_abort_each_body_that_aborts_passes
+    COMMAND cktest_expect_abort_contract --case two_expected_aborts_that_both_abort)
+add_test(NAME cktest_expect_abort_a_later_body_that_returns_fails
+    COMMAND cktest_expect_abort_contract --case a_second_expected_abort_that_returns)
+add_test(NAME cktest_expect_abort_an_earlier_body_that_returns_fails_once
+    COMMAND cktest_expect_abort_contract --case a_first_expected_abort_that_returns)
+set_tests_properties(cktest_expect_abort_each_body_that_aborts_passes
+    cktest_expect_abort_a_later_body_that_returns_fails
+    cktest_expect_abort_an_earlier_body_that_returns_fails_once
+    PROPERTIES LABELS "contract;portable" TIMEOUT 30)
+set_tests_properties(cktest_expect_abort_a_later_body_that_returns_fails
+    cktest_expect_abort_an_earlier_body_that_returns_fails_once
+    PROPERTIES PASS_REGULAR_EXPRESSION "cktest: 1 failure\\(s\\)")
+
 if(WIN32 OR UNIX)
     add_executable(terminal_nested_child terminal_nested_child.cpp)
     target_link_libraries(terminal_nested_child PRIVATE ckvision::cvision)

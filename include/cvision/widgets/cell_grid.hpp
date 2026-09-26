@@ -336,14 +336,18 @@ public:
     CellGrid();
 
     // Draws with these roles instead of the "ckv.cellgrid." ones; the inactive cursor role
-    // is still resolved from the theme. Call it before the grid is attached, or repaint
-    // afterwards: it does not invalidate.
+    // is still resolved from the theme. An override set before attachment survives it; a
+    // change repaints.
     void set_role_override(ui::RoleId normal_role, ui::RoleId header_role, ui::RoleId cursor_role,
                            ui::RoleId selection_role) noexcept {
+        if (normal_role_ == normal_role && header_role_ == header_role && cursor_role_ == cursor_role &&
+            selection_role_ == selection_role)
+            return;
         normal_role_ = normal_role;
         header_role_ = header_role;
         cursor_role_ = cursor_role;
         selection_role_ = selection_role;
+        invalidate();
     }
 
     // Borrows `model`; it must outlive this grid or be cleared first.

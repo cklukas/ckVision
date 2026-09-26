@@ -1660,3 +1660,39 @@ CK_TEST(a_content_cover_stays_above_content_that_arrives_after_it) {
     CK_CHECK(window->content_cover() == nullptr);
     CK_CHECK(window->content() != nullptr);
 }
+
+// --- WP-38 review finding A28 ------------------------------------------------
+
+namespace {
+// Content as wide as it asks to be, and as tall as that width makes it.
+class Paragraph final : public View {
+public:
+    Paragraph() { set_preferred_size(ckv::Size{40, 1}); }
+    int height_for_width(int width) const override { return width <= 0 ? 0 : (80 + width - 1) / width; }
+};
+
+class HintCounter final : public View {
+public:
+    int notifications = 0;
+    void on_child_size_hint_changed(View&) override { ++notifications; }
+};
+}  // namespace
+
+CK_TEST(a_window_budgets_asymmetric_margins_for_the_content_it_measures) {
+    // A28: each margin is budgeted where it is, so a window given its own
+    // preferred width hands its content exactly the width that content asked
+    // for, whatever the margins on either side.
+    Fixture f;
+    HintCounter host;
+    auto* window = static_cast<Window*>(host.add_child(make_window(f, "T")));
+    window->set_content(std::make_unique<Paragraph>());
+    window->set_content_margins(3, 0, 1, 0);
+    CK_CHECK(host.notifications >= 1);  // the window's measure changed with them
+    const ckv::ui::SizeHint hint = window->horizontal_size_hint();
+    CK_CHECK(hint.preferred == 40 + 2 + 3 + 1);
+    window->set_bounds(Rect{0, 0, hint.preferred, 10});
+    CK_CHECK(window->content()->bounds().width == 40);
+    CK_CHECK(window->content()->bounds().x == 1 + 3);
+    // Measured at a width, the content is given that width less both margins.
+    CK_CHECK(window->height_for_width(2 + 3 + 1 + 16) == 2 + 5);
+}

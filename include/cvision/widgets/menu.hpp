@@ -230,17 +230,25 @@ public:
 
     // Replace the roles this menu draws with: plain rows, the highlighted row,
     // and unavailable rows. A role left as kInvalidRole is resolved from the
-    // standard names at attach; an override set after attach takes effect at
-    // the next draw. Submenus this menu opens resolve their own roles.
+    // standard names at attach; an override set after attach repaints the
+    // menu. Submenus this menu opens resolve their own roles.
     void set_role_override(ui::RoleId normal_role, ui::RoleId highlighted_role,
                             ui::RoleId disabled_role) noexcept {
+        if (normal_role_ == normal_role && highlighted_role_ == highlighted_role &&
+            disabled_role_ == disabled_role)
+            return;
         normal_role_ = normal_role;
         highlighted_role_ = highlighted_role;
         disabled_role_ = disabled_role;
+        invalidate();
     }
     // The role whose colours accent each row's mnemonic letter, in place of
     // "ckv.hotkey".
-    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
+    void set_hotkey_role_override(ui::RoleId role) noexcept {
+        if (hotkey_role_ == role) return;
+        hotkey_role_ = role;
+        invalidate();
+    }
 
     // Fires on Esc, on a click outside the dropdown's own bounds (light
     // dismiss), after a successful item activation (carrying
@@ -506,14 +514,20 @@ public:
     // Replace the roles the bar draws with: the strip and its idle titles, and
     // the title the walk stands on while the bar has focus. A role left as
     // kInvalidRole is resolved from the standard names at attach; an override
-    // set after attach takes effect at the next draw.
+    // set after attach repaints the bar.
     void set_role_override(ui::RoleId normal_role, ui::RoleId active_role) noexcept {
+        if (normal_role_ == normal_role && active_role_ == active_role) return;
         normal_role_ = normal_role;
         active_role_ = active_role;
+        invalidate();
     }
     // The role whose colours accent each title's mnemonic letter, in place of
     // "ckv.hotkey".
-    void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
+    void set_hotkey_role_override(ui::RoleId role) noexcept {
+        if (hotkey_role_ == role) return;
+        hotkey_role_ = role;
+        invalidate();
+    }
 
     // Gives the bar focus (saving whatever was previously focused, for
     // deactivate()/Esc to restore) and highlights the first menu. Also

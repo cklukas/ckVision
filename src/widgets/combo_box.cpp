@@ -30,7 +30,12 @@ void ComboBox::on_attached() {
 void ComboBox::set_items(std::vector<std::string> items) {
     items_ = std::move(items);
     if (selected_index_ && *selected_index_ >= items_.size()) selected_index_.reset();
-    if (selected_index_) text_ = items_[*selected_index_];
+    if (selected_index_) {
+        // The field is what an editable combo shows and what the next key
+        // edits, so the selected item's new text has to reach it as well.
+        text_ = items_[*selected_index_];
+        editor_.set_text(text_);
+    }
     invalidate();
 }
 
@@ -95,9 +100,11 @@ void ComboBox::open_dropdown() {
     // the list inside this control instead would push everything beside it
     // around. The arrows still move the selection, so the control works.
     if (app == nullptr || desktop == nullptr || items_.empty()) return;
-    if (!selected_index_) selected_index_ = 0;  // a list opens on something
+    // A list opens on something -- the selection, or else its first row --
+    // but opening chooses nothing: the selection changes only when a row is
+    // chosen, so it never names an item the text does not hold.
     popup_ = show_popup_list(
-        absolute_bounds(), items_, selected_index_, *app, *desktop,
+        absolute_bounds(), items_, selected_index_.value_or(0), *app, *desktop,
         [this](std::size_t index) {
             popup_ = nullptr;
             select_index(index, true);

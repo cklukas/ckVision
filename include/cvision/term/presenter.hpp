@@ -280,10 +280,11 @@ private:
 // independent of the full diff pipeline.
 std::string style_to_sgr(const Style& style, const Capabilities& caps);
 
-// Neutralizes embedded OSC terminator bytes (ESC, BEL) in `text` before
-// it is embedded in an OSC sequence (title, future hyperlinks) —
+// Makes `text` safe to embed in an OSC sequence (title, future hyperlinks) —
 // ARCHITECTURE.md §12: every OSC emission escapes or rejects terminator
-// bytes.
+// bytes. Every C0 and C1 control code point is dropped (ESC, BEL, CAN, SUB,
+// U+009C ST among them) and malformed UTF-8, a lone 0x9C included, becomes
+// U+FFFD, so no 7-bit, 8-bit or UTF-8 spelling of a terminator survives.
 std::string sanitize_osc_text(std::string_view text);
 
 }  // namespace ckv::term

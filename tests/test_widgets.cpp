@@ -8,9 +8,25 @@
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/button.hpp"
+#include "cvision/widgets/canvas.hpp"
+#include "cvision/widgets/cell_grid.hpp"
+#include "cvision/widgets/common_components.hpp"
+#include "cvision/widgets/flow_view.hpp"
+#include "cvision/widgets/image_view.hpp"
 #include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/label.hpp"
+#include "cvision/widgets/list_view.hpp"
+#include "cvision/widgets/memo.hpp"
+#include "cvision/widgets/menu.hpp"
+#include "cvision/widgets/option_group.hpp"
+#include "cvision/widgets/paged_strip.hpp"
+#include "cvision/widgets/scrollbar.hpp"
+#include "cvision/widgets/splitter.hpp"
 #include "cvision/widgets/static_text.hpp"
+#include "cvision/widgets/status_line.hpp"
+#include "cvision/widgets/table.hpp"
+#include "cvision/widgets/text_view.hpp"
+#include "cvision/widgets/tree_view.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::Key;
@@ -520,6 +536,128 @@ CK_TEST(static_text_set_text_notifies_its_parent_of_the_changed_size_hint) {
     auto* text = static_cast<StaticText*>(parent.children().front().get());
     text->set_text("a much longer piece of text");
     CK_CHECK(parent.notifications == 1);
+}
+
+// --- WP-38 review findings A19 and A26 ----------------------------------
+
+CK_TEST(only_the_primary_button_presses_a_button) {
+    // A19: a right or middle press is not a click on the button -- it is
+    // left unhandled for whoever offers a context menu -- and a release of
+    // another button takes back a press in flight rather than firing it.
+    Button button("OK");
+    button.set_bounds(Rect{5, 5, 10, 1});
+    int presses = 0;
+    button.on_press = [&] { ++presses; };
+    const auto mouse = [&](ckv::MouseAction action, ckv::MouseButton which) {
+        return button.on_mouse(ckv::MouseEvent{action, which, ckv::Point{6, 5}, std::nullopt, Modifier::None});
+    };
+    for (const ckv::MouseButton which : {ckv::MouseButton::Right, ckv::MouseButton::Middle}) {
+        CK_CHECK(!mouse(ckv::MouseAction::Down, which));
+        CK_CHECK(!button.pressed());
+        mouse(ckv::MouseAction::Up, which);
+        CK_CHECK(presses == 0);
+    }
+    CK_CHECK(mouse(ckv::MouseAction::Down, ckv::MouseButton::Left));
+    CK_CHECK(button.pressed());
+    CK_CHECK(mouse(ckv::MouseAction::Up, ckv::MouseButton::Right));
+    CK_CHECK(!button.pressed());
+    CK_CHECK(presses == 0);
+    // A release the terminal does not name is the press's own.
+    CK_CHECK(mouse(ckv::MouseAction::Down, ckv::MouseButton::Left));
+    CK_CHECK(mouse(ckv::MouseAction::Up, ckv::MouseButton::None));
+    CK_CHECK(presses == 1);
+}
+
+namespace {
+// How many repaints `change` asked `view` for.
+template <class V, class Change>
+int repaints_after(V& view, Change change) {
+    int calls = 0;
+    view.set_bounds(Rect{0, 0, 10, 3});
+    view.set_dirty_rect_sink([&calls](Rect) { ++calls; });
+    change(view);
+    view.set_dirty_rect_sink({});
+    return calls;
+}
+}  // namespace
+
+CK_TEST(appearance_setters_repaint_and_a_width_changing_one_reports_its_size) {
+    // A26: a setter that changes what a view looks like repaints it; one that
+    // changes what it measures also tells its container. Setting the value a
+    // view already has changes nothing and repaints nothing.
+    Fixture f;
+    const ckv::ui::RoleId r = f.roles.dialog_background;
+
+    Button button("OK");
+    CK_CHECK(repaints_after(button, [](Button& b) { b.set_default(true); }) >= 1);
+    CK_CHECK(repaints_after(button, [](Button& b) { b.set_default(true); }) == 0);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_role_override(r, r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_role_override(r, r, r, r); }) == 0);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_pressed_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_mnemonic_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(button, [r](Button& b) { b.set_disabled_role_override(r); }) >= 1);
+
+    StaticText text("a  b");
+    CK_CHECK(repaints_after(text, [r](StaticText& t) { t.set_role_override(r); }) >= 1);
+    SpyParent parent;
+    auto* owned = static_cast<StaticText*>(parent.add_child(std::make_unique<StaticText>("a  b")));
+    CK_CHECK(repaints_after(*owned, [](StaticText& t) { t.set_preformatted(true); }) >= 1);
+    CK_CHECK(parent.notifications == 1);
+    CK_CHECK(repaints_after(*owned, [](StaticText& t) { t.set_preformatted(true); }) == 0);
+    CK_CHECK(parent.notifications == 1);
+
+    Label label("&Name");
+    CK_CHECK(repaints_after(label, [r](Label& l) { l.set_role_override(r, r); }) >= 1);
+    InputLine input;
+    CK_CHECK(repaints_after(input, [r](InputLine& i) { i.set_role_override(r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(input, [r](InputLine& i) { i.set_disabled_role_override(r); }) >= 1);
+    Window window("W");
+    CK_CHECK(repaints_after(window, [r](Window& w) { w.set_role_override(r, r, r, r); }) >= 1);
+    ckv::widgets::Scrollbar bar(ckv::widgets::Orientation::Vertical);
+    CK_CHECK(repaints_after(bar, [r](ckv::widgets::Scrollbar& b) { b.set_role_override(r, r); }) >= 1);
+    ckv::widgets::ListView list;
+    CK_CHECK(repaints_after(list, [r](ckv::widgets::ListView& l) { l.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(list, [r](ckv::widgets::ListView& l) { l.set_selected_inactive_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(list, [r](ckv::widgets::ListView& l) { l.set_disabled_role_override(r); }) >= 1);
+    ckv::widgets::Table table;
+    CK_CHECK(repaints_after(table, [r](ckv::widgets::Table& t) { t.set_role_override(r, r, r); }) >= 1);
+    ckv::widgets::TreeView tree;
+    CK_CHECK(repaints_after(tree, [r](ckv::widgets::TreeView& t) { t.set_role_override(r, r); }) >= 1);
+    ckv::widgets::CellGrid grid;
+    CK_CHECK(repaints_after(grid, [r](ckv::widgets::CellGrid& g) { g.set_role_override(r, r, r, r); }) >= 1);
+    ckv::widgets::Memo memo;
+    CK_CHECK(repaints_after(memo, [r](ckv::widgets::Memo& m) { m.set_role_override(r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(memo, [r](ckv::widgets::Memo& m) { m.set_disabled_role_override(r); }) >= 1);
+    ckv::widgets::TextView text_view;
+    CK_CHECK(repaints_after(text_view, [r](ckv::widgets::TextView& t) { t.set_role_override(r); }) >= 1);
+    ckv::widgets::FlowView flow;
+    CK_CHECK(repaints_after(flow, [r](ckv::widgets::FlowView& v) { v.set_role_override(r); }) >= 1);
+    ckv::widgets::Canvas canvas;
+    CK_CHECK(repaints_after(canvas, [r](ckv::widgets::Canvas& c) { c.set_role_override(r); }) >= 1);
+    ckv::widgets::ImageView image;
+    CK_CHECK(repaints_after(image, [r](ckv::widgets::ImageView& i) { i.set_role_override(r); }) >= 1);
+    ckv::widgets::PagedStrip strip;
+    CK_CHECK(repaints_after(strip, [r](ckv::widgets::PagedStrip& s) { s.set_role_override(r, r); }) >= 1);
+    ckv::widgets::StatusLine status;
+    CK_CHECK(repaints_after(status, [r](ckv::widgets::StatusLine& s) { s.set_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(status, [r](ckv::widgets::StatusLine& s) { s.set_disabled_role_override(r); }) >= 1);
+    CK_CHECK(repaints_after(status, [r](ckv::widgets::StatusLine& s) { s.set_hotkey_role_override(r); }) >= 1);
+    ckv::widgets::CheckGroup checks({"a"});
+    CK_CHECK(repaints_after(checks, [r](ckv::widgets::CheckGroup& g) { g.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(checks, [r](ckv::widgets::CheckGroup& g) { g.set_mnemonic_role_override(r); }) >= 1);
+    ckv::widgets::RadioGroup radios({"a"});
+    CK_CHECK(repaints_after(radios, [r](ckv::widgets::RadioGroup& g) { g.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(radios, [r](ckv::widgets::RadioGroup& g) { g.set_mnemonic_role_override(r); }) >= 1);
+    ckv::widgets::MenuBar bar_menu({});
+    CK_CHECK(repaints_after(bar_menu, [r](ckv::widgets::MenuBar& m) { m.set_role_override(r, r); }) >= 1);
+    CK_CHECK(repaints_after(bar_menu, [r](ckv::widgets::MenuBar& m) { m.set_hotkey_role_override(r); }) >= 1);
+    ckv::widgets::DropdownMenu dropdown({});
+    CK_CHECK(repaints_after(dropdown, [r](ckv::widgets::DropdownMenu& m) { m.set_role_override(r, r, r); }) >= 1);
+    CK_CHECK(repaints_after(dropdown, [r](ckv::widgets::DropdownMenu& m) { m.set_hotkey_role_override(r); }) >= 1);
+    ckv::widgets::CalendarView calendar;
+    CK_CHECK(repaints_after(calendar, [r](ckv::widgets::CalendarView& c) { c.set_role_override(r, r, r); }) >= 1);
+    ckv::widgets::Splitter splitter(Rect{0, 0, 10, 3}, std::make_unique<ui::View>(), std::make_unique<ui::View>());
+    CK_CHECK(repaints_after(splitter, [r](ckv::widgets::Splitter& s) { s.set_role_override(r, r); }) >= 1);
 }
 
 // --- InputLine ---------------------------------------------------------

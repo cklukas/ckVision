@@ -153,8 +153,10 @@ public:
     // A role left kInvalidRole when the view attaches falls back to its
     // standard one.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
+        if (normal_role_ == normal_role && selected_role_ == selected_role) return;
         normal_role_ = normal_role;
         selected_role_ = selected_role;
+        invalidate();
     }
 
     // How branches are drawn (see TreeConnectorStyle); a change repaints.

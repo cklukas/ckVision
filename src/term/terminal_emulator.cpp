@@ -650,7 +650,7 @@ bool TerminalEmulator::append_control(char byte) {
     }
     diagnostic(TerminalDiagnostic::Kind::LimitExceeded, "child control string exceeded configured limit");
     control_.clear();
-    parse_state_ = ParseState::Discard;
+    parse_state_ = parse_state_ == ParseState::Csi ? ParseState::CsiDiscard : ParseState::OscDiscard;
     return false;
 }
 
@@ -666,7 +666,7 @@ bool TerminalEmulator::append_dcs_byte(char byte) {
                                    : "child control string exceeded configured limit");
     control_.clear();
     dcs_sixel_payload_ = false;
-    parse_state_ = ParseState::Discard;
+    parse_state_ = ParseState::DcsDiscard;
     return false;
 }
 
@@ -930,11 +930,27 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                     if (retained_byte) parse_state_ = ParseState::Dcs;
                 }
                 break;
-            case ParseState::Discard:
-                if (byte == '\x1b') parse_state_ = ParseState::DiscardEscape;
+            // A dropped sequence ends where it would have ended had it been
+            // kept. ECMA-48 §5.4: a control sequence ends at its final byte,
+            // 04/00 to 07/14. xterm's control sequences: an OSC ends at BEL
+            // or ST, a DCS at ST (ESC \) only. Waiting for ST after a CSI or
+            // a BEL-terminated OSC would swallow everything the child wrote
+            // until some later ESC \ happened to arrive.
+            case ParseState::CsiDiscard:
+                if (byte >= '@' && byte <= '~') parse_state_ = ParseState::Ground;
                 break;
-            case ParseState::DiscardEscape:
-                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::Discard;
+            case ParseState::OscDiscard:
+                if (byte == '\a') parse_state_ = ParseState::Ground;
+                else if (byte == '\x1b') parse_state_ = ParseState::OscDiscardEscape;
+                break;
+            case ParseState::OscDiscardEscape:
+                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::OscDiscard;
+                break;
+            case ParseState::DcsDiscard:
+                if (byte == '\x1b') parse_state_ = ParseState::DcsDiscardEscape;
+                break;
+            case ParseState::DcsDiscardEscape:
+                parse_state_ = byte == '\\' ? ParseState::Ground : ParseState::DcsDiscard;
                 break;
         }
     }
@@ -1937,6 +1953,9 @@ void TerminalEmulator::put_grapheme(std::string_view grapheme) {
 }
 
 void TerminalEmulator::clear_rasters() noexcept {
+    // Every change to the picture list is raster damage: a host that reads
+    // rasters() only when told must hear that a picture went, too.
+    if (!rasters_.empty()) damage_.rasters = true;
     rasters_.clear();
     raster_coverage_.clear();
 }
@@ -2018,6 +2037,9 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
             }
             if (!touched_live_cell) continue;
         }
+        // From here the picture changes — loses cells or goes altogether —
+        // and that is raster damage, as its placing was.
+        damage_.rasters = true;
 
         // Written over completely: drop it rather than blank every pixel of
         // a picture nobody will see again.
@@ -2086,6 +2108,7 @@ void TerminalEmulator::scroll_rasters(int top, int bottom, int rows) noexcept {
         TerminalRaster& raster = rasters_[index];
         const int raster_bottom = raster.anchor.y + raster.cell_extent.height;
         if (raster_bottom <= top || raster.anchor.y >= bottom) continue;  // outside: unmoved
+        damage_.rasters = true;  // it moves or it leaves: either way the list changed
         const int moved_top = raster.anchor.y - rows;
         const int moved_bottom = raster_bottom - rows;
         // A picture only partly inside the scrolled region, or one carried

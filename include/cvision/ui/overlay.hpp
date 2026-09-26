@@ -46,9 +46,11 @@ public:
     // be null. Returns the child as add_child() does, nullptr when its attachment callback
     // detached or destroyed it.
     View* add_item(std::unique_ptr<View> child, OverlayMode mode = OverlayMode::Fill);
-    // Detaches `child`, forgets its mode, and returns ownership; nullptr when `child` is not a
-    // layer of this overlay. The remaining layers are not moved.
-    std::unique_ptr<View> remove_item(View* child);
+    // Detaches `child` exactly as View::remove_child() does, then forgets its mode and returns
+    // ownership; nullptr when `child` is not a layer of this overlay. The remaining layers are
+    // not moved. Every way a layer leaves comes through here, so a view added back with
+    // add_child() is a Fill layer again.
+    std::unique_ptr<View> remove_child(View* child) override;
 
     void on_resized() override { relayout(); }
 

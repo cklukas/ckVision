@@ -53,8 +53,22 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         ckv::fuzz::require(document.position_at_byte(after.size()).has_value());
         ckv::fuzz::require(document.line_count() != 0U);
         if ((static_cast<unsigned char>(input[round]) & 1U) != 0U) {
-            const bool undone = document.undo();
-            if (undone) ckv::fuzz::require(document.redo());
+            // Each step reports its real span: the text before it with that span replaced by
+            // the span's new bytes is exactly the text after it.
+            const auto apply = [&document](const std::string& old_text, const ckv::widgets::DocumentChange& change) {
+                const std::string now = document.text();
+                return old_text.substr(0, change.replaced_begin_byte) +
+                           now.substr(change.replaced_begin_byte, change.inserted_bytes) +
+                           old_text.substr(change.replaced_end_byte) ==
+                       now;
+            };
+            const std::string before_undo = document.text();
+            if (const auto undone = document.undo()) {
+                ckv::fuzz::require(apply(before_undo, *undone));
+                const std::string before_redo = document.text();
+                const auto redone = document.redo();
+                ckv::fuzz::require(redone.has_value() && apply(before_redo, *redone));
+            }
         }
     }
     return 0;

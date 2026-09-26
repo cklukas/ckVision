@@ -55,8 +55,10 @@ ScrollViewport::ScrollViewport() {
 std::unique_ptr<ui::View> ScrollViewport::set_content(std::unique_ptr<ui::View> content) {
     std::unique_ptr<ui::View> previous = content_ != nullptr ? frame_->remove_child(content_) : nullptr;
     content_ = content != nullptr ? frame_->add_child(std::move(content)) : nullptr;
-    scroll_x_ = 0;
-    scroll_y_ = 0;
+    // Back to the origin through the bars, which hold the offset: zeroing
+    // only the copy here left them where the old content was scrolled to,
+    // and the next arrow key stepped on from there.
+    set_scroll(0, 0);
     relayout();
     return previous;
 }

@@ -89,6 +89,48 @@ CK_TEST(terminal_emulator_keeps_discarding_an_oversized_control_after_nontermina
     CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
 }
 
+CK_TEST(terminal_emulator_ends_an_oversized_bel_terminated_osc_at_its_bel) {
+    // xterm ends an OSC with BEL as well as with ST. One that outgrew the
+    // limit is dropped up to whichever of the two it was written to end
+    // with — waiting for an ESC \ that a BEL-terminated title never sends
+    // would swallow everything the child prints after it.
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("\x1b]0;oversize\aok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+    CK_CHECK(snapshot.title.empty());
+}
+
+CK_TEST(terminal_emulator_ends_an_oversized_csi_at_its_final_byte) {
+    // ECMA-48 §5.4: a control sequence ends at its final byte (04/00 to
+    // 07/14). A dropped one ends there too, and has no effect.
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    const Style before = emulator.snapshot().cell_buffer[0].style();
+    emulator.feed_output("\x1b[1;31;42;4mok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(!snapshot.diagnostics.empty());
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+    CK_CHECK(snapshot.cell_buffer[0].style() == before);
+}
+
+CK_TEST(terminal_emulator_still_ends_an_oversized_dcs_only_at_st) {
+    // A device control string has one terminator, ST; a BEL inside it is data.
+    term::TerminalSubsessionOptions options;
+    options.max_control_bytes = 4;
+    term::TerminalEmulator emulator(term::embedded_xterm_sixel_profile(), options);
+    emulator.feed_output("\x1bP1$qoversize\ahidden\x1b\\ok");
+    const term::TerminalSnapshot snapshot = emulator.snapshot();
+    CK_CHECK(snapshot.cell_buffer[0].grapheme() == "o");
+    CK_CHECK(snapshot.cell_buffer[1].grapheme() == "k");
+}
+
 CK_TEST(terminal_emulator_limits_and_drains_child_input) {
     term::TerminalSubsessionOptions options;
     options.max_input_bytes = 3;
@@ -358,6 +400,47 @@ CK_TEST(terminal_emulator_clear_removes_child_raster_before_next_snapshot) {
     CK_CHECK(emulator.snapshot().rasters.size() == 1);
     emulator.feed_output("\x1b[2J");
     CK_CHECK(emulator.snapshot().rasters.empty());
+}
+
+CK_TEST(terminal_emulator_reports_every_change_to_its_pictures_as_raster_damage) {
+    // `rasters` is what tells a host the picture list is worth reading again.
+    // A picture written over, scrolled or cleared away changes that list as
+    // surely as one placed, and a host that trusted the flag kept drawing a
+    // picture the child had already removed.
+    term::TerminalCapabilityProfile profile = term::embedded_xterm_sixel_profile();
+    profile.cells = Size{8, 4};
+    profile.cell_pixels = Size{4, 6};
+    term::TerminalEmulator emulator(profile);
+    emulator.set_raster_identity(9);
+    const auto place = [&emulator] {
+        emulator.feed_output("\x1b[1;1H\x1bPq#0;2;100;0;0!8~-!8~\x1b\\");  // 2 x 2 cells
+        CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+        emulator.clear_damage();
+    };
+
+    place();
+    emulator.feed_output("\x1b[1;1HX");  // written over in part
+    CK_CHECK(emulator.damage().rasters);
+
+    place();
+    emulator.feed_output("\x1b[1;1HXY\x1b[2;1HXY");  // written over completely
+    CK_CHECK(emulator.snapshot().rasters.empty());
+    CK_CHECK(emulator.damage().rasters);
+
+    place();
+    emulator.feed_output("\x1b[1S");  // scrolled up one row: it moves
+    CK_CHECK(emulator.damage().rasters);
+
+    place();
+    emulator.feed_output("\x1b[2J");  // cleared
+    CK_CHECK(emulator.snapshot().rasters.empty());
+    CK_CHECK(emulator.damage().rasters);
+
+    // And text that misses the picture leaves the list, and the flag, alone.
+    place();
+    emulator.feed_output("\x1b[4;1Hfar away");
+    CK_CHECK(emulator.snapshot().rasters.size() == 1U);
+    CK_CHECK(!emulator.damage().rasters);
 }
 
 CK_TEST(terminal_emulator_rejects_a_child_sixel_picture_over_its_declared_pixel_limit) {

@@ -57,7 +57,11 @@ public:
 
     // Replace the role the text is drawn with (spans add their attributes to
     // it). Left as kInvalidRole, "ckv.textview.text" is resolved at attach.
-    void set_role_override(ui::RoleId text_role) noexcept { text_role_ = text_role; }
+    void set_role_override(ui::RoleId text_role) noexcept {
+        if (text_role_ == text_role) return;
+        text_role_ = text_role;
+        invalidate();
+    }
     // A containing ScrollViewport can own the visible scrollbars for a
     // document surface. Hiding this view's internal vertical track keeps the
     // text preformatted while avoiding duplicate controls.

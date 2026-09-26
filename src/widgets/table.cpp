@@ -90,9 +90,15 @@ void Table::on_attached() {
 }
 
 void Table::set_columns(std::vector<TableColumn> columns) {
+    // The rule set_rows holds, from the other side: every materialized row
+    // has one cell per column, whichever of the two is set second.
+    for (const auto& row : rows_) CKV_ASSERT(row.size() == columns.size());
     columns_ = std::move(columns);
     if (cursor_column_ >= static_cast<int>(columns_.size())) cursor_column_ = std::max(0, static_cast<int>(columns_.size()) - 1);
     cancel_edit();
+    // A sort by a column the table no longer has is no sort: kept, it would
+    // index past the end of every row set for the new columns.
+    if (sort_column_ >= static_cast<int>(columns_.size())) sort_by(-1, sort_ascending_);
     invalidate();
 }
 
@@ -202,8 +208,7 @@ void Table::sort_by(int column, bool ascending) {
     if (model_ != nullptr) {
         const std::optional<std::size_t> requested = column < 0 ? std::nullopt : std::optional<std::size_t>(column);
         model_->request_sort(requested, ascending);
-        if (const auto selected = selected_cell(); selected && on_sort_requested)
-            on_sort_requested(*selected, requested, ascending);
+        if (on_sort_requested) on_sort_requested(selected_cell(), requested, ascending);
     } else {
         rebuild_order();
         resolve_model_identity(false);
@@ -383,9 +388,11 @@ bool Table::commit_edit() {
 }
 
 void Table::cancel_edit() noexcept {
+    if (!editing_) return;
     editing_ = false;
     edit_text_.clear();
     edit_diagnostic_.clear();
+    invalidate();
 }
 
 bool Table::on_key(const KeyEvent& event) {
@@ -394,10 +401,12 @@ bool Table::on_key(const KeyEvent& event) {
         switch (event.chord.key) {
             case Key::Escape:
                 cancel_edit();
-                invalidate();
                 return true;
             case Key::Enter:
-                return commit_edit();
+                // Taken whether or not the value commits: an edit left open
+                // shows its diagnostic, and the reader is still in the cell.
+                commit_edit();
+                return true;
             case Key::Backspace: {
                 const auto graphemes = text::split_graphemes(edit_text_);
                 if (!graphemes.empty()) edit_text_.erase(graphemes.back().data() - edit_text_.data());
@@ -479,6 +488,9 @@ bool Table::on_mouse(const MouseEvent& event) {
     const Point local{event.cell.x - abs.x, event.cell.y - abs.y};
 
     if (event.action == MouseAction::Down) {
+        // The primary button only: another press is not a click on the
+        // table, and is left for whoever offers a context menu.
+        if (event.button != MouseButton::Left) return false;
         if (local.y < 0 || local.y >= bounds().height || local.x < 0) return false;
         if (local.y == 0) {
             for (std::size_t column = 0; column < columns_.size(); ++column) {
@@ -547,11 +559,12 @@ void Table::draw(scene::Painter& painter) {
     // would otherwise wear, the cursor cell on the muted selection.
     const auto shown_style = [&](Style style) { return enabled ? style : accent_style(style, disabled); };
     const Style header_style = shown_style(theme.resolve(header_role_));
-    const Style normal_style = shown_style(theme.resolve(normal_role_));
+    const Style normal = theme.resolve(normal_role_);
+    const Style normal_style = shown_style(normal);
     // The cursor cell wears the full highlight only while the table holds
     // the keyboard (as a list's selection does), and never while disabled.
-    const Style selected_style =
-        shown_style(theme.resolve(enabled && has_focus() ? selected_role_ : selected_inactive_role_));
+    const bool active = enabled && has_focus();
+    const Style selected = theme.resolve(active ? selected_role_ : selected_inactive_role_);
     painter.fill(Rect{0, 0, bounds().width, 1}, Cell::from_grapheme(" ", header_style));
     for (std::size_t column = 0; column < columns_.size(); ++column) {
         const int x = column_start_x(column);
@@ -575,11 +588,17 @@ void Table::draw(scene::Painter& painter) {
             if (x >= bounds().width) break;
             const TableCellRef reference{row_id, column};
             const TableCell cell = cell_at(reference);
-            Style style = row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_ ? selected_style : normal_style;
-            if (cell.style) style = *cell.style;
-            if (model_ == nullptr && cell_style_hook_) {
-                style = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, style);
-            }
+            // What the cell says it looks like, then the cursor over it: a
+            // cell that styles itself keeps its colouring under the highlight
+            // (D-067) rather than losing either one to the other.
+            Style own = cell.style.value_or(normal);
+            if (model_ == nullptr && cell_style_hook_)
+                own = cell_style_hook_(static_cast<std::size_t>(row_id - 1), column, own);
+            const bool is_cursor = row_id == cursor_row_id_ && static_cast<int>(column) == cursor_column_;
+            const bool styled = own != normal;
+            Style style = !is_cursor ? own
+                          : styled   ? highlight_over(own, sets_color(own), selected, /*cursor=*/true, active)
+                                     : selected;
             style = shown_style(style);
             std::string shown = cell.display.empty() ? format_cell_value(cell.value) : cell.display;
             // A cell being edited is a field: the input surface, its caret

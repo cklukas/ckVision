@@ -783,3 +783,52 @@ CK_TEST(a_single_select_list_never_underlines_its_cursor_row) {
     list.draw(painter);
     CK_CHECK(!has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Underline));
 }
+
+// --- WP-38 review finding A16 ------------------------------------------------
+
+namespace {
+// Rows that carry colours of their own.
+struct StyledRows final : ListModel {
+    ckv::Style style;
+    std::size_t item_count() const override { return 3; }
+    ListItem item_at(std::size_t index) const override {
+        return ListItem{static_cast<ListItemId>(index + 1), "row", style};
+    }
+    std::optional<std::size_t> index_of(ListItemId id) const override {
+        return id >= 1 && id <= 3 ? std::optional<std::size_t>(id - 1) : std::nullopt;
+    }
+};
+}  // namespace
+
+CK_TEST(a_styled_row_still_shows_the_cursor_and_the_selection) {
+    // A16: a row's own colours are its content, and the highlight is drawn
+    // over them (D-067) -- the two colours swapped -- rather than lost.
+    Fixture f;
+    StyledRows rows;
+    rows.style.fg = ckv::Color::rgb(200, 30, 30);
+    rows.style.bg = ckv::Color::rgb(250, 250, 250);
+    auto list = make_list(f, true);
+    list.set_context(f.ctx());
+    list.set_model(rows);
+    list.set_bounds(Rect{0, 0, 8, 3});
+    list.set_selected(2, true);
+    ckv::scene::Surface surface(ckv::Size{8, 3}, ckv::Cell::from_grapheme(" ", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 8, 3});
+    list.draw(painter);
+
+    const auto swapped = [&](int row) {
+        const ckv::Style style = surface.at(ckv::Point{0, row}).style();
+        return style.fg == rows.style.bg && style.bg == rows.style.fg;
+    };
+    CK_CHECK(swapped(0));  // the cursor
+    CK_CHECK(surface.at(ckv::Point{0, 1}).style() == rows.style);
+    CK_CHECK(swapped(2));  // a selected row
+
+    // A row whose colours would not read swapped wears the highlight's.
+    rows.style.fg = rows.style.bg;
+    list.draw(painter);
+    const ckv::Style highlight = f.theme.resolve(f.roles.list_selected_inactive);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().fg == highlight.fg);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).style().bg == highlight.bg);
+    list.clear_model();
+}

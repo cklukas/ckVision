@@ -49,10 +49,18 @@ grapheme column, not a terminal-cell coordinate.
 Header: `include/cvision/widgets/editor_document.hpp`. Sets invalid-UTF-8 and
 bounded undo-history policy when constructing a document.
 
+## DocumentSelection
+
+Header: `include/cvision/widgets/editor_document.hpp`. An anchor and a caret as
+byte offsets of one revision's text: the selection a transaction records for
+its undo step and an undo or redo hands back; see
+[Editor](editor.md#positions-and-edits).
+
 ## DocumentChange
 
 Header: `include/cvision/widgets/editor_document.hpp`. The deterministic
-revision/change record delivered to document observers.
+revision/change record delivered to document observers and returned by undo
+and redo, with the selection those restore.
 
 ## DocumentEditResult
 
@@ -1490,7 +1498,9 @@ TreeView selection. For dynamic or large data, set a ListModel rather than
 materializing rows. Typing searches: letters typed within a second of each
 other form one prefix, so `sa` reaches "sample" past "parts", while a letter
 typed alone — or the same letter again — steps to the next row beginning
-with it (D-070); a provider answers the search through `find_prefix`.
+with it (D-070); a provider answers the search through `find_prefix`. A row
+that carries its own `style` keeps its colouring under the cursor and the
+selection, drawn over it as CellGrid draws over a coloured cell (D-067).
 
 ![Multi-select ListView](generated/screenshots/widget-listview.svg)
 
@@ -2030,8 +2040,10 @@ status->set_transient_hint("Saved package.json (1 284 bytes)");
 ## TabControl
 
 Header: `include/cvision/widgets/tab_control.hpp`. Use mutually exclusive
-pages within one window. Mnemonics/keyboard navigation change active page;
-Workbench and Graphics provide real tab captures.
+pages within one window. Left/Right and Alt with a caption's mnemonic change
+the active page; Tab and Shift+Tab stay focus traversal, so the focus moves
+into the page and on out of the control. Workbench and Graphics provide real
+tab captures.
 
 ![TabControl with selected page](generated/screenshots/widget-tabcontrol.svg)
 
@@ -2087,6 +2099,9 @@ constraints.
 Header: `include/cvision/widgets/table.hpp`. Use aligned sortable typed
 rows/columns. Arrow keys navigate; F2, Enter, or typing begins an editable
 cell's provider-validated edit. Use a TableModel for dynamic or large data.
+A cell that styles itself — a provider cell's `style`, or the materialized
+style hook — keeps its colouring under the cursor, which is drawn over it the
+way CellGrid draws its cursor over a coloured cell (D-067).
 
 | Table with typed columns | Table with an active cell editor |
 | :---: | :---: |

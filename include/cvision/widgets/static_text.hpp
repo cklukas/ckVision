@@ -55,8 +55,12 @@ public:
     ui::Alignment alignment() const noexcept { return alignment_; }
 
     // Replaces "ckv.static.text". An override set before attachment survives
-    // it; the call does not repaint, so the role shows from the next paint.
-    void set_role_override(ui::RoleId role) noexcept { role_ = role; }
+    // it; a change repaints.
+    void set_role_override(ui::RoleId role) noexcept {
+        if (role_ == role) return;
+        role_ = role;
+        invalidate();
+    }
 
     // Draws the first `count` rendered lines bold. A block whose opening
     // line names what the rest is about — a product title above its
@@ -75,11 +79,13 @@ public:
     // space and the columns collapse. Such text also asks for every
     // column it was written with, rather than for kProseMeasureCells:
     // it cannot wrap into a narrower view, so a narrower view would
-    // clip it instead. Setting it repaints but does not itself report a
-    // size-hint change.
+    // clip it instead. A change repaints and reports a size-hint change,
+    // since both the width asked for and the lines laid out depend on it.
     void set_preformatted(bool preformatted) noexcept {
+        if (preformatted_ == preformatted) return;
         preformatted_ = preformatted;
         invalidate();
+        size_hint_changed();
     }
 
     void draw(scene::Painter& painter) override;

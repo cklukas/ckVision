@@ -134,19 +134,24 @@ bool PosixFileSystem::is_directory(std::string_view path) const noexcept {
 }
 
 bool PosixFileSystem::create_directories(std::string_view path) {
-    const std::string normalized = normalize_path(path);
-    if (normalized.empty() || normalized.front() != '/') return false;
-    if (normalized == "/") return true;
-    std::size_t position = 1;
-    while (position <= normalized.size()) {
-        const std::size_t separator = normalized.find('/', position);
-        const std::string prefix = normalized.substr(0, separator);
-        if (::mkdir(prefix.c_str(), 0755) != 0 && errno != EEXIST) return false;
-        if (!is_directory(prefix)) return false;
+    // The path goes to the system as given, like every other call here: a
+    // relative one resolves against the working directory (POSIX.1 pathname
+    // resolution). Each prefix that ends a component is made in turn; empty
+    // components ("a//b", a trailing '/') name nothing new and are skipped.
+    if (path.empty()) return false;
+    const std::string given(path);
+    for (std::size_t start = 0;;) {
+        const std::size_t separator = given.find('/', start);
+        const std::size_t end = separator == std::string::npos ? given.size() : separator;
+        if (end > start) {
+            const std::string prefix = given.substr(0, end);
+            if (::mkdir(prefix.c_str(), 0755) != 0 && errno != EEXIST) return false;
+            if (!is_directory(prefix)) return false;
+        }
         if (separator == std::string::npos) break;
-        position = separator + 1;
+        start = separator + 1;
     }
-    return true;
+    return is_directory(given);
 }
 
 std::optional<FileReadResult> PosixFileSystem::read_file(std::string_view path) const {

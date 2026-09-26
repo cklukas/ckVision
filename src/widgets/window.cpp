@@ -177,10 +177,10 @@ ui::SizeHint Window::horizontal_size_hint() const {
     if (content_ == nullptr) return ui::SizeHint{min_size_.width, std::max(min_size_.width, title_width),
                                                   ui::kUnboundedExtent};
     const ui::SizeHint content = content_->horizontal_size_hint();
-    // The frame plus any content margin: a margin the window asks for but
-    // does not budget would be taken out of the content instead, silently
-    // re-wrapping text that was measured to fit.
-    const int chrome = 2 + 2 * horizontal_content_margin_;
+    // The frame plus the content margin on each side: a margin the window
+    // asks for but does not budget would be taken out of the content
+    // instead, silently re-wrapping text that was measured to fit.
+    const int chrome = 2 + left_content_margin_ + right_content_margin_;
     const int minimum = std::max(min_size_.width, content.min + chrome);
     const int preferred = std::max({minimum, content.preferred + chrome, title_width});
     const int maximum = content.max == ui::kUnboundedExtent ? ui::kUnboundedExtent : content.max + chrome;
@@ -214,7 +214,7 @@ ui::SizeHint Window::vertical_size_hint() const {
 }
 
 int Window::height_for_width(int width) const {
-    const int content_width = std::max(0, width - 2 - 2 * horizontal_content_margin_);
+    const int content_width = std::max(0, width - 2 - left_content_margin_ - right_content_margin_);
     const int content_height = content_ != nullptr ? content_->height_for_width(content_width) : 0;
     return std::max(vertical_size_hint().min, content_height + 2 + effective_top_margin() +
                                                    effective_bottom_margin());
@@ -401,20 +401,26 @@ Rect Window::content_rect() const noexcept {
 }
 
 void Window::set_content_margin(int horizontal, int vertical) {
-    horizontal_content_margin_ = std::max(0, horizontal);
-    vertical_content_margin_ = std::max(0, vertical);
-    set_content_margins(horizontal_content_margin_, vertical_content_margin_,
-                        horizontal_content_margin_, vertical_content_margin_);
+    set_content_margins(horizontal, vertical, horizontal, vertical);
 }
 
 void Window::set_content_margins(int left, int top, int right, int bottom) {
-    left_content_margin_ = std::max(0, left);
-    top_content_margin_ = std::max(0, top);
-    right_content_margin_ = std::max(0, right);
-    bottom_content_margin_ = std::max(0, bottom);
+    left = std::max(0, left);
+    top = std::max(0, top);
+    right = std::max(0, right);
+    bottom = std::max(0, bottom);
+    if (left == left_content_margin_ && top == top_content_margin_ && right == right_content_margin_ &&
+        bottom == bottom_content_margin_)
+        return;
+    left_content_margin_ = left;
+    top_content_margin_ = top;
+    right_content_margin_ = right;
+    bottom_content_margin_ = bottom;
     if (content_ != nullptr) content_->set_bounds(content_rect());
     if (content_cover_ != nullptr) content_cover_->set_bounds(content_rect());
     invalidate();
+    // The margins are part of what the window measures.
+    size_hint_changed();
 }
 
 Rect Window::frame_overlay_rect(ui::View& view, FrameSlot slot) const noexcept {

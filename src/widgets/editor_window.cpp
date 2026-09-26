@@ -16,7 +16,9 @@ EditorWindow::EditorWindow(std::string title, std::shared_ptr<EditorDocument> do
     set_content(std::move(editor));
     status_ = add_frame_overlay(std::make_unique<FrameText>("Ln 1, Col 1"), FrameSlot{Edge::Bottom, ui::Alignment::End});
     observer_ = controller_.document()->subscribe([this](const DocumentChange&) { refresh_chrome(); });
-    close_request = [this] { return !controller_.modified(); };
+    close_request = [this] {
+        return !controller_.modified() || close_settled_revision_ == controller_.document()->revision();
+    };
     refresh_chrome();
 }
 
@@ -48,6 +50,7 @@ EditorFileStatus EditorWindow::save_as(std::string path, EditorSaveAsPolicy poli
 
 EditorFileStatus EditorWindow::request_close(EditorCloseChoice choice) {
     const EditorFileStatus status = controller_.request_close(choice);
+    if (status == EditorFileStatus::Ok) close_settled_revision_ = controller_.document()->revision();
     refresh_chrome();
     return status;
 }

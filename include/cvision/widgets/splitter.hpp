@@ -116,6 +116,7 @@ public:
     // across the panel — the same reason ListView and Scrollbar each
     // carry one of these.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role) return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
         invalidate();

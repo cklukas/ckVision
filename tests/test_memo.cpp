@@ -482,3 +482,39 @@ CK_TEST(a_memo_rewrap_moves_no_cursor_and_no_selection) {
     memo.set_bounds(Rect{0, 0, 8, 6});  // a resize rewraps too
     CK_CHECK(memo.cursor() == before);
 }
+
+CK_TEST(backspace_and_delete_over_an_empty_selection_edit_the_text_in_one_undo_step) {
+    // A29: a selection that spans nothing is no selection. Backspace and
+    // Delete then remove a grapheme as they would without one, and one undo
+    // takes back exactly that -- not an empty step that changes nothing.
+    Fixture f;
+    auto memo = make_memo(f);
+    memo.set_context(f.ctx());
+    memo.set_bounds(Rect{0, 0, 20, 5});
+    memo.set_text("abc");
+    memo.on_key(key(Key::End));
+    memo.on_key(key(Key::Left, Modifier::Shift));
+    memo.on_key(key(Key::Right, Modifier::Shift));  // anchored, spanning nothing
+    CK_CHECK(memo.on_key(key(Key::Backspace)));
+    CK_CHECK(memo.text() == "ab");
+    CK_CHECK(memo.undo());
+    CK_CHECK(memo.text() == "abc");
+    CK_CHECK(!memo.undo());
+
+    memo.on_key(key(Key::Home));
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_key(key(Key::Left, Modifier::Shift));
+    CK_CHECK(memo.on_key(key(Key::Delete)));
+    CK_CHECK(memo.text() == "bc");
+    CK_CHECK(memo.undo());
+    CK_CHECK(memo.text() == "abc");
+    CK_CHECK(!memo.undo());
+
+    // With nothing to remove, nothing is recorded either.
+    memo.on_key(key(Key::Home));
+    memo.on_key(key(Key::Right, Modifier::Shift));
+    memo.on_key(key(Key::Left, Modifier::Shift));
+    CK_CHECK(memo.on_key(key(Key::Backspace)));
+    CK_CHECK(memo.text() == "abc");
+    CK_CHECK(!memo.undo());
+}

@@ -68,9 +68,10 @@ struct DockRects {
 DockRects compute_dock_layout(Rect available, DockEdgeExtents edges) noexcept;
 
 // A container with at most one child on each DockEdge, laid out by
-// compute_dock_layout() on every resize, item change, and child size-hint
-// change. Only children added with add_item() are placed; hidden edge
-// children still reserve their strip.
+// compute_dock_layout() on every resize, item change, visibility change and
+// child size-hint change. Only children added with add_item() are placed; a
+// hidden child is laid out as an absent edge, reserving no strip, and keeps
+// its bounds until it is shown again.
 class Dock : public View {
 public:
     // Same constructor as View: parent-local bounds and a focus policy, both
@@ -81,11 +82,15 @@ public:
     // (height for Top/Bottom, width for Left/Right) is honored,
     // clamped to fit the space earlier edges left; Center fills
     // whatever space is left after all four. CKV_ASSERTs if `edge`
-    // already has a child — remove_item first to replace one.
+    // already has a child — remove_child() first to replace one.
     View* add_item(std::unique_ptr<View> child, DockEdge edge);
-    // Detaches `child`, frees its edge, relays out, and returns ownership;
-    // nullptr (and no relayout) when `child` is not a child of this dock.
-    std::unique_ptr<View> remove_item(View* child);
+    // Detaches `child` exactly as View::remove_child() does, then frees its
+    // edge, relays out and returns ownership; nullptr (and no relayout) when
+    // `child` is not a child of this dock. Every way a child leaves comes
+    // through here, so a departed child's edge is always free again. When an
+    // attachment callback detaches the child add_item() is adding, the edge
+    // is never taken and add_item() returns nullptr.
+    std::unique_ptr<View> remove_child(View* child) override;
 
     void on_resized() override { relayout(); }
     // See Row/Column/Grid: a child's own hint changing (M9/WP-16)

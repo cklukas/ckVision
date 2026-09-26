@@ -2006,6 +2006,28 @@ constructor would need a factory returning a result, for failures a caller
 cannot recover from inside the session anyway); keeping the unused type (a
 documented contract nothing honours is worse than none).
 
+**D-079 — A child's maximum limits the spare space it is given, and hidden
+children take no space.** `SizeHint::max` was declared by many widgets and
+read by no container, so a Row or Column grew an Expanding child past the
+largest extent it said it could use. Row and Column now share out spare space
+among Expanding children by weight, each no further than its max. What one
+child cannot take goes to the others, and what none can take stays empty
+after the last child rather than stretching anything. A container's own max
+stays unbounded, because it leaves unused room empty. Where a container is
+told to give a child an extent (Fill cross-axis alignment, a Grid cell, the
+Dock centre, an Overlay layer), the child gets that extent: max is the
+answer to "how much of the spare may you take", not a cap on a place assigned
+to it. A hidden child takes nothing. Row, Column, and Dock lay it out as
+absent, so a hidden Dock edge keeps no strip, and a Row or Column's shadow
+row is decided by its visible children alone. Grid, Overlay, and AnchorPane
+place each child independently, so a hidden one there already takes nothing
+from its siblings. Every container forgets a child's layout spec when the
+child leaves by any route (`remove_child`, `detach_child`, a view closing
+itself), and never records one for a child that detached during its own
+attachment. *Rejected:* treating max as a hard cap everywhere (a Label's own
+contract is to take its column's width, and many controls declare max equal
+to their natural width); ignoring max (a declared contract nothing honours).
+
 **D-080 — A raster region records no fallback state.** `RasterRegion` and
 `RasterSlice` carried a `fallback_active` flag, and every golden `raster` line
 ended in `fallback active|hidden`. Outside tests the flag was always true, and

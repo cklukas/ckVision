@@ -219,12 +219,21 @@ std::string style_to_sgr(const Style& style, const Capabilities& caps) {
 }
 
 std::string sanitize_osc_text(std::string_view text) {
+    // Only text survives. ST ends an OSC — ESC \ in a 7-bit code, 09/12 in an
+    // 8-bit one (ECMA-48 §8.3.143) — xterm also ends one at BEL, and CAN and
+    // SUB cancel a sequence in progress. ECMA-48 §8.3.89 admits no other
+    // control into a command string either, and a title is one line, so every
+    // C0 and C1 control goes. A UTF-8 receiver meets C1 as the code points
+    // U+0080..U+009F; a lone byte in 0x80..0x9F is malformed UTF-8 and becomes
+    // U+FFFD, whose encoding holds no byte below 0xA0. No spelling of a
+    // terminator gets through, and text whose encoding merely contains such a
+    // byte as a continuation (U+201C is E2 80 9C) is kept whole.
     std::string out;
     out.reserve(text.size());
-    for (const char c : text) {
-        const unsigned char b = static_cast<unsigned char>(c);
-        if (b == 0x1B || b == 0x07) continue;  // strip: would prematurely terminate the OSC
-        out += c;
+    for (std::size_t pos = 0; pos < text.size();) {
+        const char32_t cp = utf8::decode(text, pos);
+        if (cp <= 0x1F || (cp >= 0x7F && cp <= 0x9F)) continue;
+        utf8::encode(cp, out);
     }
     return out;
 }

@@ -256,6 +256,9 @@ bool Button::on_key_release(const KeyEvent& event) {
 bool Button::on_mouse(const MouseEvent& event) {
     const bool inside = contains(absolute_bounds(), event.cell);
     if (event.action == MouseAction::Down) {
+        // The primary button presses a button; another is not a click on it
+        // and is left for whoever offers a context menu.
+        if (event.button != MouseButton::Left) return false;
         pressed_ = true;
         armed_ = true;
         invalidate();
@@ -276,7 +279,11 @@ bool Button::on_mouse(const MouseEvent& event) {
         return true;  // still claim Move while a Down/Up pair is in flight
     }
     if (event.action == MouseAction::Up) {
-        const bool fire = armed_ && inside;
+        // A release the terminal names as another button's still ends the
+        // press -- the pointer grab ends with it -- but takes it back rather
+        // than firing it. An unnamed release is the press's own.
+        const bool own_release = event.button == MouseButton::Left || event.button == MouseButton::None;
+        const bool fire = armed_ && inside && own_release;
         pressed_ = false;
         armed_ = false;
         invalidate();

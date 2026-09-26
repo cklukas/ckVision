@@ -34,8 +34,9 @@
 <rect x="351" y="180" width="288" height="18" fill="#0000aa"/>
 <rect x="351" y="198" width="288" height="18" fill="#c8c8c8"/>
 <rect x="243" y="216" width="18" height="252" fill="#c8c8c8"/>
-<rect x="261" y="216" width="378" height="18" fill="#00aaaa"/>
-<rect x="261" y="234" width="378" height="18" fill="#c8c8c8"/>
+<rect x="261" y="216" width="144" height="18" fill="#00aaaa"/>
+<rect x="405" y="216" width="234" height="36" fill="#c8c8c8"/>
+<rect x="261" y="234" width="144" height="18" fill="#c8c8c8"/>
 <rect x="261" y="252" width="90" height="162" fill="#c8c8c8"/>
 <rect x="351" y="252" width="288" height="18" fill="#0000aa"/>
 <rect x="351" y="270" width="288" height="18" fill="#c8c8c8"/>

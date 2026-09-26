@@ -281,8 +281,8 @@ struct TerminalSubsessionOptions {
     // dropped.
     std::size_t max_output_bytes = 64 * 1024;
     // The longest control sequence or string (CSI, OSC, non-Sixel DCS) the parser collects. One
-    // that grows past it is dropped, and the parser then skips output up to the next string
-    // terminator (ESC \).
+    // that grows past it is dropped, and the parser skips output up to where that sequence ends:
+    // a CSI's final byte, an OSC's BEL or ST (ESC \), a DCS's ST.
     std::size_t max_control_bytes = 16 * 1024;
     // Sixel payloads are graphics data, not ordinary CSI/OSC control
     // strings. Keep a separate bound so real images are not rejected by the
@@ -498,8 +498,9 @@ struct TerminalDamage {
     bool modes = false;
     // The child set its title (or the title stack changed it).
     bool title = false;
-    // A picture was placed (also set with `full`). A picture later erased, moved or removed by
-    // text, scrolling or clearing does not set it; the rows of the cells involved are damaged.
+    // The picture list (rasters()) changed: a picture was placed, or one was written over in
+    // part or whole, moved or removed by scrolling, or cleared away (also set with `full`). The
+    // rows of any cells involved are damaged as well.
     bool rasters = false;
     // The four below are things that HAPPENED rather than things that are set,
     // and a host does something different with each: put text on the system

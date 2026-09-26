@@ -95,3 +95,17 @@ CK_TEST(key_chord_capture_has_a_deterministic_unbound_golden) {
         "end\n";
     CK_CHECK(ckv::golden::serialize(ckv::scene::capture(surface)) == expected);
 }
+
+CK_TEST(only_the_primary_button_starts_a_chord_capture) {
+    // A19: a right or middle press is not a click on the field.
+    ckv::widgets::KeyChordCapture capture;
+    capture.set_bounds(ckv::Rect{0, 0, 12, 1});
+    for (const ckv::MouseButton button : {ckv::MouseButton::Right, ckv::MouseButton::Middle}) {
+        CK_CHECK(!capture.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, button, ckv::Point{3, 0},
+                                                   std::nullopt, ckv::Modifier::None}));
+        CK_CHECK(!capture.capturing());
+    }
+    CK_CHECK(capture.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 0},
+                                              std::nullopt, ckv::Modifier::None}));
+    CK_CHECK(capture.capturing());
+}

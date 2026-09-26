@@ -3,6 +3,7 @@
 #include "cvision/widgets/common_components.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -105,8 +106,10 @@ CK_TEST(date_picker_supports_strict_optional_segmented_editing_without_a_clock) 
     CK_CHECK(date.on_key(key(Key::Delete)));
     CK_CHECK(!date.value());
 
+    // Required again, an empty field takes the seed -- the caller's today,
+    // which no value the reader chose has moved.
     date.set_empty_allowed(false);
-    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2025, 3, 27}}));
+    CK_CHECK((date.value() == std::optional<DateValue>{DateValue{2024, 2, 29}}));
     CK_CHECK(date.on_key(key(Key::Delete)));
     CK_CHECK(date.value().has_value());
 }
@@ -1689,4 +1692,197 @@ CK_TEST(a_tooltip_given_less_room_than_its_text_elides_it_in_the_tooltip_role) {
     const ckv::scene::Surface surface = painted(tip);
     CK_CHECK(row_of(surface, 0) == " Opens t… ");
     CK_CHECK(surface.at(ckv::Point{1, 0}).style() == s.theme.resolve(s.roles.tooltip));
+}
+
+// --- WP-38 review findings A1-A5 -------------------------------------------
+
+CK_TEST(a_calendar_without_its_title_answers_a_click_on_its_first_week) {
+    // A1: the rows a click maps to are the rows the days are drawn on. With
+    // the title off (as in a CalendarDropdown) the first week is drawn on
+    // row 1, and a click there has to choose a day of it.
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    calendar.set_show_title(false);
+    calendar.set_bounds(ckv::Rect{0, 0, 21, 7});
+    calendar.set_selected(DateValue{2026, 8, 20});
+    // 1 Aug 2026 is a Saturday: column 5 of a Monday-first week.
+    CK_CHECK(calendar.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                               ckv::Point{15, 1}, std::nullopt, Modifier::None}));
+    CK_CHECK(calendar.selected() == (DateValue{2026, 8, 1}));
+    // The sixth week's row is the last one drawn: 31 Aug is on row 6.
+    CK_CHECK(calendar.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                               ckv::Point{0, 6}, std::nullopt, Modifier::None}));
+    CK_CHECK(calendar.selected() == (DateValue{2026, 8, 31}));
+    // The weekday heading is not a week.
+    CK_CHECK(!calendar.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                                ckv::Point{15, 0}, std::nullopt, Modifier::None}));
+}
+
+CK_TEST(backspace_in_a_search_box_and_a_palette_removes_a_whole_grapheme) {
+    // A2: one grapheme, never one byte: a byte would leave the query holding
+    // half a character, which is not text at all.
+    Standalone s;
+    SearchBox search;
+    attach_standalone(search, s);
+    search.set_query("café");
+    CK_CHECK(search.on_key(key(Key::Backspace)));
+    CK_CHECK(search.query() == "caf");
+    search.set_query("é\U0001F44D");
+    CK_CHECK(search.on_key(key(Key::Backspace)));
+    CK_CHECK(search.query() == "é");
+    CK_CHECK(search.on_key(key(Key::Backspace)));
+    CK_CHECK(search.query().empty());
+
+    CommandPalette palette;
+    attach_standalone(palette, s);
+    palette.set_query("x\U0001F44D");
+    CK_CHECK(palette.on_key(key(Key::Backspace)));
+    CK_CHECK(palette.query() == "x");
+}
+
+CK_TEST(new_inspector_rows_end_an_edit_and_a_read_only_row_takes_no_backspace) {
+    // A3: an edit belongs to the row it began on; rows replaced under it end
+    // it, so the first new row -- read-only here -- cannot be changed.
+    Standalone s;
+    PropertyInspector inspector;
+    attach_standalone(inspector, s);
+    inspector.set_items({PropertyItem{"Name", "value", true}});
+    CK_CHECK(inspector.on_key(key(Key::Enter)));
+    int changes = 0;
+    inspector.on_change = [&](std::size_t, std::string) { ++changes; };
+
+    inspector.set_items({PropertyItem{"Id", "fixed", false}});
+    CK_CHECK(!inspector.on_key(key(Key::Backspace)));
+    CK_CHECK(!inspector.on_key(typed("x")));
+    CK_CHECK(inspector.items()[0].value == "fixed");
+    CK_CHECK(changes == 0);
+    CK_CHECK(!inspector.cursor_state().has_value());
+}
+
+CK_TEST(a_date_pickers_value_does_not_move_its_seed_or_the_calendars_today) {
+    // A4: the seed is the caller's notion of today. The value the reader
+    // settles on is a different fact, and must not become "today".
+    ckv::term::HeadlessTerminal term(ckv::Size{60, 20});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+    app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    auto* desktop = static_cast<ckv::widgets::Desktop*>(
+        app.root().add_child(std::make_unique<ckv::widgets::Desktop>(app.root().bounds())));
+    auto* picker = static_cast<DatePicker*>(desktop->add_child(std::make_unique<DatePicker>()));
+    picker->set_bounds(ckv::Rect{4, 2, 14, 1});
+    picker->set_seed(DateValue{2026, 8, 25});
+    picker->set_calendar_host(app, *desktop);
+    app.step(0);
+
+    picker->set_value(DateValue{2020, 1, 15});
+    CK_CHECK(picker->seed() == (DateValue{2026, 8, 25}));
+    CK_CHECK(picker->open_calendar());
+    auto* dropdown = dynamic_cast<CalendarDropdown*>(app.input_capture());
+    CK_CHECK(dropdown != nullptr);
+    if (dropdown != nullptr) {
+        CK_CHECK((dropdown->calendar().today() == std::optional<DateValue>{DateValue{2026, 8, 25}}));
+        CK_CHECK(dropdown->calendar().selected() == (DateValue{2020, 1, 15}));
+    }
+}
+
+CK_TEST(spin_box_and_slider_arithmetic_holds_across_the_whole_int_range) {
+    // A5: stepping and mapping a pointer column to a value over the widest
+    // range an int allows neither overflows nor wraps.
+    constexpr int lowest = std::numeric_limits<int>::min();
+    constexpr int highest = std::numeric_limits<int>::max();
+    Standalone s;
+    SpinBox spin;
+    attach_standalone(spin, s);
+    spin.set_range(lowest, highest);
+    spin.set_step(highest);
+    spin.set_value(highest - 1);
+    CK_CHECK(spin.on_key(key(Key::Up)));
+    CK_CHECK(spin.value() == highest);
+    spin.set_value(lowest + 1);
+    CK_CHECK(spin.on_key(key(Key::Down)));
+    CK_CHECK(spin.value() == lowest);
+
+    Slider slider;
+    attach_standalone(slider, s);
+    slider.set_bounds(ckv::Rect{0, 0, 11, 1});
+    slider.set_range(lowest, highest);
+    slider.set_step(highest);
+    slider.set_value(lowest + 1);
+    CK_CHECK(slider.on_key(key(Key::Left)));
+    CK_CHECK(slider.value() == lowest);
+    const auto click = [&](int x) {
+        return slider.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left,
+                                               ckv::Point{x, 0}, std::nullopt, Modifier::None});
+    };
+    CK_CHECK(click(10));
+    CK_CHECK(slider.value() == highest);
+    CK_CHECK(click(5));
+    CK_CHECK(slider.value() == -1);  // halfway along 2^32 - 1 steps from the lowest int
+    CK_CHECK(click(0));
+    CK_CHECK(slider.value() == lowest);
+
+    // The thumb is drawn where the value is: the far end for the highest int.
+    slider.set_value(highest);
+    ckv::scene::Surface surface = painted(slider);
+    CK_CHECK(surface.at(ckv::Point{10, 0}).grapheme() == "●");
+    slider.set_value(lowest);
+    surface = painted(slider);
+    CK_CHECK(surface.at(ckv::Point{0, 0}).grapheme() == "●");
+}
+
+CK_TEST(a_calendar_asks_for_the_rows_it_draws_and_says_when_that_changes) {
+    // A48: the title, the weekday heading and six week rows with the title
+    // on; one row fewer without it. A container is told when a setter
+    // changes the measure, so the calendar is laid out again.
+    struct Host final : ckv::ui::View {
+        int notifications = 0;
+        void on_child_size_hint_changed(ckv::ui::View&) override { ++notifications; }
+    } host;
+    auto* calendar = static_cast<CalendarView*>(host.add_child(std::make_unique<CalendarView>()));
+    CK_CHECK(calendar->vertical_size_hint().min == 8);
+    CK_CHECK(calendar->vertical_size_hint().preferred == 8);
+    CK_CHECK(calendar->vertical_size_hint().max == 8);
+
+    calendar->set_show_title(false);
+    CK_CHECK(host.notifications == 1);
+    CK_CHECK(calendar->vertical_size_hint().min == 7);
+    CK_CHECK(calendar->vertical_size_hint().preferred == 7);
+    CK_CHECK(calendar->vertical_size_hint().max == 7);
+    // The last week row a month can need is the last row of those seven.
+    Standalone s;
+    attach_standalone(*calendar, s);
+    calendar->set_month(DateValue{2026, 8, 1});  // 31 days from a Saturday: six week rows
+    calendar->set_bounds(ckv::Rect{0, 0, 21, 7});
+    const ckv::scene::Surface surface = painted(*calendar);
+    CK_CHECK(two_cells(surface, ckv::Point{0, 6}) == "31");
+
+    calendar->set_show_iso_week_numbers(true);  // wider: the container is told
+    CK_CHECK(host.notifications == 2);
+    calendar->set_show_iso_week_numbers(true);
+    calendar->set_show_title(false);
+    CK_CHECK(host.notifications == 2);
+}
+
+CK_TEST(a_calendar_is_at_least_as_wide_as_the_columns_it_draws) {
+    // A50: seven day columns of three cells less the trailing gap are 20
+    // cells; the "Wk" column adds three. The minimum is what is drawn, and
+    // the preferred width keeps one blank after the last column.
+    Standalone s;
+    CalendarView calendar;
+    attach_standalone(calendar, s);
+    CK_CHECK(calendar.horizontal_size_hint().min == 20);
+    CK_CHECK(calendar.horizontal_size_hint().preferred == 21);
+    calendar.set_show_iso_week_numbers(true);
+    CK_CHECK(calendar.horizontal_size_hint().min == 23);
+    CK_CHECK(calendar.horizontal_size_hint().preferred == 24);
+
+    // At its minimum width every column is on screen: Sunday 30 August
+    // 2026 is in the last column, and its week number in the first.
+    calendar.set_month(DateValue{2026, 8, 1});
+    calendar.set_bounds(ckv::Rect{0, 0, calendar.horizontal_size_hint().min, 8});
+    const ckv::scene::Surface surface = painted(calendar);
+    CK_CHECK(two_cells(surface, ckv::Point{3 + 6 * 3, 6}) == "30");
+    CK_CHECK(two_cells(surface, ckv::Point{0, 6}) == "35");
 }

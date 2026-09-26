@@ -80,12 +80,18 @@ public:
     // focus (its foreground also colours the caption then). A role left as
     // kInvalidRole is resolved from the standard names at attach.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role) return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
+        invalidate();
     }
     // The role whose colours accent the mnemonic letters of the choices and
     // the caption, in place of "ckv.label.mnemonic".
-    void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
+    void set_mnemonic_role_override(ui::RoleId role) noexcept {
+        if (mnemonic_role_ == role) return;
+        mnemonic_role_ = role;
+        invalidate();
+    }
 
     // Per-choice state; `index` must be below the number of labels (checked
     // by assertion). checked() is true only for CheckState::Checked;
@@ -172,12 +178,18 @@ public:
     // Replace the roles the choices are drawn with, as CheckGroup's
     // set_role_override does.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role) return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
+        invalidate();
     }
     // The role whose colours accent the mnemonic letters of the choices and
     // the caption, in place of "ckv.label.mnemonic".
-    void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
+    void set_mnemonic_role_override(ui::RoleId role) noexcept {
+        if (mnemonic_role_ == role) return;
+        mnemonic_role_ = role;
+        invalidate();
+    }
 
     // The selected choice's index, or -1 when none is. set_selected accepts
     // -1 (clear) or a valid index and ignores anything else; a valid index

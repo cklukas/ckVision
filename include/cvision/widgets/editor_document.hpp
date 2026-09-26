@@ -123,13 +123,25 @@ enum class DocumentEditStatus {
     LimitExceeded,
 };
 
+// A selection as byte offsets into the text of one revision: the anchor, where the selection
+// began, and the caret, its moving end. Equal offsets describe a caret without a selection.
+// Unlike a DocumentPosition it names no revision, because it is history metadata: it is stored
+// with an undo step and handed back for the text that step restores.
+struct DocumentSelection {
+    std::size_t anchor_byte = 0;
+    std::size_t caret_byte = 0;
+
+    // Memberwise equality.
+    friend bool operator==(const DocumentSelection&, const DocumentSelection&) = default;
+};
+
 // One change, described as a single replacement covering everything it
 // touched: the old bytes [replaced_begin_byte, replaced_end_byte) became the
 // `inserted_bytes` bytes that now start at replaced_begin_byte. A transaction
 // of several separated edits is reported as the one span from its first edit
-// to its last, and an undo, a redo or a set_text as the whole document, so an
-// observer can always carry a position through a change with the same
-// arithmetic.
+// to its last; an undo or a redo as that same span of the transaction it
+// reverts or replays; a set_text as the whole document. An observer can
+// therefore always carry a position through a change with the same arithmetic.
 struct DocumentChange {
     // The revision before the change and the one it produced, always one more.
     DocumentRevision previous_revision = 0;
@@ -139,11 +151,21 @@ struct DocumentChange {
     std::size_t replaced_begin_byte = 0;
     std::size_t replaced_end_byte = 0;
     std::size_t inserted_bytes = 0;
-    // Zero-based lines of the old text. For an edit or a transaction they are the lines of
-    // replaced_begin_byte and replaced_end_byte; for an undo, a redo or a set_text they are 0
-    // and the larger of the old and the new last line.
+    // Zero-based lines of the old text. For an edit, a transaction, an undo or a redo they are
+    // the lines of replaced_begin_byte and replaced_end_byte; for a set_text they are 0 and the
+    // larger of the old and the new last line.
     std::size_t first_affected_line = 0;
     std::size_t last_affected_line = 0;
+    // For an undo or a redo only, the selection the view that asked for the step restores, as
+    // bytes of the new text: after an undo, the selection recorded with the reverted
+    // transaction (DocumentTransaction::set_selection_before) or, when none was, a caret after
+    // the restored text; after a redo, a caret after the replayed text. Other views of the
+    // document carry their own selections through the change instead. Empty for every other
+    // change.
+    std::optional<DocumentSelection> selection;
+
+    // Memberwise equality.
+    friend bool operator==(const DocumentChange&, const DocumentChange&) = default;
 };
 
 // The outcome of EditorDocument::replace or commit.
@@ -158,8 +180,9 @@ struct DocumentEditResult {
 };
 
 // One replacement queued in a DocumentTransaction: the text of `range` becomes `text`. On commit
-// the text is normalized as set_text input is (CR LF and lone CR become LF, malformed UTF-8
-// follows the document's policy), and a UTF-8 byte-order mark at its very start is removed.
+// the text's line breaks are normalized as set_text input's are (CR LF and lone CR become LF) and
+// malformed UTF-8 follows the document's policy. Unlike set_text input, a leading U+FEFF is kept:
+// in an edit it is a ZERO WIDTH NO-BREAK SPACE, not a byte-order mark.
 struct DocumentTextEdit {
     // A range of the transaction's base revision, empty to insert, and its replacement.
     DocumentRange range;
@@ -179,10 +202,19 @@ public:
     DocumentRevision base_revision() const noexcept { return base_revision_; }
     // Queues one replacement without validating it. Every range refers to the base revision's
     // text, not to the text earlier queued edits would leave, so the edits apply as if at once;
-    // ranges must not overlap, though they may touch.
+    // ranges must not overlap, though they may touch. Where edits touch, the result is fixed
+    // regardless of the order they were queued in, except among insertions at one position:
+    // those land in the order they were queued, and all of them ahead of a replacement that
+    // begins at that position.
     void replace(DocumentRange range, std::string text);
     // The queued replacements, in the order they were queued.
     const std::vector<DocumentTextEdit>& edits() const noexcept { return edits_; }
+    // The selection the editing view had before this transaction, as bytes of the base
+    // revision's text. It is kept with the transaction's undo step, and an undo hands it back
+    // (see DocumentChange::selection). Both offsets must lie on grapheme boundaries inside that
+    // text, or commit refuses the transaction with InvalidRange. None by default.
+    void set_selection_before(DocumentSelection selection) noexcept { selection_before_ = selection; }
+    const std::optional<DocumentSelection>& selection_before() const noexcept { return selection_before_; }
     // Whether nothing is queued. Committing an empty transaction of the current revision returns
     // Ok and changes nothing.
     bool empty() const noexcept { return edits_.empty(); }
@@ -190,6 +222,7 @@ public:
 private:
     DocumentRevision base_revision_;
     std::vector<DocumentTextEdit> edits_;
+    std::optional<DocumentSelection> selection_before_;
 };
 
 // A persistent piece-tree document. Original text and inserted text are kept
@@ -198,13 +231,16 @@ private:
 // accidentally edit changed text.
 class EditorDocument {
 public:
-    // A subscription's identity, and the callback it holds. Ids start at 1 and a document never
-    // reuses one, so 0 is free to mean "no subscription". An observer is called synchronously
-    // after every applied change (an edit, a commit, an undo, a redo, a set_text) with that
-    // change; never for a refused one, and never for mark_clean, set_preferred_newline or
-    // set_utf8_bom, which change no text.
+    // A subscription's identity, and the callbacks a subscription holds. Ids start at 1, are
+    // shared by both kinds of subscription, and a document never reuses one, so 0 is free to
+    // mean "no subscription". An Observer is called synchronously after every applied change
+    // of the text (an edit, a commit, an undo, a redo, a set_text) with that change; never for
+    // a refused one. A StateObserver is called synchronously after mark_clean,
+    // set_preferred_newline or set_utf8_bom changes what modified(), preferred_newline() or
+    // has_utf8_bom() report; those change no text and never reach an Observer.
     using ObserverId = std::uint64_t;
     using Observer = std::function<void(const DocumentChange&)>;
+    using StateObserver = std::function<void()>;
 
     // Opaque persistent tree handle. It is public only so the implementation's
     // value helpers can remain allocation-free; clients cannot construct or
@@ -236,20 +272,20 @@ public:
     // modified() is true whenever the revision differs from the one mark_clean() last recorded
     // (construction records the first). Every applied change counts, including set_text and an
     // undo back to the recorded text, because revisions never return to an earlier value.
-    // mark_clean() does not notify observers.
+    // mark_clean() notifies the state observers when the document was modified.
     bool modified() const noexcept { return revision_ != clean_revision_; }
-    void mark_clean() noexcept { clean_revision_ = revision_; }
+    void mark_clean();
 
     // File-format metadata that travels with the text without being part of it: the line-break
     // convention and whether the file began with a UTF-8 byte-order mark. set_text records both
     // from its input; the setters change them without touching the text, the revision, the
-    // modified flag or the history, and without notifying observers. FileEditorController
-    // applies them when it saves. encoding() is always Utf8.
+    // modified flag or the history, and notify the state observers when the value changes.
+    // FileEditorController applies them when it saves. encoding() is always Utf8.
     DocumentNewline preferred_newline() const noexcept { return preferred_newline_; }
-    void set_preferred_newline(DocumentNewline newline) noexcept { preferred_newline_ = newline; }
+    void set_preferred_newline(DocumentNewline newline);
     DocumentEncoding encoding() const noexcept { return DocumentEncoding::Utf8; }
     bool has_utf8_bom() const noexcept { return utf8_bom_; }
-    void set_utf8_bom(bool present) noexcept { utf8_bom_ = present; }
+    void set_utf8_bom(bool present);
 
     // The size of the text in bytes (normalized, BOM excluded); its number of logical lines,
     // which is its LF count plus one, so an empty document has one line and a trailing LF adds
@@ -281,22 +317,24 @@ public:
     DocumentEditResult replace(DocumentRange range, std::string text);
     // Applies every edit of `transaction` at once, or none. It is refused with StaleRevision
     // when the transaction or a range is not of the current revision, InvalidRange for a
-    // reversed, out-of-bounds, mid-grapheme or overlapping range, InvalidUtf8 for text the
+    // reversed, out-of-bounds, mid-grapheme or overlapping range or a recorded selection that
+    // is out of bounds or mid-grapheme, InvalidUtf8 for text the
     // policy rejects, and LimitExceeded when the result would outgrow max_document_bytes. On
     // success the revision advances by exactly one, the redo history is cleared, one undo step
-    // is recorded (evicting old ones under the history limits), and the observers receive one
-    // DocumentChange covering all the edits.
+    // is recorded (evicting old ones under the history limits) together with the transaction's
+    // selection_before, and the observers receive one DocumentChange covering all the edits.
     DocumentEditResult commit(DocumentTransaction transaction);
     // Whether undo() or redo() has a step to take.
     bool can_undo() const noexcept { return !undo_.empty(); }
     bool can_redo() const noexcept { return !redo_.empty(); }
     // Step back or forward over one recorded change, restoring the exact text of that point.
     // Each advances the revision, so positions taken before are stale and modified() stays
-    // true, and notifies the observers with a whole-document change. They return false, having
-    // changed nothing, when there is no step. The newline convention and BOM flag are not part
-    // of the history.
-    bool undo();
-    bool redo();
+    // true, notifies the observers with the change, and returns it: the covering span of the
+    // transaction it reverts or replays, with the selection to restore (see DocumentChange).
+    // They return nullopt, having changed nothing, when there is no step. The newline
+    // convention and BOM flag are not part of the history.
+    std::optional<DocumentChange> undo();
+    std::optional<DocumentChange> redo();
     // Forgets every undo and redo step. The text, the revision and the modified flag stay as
     // they are, and observers are not called.
     void clear_history();
@@ -313,20 +351,23 @@ public:
     // policy without changing the document's normal edit policy.
     DocumentEditStatus set_text(std::string text, InvalidUtf8Policy policy);
 
-    // subscribe registers `observer` and returns its id; unsubscribe removes it and ignores an
-    // unknown id. Observers run in subscription order over a snapshot of the list, so
-    // subscribing or unsubscribing inside a notification takes effect from the next one; an
-    // observer removed during a notification is still called for that one.
+    // subscribe and subscribe_state register `observer` and return its id; unsubscribe removes
+    // the subscription of either kind with that id and ignores an unknown one. Observers of a
+    // kind run in subscription order over a snapshot of their list, so subscribing or
+    // unsubscribing inside a notification takes effect from the next one; an observer removed
+    // during a notification is still called for that one.
     ObserverId subscribe(Observer observer);
+    ObserverId subscribe_state(StateObserver observer);
     void unsubscribe(ObserverId observer) noexcept;
 
 private:
     struct HistoryEntry;
 
     DocumentEditResult commit_edits(const std::vector<DocumentTextEdit>& edits, DocumentRevision base_revision,
-                                    bool record_history);
+                                    const std::optional<DocumentSelection>& selection_before);
     bool range_is_current_and_valid(DocumentRange range) const;
     void notify(const DocumentChange& change);
+    void notify_state();
 
     EditorDocumentOptions options_;
     std::string original_;
@@ -341,6 +382,7 @@ private:
     std::size_t undo_bytes_ = 0;
     ObserverId next_observer_id_ = 1;
     std::vector<std::pair<ObserverId, Observer>> observers_;
+    std::vector<std::pair<ObserverId, StateObserver>> state_observers_;
 };
 
 }  // namespace ckv::widgets

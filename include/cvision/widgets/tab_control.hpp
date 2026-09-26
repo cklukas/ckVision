@@ -21,10 +21,9 @@ namespace ckv::widgets {
 //
 // The control is a Tab stop. While a key reaches it, Left and Right step to
 // the previous and next tab, wrapping around, and Alt plus a caption's
-// mnemonic letter selects that tab. Tab (with any modifiers, Shift included)
-// also steps to the next tab and is consumed, so Tab traversal does not move
-// the focus out of a focused TabControl. A left-button press on a caption
-// selects it.
+// mnemonic letter selects that tab. Tab and Shift+Tab are left unhandled, so
+// focus traversal moves into the page and out of the control as it does
+// anywhere else. A left-button press on a caption selects it.
 //
 // Resolves its theme roles from context() once attached, borrowing the menu
 // family's: "ckv.menu.bar.normal" for the strip and inactive captions,

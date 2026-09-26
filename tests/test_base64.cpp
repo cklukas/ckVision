@@ -48,3 +48,15 @@ CK_TEST(base64_decoding_is_strict_because_its_input_may_be_hostile) {
     CK_CHECK(!ckv::base64::decode("!!!!", out));
     CK_CHECK(out == "untouched");
 }
+
+CK_TEST(base64_rejects_non_zero_pad_bits) {
+    // RFC 4648 §3.5: the bits a final quantum does not fill are zero when
+    // encoded, and a decoder may reject a spelling that sets them. Accepting
+    // one would give the same bytes a second spelling — "Zh==" and "Zg==" both
+    // meaning "f" — which is exactly what a strict decoder exists to refuse.
+    std::string out;
+    CK_CHECK(!ckv::base64::decode("Zh==", out));  // "f" with a stray low bit in 'h'
+    CK_CHECK(!ckv::base64::decode("Zm9=", out));  // "fo" with a stray low bit in '9'
+    CK_CHECK(ckv::base64::decode("Zg==", out) && out == "f");
+    CK_CHECK(ckv::base64::decode("Zm8=", out) && out == "fo");
+}

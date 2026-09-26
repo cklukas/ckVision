@@ -52,3 +52,23 @@ CK_TEST(editor_window_preserves_its_dirty_document_until_the_client_chooses_disc
                                                            EditorOpenModifiedPolicy::Discard}) == EditorFileStatus::Ok);
     CK_CHECK(window.document()->text() == "second");
 }
+
+CK_TEST(editor_window_closes_once_the_client_chose_discard_and_vetoes_again_after_a_new_change) {
+    MemoryFileSystem filesystem;
+    filesystem.add_file("notes.txt", "notes");
+    EditorWindow window("Editor", std::make_shared<EditorDocument>(), filesystem);
+    CK_CHECK(window.open("notes.txt") == EditorFileStatus::Ok);
+    const auto end = window.document()->end();
+    CK_CHECK(window.document()->replace({end, end}, " unsaved"));
+    CK_CHECK(!window.close());
+    CK_CHECK(window.request_close(EditorCloseChoice::Cancel) == EditorFileStatus::Conflict);
+    CK_CHECK(!window.close());
+    CK_CHECK(window.request_close(EditorCloseChoice::Discard) == EditorFileStatus::Ok);
+    CK_CHECK(window.document()->modified());
+    // The discard answered for the changes as they stood; a further change asks again.
+    const auto later = window.document()->end();
+    CK_CHECK(window.document()->replace({later, later}, "!"));
+    CK_CHECK(!window.close());
+    CK_CHECK(window.request_close(EditorCloseChoice::Discard) == EditorFileStatus::Ok);
+    CK_CHECK(window.close());
+}

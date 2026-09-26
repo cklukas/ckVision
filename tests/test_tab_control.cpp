@@ -126,3 +126,16 @@ CK_TEST(a_tab_mnemonic_takes_the_hotkey_accent_and_a_disabled_strip_shows_none) 
     CK_CHECK(surface.at(ckv::Point{8, 0}).style() == surface.at(ckv::Point{7, 0}).style());
     CK_CHECK(surface.at(ckv::Point{1, 0}).style().fg != hotkey.fg);
 }
+
+CK_TEST(tab_and_shift_tab_are_left_for_focus_traversal) {
+    // A24: Tab and Shift+Tab move the focus through the form; the strip is
+    // stepped with its own keys, so a focused TabControl can be left.
+    TabControl tabs;
+    tabs.add_tab("&One", std::make_unique<ckv::ui::View>());
+    tabs.add_tab("&Two", std::make_unique<ckv::ui::View>());
+    CK_CHECK(!tabs.on_key(key(Key::Tab)));
+    CK_CHECK(!tabs.on_key(key(Key::Tab, Modifier::Shift)));
+    CK_CHECK(tabs.active_index() == 0);
+    CK_CHECK(tabs.on_key(key(Key::Right)));
+    CK_CHECK(tabs.active_index() == 1);
+}

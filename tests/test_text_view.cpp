@@ -378,3 +378,35 @@ CK_TEST(a_hidden_scrollbar_policy_leaves_the_whole_width_to_the_text) {
     // Wrapping measured against the full width, since no bar takes a column.
     CK_CHECK(view.content_width() <= 10);
 }
+
+CK_TEST(a_click_finds_the_link_under_the_pointer_after_a_horizontal_scroll) {
+    // A27: a click lands on what is drawn under the pointer, which after a
+    // sideways scroll is further along the line than the column clicked.
+    Fixture f;
+    auto view = make_view(f);
+    view.set_context(f.ctx());
+    view.set_bounds(Rect{0, 0, 10, 3});
+    view.set_spans({TextSpan{"0123456789ABCDEF", static_cast<ckv::Attr>(0), std::nullopt},
+                    TextSpan{"LINK", static_cast<ckv::Attr>(0), std::string("target")}});
+    ckv::widgets::Scrollbar* horizontal = nullptr;
+    for (const auto& child : view.children())
+        if (auto* bar = dynamic_cast<ckv::widgets::Scrollbar*>(child.get()); bar != nullptr && bar->visible() &&
+                                                                             bar->bounds().height == 1)
+            horizontal = bar;
+    CK_CHECK(horizontal != nullptr);
+    if (horizontal == nullptr) return;
+    horizontal->set_position(10);  // as far as a 20-cell line scrolls in 10 columns
+    CK_CHECK(view.left_column() == 10);
+
+    std::string activated;
+    view.on_link_activate = [&](const std::string& target) { activated = target; };
+    const auto click = [&](int x) {
+        return view.on_mouse(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{x, 0},
+                                             std::nullopt, Modifier::None});
+    };
+    CK_CHECK(!click(0));  // "A", plain text
+    CK_CHECK(!click(5));  // "F", the last plain cell
+    CK_CHECK(activated.empty());
+    CK_CHECK(click(6));   // "L", the first cell of the link
+    CK_CHECK(activated == "target");
+}

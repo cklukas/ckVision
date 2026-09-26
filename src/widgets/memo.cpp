@@ -533,6 +533,10 @@ bool Memo::on_key(const KeyEvent& event) {
             insert_text_at_cursor("\n");
             return true;
         case Key::Backspace:
+            // An anchor spanning nothing is no selection: dropped, so the
+            // key removes what it would without one, and nothing is recorded
+            // for an edit that changes nothing.
+            if (selection_anchor_ && *selection_anchor_ == cursor_) selection_anchor_.reset();
             if (selection_anchor_) {
                 record_undo_state();
                 erase_selection();
@@ -544,20 +548,13 @@ bool Memo::on_key(const KeyEvent& event) {
                 selection_anchor_ = cursor_;
                 cursor_ = target;
                 erase_selection();
-            } else if (cursor_.line > 0) {
-                record_undo_state();
-                const int prev_len = line_length(cursor_.line - 1);
-                for (auto& g : lines_[static_cast<std::size_t>(cursor_.line)])
-                    lines_[static_cast<std::size_t>(cursor_.line - 1)].push_back(std::move(g));
-                lines_.erase(lines_.begin() + cursor_.line);
-                --cursor_.line;
-                cursor_.column = prev_len;
             }
             on_resized();
             ensure_cursor_visible();
             invalidate();
             return true;
         case Key::Delete:
+            if (selection_anchor_ && *selection_anchor_ == cursor_) selection_anchor_.reset();
             if (selection_anchor_) {
                 record_undo_state();
                 erase_selection();
@@ -570,11 +567,6 @@ bool Memo::on_key(const KeyEvent& event) {
                 selection_anchor_ = cursor_;
                 cursor_ = target;
                 erase_selection();
-            } else if (cursor_.line < static_cast<int>(lines_.size()) - 1) {
-                record_undo_state();
-                for (auto& g : lines_[static_cast<std::size_t>(cursor_.line + 1)])
-                    lines_[static_cast<std::size_t>(cursor_.line)].push_back(std::move(g));
-                lines_.erase(lines_.begin() + cursor_.line + 1);
             }
             on_resized();
             invalidate();

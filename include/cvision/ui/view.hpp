@@ -37,11 +37,14 @@ class Application;
 // below) means "no upper bound".
 struct SizeHint {
     // All three are in cells along the axis the hint was asked for. `min` is
-    // the smallest extent a shrinking container gives the view and
-    // `preferred` its natural extent. Row, Column, Grid and Dock read only
-    // those two; `max` is carried for containers that aggregate their
-    // children's hints (Window, Splitter) and is not enforced by the ui
-    // containers.
+    // the smallest extent a shrinking container gives the view, `preferred`
+    // its natural extent, and `max` the most it can use: a Row or Column
+    // grows an Expanding child from leftover space no further than its max.
+    // A container that places rather than shares — Alignment::Fill, a Grid
+    // cell, the Dock's center, an Overlay layer — gives the child the extent
+    // it was told to, whatever the hint, so a view that must not grow says so
+    // there (Start/Center/End alignment) as well as in its max. Window and
+    // Splitter carry the max through their own hints.
     int min = 0;
     int preferred = 0;
     int max = 0;  // kUnboundedExtent means "no upper bound"
@@ -296,7 +299,7 @@ public:
     virtual int height_for_width(int /*width*/) const { return preferred_size_.height; }
 
     // This view's own visibility flag (true by default). A hidden view and its subtree are neither
-    // painted nor hit-tested, and Row and Column leave it out of their layout.
+    // painted nor hit-tested, and Row, Column and Dock leave it out of their layout.
     bool visible() const noexcept { return visible_; }
     // A change tells the parent (on_child_size_hint_changed), since a
     // container lays out only the children that show.

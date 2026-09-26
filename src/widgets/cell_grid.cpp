@@ -10,31 +10,11 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/ui/application.hpp"
+#include "cvision/widgets/mnemonic_internal.hpp"
 
 namespace ckv::widgets {
 
 namespace {
-
-// Relative luminance on the 0..255 scale, from the encoded channels with the
-// usual perceptual weights and no linearisation: the question is "do these
-// two read together", not "what is the exact ratio", and an integer answer
-// is the same on every platform.
-int luminance(const Color& color) noexcept {
-    return (2126 * color.r() + 7152 * color.g() + 722 * color.b()) / 10000;
-}
-
-// Whether text in `foreground` on `background` reads: the two differ, and
-// the contrast — the lighter luminance over the darker, each lifted by five
-// percent of the scale — reaches 3:1. A colour the grid cannot measure (an
-// indexed one, or the terminal's default) is taken as readable: it says
-// something the terminal knows and the grid does not.
-bool readable(const Color& foreground, const Color& background) noexcept {
-    if (foreground == background) return false;
-    if (!foreground.is_rgb() || !background.is_rgb()) return true;
-    const int lighter = std::max(luminance(foreground), luminance(background));
-    const int darker = std::min(luminance(foreground), luminance(background));
-    return lighter * 100 + 1275 >= 3 * (darker * 100 + 1275);
-}
 
 int text_start(int x, int width, int text_width, CellAlignment alignment) noexcept {
     switch (alignment) {
@@ -443,21 +423,7 @@ Style CellGrid::cell_style(const GridCell& cell, bool is_cursor, bool is_selecte
     // The cursor claims the keys only while the grid holds them.
     const bool active_cursor = is_cursor && has_focus();
     const Style overlay = theme.resolve(!is_cursor ? selection_role_ : active_cursor ? cursor_role_ : cursor_inactive_role_);
-    if (!cell.style.has_color()) {
-        style.fg = overlay.fg;
-        style.bg = overlay.bg;
-        style.attrs |= overlay.attrs;
-        return style;
-    }
-    Style swapped = style;
-    swapped.fg = style.bg;
-    swapped.bg = style.fg;
-    if (!readable(swapped.fg, swapped.bg)) {
-        swapped.fg = overlay.fg;
-        swapped.bg = overlay.bg;
-    }
-    if (is_cursor) swapped.attrs |= active_cursor ? Attr::Bold | Attr::Underline : Attr::Underline;
-    return swapped;
+    return highlight_over(style, cell.style.has_color(), overlay, is_cursor, active_cursor);
 }
 
 void CellGrid::draw(scene::Painter& painter) {

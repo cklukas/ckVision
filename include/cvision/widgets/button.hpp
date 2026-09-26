@@ -69,9 +69,12 @@ public:
     // Marks the button as its dialog's default, which only selects the
     // ckv.button.default face for a button that is neither focused, hovered
     // nor pressed. It is appearance only: no key is routed to the button
-    // because of it. The setter does not repaint by itself; the new face
-    // shows at the button's next paint.
-    void set_default(bool is_default) noexcept { is_default_ = is_default; }
+    // because of it. A change repaints; the button's size is not affected.
+    void set_default(bool is_default) noexcept {
+        if (is_default_ == is_default) return;
+        is_default_ = is_default;
+        invalidate();
+    }
     bool is_default() const noexcept { return is_default_; }
 
     // A button drawn as a bare face: no cast shadow, no depressed shift, one
@@ -97,22 +100,38 @@ public:
     // background must match the surface beneath the button). The hovered face
     // is not overridable. An override set before attachment survives it;
     // passing ui::kInvalidRole before attachment leaves that role to the
-    // standard lookup. None of these setters repaints; the roles apply from
-    // the next paint.
+    // standard lookup. Each of these setters repaints when it changes a
+    // role.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId default_role,
                             ui::RoleId shadow_role) noexcept {
+        if (normal_role_ == normal_role && focused_role_ == focused_role && default_role_ == default_role &&
+            shadow_role_ == shadow_role)
+            return;
         normal_role_ = normal_role;
         focused_role_ = focused_role;
         default_role_ = default_role;
         shadow_role_ = shadow_role;
+        invalidate();
     }
     // The same kind of override for the flat button's pressed face
     // (ckv.button.pressed), the accented mnemonic grapheme
     // (ckv.label.mnemonic, of which only the foreground and attributes are
     // used) and the disabled face (ckv.button.disabled).
-    void set_pressed_role_override(ui::RoleId role) noexcept { pressed_role_ = role; }
-    void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
-    void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
+    void set_pressed_role_override(ui::RoleId role) noexcept {
+        if (pressed_role_ == role) return;
+        pressed_role_ = role;
+        invalidate();
+    }
+    void set_mnemonic_role_override(ui::RoleId role) noexcept {
+        if (mnemonic_role_ == role) return;
+        mnemonic_role_ = role;
+        invalidate();
+    }
+    void set_disabled_role_override(ui::RoleId role) noexcept {
+        if (disabled_role_ == role) return;
+        disabled_role_ = role;
+        invalidate();
+    }
 
     // Invoked by a containing dialog/window for a matching Alt+mnemonic.
     // The button remains independently activatable by Enter/Space when it
@@ -149,11 +168,13 @@ public:
     // press. Routed separately from on_key by design: a release must never
     // reach a handler that would read it as a second activation.
     bool on_key_release(const KeyEvent& event) override;
-    // A Down arms and depresses the button whichever mouse button reported
-    // it; a Move while armed lifts or re-depresses it as the pointer leaves or
-    // returns; an Up fires on_press only when it lands inside the button.
-    // Down, Move and Up are always consumed; wheel and double-click events
-    // are not.
+    // A primary-button Down arms and depresses the button; a Down of another
+    // button is left unhandled. A Move while armed lifts or re-depresses it as
+    // the pointer leaves or returns. An Up ends the press, firing on_press
+    // only when it lands inside the button and is the primary button's own
+    // release (or names no button); another button's release takes the press
+    // back. Primary Down, Move and Up are consumed; wheel and double-click
+    // events are not.
     bool on_mouse(const MouseEvent& event) override;
     // A button is the plain case of something that acts when clicked;
     // a disabled one is still there, still hit-tested, and still refusing.

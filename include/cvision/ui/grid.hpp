@@ -59,7 +59,8 @@ std::vector<std::pair<int, int>> distribute_grid_cells(int available, int count,
 
 // A container of `rows` x `columns` equal cells that places each child added with add_item() by
 // its GridSpec, on every resize, spacing change, item change, and child size-hint change.
-// Children added with add_child() instead are not placed. Hidden children keep their cells.
+// Children added with add_child() instead are not placed. Every child's cell is fixed by its
+// spec alone, so a hidden child takes nothing from its siblings and keeps its cell.
 class Grid : public View {
 public:
     // `bounds` is parent-local; `rows` and `columns` must each be at least 1 (asserted) and are
@@ -71,9 +72,12 @@ public:
     // the grid's own fixed row_count()/column_count() — checked here
     // via CKV_ASSERT, not at relayout time.
     View* add_item(std::unique_ptr<View> child, GridSpec spec);
-    // Detaches `child`, forgets its spec, relays out, and returns ownership; nullptr (and no
-    // relayout) when `child` is not a child of this grid.
-    std::unique_ptr<View> remove_item(View* child);
+    // Detaches `child` exactly as View::remove_child() does, then forgets its spec, relays out
+    // and returns ownership; nullptr (and no relayout) when `child` is not a child of this grid.
+    // Every way a child leaves comes through here, so a view added back with add_child() is
+    // not placed by the spec it had before. add_item() keeps no spec for a child its
+    // attachment callback detached, and returns nullptr.
+    std::unique_ptr<View> remove_child(View* child) override;
 
     // The fixed track counts given to the constructor.
     int row_count() const noexcept { return row_count_; }

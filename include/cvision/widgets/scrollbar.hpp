@@ -45,10 +45,12 @@ public:
 
     // Replace "ckv.scrollbar.track" (arrows and trough) and
     // "ckv.scrollbar.thumb". An override set before attachment survives it;
-    // the call does not repaint, so the roles show from the bar's next paint.
+    // a change repaints.
     void set_role_override(ui::RoleId track_role, ui::RoleId thumb_role) noexcept {
+        if (track_role_ == track_role && thumb_role_ == thumb_role) return;
         track_role_ = track_role;
         thumb_role_ = thumb_role;
+        invalidate();
     }
 
     // `content_size` is the total scrollable extent; `viewport_size` is
@@ -93,10 +95,10 @@ public:
     // PageDown step one viewport, Home and End go to the ends; modifiers are
     // not consulted. Other keys, and the other axis's arrows, are unhandled.
     bool on_key(const KeyEvent& event) override;
-    // A press on an arrow steps one unit, on the trough pages one viewport
-    // toward the press, and on the thumb starts a drag that the following
-    // moves and release belong to. Motion and release outside a drag are
-    // left unhandled.
+    // A primary-button press on an arrow steps one unit, on the trough pages
+    // one viewport toward the press, and on the thumb starts a drag that the
+    // following moves and release belong to. A press of another button, and
+    // motion and release outside a drag, are left unhandled.
     bool on_mouse(const MouseEvent& event) override;
     void on_attached() override;
 
