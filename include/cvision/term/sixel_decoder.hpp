@@ -34,10 +34,17 @@ inline constexpr int kSixelColorRegisters = 256;
 // and outlive any one sequence — a program may define a palette in one image
 // and use it in the next — so the caller holds them.
 struct SixelPalette {
+    // The colour held by each register, indexed by register number. A definition
+    // (`#n;2;r;g;b`, percentages) stores the colour opaque; selecting a register that was
+    // never defined makes it opaque black.
     std::array<Image::Rgba, kSixelColorRegisters> colors{};
+    // Whether each register has been given a colour by a definition. A default-constructed
+    // palette has none defined.
     std::array<bool, kSixelColorRegisters> defined{};
 };
 
+// The result of decoding one Sixel sequence: the picture plus the two facts about how it is
+// placed that the picture alone cannot carry.
 struct DecodedSixel {
     // Exactly the picture: its own declared raster size where it gives one,
     // otherwise the extent it actually drew. Untouched pixels are transparent.

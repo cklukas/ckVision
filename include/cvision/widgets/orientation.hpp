@@ -8,6 +8,10 @@
 
 namespace ckv::widgets {
 
+// The axis a widget runs along. Horizontal runs left to right, along x: a
+// scrollbar under the content, or a splitter's panes side by side. Vertical
+// runs top to bottom, along y: a scrollbar beside the content, or a
+// splitter's panes stacked.
 enum class Orientation { Horizontal, Vertical };
 
 }  // namespace ckv::widgets

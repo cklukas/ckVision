@@ -30,7 +30,10 @@
 
 namespace ckv::widgets {
 
+// The report asks nothing, so it has one outcome: it was closed, whether by
+// Close, Enter, Esc, the close control, external detach or quit.
 enum class TerminalReportDialogResult { Closed };
+// The handle present_terminal_report_dialog returns; see DialogPresentation.
 using TerminalReportDialogPresentation = DialogPresentation<TerminalReportDialogResult>;
 
 // What the dialog cannot observe through the Application: how many SGR
@@ -41,6 +44,8 @@ using TerminalReportDialogPresentation = DialogPresentation<TerminalReportDialog
 // omitted when no probe is given — a headless or mirrored terminal has no
 // byte stream of its own to count.
 struct TerminalReportDialogOptions {
+    // The probe: returns the count of mouse reports decoded so far. Called
+    // once, while the dialog is built; the shown count does not update.
     std::function<std::size_t()> mouse_reports_decoded;
 };
 

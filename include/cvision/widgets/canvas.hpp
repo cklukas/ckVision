@@ -50,8 +50,14 @@ Size fit_image_cells(Size image_pixels, Size cell_pixels, Size max_cells) noexce
 // WP-7, D-028): "ckv.canvas.fallback".
 class Canvas : public ui::View {
 public:
+    // A canvas with no backing image (pixel size 0 by 0) until it is given a
+    // pixel size or cell metrics; until then it draws a blank fill in the
+    // fallback role. Not focusable.
     Canvas();
 
+    // Replaces "ckv.canvas.fallback", the style of the blank fill and of the
+    // text-only fallback. An override set before attachment survives it; the
+    // call does not repaint.
     void set_role_override(ui::RoleId fallback_role) noexcept { fallback_role_ = fallback_role; }
 
     // (width, height) in PIXELS (not cells) — the owner computes this
@@ -61,6 +67,13 @@ public:
     void set_pixel_size(int width, int height);
     Size pixel_size() const noexcept;
 
+    // The terminal's cell size in pixels. Setting it switches to automatic
+    // sizing: the backing image becomes the canvas's cell bounds times this
+    // metric, recomputed on every resize. A metric with a non-positive
+    // extent is replaced by kAssumedCellPixels, and the canvas then adopts
+    // the Application's measured cell metric by itself once one is reported
+    // (checked at each paint and resize). cell_metrics() is the metric in
+    // use, the assumed one included; 0 by 0 before any has been set.
     void set_cell_metrics(Size cell_pixels);
     Size cell_metrics() const noexcept { return cell_pixels_; }
 
@@ -87,9 +100,13 @@ public:
     // of that bargain.
     void set_fallback_painter(std::function<void(scene::Painter&, Rect)> fallback);
 
+    // Called with every mouse event the canvas receives (presses, releases,
+    // moves and wheel alike, not only clicks), unchanged, so both the cell
+    // and any pixel position the host reported are available.
     std::function<void(const MouseEvent&)> on_click;  // see ImageView's own note: forwards the full dual-space event
 
     void draw(scene::Painter& painter) override;
+    // Consumes every mouse event, whether or not on_click is set.
     bool on_mouse(const MouseEvent& event) override;
     // A drawing surface, where which cell the pointer is on is the whole
     // question and an arrow tip is a poor way to answer it.

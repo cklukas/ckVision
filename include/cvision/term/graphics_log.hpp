@@ -23,11 +23,15 @@
 
 namespace ckv::term {
 
+// Whether tracing is on for this process. The first call reads the environment and opens
+// the destination; the answer is then fixed for the life of the process. A destination
+// that cannot be opened leaves tracing off. Safe to call from any thread.
 bool graphics_log_enabled() noexcept;
 
-// Writes one line, prefixed with the process id and a monotonic millisecond
-// stamp so two ckVision processes — a host and the child inside it — can be
-// read together in one file.
+// Writes one line, prefixed with the process id (0 on Windows) and a monotonic millisecond
+// stamp counted from when this process opened the log, so two ckVision processes — a host
+// and the child inside it — can be read together in one file. Does nothing while tracing is
+// off. Lines from concurrent threads are serialized, and each is flushed immediately.
 void graphics_log(std::string_view message);
 
 }  // namespace ckv::term

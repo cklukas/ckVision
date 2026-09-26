@@ -17,29 +17,49 @@
 
 namespace ckv::term {
 
+// The batch one poll() call returned, in delivery order. An empty batch (a poll that timed
+// out) is recorded too, so the sequence of polls is preserved.
 struct RecordedEvents {
+    // The events exactly as poll() returned them.
     std::vector<TerminalEvent> events;
+    // Equal when both batches hold the same events in the same order.
     friend bool operator==(const RecordedEvents&, const RecordedEvents&) = default;
 };
+// One write() call: the raw output bytes, unmodified.
 struct RecordedWrite {
+    // The bytes passed to that one call; consecutive writes are not merged.
     std::string bytes;
+    // Equal when the bytes are identical.
     friend bool operator==(const RecordedWrite&, const RecordedWrite&) = default;
 };
+// One set_title() call.
 struct RecordedTitle {
+    // The title as the caller passed it, before any sanitizing a live backend applies.
     std::string title;
+    // Equal when the titles are identical.
     friend bool operator==(const RecordedTitle&, const RecordedTitle&) = default;
 };
+// One bell() call; it carries no data.
 struct RecordedBell {
+    // Every bell equals every other bell.
     friend bool operator==(const RecordedBell&, const RecordedBell&) = default;
 };
+// One write_clipboard() call that took effect. Calls made while the capabilities deny
+// clipboard writes are no-ops and leave no entry.
 struct RecordedClipboard {
+    // The UTF-8 text sent to the clipboard.
     std::string text;
+    // Equal when the texts are identical.
     friend bool operator==(const RecordedClipboard&, const RecordedClipboard&) = default;
 };
+// One write_diagnostic_after_restore() call.
 struct RecordedDiagnostic {
+    // The diagnostic text as passed, including any trailing newline the caller supplied.
     std::string message;
+    // Equal when the messages are identical.
     friend bool operator==(const RecordedDiagnostic&, const RecordedDiagnostic&) = default;
 };
+// One operation in a recording, in the order it happened: an input batch or an output call.
 using RecordedEntry =
     std::variant<RecordedEvents, RecordedWrite, RecordedTitle, RecordedBell, RecordedClipboard, RecordedDiagnostic>;
 
@@ -50,6 +70,13 @@ using RecordedEntry =
 // replay never has to borrow mutable state from the original terminal.
 class RecordingTerminal final : public Terminal {
 public:
+    // Borrows `inner`, which must outlive this recorder, and snapshots its current
+    // capabilities and size for initial_capabilities() and initial_size(). The recording
+    // starts empty.
+    //
+    // Only the members declared here are forwarded: frame_acknowledgements() and the poll()
+    // overload taking additional wait handles fall back to the Terminal defaults, so the
+    // recorder reports no frame acknowledgements and polls `inner` on its own sources only.
     explicit RecordingTerminal(Terminal& inner)
         : inner_(inner), initial_capabilities_(inner.capabilities()), initial_size_(inner.size()) {}
 
@@ -103,7 +130,11 @@ public:
         if (supported) log_.push_back(RecordedEntry{RecordedClipboard{std::string(text)}});
     }
 
+    // Every entry recorded so far, oldest first. The reference stays valid for the
+    // recorder's lifetime; further calls append to the same vector.
     const std::vector<RecordedEntry>& recording() const noexcept { return log_; }
+    // The inner terminal's capabilities and size at construction: the values to hand to
+    // ReplayTerminal's constructor along with recording().
     Capabilities initial_capabilities() const noexcept { return initial_capabilities_; }
     Size initial_size() const noexcept { return initial_size_; }
 
@@ -122,6 +153,11 @@ private:
 // operation-by-operation comparison with the original recording.
 class ReplayTerminal final : public Terminal {
 public:
+    // Takes ownership of `recording` and starts from `caps` and `size`, normally the
+    // recorder's initial_capabilities() and initial_size(). Replayed CapabilityChangedEvent
+    // and ResizeEvent entries update what capabilities() and size() report as they are
+    // returned from poll(). write_clipboard() is gated on the replayed capabilities, as on a
+    // live backend.
     ReplayTerminal(std::vector<RecordedEntry> recording, Capabilities caps, Size size)
         : recording_(std::move(recording)), caps_(caps), size_(size) {}
 
@@ -164,6 +200,7 @@ public:
         clipboard_ = std::string(text);
         replayed_.push_back(RecordedEntry{RecordedClipboard{clipboard_}});
     }
+    // Captures the diagnostic in diagnostic_bytes() instead of writing it to stderr.
     void write_diagnostic_after_restore(std::string_view message) noexcept override {
         try {
             diagnostics_.append(message);
@@ -172,14 +209,27 @@ public:
         }
     }
 
+    // Everything write() received since construction or the last clear_written(), as one
+    // concatenated byte string. The view is invalidated by the next write or clear.
+    // clear_written() empties it without touching replayed().
     std::string_view written_bytes() const noexcept { return written_; }
     void clear_written() noexcept { written_.clear(); }
+    // The last title set; empty until set_title() is called.
     const std::string& title() const noexcept { return title_; }
+    // How many times bell() has been called.
     int bell_count() const noexcept { return bell_count_; }
+    // The last text write_clipboard() accepted; empty until one is accepted.
     const std::string& clipboard() const noexcept { return clipboard_; }
+    // Every diagnostic written after restore, concatenated in order.
     std::string_view diagnostic_bytes() const noexcept { return diagnostics_; }
+    // True once every recorded entry has been consumed; each further poll() returns an empty
+    // batch and logs it as an empty RecordedEvents.
     bool exhausted() const noexcept { return cursor_ >= recording_.size(); }
+    // This session's own log, in the same format as RecordingTerminal::recording().
     const std::vector<RecordedEntry>& replayed() const noexcept { return replayed_; }
+    // Whether the replay reproduced the recording operation for operation: replayed() equals
+    // the recording exactly, including every output entry. A replay that polls past the end
+    // of the recording logs extra empty batches and therefore no longer matches.
     bool matches_recording() const noexcept { return replayed_ == recording_; }
 
 private:

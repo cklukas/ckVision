@@ -58,15 +58,22 @@ namespace ckv::widgets {
 // same as if constructed standalone.
 class ScrollViewport : public ui::View {
 public:
+    // An empty viewport with its vertical and horizontal Scrollbar children
+    // already in place, both ScrollbarPolicy::Auto, and no content.
     ScrollViewport();
 
-    // Content's OWN preferred size (via its size hints) is treated as
-    // its full scrollable extent; installs vertical and horizontal
-    // Scrollbar children alongside it. Replaces and returns ownership
-    // of any previous content.
+    // Content's OWN preferred size (via its size hints, and its
+    // height_for_width at the visible width) is treated as its full
+    // scrollable extent, which the viewport's two Scrollbar children then
+    // reflect. Replaces and returns ownership of any previous content
+    // (nullptr when there was none); passing nullptr just removes it. The
+    // scroll offset returns to 0,0.
     std::unique_ptr<ui::View> set_content(std::unique_ptr<ui::View> content);
     ui::View* content() const noexcept { return content_; }
 
+    // The content-local cell shown at the viewport's top-left corner. Setting
+    // it moves each axis through its scrollbar, so both are clamped and the
+    // bars follow; a hidden axis, or one whose content fits, stays at 0.
     int scroll_x() const noexcept { return scroll_x_; }
     int scroll_y() const noexcept { return scroll_y_; }
     void set_scroll(int x, int y);  // clamped to [0, content extent - viewport extent]
@@ -133,7 +140,13 @@ public:
     // appears and everything past the first screenful is unreachable.
     // Splitter carries the same override for the same reason.
     void on_child_size_hint_changed(View&) override;
+    // Up, Down, PageUp, PageDown, Home and End scroll vertically and Left and
+    // Right horizontally, as the matching Scrollbar keys do, but only along
+    // an axis that can scroll; otherwise the key is left unhandled.
     bool on_key(const KeyEvent& event) override;
+    // A vertical wheel notch scrolls one row, when there is vertical room to
+    // scroll. Every other mouse event, including a horizontal wheel, is left
+    // unhandled.
     bool on_mouse(const MouseEvent& event) override;
 
 private:

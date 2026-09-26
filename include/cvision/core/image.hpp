@@ -12,19 +12,27 @@ namespace ckv {
 // scene raster regions and the widgets/gfx layers (ARCHITECTURE.md §7).
 class Image {
 public:
+    // An empty 0x0 image with no pixel storage.
     Image() = default;
 
-    // Zero-initialized (transparent black) buffer of the given size.
+    // Zero-initialized (transparent black) buffer of the given size in
+    // pixels. A negative width or height is clamped to 0, giving an empty
+    // image.
     Image(int width, int height) : width_(width < 0 ? 0 : width), height_(height < 0 ? 0 : height) {
         stride_ = width_ * 4;
         pixels_.assign(static_cast<std::size_t>(stride_) * static_cast<std::size_t>(height_), 0);
     }
 
+    // Dimensions in pixels, and the distance in bytes between the starts of
+    // consecutive rows (always width() * 4). empty() is true when either
+    // dimension is 0.
     int width() const noexcept { return width_; }
     int height() const noexcept { return height_; }
     int stride() const noexcept { return stride_; }
     bool empty() const noexcept { return width_ == 0 || height_ == 0; }
 
+    // The whole buffer, stride() * height() bytes starting with the R byte of
+    // the top-left pixel. May be null for an empty image.
     const std::uint8_t* data() const noexcept { return pixels_.data(); }
     std::uint8_t* data() noexcept { return pixels_.data(); }
 
@@ -36,7 +44,10 @@ public:
         return pixels_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride_);
     }
 
+    // One pixel: 8-bit red, green, blue and straight (not premultiplied)
+    // alpha, where alpha 0 is fully transparent and 255 fully opaque.
     struct Rgba {
+        // Red, green, blue and alpha, 0-255 each, in memory order.
         std::uint8_t r, g, b, a;
     };
 

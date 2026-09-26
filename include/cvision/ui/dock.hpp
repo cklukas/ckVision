@@ -29,6 +29,8 @@
 
 namespace ckv::ui {
 
+// Where a Dock places a child: a full-width strip along the Top or Bottom edge, a strip along the
+// Left or Right edge between those two, or the Center that fills whatever remains.
 enum class DockEdge { Top, Bottom, Left, Right, Center };
 
 // Reserves each present edge's own strip from `available` (local,
@@ -39,21 +41,40 @@ enum class DockEdge { Top, Bottom, Left, Right, Center };
 // remains after all four goes to `center`. Pure function, no View
 // dependency, exhaustively testable in isolation — the Dock analogue
 // of distribute_main_axis.
+//
+// DockEdgeExtents is that function's `edges` input: the extent each edge
+// asks for, in cells.
 struct DockEdgeExtents {
+    // Requested strip sizes: a height for Top and Bottom, a width for Left
+    // and Right. nullopt means the edge is absent; a negative value is
+    // treated as zero.
     std::optional<int> top;     // preferred height
     std::optional<int> bottom;  // preferred height
     std::optional<int> left;    // preferred width
     std::optional<int> right;   // preferred width
 };
 
+// The output of compute_dock_layout(): one rectangle per edge, in the same
+// coordinates as `available`.
 struct DockRects {
+    // The strip reserved for each edge; an absent edge's rect stays empty
+    // (all zero). `center` is always the space left after the four edges.
     Rect top, bottom, left, right, center;
 };
 
+// The Dock reservation described above DockEdgeExtents. The result keeps
+// `available`'s origin, and a negative available width or height is
+// treated as zero, so no rect ever has a negative extent.
 DockRects compute_dock_layout(Rect available, DockEdgeExtents edges) noexcept;
 
+// A container with at most one child on each DockEdge, laid out by
+// compute_dock_layout() on every resize, item change, and child size-hint
+// change. Only children added with add_item() are placed; hidden edge
+// children still reserve their strip.
 class Dock : public View {
 public:
+    // Same constructor as View: parent-local bounds and a focus policy, both
+    // usually defaulted.
     using View::View;
 
     // `edge`'s own preferred size hint along its perpendicular axis
@@ -62,6 +83,8 @@ public:
     // whatever space is left after all four. CKV_ASSERTs if `edge`
     // already has a child — remove_item first to replace one.
     View* add_item(std::unique_ptr<View> child, DockEdge edge);
+    // Detaches `child`, frees its edge, relays out, and returns ownership;
+    // nullptr (and no relayout) when `child` is not a child of this dock.
     std::unique_ptr<View> remove_item(View* child);
 
     void on_resized() override { relayout(); }

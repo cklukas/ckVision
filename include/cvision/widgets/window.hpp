@@ -59,8 +59,14 @@ enum class Edge { Top, Bottom, Left, Right };
 // wins Center on Top," not a stacking order. Edge::Bottom accepts all
 // four; there is no title there to collide with.
 struct FrameSlot {
+    // The border the overlay sits on; the bottom border by default.
     Edge edge = Edge::Bottom;
+    // Where along that border, clear of the corners and of the frame controls
+    // the top border draws at the window's current width. End (bottom right)
+    // by default.
     ui::Alignment alignment = ui::Alignment::End;  // the old hard-wired bottom-right default
+    // Cells to shift from the aligned position, right or down for positive,
+    // clamped to the border's available span.
     int offset = 0;
 };
 
@@ -88,8 +94,17 @@ enum class DesktopGrowPolicy {
 // share one role in that family) immediately after construction.
 class Window : public ui::View {
 public:
+    // `title` is drawn centred on the top border (see set_title). A new window
+    // has no content, zero bounds (Desktop's "not positioned yet" state), a
+    // minimum size of 10x4 cells and no maximum, and is movable, resizable and
+    // minimizable.
     explicit Window(std::string title);
 
+    // Replace the four chrome roles at once: the frame (border, interior fill,
+    // footer padding) while active and inactive, and the title and footer text
+    // while active and inactive. A role left as kInvalidRole is resolved from
+    // the standard names at attach; an override set after attach takes effect
+    // at the next draw.
     void set_role_override(ui::RoleId frame_active_role, ui::RoleId frame_inactive_role,
                             ui::RoleId title_active_role, ui::RoleId title_inactive_role) noexcept {
         frame_active_role_ = frame_active_role;
@@ -112,6 +127,11 @@ public:
         return chrome_background_override_;
     }
 
+    // The caption on the top border: centred on the frame where it fits,
+    // shifted to stay clear of the frame controls, elided with an ellipsis
+    // when wider than the room between them, and not drawn at all on a window
+    // 8 columns wide or less. A change repaints the frame and is reported to
+    // the owning Desktop, so switcher bars and window lists redraw the name.
     void set_title(std::string title);
     const std::string& title() const noexcept { return title_; }
 
@@ -190,12 +210,20 @@ public:
     // blank row nobody asked for, while the top of the window still wants
     // its breathing space. Symmetric padding cannot express that.
     void set_content_margins(int left, int top, int right, int bottom);
+    // The area, in the parent's coordinates, within which a title-bar drag
+    // must leave the window grabbable: its top row stays inside vertically
+    // and at least eight columns of it (or the whole width, if narrower) stay
+    // inside horizontally. An empty rectangle (the default) leaves drags
+    // unconstrained. Desktop sets it to its content area; it does not affect
+    // set_bounds or keyboard move mode.
     void set_move_bounds(Rect bounds) noexcept { move_bounds_ = bounds; }
     // The margins actually applied. The bottom one is dropped when the
     // content's last row is a cast shadow: measuring, sizing and painting
     // all ask here, so a window cannot be sized for a gap it does not draw.
     int effective_top_margin() const noexcept;
     int effective_bottom_margin() const noexcept;
+    // The top and bottom margins as last requested, negative values raised
+    // to 0, before the shadow rule above is applied.
     int top_content_margin() const noexcept { return top_content_margin_; }
     int bottom_content_margin() const noexcept { return bottom_content_margin_; }
 
@@ -237,11 +265,25 @@ public:
     // `view` is not a currently-attached overlay of this window).
     std::unique_ptr<ui::View> remove_frame_overlay(ui::View* view);
 
+    // Size limits, in cells, honoured by every resize path the window itself
+    // runs: a corner drag, keyboard resize mode, zoom, fill and
+    // reposition_within (the minimum wins where they conflict with the
+    // space available). The minimum defaults to 10x4. A maximum component of
+    // 0 leaves that axis unbounded. Setting either re-clamps the current
+    // bounds at once, unless the window is still unpositioned (zero width
+    // and height), which Desktop reads as "centre it when presented".
     void set_min_size(Size min) noexcept;
     void set_max_size(Size max) noexcept;  // {0,0} means unbounded (the default)
 
+    // Whether a press on the title bar starts a move drag. Default true.
+    // Programmatic moves and keyboard move mode are not affected.
     void set_movable(bool movable) noexcept { movable_ = movable; }
     bool movable() const noexcept { return movable_; }
+    // Whether the frame offers resizing: the corner grips, the zoom control
+    // and the minimize control. A non-resizable window also reports its
+    // preferred size as its maximum, so a layout does not stretch it, and
+    // its Desktop leaves it out of tiling arrangements. Default true.
+    // Programmatic set_bounds and keyboard resize mode are not affected.
     void set_resizable(bool resizable) noexcept { resizable_ = resizable; }
     bool resizable() const noexcept { return resizable_; }
 
@@ -251,7 +293,9 @@ public:
     // nothing else happens). Otherwise on_closed fires so the owner
     // (Desktop) can remove/destroy this window. close() never destroys
     // the window itself — lifetime stays with whoever owns it in the
-    // View tree. A recursive close() from either callback is accepted as
+    // View tree. With no on_closed installed, an accepted close schedules
+    // the window's removal from its parent instead (schedule_self_detach,
+    // when attached under an Application). A recursive close() from either callback is accepted as
     // an idempotent no-op until the outer close request returns, so one
     // user request cannot re-enter its own callbacks. A close_request may
     // exceptionally detach and destroy its Window; a true return then
@@ -333,7 +377,7 @@ public:
     bool minimized() const noexcept { return minimized_; }
 
     // Whether the frame draws and answers the `_` control, immediately
-    // left of the maximize/restore one — from 22 columns wide, which is
+    // left of the maximize/restore one — from 19 columns wide, which is
     // where three controls still leave the window its own name (see
     // draws_minimize_control). Default true, but — like the zoom
     // control — a fixed-size window keeps the close control alone:
@@ -382,9 +426,16 @@ public:
     // Desktop's retained-scene path owns the layer relationship; a Window
     // owns only its local backing store. Moving changes the layer position
     // and therefore never enters this repaint operation.
+    //
+    // repaint_backing_if_needed() redraws the frame and every child into the
+    // window-sized backing surface when content was invalidated or the size
+    // changed, and returns whether it did. backing_surface() is that surface;
+    // it exists only after the first repaint_backing_if_needed() call (asserted).
     bool repaint_backing_if_needed();
     scene::Surface& backing_surface() noexcept;
     const scene::Surface& backing_surface() const noexcept;
+    // How many times repaint_backing_if_needed() has actually redrawn: a
+    // counter for tests and diagnostics proving that a move did not repaint.
     std::size_t content_repaint_count() const noexcept { return content_repaint_count_; }
 
     // Runs after this Window has left the Application tree and its
@@ -405,6 +456,12 @@ public:
     // here: content_rect() depends only on this Window's own bounds(),
     // never on content()'s size hint.
     void on_child_size_hint_changed(ui::View& child) override;
+    // Outside keyboard mode: Enter and Escape go to accept_request and
+    // cancel_request when those are set, Alt+mnemonics of the labels and
+    // buttons inside it are routed (activate_control_mnemonic), and an
+    // unmodified arrow no descendant consumed moves focus to the next
+    // (Down/Right) or previous (Up/Left) control within this window. In
+    // keyboard move/resize mode the arrows, Enter and Escape drive the mode.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // The frame's own affordances, and only those it really has. A ckVision
@@ -419,6 +476,8 @@ protected:
                                    ui::InvalidationKind kind) override;
 
 private:
+    // Desktop binds the zoom target, gesture, title and minimize observers
+    // below, and composes the window's backing surface as a scene layer.
     friend class Desktop;
 
     enum class KeyboardMode { None, Move, Resize };
@@ -602,7 +661,12 @@ private:
 // on screen (see Desktop::present_modeless and present_modal, the
 // sanctioned presentation operations).
 struct WindowHandle {
+    // The window, owned until the caller hands it to a Desktop (or another
+    // parent).
     std::unique_ptr<Window> window;
+    // A descendant of `window` to focus once it is attached. Desktop's
+    // presentation operations focus exactly this, so nullptr leaves nothing
+    // focused. Not owned; valid for as long as the window keeps that view.
     ui::View* initial_focus = nullptr;
 };
 

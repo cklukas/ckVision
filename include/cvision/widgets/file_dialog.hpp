@@ -33,18 +33,33 @@ namespace ckv::widgets {
 
 class Desktop;
 
+// Which question the dialog asks. The mode sets the window title and the
+// accept button's caption (the StandardStrings open/save entries) and nothing
+// else: Open does not require the path to exist, and Save does not confirm
+// overwriting one. Such checks are the caller's.
 enum class FileDialogMode { Open, Save };
 
+// A named set of file suffixes the listing can be narrowed to.
 struct FileDialogFilter {
+    // Shown on the filter button as "<filter caption>: <label>" while this
+    // filter is active.
     std::string label;
     // Case-insensitive file suffixes. ".txt" and "txt" both match
     // "report.txt". Directories are never removed by file filters.
+    // An empty list, or an empty suffix in it, matches every file.
     std::vector<std::string> extensions;
 };
 
+// The optional parts of a file dialog. A default-constructed value is the
+// plain dialog the overloads without options present.
 struct FileDialogOptions {
+    // The filters the filter button cycles through, in order, starting at
+    // `active_filter` (clamped to the last one). With no filters every file is
+    // listed and the button does nothing.
     std::vector<FileDialogFilter> filters{};
     std::size_t active_filter = 0;
+    // Whether names beginning with '.' are listed at first; the reader toggles
+    // it with the show/hide-hidden button.
     bool show_hidden = false;
 
     // A name to offer, for a dialog that is saving something the application
@@ -57,16 +72,23 @@ struct FileDialogOptions {
 
     // Optional recent-location registry. The dialog records the current
     // directory on accept and shows still-existing directories as navigable
-    // "Recent: ..." rows at the top of the list.
+    // "Recent: ..." rows at the top of the list. The registry is borrowed and
+    // must outlive the dialog; its entries live under `recent_locations_key`.
     ui::HistoryRegistry* recent_locations = nullptr;
     std::string recent_locations_key = "ckv.file_dialog.recent_locations";
 };
 
+// The answer of a file dialog.
 struct FileDialogResult {
+    // Whether the reader accepted a non-empty path. When true, `path` is the
+    // path field's text, normalized when absolute and otherwise joined to the
+    // directory being shown. It may name a directory or a file that does not
+    // exist; nothing is checked. When false, `path` is empty.
     bool accepted = false;
     std::string path;  // full path; meaningful only when accepted
 };
 
+// The handle present_file_dialog returns; see DialogPresentation.
 using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 
 // `initial_directory` must exist as a directory in `fs` (a dialog
@@ -80,11 +102,24 @@ using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 // and focuses its initial_focus in one call; modal presentation is
 // explicit through Desktop::present_modal. The returned standard dialog window
 // is non-resizable by default.
+//
+// The window holds the path field, the listing (directories first, then files,
+// each sorted by name; ".." except at "/"), and the filter, hidden-files, accept
+// and Cancel buttons. Activating a directory row enters it; activating a file
+// row puts its path in the field and focuses the field. Tab in the field
+// completes its last path segment when exactly one name in the directory it
+// names (filtered as the listing is) starts with it, ignoring case. The field
+// opens holding the shown directory, and the handle's initial_focus is the
+// listing. `strings` is read again whenever the listing refreshes, so it too
+// must outlive the returned Window.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                const ui::StandardRoles& roles, ui::Application& app, ui::View* restore_focus_to,
                                std::function<void(FileDialogResult)> on_result,
                                const StandardStrings& strings = english_standard_strings());
 
+// The same dialog shaped by `options`: filters, hidden files, a recent-location
+// list, and a suggested name. With a suggested name the handle's initial_focus
+// is the path field instead of the listing.
 WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                FileDialogOptions options, const ui::StandardRoles& roles, ui::Application& app,
                                ui::View* restore_focus_to, std::function<void(FileDialogResult)> on_result,
@@ -98,6 +133,8 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
                                                           Desktop& desktop, const ui::StandardRoles& roles,
                                                           const StandardStrings& strings = english_standard_strings());
 
+// present_file_dialog shaped by `options` (see the options overload of
+// make_file_dialog). `fs` and `strings` must outlive the dialog.
 [[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, FileDialogOptions options,
                                                           ui::Application& app, Desktop& desktop,
@@ -113,6 +150,8 @@ FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_direc
                                   ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
                                   const StandardStrings& strings = english_standard_strings());
 
+// exec_file_dialog shaped by `options` (see the options overload of
+// make_file_dialog).
 FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
                                   FileDialogOptions options, ui::Application& app, Desktop& desktop,
                                   const ui::StandardRoles& roles,

@@ -29,9 +29,15 @@ using ui::SizeHint;
 using ListItemId = std::uint64_t;
 inline constexpr ListItemId kInvalidListItemId = 0;
 
+// One row as a ListModel describes it.
 struct ListItem {
+    // The item's stable identity; must be non-zero. A row whose item has the
+    // invalid id is drawn blank and can be neither selected nor activated.
     ListItemId id = kInvalidListItemId;
+    // The row's text, drawn from the list's left edge.
     std::string text;
+    // When set, replaces the style the row would otherwise wear — including
+    // the cursor and selection highlight. A disabled list still mutes it.
     std::optional<Style> style;
 };
 
@@ -41,8 +47,14 @@ struct ListItem {
 // ListView::model_changed() on the UI thread.
 class ListModel {
 public:
+    // Destroying a model a ListView still borrows is the caller's error; see
+    // ListView::set_model.
     virtual ~ListModel() = default;
 
+    // The items in display order: how many there are; the item at a display
+    // index in [0, item_count()); and the display index of an id, or nullopt
+    // when no current item has it (ListView then drops that id from its
+    // selection and cursor on model_changed()).
     virtual std::size_t item_count() const = 0;
     virtual ListItem item_at(std::size_t index) const = 0;
     virtual std::optional<std::size_t> index_of(ListItemId id) const = 0;
@@ -65,8 +77,15 @@ public:
 // cursor and selected rows on the inactive selection's background.
 class ListView : public ui::View {
 public:
+    // An empty tab-stop list with its vertical Scrollbar in the rightmost
+    // column. Single-select by default: the cursor row is the selection and
+    // moves with it. Multi-select keeps the cursor and a set of selected rows
+    // apart, Space toggling the row under the cursor.
     explicit ListView(bool multi_select = false);
 
+    // Replaces the roles of ordinary rows and of cursor and selected rows
+    // while the list has focus. A role left kInvalidRole when the view
+    // attaches falls back to its standard one.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
         normal_role_ = normal_role;
         selected_role_ = selected_role;
@@ -75,6 +94,7 @@ public:
     // from the two above so an existing caller that overrides only the
     // focused pair keeps working.
     void set_selected_inactive_role_override(ui::RoleId role) noexcept { selected_inactive_role_ = role; }
+    // The role whose foreground every row takes while the list is disabled.
     void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
     // Restyles the embedded scrollbar. It resolves its own roles, which is
@@ -98,6 +118,12 @@ public:
     void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
 
+    // The id of the cursor row (nullopt while the list is empty), and whether
+    // the item at a display index, or with an id, is in the selection. An
+    // out-of-range index or the invalid id is never selected. In a
+    // single-select list the cursor row is highlighted as selected but is
+    // only in the selection once chosen (by a move, Space, a click or
+    // set_selected).
     std::optional<ListItemId> cursor_id() const noexcept;
     bool is_selected(std::size_t index) const;
     bool is_selected_id(ListItemId id) const;
@@ -147,6 +173,8 @@ public:
     // sees when the dialog opens.
     static constexpr std::size_t kMeasuredItemsForWidth = 32;
 
+    // The cursor row's display index; -1 while the list is empty. Filling an
+    // empty list puts the cursor on the first row.
     int cursor() const noexcept { return cursor_; }  // display index, -1 if empty
 
     // Puts the cursor on `index` and scrolls it into view, selecting it too
@@ -178,8 +206,19 @@ public:
     // move it silently.
     std::function<void(std::size_t)> on_cursor_changed;
 
+    // The reader chose a row: Enter on the cursor row, or a second press on
+    // the same row within half a second (by the application's clock; with no
+    // Application there is no double click). The id form runs first, then the
+    // index form. Programmatic changes never activate.
     std::function<void(std::size_t)> on_activate;
     std::function<void(ListItemId)> on_activate_id;
+    // The selection changed, reported with the item that changed: in a
+    // single-select list the newly selected item; in a multi-select list the
+    // item toggled, or the item a click made the only selected one. Fires for
+    // programmatic set_selected/set_cursor as well as for the reader, but not
+    // when a new model, a new item list or model_changed() drops selected
+    // items. The id form runs first; the index form is skipped when the
+    // id no longer resolves to an index.
     std::function<void(std::size_t)> on_selection_changed;
     std::function<void(ListItemId)> on_selection_changed_id;
 

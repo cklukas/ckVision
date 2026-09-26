@@ -31,7 +31,12 @@ namespace ckv::ui {
 
 class Application;
 
+// What a view reaches through View::context(). All three pointers are non-owning; under an
+// Application they point at its own theme, role registry and itself, which outlive every view in
+// its tree. A View::set_theme_override() swaps `theme` for that view's subtree.
 struct Context {
+    // The theme roles resolve against, the registry widgets intern their role names into, and the
+    // owning Application (null in a standalone context built without one).
     const Theme* theme = nullptr;
     RoleRegistry* roles = nullptr;  // non-const: intern() is a mutating lookup
     Application* app = nullptr;     // optional; only a few widgets dereference this

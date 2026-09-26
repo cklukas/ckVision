@@ -13,8 +13,12 @@
 
 namespace ckv {
 
+// The export side of the clipboard: where an Application sends text the user copied so the host
+// system clipboard can receive it too. An Application either owns one (by default one that
+// forwards to its Terminal) or borrows a caller-supplied one that must outlive it.
 class ClipboardWriter {
 public:
+    // Destroys the bridge; implementations may be deleted through a ClipboardWriter pointer.
     virtual ~ClipboardWriter() = default;
 
     // Best effort: a bridge that cannot export text must make this a no-op.
@@ -28,6 +32,9 @@ class MemoryClipboardWriter final : public ClipboardWriter {
 public:
     void write_text(std::string_view text) override { text_ = std::string(text); }
 
+    // The text of the most recent write_text call, replacing any earlier one; empty before the
+    // first write and after clear(). The reference is to the writer's own storage, so it lives as
+    // long as the writer and shows later writes.
     const std::string& text() const noexcept { return text_; }
     void clear() noexcept { text_.clear(); }
 

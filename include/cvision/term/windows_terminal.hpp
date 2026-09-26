@@ -26,10 +26,18 @@ namespace ckv::term {
 // restored when the session ends. One instance owns one console session.
 class WindowsTerminal final : public Terminal {
 public:
+    // Switches both console handles to VT processing and UTF-8, enters the session and starts
+    // a bounded capability-probe window. Capabilities start from baseline_capabilities() with
+    // clipboard_write on, since the clipboard is written natively (CF_UNICODETEXT) rather
+    // than through OSC 52. Throws std::runtime_error, with the console modes and code pages
+    // put back, when either handle is not a console or the host will not keep VT mode (a
+    // legacy console). `clock` must outlive the terminal; it times polls and the probe window.
     explicit WindowsTerminal(const Clock& clock, HANDLE output = ::GetStdHandle(STD_OUTPUT_HANDLE),
                              HANDLE input = ::GetStdHandle(STD_INPUT_HANDLE));
+    // Restores the session (see restore()).
     ~WindowsTerminal() override;
 
+    // Not copyable: one instance owns one console session and its wake event.
     WindowsTerminal(const WindowsTerminal&) = delete;
     WindowsTerminal& operator=(const WindowsTerminal&) = delete;
 
@@ -48,9 +56,12 @@ public:
     void restore() noexcept override;
     void write_diagnostic_after_restore(std::string_view message) noexcept override;
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
+    // Throws std::runtime_error when the console output handle refuses a write.
     void write(std::string_view bytes) override;
     void set_title(std::string_view title) override;
     void bell() override;
+    // Places `text` on the Windows clipboard as CF_UNICODETEXT. Text that is not valid UTF-8,
+    // or a clipboard that cannot be opened, drops the write silently.
     void write_clipboard(std::string_view text) override;
 
 private:

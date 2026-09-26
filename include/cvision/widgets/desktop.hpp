@@ -29,17 +29,6 @@ namespace ckv::widgets {
 
 class MinimizedWindowStub;
 
-// Window-management default handlers (M9/WP-13, M10/WP-13 completion,
-// D-029): on_attached() installs itself as kClose/kQuit/kZoom/
-// kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
-// kTileVertically/kTileGrid/kCascade's default handler — but
-// ONLY for whichever of those nothing has claimed yet
-// (CommandRegistry::has_handler), the same guarded-install/guarded-
-// cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
-// an application that wires its own handler for any of these before
-// attaching a Desktop is never overridden, and the destructor clears
-// only the ones THIS instance actually installed, never one it found
-// already claimed.
 // Where a window goes when it is put away (D-064). The question every
 // desktop has to answer and only a host can: `Desktop` draws the way back
 // itself unless something else already does.
@@ -65,6 +54,23 @@ enum class MinimizedWindowPlacement {
     Disabled,
 };
 
+// The surface windows live on: it fills its background, owns the windows in
+// z-order and activates one of them at a time, holds popups above every
+// window, docks chrome (a menu bar, a status line) to its top and bottom
+// edges, and arranges, cycles, minimizes and restores windows. Resolves
+// "ckv.desktop.background" from context() once attached.
+//
+// Window-management default handlers (M9/WP-13, M10/WP-13 completion,
+// D-029): on_attached() installs itself as kClose/kQuit/kZoom/
+// kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
+// kTileVertically/kTileGrid/kCascade/kWindowList/kTerminalReport's default
+// handler — but ONLY for whichever of those nothing has claimed yet
+// (CommandRegistry::has_handler), the same guarded-install/guarded-
+// cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
+// an application that wires its own handler for any of these before
+// attaching a Desktop is never overridden, and the destructor clears
+// only the ones THIS instance actually installed, never one it found
+// already claimed.
 class Desktop : public ui::View {
 public:
     // Long enough to read as a movement between two places, short enough
@@ -72,13 +78,24 @@ public:
     // next one is never waiting on it. Six frames at the default interval.
     static constexpr std::int64_t kDefaultMinimizeAnimationNanos = 180'000'000;
 
+    // One window's recorded state in a Snapshot.
     struct WindowSnapshot {
+        // The window the entry describes, not owned. restore() acts on it only
+        // while `liveness` has not expired and this Desktop still owns it.
         Window* window = nullptr;
+        // The window's lifetime token at snapshot time; it tells a destroyed
+        // window from a new one allocated at the same address.
         std::weak_ptr<void> liveness;
+        // The window's bounds, in the Desktop's coordinates.
         Rect bounds;
+        // The bounds a zoomed window returns to when un-zoomed.
         Rect restored_bounds;
+        // The window's DesktopGrowPolicy.
         DesktopGrowPolicy grow_policy = DesktopGrowPolicy::None;
+        // Whether the window was the active one; restore() honours it only for
+        // a window that ends up shown (not minimized or hidden).
         bool active = false;
+        // Whether the window was zoomed (Window::zoomed()).
         bool zoomed = false;
         // Recorded beside the geometry, for the same reason: a layout in
         // which one window was parked on the switcher bar is not the same
@@ -86,11 +103,21 @@ public:
         bool minimized = false;
     };
 
+    // A layout snapshot (see snapshot()/restore()): plain data an application
+    // may keep for as long as it likes.
     struct Snapshot {
+        // One entry per owned window, back to front (z-order at snapshot time).
         std::vector<WindowSnapshot> windows;
     };
 
+    // `bounds` is where the desktop sits in its parent; the default empty
+    // rectangle suits a desktop sized later (for example by the Application's
+    // fill-the-root resize).
     explicit Desktop(Rect bounds = {});
+    // Clears every window's binding to this Desktop, drops all window-change
+    // observers without notifying them, destroys its children (windows,
+    // popups, docks, content) while its own state is still intact, and
+    // withdraws the default command handlers this instance installed.
     ~Desktop() override;
 
     // Adds `window`, activating it (raising to front, deactivating any
@@ -190,6 +217,10 @@ public:
     // cycles windows skips the hidden ones itself.
     const std::vector<Window*>& windows() const noexcept { return windows_; }
 
+    // The window currently marked active (drawn with the double frame), or
+    // nullptr when none is — always the case when no window is shown. Never
+    // a minimized window: minimizing the active one hands activation to the
+    // topmost window still shown.
     Window* active_window() const noexcept { return active_; }
 
     // --- Observing the window set ----------------------------------
@@ -207,7 +238,12 @@ public:
         // detached window is alive in the ownership the removal is about to
         // hand back.
         Removed,
+        // The window has just become the active one: active_window() already
+        // returns it (and, through activate(), it has been raised to the
+        // front). Also reported after restore() for the window it left active.
         Activated,
+        // The window's title changed (Window::set_title), so a listing that
+        // shows it must redraw its name.
         TitleChanged,
         // A window hidden by its `_` control, or by set_minimized(true).
         // Reported LAST, once whichever window succeeded it is already
@@ -227,7 +263,11 @@ public:
         Restored,
     };
 
+    // Identifies one subscription for unsubscribe_window_change. Ids are
+    // handed out from 1 upwards and never reused by the same Desktop.
     using WindowObserverId = std::uint64_t;
+    // Called with what changed and the window it changed for; see
+    // subscribe_window_change for what an observer may and may not do.
     using WindowObserver = std::function<void(WindowChange, Window&)>;
 
     // Learn of windows opening, closing, being renamed, and changing
@@ -261,13 +301,17 @@ public:
     // reaching into a Desktop whose own members are already gone.
     WindowObserverId subscribe_window_change(WindowObserver observer,
                                              std::weak_ptr<void> owner_lifetime);
+    // Ends a subscription; an unknown or already-removed id is ignored. Safe
+    // to call from inside an observer, including the one being removed.
     void unsubscribe_window_change(WindowObserverId observer) noexcept;
 
     // Typed layout snapshot/restore for application-owned session state.
     // The snapshot records current windows by instance identity and liveness,
     // then restore ignores entries whose original Window is no longer owned.
-    // It restores geometry, z-order, active state, zoom state, and grow policy;
-    // it never creates or destroys windows.
+    // It restores geometry, z-order, active state, zoom state, minimized
+    // state and grow policy; it never creates or destroys windows. A restored
+    // arrangement that forms a tiling is remembered like one made by a tile
+    // command, and observers hear Activated for the window left active.
     Snapshot snapshot() const;
     void restore(const Snapshot& snapshot);
 
@@ -377,14 +421,18 @@ public:
     // different, and gets the same treatment rather than a second
     // convention.
     //
-    // Returns ownership of whatever content was there before (nullptr the
-    // first time), so swapping the arrangement at runtime neither leaks
-    // nor detaches something the caller still wanted.
+    // `view` must not be null. Any previous content is removed and destroyed
+    // first; a caller that wants to keep it calls take_content() before
+    // swapping. Returns the new content as T*, not owned (typed insertion,
+    // like dock_top()).
     template <class T>
     T* set_content(std::unique_ptr<T> view) {
         return static_cast<T*>(set_content_impl(std::move(view)));
     }
+    // The current content view, or nullptr.
     ui::View* content() const noexcept { return content_; }
+    // Detaches the content and returns ownership of it (nullptr when there is
+    // none), leaving the desktop without content.
     std::unique_ptr<ui::View> take_content();
 
     // The area available for windows: this Desktop's own bounds minus
@@ -542,6 +590,7 @@ public:
     // One window's share of a filled tiling, as a fraction of
     // content_area() — see filled_tile_fractions().
     struct TileFraction {
+        // The window this share belongs to; not owned.
         Window* window = nullptr;
         // Offsets are measured from content_area()'s own origin, so all
         // four numbers lie in [0, 1] and x + width <= 1, y + height <= 1.

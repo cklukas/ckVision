@@ -43,8 +43,16 @@ using ui::View;
 // in the disabled role with no caret, selection, or invalid mark.
 class InputLine : public View {
 public:
+    // An empty, free-form, valid field: a Tab stop, one row high, preferring
+    // ten cells.
     InputLine();
 
+    // Replace the theme roles the field would otherwise resolve on
+    // attachment: the unfocused, focused and invalid faces, and separately
+    // the disabled face. The invalid face wins over the focused one. An
+    // override set before attachment survives it; ui::kInvalidRole before
+    // attachment leaves that role to the standard lookup. Neither setter
+    // repaints; the roles apply from the next paint.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId invalid_role) noexcept {
         normal_role_ = normal_role;
         focused_role_ = focused_role;
@@ -52,9 +60,18 @@ public:
     }
     void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
 
+    // Replaces the whole text (split into graphemes), puts the caret at the
+    // end, clears the selection and the undo history, and re-runs the
+    // validator. It is the owner's change, so on_edited does not fire and
+    // the grapheme filter is not applied. On a masked field the text becomes
+    // the buffer as given; it is not fitted to the mask. text() returns the
+    // graphemes concatenated, including a masked field's literals and
+    // unfilled placeholders.
     void set_text(std::string text);  // resets cursor to end, clears selection
     std::string text() const;
 
+    // The caret, as a grapheme index from 0 (before the first grapheme) to
+    // the grapheme count (after the last).
     std::size_t cursor() const noexcept { return cursor_; }
     // Places the caret at `grapheme` (clamped to the text; on a masked field,
     // at the next editable position) with nothing selected — what an owner
@@ -63,9 +80,14 @@ public:
     // select-on-focus offer (D-066) is for a field the reader arrives at,
     // and an owner that has just placed the caret has decided otherwise.
     void set_cursor(std::size_t grapheme);
+    // Whether a selection is anchored, and its span. A selection anchored at
+    // the caret itself counts as present although it covers nothing.
     bool has_selection() const noexcept { return selection_anchor_.has_value(); }
     std::pair<std::size_t, std::size_t> selection_range() const noexcept;  // [begin, end) in graphemes; {cursor_,cursor_} if none
 
+    // Whether typing replaces the grapheme under the caret (appending at the
+    // end) instead of inserting. The reader toggles it with Insert; it has
+    // no setter. A masked field always overwrites and ignores the mode.
     bool overwrite_mode() const noexcept { return overwrite_mode_; }
 
     // set_valid() is still the EXTERNAL override an owner (e.g. the
@@ -97,6 +119,10 @@ public:
     // text as it was (a caret move, a refused grapheme).
     std::function<void()> on_edited;
 
+    // The self-validation rule described above set_valid: called with the
+    // whole text, true meaning valid. It runs once immediately against the
+    // current text. An empty function stops self-validation and leaves
+    // valid() at its last value.
     void set_validator(std::function<bool(const std::string&)> validator);
 
     // Optional per-grapheme admission rule for interactive input. It applies
@@ -129,17 +155,38 @@ public:
     // `registry`/`key` for Up/Down history cycling; `registry` may be
     // nullptr to disable (the default). commit_to_history() records
     // the field's current text into the registry under `key` — call
-    // explicitly when the owner considers the value "accepted".
+    // explicitly when the owner considers the value "accepted". The registry
+    // is not owned and must outlive the field, or be replaced first. A masked
+    // field never cycles history.
     void set_history(ui::HistoryRegistry* registry, std::string key);
     void commit_to_history();
 
+    // The editing commands behind the clipboard and undo keys, callable by an
+    // owner (a menu's Edit commands, say). Each returns true when it acted.
+    // Copy needs a non-empty selection and an attached Application and leaves
+    // the text alone. Cut additionally erases the selection (on a masked
+    // field, resetting its editable positions to the placeholder). Paste
+    // inserts the Application's clipboard text as if typed, so the grapheme
+    // filter and mask apply; it returns false when the clipboard is empty and
+    // true whenever the enabled field took the text, even if every grapheme
+    // was refused. Undo restores the text, caret, selection and overwrite
+    // mode from before the most recent edit (at most 64 levels; set_text
+    // discards them) and returns false when there is nothing to undo. Cut,
+    // paste and undo report on_edited when they change the text.
     bool copy_selection_to_clipboard();
     bool cut_selection_to_clipboard();
     bool paste_from_clipboard();
     bool undo();
 
     void draw(scene::Painter& painter) override;
+    // A masked field is exactly the mask's length. A free-form one shrinks to
+    // four cells, prefers its text's width plus one (at least ten) and grows
+    // without bound.
     SizeHint horizontal_size_hint() const override;
+    // Enter is consumed only when on_accept is set, and an unmasked field with
+    // a history registry consumes Up and Down even when the history is empty.
+    // Ctrl, Alt and Super characters other than the clipboard and undo
+    // chords are left unhandled so commands can have them.
     bool on_key(const KeyEvent& event) override;
     bool on_text(const TextEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
@@ -148,6 +195,9 @@ public:
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return enabled() ? PointerShape::Text : PointerShape::NotAllowed;
     }
+    // Gaining the focus selects the whole text with the caret at the end
+    // (the select-on-focus offer, D-066), except on a masked or empty field.
+    // A pointer press then places the caret where it lands instead.
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 

@@ -54,6 +54,10 @@ constexpr bool is_standalone_key(Key key) noexcept {
     return key >= Key::LeftShift && key <= Key::Menu;
 }
 
+// Modifier keys held with a key or mouse report, as independent bit flags;
+// a Modifier value holds any combination, and None is the empty set. The bit
+// order is that of the terminal's modifier parameter (Shift 1, Alt 2, Ctrl 4,
+// Super 8), so Super appears only when a host reports that bit.
 enum class Modifier : std::uint8_t {
     None = 0,
     Shift = 1u << 0,
@@ -62,9 +66,12 @@ enum class Modifier : std::uint8_t {
     Super = 1u << 3,
 };
 
+// The union of two modifier sets.
 constexpr Modifier operator|(Modifier a, Modifier b) noexcept {
     return static_cast<Modifier>(static_cast<std::uint8_t>(a) | static_cast<std::uint8_t>(b));
 }
+// Whether `set` contains any flag of `flag`. With a single flag, as intended,
+// that is simply "is it held"; Modifier::None is never contained.
 constexpr bool has_modifier(Modifier set, Modifier flag) noexcept {
     return (static_cast<std::uint8_t>(set) & static_cast<std::uint8_t>(flag)) != 0;
 }
@@ -72,10 +79,15 @@ constexpr bool has_modifier(Modifier set, Modifier flag) noexcept {
 // A key press: the named key plus modifiers, and — for `Key::Char` — the
 // UTF-8 text it represents. `text` is empty for named keys.
 struct KeyChord {
+    // The named key (Key::Char for printable text), the modifiers held with
+    // it, and the UTF-8 text of a Key::Char chord. A default chord is
+    // Key::None with no modifiers, which names no real key.
     Key key = Key::None;
     Modifier modifiers = Modifier::None;
     std::string text;
 
+    // Memberwise equality. The text compares byte for byte, so "g" and "G"
+    // are different chords.
     friend bool operator==(const KeyChord&, const KeyChord&) = default;
 
     // Parses a canonical chord spelling (M9/WP-11), e.g. "Alt+G",

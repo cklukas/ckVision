@@ -29,14 +29,23 @@ using ui::View;
 // and shows no mnemonic accent.
 class Label : public View {
 public:
+    // A one-row label showing `text`, with no buddy.
     explicit Label(std::string text);
 
+    // The text exactly as given, '&' markers included. It is drawn on one row
+    // with the markers stripped, clipped to the label's width. Setting it
+    // re-parses the mnemonic, repaints and reports a size-hint change.
     const std::string& text() const noexcept { return raw_text_; }
     void set_text(std::string text);
 
+    // The control the mnemonic focuses. Not owned: the label watches its
+    // lifetime, so buddy() returns nullptr once the buddy has been destroyed,
+    // and nullptr clears it. The mnemonic only reaches a buddy that is inside
+    // the scope being searched and focusable at the time.
     void set_buddy(View* buddy) noexcept;
     View* buddy() const noexcept;
 
+    // The grapheme the text marks with '&', or empty when it marks none.
     const std::string& mnemonic() const noexcept { return mnemonic_; }
 
     // The width of the column this label stands in, beside others: the
@@ -46,6 +55,10 @@ public:
     void set_column_width(int cells);
     int column_width() const noexcept { return column_width_; }
 
+    // The text role and the mnemonic role, replacing "ckv.label.text" and
+    // "ckv.label.mnemonic" (see the class comment). The mnemonic role is
+    // applied whole to the marked grapheme, background included. The
+    // disabled role is not overridable.
     void set_role_override(ui::RoleId text_role, ui::RoleId mnemonic_role) noexcept {
         text_role_ = text_role;
         mnemonic_role_ = mnemonic_role;

@@ -23,7 +23,10 @@
 
 namespace ckv::widgets {
 
+// The dialog's only outcome. Activating a window is its effect, not its
+// answer, so an activation and a plain close both complete as Closed.
 enum class WindowListDialogResult { Closed };
+// The handle present_window_list_dialog returns; see DialogPresentation.
 using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 
 // Lists `desktop`'s windows() (stable insertion/cycling order, the

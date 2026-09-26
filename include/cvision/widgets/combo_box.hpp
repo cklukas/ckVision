@@ -15,6 +15,8 @@
 
 namespace ckv::widgets {
 
+// Whether the value can only be one of the items (PickOnly) or can also be
+// typed freely in an embedded InputLine (Editable).
 enum class ComboBoxMode { PickOnly, Editable };
 
 // Editable or pick-only combo box with deterministic in-application history.
@@ -32,28 +34,64 @@ enum class ComboBoxMode { PickOnly, Editable };
 // "ckv.input.disabled", with no caret or selection even when editable.
 class ComboBox : public ui::View {
 public:
+    // An empty tab-stop combo box with no items, no text and no selection,
+    // asking for 16 x 1 cells. Constructing it PickOnly selects nothing yet.
     explicit ComboBox(ComboBoxMode mode = ComboBoxMode::PickOnly);
 
+    // The choices, in list order. Replacing them keeps the selection when its
+    // index is still in range (taking that item's text) and drops it
+    // otherwise; neither callback fires.
     void set_items(std::vector<std::string> items);
     const std::vector<std::string>& items() const noexcept { return items_; }
 
+    // Switching to PickOnly while nothing is selected selects the first item,
+    // if any; that fires on_text_changed but not on_select.
     void set_mode(ComboBoxMode mode);
     ComboBoxMode mode() const noexcept { return mode_; }
     bool editable() const noexcept { return mode_ == ComboBoxMode::Editable; }
 
+    // The current value: the selected item's text, or what was typed or set.
+    // Setting different text clears the selection (even when it equals an
+    // item) and fires on_text_changed; setting the same text does nothing.
+    // The value may be set in either mode.
     void set_text(std::string text);
     const std::string& text() const noexcept { return text_; }
 
+    // The selected item, if any. Selecting an in-range index takes that item's
+    // text and fires on_text_changed (never on_select); nullopt or an index
+    // out of range clears the selection and leaves the text as it is.
     void set_selected_index(std::optional<std::size_t> index);
     std::optional<std::size_t> selected_index() const noexcept { return selected_index_; }
 
+    // Shares a named history list with other widgets. `registry` is borrowed
+    // and must outlive this combo box; null turns history off. While a
+    // registry is set, an Editable combo's Up and Down (list closed) recall
+    // entries, Down stepping to older ones and Up back towards the text that
+    // was there before recall began, instead of opening the list.
+    // commit_to_history records the current text as the newest entry (empty
+    // text is not recorded). Enter on the closed control calls it and leaves
+    // the key unhandled, so a dialog's default button still receives it.
     void set_history(ui::HistoryRegistry* registry, std::string key);
     void commit_to_history();
 
+    // Opens the item list as a PopupList floating over the nearest ancestor
+    // Desktop, below the control (above it when too little room is below and
+    // more is above), at least as wide as the control. Does nothing when it is
+    // already open, when there are no items, or without an Application and a
+    // Desktop. Opening with nothing selected sets selected_index() to 0
+    // without changing the text. Choosing an item in the list selects it and
+    // fires on_select, then on_text_changed. close_dropdown dismisses the list
+    // without choosing; nothing fires.
     void open_dropdown();
     void close_dropdown();
     bool dropdown_open() const noexcept { return popup_ != nullptr; }
 
+    // on_select fires with the index when the reader chooses an item from the
+    // open list, and only then. on_text_changed fires with the text when
+    // typing or set_text changes it, on each history recall step, and on every
+    // selection — a choice from the list, an arrow step where no list can
+    // open, set_selected_index, or set_mode's automatic pick — even when the
+    // text stays the same.
     std::function<void(std::size_t)> on_select;
     std::function<void(const std::string&)> on_text_changed;
 

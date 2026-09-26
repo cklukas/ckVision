@@ -26,19 +26,37 @@
 
 namespace ckv::widgets {
 
+// One styled run of a TextView's content (TextView::set_spans). Spans are laid
+// end to end; a span does not start a new line unless its text says so.
 struct TextSpan {
+    // UTF-8 text. A '\n' inside it ends the current logical line, so a span
+    // may cover several lines.
     std::string text;
+    // Attributes added on top of the view's text role for this run (combined
+    // with it, never replacing it).
     Attr attrs = static_cast<Attr>(0);
+    // When set, the whole span is one link to this target: drawn underlined,
+    // reachable with Tab, handed to TextView::on_link_activate when activated,
+    // and exported as an OSC 8 hyperlink by TextView::osc8_text. Every linked
+    // span is its own link, even when two spans share a target.
     std::optional<std::string> link_target;
 };
 
+// A read-only, scrollable, focusable text surface with optional styled runs
+// and activatable links. The view is a tab stop; Up/Down/PageUp/PageDown/
+// Home/End and the wheel scroll it vertically, and the horizontal bar (when
+// shown) scrolls it sideways.
+//
 // Resolves its own theme role from context() once attached (M9
 // WP-7, D-028): "ckv.textview.text"; its embedded Scrollbar resolves
 // its own roles independently.
 class TextView : public ui::View {
 public:
+    // Empty text, both bars on ScrollbarPolicy::Auto, no wrapping.
     TextView();
 
+    // Replace the role the text is drawn with (spans add their attributes to
+    // it). Left as kInvalidRole, "ckv.textview.text" is resolved at attach.
     void set_role_override(ui::RoleId text_role) noexcept { text_role_ = text_role; }
     // A containing ScrollViewport can own the visible scrollbars for a
     // document surface. Hiding this view's internal vertical track keeps the
@@ -66,25 +84,57 @@ public:
     int display_line_count() const noexcept { return static_cast<int>(display_runs_.size()); }
     // The widest display line, in cells. What the horizontal bar scrolls over.
     int content_width() const noexcept { return content_width_; }
+    // The first cell column shown at the left edge: the horizontal scroll
+    // position, 0 when nothing is scrolled.
     int left_column() const noexcept;
 
+    // Replaces the content with plain text in the view's text role. Clears any
+    // spans and links (current_link() becomes empty). The scroll position is
+    // kept, clamped to the new content.
     void set_text(std::string text);
+    // Replaces the content with styled runs, laid end to end. The links are
+    // numbered in span order and the first one becomes current. The scroll
+    // position is kept, clamped to the new content.
     void set_spans(std::vector<TextSpan> spans);
+    // The content as plain text: what set_text was given, or the spans' text
+    // concatenated (links and attributes dropped).
     const std::string& text() const noexcept { return raw_text_; }
 
+    // Logical lines: the content split on '\n', at least 1 even when empty.
     int line_count() const noexcept { return static_cast<int>(lines_.size()); }
+    // The display line shown in the top row: the vertical scroll position.
     int top_line() const noexcept;
+    // Links, in span order; 0 for content set with set_text.
     std::size_t link_count() const noexcept { return link_targets_.size(); }
+    // Which link Enter activates: marked (reverse video) while the view has
+    // focus. Empty when there are no links. Tab and Shift+Tab step it forward
+    // and back, wrapping.
     std::optional<std::size_t> current_link() const noexcept { return current_link_; }
+    // An index at or past link_count() clears the current link.
     void set_current_link(std::optional<std::size_t> index);
+    // Hands the current link's target to on_link_activate (if set). Returns
+    // whether there was a current link, whether or not a handler is set.
     bool activate_current_link();
+    // The content for a terminal that understands OSC 8 hyperlinks: each
+    // linked span wrapped as ESC ] 8 ; ; target ST, text, ESC ] 8 ; ; ST, the
+    // rest as plain text. Attributes are not exported. C0 controls other than
+    // '\n', and DEL, are removed from text and targets so the output can
+    // never carry a control sequence of its own. Deterministic: the same
+    // content always yields the same bytes.
     std::string osc8_text() const;
 
+    // Fired with the link's target when a link is activated: Enter on the
+    // current link, a left press on a link, or activate_current_link().
     std::function<void(const std::string&)> on_link_activate;
 
     void on_resized() override;
     void draw(scene::Painter& painter) override;
+    // Besides scrolling, consumes Tab and Shift+Tab to step the current link
+    // whenever the content has links — so focus traversal does not leave the
+    // view by Tab then — and Enter to activate it. Left/Right do not scroll.
     bool on_key(const KeyEvent& event) override;
+    // A left press on a link makes it current and activates it; the wheel
+    // scrolls one display line per notch.
     bool on_mouse(const MouseEvent& event) override;
     // Read-only, but still text: it is selected and scrolled by pointer,
     // and the shape says what the pointer will do rather than whether the

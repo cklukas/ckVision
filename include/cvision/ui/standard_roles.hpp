@@ -10,6 +10,10 @@
 
 namespace ckv::ui {
 
+// The interned ids of every theme role ckVision's built-in widgets draw with, one field per role.
+// Produced by intern_standard_roles(), which an application calls on its Application::roles()
+// registry, and handed to the built-in scheme factories and dialog builders. The ids are
+// meaningful only against the RoleRegistry that interned them.
 struct StandardRoles {
     // The Desktop's own fill — deliberately a SEPARATE role from
     // dialog_background: sharing one role between the desktop and

@@ -53,18 +53,6 @@ namespace ckv::ui {
 // existed.
 inline constexpr std::int64_t kDefaultFrameIntervalNanos = 200'000'000;
 
-// ARCHITECTURE.md §5 "Sizing policy" (M10/WP-21). Below kMinFullChromeSize,
-// nothing new triggers — Window::reposition_within (M8 WP-1/WP-4) already
-// clamps every window to fit and stay reachable as root() shrinks, and
-// that existing clamped rendering IS the "degraded chrome" the policy
-// names; there is no separate degraded visual mode to build. Below
-// kHardFloorSize, Application::paint_and_present() instead shows a
-// deterministic "terminal too small" message in place of the normal
-// View tree — a partial, garbled render (a window frame's own
-// box-drawing corners alone need at least 2x2) is worse than a clear,
-// honest refusal to render. Recovery is automatic and needs nothing
-// undone on either side: the very next frame root() is at least
-// kHardFloorSize again, painting resumes normally.
 // How long an unanswered frame is waited for before it is written off, on a
 // host that has never answered one. Short enough that a terminal without the
 // facility costs an application a fraction of a second once, rather than a
@@ -85,19 +73,48 @@ inline constexpr int kFrameCompletionPatienceFactor = 4;
 // at its word.
 inline constexpr int kFrameCompletionGiveUpCount = 3;
 
+// ARCHITECTURE.md §5 "Sizing policy" (M10/WP-21). Below kMinFullChromeSize,
+// nothing new triggers — Window::reposition_within (M8 WP-1/WP-4) already
+// clamps every window to fit and stay reachable as root() shrinks, and
+// that existing clamped rendering IS the "degraded chrome" the policy
+// names; there is no separate degraded visual mode to build. Below
+// kHardFloorSize, Application::paint_and_present() instead shows a
+// deterministic "terminal too small" message in place of the normal
+// View tree — a partial, garbled render (a window frame's own
+// box-drawing corners alone need at least 2x2) is worse than a clear,
+// honest refusal to render. Recovery is automatic and needs nothing
+// undone on either side: the very next frame root() is at least
+// kHardFloorSize again, painting resumes normally.
+//
+// Both sizes are in cells (columns x rows): 80x24 for full chrome, 20x6
+// as the floor below which nothing but the message is drawn.
 inline constexpr Size kMinFullChromeSize{80, 24};
 inline constexpr Size kHardFloorSize{20, 6};
 
+// The one owner of a terminal UI session: the root of the view tree, focus and input routing,
+// the command registry, the theme, timers, and the step()/run() loop that turns invalidation into
+// presented frames. Not thread-safe apart from post(), wake() and request_quit(); everything else
+// runs on the owning thread.
 class Application {
 public:
+    // Builds the application over `terminal` and `clock`, both borrowed and required to outlive
+    // it, with a clipboard bridge of its own that exports through the terminal. The root view is
+    // sized to the terminal's current size, and the standard help and focus-traversal handlers
+    // are installed.
     Application(term::Terminal& terminal, Clock& clock);
     // Explicit host composition: the injected bridge receives portable
     // clipboard exports. Its lifetime must cover this Application. The
     // two-argument convenience constructor instead owns a terminal-backed
     // bridge for this Application instance.
     Application(term::Terminal& terminal, Clock& clock, ClipboardWriter& clipboard_writer);
+    // Settles outstanding frame-completion replies, restores the terminal, writes the buffered
+    // diagnostics after that restore, and then destroys the root's children while every service
+    // their destructors may reach (commands, roles, theme, timers) is still alive.
     ~Application();
 
+    // The root of the view tree, sized to the terminal and resized with it. Applications add
+    // their top-level views (a Desktop, a full-screen surface) as its children; children whose
+    // View::fills_root() is true track its size. The root itself is owned by the Application.
     View& root() noexcept { return root_; }
     const View& root() const noexcept { return root_; }
 
@@ -203,17 +220,27 @@ public:
     // rediscovering that.
     void settle_frame_completion();
 
+    // This application's command registry: the standard set, the keymap, handlers, and pushed
+    // contexts. Owned by the Application and alive until after every view is destroyed.
     CommandRegistry& commands() noexcept { return commands_; }
     const CommandRegistry& commands() const noexcept { return commands_; }
 
+    // The role registry every view interns its role names into (through Context::roles). The
+    // Application does not intern the standard roles itself; call intern_standard_roles() on it.
     RoleRegistry& roles() noexcept { return roles_; }
+    // The active theme, built over roles(). Starts empty, so every role resolves to its fallback
+    // until a scheme is installed with set_theme().
     Theme& theme() noexcept { return theme_; }
     const Theme& theme() const noexcept { return theme_; }
     // Replace the active scheme and repaint retained views on the next step.
+    // `theme` must be built over roles(): it resolves unset roles through
+    // whichever registry it was constructed with.
     void set_theme(Theme theme);
 
+    // The application-wide named history lists input lines and other widgets share by key.
     HistoryRegistry& history() noexcept { return history_; }
 
+    // The injected clock every timer, animation and frame deadline is measured on.
     Clock& clock() noexcept { return clock_; }
     const Clock& clock() const noexcept { return clock_; }
 
@@ -244,6 +271,8 @@ public:
     // different causes.
     std::size_t mouse_events_dispatched() const noexcept { return mouse_events_dispatched_; }
     const std::optional<MouseEvent>& last_mouse_event() const noexcept { return last_mouse_event_; }
+    // The terminal's current size in cells (columns x rows), as the terminal reports it now; root()
+    // follows it once the corresponding resize event has been dispatched.
     Size terminal_cell_grid() const noexcept { return terminal_.size(); }
 
     // The single deepest view the pointer is over, or nullptr when it is
@@ -343,19 +372,29 @@ public:
     // from_paste set, which dispatch() also mirrors into this clipboard
     // before routing it onward — never OSC 52 read (D-022).
 
+    // The internal clipboard's text. Setting it replaces the text and writes it through to the
+    // ClipboardWriter at once; a paste arriving from the terminal replaces it too.
     void set_clipboard_text(std::string text);
     const std::string& clipboard_text() const noexcept { return clipboard_text_; }
 
     // --- Timers (part of the loop's "drain input, dispatch, run due
     // timers" batch, ARCHITECTURE.md §5) --------------------------------
 
+    // Identifies one start_timer() call. Assigned from 1 upward and never reused, so 0 is free
+    // for callers to mean "no timer".
     using TimerId = std::uint64_t;
 
     // Fires `callback` once `interval_nanos` (on the injected Clock,
     // never wall-clock) has elapsed; if `repeating`, reschedules for
     // `interval_nanos` after the fire time (not "after now" — so a
     // late `step()` call does not accumulate drift across fires).
+    // `interval_nanos` must be positive (asserted). Callbacks run on the
+    // owning thread inside step(); a repeating timer that fell several
+    // intervals behind fires once and keeps its original phase.
     TimerId start_timer(std::int64_t interval_nanos, bool repeating, std::function<void()> callback);
+    // Removes the timer; a no-op for an unknown, cancelled or already fired one-shot id. A timer
+    // that was already due in the step now running still fires once in that step, even when an
+    // earlier callback of the same batch cancels it.
     void cancel_timer(TimerId id);
 
     // --- Context help (ARCHITECTURE.md §5 "Commands and help", D-027) ---
@@ -401,6 +440,8 @@ public:
 
     // --- Focus (ARCHITECTURE.md §5 "Focus and traversal") ---------------
 
+    // The view holding keyboard focus, or nullptr. Cleared automatically when that view is
+    // detached or destroyed; do not keep the pointer across callbacks (use save_focus()).
     View* focused() const noexcept { return focused_; }
 
     // A lifetime-checked place to return focus after temporary UI is removed.
@@ -408,14 +449,20 @@ public:
     // destroyed control for a valid restoration target.
     class FocusBookmark {
     public:
+        // An empty bookmark; restoring it clears focus.
         FocusBookmark() = default;
 
     private:
+        // Only the Application reads or fills a bookmark.
         friend class Application;
         View* view_ = nullptr;
         std::weak_ptr<void> liveness_;
     };
 
+    // Records the currently focused view (or no focus). restore_focus() refocuses that view if it
+    // is still alive, still in this application's tree, and focusable; otherwise it clears focus.
+    // Like set_focus(), a restore into a view outside the active modal scope is deferred until
+    // the scope ends.
     FocusBookmark save_focus() const noexcept;
     void restore_focus(const FocusBookmark& bookmark);
 
@@ -449,6 +496,9 @@ public:
     // execute_command on an id with neither a handler nor a declaration
     // is a no-op.
     void set_command_handler(CommandId id, std::function<void()> handler);
+    // CommandRegistry::is_available() and execute() with the command contexts named on the
+    // current focus path (up to the active modal root) — the same answer menus and key dispatch
+    // get. execute_command() returns whether the handler ran.
     bool command_available(CommandId id);
     bool execute_command(CommandId id);
 
@@ -600,6 +650,7 @@ public:
     // for a specific non-blocking or blocking-modal owner.
     bool pop_modal(ModalScopeId scope);
 
+    // Whether any modal scope is active.
     bool is_modal() const noexcept { return !modal_stack_.empty(); }
 
     // Whether `view` is the root of the innermost active modal scope.

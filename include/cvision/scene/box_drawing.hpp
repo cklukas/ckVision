@@ -17,30 +17,43 @@
 
 namespace ckv::scene {
 
+// The line weight and corner form of box-drawing glyphs.
 enum class LineStyle : unsigned char {
+    // Light lines with square corners.
     Single,
+    // Double lines.
     Double,
+    // Light lines with rounded corners; identical to Single except at the
+    // four corner shapes.
     Rounded,
+    // Heavy (bold-weight) lines.
     Heavy,
 };
 
 // Which of a cell's four edges connect to a neighboring line segment.
 // At least one direction must be set for junction_glyph.
 struct Junction {
+    // One flag per edge of the cell; true where the line leaves the cell
+    // through that edge.
     bool up = false;
     bool down = false;
     bool left = false;
     bool right = false;
 
+    // Memberwise equality.
     friend bool operator==(const Junction&, const Junction&) = default;
 
+    // The union of both connector sets: every edge either one connects.
+    // This is how a line drawn across an existing one becomes a T or a cross.
     Junction operator|(const Junction& other) const noexcept {
         return Junction{up || other.up, down || other.down, left || other.left,
                          right || other.right};
     }
 };
 
+// What classify_junction_glyph recognizes in a glyph.
 struct JunctionGlyphInfo {
+    // The glyph's connector directions and its line style.
     Junction junction;
     LineStyle style = LineStyle::Single;
 };

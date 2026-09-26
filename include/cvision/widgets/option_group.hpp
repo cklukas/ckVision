@@ -35,9 +35,16 @@ namespace ckv::widgets {
 
 using ui::SizeHint;
 
+// The state of one CheckGroup choice.
 enum class CheckState {
+    // Drawn "[ ] "; reads as false through CheckGroup::checked.
     Unchecked,
+    // Drawn "[X] "; the only state CheckGroup::checked reports as true.
     Checked,
+    // Drawn "[~] ": partly on, typically a choice standing for several
+    // settings that disagree. Reached by Space only in a tristate group, but
+    // settable by the application in any group; reads as false through
+    // CheckGroup::checked.
     Mixed,
 };
 
@@ -68,16 +75,30 @@ public:
     void set_column_width(int columns);
     int column_width() const noexcept { return column_width_; }
 
+    // Replace the roles the choices are drawn with: `normal_role` for the
+    // choice rows, `focused_role` for the cursor row while the group has
+    // focus (its foreground also colours the caption then). A role left as
+    // kInvalidRole is resolved from the standard names at attach.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
         normal_role_ = normal_role;
         focused_role_ = focused_role;
     }
+    // The role whose colours accent the mnemonic letters of the choices and
+    // the caption, in place of "ckv.label.mnemonic".
     void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
+    // Per-choice state; `index` must be below the number of labels (checked
+    // by assertion). checked() is true only for CheckState::Checked;
+    // set_checked(i, v) is set_check_state with Checked or Unchecked. A change
+    // fires on_state_changed and then on_changed — programmatic changes
+    // included — and setting the state a choice already has fires nothing.
     bool checked(std::size_t index) const;
     void set_checked(std::size_t index, bool value);
     CheckState check_state(std::size_t index) const;
     void set_check_state(std::size_t index, CheckState state);
+    // Whether Space, a click or a mnemonic cycles a choice through
+    // Unchecked, Checked, Mixed and back, rather than toggling Checked and
+    // Unchecked (where a Mixed choice becomes Checked). Off by default.
     void set_tristate(bool enabled) noexcept { tristate_ = enabled; }
     bool tristate() const noexcept { return tristate_; }
 
@@ -85,11 +106,16 @@ public:
     // and new bool state. Mixed reports false here; use on_state_changed
     // when the caller needs to distinguish Mixed from Unchecked.
     std::function<void(std::size_t, bool)> on_changed;
+    // Fired on the same changes with the full new state, before on_changed.
     std::function<void(std::size_t, CheckState)> on_state_changed;
 
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
+    // Arrows move the cursor (see the file comment); Space toggles the cursor
+    // choice, and a choice's mnemonic letter (typed without Ctrl or Super)
+    // moves the cursor to it and toggles it. Enter is deliberately left
+    // unhandled so it reaches the dialog's default button.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Each choice toggles when clicked.
@@ -123,6 +149,7 @@ private:
 // drawn disabled exactly as CheckGroup is.
 class RadioGroup : public ui::View {
 public:
+    // `labels` may each carry a '&' mnemonic. Nothing is selected initially.
     explicit RadioGroup(std::vector<std::string> labels);
 
     // Optional caption owned by this group. When present it occupies the row
@@ -142,12 +169,20 @@ public:
     void set_column_width(int columns);
     int column_width() const noexcept { return column_width_; }
 
+    // Replace the roles the choices are drawn with, as CheckGroup's
+    // set_role_override does.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role) noexcept {
         normal_role_ = normal_role;
         focused_role_ = focused_role;
     }
+    // The role whose colours accent the mnemonic letters of the choices and
+    // the caption, in place of "ckv.label.mnemonic".
     void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
 
+    // The selected choice's index, or -1 when none is. set_selected accepts
+    // -1 (clear) or a valid index and ignores anything else; a valid index
+    // also moves the keyboard cursor there. A change fires on_changed,
+    // programmatic changes included; re-selecting the selected choice does not.
     int selected() const noexcept { return selected_; }  // -1 means none selected
     void set_selected(int index);
 
@@ -157,6 +192,10 @@ public:
     void draw(scene::Painter& painter) override;
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
+    // An arrow that moves the cursor also selects the choice it lands on;
+    // Space selects the cursor choice, and a choice's mnemonic letter (typed
+    // without Ctrl or Super) selects it. Enter is deliberately left unhandled
+    // so it reaches the dialog's default button.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Each choice selects when clicked.

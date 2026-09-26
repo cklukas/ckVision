@@ -14,19 +14,27 @@
 
 namespace ckv::text::unicode_15_1 {
 
+// An inclusive range of Unicode scalar values, first <= last. Each table below lists
+// the code points holding one Unicode 15.1.0 property as ascending ranges that neither
+// overlap nor touch (adjacent runs are merged), so a lookup can binary-search them.
 struct Range {
+    // The lowest and the highest code point of the range; both belong to it.
     char32_t first;
     char32_t last;
 };
 
+// Grapheme_Cluster_Break=CR: the carriage return, which pairs only with a following LF.
 inline constexpr Range kCr[] = {
     {0x000D, 0x000D},
 };
 
+// Grapheme_Cluster_Break=LF: the line feed.
 inline constexpr Range kLf[] = {
     {0x000A, 0x000A},
 };
 
+// Grapheme_Cluster_Break=Control: controls and separators that always stand alone as their own
+// cluster.
 inline constexpr Range kControl[] = {
     {0x0000, 0x0009},
     {0x000B, 0x000C},
@@ -49,6 +57,8 @@ inline constexpr Range kControl[] = {
     {0xE01F0, 0xE0FFF},
 };
 
+// Grapheme_Cluster_Break=Extend: combining marks and other extenders that attach to the preceding
+// character.
 inline constexpr Range kExtend[] = {
     {0x0300, 0x036F},
     {0x0483, 0x0489},
@@ -416,14 +426,17 @@ inline constexpr Range kExtend[] = {
     {0xE0100, 0xE01EF},
 };
 
+// Grapheme_Cluster_Break=ZWJ: the zero-width joiner.
 inline constexpr Range kZwj[] = {
     {0x200D, 0x200D},
 };
 
+// Grapheme_Cluster_Break=Regional_Indicator: the regional-indicator letters that pair into flags.
 inline constexpr Range kRegionalIndicator[] = {
     {0x1F1E6, 0x1F1FF},
 };
 
+// Grapheme_Cluster_Break=Prepend: characters that attach to the character after them.
 inline constexpr Range kPrepend[] = {
     {0x0600, 0x0605},
     {0x06DD, 0x06DD},
@@ -442,6 +455,8 @@ inline constexpr Range kPrepend[] = {
     {0x11F02, 0x11F02},
 };
 
+// Grapheme_Cluster_Break=SpacingMark: spacing combining marks that attach to the preceding
+// character.
 inline constexpr Range kSpacingmark[] = {
     {0x0903, 0x0903},
     {0x093B, 0x093B},
@@ -610,21 +625,25 @@ inline constexpr Range kSpacingmark[] = {
     {0x1D16D, 0x1D16D},
 };
 
+// Grapheme_Cluster_Break=L: Hangul leading consonant jamo.
 inline constexpr Range kL[] = {
     {0x1100, 0x115F},
     {0xA960, 0xA97C},
 };
 
+// Grapheme_Cluster_Break=V: Hangul vowel jamo.
 inline constexpr Range kV[] = {
     {0x1160, 0x11A7},
     {0xD7B0, 0xD7C6},
 };
 
+// Grapheme_Cluster_Break=T: Hangul trailing consonant jamo.
 inline constexpr Range kT[] = {
     {0x11A8, 0x11FF},
     {0xD7CB, 0xD7FB},
 };
 
+// Grapheme_Cluster_Break=LV: precomposed Hangul syllables without a trailing consonant.
 inline constexpr Range kLv[] = {
     {0xAC00, 0xAC00},
     {0xAC1C, 0xAC1C},
@@ -1027,6 +1046,7 @@ inline constexpr Range kLv[] = {
     {0xD788, 0xD788},
 };
 
+// Grapheme_Cluster_Break=LVT: precomposed Hangul syllables with a trailing consonant.
 inline constexpr Range kLvt[] = {
     {0xAC01, 0xAC1B},
     {0xAC1D, 0xAC37},
@@ -1429,6 +1449,7 @@ inline constexpr Range kLvt[] = {
     {0xD789, 0xD7A3},
 };
 
+// Extended_Pictographic (emoji-data.txt): the pictographs a ZWJ sequence may join into one cluster.
 inline constexpr Range kExtendedPictographic[] = {
     {0x00A9, 0x00A9},
     {0x00AE, 0x00AE},
@@ -1510,6 +1531,8 @@ inline constexpr Range kExtendedPictographic[] = {
     {0x1FC00, 0x1FFFD},
 };
 
+// East_Asian_Width W or F (EastAsianWidth.txt), merged into one table: the code points ckVision
+// measures as two terminal columns.
 inline constexpr Range kEastAsianWide[] = {
     {0x1100, 0x115F},
     {0x231A, 0x231B},
@@ -1633,6 +1656,8 @@ inline constexpr Range kEastAsianWide[] = {
     {0x30000, 0x3FFFD},
 };
 
+// Indic_Conjunct_Break=Consonant (DerivedCoreProperties.txt): the consonants an Indic conjunct
+// joins.
 inline constexpr Range kIncbConsonant[] = {
     {0x0915, 0x0939},
     {0x0958, 0x095F},
@@ -1662,6 +1687,8 @@ inline constexpr Range kIncbConsonant[] = {
     {0x0D15, 0x0D3A},
 };
 
+// Indic_Conjunct_Break=Linker (DerivedCoreProperties.txt): the viramas that link two consonants
+// into a conjunct.
 inline constexpr Range kIncbLinker[] = {
     {0x094D, 0x094D},
     {0x09CD, 0x09CD},
@@ -1671,6 +1698,8 @@ inline constexpr Range kIncbLinker[] = {
     {0x0D4D, 0x0D4D},
 };
 
+// Indic_Conjunct_Break=Extend (DerivedCoreProperties.txt): marks that may sit beside the linker
+// between a conjunct's two consonants.
 inline constexpr Range kIncbExtend[] = {
     {0x0300, 0x034E},
     {0x0350, 0x036F},

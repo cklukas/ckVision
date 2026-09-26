@@ -1,7 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
 //
-// The one concrete real-time Clock (D-039): core/scene/ui/widgets never
+// The concrete real-time Clock for POSIX (D-039): core/scene/ui/widgets never
 // read wall-clock time directly, so applications need SOMETHING at the
 // term-layer boundary to inject. PosixClock is that something on
 // POSIX hosts — CLOCK_MONOTONIC. The application passes this same
@@ -13,6 +13,9 @@
 
 namespace ckv::term {
 
+// now_nanos() is CLOCK_MONOTONIC in nanoseconds from an unspecified origin: it never goes
+// backwards and does not follow wall-clock adjustments. Stateless, so any number of
+// instances agree.
 class PosixClock final : public Clock {
 public:
     std::int64_t now_nanos() const noexcept override;

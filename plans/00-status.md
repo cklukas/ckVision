@@ -125,6 +125,8 @@ Plans in this directory (not published):
 | [mac-first-traceability.md](mac-first-traceability.md) | Mac-first traceability matrix |
 | [mac-performance-baseline.md](mac-performance-baseline.md) | Pinned-host performance baseline |
 | [term_capabilities.md](term_capabilities.md) | Observed terminal capability matrix |
+| [wp38-appearance-matrix.md](wp38-appearance-matrix.md) | WP-38 appearance matrix: contract, current record, and the findings it exposed |
+| [wp38-api-review-findings.md](wp38-api-review-findings.md) | WP-38 API reference review: documentation coverage and suspected defects |
 | [../docs/release-audit.md](../docs/release-audit.md) | 0.1 Mac release evidence and final acceptance checklist |
 
 The published client documentation is `docs/` (minus `release-audit.md`); it

@@ -120,6 +120,8 @@ constexpr std::string_view pointer_shape_legacy_name(PointerShape shape) noexcep
     return "";  // exhaustive enum fallback for defensive builds
 }
 
+// The OSC 22 name for `shape` in the given vocabulary: the CSS name under Standard, the X11
+// cursorfont name under Legacy. The Presenter writes this for the effective shape.
 constexpr std::string_view pointer_shape_name(PointerShape shape,
                                               PointerShapeVocabulary vocabulary) noexcept {
     return vocabulary == PointerShapeVocabulary::Standard ? pointer_shape_standard_name(shape)

@@ -25,19 +25,38 @@
 
 namespace ckv::widgets {
 
+// A TreeModel's stable identity for one node. Ids are chosen by the model and
+// mean nothing to TreeView beyond equality.
 using TreeItemId = std::uint64_t;
+// The id no node may have: TreeView uses it for "no item", so a model must
+// never hand it out.
 inline constexpr TreeItemId kInvalidTreeItemId = 0;
 
+// How a TreeView draws the branch in front of each label. Outline gives each
+// nesting level three columns, every other style two; a click within the
+// branch columns of a row that may have children toggles it.
 enum class TreeConnectorStyle {
+    // The styles, each with the glyphs it draws noted beside it. Minimal is
+    // the default. Outline's "├"/"└" follows sibling position; its "─+" marks
+    // a collapsed group, and "──" both an expanded group and a leaf.
     Minimal,     // compact "+ "/"- " twisties, no guides
     Ascii,       // printable "+-"/"--" groups, "|-"/"`-" leaves by sibling position, "|" ancestry guides
     BoxDrawing,  // "├"/"└" by sibling position with ▶/▼/─ markers, "│" ancestry guides
     Outline,     // classic outline branches: ─+ groups, ── leaves, and │ ancestry guides
 };
 
+// One node of a materialized tree passed to TreeView::set_roots, which takes
+// the forest by value; TreeView then owns the nodes and updates `expanded`
+// (and, through lazy population, `children`) in place. In provider mode
+// TreeView passes TreeNode snapshots of model items to the TreeNode
+// callbacks; a snapshot carries no children.
 struct TreeNode {
+    // The row's text, drawn after the branch.
     std::string label;
+    // Child nodes, in display order.
     std::vector<TreeNode> children;
+    // Whether the children are shown. The reader toggles it (Left/Right,
+    // Enter/Space, a twisty click), and reveal_and_select sets it on ancestors.
     bool expanded = false;
 
     // Lazy population (M10/WP-22): false means "children not yet
@@ -77,6 +96,9 @@ struct TreeNode {
 // expansion belongs to TreeView. `children_known == false` keeps an expander
 // visible while a caller arranges loading and later calls model_changed().
 struct TreeItem {
+    // The row's text; whether the node may have children (false while the
+    // model has not yet listed them); and an opaque payload TreeView copies
+    // into the TreeNode snapshots it passes to the TreeNode callbacks.
     std::string label;
     bool children_known = true;
     std::any user_data;
@@ -89,13 +111,22 @@ struct TreeItem {
 // a provider never starts work or calls back into a widget from a worker.
 class TreeModel {
 public:
+    // Destroying a model a TreeView still borrows is the caller's error; see
+    // TreeView::set_model.
     virtual ~TreeModel() = default;
 
+    // The top-level nodes in display order: how many there are, the id at a
+    // position in [0, root_count()), and the position of a root id (nullopt
+    // when `id` is not a root).
     virtual std::size_t root_count() const = 0;
     virtual TreeItemId root_id_at(std::size_t root_index) const = 0;
     virtual std::optional<std::size_t> root_index_of(TreeItemId id) const = 0;
     // A root has no parent. A non-root item must return its stable parent id.
     virtual std::optional<TreeItemId> parent_id_of(TreeItemId id) const = 0;
+    // The children of `parent` in display order, mirroring the root queries:
+    // their count (zero for a leaf or a node not yet loaded), the id at a
+    // position in [0, child_count(parent)), and the position of `child`
+    // under `parent` (nullopt when it is not one of its children).
     virtual std::size_t child_count(TreeItemId parent) const = 0;
     virtual TreeItemId child_id_at(TreeItemId parent, std::size_t child_index) const = 0;
     virtual std::optional<std::size_t> child_index_of(TreeItemId parent, TreeItemId child) const = 0;
@@ -113,13 +144,21 @@ public:
 // "ckv.list.selected.inactive"'s background.
 class TreeView : public ui::View {
 public:
+    // An empty tab-stop tree with no model, Minimal connectors, and its
+    // vertical Scrollbar in the rightmost column.
     TreeView();
 
+    // Replaces the roles of ordinary rows and of the focused cursor row. The
+    // unfocused cursor row and the disabled rows keep their standard roles.
+    // A role left kInvalidRole when the view attaches falls back to its
+    // standard one.
     void set_role_override(ui::RoleId normal_role, ui::RoleId selected_role) noexcept {
         normal_role_ = normal_role;
         selected_role_ = selected_role;
     }
 
+    // How branches are drawn (see TreeConnectorStyle); a change repaints.
+    // Minimal by default.
     void set_connector_style(TreeConnectorStyle style);
     TreeConnectorStyle connector_style() const noexcept { return connector_style_; }
 

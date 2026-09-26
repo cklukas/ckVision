@@ -15,6 +15,9 @@
 
 namespace ckv::ui {
 
+// Named, most-recently-used string lists keyed by an application-chosen name, one per
+// Application (Application::history()). Keys are compared exactly; values are stored as given,
+// including empty strings. Lives in memory only; nothing is persisted.
 class HistoryRegistry {
 public:
     // Per-key capacity: the newest `capacity` entries are kept, oldest
@@ -32,8 +35,12 @@ public:
     // Newest-first. Empty (not an error) for a key with no history yet.
     const std::vector<std::string>& entries(std::string_view key) const noexcept;
 
+    // Empties `key`'s list but keeps its capacity; a no-op for an unknown key.
     void clear(std::string_view key);
 
+    // `key`'s capacity, in entries. Setting it creates the key if needed and immediately drops
+    // the oldest entries beyond the new capacity; 0 stops recording for that key. A key never
+    // recorded or configured reports the constructor's default capacity.
     void set_capacity(std::string_view key, std::size_t capacity);
     std::size_t capacity(std::string_view key) const noexcept;
 

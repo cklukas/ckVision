@@ -55,6 +55,9 @@
 
 namespace ckv::ui {
 
+// One reusable animation slot, driven by an Application's repeating timer and Clock. Owned by the
+// effect that uses it; the Application it last ran on must outlive it, because destruction
+// cancels that timer.
 class Animation {
 public:
     // ~30 frames a second. Fast enough that a short flight reads as motion
@@ -62,9 +65,13 @@ public:
     // a terminal's own redraw rate for a decoration nobody is measuring.
     static constexpr std::int64_t kDefaultFrameIntervalNanos = 33'000'000;
 
+    // An idle slot; nothing runs until start().
     Animation() = default;
+    // Cancels a running timer silently: `on_finished` is not called (see the file comment).
     ~Animation();
 
+    // Neither copyable nor movable: the running timer's callback refers to this object by
+    // address.
     Animation(const Animation&) = delete;
     Animation& operator=(const Animation&) = delete;
     Animation(Animation&&) = delete;
@@ -94,6 +101,8 @@ public:
     // asking first.
     void finish();
 
+    // Whether a run is in progress: true from a start() with a positive duration until it ends.
+    // Already false inside that run's `on_finished`, and never true for a zero-length run.
     bool running() const noexcept { return timer_ != 0; }
 
 private:

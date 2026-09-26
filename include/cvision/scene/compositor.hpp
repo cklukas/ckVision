@@ -27,9 +27,16 @@ namespace ckv::scene {
 // compose() calls — required to correctly detect moves, additions, and
 // removals for damage tracking.
 struct Layer {
+    // The stable identity described above; unique among the layers of one
+    // compose() call.
     int id = 0;
+    // The layer's content. compose() dereferences it without a check, so it
+    // must be non-null and stay alive for the call; the compositor keeps no
+    // pointer to it afterwards.
     Surface* surface = nullptr;
+    // Where the surface's top-left cell lands in the frame.
     Point position;
+    // Whether the layer casts the ShadowSpec shadow onto what lies beneath.
     bool casts_shadow = false;
     // Optional frame-absolute boundary for this layer's shadow only. Desktop
     // uses this to keep window shadows out of docked chrome.
@@ -43,6 +50,8 @@ struct Layer {
     // here bounds all of them.
     std::optional<Rect> content_clip;
 
+    // A default layer (id 0, null surface) is only a placeholder to assign
+    // into; the second form sets every field in declaration order.
     Layer() = default;
     Layer(int layer_id, Surface* layer_surface, Point layer_position, bool layer_casts_shadow,
           std::optional<Rect> layer_shadow_clip = std::nullopt,
@@ -52,15 +61,26 @@ struct Layer {
           content_clip(std::move(layer_content_clip)) {}
 };
 
-// Default shadow dimming: halves each RGB channel; a "default" (no-RGB)
-// color goes to black. A placeholder ahead of the M4+ theme system,
-// which will supply a semantic "shadow" role instead of this fixed
-// math transform — see ShadowSpec::dim.
+// Default shadow dimming: halves each RGB channel of the foreground and the
+// background; a palette index is first resolved to its default RGB, and a
+// "default" (terminal) color goes to black. An underline colour of its own is
+// dimmed the same way; one that follows the text stays default. Attributes and
+// underline shape are unchanged. It is ShadowSpec's default `dim`, and so what
+// Application uses unless set_shadow_spec installs another transform.
 Style default_dim(Style style) noexcept;
 
+// How a layer's cast shadow is placed and what it does to the cells it
+// covers.
 struct ShadowSpec {
+    // The shadow's offset from the layer in cells: a strip `dx` columns wide
+    // down the right side, starting `dy` rows below the top, and a strip `dy`
+    // rows tall along the bottom, starting `dx` columns in (see
+    // shadow_footprint). A zero offset suppresses that strip.
     int dx = 2;  // columns right
     int dy = 1;  // rows down
+    // The style transform applied once to each cell the shadow covers. Pixels
+    // of a covered raster are always halved by the presenter, whatever this
+    // transform does.
     StyleTransform dim = &default_dim;
 };
 
@@ -77,8 +97,15 @@ std::vector<Rect> shadow_footprint(Rect layer_rect, ShadowSpec shadow) noexcept;
 // A slice is split at higher-layer shadow footprints. Its shadowed bit is
 // interpreted by the presenter with the same one-half RGB transform as cells.
 
+// Owns the composed frame and turns a background surface plus a z-ordered
+// layer list into it, re-resolving only the cells that changed since the
+// previous compose(). It remembers each layer's id, rectangle and shadow from
+// one call to the next so that moved, added and removed layers repaint what
+// they uncovered.
 class Compositor {
 public:
+    // A compositor whose frame is `frame_size` cells of blank Cells, all
+    // damaged, with no previous layers and a hidden cursor.
     explicit Compositor(Size frame_size);
 
     // `layers` must already be in z-order, bottom to top. `background`
@@ -88,9 +115,18 @@ public:
     // background and every layer's surface.
     void compose(const std::vector<Layer>& layers, Surface& background, ShadowSpec shadow = {});
 
+    // The composed frame's cells. It holds no raster regions of its own:
+    // the pictures in it are reported by visible_rasters(). The compositor
+    // never clears this surface's row damage.
     const Surface& frame() const noexcept { return frame_; }
+    // Reallocates the frame at `new_size` with blank cells and forgets the
+    // previous layers and visible rasters; the cursor is kept. compose()
+    // stays damage-driven afterwards, so the caller must hand it surfaces
+    // that report their whole content as damaged — freshly resized ones do.
     void resize(Size new_size);
 
+    // The cursor that goes with the frame, stored as given: compose() and
+    // resize() neither move, clip nor hide it.
     void set_cursor(CursorState cursor) noexcept { cursor_ = cursor; }
     CursorState cursor() const noexcept { return cursor_; }
 

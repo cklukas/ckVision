@@ -3087,8 +3087,13 @@ proves the set complete and each claimed state visibly distinct. Building it
 exposed 35 findings, recorded in that plan; D-076 and `742f03b` fixed them in
 the library with regression tests, one is accepted under the 80×24 sizing
 policy, and no element is exempt. The appearance acceptance criterion is
-**Done**. Per-API reference depth and the complete M0–M11 traceability and
-release-gate audit remain Open.
+**Done**. Every public declaration in the 124 installed headers now carries
+reference documentation written against its implementation. A libclang scan
+counts 1,606 undocumented declarations before and zero after. The review
+raised 43 suspected defects, recorded in the
+[API review findings](wp38-api-review-findings.md). A mechanical coverage
+gate for that documentation, the fixes for those findings, and the complete
+M0–M11 traceability and release-gate audit remain Open.
 
 ## Review finding traceability
 

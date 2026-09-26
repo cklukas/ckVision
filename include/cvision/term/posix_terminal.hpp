@@ -51,6 +51,8 @@ public:
         : PosixTerminal(clock, output_fd, input_fd, capabilities_for_profile(profile), enable_capability_probes) {}
     ~PosixTerminal() override;
 
+    // Neither copyable nor movable: the session owns its descriptors, its self-pipe and a
+    // fixed slot in the restore registry, none of which may be duplicated or relocated.
     PosixTerminal(const PosixTerminal&) = delete;
     PosixTerminal& operator=(const PosixTerminal&) = delete;
     PosixTerminal(PosixTerminal&&) = delete;
@@ -67,7 +69,8 @@ public:
     // meaningful effective-capability change is delivered through the next
     // poll() as CapabilityChangedEvent and wakes an application blocked in
     // that poll, so callers never need to manufacture a redraw themselves.
-    // Fixed cell metrics and color-register caps must be positive.
+    // Fixed cell metrics and color-register caps must be positive; otherwise
+    // it throws std::invalid_argument and keeps the previous overrides.
     void set_capability_overrides(CapabilityOverrides overrides);
     const CapabilityOverrides& capability_overrides() const noexcept { return overrides_; }
     Size size() const noexcept override;
@@ -89,6 +92,9 @@ public:
     void restore() noexcept override;
     void write_diagnostic_after_restore(std::string_view message) noexcept override;
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
+    // Writes every byte to the output descriptor. When the CKVISION_OUTPUT_CAPTURE
+    // environment variable names a file at the first write, every written byte is also
+    // copied there, so the exact stream a host received can be replayed later.
     void write(std::string_view bytes) override;
     void set_title(std::string_view title) override;
     void bell() override;

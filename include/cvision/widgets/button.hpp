@@ -54,11 +54,23 @@ public:
     // callers can request a wider uniform family where a dialog needs it.
     static constexpr int kClassicMinimumWidth = 10;
 
+    // A shadowed button captioned `text`, which may mark a mnemonic with '&'
+    // (see widgets/mnemonic.hpp). It is a Tab stop from construction.
     explicit Button(std::string text);
 
+    // The caption exactly as given, '&' markers included. The face shows it
+    // with the markers stripped and the marked grapheme accented, centred and
+    // clipped to the face. Setting it recomputes the preferred size (the
+    // label's width plus four cells, at least minimum_width(), two rows),
+    // repaints, and tells the parent the size hint changed.
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
+    // Marks the button as its dialog's default, which only selects the
+    // ckv.button.default face for a button that is neither focused, hovered
+    // nor pressed. It is appearance only: no key is routed to the button
+    // because of it. The setter does not repaint by itself; the new face
+    // shows at the button's next paint.
     void set_default(bool is_default) noexcept { is_default_ = is_default; }
     bool is_default() const noexcept { return is_default_; }
 
@@ -73,9 +85,20 @@ public:
     void set_flat(bool flat);
     bool flat() const noexcept { return flat_; }
 
+    // The narrowest a shadowed button may be, in cells, shadow columns
+    // included; kClassicMinimumWidth by default. Values below 3 are raised to
+    // 3. A wider caption still widens the button, and a flat button ignores
+    // this width entirely. Setting it repaints and reports a size-hint change.
     void set_minimum_width(int width);
     int minimum_width() const noexcept { return minimum_width_; }
 
+    // Replace the theme roles the button would otherwise resolve on
+    // attachment: the normal, focused and default faces and the shadow (whose
+    // background must match the surface beneath the button). The hovered face
+    // is not overridable. An override set before attachment survives it;
+    // passing ui::kInvalidRole before attachment leaves that role to the
+    // standard lookup. None of these setters repaints; the roles apply from
+    // the next paint.
     void set_role_override(ui::RoleId normal_role, ui::RoleId focused_role, ui::RoleId default_role,
                             ui::RoleId shadow_role) noexcept {
         normal_role_ = normal_role;
@@ -83,6 +106,10 @@ public:
         default_role_ = default_role;
         shadow_role_ = shadow_role;
     }
+    // The same kind of override for the flat button's pressed face
+    // (ckv.button.pressed), the accented mnemonic grapheme
+    // (ckv.label.mnemonic, of which only the foreground and attributes are
+    // used) and the disabled face (ckv.button.disabled).
     void set_pressed_role_override(ui::RoleId role) noexcept { pressed_role_ = role; }
     void set_mnemonic_role_override(ui::RoleId role) noexcept { mnemonic_role_ = role; }
     void set_disabled_role_override(ui::RoleId role) noexcept { disabled_role_ = role; }
@@ -90,27 +117,50 @@ public:
     // Invoked by a containing dialog/window for a matching Alt+mnemonic.
     // The button remains independently activatable by Enter/Space when it
     // owns focus; this route supplies the conventional direct accelerator.
+    // Fires on_press at once, without a depressed state, and returns true when
+    // the button is enabled in its tree and `mnemonic` equals its marked
+    // grapheme (ASCII letters compared case-insensitively); otherwise returns
+    // false and does nothing. activate_control_mnemonic (widgets/label.hpp) is
+    // the caller that routes Alt+letter here.
     bool activate_mnemonic(std::string_view mnemonic);
 
+    // The action. Fires once per committed press: a pointer press released
+    // over the button, a key-held press released without being taken back, a
+    // keystroke on a session that reports no releases, or activate_mnemonic.
+    // Never fires for a press that was taken back. An empty function is
+    // allowed and makes the button inert.
     std::function<void()> on_press;
 
     void draw(scene::Painter& painter) override;
+    // Shadowed: exactly max(minimum_width(), label width + 4) cells wide, one
+    // to two rows high (two preferred). Flat: at least the label's width
+    // (never less than one cell) and free to grow, exactly one row high.
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
     // The face sits on row 0 and the cast shadow on row 1 -- unless there is
     // no shadow to stand off from.
     bool trailing_row_is_shadow() const noexcept override { return !flat_; }
+    // Consumes Enter and Space (modifiers are not consulted) as a press, and
+    // Escape only while it takes back a key-held press. Every other key is
+    // left unhandled. A repeat of a held key on a release-reporting session
+    // is consumed without firing again.
     bool on_key(const KeyEvent& event) override;
     // The release that commits (or finds already taken back) a key-held
     // press. Routed separately from on_key by design: a release must never
     // reach a handler that would read it as a second activation.
     bool on_key_release(const KeyEvent& event) override;
+    // A Down arms and depresses the button whichever mouse button reported
+    // it; a Move while armed lifts or re-depresses it as the pointer leaves or
+    // returns; an Up fires on_press only when it lands inside the button.
+    // Down, Move and Up are always consumed; wheel and double-click events
+    // are not.
     bool on_mouse(const MouseEvent& event) override;
     // A button is the plain case of something that acts when clicked;
     // a disabled one is still there, still hit-tested, and still refusing.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return enabled() ? PointerShape::Pointer : PointerShape::NotAllowed;
     }
+    // Losing the focus takes back a key-held press without firing.
     void on_focus(const FocusEvent& event) override;
     // A button is one of the few views that really does look different
     // under the pointer, so it is one of the few that pays for a repaint.

@@ -27,8 +27,10 @@ namespace ckv {
 // presentation concern (ARCHITECTURE.md §4).
 class Color {
 public:
+    // The terminal's default colour (the same as default_color()).
     constexpr Color() noexcept = default;
 
+    // A specific 24-bit colour from its red, green and blue channels.
     static constexpr Color rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
         Color c;
         c.kind_ = Kind::Rgb;
@@ -48,8 +50,11 @@ public:
         return c;
     }
 
+    // The terminal's own foreground or background, whichever slot the colour
+    // is used in: a named spelling of the default constructor.
     static constexpr Color default_color() noexcept { return Color{}; }
 
+    // Which of the three kinds this colour is; exactly one is true.
     constexpr bool is_default() const noexcept { return kind_ == Kind::Default; }
     constexpr bool is_indexed() const noexcept { return kind_ == Kind::Indexed; }
     constexpr bool is_rgb() const noexcept { return kind_ == Kind::Rgb; }
@@ -75,6 +80,10 @@ public:
         return c_;
     }
 
+    // Equal when the kind matches and so does that kind's payload: all
+    // default colours are equal, indexed ones compare by index, RGB ones by
+    // channel. Nothing is resolved first, so an index never equals the RGB
+    // value it names.
     friend constexpr bool operator==(const Color& a, const Color& b) noexcept {
         if (a.kind_ != b.kind_) return false;
         switch (a.kind_) {
@@ -84,6 +93,7 @@ public:
         }
         return false;
     }
+    // The negation of operator==.
     friend constexpr bool operator!=(const Color& a, const Color& b) noexcept {
         return !(a == b);
     }

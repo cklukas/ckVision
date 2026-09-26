@@ -24,9 +24,11 @@ class Painter;
 // A row's dirty column span, as a half-open interval [lo, hi). `hi <=
 // lo` means the row carries no damage.
 struct DamageSpan {
+    // The first damaged column and the first column past the damage.
     int lo = 0;
     int hi = 0;
 
+    // True when the span covers no column.
     bool empty() const noexcept { return hi <= lo; }
 };
 
@@ -35,9 +37,9 @@ struct DamageSpan {
 // Surface — Painter::draw_image is the sole construction path and
 // always supplies one alongside a fallback that has already painted
 // equivalent cell content into `anchor` (D-017's mandatory-fallback
-// contract). `fallback_active` records which representation is
-// currently authoritative — true (the default) until something later
-// in the pipeline (a term-layer capability decision) says otherwise.
+// contract). `fallback_active` is a recorded flag, true by default; the
+// presenter does not read it (it decides whether to send pixels from the
+// terminal's capabilities), and golden captures record it.
 //
 // `id` must be positive and unique among a Surface's own raster
 // regions (Surface::add_raster_region enforces both): this keeps the
@@ -45,9 +47,15 @@ struct DamageSpan {
 // rule (docs/golden-format.md), so every Surface capturable via
 // ckv::scene::capture() always round-trips.
 struct RasterRegion {
+    // The region's identity, under the rules above.
     int id = 0;
+    // The cells the whole picture spans, in the hosting Surface's coordinates.
     Rect anchor;  // cell-space position + span, at full extent
+    // The picture, shared and immutable; add_raster_region asserts that it is
+    // non-null and has non-zero dimensions.
     std::shared_ptr<const Image> image;
+    // The flag described above. Painter::draw_image records true, and within
+    // a Surface only set_raster_fallback_active changes it.
     bool fallback_active = true;
     // The part of `anchor` that may actually be drawn. An image larger than
     // the view holding it -- a picture in a terminal window the reader has
@@ -74,15 +82,22 @@ struct RasterRegion {
 void append_raster_coverage_rectangles(std::vector<Rect>& out, Rect anchor, Rect visible,
                                        std::span<const std::uint8_t> live_cells);
 
+// A layer's or frame's drawing target: a row-major grid of Cells that records
+// which columns of each row changed since the damage was last cleared, plus
+// the raster regions painted onto it. Content changes through Painter or
+// set_cell; the compositor reads the damage and clears it.
 class Surface {
 public:
     // `fill` is written to every cell; every row starts fully damaged
     // (a freshly constructed Surface has never been composed, so its
-    // entire content counts as new).
+    // entire content counts as new). A negative extent is asserted against.
     explicit Surface(Size size, Cell fill = Cell{});
 
+    // The grid's extent in cells.
     Size size() const noexcept { return size_; }
 
+    // The cell at column p.x, row p.y; `p` must lie inside size() (asserted,
+    // not clamped). The reference is invalidated by resize().
     const Cell& at(Point p) const noexcept;
 
     // A non-owning core::FrameView over this surface's cells — the
@@ -91,31 +106,51 @@ public:
     // alive and unmodified (no resize).
     FrameView view() const noexcept { return FrameView(cells_.data(), size_); }
 
-    // The sole mutation entry point: always keeps damage tracking
+    // The sole public mutation entry point: always keeps damage tracking
     // correct. There is no mutable at() — bypassing set_cell would
-    // silently break the damage invariant.
+    // silently break the damage invariant. `p` must lie inside size()
+    // (asserted). The cell is damaged even when the new content equals the
+    // old, and any box-drawing junction Painter recorded there is forgotten.
     void set_cell(Point p, Cell cell);
 
     // Marks `region` (clipped to the surface) as damaged without
     // changing any cell content — for callers that know a region needs
     // redraw for a reason the cell contents alone don't reveal.
     void mark_damage(Rect region) noexcept;
+    // Forgets all damage; Compositor::compose calls it on every surface it
+    // consumed.
     void clear_damage() noexcept;
+    // The damaged column span of `row`, which must lie in [0, height)
+    // (asserted). A row's span grows to cover every damaged column, so it may
+    // include undamaged columns between two changes.
     DamageSpan row_damage(int row) const noexcept;
+    // Whether any row carries damage.
     bool has_damage() const noexcept;
 
     // Reallocates the surface; every raster region is dropped (its
     // anchor is meaningless against the new size) and every row starts
-    // fully damaged again, exactly as at construction.
+    // fully damaged again, exactly as at construction. Every cell becomes
+    // `fill`, even when the size is unchanged, and raster id allocation
+    // restarts at 1.
     void resize(Size new_size, Cell fill = Cell{});
 
     // Assigns a positive identity unique within this Surface. Painter uses it
     // for callers that pass raster id 0, keeping ordinary widgets free of a
     // process-global id allocator.
     int allocate_raster_id() noexcept;
+    // Records a region and damages its anchor. Asserts a positive id not
+    // already in use here, a non-null non-empty image, and, when present, a
+    // `live_cells` mask of exactly anchor.width * anchor.height entries.
+    // Painter::draw_image is the ordinary way in.
     void add_raster_region(RasterRegion region);
+    // Removes the region with `id` and damages its anchor; an unknown id is
+    // ignored.
     void remove_raster_region(int id) noexcept;
+    // Removes every region, damaging each anchor, and restarts raster id
+    // allocation at 1.
     void clear_raster_regions() noexcept;
+    // Sets the region's fallback_active flag, damaging its anchor only when
+    // the value changes; an unknown id is ignored.
     void set_raster_fallback_active(int id, bool active) noexcept;
 
     // Paint this surface's pictures as their fallbacks instead of as
@@ -132,9 +167,12 @@ public:
     // gesture left it.
     void set_rasters_suppressed(bool suppressed) noexcept { rasters_suppressed_ = suppressed; }
     bool rasters_suppressed() const noexcept { return rasters_suppressed_; }
+    // The regions currently recorded, in the order they were added.
     const std::vector<RasterRegion>& raster_regions() const noexcept { return raster_regions_; }
 
 private:
+    // Painter writes line cells with their junction metadata and applies
+    // shadow coverage through the private helpers below.
     friend class Painter;
 
     std::size_t index(Point p) const noexcept {

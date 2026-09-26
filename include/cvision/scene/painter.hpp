@@ -122,7 +122,12 @@ public:
     // construction (D-017): there is no other way to place raster
     // content, and the call always happens, so cell content is always
     // present regardless of what a later presenter decides to do with
-    // the image.
+    // the image. `image` must be non-null and non-empty (asserted).
+    // `live_cells`, when given, becomes RasterRegion::live_cells and must hold
+    // one entry per anchor cell. After the fallback has run, no region is
+    // recorded while the surface's rasters are suppressed, or when no part
+    // of `anchor` lies inside this Painter's clip; otherwise the region keeps
+    // the full anchor and records the clipped part as its visible rect.
     void draw_image(Rect anchor, int id, std::shared_ptr<const Image> image,
                      const std::function<void(Painter&)>& fallback,
                      std::shared_ptr<const std::vector<std::uint8_t>> live_cells = {});

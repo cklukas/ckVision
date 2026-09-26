@@ -19,8 +19,14 @@ namespace ckv::widgets {
 // frame rather than as a gap cut out of it.
 class FrameText final : public ui::View {
 public:
+    // An overlay showing `text`, start-aligned, with no reserved width.
     explicit FrameText(std::string text = {});
 
+    // The text on the border. Empty text paints nothing and, without a
+    // reserved width, takes no room. When the overlay is given less room
+    // than the text needs, the text is elided inside its padding. Setting it
+    // repaints, and reports a size-hint change when that changes the width
+    // the overlay asks for.
     const std::string& text() const noexcept { return text_; }
     void set_text(std::string text);
 
@@ -36,6 +42,8 @@ public:
     ui::Alignment alignment() const noexcept { return alignment_; }
 
     void draw(scene::Painter& painter) override;
+    // Exactly the reserved width, or the text's width plus two when none is
+    // reserved (0 for empty text); exactly one row.
     ui::SizeHint horizontal_size_hint() const override;
     ui::SizeHint vertical_size_hint() const override;
 

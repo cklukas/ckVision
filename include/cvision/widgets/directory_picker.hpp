@@ -7,8 +7,8 @@
 //
 // Scope note (documented, not an oversight): the tree is materialized
 // EAGERLY and in full from `root_path` down at construction time —
-// TreeView has no lazy/on-demand expansion hook in v1 (same "no
-// virtualized model" precedent as ListView/TreeView/Table), so this is
+// it uses neither TreeView's lazy population (on_expand_request) nor a
+// TreeModel provider, so this is
 // only appropriate for directory trees of a size a TUI dialog would
 // reasonably show, not an entire real filesystem root. Files are
 // excluded from the tree entirely; this picks directories only.
@@ -30,11 +30,17 @@ namespace ckv::widgets {
 
 class Desktop;
 
+// The answer of a directory picker.
 struct DirectoryPickerResult {
+    // Whether the reader pressed Select (or Enter). When true, `path` is the
+    // selected node's path: `root_path` as given for the root, and
+    // FileSystem::join of it with each directory name below. When false,
+    // `path` is empty.
     bool accepted = false;
     std::string path;  // full path; meaningful only when accepted
 };
 
+// The handle present_directory_picker returns; see DialogPresentation.
 using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 
 // `root_path` must be an existing directory in `fs` (degrades to a
@@ -42,9 +48,12 @@ using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 // "empty rather than an error" contract as FileSystem::list_directory
 // itself). `on_result` fires exactly once: true and the chosen path on
 // OK, false and an empty path on Cancel/Esc. It may detach or destroy the
-// dialog; no factory-owned work touches the Window after it returns. `fs` must outlive the
-// returned Window (the tree is built once from it at construction —
-// no closure keeps a live reference afterward, unlike file_dialog.hpp).
+// dialog; no factory-owned work touches the Window after it returns. `fs` is
+// read only while this call builds the tree — no closure keeps a reference
+// to it afterward, unlike file_dialog.hpp — so it need not outlive the
+// returned Window. The tree opens collapsed on the root (labelled
+// `root_path`), its subdirectories sorted by name, and is the handle's
+// initial_focus.
 // Desktop::present_modeless attaches the returned handle and focuses
 // its initial_focus in one call; modal presentation is explicit through
 // Desktop::present_modal. The returned standard dialog window is

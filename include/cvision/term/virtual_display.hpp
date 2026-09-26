@@ -21,16 +21,32 @@
 
 namespace ckv::term {
 
+// A strict model of the screen a host would show for a byte stream. It understands exactly
+// the subset ckVision emits (cursor addressing and style, SGR, erase, scroll, DEC modes 25
+// and 2026, DSR, OSC 22 and Sixel) and treats anything else as an error rather than skipping
+// it, so an emitter that drifts from the model is caught instead of silently tolerated. The
+// first error latches: error() keeps its message and every later feed() fails until clear()
+// or resize().
 class VirtualDisplay {
 public:
+    // A blank display of `cells` (negative extents clamp to 0) whose cells each cover
+    // `cell_pixels` of the raster plane (each extent clamped to at least 1). The cursor starts
+    // at the origin with the default style.
     explicit VirtualDisplay(Size cells, Size cell_pixels = Size{9, 18});
 
+    // The grid in cells, the pixel size of one cell, and the raster plane's pixel size (the
+    // two multiplied).
     Size size() const noexcept { return size_; }
     Size cell_pixels() const noexcept { return cell_pixels_; }
     Size pixel_size() const noexcept {
         return Size{size_.width * cell_pixels_.width, size_.height * cell_pixels_.height};
     }
 
+    // What a viewer would see now: the styled cells, the transparent RGBA plane Sixel images
+    // were painted into (alpha 0 where no picture drew), and the cursor. Between DEC 2026
+    // begin and end these return the state captured when the update began, as a host holding
+    // the update back would; the new state appears when the update ends. The FrameView and
+    // Image reference internal storage that the next feed(), resize() or clear() may replace.
     FrameView frame() const noexcept {
         return FrameView((synchronized_output_ ? visible_cells_ : cells_).data(), size_);
     }
@@ -46,7 +62,11 @@ public:
     // exactly the things a test needs to be able to see.
     const std::string& pointer_shape_name() const noexcept { return pointer_shape_name_; }
 
+    // Whether any pixel of the visible raster plane is non-transparent, that is whether a
+    // Sixel image is currently on screen. Scans the whole plane.
     bool has_raster_pixels() const noexcept;
+    // valid() is false once the stream has failed; error() then holds the first failure's
+    // message, and is empty while the stream is valid.
     bool valid() const noexcept { return error_.empty(); }
     const std::string& error() const noexcept { return error_; }
 
@@ -54,15 +74,23 @@ public:
     // calls, including a split CSI/DCS/Sixel sequence. Printable text is
     // committed whenever a fragment ends in ground state. finish() marks
     // end-of-stream, where an incomplete control sequence becomes an error.
+    // Both return valid() afterwards.
     bool feed(std::string_view bytes);
     bool finish();
+    // feed() then finish(): for a buffer that is known to be a complete stream.
     bool write(std::string_view bytes) { return feed(bytes) && finish(); }
 
     // A terminal resize clears both planes. Changing only cell metrics
     // preserves cells but clears/reallocates the pixel plane: existing
     // raster pixels no longer have a meaningful geometry.
+    // Both also end any DEC 2026 update in progress. resize() clamps negative extents to 0
+    // and, like clear(), discards a latched error. set_cell_pixels() clamps each extent to at
+    // least 1 and does nothing when the metric is unchanged.
     void resize(Size cells);
     void set_cell_pixels(Size cell_pixels);
+    // Blanks both planes, homes the cursor with the default cursor state and style, resets
+    // the parser and the Sixel colour registers, and clears a latched error. The last
+    // pointer shape name is kept.
     void clear();
 
 private:

@@ -163,18 +163,23 @@ private:
 // looking at" and "what can be said about it" are one question, and a
 // listener that had to look the rest up again could look it up wrong.
 struct MenuHighlight {
+    // The command the row runs; kInvalidCommand for an Action row, a submenu
+    // parent, a separator, or when no row is highlighted.
     ui::CommandId command = ui::kInvalidCommand;
+    // The row's help topic (MenuItem::with_help), or empty.
     std::string help_context;
+    // The row's own explanation of why it is unavailable
+    // (MenuItem::with_disabled_reason), or empty. Reported whether or not the
+    // row is currently enabled; a listener decides whether to show it.
     std::string disabled_reason;
+    // Whether the row would act if chosen: a Command row's availability in the
+    // registry (for the focus the menu was opened from), an Action or Submenu
+    // row's own flag. Stays true when `none` is set.
     bool enabled = true;
     // No row is highlighted (the menu closed, or the pointer left it).
     bool none = false;
 };
 
-// Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.menu.dropdown.normal"/"highlighted"/"disabled".
-// Also reads context().app for command enablement — see the file
-// comment on why menus are one of the few widgets that need it.
 // How a dropdown came to be open, which decides whether it already has a
 // selection. A menu opened from the keyboard must land on an item at once —
 // there is no pointer to indicate one, and the next arrow key has to move
@@ -200,17 +205,41 @@ enum class MenuDismissReason {
     ItemChosen,
 };
 
+// One open menu popup: a framed column of MenuItem rows, with a left mark
+// column when any row carries a mark and a right-aligned column for chord
+// hints and the submenu marker. It is what a MenuBar drops down, what
+// show_context_menu() puts up, and what a submenu row opens beside its parent.
+// A DropdownMenu is meant to live in a Desktop's popup list; it finds that
+// Desktop through its parents when attached.
+//
+// Resolves its own theme roles from context() once attached (M9 WP-7, D-028):
+// "ckv.menu.dropdown.normal"/"highlighted"/"disabled", and "ckv.hotkey" for
+// the mnemonic accent. Also reads context().app to ask whether each Command
+// row's command is available.
 class DropdownMenu : public ui::View {
 public:
+    // `items` are the rows, in order. `parent_menu` is the menu whose submenu
+    // row this one hangs from, or nullptr for a menu that starts a chain (the
+    // one a MenuBar opens, or a context menu); it is not owned and must
+    // outlive this menu. The highlight is placed on the first reachable row
+    // when the menu is attached, unless it was opened by a pointer press.
     explicit DropdownMenu(std::vector<MenuItem> items, DropdownMenu* parent_menu = nullptr);
+    // Dismisses the menu (and any submenu it has open), so on_dismiss fires
+    // even when the popup was removed by someone else.
     ~DropdownMenu() override;
 
+    // Replace the roles this menu draws with: plain rows, the highlighted row,
+    // and unavailable rows. A role left as kInvalidRole is resolved from the
+    // standard names at attach; an override set after attach takes effect at
+    // the next draw. Submenus this menu opens resolve their own roles.
     void set_role_override(ui::RoleId normal_role, ui::RoleId highlighted_role,
                             ui::RoleId disabled_role) noexcept {
         normal_role_ = normal_role;
         highlighted_role_ = highlighted_role;
         disabled_role_ = disabled_role;
     }
+    // The role whose colours accent each row's mnemonic letter, in place of
+    // "ckv.hotkey".
     void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
 
     // Fires on Esc, on a click outside the dropdown's own bounds (light
@@ -241,7 +270,12 @@ public:
     // parent item once that submenu closes.
     std::function<void(const MenuHighlight&)> on_highlight_changed;
 
+    // The rows as constructed; a menu's rows do not change while it is open.
     const std::vector<MenuItem>& items() const noexcept { return items_; }
+    // Index into items() of this menu's own highlighted row, or -1 when none
+    // is: a menu opened by a pointer press that has not yet settled on a row,
+    // or a menu with no reachable row. It does not follow an open submenu —
+    // see highlight() for that.
     int highlighted() const noexcept { return highlighted_; }
     // The command behind the highlighted item, or kInvalidCommand.
     ui::CommandId highlighted_command() const noexcept;
@@ -251,23 +285,36 @@ public:
     // answer about.
     MenuHighlight highlight() const;
 
-    // Preferred size: width fits the longest item label plus its chord
-    // hint column (+ padding), height is exactly one row per item
-    // (including separators).
+    // Fixed size (min, preferred and max agree): width fits the longest item
+    // label plus its mark column, its chord hint or submenu marker column, the
+    // padding and the one-cell frame; height is one row per item (including
+    // separators) plus the two frame rows.
     SizeHint horizontal_size_hint() const override;
     SizeHint vertical_size_hint() const override;
 
     void draw(scene::Painter& painter) override;
     bool casts_shadow() const noexcept override { return true; }
+    // Up/Down move the highlight over reachable rows, wrapping at the ends,
+    // and Home/End jump to the first/last of them. Enter or an enabled row's
+    // mnemonic letter chooses a row (Enter on an unavailable row does
+    // nothing), Right
+    // opens the highlighted row's submenu, Left closes this menu when it is a
+    // submenu, and Esc dismisses it. Right on a row without a submenu, Left on
+    // a top-level menu, and every other key are left unhandled so a MenuBar
+    // above can act on them.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
-    // Every title on the bar opens something.
+    // Every row in the drop-down invokes or opens something.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return PointerShape::Pointer;
     }
     void on_attached() override;
 
 private:
+    // MenuBar and show_context_menu() set up a menu before it is shown (open
+    // reason, invocation contexts, pointer navigation) and drive a bar's
+    // dropdown from the bar's own key handling, through the private members
+    // below.
     friend class MenuBar;
     friend DropdownMenu* show_context_menu(std::vector<MenuItem> items,
                                             Point screen_position,
@@ -372,27 +419,15 @@ private:
     ui::RoleId hotkey_role_ = ui::kInvalidRole;
 };
 
+// One title on a MenuBar and the menu it drops down.
 struct MenuBarItem {
+    // The title drawn on the bar. A '&' marks its mnemonic letter, which the
+    // bar also binds as an Alt+<letter> accelerator once it is attached.
     std::string label;  // may carry a '&' mnemonic
+    // The rows of the dropdown this title opens.
     std::vector<MenuItem> items;
 };
 
-// Resolves its own theme roles from context() once attached (M9
-// WP-7, D-028): "ckv.menu.bar.normal"/"ckv.menu.bar.active" — its
-// dropdowns resolve their own "ckv.menu.dropdown.*" roles the same
-// way, so MenuBar no longer needs to hold or thread them through.
-// Also reads context().app for focus save/restore, and finds its
-// owning Desktop with a parent-chain walk at attach (real usage
-// always docks a MenuBar directly onto the Desktop it controls, via
-// Desktop::dock_top — see gallery_app.cpp).
-//
-// F10 activation (M9/WP-13, D-029): on_attached() installs itself as
-// the standard menu command's default handler — but ONLY if nothing has
-// claimed it yet (CommandRegistry::has_handler) — so an application
-// that calls set_handler(commands().standard().menu, ...) itself before
-// attaching a MenuBar is never silently overridden. The destructor clears the handler
-// again if this instance was the one that installed it, so a
-// destroyed MenuBar can never be reached through a stale handler.
 // A trailing view that behaves as a title on the bar rather than as
 // decoration beside it: the keyboard walks onto it, it highlights while it
 // holds the walk, and Enter or Space acts on it.
@@ -400,13 +435,44 @@ struct MenuBarItem {
 // An interface rather than a concrete type because what drops out of such a
 // title is the caller's business -- a calendar, a palette, anything. The bar
 // keeps what a bar owns: the highlight, the walk, and the acting.
+//
+// A MenuBar recognises a trailing view as an accessory by a dynamic_cast, so
+// the view implements this interface alongside ui::View.
 class MenuBarAccessory {
 public:
+    // Destroyed through the view that implements it; the bar never owns an
+    // accessory through this interface.
     virtual ~MenuBarAccessory() = default;
+    // Whether the bar's keyboard walk is standing on this title. The bar calls
+    // it whenever that changes, including with false when the walk ends or the
+    // bar loses focus; the accessory draws itself highlighted accordingly.
     virtual void set_menu_highlighted(bool highlighted) = 0;
+    // Enter or Space while the walk stands on this title. The bar has already
+    // ended the walk and restored the focus it saved when it was activated, so
+    // anything the accessory opens saves and later restores that focus.
     virtual void activate_from_menu_bar() = 0;
 };
 
+// The one-row strip of menu titles across the top of a Desktop. Titles are
+// drawn from two cells in, two cells apart; the keyboard walks them with
+// Left/Right, opens a title's DropdownMenu with Enter, Down or its mnemonic,
+// and a pointer press on a title opens it too. The bar holds keyboard focus
+// for as long as it is being walked and hands it back when the walk ends.
+//
+// Resolves its own theme roles from context() once attached (M9 WP-7, D-028):
+// "ckv.menu.bar.normal"/"ckv.menu.bar.active", and "ckv.hotkey" for mnemonic
+// letters. Its dropdowns resolve their own "ckv.menu.dropdown.*" roles the same
+// way. Also reads context().app for focus save/restore, and finds its owning
+// Desktop with a parent-chain walk at attach, so the bar must be a descendant
+// of the Desktop its dropdowns open on (usually docked with Desktop::dock_top).
+//
+// F10 activation (M9/WP-13, D-029): on_attached() installs activate() as the
+// standard menu command's default handler — but ONLY if nothing has claimed it
+// yet (CommandRegistry::has_handler) — so an application that calls
+// set_handler(commands().standard().menu, ...) itself before attaching a
+// MenuBar is never silently overridden. The destructor clears the handler
+// again if this instance was the one that installed it, so a destroyed
+// MenuBar can never be reached through a stale handler.
 class MenuBar : public ui::View {
 public:
     // A view pinned to the right end of the bar -- a clock, an indicator,
@@ -430,26 +496,42 @@ public:
     // ends the walk before the view reacts: the press is a hand-off.
     void on_descendant_mouse_down(ui::View& target) override;
 
+    // `menus` are the titles in left-to-right order. The bar is a tab stop;
+    // accelerators and the F10 handler are installed when it is attached.
     explicit MenuBar(std::vector<MenuBarItem> menus);
+    // Closes any open dropdown and withdraws the F10 default handler if this
+    // bar installed it.
     ~MenuBar() override;
 
+    // Replace the roles the bar draws with: the strip and its idle titles, and
+    // the title the walk stands on while the bar has focus. A role left as
+    // kInvalidRole is resolved from the standard names at attach; an override
+    // set after attach takes effect at the next draw.
     void set_role_override(ui::RoleId normal_role, ui::RoleId active_role) noexcept {
         normal_role_ = normal_role;
         active_role_ = active_role;
     }
+    // The role whose colours accent each title's mnemonic letter, in place of
+    // "ckv.hotkey".
     void set_hotkey_role_override(ui::RoleId role) noexcept { hotkey_role_ = role; }
 
     // Gives the bar focus (saving whatever was previously focused, for
     // deactivate()/Esc to restore) and highlights the first menu. Also
     // callable directly by an application that wants its own trigger
     // for opening the menu, in addition to (or instead of) the F10
-    // default this class installs itself — see the class comment.
+    // default this class installs itself — see the class comment. On a bar
+    // that already has focus it closes any open dropdown and goes back to
+    // the first menu. The bar must be attached under an Application.
     void activate();
     // Closes any open dropdown and restores focus to whatever was
     // focused before activate() was called.
     void deactivate();
     bool active() const noexcept { return has_focus(); }
 
+    // Replaces the titles. Any open dropdown is closed first, the old
+    // Alt+<mnemonic> accelerators are withdrawn and new ones installed (when
+    // attached), and a walk that was past the new last title moves back onto
+    // it. The bar asks its parent to re-lay it out.
     void set_menus(std::vector<MenuBarItem> menus);
     const std::vector<MenuBarItem>& menus() const noexcept { return menus_; }
 
@@ -469,12 +551,19 @@ public:
     SizeHint vertical_size_hint() const override;
 
     void draw(scene::Painter& painter) override;
+    // Handles keys only while the bar has focus, i.e. while it is being
+    // walked; an unfocused bar is reached through F10 and the Alt+<mnemonic>
+    // accelerators instead. While a dropdown is open, navigation keys go to
+    // its innermost open menu first.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
-    // Every row in the drop-down invokes or opens something.
+    // Every title on the bar opens something.
     std::optional<PointerShape> pointer_shape_at(Point) const override {
         return PointerShape::Pointer;
     }
+    // Losing focus ends the walk however it happened: the open dropdown
+    // closes and the saved focus is forgotten, so a later deactivate() does
+    // not return focus to a view the reader has since left.
     void on_focus(const FocusEvent& event) override;
     void on_attached() override;
 

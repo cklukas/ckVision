@@ -27,9 +27,17 @@
 
 namespace ckv::ui {
 
+// How a Row or Column child's main-axis extent responds to the space the container has. When
+// there is room to spare only Expanding children grow; when there is too little, Minimum and
+// Expanding children shrink toward their min in proportion to how far each can shrink, and any
+// deficit left after that overflows the container and is clipped when painted.
 enum class SizePolicy {
+    // Always exactly its preferred size, even when that overflows the container.
     Fixed,       // always exactly its preferred size, never grows or shrinks
-    Minimum,     // grows/shrinks with the container but never below its size hint's min
+    // Its preferred size when there is room; shrinks toward its size hint's min when there is not,
+    // and never grows past preferred.
+    Minimum,     // shrinks with the container but never below its size hint's min; never grows
+    // Like Minimum, but also claims a weighted share of any leftover space.
     Expanding,   // like Minimum, but also claims a share of any leftover space
 };
 
@@ -43,7 +51,12 @@ enum class Alignment {
     End,     // bottom (Row) / right (Column)
 };
 
+// How one Row or Column child is placed, given when it is added with add_item(). A child added
+// through View::add_child() instead is laid out with the defaults.
 struct LayoutSpec {
+    // Main-axis policy, then its weight: the child's relative share of leftover space among
+    // Expanding siblings (ignored for the other policies; when every Expanding sibling has weight
+    // 0 the space is split evenly). Last, the cross-axis alignment.
     SizePolicy policy = SizePolicy::Minimum;
     int weight = 1;  // relative share of leftover space among Expanding siblings
     Alignment alignment = Alignment::Fill;
@@ -56,6 +69,7 @@ struct LayoutSpec {
     int margin_before = 0;
     int margin_after = 0;
 
+    // Memberwise equality.
     friend bool operator==(const LayoutSpec&, const LayoutSpec&) = default;
 };
 
@@ -70,6 +84,8 @@ std::pair<int, int> align_cross_axis(int available, int preferred, Alignment ali
 // Shared main-axis distribution math (declared here so it is directly
 // unit-testable without a View tree; Row/Column call it).
 struct LayoutChild {
+    // The child's main-axis size hint in cells (min and preferred only) and its LayoutSpec
+    // policy and weight — everything distribute_main_axis() needs about one child.
     int min = 0;
     int preferred = 0;
     SizePolicy policy = SizePolicy::Minimum;
@@ -83,13 +99,25 @@ struct LayoutChild {
 std::vector<std::pair<int, int>> distribute_main_axis(const std::vector<LayoutChild>& children,
                                                         int available, int spacing);
 
+// A container that places its visible children left to right, each as tall as the row allows
+// (or as its LayoutSpec alignment and margins say), sharing the width by SizePolicy. Relayout
+// runs on every resize, spacing change, item change, and child size-hint change.
 class Row : public View {
 public:
+    // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
 
+    // Adds `child` at the right end with its placement `spec` and relays out. `child` must not be
+    // null. Returns the child as add_child() does, nullptr when its attachment callback detached
+    // or destroyed it.
     View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
+    // Detaches `child`, forgets its spec, relays out, and returns ownership; nullptr (and no
+    // relayout) when `child` is not a child of this row. Remove items this way rather than with
+    // remove_child(), which leaves the spec and the layout as they were.
     std::unique_ptr<View> remove_item(View* child);
 
+    // Blank columns between consecutive visible children (0 by default). set_spacing() asserts
+    // `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
 
@@ -125,13 +153,26 @@ private:
     std::unordered_map<View*, LayoutSpec> specs_;
 };
 
+// A container that places its visible children top to bottom, each as wide as the column allows
+// (or as its LayoutSpec alignment and margins say), sharing the height by SizePolicy. A child's
+// preferred height is asked at the width it will get, so wrapped text is measured correctly.
+// Relayout runs on the same triggers as Row.
 class Column : public View {
 public:
+    // Same constructor as View: parent-local bounds and a focus policy, both usually defaulted.
     using View::View;
 
+    // Adds `child` at the bottom with its placement `spec` and relays out. `child` must not be
+    // null. Returns the child as add_child() does, nullptr when its attachment callback detached
+    // or destroyed it.
     View* add_item(std::unique_ptr<View> child, LayoutSpec spec = {});
+    // Detaches `child`, forgets its spec, relays out, and returns ownership; nullptr (and no
+    // relayout) when `child` is not a child of this column. As with Row, prefer this to
+    // remove_child().
     std::unique_ptr<View> remove_item(View* child);
 
+    // Blank rows between consecutive visible children (0 by default). set_spacing() asserts
+    // `spacing` >= 0 and relays out when it changes.
     int spacing() const noexcept { return spacing_; }
     void set_spacing(int spacing);
 

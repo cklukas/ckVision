@@ -37,8 +37,15 @@ inline constexpr std::size_t kLargeTextFrameBytes = 4U * 1024U;
 inline constexpr std::int64_t kCursorBlinkHalfPeriodNanos =
     kDefaultCursorBlinkHalfPeriodNanos;
 
+// Turns successive composed frames into the bytes one Terminal needs, remembering what it
+// last presented so each frame costs only its changes. It reads the terminal's current
+// capabilities on every present, so encodings follow capability changes; call invalidate()
+// when such a change requires repainting everything.
 class Presenter {
 public:
+    // Borrows `terminal`, which must outlive this Presenter and should receive frame output
+    // from no other writer. Nothing is written until the first present(), which paints the
+    // whole frame.
     explicit Presenter(Terminal& terminal) : terminal_(terminal) {}
 
     // Diffs `frame` against the previously presented one and writes

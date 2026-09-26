@@ -23,16 +23,30 @@
 
 namespace ckv::term {
 
+// A child process on a private pseudoconsole (ConPTY), its output decoded by an owned
+// TerminalEmulator and its process tree held in a job object so no descendant outlives the
+// session. Overlapped pipes carry output and input; the wait handles are whichever of the
+// read event, the write event, the process and a pending pseudoconsole-close thread can
+// currently signal. Model queries forward to the emulator.
 class WindowsTerminalSubsession final : public TerminalSubsession {
 public:
+    // Starts `spec`'s program and returns the session; never null. An app-local conpty.dll
+    // beside the executable is preferred when present; without it the system ConPTY is used
+    // and Sixel is removed from the session's profile. A missing exit policy, an unusable
+    // conpty.dll (present but not loadable) or a failed start yields a
+    // session in the Failed state with the reason in its diagnostics().
     static std::unique_ptr<WindowsTerminalSubsession> launch(TerminalLaunchSpec spec,
                                                                TerminalSubsessionOptions options = {});
+    // Closes the session (see close()), which may wait for the child to exit.
     ~WindowsTerminalSubsession() override;
 
+    // Not copyable: the session owns the child, its job object and the pipe handles.
     WindowsTerminalSubsession(const WindowsTerminalSubsession&) = delete;
     WindowsTerminalSubsession& operator=(const WindowsTerminalSubsession&) = delete;
 
     TerminalSnapshot snapshot() const override { return emulator_.snapshot(); }
+    // The partial snapshot TerminalEmulator::snapshot(options) takes, forwarded so a host
+    // holding this session need not reach the emulator.
     TerminalSnapshot snapshot(TerminalSnapshotOptions options) const { return emulator_.snapshot(options); }
     TerminalStatus status() const override { return emulator_.status(); }
     std::span<const Cell> cells() const noexcept override { return emulator_.cells(); }
@@ -58,6 +72,8 @@ public:
         return std::span<const WaitHandle>(wait_handles_.data(), wait_handle_count_);
     }
     int process_id() const noexcept override { return process_ == nullptr ? -1 : static_cast<int>(process_id_); }
+    // The child's exit status once its exit has been observed; nullopt before that, and for a
+    // session that never started.
     std::optional<int> exit_code() const noexcept { return emulator_.exit_code(); }
 
 private:

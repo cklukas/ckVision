@@ -18,6 +18,10 @@ namespace ckv::term {
 // model, not a Terminal implementation: it cannot emit bytes to the parent.
 class TerminalEmulator final : public TerminalSubsession {
 public:
+    // A blank screen of the profile's grid, clamped to between 1 x 1 and the options'
+    // max_cells, filled with spaces in the profile's default style. The profile's recorded
+    // grid is updated to the clamped size, and everything starts damaged, so the first
+    // frame a host reads sends the whole screen.
     explicit TerminalEmulator(TerminalCapabilityProfile profile = embedded_xterm_sixel_profile(),
                               TerminalSubsessionOptions options = {});
 
@@ -87,6 +91,8 @@ public:
     std::string take_pending_input() override;
     TerminalSubsessionState state() const noexcept override { return state_; }
     void set_raster_identity(int identity) noexcept override { raster_identity_ = identity; }
+    // The emulator owns no process: closing only moves it to Closed (once) and flags the
+    // lifecycle damage, leaving the screen readable.
     void close() noexcept override {
         if (state_ == TerminalSubsessionState::Closed) return;
         state_ = TerminalSubsessionState::Closed;

@@ -29,24 +29,33 @@ using ui::View;
 inline constexpr int kProseMeasureCells = 64;
 
 // Read-only, word-wrapped, styled text (plans/widgets.md baseline:
-// "Styled, wrapped"). Wraps at grapheme boundaries on whitespace,
-// falling back to a hard break mid-word only when a single word is
+// "Styled, wrapped"). Each '\n' starts a new paragraph; within one, lines
+// break at spaces (a run of spaces becomes a single space), falling back
+// to a hard break at a grapheme boundary only when a single word is
 // wider than the available width. Uses the height-for-width pass
 // (ARCHITECTURE.md §5's one sanctioned second layout pass) to report
-// how tall it needs to be for a given width.
+// how tall it needs to be for a given width. Resolves "ckv.static.text"
+// from context() once attached; lines past the view's height are not drawn.
 class StaticText : public View {
 public:
+    // Text showing `text`, start-aligned, reflowed, with no emphasis.
     explicit StaticText(std::string text);
 
+    // The text as given. Setting it repaints and reports a size-hint change.
     void set_text(std::string text);
     const std::string& text() const noexcept { return raw_text_; }
 
+    // Where each line sits across the view's width: Start (the default) and
+    // Fill at the left edge, Center centred, End against the right edge.
+    // Setting it repaints.
     void set_alignment(ui::Alignment alignment) noexcept {
         alignment_ = alignment;
         invalidate();
     }
     ui::Alignment alignment() const noexcept { return alignment_; }
 
+    // Replaces "ckv.static.text". An override set before attachment survives
+    // it; the call does not repaint, so the role shows from the next paint.
     void set_role_override(ui::RoleId role) noexcept { role_ = role; }
 
     // Draws the first `count` rendered lines bold. A block whose opening
@@ -66,7 +75,8 @@ public:
     // space and the columns collapse. Such text also asks for every
     // column it was written with, rather than for kProseMeasureCells:
     // it cannot wrap into a narrower view, so a narrower view would
-    // clip it instead.
+    // clip it instead. Setting it repaints but does not itself report a
+    // size-hint change.
     void set_preformatted(bool preformatted) noexcept {
         preformatted_ = preformatted;
         invalidate();
