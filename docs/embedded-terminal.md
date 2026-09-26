@@ -50,8 +50,10 @@ changes:
 |---|---|---|---|
 | ![Classic terminal](generated/screenshots/terminal-initial.svg) | ![Dark terminal](generated/screenshots/terminal-initial-dark.svg) | ![Light terminal](generated/screenshots/terminal-initial-light.svg) | ![Mono terminal](generated/screenshots/terminal-initial-mono.svg) |
 
-The four initial-shell frames are pinned as cell and RGBA goldens from the
-actual `TerminalApp` window and `TerminalView` graph. The generator supplies
+The initial shell, full-screen alternate buffer, and nested Gallery frames are
+pinned as cell and RGBA goldens in all four schemes from the actual
+`TerminalApp` window and `TerminalView` graph. The nested frames contain the
+Gallery's real terminal output inside the child session. The generator supplies
 an owned, deterministic child session and fixed local time through
 `TerminalAppServices`; normal construction still launches the host shell
 and reads the host clock. A supplied session factory must return a non-null

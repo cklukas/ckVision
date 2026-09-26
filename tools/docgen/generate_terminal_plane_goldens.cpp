@@ -113,20 +113,22 @@ bool gallery_case(const std::filesystem::path& directory) {
                        fallback.display().cursor());
 }
 
-bool terminal_initial_cases(const std::filesystem::path& directory) {
+bool terminal_app_cases(const std::filesystem::path& directory) {
     HeadlessTerminal terminal(Size{100, 30}, headless_no_graphics_profile());
     ManualClock clock;
     ui::Application app(terminal, clock);
     terminal_example::TerminalAppServices services;
-    services.make_subsession = [](TerminalLaunchSpec launch) -> std::unique_ptr<TerminalSubsession> {
-        auto child = std::make_unique<TerminalEmulator>(launch.profile);
-        child->feed_output("ckvision$ ");
-        return child;
+    TerminalEmulator* child = nullptr;
+    services.make_subsession = [&child](TerminalLaunchSpec launch) -> std::unique_ptr<TerminalSubsession> {
+        auto session = std::make_unique<TerminalEmulator>(launch.profile);
+        session->feed_output("ckvision$ ");
+        child = session.get();
+        return session;
     };
     services.local_time = [] { return widgets::TimeValue{12, 34, 56}; };
     terminal_example::TerminalApp example(app, std::move(services));
     app.step(0);
-    if (example.desktop().windows().size() != 1U ||
+    if (child == nullptr || example.desktop().windows().size() != 1U ||
         example.desktop().windows().front()->title() != "Terminal 1" ||
         dynamic_cast<widgets::TerminalView*>(example.desktop().windows().front()->content()) == nullptr)
         return false;
@@ -137,6 +139,16 @@ bool terminal_initial_cases(const std::filesystem::path& directory) {
         return write_cells(directory / (std::string(name) + ".dump"), display.frame(), display.cursor()) &&
                write_pixels(directory / (std::string(name) + ".rgba"), display.raster_plane());
     };
+    const auto contains = [&](std::string_view text) {
+        const FrameView frame = terminal.display().frame();
+        for (int y = 0; y < frame.size().height; ++y) {
+            std::string row;
+            for (int x = 0; x < frame.size().width; ++x)
+                row += frame.at(Point{x, y}).grapheme();
+            if (row.find(text) != std::string::npos) return true;
+        }
+        return false;
+    };
     if (!record("terminal_initial")) return false;
     for (const std::string_view scheme : {"dark", "light", "mono"}) {
         const std::string key = "terminal.scheme." + std::string(scheme);
@@ -145,7 +157,41 @@ bool terminal_initial_cases(const std::filesystem::path& directory) {
         app.step(0);
         if (!record("terminal_initial_" + std::string(scheme))) return false;
     }
-    return true;
+    const auto scheme = [&](std::string_view name) {
+        const std::string key = "terminal.scheme." + std::string(name);
+        const auto command = app.commands().id_for(key);
+        if (!command || !app.commands().execute(*command)) return false;
+        app.step(0);
+        return true;
+    };
+    const auto record_state = [&](std::string_view name) {
+        if (!scheme("classic") || !record(name)) return false;
+        for (const std::string_view variant : {"dark", "light", "mono"}) {
+            if (!scheme(variant) || !record(std::string(name) + "_" + std::string(variant)))
+                return false;
+        }
+        return true;
+    };
+
+    child->feed_output("\x1b[?1049h\x1b[2J\x1b[HckVision full-screen child\r\n\r\n"
+                       "alternate buffer is private to this window");
+    app.root().notify_terminal_subsession_changed(*child);
+    app.step(0);
+    if (!contains("ckVision full-screen child") || !record_state("terminal_full_screen"))
+        return false;
+
+    const Size nested_size = child->snapshot().cells;
+    HeadlessTerminal nested(nested_size, headless_no_graphics_profile());
+    ManualClock nested_clock;
+    ui::Application nested_app(nested, nested_clock);
+    gallery::GalleryApp nested_gallery(nested_app);
+    nested_app.step(0);
+    if (nested.written_bytes().empty()) return false;
+    child->feed_output("\x1b[?1049h\x1b[2J\x1b[H");
+    child->feed_output(nested.written_bytes());
+    app.root().notify_terminal_subsession_changed(*child);
+    app.step(0);
+    return contains("Controls") && contains("Sixel Demo") && record_state("terminal_nested");
 }
 
 bool presenter_cases(const std::filesystem::path& directory) {
@@ -587,7 +633,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path directory = argv[1];
     std::filesystem::create_directories(directory);
     if (!protocol_case(directory) || !embedded_child_case(directory) ||
-        !gallery_case(directory) || !terminal_initial_cases(directory) ||
+        !gallery_case(directory) || !terminal_app_cases(directory) ||
         !presenter_cases(directory) || !contained_terminal_cases(directory) ||
         !contained_pair_cases(directory) || !contained_text_over_raster_case(directory)) {
         std::fprintf(stderr, "terminal plane capture failed\n");

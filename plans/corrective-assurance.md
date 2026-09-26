@@ -101,8 +101,8 @@ dependent row's package prerequisite; `Blocked` does not.
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 95 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, and live WezTerm pixel-mouse transport plus Gallery interaction Done; literal Windows Terminal pixel mode and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
-| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 95-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 111 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, and live WezTerm pixel-mouse transport plus Gallery interaction Done; literal Windows Terminal pixel mode and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal four-scheme initial/full-screen/nested appearance slices, and 111-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
 person-weeks**. These are planning ranges, not completion evidence. WP-23 must
@@ -3017,7 +3017,7 @@ and prevent milestone status from outrunning verification again.
   each milestone is changed individually only when its own exit row is fully
   supported by the report.
 
-**Current WP-38 status (2026-09-25): In progress.** The
+**Current WP-38 status (2026-09-26): In progress.** The
 [M7 Windows traceability slice](windows-m7-traceability.md) maps every literal
 M7 exit item to implementation, executable and live evidence, public reference,
 and its remaining gap. It does not close M7: live pixel-mouse interaction and
@@ -3042,10 +3042,16 @@ explicit host services for its four-scheme initial-shell capture. Eight new
 cell/RGBA files brought that checkpoint's three-host byte-identical manifest to **93**;
 macOS and Linux ARM64 pass 177/177, Windows ARM64 passes 164/164, and both
 provenance gates pass on each host. The Terminal initial-shell appearance row is
-Done; full-screen/nested and the broader matrix remain Open. The later child
-text-over-raster cell/RGBA pair brings the current manifest to **95** on all
-three hosts. It proves the visible overwrite state for the default profile;
-the remaining state/scheme matrix remains Open.
+Done. The later child text-over-raster cell/RGBA pair brought that checkpoint's
+manifest to **95** on all three hosts. It proves the visible overwrite state
+for the default profile. Sixteen further files pin the Terminal example's
+actual full-screen alternate-buffer and nested Gallery output under classic,
+dark, light, and mono schemes in the no-graphics profile. The now-current
+**111-file** portable manifest and full Release suites pass on macOS ARM64
+(177/177), Linux ARM64 (177/177), and Windows ARM64 (164/164), with zero build
+warnings and both provenance gates on each host. The earlier 95 files stayed
+byte-identical. That exact state/scheme slice is **Done**; the remaining
+graphics-capable and broader state/scheme matrix stays Open.
 Per-API reference depth and the complete
 M0–M11 appearance, example, and release-gate audit remain Open.
 
