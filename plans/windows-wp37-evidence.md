@@ -1753,3 +1753,29 @@ the 95-file generated-golden check green. **Gallery pixel interaction is
 Done on this capable Windows host.** Windows Terminal Stable/Preview still
 report no mode 1016, and the real legacy-console refusal path remains Open,
 so literal M7 and WP-37 remain In progress.
+
+## VT host refusal diagnostic refinement — 2026-09-26
+
+`WindowsTerminal` now distinguishes VT output, VT input, and UTF-8 setup
+failures. After setting each VT mode, it reads the console mode back and
+refuses a host that silently clears the required flag. The VT refusal names
+Windows Terminal or a modern Console Host with legacy mode disabled, and
+partial setup still restores the original modes and code pages before the
+exception reaches the app. This improves the product's legacy-host failure
+message; it does not substitute for a live legacy-host acceptance run.
+
+The final Windows ARM64 Release build ran from `10:42:39Z` to `10:42:53Z`
+(13.5 s, zero warnings) and passed 164/164 hosted tests, both provenance
+gates, and the 95-file generated-golden check. Mac and Linux ARM64 each passed
+177/177 with zero warnings. A signed-in `ForceV2=1` control launched the
+post-change Gallery executable (SHA-256
+`280DACEEB8F235540C91F64339458EF32DA6FE509217BF2F0C5C6B6A7A3C94AD`)
+as PID 7544 under `C:\Windows\System32\conhost.exe` PID 9232. The actual
+QEMU framebuffer showed Gallery and its expected `[image]` text fallback;
+the capture SHA-256 is
+`C8B41B398B13D27F5302AC07810378A4200ABC99DEC95EF55DB178463899005A`.
+The exact test PIDs and scheduled task were removed, and `cktest` retained
+`ForceV2=1`.
+
+The VM's previously recorded `ForceV2=0` attempt failed before `cmd.exe` or
+ckVision could start, so the **real legacy-console refusal row remains Open**.

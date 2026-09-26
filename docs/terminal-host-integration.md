@@ -35,7 +35,10 @@ ckv::ui::Application app(terminal, clock, clipboard);
 On Windows, use `WindowsClock` and `WindowsTerminal` in the same composition.
 The terminal requires console stdin/stdout with VT mode support; construction
 fails with an actionable diagnostic when those handles are redirected or the
-host refuses VT input/output. It saves and restores the original console modes
+host refuses VT input/output. It checks that the host retained both VT mode
+flags, distinguishes output, input, and UTF-8 setup failures, and names the
+modern host or legacy-mode setting needed for a VT refusal. It saves and
+restores the original console modes
 and code pages, decodes VT input with the same `InputDecoder`, and uses native
 `CF_UNICODETEXT` for clipboard export. The first frame uses conservative
 capabilities; a bounded response window may refine Sixel, pixel mouse,

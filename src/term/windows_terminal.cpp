@@ -76,17 +76,43 @@ WindowsTerminal::WindowsTerminal(const Clock& clock, HANDLE output, HANDLE input
                                 ENABLE_QUICK_EDIT_MODE)) |
                              ENABLE_EXTENDED_FLAGS | ENABLE_VIRTUAL_TERMINAL_INPUT |
                              ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT;
-    if (!::SetConsoleMode(output_, output_mode) || !::SetConsoleMode(input_, input_mode) ||
-        !::SetConsoleOutputCP(CP_UTF8) || !::SetConsoleCP(CP_UTF8)) {
-        const auto failure = win32_error("enable VT input/output and UTF-8");
+    const auto fail_setup = [this](std::string reason) {
         ::SetConsoleMode(input_, original_input_mode_);
         ::SetConsoleMode(output_, original_output_mode_);
         ::SetConsoleOutputCP(original_output_cp_);
         ::SetConsoleCP(original_input_cp_);
         ::CloseHandle(wake_event_);
         wake_event_ = nullptr;
-        throw failure;
+        throw std::runtime_error("Windows terminal: " + std::move(reason));
+    };
+    constexpr std::string_view vt_host_advice =
+        "Use Windows Terminal or Windows Console Host with 'Use legacy console' disabled.";
+    if (!::SetConsoleMode(output_, output_mode))
+        fail_setup("VT output cannot be enabled (Win32 " + std::to_string(::GetLastError()) + "). " +
+                   std::string(vt_host_advice));
+    DWORD verified_output_mode = 0;
+    if (!::GetConsoleMode(output_, &verified_output_mode))
+        fail_setup("VT output mode cannot be verified (Win32 " +
+                   std::to_string(::GetLastError()) + "). " + std::string(vt_host_advice));
+    if ((verified_output_mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0) {
+        fail_setup("the console host did not retain VT output mode. " + std::string(vt_host_advice));
     }
+    if (!::SetConsoleMode(input_, input_mode))
+        fail_setup("VT input cannot be enabled (Win32 " + std::to_string(::GetLastError()) + "). " +
+                   std::string(vt_host_advice));
+    DWORD verified_input_mode = 0;
+    if (!::GetConsoleMode(input_, &verified_input_mode))
+        fail_setup("VT input mode cannot be verified (Win32 " +
+                   std::to_string(::GetLastError()) + "). " + std::string(vt_host_advice));
+    if ((verified_input_mode & ENABLE_VIRTUAL_TERMINAL_INPUT) == 0) {
+        fail_setup("the console host did not retain VT input mode. " + std::string(vt_host_advice));
+    }
+    if (!::SetConsoleOutputCP(CP_UTF8))
+        fail_setup("UTF-8 output code page cannot be enabled (Win32 " +
+                   std::to_string(::GetLastError()) + ").");
+    if (!::SetConsoleCP(CP_UTF8))
+        fail_setup("UTF-8 input code page cannot be enabled (Win32 " +
+                   std::to_string(::GetLastError()) + ").");
     caps_.clipboard_write = true;  // Native CF_UNICODETEXT, independent of OSC 52.
     decoder_.set_capabilities(caps_);
     last_size_ = size();
