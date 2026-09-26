@@ -37,6 +37,10 @@ from the raster while the fallback callback paints that cell as appropriate.
 |---|---|---|---|---|
 | ![Interactive shell](generated/screenshots/terminal-initial.svg) | ![Full-screen child](generated/screenshots/terminal-full-screen.svg) | ![Nested child](generated/screenshots/terminal-nested.svg) | ![Contained Sixel](generated/screenshots/terminal-sixel.svg) | ![Sixel fallback](generated/screenshots/terminal-no-graphics.svg) |
 
+These captures run the shipped `TerminalApp`. The Sixel and fallback captures
+feed its actual six-color demo bytes after the child is attached, with the
+shell prompt below the picture.
+
 Choose **View → Classic**, **Dark**, **Light**, or **Mono** while the shell
 and Sixel Demo windows are open. The menu changes the outer desktop and
 window chrome immediately; the child terminal keeps its own VT colors and

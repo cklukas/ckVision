@@ -460,8 +460,11 @@ endif()
 
 if(TARGET capture_terminal_screenshots)
     add_test(NAME terminal_visual_capture
-        COMMAND capture_terminal_screenshots
-                ${CMAKE_BINARY_DIR}/test-artifacts/terminal)
+        COMMAND ${CMAKE_COMMAND}
+            -DCKVISION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DCKVISION_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts/terminal
+            -DCKVISION_TERMINAL_CAPTURE=$<TARGET_FILE:capture_terminal_screenshots>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_terminal_screenshots.cmake)
     set_tests_properties(terminal_visual_capture PROPERTIES
         LABELS "golden;visual;artifact;terminal" TIMEOUT 60)
 endif()

@@ -2213,13 +2213,23 @@ focus under the application's control; see [Embedded terminal](embedded-terminal
 
 The compiled scene below is the source of this figure.
 
-<!-- ckvision-snippet source="tools/docgen/capture_terminal_screenshots.cpp" region="terminalview" -->
+<!-- ckvision-snippet source="examples/terminal/terminal_app.cpp" region="terminalview" -->
 ```cpp
-auto window = std::make_unique<ckv::widgets::Window>(child_sixel ? "Sixel Demo" : "Terminal 1");
-window->set_bounds(ckv::Rect{2, 2, 76, 20});
-auto view = std::make_unique<ckv::widgets::TerminalView>(session);
+auto window = std::make_unique<widgets::Window>(std::move(title));
+window->set_bounds(Rect{2, 2, 76, 20});
+
+term::TerminalSubsession& session = services_.make_subsession
+    ? app_.adopt_terminal_subsession(services_.make_subsession(std::move(launch)))
+    : app_.launch_terminal_subsession(std::move(launch));
+auto view = std::make_unique<widgets::TerminalView>(session);
+widgets::TerminalView* const terminal_view = view.get();
+view->set_bounds(window->content_rect());
+view->set_parent_escape(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Alt, " "});
+view->on_parent_escape = [this] {
+    if (auto* const menu = dynamic_cast<widgets::MenuBar*>(desktop_->top_dock())) app_.set_focus(menu);
+};
+view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
 window->set_content(std::move(view));
-shell.desktop().add_window(std::move(window));
 ```
 <!-- /ckvision-snippet -->
 

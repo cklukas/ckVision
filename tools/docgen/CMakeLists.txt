@@ -127,12 +127,13 @@ if(TARGET editor_app)
     ckvision_strict(capture_editor_screenshots)
 endif()
 
-if(UNIX AND TARGET terminal_app)
+if(UNIX AND TARGET terminal_app AND TARGET gallery_app)
     add_executable(capture_terminal_screenshots capture_terminal_screenshots.cpp)
-    target_link_libraries(capture_terminal_screenshots PRIVATE docgen_frame_svg terminal_app ckvision::cvision)
+    target_link_libraries(capture_terminal_screenshots PRIVATE docgen_frame_svg terminal_app gallery_app ckvision::cvision)
     target_include_directories(capture_terminal_screenshots PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/terminal)
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/terminal
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../examples/gallery)
     ckvision_strict(capture_terminal_screenshots)
 endif()
 

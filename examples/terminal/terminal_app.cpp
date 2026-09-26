@@ -349,6 +349,7 @@ void TerminalApp::open_calendar() {
 }
 
 widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std::string title) {
+    // ckvision-doc: terminalview
     auto window = std::make_unique<widgets::Window>(std::move(title));
     window->set_bounds(Rect{2, 2, 76, 20});
 
@@ -364,6 +365,7 @@ widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std
     };
     view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
     window->set_content(std::move(view));
+    // ckvision-doc-end: terminalview
     widgets::Window* const terminal_window = window.get();
     term::TerminalSubsession* const terminal_session = &session;
     window->on_closed = [this, terminal_window, terminal_session] {

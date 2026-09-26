@@ -3052,6 +3052,11 @@ dark, light, and mono schemes in the no-graphics profile. The now-current
 warnings and both provenance gates on each host. The earlier 95 files stayed
 byte-identical. That exact state/scheme slice is **Done**; the remaining
 graphics-capable and broader state/scheme matrix stays Open.
+The published Terminal SVGs now depict the production app, its real nested
+Gallery, and the full six-color Sixel demo with its prompt below the image.
+`terminal_visual_capture` checks all nine tracked SVGs against regenerated
+output on macOS and Linux; the complete three-host Release suites remain green
+at 177/177, 177/177, and 164/164 with zero build warnings.
 Per-API reference depth and the complete
 M0–M11 appearance, example, and release-gate audit remain Open.
 
