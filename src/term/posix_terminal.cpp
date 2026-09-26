@@ -670,7 +670,7 @@ void PosixTerminal::synchronize_sgr_mouse_input_policy() noexcept {
 
 void PosixTerminal::finish_capability_probes() {
     probe_deadline_nanos_ = -1;
-    decoder_.set_capabilities(observed_caps_);
+    decoder_.finish_capability_probe_window(observed_caps_);
     // If mode 1016 did not become a usable capability, return the terminal to
     // ordinary SGR cell coordinates before accepting subsequent mouse input.
     // Keeping the mode enabled would make a late pixel report look like a
@@ -706,7 +706,7 @@ void PosixTerminal::finish_capability_probes() {
         }
     }
     configure_decoder_capability_update_policy();
-    decoder_.set_capabilities(observed_caps_);
+    decoder_.finish_capability_probe_window(observed_caps_);
     decoder_.set_sgr_mouse_input_suppressed(false);
     decoder_.require_verified_sixel_geometry(false);
 

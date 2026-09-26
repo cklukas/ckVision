@@ -105,7 +105,9 @@ without a usable pixel capability, ckVision resets mode 1016 before ordinary
 SGR input is delivered again.
 If a delayed beyond-grid report then proves pixel mode directly, the backend
 re-enables mode 1016 for the rest of the session. A delayed DECRPM reply alone
-does not reopen the closed probe.
+does not reopen the closed probe. If the direct report precedes its cell metric,
+the report is consumed, but its proof survives probe expiry and the later
+metric enables subsequent pixel reports.
 
 XTSMGRAPHICS maximum Sixel geometry is window-sensitive: xterm constrains it
 by both its graphics limit and the current window. Accordingly, a probing

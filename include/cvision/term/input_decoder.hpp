@@ -75,6 +75,7 @@ public:
     void set_capabilities(Capabilities caps) noexcept {
         caps_ = caps;
         pixel_mouse_mode_enabled_ = caps.pixel_mouse;
+        direct_pixel_report_seen_ = false;
         color_scheme_from_osc11_ = false;
     }
     void set_capability_update_policy(CapabilityUpdatePolicy policy) noexcept {
@@ -128,6 +129,14 @@ public:
         capability_update_policy_ = CapabilityUpdatePolicy::AcceptProbeRefinements;
         discard_capability_update_from_pending_sequence_ = !pending_.empty();
     }
+    // Closing a bounded window discards unverified query state while keeping
+    // direct pixel reports whose cell metric may still be in flight.
+    void finish_capability_probe_window(Capabilities caps) noexcept {
+        const bool direct_pixel_proof = direct_pixel_report_seen_ && !caps.pixel_mouse;
+        set_capabilities(caps);
+        direct_pixel_report_seen_ = direct_pixel_proof;
+        pixel_mouse_mode_enabled_ = caps.pixel_mouse || direct_pixel_proof;
+    }
     const Capabilities& capabilities() const noexcept { return caps_; }
 
     // True while a bracketed paste is being accumulated — exposed for
@@ -174,6 +183,7 @@ private:
     // reported mode separately until a positive cell-size reply makes pixel
     // coordinates usable by callers.
     bool pixel_mouse_mode_enabled_ = false;
+    bool direct_pixel_report_seen_ = false;
     // `drain` stops only at one incomplete sequence, so at a probe-window
     // boundary any pending bytes belong to exactly that pre-boundary sequence.
     // The next completed sequence consumes this marker.

@@ -105,7 +105,9 @@ falls through as ordinary text input.
   cell grid also proves that the host engaged pixel mode, even when DECRPM
   stays silent; it promotes the capability with a positive cell metric even
   when the report reaches the decoder after the bounded probe. A late DECRPM
-  reply alone does not promote it. The metric and mode evidence
+  reply alone does not promote it. Direct report proof survives probe expiry
+  when the cell metric arrives later; the original report is consumed because
+  its cell position cannot yet be mapped. The metric and mode evidence
   may arrive in either order; pixel coordinates are advertised only after
   both facts are known.
   XTSMGRAPHICS reports a verified Sixel color-register limit and maximum pixel

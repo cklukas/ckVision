@@ -128,6 +128,7 @@ void WindowsTerminal::begin_probes() {
 void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
     if (probe_deadline_nanos_ < 0) return;
     probe_deadline_nanos_ = -1;
+    decoder_.finish_capability_probe_window(caps_);
     if (caps_.mouse_protocol == MouseProtocol::SGR && !caps_.pixel_mouse) {
         write_all("\x1B[?1016l\x1B[?1003h\x1B[?1006h");
     }
@@ -139,7 +140,7 @@ void WindowsTerminal::finish_probes(std::vector<TerminalEvent>& events) {
             // A host that already advertised Sixel may omit a later geometry
             // reply. End the resize fence using that established host proof.
             caps_.sixel_graphics = true;
-            decoder_.set_capabilities(caps_);
+            decoder_.finish_capability_probe_window(caps_);
             events.push_back(TerminalEvent{CapabilityChangedEvent{caps_}});
         }
     }

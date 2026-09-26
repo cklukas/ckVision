@@ -1146,6 +1146,31 @@ CK_TEST(a_late_pixel_report_establishes_live_capability_without_decrpm) {
     CK_CHECK(as_mouse(proof[1]).cell == (Point{28, 8}));
 }
 
+CK_TEST(a_late_pixel_report_can_precede_the_cell_metric) {
+    InputDecoder decoder(baseline_capabilities());
+    decoder.set_cell_grid(Size{80, 25});
+    decoder.begin_capability_probe_window(baseline_capabilities());
+
+    // The report proves mode 1016 but cannot yet place a click in the cell
+    // grid. Closing the probe must preserve that direct proof while dropping
+    // unverified query state, until the independent metric arrives.
+    CK_CHECK(decoder.feed("\x1B[<0;283;181M", 0).empty());
+    CK_CHECK(!decoder.capabilities().pixel_mouse);
+    decoder.finish_capability_probe_window(decoder.capabilities());
+    decoder.set_capability_update_policy(CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements);
+    const auto metric = decoder.feed("\x1B[6;22;10t", 0);
+    CK_CHECK(metric.size() == 1);
+    if (metric.size() != 1) return;
+    CK_CHECK(std::get<CapabilityChangedEvent>(metric[0]).capabilities.pixel_mouse);
+    CK_CHECK(decoder.capabilities().cell_pixels == (Size{10, 22}));
+
+    const auto next = decoder.feed("\x1B[<32;21;13M", 0);
+    CK_CHECK(next.size() == 1);
+    if (next.size() != 1) return;
+    CK_CHECK(as_mouse(next[0]).pixel == (PixelPoint{20, 12}));
+    CK_CHECK(as_mouse(next[0]).cell == (Point{2, 0}));
+}
+
 CK_TEST(a_beyond_grid_report_without_any_metric_is_consumed_not_guessed) {
     InputDecoder decoder(baseline_capabilities());
     decoder.set_cell_grid(Size{89, 29});

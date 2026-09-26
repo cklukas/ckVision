@@ -387,12 +387,16 @@ std::vector<TerminalEvent> InputDecoder::drain(std::int64_t now_nanos) {
             // A mouse report outside the cell grid is direct protocol evidence,
             // even when it arrives after the bounded startup probe. Late
             // DECRPM replies remain subject to the stricter live policy.
-            Capabilities without_pixel = *r.updated_caps;
-            without_pixel.pixel_mouse = caps_.pixel_mouse;
+            Capabilities without_pixel_and_geometry = *r.updated_caps;
+            without_pixel_and_geometry.pixel_mouse = caps_.pixel_mouse;
+            without_pixel_and_geometry.cell_pixels = caps_.cell_pixels;
+            without_pixel_and_geometry.text_area_pixels = caps_.text_area_pixels;
             const bool direct_pixel_proof =
                 capability_update_policy_ == CapabilityUpdatePolicy::AcceptVerifiedLiveRefinements &&
-                r.event && std::holds_alternative<MouseEvent>(*r.event) &&
-                !caps_.pixel_mouse && r.updated_caps->pixel_mouse && without_pixel == caps_;
+                direct_pixel_report_seen_ && !caps_.pixel_mouse &&
+                r.updated_caps->pixel_mouse && r.updated_caps->cell_pixels.width > 0 &&
+                r.updated_caps->cell_pixels.height > 0 &&
+                without_pixel_and_geometry == caps_;
             if ((accepts_capability_update(*r.updated_caps) || direct_pixel_proof) &&
                 !needs_fresh_geometry) {
                 if (*r.updated_caps != caps_) {
@@ -772,7 +776,11 @@ InputDecoder::ParseResult InputDecoder::parse_csi(std::string_view buf) {
         // recorded even when the report itself is consumed below.
         const bool beyond_grid = cell_grid_.width > 0 && cell_grid_.height > 0 &&
                                  (cx > cell_grid_.width || cy > cell_grid_.height);
-        if (beyond_grid) pixel_mouse_mode_enabled_ = true;
+        if (beyond_grid) {
+            pixel_mouse_mode_enabled_ = true;
+            if (capability_update_policy_ != CapabilityUpdatePolicy::Reject)
+                direct_pixel_report_seen_ = true;
+        }
         // A direct report outside the cell grid proves that this session's
         // mode-1016 request took effect even if DECRQM stays silent. Once a
         // positive cell metric is also known, publish that proof before the
