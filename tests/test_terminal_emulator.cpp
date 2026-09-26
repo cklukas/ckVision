@@ -1,5 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include "cvision/core/clock.hpp"
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/testing/cktest.hpp"
 
 #include <fstream>
@@ -2820,4 +2822,16 @@ CK_TEST(the_three_mouse_tracking_modes_are_told_apart_rather_than_collapsed) {
     term::TerminalEmulator without(profile);
     without.feed_output("\x1b[?1003h");
     CK_CHECK(without.status().mouse_tracking == core::TerminalMouseTracking::None);
+}
+
+CK_TEST(the_emulator_reports_a_childs_graphics_query_to_its_trace) {
+    term::TerminalEmulator emulator;
+    ManualClock clock;
+    BufferedDiagnostics sink;
+    emulator.feed_output("\x1b[c");
+    CK_CHECK(sink.entries().empty());
+    emulator.set_graphics_trace(GraphicsTrace{&sink, &clock});
+    emulator.feed_output("\x1b[c");
+    CK_CHECK(sink.entries().size() == 1U);
+    CK_CHECK(sink.entries().front().text.find("child asked DA1") != std::string::npos);
 }

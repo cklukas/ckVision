@@ -1183,6 +1183,7 @@ term::TerminalSubsession& Application::adopt_terminal_subsession(
     // session that decodes graphics must be given one, and the host cannot be
     // the one to remember.
     session->set_raster_identity(next_terminal_raster_identity_++);
+    session->set_graphics_trace(graphics_trace_);
     terminal_subsessions_.push_back(std::move(session));
     return *terminal_subsessions_.back();
 }
@@ -1194,6 +1195,9 @@ std::unique_ptr<term::TerminalSubsession> Application::release_terminal_subsessi
         // the session this application owns are the same question.
         if (static_cast<const core::TerminalSubsession*>(owned.get()) != &session) continue;
         std::unique_ptr<term::TerminalSubsession> released = std::move(owned);
+        // The trace is this Application's to lend; the session now outlives
+        // its reach.
+        released->set_graphics_trace(GraphicsTrace{});
         // The slot stays, empty, until the next step(): this may be running
         // inside a drain loop that is walking the very vector an erase would
         // reallocate.
@@ -1201,6 +1205,13 @@ std::unique_ptr<term::TerminalSubsession> Application::release_terminal_subsessi
         return released;
     }
     return nullptr;
+}
+
+void Application::set_graphics_trace(GraphicsTrace trace) noexcept {
+    graphics_trace_ = trace;
+    presenter_.set_graphics_trace(trace);
+    for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_)
+        if (session != nullptr) session->set_graphics_trace(trace);
 }
 
 void Application::invalidate_all() {

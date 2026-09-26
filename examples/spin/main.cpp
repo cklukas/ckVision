@@ -30,15 +30,18 @@
 //                            and then applies a picture outside the bracket
 //                            it applies the surrounding cells in.
 //   CKVISION_OUTPUT_CAPTURE=<file>
-//                            every byte written to the terminal, so a frame
-//                            a host renders wrongly can be replayed into
-//                            ckVision's own decoder.
+//                            every byte written to the terminal after
+//                            startup, so a frame a host renders wrongly can
+//                            be replayed into ckVision's own decoder; read by
+//                            examples/example_diagnostics.hpp, like
+//                            CKVISION_GRAPHICS_LOG.
 //
 // `ckvision_graphics_check` reports what this terminal actually said.
 #include <cstdlib>
 #include <cstdio>
 #include <string>
 
+#include "../example_diagnostics.hpp"
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_terminal.hpp"
 #include "cvision/term/terminal_clipboard.hpp"
@@ -74,11 +77,14 @@ ckv::term::CapabilityOverrides overrides_from_environment() {
 int main() {
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    diagnostics.attach(terminal);
     if (const ckv::term::CapabilityOverrides overrides = overrides_from_environment();
         overrides != ckv::term::CapabilityOverrides{})
         terminal.set_capability_overrides(overrides);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock);
+    diagnostics.attach(app);
     ckv::spin::SpinApp spin(app);
     if (const int fps = std::atoi(environment_value("CKVISION_SPIN_FPS").c_str()); fps > 0)
         spin.set_target_frame_interval(1'000'000'000LL / fps);

@@ -45,7 +45,7 @@ add_library(cvision
     src/term/input_decoder.cpp
     src/term/capability_report.cpp
     src/term/presenter.cpp
-    src/term/graphics_log.cpp
+    src/term/file_trace_sink.cpp
     src/term/sixel_decoder.cpp
     src/term/sixel_encoder.cpp
     src/term/terminal_emulator.cpp

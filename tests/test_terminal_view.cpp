@@ -80,6 +80,7 @@ public:
     void set_raster_identity(int identity) noexcept override {
         emulator_.set_raster_identity(identity);
     }
+    void set_graphics_trace(ckv::GraphicsTrace trace) noexcept override { emulator_.set_graphics_trace(trace); }
 
     mutable int snapshots = 0;
     mutable int statuses = 0;

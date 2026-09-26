@@ -71,6 +71,8 @@ public:
     const TerminalCapabilityProfile& profile() const noexcept override { return emulator_.profile(); }
     void feed_output(std::string_view bytes) override { emulator_.feed_output(bytes); }
     void set_raster_identity(int identity) noexcept override { emulator_.set_raster_identity(identity); }
+    // Forwarded to the emulator that decodes this child's graphics.
+    void set_graphics_trace(GraphicsTrace trace) noexcept override { emulator_.set_graphics_trace(trace); }
     void resize(Size cells, Size cell_pixels) override;
     void send_input(std::string_view bytes) override;
     std::string take_pending_input() override { return emulator_.take_pending_input(); }

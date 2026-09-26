@@ -79,5 +79,6 @@ mechanical gate that keeps coverage at zero is WP-38 work still Open.
 | A39 | A second `CK_EXPECT_ABORT` in one test case cannot fail | `include/cvision/testing/cktest.hpp` | Open |
 | A40 | The title sanitiser may not strip a raw C1 ST (0x9C); unverified | `src/term/presenter.cpp` | Open |
 | A41 | Dead or unused public API: `TimerEvent`, `PixelSize`, `ckv::Error`/`ErrorCode` (nothing returns them), `RasterRegion::fallback_active` (nothing clears or reads it) | several | Open |
-| A42 | `graphics_log.cpp` keeps process-global mutable state with no DECISIONS entry (AGENTS.md sanctions only the D-024 session registry) | `src/term/graphics_log.cpp` | Open |
+| A42 | `graphics_log.cpp` keeps process-global mutable state with no DECISIONS entry (AGENTS.md sanctions only the D-024 session registry), and reads, writes and sets environment variables — a D-039 violation | `src/term/graphics_log.cpp` | Fixed (D-077): an injected `GraphicsTrace`, `term::FileTraceSink`, and the examples' own switch |
 | A43 | The TextEvent "IME/dead-key" wording is kept, although the decoder produces TextEvents only for paste | `include/cvision/core/event.hpp` | Open |
+| A44 | `PosixTerminal` read `CKVISION_OUTPUT_CAPTURE` itself, never closed the file, and missed titles, bells and clipboard writes despite claiming every byte | `src/term/posix_terminal.cpp` | Fixed (D-077): `set_output_capture` receives every byte sent after it is set |

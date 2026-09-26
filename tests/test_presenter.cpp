@@ -1,5 +1,7 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include "cvision/core/clock.hpp"
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/term/presenter.hpp"
 
 #include "cvision/scene/painter.hpp"
@@ -827,4 +829,23 @@ CK_TEST(every_presented_frame_keeps_the_synchronized_update_bracket) {
                       {RasterSlice{7, Rect{4, 3, 10, 4}, Rect{4, 3, 10, 4}, image, false}});
     CK_CHECK(term.written_bytes().find("\x1B[?2026h") != std::string::npos);
     CK_CHECK(term.written_bytes().find("\x1B" "P") != std::string::npos);
+}
+
+// --- Graphics trace (D-077) ----------------------------------------------------
+
+CK_TEST(a_presenter_reports_its_frames_only_to_a_trace_it_was_given) {
+    HeadlessTerminal term(Size{3, 1});
+    Presenter presenter(term);
+    Surface s = make_surface(3, 1, "x");
+    ManualClock clock;
+    BufferedDiagnostics sink;
+    presenter.present(s.view(), CursorState{}, 0);
+    CK_CHECK(sink.entries().empty());  // nothing is reported while no trace is set
+
+    presenter.set_graphics_trace(GraphicsTrace{&sink, &clock});
+    presenter.invalidate();
+    presenter.present(s.view(), CursorState{}, 0);
+    CK_CHECK(!sink.entries().empty());
+    CK_CHECK(sink.entries().front().level == LogLevel::Trace);
+    CK_CHECK(sink.entries().front().text.rfind("frame: ", 0) == 0);
 }

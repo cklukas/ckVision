@@ -362,6 +362,16 @@ public:
     DiagnosticsSink& diagnostics() noexcept;
     void set_diagnostics_sink(std::unique_ptr<DiagnosticsSink> sink);
 
+    // Where this Application's graphics path reports what it does (D-077): its Presenter's
+    // refused pictures, encodes, and frame timings, and every owned terminal session's
+    // decodes, graphics queries, and resizes. Off by default. The sink and clock are the
+    // host's, borrowed until replaced or this Application is destroyed; they are deliberately
+    // not the diagnostics buffer above, because a trace is read while the program runs, not
+    // after it has restored the terminal. Sessions adopted later receive it too; a released
+    // session has it withdrawn.
+    void set_graphics_trace(GraphicsTrace trace) noexcept;
+    GraphicsTrace graphics_trace() const noexcept { return graphics_trace_; }
+
     // --- Internal clipboard (ARCHITECTURE.md §5, D-022) -------------------
     //
     // Always backs widget cut/copy/paste (in-app selection + export is
@@ -771,6 +781,7 @@ private:
     std::vector<term::WaitHandle> terminal_subsession_wait_handles_;
     mutable std::vector<term::WaitHandle> external_wait_handles_;
     int next_terminal_raster_identity_ = 1'000'000;
+    GraphicsTrace graphics_trace_{};
     // Declared before root_ so it is destroyed AFTER it: root_'s teardown
     // fires the detach sink (set in the constructor), which walks
     // modal_stack_ to drop scopes for departing windows. Declared after

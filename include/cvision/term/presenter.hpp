@@ -7,7 +7,6 @@
 // never on scene::Surface — so term stays independent of scene.
 #pragma once
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -15,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/core/cursor.hpp"
 #include "cvision/core/frame_view.hpp"
 #include "cvision/core/pointer_shape.hpp"
@@ -47,6 +47,11 @@ public:
     // from no other writer. Nothing is written until the first present(), which paints the
     // whole frame.
     explicit Presenter(Terminal& terminal) : terminal_(terminal) {}
+
+    // Where this Presenter reports its graphics work (D-077): pictures refused and why, each
+    // encode and its time, and each frame's size and timing. Off by default; the sink and
+    // clock are borrowed and must outlive this Presenter or be replaced first.
+    void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
 
     // Diffs `frame` against the previously presented one and writes
     // only the changed regions, wrapped in a synchronized-output
@@ -255,9 +260,11 @@ private:
     // removal.
     std::vector<ActiveRaster> active_rasters_;
     std::vector<ActiveRaster> previous_active_rasters_;
-    // When the last frame finished, for the "how long was it idle between
-    // paints" figure in the live trace. Only ever read under tracing.
-    std::chrono::steady_clock::time_point last_present_finished_{};
+    GraphicsTrace trace_{};
+    // When the last frame finished, on the trace clock, for the "how long was
+    // it idle between paints" figure in the trace; 0 before the first traced
+    // frame. Only ever read under tracing.
+    std::int64_t last_present_finished_nanos_ = 0;
     bool force_full_ = true;
     std::size_t last_bytes_emitted_ = 0;
     bool track_frame_completion_ = false;

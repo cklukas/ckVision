@@ -220,11 +220,18 @@ the term layer scale the smaller picture back across the whole cell box —
 than the picture. This is the failure worth knowing about by name: a window that
 was showing a picture stops as soon as it is resized past the host's limit.
 
-*Diagnosing a missing picture.* Set `CKVISION_GRAPHICS_LOG` to `stderr` or a
-file name and Presenter reports every frame's raster traffic — including, on the
-frame it happens, why a picture the scene placed did not reach the terminal
-("this host reports no Sixel graphics", or the image size against the stated
-maximum). `term::capability_report()` prints the same facts as a table an
+*Diagnosing a missing picture.* Give the application a graphics trace:
+`Application::set_graphics_trace(GraphicsTrace{sink, &clock})` makes Presenter
+report every frame's raster traffic — including, on the frame it happens, why a
+picture the scene placed did not reach the terminal ("this host reports no Sixel
+graphics", or the image size against the stated maximum) — and every terminal
+session the application owns report what its child asked about graphics and
+which pictures decoded. `term::FileTraceSink` writes such a trace to a file or
+standard error as it happens, and `PosixTerminal::set_graphics_trace()` adds the
+backend's own summary of what the host supports. The library reads no
+environment variable for this; the examples switch it on from
+`CKVISION_GRAPHICS_LOG` in their own `main()`
+(`examples/example_diagnostics.hpp`). `term::capability_report()` prints the same facts as a table an
 application can show or a user can paste into a bug report; Spin's own About box
 states them in a sentence.
 

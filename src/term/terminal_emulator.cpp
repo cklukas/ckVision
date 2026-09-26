@@ -3,7 +3,6 @@
 #include "cvision/term/terminal_emulator.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <array>
 #include <charconv>
 #include <initializer_list>
@@ -12,7 +11,6 @@
 #include "cvision/core/base64.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/text.hpp"
-#include "cvision/term/graphics_log.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
 namespace ckv::term {
@@ -879,8 +877,8 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                             constexpr std::size_t kMaxCachedPayload = 16U * 1024U * 1024U;
                             if (last_sixel_image_ != nullptr && room == last_sixel_room_ &&
                                 control_ == last_sixel_payload_) {
-                                if (graphics_log_enabled())
-                                    graphics_log("emulator: child re-sent the same Sixel (" +
+                                if (trace_)
+                                    trace_.line("emulator: child re-sent the same Sixel (" +
                                                  std::to_string(control_.size()) + " bytes); reused the decode");
                                 const Size extent{
                                     std::max(1, ceil_div_positive(last_sixel_image_->width(), cell_width)),
@@ -892,16 +890,12 @@ void TerminalEmulator::feed_output(std::string_view bytes) {
                                 break;
                             }
                             std::string error;
-                            const auto decode_started = graphics_log_enabled()
-                                                            ? std::chrono::steady_clock::now()
-                                                            : std::chrono::steady_clock::time_point{};
+                            const std::int64_t decode_started = trace_.now_nanos();
                             std::optional<DecodedSixel> decoded =
                                 decode_sixel(control_, room, options_.max_image_pixels, sixel_palette_, error);
-                            if (graphics_log_enabled()) {
-                                const double ms = std::chrono::duration<double, std::milli>(
-                                                      std::chrono::steady_clock::now() - decode_started)
-                                                      .count();
-                                graphics_log("emulator: decoded child Sixel of " + std::to_string(control_.size()) +
+                            if (trace_) {
+                                const double ms = static_cast<double>(trace_.now_nanos() - decode_started) / 1e6;
+                                trace_.line("emulator: decoded child Sixel of " + std::to_string(control_.size()) +
                                              " bytes in " + std::to_string(ms) + " ms -> " +
                                              (decoded ? std::to_string(decoded->image.width()) + "x" +
                                                             std::to_string(decoded->image.height()) + " px"
@@ -1035,8 +1029,8 @@ void TerminalEmulator::handle_csi(char final_byte) {
         // to fall back to text on a terminal that would have drawn the image.
         if (profile_.query_policy == TerminalQueryPolicy::DeclaredProfile) {
             send_input(graphics_available() ? "\x1b[?1;2;4c" : "\x1b[?1;2c");
-            if (graphics_log_enabled())
-                graphics_log(std::string("emulator: child asked DA1, answered ") +
+            if (trace_)
+                trace_.line(std::string("emulator: child asked DA1, answered ") +
                              (graphics_available() ? "?1;2;4c (Sixel)" : "?1;2c (no Sixel)"));
         }
         return;
@@ -1500,8 +1494,8 @@ void TerminalEmulator::handle_graphics_attributes() {
     }
     if (item == 1) {
         send_input(reply + "0;" + std::to_string(kSixelColorRegisters) + "S");
-        if (graphics_log_enabled())
-            graphics_log("emulator: child asked XTSMGRAPHICS registers, answered " +
+        if (trace_)
+            trace_.line("emulator: child asked XTSMGRAPHICS registers, answered " +
                          std::to_string(kSixelColorRegisters));
         return;
     }
@@ -1520,8 +1514,8 @@ void TerminalEmulator::handle_graphics_attributes() {
     while (side < 16384U && (side + 1U) * (side + 1U) <= options_.max_image_pixels) ++side;
     const std::string geometry = std::to_string(side) + ";" + std::to_string(side);
     send_input(reply + "0;" + geometry + "S");
-    if (graphics_log_enabled())
-        graphics_log("emulator: child asked XTSMGRAPHICS geometry, answered " + geometry);
+    if (trace_)
+        trace_.line("emulator: child asked XTSMGRAPHICS geometry, answered " + geometry);
 }
 
 // The kitty keyboard protocol, from the terminal's side. A program pushes the
@@ -2078,8 +2072,8 @@ void TerminalEmulator::damage_rasters(int left, int top, int right, int bottom) 
             }
         }
         if (coverage.live_count == 0) {
-            if (graphics_log_enabled())
-                graphics_log("emulator: a child picture was written over completely and is gone");
+            if (trace_)
+                trace_.line("emulator: a child picture was written over completely and is gone");
             rasters_.erase(rasters_.begin() + static_cast<std::ptrdiff_t>(index));
             raster_coverage_.erase(raster_coverage_.begin() + static_cast<std::ptrdiff_t>(index));
         }
@@ -2527,8 +2521,8 @@ void TerminalEmulator::resize(Size cells, Size cell_pixels) {
             std::max(1, ceil_div_positive(raster.image->width(), profile_.cell_pixels.width)),
             std::max(1, ceil_div_positive(raster.image->height(), profile_.cell_pixels.height))};
     }
-    if (graphics_log_enabled())
-        graphics_log("emulator: child resized to " + std::to_string(cells_.width) + "x" +
+    if (trace_)
+        trace_.line("emulator: child resized to " + std::to_string(cells_.width) + "x" +
                      std::to_string(cells_.height) + " cells of " + std::to_string(profile_.cell_pixels.width) +
                      "x" + std::to_string(profile_.cell_pixels.height) + " px");
     scroll_top_ = 0;

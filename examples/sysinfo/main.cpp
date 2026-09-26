@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "../example_diagnostics.hpp"
 #include "cvision/term/posix_clock.hpp"
 #include "cvision/term/posix_filesystem.hpp"
 #include "cvision/term/posix_terminal.hpp"
@@ -32,6 +33,8 @@ std::string home_directory() {
 int main() {
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+    diagnostics.attach(terminal);
     ckv::term::TerminalClipboardWriter clipboard(terminal);
 
     ckv::sysinfo::PosixSystemProbe probe;
@@ -41,6 +44,7 @@ int main() {
     ckv::sysinfo::MeasuredBenchmarkRunner runner(clock);
     ckv::term::PosixFileSystem files;
     ckv::ui::Application app(terminal, clock, clipboard);
+    diagnostics.attach(app);
     ckv::sysinfo::SysInfoApp sysinfo(app, probe, runner, files, home_directory());
     app.run();
     return 0;

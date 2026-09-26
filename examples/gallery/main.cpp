@@ -10,6 +10,8 @@
 // exercised headlessly (byte-for-byte) by
 // tests/test_gallery_smoke.cpp — this file is the interactive shell
 // around exactly that same, already-tested object graph.
+#include "../example_diagnostics.hpp"
+
 #if defined(_WIN32)
 #include "cvision/term/windows_clock.hpp"
 #include "cvision/term/windows_terminal.hpp"
@@ -35,8 +37,13 @@ void run_example() {
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
 #endif
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+#if !defined(_WIN32)
+    diagnostics.attach(terminal);
+#endif
     ckv::term::TerminalClipboardWriter clipboard(terminal);
     ckv::ui::Application app(terminal, clock, clipboard);
+    diagnostics.attach(app);
     ckv::gallery::GalleryApp gallery(app);
     app.run();
 }

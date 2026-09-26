@@ -163,7 +163,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 |---|---|---|
 | `include/cvision/term/capabilities.hpp` | `Capabilities`, terminal profiles, colour and input protocol enums | [Terminal capability profiles](terminal-profiles.md) |
 | `include/cvision/term/capability_report.hpp` | structured capability report entries | [Terminal host integration](terminal-host-integration.md) |
-| `include/cvision/term/graphics_log.hpp` | opt-in graphics diagnostic log | [Graphics](graphics.md) |
+| `include/cvision/term/file_trace_sink.hpp` | `FileTraceSink`, the live file or stderr sink for a graphics trace | [Graphics](graphics.md) |
 | `include/cvision/term/headless_terminal.hpp` | deterministic `HeadlessTerminal` test host | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/input_decoder.hpp` | `InputDecoder` and capability-update policy | [Input decoder](input-decoder.md) |
 | `include/cvision/term/pointer_shape_names.hpp` | pointer-shape protocol names and support map | [Terminal capability profiles](terminal-profiles.md) |

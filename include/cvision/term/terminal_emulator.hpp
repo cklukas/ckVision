@@ -91,6 +91,8 @@ public:
     std::string take_pending_input() override;
     TerminalSubsessionState state() const noexcept override { return state_; }
     void set_raster_identity(int identity) noexcept override { raster_identity_ = identity; }
+    // Trace lines are written as the child's bytes are processed; see TerminalSubsession.
+    void set_graphics_trace(GraphicsTrace trace) noexcept override { trace_ = trace; }
     // The emulator owns no process: closing only moves it to Closed (once) and flags the
     // lifecycle damage, leaving the screen readable.
     void close() noexcept override {
@@ -315,6 +317,7 @@ private:
     std::shared_ptr<Image> last_sixel_image_;
     Size last_sixel_room_;
     int raster_identity_ = 0;
+    GraphicsTrace trace_{};
     // DEC mode 2026: the child asked to hold its damage until it says the
     // frame is whole. Set and reset in handle_csi's mode dispatch; read by
     // synchronized_output_active() and answered back truthfully to the

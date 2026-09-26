@@ -1,5 +1,6 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include "../example_diagnostics.hpp"
 #include "editor_app.hpp"
 
 #if defined(_WIN32)
@@ -23,7 +24,12 @@ void run_example() {
     ckv::term::PosixClock clock;
     ckv::term::PosixTerminal terminal(clock);
 #endif
+    const ckv::examples::ExampleDiagnostics diagnostics(clock);
+#if !defined(_WIN32)
+    diagnostics.attach(terminal);
+#endif
     ckv::ui::Application application(terminal, clock);
+    diagnostics.attach(application);
     ckv::editor_example::EditorApp editor(application);
     application.run();
 }

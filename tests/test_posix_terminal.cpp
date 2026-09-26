@@ -1763,6 +1763,31 @@ CK_TEST(application_diagnostics_flush_only_after_the_terminal_session_is_restore
     ::close(child.stderr_fd);
 }
 
+CK_TEST(an_output_capture_receives_the_bytes_written_after_it_is_set) {
+    // D-077: capture is a sink the host sets, not a file the backend opens.
+    PtyChild child = spawn_pty_child([](int slave_fd) {
+        PosixClock clock;
+        PosixTerminal term(clock, slave_fd, slave_fd, baseline_capabilities(), /*enable_capability_probes=*/false);
+        std::string captured;
+        term.set_output_capture([&captured](std::string_view bytes) { captured.append(bytes); });
+        term.write("CAPTURED-PAYLOAD");
+        term.set_title("CAPTURED-TITLE");
+        const bool complete = captured.find("CAPTURED-PAYLOAD") != std::string::npos &&
+                              captured.find("CAPTURED-TITLE") != std::string::npos;
+        term.set_output_capture({});
+        term.write(complete ? "CAPTURE-COMPLETE" : "CAPTURE-INCOMPLETE");
+        ::usleep(100'000);  // keep the slave open while the parent reads
+    });
+    const std::string output = read_until_contains(child.master_fd, "CAPTURE-", 2000);
+    const std::string rest = read_until_contains(child.master_fd, "COMPLETE", 2000);
+    const std::string seen = output + rest;
+    CK_CHECK(seen.find("CAPTURED-PAYLOAD") != std::string::npos);  // the host still received it
+    CK_CHECK(seen.find("CAPTURE-COMPLETE") != std::string::npos);
+    const int status = wait_child(child.pid);
+    CK_CHECK(WIFEXITED(status));
+    ::close(child.master_fd);
+}
+
 CK_TEST(assertion_diagnostic_follows_the_terminal_restore_ledger) {
     PtyChild child = spawn_pty_child([](int slave_fd) {
         PosixClock clock;

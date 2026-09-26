@@ -2212,6 +2212,7 @@ public:
         return ckv::core::TerminalSubsessionState::Running;
     }
     void set_raster_identity(int identity) noexcept override { raster_identity = identity; }
+    void set_graphics_trace(ckv::GraphicsTrace trace) noexcept override { graphics_trace = trace; }
     void close() noexcept override { ++closes; }
 
     bool drain(std::size_t byte_budget) override {
@@ -2228,6 +2229,7 @@ public:
     int drains = 0;
     int closes = 0;
     int raster_identity = 0;
+    ckv::GraphicsTrace graphics_trace{};
     std::size_t last_byte_budget = 0;
     bool has_output = false;
     std::size_t handle_count = 0;
@@ -2309,6 +2311,33 @@ CK_TEST(an_adopted_session_gets_a_raster_identity_of_its_own) {
     CK_CHECK(a->raster_identity != 0);
     CK_CHECK(b->raster_identity != 0);
     CK_CHECK(a->raster_identity != b->raster_identity);
+}
+
+CK_TEST(the_graphics_trace_reaches_every_owned_session_and_leaves_a_released_one) {
+    // D-077: the trace is the Application's to lend. A session adopted before
+    // or after it is set carries it; a released session, which may outlive
+    // the host's sink, has it withdrawn.
+    ckv::term::HeadlessTerminal terminal{ckv::Size{40, 6}};
+    ManualClock clock;
+    Application app{terminal, clock};
+    auto first = std::make_unique<FakeSubsession>();
+    FakeSubsession* const a = first.get();
+    app.adopt_terminal_subsession(std::move(first));
+    CK_CHECK(!static_cast<bool>(a->graphics_trace));
+
+    ckv::BufferedDiagnostics sink;
+    app.set_graphics_trace(ckv::GraphicsTrace{&sink, &clock});
+    CK_CHECK(a->graphics_trace.sink == &sink);
+    auto second = std::make_unique<FakeSubsession>();
+    FakeSubsession* const b = second.get();
+    app.adopt_terminal_subsession(std::move(second));
+    CK_CHECK(b->graphics_trace.sink == &sink);
+    CK_CHECK(app.graphics_trace().clock == &clock);
+
+    std::unique_ptr<ckv::term::TerminalSubsession> released = app.release_terminal_subsession(*b);
+    CK_CHECK(released.get() == b);
+    CK_CHECK(!static_cast<bool>(b->graphics_trace));
+    CK_CHECK(a->graphics_trace.sink == &sink);
 }
 
 CK_TEST(an_adopted_sessions_wait_handles_join_the_combined_wait) {

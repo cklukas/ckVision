@@ -11,9 +11,11 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 
 #include "cvision/core/clock.hpp"
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/term/input_decoder.hpp"
 #include "cvision/term/terminal.hpp"
 
@@ -92,10 +94,22 @@ public:
     void restore() noexcept override;
     void write_diagnostic_after_restore(std::string_view message) noexcept override;
     [[noreturn]] void terminate_after_callback_failure() noexcept override;
-    // Writes every byte to the output descriptor. When the CKVISION_OUTPUT_CAPTURE
-    // environment variable names a file at the first write, every written byte is also
-    // copied there, so the exact stream a host received can be replayed later.
+    // Writes every byte to the output descriptor, and to the output capture when one is set.
     void write(std::string_view bytes) override;
+
+    // Receives a copy of every byte this session sends the host from the moment it is set,
+    // probes, frames, titles and restoration included, in order, so the exact stream a host
+    // was given can be replayed into ckVision's own decoder (D-077). What the constructor
+    // wrote before a capture could be set (entering the session and its first probes) is not
+    // included. Called before the bytes are written; an exception it
+    // throws is swallowed rather than allowed to cost the session its output. Empty (the
+    // default) captures nothing.
+    void set_output_capture(std::function<void(std::string_view)> capture);
+
+    // Where this backend reports what it concluded about the host once its capability probes
+    // settle (D-077): Sixel, cell metrics, colour registers, geometry, keyboard protocol, and
+    // any overrides. Borrowed; off by default.
+    void set_graphics_trace(GraphicsTrace trace) noexcept { trace_ = trace; }
     void set_title(std::string_view title) override;
     void bell() override;
     void write_clipboard(std::string_view text) override;  // OSC 52
@@ -105,6 +119,8 @@ public:
     void wake() noexcept override;
 
 private:
+    // Every byte to the host goes through here: to the output capture, then the descriptor.
+    void emit(std::string_view bytes);
     const Clock& clock_;
     int output_fd_;
     int input_fd_;
@@ -133,10 +149,8 @@ private:
     // flight, so that a probe window closing without the fresh maximum
     // geometry can give it back instead of leaving the terminal dark.
     bool withheld_sixel_graphics_ = false;
-    // Raw output capture (CKVISION_OUTPUT_CAPTURE), for replaying what a
-    // misbehaving host was actually given.
-    std::FILE* capture_stream_ = nullptr;
-    bool capture_attempted_ = false;
+    std::function<void(std::string_view)> capture_;
+    GraphicsTrace trace_{};
     bool capability_change_pending_ = false;
 
     void begin_capability_probes();

@@ -3,7 +3,6 @@
 #include "cvision/term/presenter.hpp"
 
 #include <array>
-#include <chrono>
 #include <climits>
 #include <limits>
 #include <string>
@@ -11,7 +10,6 @@
 #include "cvision/core/assert.hpp"
 #include "cvision/core/palette.hpp"
 #include "cvision/core/utf8.hpp"
-#include "cvision/term/graphics_log.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
 #include "cvision/term/sixel_encoder.hpp"
 
@@ -461,8 +459,7 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         // this slice's geometry, so the answer survives as long as both do:
         // a picture repainted over is re-sent from these bytes rather than
         // computed again.
-        const auto encode_started = graphics_log_enabled() ? std::chrono::steady_clock::now()
-                                                           : std::chrono::steady_clock::time_point{};
+        const std::int64_t encode_started = trace_.now_nanos();
         const bool had_encoding = active.encoded != nullptr;
         if (active.encoded == nullptr) {
             const int target_w = active.key.target_width;
@@ -524,11 +521,9 @@ void Presenter::emit_raster_slices(std::string& out, FrameView frame,
         out += style_to_sgr(frame.at(Point{slice.visible_rect.x, slice.visible_rect.y}).style(),
                             terminal_.capabilities());
         out += *active.encoded;
-        if (graphics_log_enabled() && !had_encoding) {
-            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
-                                                                        encode_started)
-                                  .count();
-            graphics_log("  encoded a " + std::to_string(active.key.target_width) + "x" +
+        if (trace_ && !had_encoding) {
+            const double ms = static_cast<double>(trace_.now_nanos() - encode_started) / 1e6;
+            trace_.line("  encoded a " + std::to_string(active.key.target_width) + "x" +
                          std::to_string(active.key.target_height) + " picture into " +
                          std::to_string(active.encoded->size() / 1024) + " KiB in " + std::to_string(ms) + " ms");
         }
@@ -729,12 +724,11 @@ void Presenter::present(FrameView frame, CursorState cursor,
     // work this process does but how long the host takes to swallow it: a
     // terminal decoding a quarter-megabyte Sixel blocks the write, and that
     // shows up here and nowhere else.
-    const bool tracing = graphics_log_enabled();
-    const auto frame_started = tracing ? std::chrono::steady_clock::now()
-                                       : std::chrono::steady_clock::time_point{};
+    const bool tracing = static_cast<bool>(trace_);
+    const std::int64_t frame_started = trace_.now_nanos();
     double idle_ms = 0;
-    if (tracing && last_present_finished_ != std::chrono::steady_clock::time_point{})
-        idle_ms = std::chrono::duration<double, std::milli>(frame_started - last_present_finished_).count();
+    if (tracing && last_present_finished_nanos_ != 0)
+        idle_ms = static_cast<double>(frame_started - last_present_finished_nanos_) / 1e6;
     active_rasters_.clear();
     if (active_rasters_.capacity() < rasters.size()) active_rasters_.reserve(rasters.size());
     for (const RasterSlice& slice : rasters) {
@@ -745,8 +739,7 @@ void Presenter::present(FrameView frame, CursorState cursor,
             // that DID reach the terminal, so a refusal has to say so
             // here or it is indistinguishable from a frame that never
             // had one.
-            if (graphics_log_enabled())
-                graphics_log("presenter: " + raster_refusal_reason(terminal_.capabilities(), slice));
+            if (tracing) trace_.line("presenter: " + raster_refusal_reason(terminal_.capabilities(), slice));
             continue;
         }
         const std::uint64_t fingerprint = image_fingerprint(*slice.image);
@@ -806,10 +799,10 @@ void Presenter::present(FrameView frame, CursorState cursor,
         out += kSynchronizedOutputEnd;
     }
 
-    if (graphics_log_enabled() && (!active_rasters_.empty() || !previous_active_rasters_.empty())) {
+    if (tracing && (!active_rasters_.empty() || !previous_active_rasters_.empty())) {
         std::size_t sending = 0;
         for (const ActiveRaster& active : active_rasters_) sending += active.needs_emit ? 1U : 0U;
-        graphics_log("presenter: frame with " + std::to_string(active_rasters_.size()) + " picture(s), " +
+        trace_.line("presenter: frame with " + std::to_string(active_rasters_.size()) + " picture(s), " +
                      std::to_string(sending) + " re-sent, host sixel=" +
                      (terminal_.capabilities().sixel_graphics ? "yes" : "NO") + ", " +
                      std::to_string(out.size() / 1024) + " KiB total");
@@ -827,22 +820,21 @@ void Presenter::present(FrameView frame, CursorState cursor,
         ++frames_marked_;
     }
     last_bytes_emitted_ = out.size();
-    const auto write_started = tracing ? std::chrono::steady_clock::now()
-                                       : std::chrono::steady_clock::time_point{};
+    const std::int64_t write_started = trace_.now_nanos();
     if (!out.empty()) terminal_.write(out);
     if (tracing) {
-        const auto finished = std::chrono::steady_clock::now();
-        const double write_ms = std::chrono::duration<double, std::milli>(finished - write_started).count();
-        const double frame_ms = std::chrono::duration<double, std::milli>(finished - frame_started).count();
+        const std::int64_t finished = trace_.now_nanos();
+        const double write_ms = static_cast<double>(finished - write_started) / 1e6;
+        const double frame_ms = static_cast<double>(finished - frame_started) / 1e6;
         std::size_t pictures_sent = 0;
         for (const ActiveRaster& active : active_rasters_) pictures_sent += active.needs_emit ? 1U : 0U;
         if (!out.empty() || !active_rasters_.empty())
-            graphics_log("frame: " + std::to_string(frame_ms) + " ms (write " + std::to_string(write_ms) +
+            trace_.line("frame: " + std::to_string(frame_ms) + " ms (write " + std::to_string(write_ms) +
                          " ms of " + std::to_string(out.size() / 1024) + " KiB), " +
                          std::to_string(active_rasters_.size()) + " picture(s), " +
                          std::to_string(pictures_sent) + " sent, " + std::to_string(idle_ms) +
                          " ms since the last frame");
-        last_present_finished_ = finished;
+        last_present_finished_nanos_ = finished;
     }
 
     // The frame just presented becomes the next one's basis, and the buffer

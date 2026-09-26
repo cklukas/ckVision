@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "cvision/core/clock.hpp"
 
 namespace ckv {
 
@@ -66,6 +69,28 @@ public:
 
 private:
     std::vector<DiagnosticsEntry> entries_;
+};
+
+// Where the graphics path reports what it did (D-077): whether a child asked about graphics and
+// what it was told, whether its picture decoded, how long an encode or a frame took, and what
+// erased a picture. Both parts are borrowed from the host, which must keep them alive while any
+// Presenter or session holds this; the sink receives LogLevel::Trace lines, and the clock times
+// them. A default-constructed trace, or one missing either part, traces nothing, and the
+// graphics path then builds no message and reads no clock.
+struct GraphicsTrace {
+    DiagnosticsSink* sink = nullptr;
+    const Clock* clock = nullptr;
+
+    // Whether tracing is on: both a sink to write to and a clock to time with.
+    explicit operator bool() const noexcept { return sink != nullptr && clock != nullptr; }
+
+    // Writes one trace line; nothing when tracing is off.
+    void line(std::string_view message) const noexcept {
+        if (*this) sink->log(LogLevel::Trace, message);
+    }
+
+    // The trace clock's reading in nanoseconds, or 0 when tracing is off.
+    std::int64_t now_nanos() const noexcept { return *this ? clock->now_nanos() : 0; }
 };
 
 }  // namespace ckv

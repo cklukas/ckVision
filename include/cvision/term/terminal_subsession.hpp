@@ -10,6 +10,7 @@
 #include <memory>
 #include <span>
 
+#include "cvision/core/diagnostics.hpp"
 #include "cvision/core/terminal_subsession.hpp"
 #include "cvision/term/terminal.hpp"
 
@@ -76,6 +77,13 @@ public:
     // as long as it had existed -- it forwarded every other call to its
     // emulator and silently swallowed this one.
     virtual void set_raster_identity(int identity) noexcept = 0;
+
+    // Where this session's emulator reports its graphics work (D-077): what a child asked about
+    // graphics and was told, each picture decoded or rejected, pictures erased, and resizes. The
+    // sink and clock are borrowed; the owning Application hands over its own trace on adoption
+    // and withdraws it on release. Pure for the same reason as set_raster_identity: a session
+    // that quietly dropped it would leave a host reading an empty trace and trusting it.
+    virtual void set_graphics_trace(GraphicsTrace trace) noexcept = 0;
 
     // Borrowed native readiness sources. Application presents them to the
     // outer Terminal's combined wait operation but never owns or closes them.

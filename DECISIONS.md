@@ -1945,3 +1945,33 @@ over each control's surface (no single colour contrasts with a green button, a
 blue field, and a grey dialog at once, and the codebase leaves state colours
 to the theme); a Dim attribute alone (terminals render faint text
 inconsistently, and a monochrome scheme needs to say more than that).
+
+**D-077 — Graphics tracing and output capture are sinks a host injects, never
+settings the library looks up.** The library had two process-wide hooks
+switched on by environment variables. `term::graphics_log` read
+`CKVISION_GRAPHICS_LOG` on first use, opened and truncated a file, set a
+variable of its own so child processes would append, and kept the open stream
+in a function-local singleton. `PosixTerminal` read `CKVISION_OUTPUT_CAPTURE`
+and copied every byte it wrote into the file that named. Both break D-039,
+which admits no service that is a singleton or an environment lookup, and the
+first also made the deterministic Presenter and the embedded emulator consult
+ambient process state. Tracing now goes to an optional `DiagnosticsSink`, the
+existing core contract: `ui::Application::set_graphics_trace()` hands one to
+its Presenter, and a `TerminalView`'s session receives it through
+`TerminalSubsession::set_graphics_trace()` so its emulator can report. The
+sink is not the Application's own buffered diagnostics, because a trace is
+read while the program runs, not after it restores the terminal. `term`
+provides `FileTraceSink`, a platform adapter that stamps each line with the
+process id and a monotonic time and appends or truncates as its owner chooses.
+Output capture becomes a callback the host sets on `PosixTerminal`
+(`set_output_capture`), which receives every byte the session sends from then
+on, and the backend's own summary of what the host supports goes to a trace
+set with `PosixTerminal::set_graphics_trace`. The examples decide from their
+own environment whether to create either and pass that choice to their
+children, which keeps the host-and-child single-file log. The library reads no
+environment variable to decide what to do. *Rejected:* routing traces into
+`Application::diagnostics()` (they would surface only after exit, interleaved
+with every other message); keeping the singleton with a DECISIONS exception
+(the trace has no reason to be process-global; it belongs to the session that
+produces it); deleting tracing (it answered questions about hosts that nothing
+else could).

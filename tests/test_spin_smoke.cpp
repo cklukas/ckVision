@@ -1,6 +1,9 @@
 // Copyright (c) 2026 C. Klukas. All rights reserved.
 // SPDX-License-Identifier: MIT
+#include <algorithm>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "cvision/core/palette.hpp"
 #include "cvision/term/headless_terminal.hpp"

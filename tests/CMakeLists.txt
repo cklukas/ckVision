@@ -16,6 +16,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_common_components.cpp
     test_compositor.cpp
     test_combo_box.cpp
+    test_file_trace_sink.cpp
     test_filesystem.cpp
     test_focus.cpp
     test_frame_text.cpp

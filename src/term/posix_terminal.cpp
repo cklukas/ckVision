@@ -24,7 +24,6 @@
 
 #include "cvision/core/assert.hpp"
 #include "cvision/core/base64.hpp"
-#include "cvision/term/graphics_log.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
 #include "cvision/term/presenter.hpp"  // sanitize_osc_text
 
@@ -582,7 +581,7 @@ PosixTerminal::PosixTerminal(const Clock& clock, int output_fd, int input_fd, Ca
 
     CKV_ASSERT(::tcsetattr(input_fd_, TCSANOW, &raw) == 0);
 
-    write_all(output_fd_, session_enter);
+    emit(session_enter);
     begin_capability_probes();
 }
 
@@ -618,8 +617,8 @@ void PosixTerminal::begin_capability_probes() {
     // window resets the mode, so this must happen on every re-probe rather
     // than only at session construction.
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse)
-        write_all(output_fd_, "\x1B[?1016h");
-    write_all(output_fd_, kCapabilityProbeSequence);
+        emit("\x1B[?1016h");
+    emit(kCapabilityProbeSequence);
     // Asked separately because it is the one probe whose silence is not an
     // answer. A host implementing the kitty specification replies with a
     // flag per shape and earns the CSS vocabulary; one implementing only
@@ -627,7 +626,7 @@ void PosixTerminal::begin_capability_probes() {
     // and resets its pointer — harmless here, because a probe window is
     // also a re-present, and the frame that follows re-states the shape.
     if (observed_caps_.pointer_shapes)
-        write_all(output_fd_, kPointerShapeQuerySequence);
+        emit(kPointerShapeQuerySequence);
 }
 
 void PosixTerminal::configure_decoder_capability_update_policy() noexcept {
@@ -676,14 +675,14 @@ void PosixTerminal::finish_capability_probes() {
     // Keeping the mode enabled would make a late pixel report look like a
     // large cell coordinate after the probe fence closes.
     if (observed_caps_.mouse_protocol == MouseProtocol::SGR && !observed_caps_.pixel_mouse) {
-        write_all(output_fd_, "\x1B[?1016l");
+        emit("\x1B[?1016l");
         // Re-assert tracking immediately afterwards. Disabling one mouse
         // mode is not supposed to disturb the others, but terminals differ
         // and a host that stops reporting entirely leaves the application
         // with no mouse at all — an invisible, total failure. Re-enabling
         // costs two short sequences once per probe window and makes the
         // outcome independent of how the terminal interpreted the reset.
-        write_all(output_fd_, "\x1B[?1003h\x1B[?1006h");
+        emit("\x1B[?1003h\x1B[?1006h");
     }
     // Adopting the kitty keyboard protocol waits until its own reply proved
     // it exists. It reports modifiers explicitly — which is what makes a
@@ -714,7 +713,7 @@ void PosixTerminal::finish_capability_probes() {
     // are. Every question that starts "was that build/terminal/setting
     // actually in use?" is answered by the line above the frames it is
     // asking about, instead of by running the session again.
-    if (graphics_log_enabled()) {
+    if (trace_) {
         const auto size_text = [](Size size) {
             return std::to_string(size.width) + "x" + std::to_string(size.height);
         };
@@ -723,7 +722,7 @@ void PosixTerminal::finish_capability_probes() {
                 ? "kitty(flags " + std::to_string(caps_.kitty_keyboard_flags) + ")"
                 : (caps_.keyboard_protocol == KeyboardProtocol::ModifyOtherKeys ? "modifyOtherKeys"
                                                                                 : "legacy");
-        graphics_log("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
+        trace_.line("terminal: sixel=" + std::string(caps_.sixel_graphics ? "yes" : "NO") +
                      " cell=" + size_text(caps_.cell_pixels) + "px grid=" + size_text(last_size_) +
                      " registers=" + std::to_string(caps_.sixel_color_registers) +
                      " max-geometry=" + size_text(caps_.sixel_max_geometry) +
@@ -753,9 +752,9 @@ void PosixTerminal::negotiate_kitty_enhancements() {
         // never a second push, so the restore ledger's single pop stays
         // exact.
         if (profile_kitty_flags_ != 0) return;
-        write_all(output_fd_, "\x1B[<u");
-        write_all(output_fd_, kitty_push_sequence(kKittyRequestedFlags));
-        write_all(output_fd_, "\x1B[?u");
+        emit("\x1B[<u");
+        emit(kitty_push_sequence(kKittyRequestedFlags));
+        emit("\x1B[?u");
         return;
     }
     // Runtime adoption: nothing of ours is on the host's stack yet. The
@@ -763,8 +762,8 @@ void PosixTerminal::negotiate_kitty_enhancements() {
     // pushing without recording it would strand a terminal in the protocol
     // after a crash.
     kitty_push_active_ = true;
-    write_all(output_fd_, kitty_push_sequence(kKittyRequestedFlags));
-    write_all(output_fd_, "\x1B[?u");
+    emit(kitty_push_sequence(kKittyRequestedFlags));
+    emit("\x1B[?u");
     append_session_restore(session_slot_, "\x1B[<u");
 }
 
@@ -784,9 +783,9 @@ void PosixTerminal::maybe_demote_kitty_keyboard() {
         (flags & kKittyReportAssociatedText) != 0)
         return;
     kitty_demoted_ = true;
-    write_all(output_fd_, "\x1B[<u");
-    write_all(output_fd_, kitty_push_sequence(kKittyBaselineFlags));
-    write_all(output_fd_, "\x1B[?u");
+    emit("\x1B[<u");
+    emit(kitty_push_sequence(kKittyBaselineFlags));
+    emit("\x1B[?u");
 }
 
 bool PosixTerminal::invalidate_resize_dependent_capabilities() noexcept {
@@ -945,7 +944,7 @@ std::vector<TerminalEvent> PosixTerminal::poll(
                 // The probe may already have reset 1016 before its last
                 // pixel report reached us. Resume the proved mode for later
                 // reports; late query replies cannot reach this transition.
-                if (late_pixel_proof) write_all(output_fd_, "\x1B[?1016h");
+                if (late_pixel_proof) emit("\x1B[?1016h");
                 // The kitty flag readback normally lands after its probe
                 // window closed; a protocol proof can also straggle into
                 // the batch that closed one. Raise the enhancement request
@@ -1054,7 +1053,7 @@ std::vector<TerminalEvent> PosixTerminal::poll(
 void PosixTerminal::restore() noexcept {
     if (session_slot_ < 0) return;
     SessionRecord& session = g_sessions[session_slot_];
-    write_all(output_fd_, std::string_view(session.restore_bytes, session.restore_len));
+    emit(std::string_view(session.restore_bytes, session.restore_len));
     ::tcsetattr(input_fd_, TCSANOW, &session.original_termios);
     unregister_session(session_slot_);
     session_slot_ = -1;
@@ -1078,32 +1077,37 @@ void PosixTerminal::write_diagnostic_after_restore(std::string_view message) noe
     std::abort();
 }
 
-void PosixTerminal::write(std::string_view bytes) {
-    // Every byte this session writes, when CKVISION_OUTPUT_CAPTURE names a
-    // file. A terminal that renders a frame wrongly cannot be argued with
-    // from this side; the bytes it was given can be replayed into ckVision's
-    // own decoder, which settles whether the frame or its reader was at
-    // fault. Opened once, on the first write.
-    if (capture_stream_ == nullptr && !capture_attempted_) {
-        capture_attempted_ = true;
-        if (const char* const path = std::getenv("CKVISION_OUTPUT_CAPTURE"); path != nullptr && *path != '\0')
-            capture_stream_ = std::fopen(path, "wb");
-    }
-    if (capture_stream_ != nullptr) {
-        std::fwrite(bytes.data(), 1, bytes.size(), capture_stream_);
-        std::fflush(capture_stream_);
-    }
- write_all(output_fd_, bytes); }
+void PosixTerminal::write(std::string_view bytes) { emit(bytes); }
 
-void PosixTerminal::set_title(std::string_view title) {
-    write_all(output_fd_, "\x1B]0;" + sanitize_osc_text(title) + "\x07");
+void PosixTerminal::set_output_capture(std::function<void(std::string_view)> capture) {
+    capture_ = std::move(capture);
 }
 
-void PosixTerminal::bell() { write_all(output_fd_, "\x07"); }
+void PosixTerminal::emit(std::string_view bytes) {
+    // A terminal that renders a frame wrongly cannot be argued with from this
+    // side; the bytes it was given can be replayed into ckVision's own decoder,
+    // which settles whether the frame or its reader was at fault. So the
+    // capture sees every byte this session sends, probes and restoration
+    // included, not only frames. A capture that fails must not cost the
+    // session its output.
+    if (capture_) {
+        try {
+            capture_(bytes);
+        } catch (...) {
+        }
+    }
+    write_all(output_fd_, bytes);
+}
+
+void PosixTerminal::set_title(std::string_view title) {
+    emit("\x1B]0;" + sanitize_osc_text(title) + "\x07");
+}
+
+void PosixTerminal::bell() { emit("\x07"); }
 
 void PosixTerminal::write_clipboard(std::string_view text) {
     if (!caps_.clipboard_write) return;
-    write_all(output_fd_, "\x1B]52;c;" + base64::encode(text) + "\x07");
+    emit("\x1B]52;c;" + base64::encode(text) + "\x07");
 }
 
 void PosixTerminal::wake() noexcept {
