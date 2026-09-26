@@ -119,6 +119,38 @@ void capture_terminal_app_states(const std::filesystem::path& directory) {
     write_svg(directory, "terminal-nested", terminal.display());
 }
 
+void capture_nested_sixel(const std::filesystem::path& directory) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{100, 30}, ckv::term::headless_sixel_profile());
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    ckv::term::TerminalEmulator* child = nullptr;
+    ckv::terminal_example::TerminalAppServices services;
+    services.make_subsession = [&child](ckv::term::TerminalLaunchSpec launch)
+        -> std::unique_ptr<ckv::term::TerminalSubsession> {
+        auto session = std::make_unique<ckv::term::TerminalEmulator>(launch.profile);
+        child = session.get();
+        return session;
+    };
+    services.local_time = [] { return ckv::widgets::TimeValue{12, 34, 56}; };
+    ckv::terminal_example::TerminalApp example(app, std::move(services));
+    app.step(0);
+    if (child == nullptr) std::exit(1);
+
+    ckv::term::HeadlessTerminal nested(child->snapshot().cells, ckv::term::headless_sixel_profile());
+    ckv::ManualClock nested_clock;
+    ckv::ui::Application nested_app(nested, nested_clock);
+    ckv::gallery::GalleryApp gallery(nested_app);
+    nested_app.step(0);
+    if (!nested.display().has_raster_pixels()) std::exit(1);
+
+    child->feed_output("\x1b[?1049h\x1b[2J\x1b[H");
+    child->feed_output(nested.written_bytes());
+    app.root().notify_terminal_subsession_changed(*child);
+    app.step(0);
+    if (!terminal.display().has_raster_pixels()) std::exit(1);
+    write_svg(directory, "terminal-nested-sixel", terminal.display());
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -129,6 +161,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path out_dir = argv[1];
     std::filesystem::create_directories(out_dir);
     capture_terminal_app_states(out_dir);
+    capture_nested_sixel(out_dir);
     capture_profile(out_dir, "terminal-sixel", ckv::term::headless_sixel_profile());
     capture_profile(out_dir, "terminal-no-graphics", ckv::term::headless_no_graphics_profile());
     return 0;

@@ -41,6 +41,11 @@ These captures run the shipped `TerminalApp`. The Sixel and fallback captures
 feed its actual six-color demo bytes after the child is attached, with the
 shell prompt below the picture.
 
+With Sixel enabled at both levels, the nested Gallery's image also passes
+through its private terminal, the outer `TerminalView`, and the outer presenter:
+
+![Nested Gallery with Sixel graphics](generated/screenshots/terminal-nested-sixel.svg)
+
 Choose **View → Classic**, **Dark**, **Light**, or **Mono** while the shell
 and Sixel Demo windows are open. The menu changes the outer desktop and
 window chrome immediately; the child terminal keeps its own VT colors and

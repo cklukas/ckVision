@@ -18,7 +18,7 @@ endif()
 
 foreach(name IN ITEMS terminal-initial terminal-initial-dark terminal-initial-light
                       terminal-initial-mono terminal-menu terminal-full-screen
-                      terminal-nested terminal-sixel terminal-no-graphics)
+                      terminal-nested terminal-nested-sixel terminal-sixel terminal-no-graphics)
     execute_process(
         COMMAND "${CMAKE_COMMAND}" -E compare_files
                 "${CKVISION_SOURCE_DIR}/docs/generated/screenshots/${name}.svg"

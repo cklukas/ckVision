@@ -194,6 +194,52 @@ bool terminal_app_cases(const std::filesystem::path& directory) {
     return contains("Controls") && contains("Sixel Demo") && record_state("terminal_nested");
 }
 
+bool terminal_nested_sixel_cases(const std::filesystem::path& directory) {
+    HeadlessTerminal terminal(Size{100, 30}, headless_sixel_profile());
+    ManualClock clock;
+    ui::Application app(terminal, clock);
+    TerminalEmulator* child = nullptr;
+    terminal_example::TerminalAppServices services;
+    services.make_subsession = [&child](TerminalLaunchSpec launch) -> std::unique_ptr<TerminalSubsession> {
+        auto session = std::make_unique<TerminalEmulator>(launch.profile);
+        child = session.get();
+        return session;
+    };
+    services.local_time = [] { return widgets::TimeValue{12, 34, 56}; };
+    terminal_example::TerminalApp example(app, std::move(services));
+    app.step(0);
+    if (child == nullptr || example.desktop().windows().size() != 1U) return false;
+
+    HeadlessTerminal nested(child->snapshot().cells, headless_sixel_profile());
+    ManualClock nested_clock;
+    ui::Application nested_app(nested, nested_clock);
+    gallery::GalleryApp nested_gallery(nested_app);
+    nested_app.step(0);
+    if (!nested.display().has_raster_pixels() ||
+        nested.written_bytes().find("\x1bP") == std::string_view::npos)
+        return false;
+
+    child->feed_output("\x1b[?1049h\x1b[2J\x1b[H");
+    child->feed_output(nested.written_bytes());
+    app.root().notify_terminal_subsession_changed(*child);
+    app.step(0);
+
+    const auto record = [&](std::string_view name) {
+        const VirtualDisplay& display = terminal.display();
+        if (!display.has_raster_pixels()) return false;
+        return write_cells(directory / (std::string(name) + ".dump"), display.frame(), display.cursor()) &&
+               write_pixels(directory / (std::string(name) + ".rgba"), display.raster_plane());
+    };
+    if (!record("terminal_nested_sixel")) return false;
+    for (const std::string_view scheme : {"dark", "light", "mono"}) {
+        const auto command = app.commands().id_for("terminal.scheme." + std::string(scheme));
+        if (!command || !app.commands().execute(*command)) return false;
+        app.step(0);
+        if (!record("terminal_nested_sixel_" + std::string(scheme))) return false;
+    }
+    return true;
+}
+
 bool presenter_cases(const std::filesystem::path& directory) {
     scene::Compositor compositor(Size{4, 1});
     scene::Surface background(Size{4, 1}, Cell::from_grapheme(" ", Style{}));
@@ -634,6 +680,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(directory);
     if (!protocol_case(directory) || !embedded_child_case(directory) ||
         !gallery_case(directory) || !terminal_app_cases(directory) ||
+        !terminal_nested_sixel_cases(directory) ||
         !presenter_cases(directory) || !contained_terminal_cases(directory) ||
         !contained_pair_cases(directory) || !contained_text_over_raster_case(directory)) {
         std::fprintf(stderr, "terminal plane capture failed\n");

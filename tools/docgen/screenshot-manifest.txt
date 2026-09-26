@@ -23,6 +23,7 @@ terminal-initial-mono
 terminal-menu
 terminal-full-screen
 terminal-nested
+terminal-nested-sixel
 terminal-sixel
 terminal-no-graphics
 layouts-initial
