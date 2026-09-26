@@ -61,15 +61,13 @@ headlessly in a test.
   and modifyOtherKeys key encodings, SGR mouse, sanitized bracketed paste,
   focus events and capability probe replies; a presenter that diffs cells,
   degrades color depth to what the host has, and emits synchronized output.
-- **Themes** — a flat, interned-role theme system with Dark, Light and Mono
-  schemes.
+- **Themes** — a flat, interned-role theme system with Classic, Dark, Light,
+  Mono and High Contrast schemes, switchable while the application runs.
 - **A text editor core** — revisioned documents, `TextEditor`, language
   profiles, incremental syntax caching, search and replace, and a safe file
   workflow.
-- **Backends** — POSIX (real termios, signals, PTY-tested), headless, and
-  record/replay. macOS is the verified platform; Linux builds and is close
-  behind, with GCC's stricter warning set still being worked through;
-  Windows now has a VT outer backend and ConPTY child adapter with native ARM64 smoke evidence; full Windows Terminal and three-platform acceptance are still open.
+- **Backends** — POSIX (real termios, signals, PTY-tested), Windows (a VT
+  outer backend and a ConPTY child adapter), headless, and record/replay.
 
 Zero mandatory dependencies. C++20. `find_package(ckvision)` gives you one
 target: `ckvision::cvision`.
@@ -79,9 +77,11 @@ target: `ckvision::cvision`.
 Version 0.1, pre-release. The framework is substantially implemented and
 substantially tested — the suite covers unit behavior, byte-exact golden
 output, PTY contracts, fuzzed decoders, allocation budgets, and visual
-captures. CI builds it on macOS, Linux and Windows plus dedicated Address,
-UndefinedBehavior and Thread sanitizer lanes; macOS is the lane held green
-today, and the others are being brought to it.
+captures. The recorded release verification builds it on three hosts — Release
+builds with warnings as errors on macOS ARM64, Linux ARM64 (GCC 14) and
+Windows ARM64 (MSVC) — and each passes its full CTest suite with zero warnings.
+CI adds dedicated Address, UndefinedBehavior and Thread sanitizer lanes. Full
+interactive acceptance in Windows Terminal is still open (WP-37 and WP-38).
 
 It is not yet a finished 1.0. No milestone has been signed off against its
 full written acceptance criteria: cross-platform gates, some performance and
@@ -91,7 +91,11 @@ applications — but expect it to move before a tagged release.
 
 ## Build
 
-Needs a C++20 compiler and CMake 3.25+.
+Needs a C++20 compiler, CMake 3.25+ and Python 3. A top-level configure builds
+the test suite by default, and its gates run Python scripts, so CMake stops
+without a Python 3 interpreter. A build that only wants the library and the
+examples can configure with `-DCKVISION_BUILD_TESTING=OFF`, which needs no
+Python.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release

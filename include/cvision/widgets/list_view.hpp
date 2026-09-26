@@ -86,9 +86,11 @@ public:
 class ListView : public ui::View {
 public:
     // An empty tab-stop list with its vertical Scrollbar in the rightmost
-    // column. Single-select by default: the cursor row is the selection and
-    // moves with it. Multi-select keeps the cursor and a set of selected rows
-    // apart, Space toggling the row under the cursor.
+    // column. A row's text stops short of that column while the bar shows,
+    // clipped a whole grapheme cluster at a time. Single-select by default:
+    // the cursor row is the selection and moves with it. Multi-select keeps
+    // the cursor and a set of selected rows apart, Space toggling the row
+    // under the cursor.
     explicit ListView(bool multi_select = false);
 
     // Replaces the roles of ordinary rows and of cursor and selected rows
@@ -265,6 +267,11 @@ private:
     bool contains_selected(ListItemId id) const noexcept;
     void notify_selection(ListItemId id);
     void resolve_model_identities();
+    // The columns a row's text may use: the whole width, less the column the
+    // scrollbar covers while it shows. The bar paints over that column after
+    // the rows, so text drawn into it would lose whatever the bar covers —
+    // the second half of a wide glyph, say.
+    int text_columns() const noexcept;
 
     std::vector<std::string> items_;
     ListModel* model_ = nullptr;

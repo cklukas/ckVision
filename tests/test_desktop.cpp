@@ -1566,6 +1566,32 @@ CK_TEST(attaching_a_desktop_installs_itself_as_every_window_management_commands_
     CK_CHECK(af.app.commands().has_handler(standard(af.app).tile_grid));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).cascade));
     CK_CHECK(af.app.commands().has_handler(standard(af.app).window_list));
+    for (const ckv::ui::CommandId select : standard(af.app).select_window)
+        CK_CHECK(af.app.commands().has_handler(select));
+}
+
+CK_TEST(alt_digits_from_the_terminal_select_windows_by_number_through_the_standard_commands) {
+    AttachedFixture af;
+    Window* first = af.desktop->add_window(make_window(af.f, "First"));
+    Window* second = af.desktop->add_window(make_window(af.f, "Second"));
+    Window* third = af.desktop->add_window(make_window(af.f, "Third"));
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == third);
+
+    // Legacy Alt encoding: ESC, then the digit.
+    af.term.inject_bytes("\x1B" "1", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == first);
+    af.term.inject_bytes("\x1B" "2", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == second);
+    // A number past the last window is a harmless no-op.
+    af.term.inject_bytes("\x1B" "9", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == second);
+    af.term.inject_bytes("\x1B" "3", 0);
+    af.app.step(0);
+    CK_CHECK(af.desktop->active_window() == third);
 }
 
 CK_TEST(nonblocking_presentation_returns_null_when_focus_loss_removes_its_new_window) {
@@ -1757,6 +1783,29 @@ CK_TEST(kquit_default_stops_at_the_first_veto_and_does_not_request_quit) {
 
     af.app.commands().execute(standard(af.app).quit);
     CK_CHECK(closed_count == 0);
+    CK_CHECK(!af.app.quit_requested());
+}
+
+CK_TEST(kquit_default_sweeps_in_z_order_after_an_older_window_is_raised) {
+    // windows() keeps insertion order for cycling; raising `a` changes only
+    // z-order. The sweep asks the window in front first, so a vetoing `b`
+    // that is now behind `a` is reached only after `a` has closed.
+    AttachedFixture af;
+    Window* a = af.desktop->add_window(make_window(af.f));
+    Window* b = af.desktop->add_window(make_window(af.f));
+    af.desktop->activate(a);
+    std::vector<Window*> asked;
+    a->close_request = [&] {
+        asked.push_back(a);
+        return true;
+    };
+    b->close_request = [&] {
+        asked.push_back(b);
+        return false;
+    };
+
+    af.app.commands().execute(standard(af.app).quit);
+    CK_CHECK(asked == (std::vector<Window*>{a, b}));
     CK_CHECK(!af.app.quit_requested());
 }
 
@@ -3794,4 +3843,42 @@ CK_TEST(pan_to_show_moves_the_least_it_can_and_nothing_if_it_need_not) {
     // And back the other way.
     af.desktop->pan_to_show(ckv::Rect{0, 2, 10, 4});
     CK_CHECK(af.desktop->pan().x == 0);
+}
+
+namespace {
+// A plain view that covers its whole box with one glyph: neither a Window
+// nor a popup, so the desktop paints it straight onto its base surface.
+class Blot : public ckv::ui::View {
+public:
+    void draw(Painter& painter) override {
+        painter.fill(Rect{0, 0, bounds().width, bounds().height}, ckv::Cell::from_grapheme("#", ckv::Style{}));
+    }
+};
+}  // namespace
+
+CK_TEST(a_plain_desktop_child_that_hides_or_moves_uncovers_the_desktop_background) {
+    // A plain child is drawn onto the desktop's retained base surface, so
+    // going away or moving must repaint that base. Before the fix only docked
+    // chrome dirtied it, and the child's last cells stayed on screen.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock;
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<Desktop>(app.root().bounds()));
+    auto* blot = desktop->add(std::make_unique<Blot>());
+    blot->set_bounds(Rect{4, 2, 3, 2});
+    app.step(0);
+    const auto at = [&](int x, int y) { return app.composed_surface().at(ckv::Point{x, y}).grapheme(); };
+    CK_CHECK(at(4, 2) == "#");
+
+    blot->set_bounds(Rect{10, 2, 3, 2});
+    app.step(0);
+    CK_CHECK(at(4, 2) == "░");
+    CK_CHECK(at(10, 3) == "#");
+
+    blot->set_visible(false);
+    app.step(0);
+    CK_CHECK(at(10, 3) == "░");
+    CK_CHECK(at(12, 2) == "░");
 }

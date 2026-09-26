@@ -1031,6 +1031,9 @@ bool Application::step(std::int64_t deadline_nanos) {
             wake_now = wake_requested_;
             wake_requested_ = false;
         }
+        // A rebind made outside the loop is known work like any invalidation:
+        // the frame showing it must not wait for the next input.
+        repaint_if_commands_changed();
         const std::int64_t before_wait = clock_.now_nanos();
         // Known work is never held behind an input wait. This is what lets a
         // standalone run loop wait indefinitely while dormant without also
@@ -1137,6 +1140,7 @@ bool Application::step(std::int64_t deadline_nanos) {
         }
 
         restore_modal_focus_if_needed();
+        repaint_if_commands_changed();
         // Coalesce rather than pile on. A large text frame or a picture costs
         // the host enough that pointer-rate window motion can otherwise fill
         // the path with positions the reader will never see. While the host
@@ -1212,6 +1216,12 @@ void Application::set_graphics_trace(GraphicsTrace trace) noexcept {
     presenter_.set_graphics_trace(trace);
     for (const std::unique_ptr<term::TerminalSubsession>& session : terminal_subsessions_)
         if (session != nullptr) session->set_graphics_trace(trace);
+}
+
+void Application::repaint_if_commands_changed() {
+    if (commands_.revision() == painted_command_revision_) return;
+    painted_command_revision_ = commands_.revision();
+    root_.invalidate_subtree();
 }
 
 void Application::invalidate_all() {

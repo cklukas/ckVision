@@ -13,6 +13,16 @@ context, and applications can begin with `ui::make_classic_theme` before
 supplying a different `Theme`. A subtree or window can override the roles it
 uses without changing process-wide state.
 
+`View::set_theme_override` gives one window — its frame and everything inside
+it — a theme of its own while the rest of the application keeps the
+application's. The Workbench example's **Window → Console** is a console on a
+dark ground inside the classic workbench. The override script
+(`tests/test_theme_override_golden.cpp`) pins two overlapping windows, the
+front one overridden with a different built-in scheme, under each of the four
+application schemes (`tests/golden/theme_override_{classic,dark,light,mono}.dump`),
+and checks that the overridden window draws exactly what its scheme draws when
+that scheme is the application's own.
+
 The Gallery shows both document and dialog frame families in one real frame:
 
 ![Gallery with themed windows](generated/screenshots/gallery-initial.svg)
@@ -97,6 +107,128 @@ then search, then syntax/base text; a selected match therefore remains legible
 under every built-in scheme. Applications may override any of these semantic
 roles in an ordinary `Theme` without changing editor behavior or using a
 global palette.
+
+## Scene composition
+
+Every visible change goes through one drawing API, `scene::Painter`, onto a
+`scene::Surface`: a grid of cells with per-row damage and the raster regions
+painted onto it. `scene::Compositor` then assembles a background surface and
+z-ordered layers (retained window and popup surfaces) into one frame, and the
+Presenter turns that frame and its visible pictures into terminal bytes. An
+application never drives these directly; `Application::step()` does. The
+rules below are what a widget author can rely on, and each names the goldens
+that pin it.
+
+### Clip rects and translation
+
+A `Painter` takes coordinates in its own local space, with (0,0) at its
+view's top-left, while `clip()` is the absolute rectangle it may touch.
+`translated(offset, local_clip)` gives a child a new origin and a clip that
+is intersected with the parent's, so a child can never paint outside what its
+parent allows, whatever it asks for. `clipped(sub_clip)` narrows the clip and
+keeps the origin; `draw_image` uses it to keep a fallback inside its anchor.
+The view tree hands every child such a translated, clipped painter.
+
+Clipping never cuts a character:
+
+- `fill` covers the part of its rectangle inside the clip.
+- `draw_text` draws each grapheme cluster whole or not at all. A cluster
+  that would cross the right edge ends the run. One that starts left of the
+  left edge is skipped whole, even the half that would fall inside, and the
+  clusters after it still land in their own columns.
+- Lines and box edges are clipped cell by cell, and corners outside the clip
+  are not drawn. A junction on the clip edge keeps the directions of the parts
+  the clip hides, so a line that runs on past the edge still reads as running
+  on.
+
+[painter_clipping.dump](../tests/golden/painter_clipping.dump)
+(`golden_translated_clipped_painter_cuts_every_primitive_at_the_clip_edges`)
+pins all of this for one translated painter whose clip takes two edges from
+its own request and two from its parent. The widget width sweeps pin the same
+guarantee one level up: ten text-drawing widget families, each clipped at
+every width from 0 until its text fits, with no cell holding part of a
+cluster (`tests/test_clip_sweep_golden.cpp`, one
+`tests/golden/clip_sweep_<family>.dump` per family, for example
+[clip_sweep_label.dump](../tests/golden/clip_sweep_label.dump)).
+
+### Junction scopes (D-036)
+
+Box-drawing lines merge into tees and crosses only with lines from the same
+logical paint. A `Surface` keeps the connector directions and a paint-scope
+id beside every line cell. `translated()` and `clipped()` keep their parent's
+scope; `isolated()` starts a new one, and the view tree gives every view its
+own. A divider a view draws across its own frame therefore joins that frame,
+while a foreground window's border drawn over a background window's border
+replaces it rather than forming a cross. An ordinary cell write clears the
+provenance; a style-only pass such as a shadow keeps it.
+
+[box_and_junctions.dump](../tests/golden/box_and_junctions.dump) pins
+same-scope tees, and
+[window_z_order_junction.dump](../tests/golden/window_z_order_junction.dump)
+pins two overlapping windows whose frames stay independent.
+
+### Shadows: one binary union (D-037)
+
+A layer that casts a shadow covers an L-shaped footprint of two
+non-overlapping rectangles (`shadow_footprint`): a strip `ShadowSpec::dx`
+columns wide down the right side, starting `dy` rows below the top, and a
+strip `dy` rows tall along the bottom. Coverage is binary. A covered cell
+gets the shadow transform exactly once, however many footprint pieces or
+windows cover it, so overlapping shadows never make a darker intersection.
+Coverage follows z-order: a lower window's shadow cannot dim a higher window
+painted after it. A picture under a shadow is marked `shadowed`, and the
+Presenter halves its pixels.
+
+[shadow.dump](../tests/golden/shadow.dump) pins the footprint,
+[shadow_binary_union.dump](../tests/golden/shadow_binary_union.dump) two
+overlapping shadows that dim their intersection once, and
+[contained_shadow_union.rgba](../tests/golden/contained_shadow_union.rgba)
+the same union over decoded Sixel pixels.
+
+### Raster regions and occlusion slicing
+
+`Painter::draw_image` first runs the picture's mandatory fallback (D-017),
+then records a `RasterRegion`: the full anchor, and the part of it inside the
+painter's clip. The composed frame's surface holds cells only. The
+compositor reports the pictures separately as `visible_rasters()`: each
+region is cut by the content of every higher layer into rectangular
+`RasterSlice`s, and cut again where a higher layer's shadow begins. A picture
+half covered by a window arrives as several slices, each carrying the full
+anchor, so the Presenter can crop the right pixels. Whether pixels or the
+fallback reach the screen is the Presenter's decision for the terminal's
+capabilities (D-080), never the scene's.
+
+`scene::capture(surface)` records a surface's own, unsliced regions;
+`scene::capture_frame(compositor)` records one `raster` line per visible
+slice. For a running application, capture
+`scene::capture_frame(app.compositor(), app.current_cursor())`.
+[raster_occlusion.dump](../tests/golden/raster_occlusion.dump) pins one
+region cut into four slices. The appearance matrix pins a symbolic scene for
+every state of the raster widgets, for example
+[ImageView/sixel.classic.scene](../tests/golden/appearance/ImageView/sixel.classic.scene),
+and its gate requires each `sixel` scene to equal its `no-graphics` scene.
+[presenter_occlusion.dump](../tests/golden/presenter_occlusion.dump) and its
+`.rgba` show the decoded result on the terminal.
+
+### Row damage
+
+Each surface row carries a damaged column span, `DamageSpan` `[lo, hi)`.
+`Surface::set_cell` and every `Painter` write damage what they touch, even
+when the content is unchanged. `Compositor::compose` reads the damage of the
+background and of every layer, clears it, and resolves only damaged cells
+plus whatever a moved, added or removed layer uncovered; it remembers each
+layer's id, rectangle and shadow between calls to find those. The work is
+counted, not timed: `last_compose_cells_touched()` is zero for an unchanged
+frame and one for a single changed cell.
+
+Damage decides cost, not appearance, so counts pin it rather than pictures:
+`steady_state_recompose_touches_zero_cells` and
+`content_change_in_a_layer_only_damages_that_cell` in
+`tests/test_compositor.cpp`, and the `scene_budget_gate` benchmark
+([Performance](performance.md)). The frames that damage-driven composition
+produces are pinned like any other, for example
+[contained_move.dump](../tests/golden/contained_move.dump) after a window
+move.
 
 ## What a colour is, and what an underline looks like
 

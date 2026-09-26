@@ -247,6 +247,9 @@ std::optional<Key> tilde_key_from_number(int n) noexcept {
 // D-040's paste sanitization rule — distinct from
 // ckv::text::sanitize_display_text: tab and newline are exempt here
 // because paste inserts multi-line text, unlike a single-grapheme Cell.
+// DEL is replaced with the controls: it is the erase character a shell's
+// line discipline acts on, so pasted text forwarded to a child could
+// otherwise rub out what the reader saw before it ran.
 std::string sanitize_paste(std::string_view text) {
     std::string out;
     out.reserve(text.size());
@@ -257,7 +260,7 @@ std::string sanitize_paste(std::string_view text) {
         const bool is_tab_or_nl = (cp == 0x09 || cp == 0x0A);
         const bool is_c0 = cp <= 0x1F;
         const bool is_c1 = cp >= 0x80 && cp <= 0x9F;
-        if ((is_c0 && !is_tab_or_nl) || is_c1 || cp == utf8::replacement_char) {
+        if ((is_c0 && !is_tab_or_nl) || cp == 0x7F || is_c1 || cp == utf8::replacement_char) {
             out += "\xEF\xBF\xBD";
         } else {
             out.append(text.substr(start, pos - start));

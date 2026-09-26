@@ -60,6 +60,15 @@ void ImageView::draw(scene::Painter& painter) {
     });
 }
 
+std::optional<PixelPoint> ImageView::image_pixel_at(const MouseEvent& event) const noexcept {
+    if (context().app == nullptr) return std::nullopt;
+    const Rect anchor = image_anchor();
+    if (anchor.empty()) return std::nullopt;
+    const Rect origin = absolute_bounds();
+    return event.image_pixel(Rect{origin.x + anchor.x, origin.y + anchor.y, anchor.width, anchor.height},
+                             context().app->terminal_cell_pixels(), image_->size());
+}
+
 bool ImageView::on_mouse(const MouseEvent& event) {
     if (on_click) on_click(event);
     return true;

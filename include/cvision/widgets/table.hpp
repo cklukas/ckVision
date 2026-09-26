@@ -152,15 +152,17 @@ std::string format_cell_value(const CellValue& value);
 // background, and no edit in progress is shown.
 //
 // Layout: the header takes the first row and the data rows the rest; the rightmost column
-// holds a vertical scrollbar. Columns start at the left edge, each followed by one blank
-// cell. The cursor is a single cell, highlighted with "ckv.list.selected" while the table
-// has the focus and "ckv.list.selected.inactive" otherwise; a cell being edited is drawn
-// in "ckv.input.focused" with a caret after its text. A cell with a style of its own (a
+// of the data rows holds a vertical scrollbar. Columns start at the left edge, each
+// followed by one blank cell. Header and cell text is clipped a whole grapheme cluster at a
+// time to its column's width, and a cell's text also stops short of the scrollbar. The
+// cursor is a single cell, highlighted with "ckv.list.selected" while the table has the
+// focus and "ckv.list.selected.inactive" otherwise; a cell being edited is drawn in
+// "ckv.input.focused" with a caret after its text. A cell with a style of its own (a
 // provider cell's `style`, or what the style hook returns) keeps it under the cursor as
 // CellGrid's cells do (D-067): a cell with a colour swaps its two colours, or takes the
 // highlight's where the swapped pair would not read, and the cursor cell is then bold and
-// underlined while the table has the focus (underlined only otherwise); a cell that sets
-// no colour wears the highlight's colours with its own attributes.
+// underlined while the table has the focus (underlined only otherwise); a cell that sets no
+// colour wears the highlight's colours with its own attributes.
 //
 // Keyboard: the arrows, PageUp, PageDown, Home and End (first and last row) move the
 // cursor; Enter or F2 begins an edit, and a printable key without Alt, Ctrl or Super begins
@@ -315,6 +317,14 @@ private:
     void ensure_cursor_visible();
     int column_start_x(std::size_t column) const noexcept;
     int column_at_x(int local_x) const noexcept;
+    // The columns the data rows may use: the whole width, less the column
+    // the scrollbar covers while it shows. The bar paints over that column
+    // after the rows, so a cell drawn into it would lose whatever the bar
+    // covers — the second half of a wide glyph, say.
+    int data_columns() const noexcept;
+    // The width of `column`'s cells on screen: its own width, cut short
+    // where the data columns end.
+    int shown_cell_width(std::size_t column) const noexcept;
     bool parse_edit_value(CellValue& out, std::string& diagnostic) const;
     TableEditResult commit_value(TableCellRef reference, const CellValue& value);
 

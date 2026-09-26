@@ -18,7 +18,13 @@ specimen x state x scheme. This check:
    say what the states claim: the four schemes of one state are pairwise
    different (or, for a state the catalog declares fixed with a reason,
    identical), and in every scheme `focused` (for anything that takes the
-   keyboard) and `disabled` (for a control) differ from `normal`.
+   keyboard) and `disabled` (for a control) differ from `normal`;
+5. requires a symbolic scene dump (`<state>.<scheme>.scene`, the composed
+   frame with its `raster` records) for every state of a raster element and
+   for nothing else, and in every scheme requires the `sixel` scene to record
+   at least one raster and to equal the `no-graphics` scene: the same script
+   composes the same scene, and only the presenter decides whether pixels
+   cover the fallback (D-080).
 """
 
 from __future__ import annotations
@@ -163,6 +169,27 @@ def main() -> int:
                     if normal is not None and normal == dumps.get(scheme):
                         failures.append(f"{name}/{state}.{scheme}: renders exactly as normal")
 
+        if "raster" in element["traits"]:
+            for state in states:
+                for scheme in schemes:
+                    if f"{name}/{state}.{scheme}.scene" not in generated:
+                        failures.append(f"{name}/{state}.{scheme}: raster element has no symbolic scene dump")
+            for scheme in schemes:
+                sixel = generated.get(f"{name}/sixel.{scheme}.scene")
+                fallback = generated.get(f"{name}/no-graphics.{scheme}.scene")
+                if sixel is None or fallback is None:
+                    continue  # reported above
+                if not any(line.startswith("raster ") for line in sixel.decode("utf-8").splitlines()):
+                    failures.append(f"{name}/sixel.{scheme}.scene: records no raster")
+                if sixel != fallback:
+                    failures.append(f"{name}: sixel.{scheme}.scene and no-graphics.{scheme}.scene differ; "
+                                    "the graphics profile must not change the composed scene")
+
+    for key in generated:
+        element_name, _, file_name = key.partition("/")
+        if file_name.endswith(".scene") and "raster" not in elements.get(element_name, {}).get("traits", set()):
+            failures.append(f"{key}: a symbolic scene dump for an element without the raster trait")
+
     if failures:
         for failure in failures:
             print(failure, file=sys.stderr)
@@ -173,8 +200,10 @@ def main() -> int:
     for name, data in sorted(generated.items()):
         manifest.update(name.encode("utf-8") + b"\0" + len(data).to_bytes(8, "little") + data)
     state_count = sum(len(element["states"]) for element in elements.values())
+    scene_count = sum(1 for key in generated if key.endswith(".scene"))
     print(f"appearance matrix: {len(elements)} elements, {state_count} states x {len(schemes)} schemes, "
-          f"{len(exemptions)} exemptions, {len(generated)} files match; manifest SHA-256 {manifest.hexdigest()}")
+          f"{len(exemptions)} exemptions, {len(generated)} files match ({scene_count} symbolic scenes); "
+          f"manifest SHA-256 {manifest.hexdigest()}")
     return 0
 
 

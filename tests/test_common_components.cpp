@@ -6,6 +6,8 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "cvision/testing/cktest.hpp"
@@ -732,9 +734,10 @@ CK_TEST(a_hosted_date_picker_opens_the_calendar_and_tracks_its_typed_selection) 
     picker->set_bounds(ckv::Rect{4, 2, 14, 1});
     picker->set_seed(DateValue{2026, 8, 25});
     picker->set_calendar_host(app, *desktop);
+    app.set_focus(picker);
     app.step(0);
 
-    CK_CHECK(picker->on_key(ckv::KeyEvent{ckv::KeyChord{Key::Char, Modifier::None, " "}}));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{ckv::KeyChord{Key::Char, Modifier::None, " "}}));
     CK_CHECK(dynamic_cast<CalendarDropdown*>(app.input_capture()) != nullptr);
     CK_CHECK(app.dispatch(key(Key::Right)));
     CK_CHECK((picker->value() == std::optional<DateValue>{DateValue{2026, 8, 26}}));
@@ -1885,4 +1888,351 @@ CK_TEST(a_calendar_is_at_least_as_wide_as_the_columns_it_draws) {
     const ckv::scene::Surface surface = painted(calendar);
     CK_CHECK(two_cells(surface, ckv::Point{3 + 6 * 3, 6}) == "30");
     CK_CHECK(two_cells(surface, ckv::Point{0, 6}) == "35");
+}
+
+// --- Application-level interaction scripts (WP-38) -----------------------
+//
+// Each script mounts one component in a real Application on a headless
+// terminal and drives it only as a reader would: keys and pointer events go
+// through Application::dispatch, and step() renders what they changed. The
+// "Interaction scripts" map in docs/coverage.md names these cases.
+
+namespace {
+
+struct Scripted {
+    ckv::term::HeadlessTerminal term{ckv::Size{60, 16}};
+    ManualClock clock;
+    Application app{term, clock};
+
+    Scripted() {
+        const ckv::ui::StandardRoles roles = ckv::ui::intern_standard_roles(app.roles());
+        app.theme() = ckv::ui::make_classic_theme(app.roles(), roles);
+    }
+
+    // Adds `view` to the root at `bounds`, gives it the focus when it takes
+    // any, and renders the first frame.
+    template <class V>
+    V* mount(std::unique_ptr<V> view, ckv::Rect bounds) {
+        return mount_in(app.root(), std::move(view), bounds);
+    }
+
+    // The same, onto a Desktop covering the root. The bare root paints no
+    // background of its own, so a script that watches a view go away mounts
+    // it where something paints what it uncovers, as every application does.
+    template <class V>
+    V* mount_on_desktop(std::unique_ptr<V> view, ckv::Rect bounds) {
+        auto* desktop = app.root().add(std::make_unique<Desktop>(app.root().bounds()));
+        return mount_in(*desktop, std::move(view), bounds);
+    }
+
+    template <class V>
+    V* mount_in(ckv::ui::View& parent, std::unique_ptr<V> view, ckv::Rect bounds) {
+        V* mounted = parent.add(std::move(view));
+        mounted->set_bounds(bounds);
+        if (mounted->focus_policy() != ckv::ui::FocusPolicy::None) app.set_focus(mounted);
+        app.step(0);
+        return mounted;
+    }
+
+    bool press(Key k, std::string text = {}) {
+        const bool handled = app.dispatch(ckv::KeyEvent{KeyChord{k, Modifier::None, std::move(text)}});
+        app.step(0);
+        return handled;
+    }
+
+    bool type(std::string_view text) {
+        bool handled = true;
+        for (const char c : text) handled = press(Key::Char, std::string(1, c)) && handled;
+        return handled;
+    }
+
+    bool click(ckv::Point cell) {
+        const bool handled = app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, cell,
+                                                          std::nullopt, Modifier::None});
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, cell, std::nullopt,
+                                     Modifier::None});
+        app.step(0);
+        return handled;
+    }
+
+    std::string row(int y) const { return row_of(app.composed_surface(), y); }
+
+    // The graphemes of `width` cells of row `y` from column `x`.
+    std::string cells(int x, int y, int width) const {
+        std::string out;
+        for (int column = x; column < x + width; ++column)
+            out += app.composed_surface().at(ckv::Point{column, y}).grapheme();
+        return out;
+    }
+};
+
+}  // namespace
+
+CK_TEST(a_scripted_calendar_view_moves_by_keys_and_selects_the_clicked_day) {
+    Scripted s;
+    auto* calendar = s.mount(std::make_unique<CalendarView>(), ckv::Rect{0, 0, 21, 8});
+    calendar->set_selected(DateValue{2026, 8, 9});
+    std::vector<DateValue> chosen;
+    calendar->on_select = [&](DateValue date) { chosen.push_back(date); };
+    s.app.step(0);
+    CK_CHECK(s.row(0).starts_with("August 2026"));
+
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(calendar->selected() == (DateValue{2026, 8, 17}));
+    // Thursday 20 August 2026: the fourth week row, the fourth column.
+    CK_CHECK(s.click(ckv::Point{9, 5}));
+    CK_CHECK(calendar->selected() == (DateValue{2026, 8, 20}));
+    CK_CHECK(chosen.size() == 3U);
+    // Up from the first week walks back into July, and the calendar follows.
+    CK_CHECK(s.press(Key::Up));
+    CK_CHECK(s.press(Key::Up));
+    CK_CHECK(s.press(Key::Up));
+    CK_CHECK(calendar->selected() == (DateValue{2026, 7, 30}));
+    CK_CHECK(s.row(0).starts_with("July 2026"));
+}
+
+CK_TEST(a_scripted_spin_box_steps_by_keys_by_clicks_on_either_half_and_by_the_wheel) {
+    Scripted s;
+    auto* spin = s.mount(std::make_unique<SpinBox>(), ckv::Rect{2, 1, 8, 1});
+    spin->set_range(0, 10);
+    spin->set_step(3);
+    spin->set_value(5);
+    s.app.step(0);
+
+    CK_CHECK(s.press(Key::Up));
+    CK_CHECK(spin->value() == 8);
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(spin->value() == 10);  // the last step is clamped at the end
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(spin->value() == 7);
+    CK_CHECK(s.click(ckv::Point{3, 1}));  // left half: down
+    CK_CHECK(spin->value() == 4);
+    CK_CHECK(s.click(ckv::Point{8, 1}));  // right half: up
+    CK_CHECK(spin->value() == 7);
+    CK_CHECK(s.row(1).find(" 7 ") != std::string::npos);
+    // The wheel steps it too.
+    const auto wheel = [&](ckv::MouseButton direction) {
+        const bool handled = s.app.dispatch(
+            ckv::MouseEvent{ckv::MouseAction::Wheel, direction, ckv::Point{4, 1}, std::nullopt, Modifier::None});
+        s.app.step(0);
+        return handled;
+    };
+    CK_CHECK(wheel(ckv::MouseButton::WheelUp));
+    CK_CHECK(spin->value() == 10);
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown));
+    CK_CHECK(wheel(ckv::MouseButton::WheelDown));
+    CK_CHECK(spin->value() == 4);
+    CK_CHECK(s.row(1).find(" 4 ") != std::string::npos);
+}
+
+CK_TEST(a_scripted_slider_follows_keys_and_a_proportional_click) {
+    Scripted s;
+    auto* slider = s.mount(std::make_unique<Slider>(), ckv::Rect{0, 2, 11, 1});
+    slider->set_range(0, 100);
+    slider->set_step(5);
+    s.app.step(0);
+
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(slider->value() == 10);
+    CK_CHECK(s.press(Key::End));
+    CK_CHECK(slider->value() == 100);
+    CK_CHECK(s.press(Key::Home));
+    CK_CHECK(slider->value() == 0);
+    // Column 5 of eleven is the middle of the track.
+    CK_CHECK(s.click(ckv::Point{5, 2}));
+    CK_CHECK(slider->value() == 50);
+    CK_CHECK(s.row(2).find("◆") != std::string::npos);  // focused thumb
+}
+
+CK_TEST(a_scripted_tool_bar_click_runs_its_command_only_while_it_is_enabled) {
+    Scripted s;
+    int saved = 0;
+    bool can_save = true;
+    const ckv::ui::CommandId save = s.app.commands().declare(
+        ckv::ui::CommandDescriptor{.key = "test.save", .title = "&Save", .category = "test",
+                                   .handler = [&] { ++saved; }});
+    s.app.commands().set_enabled_predicate(save, [&] { return can_save; });
+    auto toolbar = std::make_unique<ToolBar>();
+    toolbar->set_commands({save});
+    s.mount(std::move(toolbar), ckv::Rect{0, 0, 20, 1});
+    CK_CHECK(s.row(0).starts_with("[Save]"));
+
+    CK_CHECK(s.click(ckv::Point{2, 0}));
+    CK_CHECK(saved == 1);
+    can_save = false;
+    s.click(ckv::Point{2, 0});
+    CK_CHECK(saved == 1);
+    // Past the button the click is not the tool bar's.
+    can_save = true;
+    CK_CHECK(!s.click(ckv::Point{12, 0}));
+    CK_CHECK(saved == 1);
+}
+
+CK_TEST(a_scripted_command_palette_filters_as_typed_and_runs_the_highlighted_command) {
+    Scripted s;
+    int opened = 0;
+    int ordered = 0;
+    s.app.commands().declare(ckv::ui::CommandDescriptor{.key = "test.open", .title = "&Open file",
+                                                        .category = "test", .handler = [&] { ++opened; }});
+    s.app.commands().declare(ckv::ui::CommandDescriptor{.key = "test.order", .title = "Order &lines",
+                                                        .category = "test", .handler = [&] { ++ordered; }});
+    auto* palette = s.mount(std::make_unique<CommandPalette>(), ckv::Rect{0, 0, 40, 8});
+
+    CK_CHECK(s.type("o"));
+    CK_CHECK(palette->query() == "o");
+    CK_CHECK(palette->filtered_commands().size() == 2U);
+    CK_CHECK(s.type("rd"));
+    CK_CHECK(palette->filtered_commands().size() == 1U);
+    CK_CHECK(s.row(2).find("ord") != std::string::npos);
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(ordered == 1);
+    CK_CHECK(opened == 0);
+
+    // Backspace widens the match again; Down moves the highlight to the
+    // second result before Enter runs it.
+    CK_CHECK(s.press(Key::Backspace));
+    CK_CHECK(s.press(Key::Backspace));
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(ordered == 2);
+}
+
+CK_TEST(a_scripted_breadcrumb_bar_walks_and_activates_its_segments) {
+    Scripted s;
+    auto breadcrumb = std::make_unique<BreadcrumbBar>();
+    breadcrumb->set_segments({"home", "ada", "notes"});
+    std::vector<std::size_t> activated;
+    breadcrumb->on_activate = [&](std::size_t index) { activated.push_back(index); };
+    s.mount(std::move(breadcrumb), ckv::Rect{0, 3, 30, 1});
+    CK_CHECK(s.row(3).starts_with("home/ada/notes"));
+
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(!s.press(Key::Right));  // already on the last segment
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(s.click(ckv::Point{1, 3}));
+    CK_CHECK((activated == std::vector<std::size_t>{2, 1, 0}));
+}
+
+CK_TEST(a_scripted_property_inspector_edits_a_value_in_place) {
+    Scripted s;
+    auto inspector = std::make_unique<PropertyInspector>();
+    inspector->set_items({{"Name", "Ada", true}, {"Id", "7", false}, {"Role", "", true}});
+    std::vector<std::pair<std::size_t, std::string>> changes;
+    inspector->on_change = [&](std::size_t index, std::string value) { changes.emplace_back(index, value); };
+    auto* mounted = s.mount(std::move(inspector), ckv::Rect{0, 0, 30, 4});
+    CK_CHECK(s.row(0).starts_with("Name: Ada"));
+
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(mounted->cursor() == 1);
+    s.press(Key::Enter);  // read-only: no edit opens
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(s.type("dev"));
+    CK_CHECK(s.press(Key::Backspace));
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(mounted->items()[2].value == "de");
+    CK_CHECK(mounted->items()[1].value == "7");
+    CK_CHECK(changes.size() == 4U);
+    CK_CHECK(s.row(2).starts_with("Role: de"));
+    // With the edit closed, typing no longer reaches the value.
+    s.type("x");
+    CK_CHECK(mounted->items()[2].value == "de");
+}
+
+CK_TEST(a_scripted_wizard_goes_forward_back_and_finishes_only_when_allowed) {
+    Scripted s;
+    bool accepted = false;
+    int finished = 0;
+    int cancelled = 0;
+    auto wizard = std::make_unique<Wizard>();
+    wizard->set_pages({{"Welcome", {}}, {"Licence", [&] { return accepted; }}, {"Done", {}}});
+    wizard->on_finish = [&] { ++finished; };
+    wizard->on_cancel = [&] { ++cancelled; };
+    auto* mounted = s.mount(std::move(wizard), ckv::Rect{0, 0, 40, 6});
+    CK_CHECK(s.row(0).find("Welcome") != std::string::npos);
+
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(mounted->current_page() == 1U);
+    s.press(Key::Enter);  // the licence page refuses until accepted
+    CK_CHECK(mounted->current_page() == 1U);
+    accepted = true;
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(mounted->current_page() == 2U);
+    CK_CHECK(s.row(5).find("Finish") != std::string::npos);
+    CK_CHECK(s.press(Key::Left));
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Enter));
+    CK_CHECK(finished == 1);
+    CK_CHECK(s.press(Key::Escape));
+    CK_CHECK(cancelled == 1);
+}
+
+CK_TEST(a_scripted_notification_center_expires_toasts_and_dismisses_by_escape_and_click) {
+    Scripted s;
+    auto* centre = s.mount_on_desktop(std::make_unique<NotificationCenter>(), ckv::Rect{0, 0, 40, 3});
+    centre->set_auto_dismiss(kSecond * 2);
+    centre->add(info("Saved"));
+    centre->add(info("Disk almost full", true));
+    centre->add(info("Synced"));
+    s.app.step(0);
+    CK_CHECK(s.row(0).find("Saved") != std::string::npos);
+
+    // Only time, delivered by the loop, takes the two toasts away; the
+    // persistent line stays.
+    s.clock.advance(kSecond * 3);
+    s.app.step(s.clock.now_nanos());
+    CK_CHECK(centre->notifications().size() == 1U);
+    CK_CHECK(s.row(0).find("Disk almost full") != std::string::npos);
+    CK_CHECK(s.row(1).find("Synced") == std::string::npos);
+
+    centre->add(info("Again", true));
+    s.app.step(s.clock.now_nanos());
+    CK_CHECK(s.press(Key::Escape));  // the newest goes first
+    CK_CHECK(centre->notifications().size() == 1U);
+    CK_CHECK(s.click(ckv::Point{4, 0}));
+    CK_CHECK(centre->notifications().empty());
+    CK_CHECK(s.row(0).find("Disk") == std::string::npos);
+}
+
+CK_TEST(a_scripted_tooltip_appears_and_leaves_with_the_frames_its_host_steps) {
+    Scripted s;
+    auto* tooltip = s.mount_on_desktop(std::make_unique<Tooltip>("Saves the file"), ckv::Rect{});
+    CK_CHECK(s.row(4).find("Saves the file") == std::string::npos);
+
+    tooltip->show_at(ckv::Point{6, 4});
+    s.app.step(0);
+    CK_CHECK(s.cells(6, 4, 16) == " Saves the file ");
+    // It takes no input: a key goes past it to nothing that wants it.
+    CK_CHECK(!s.press(Key::Char, "x"));
+    CK_CHECK(tooltip->shown());
+
+    tooltip->hide();
+    s.app.step(0);
+    CK_CHECK(s.row(4).find("Saves the file") == std::string::npos);
+}
+
+CK_TEST(a_scripted_time_picker_steps_its_fields_and_shows_either_clock_face) {
+    Scripted s;
+    auto* picker = s.mount(std::make_unique<TimePicker>(), ckv::Rect{0, 2, 14, 1});
+    picker->set_value(TimeValue{13, 5, 0});
+    s.app.step(0);
+    CK_CHECK(s.row(2).find("13:05:00") != std::string::npos);
+
+    CK_CHECK(s.press(Key::Up));  // the hour field
+    CK_CHECK(s.press(Key::Right));
+    CK_CHECK(s.press(Key::Down));  // then the minutes
+    CK_CHECK(picker->value() == (TimeValue{14, 4, 0}));
+    CK_CHECK(s.row(2).find("14:04:00") != std::string::npos);
+
+    // The twelve-hour face shows the same value on the other scale.
+    picker->set_24_hour(false);
+    s.app.step(0);
+    CK_CHECK(s.row(2).find("02:04:00 PM") != std::string::npos);
+    CK_CHECK(s.press(Key::Down));
+    CK_CHECK(picker->value() == (TimeValue{14, 3, 0}));
 }

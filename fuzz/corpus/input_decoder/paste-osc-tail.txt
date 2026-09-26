@@ -1,0 +1,1 @@
+\e[200~before\e[201~\e[200~\e]52;c;payload\aafter\e[201~

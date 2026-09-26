@@ -106,17 +106,39 @@ also the order `CommandRegistry::all()` reports them in:
 | `ckv.window.tile_vertical` | `Tile &Vertically` | Window | — |
 | `ckv.window.tile_grid` | `Tile &Grid` | Window | — |
 | `ckv.window.minimize` | `Mi&nimize` | Window | — |
+| `ckv.window.select.1` | `Window &1` | Window | Alt+1 |
+| `ckv.window.select.2` | `Window &2` | Window | Alt+2 |
+| `ckv.window.select.3` | `Window &3` | Window | Alt+3 |
+| `ckv.window.select.4` | `Window &4` | Window | Alt+4 |
+| `ckv.window.select.5` | `Window &5` | Window | Alt+5 |
+| `ckv.window.select.6` | `Window &6` | Window | Alt+6 |
+| `ckv.window.select.7` | `Window &7` | Window | Alt+7 |
+| `ckv.window.select.8` | `Window &8` | Window | Alt+8 |
+| `ckv.window.select.9` | `Window &9` | Window | Alt+9 |
 
 Application code references these through
 `CommandRegistry::standard()` — `.quit`, `.close`, `.zoom`,
 `.next_window`, `.previous_window`, `.tile`, `.tile_horizontally`,
 `.tile_vertically`, `.tile_grid`, `.cascade`,
 `.window_list`, `.menu`, `.help`, `.terminal_report`, `.focus_next`,
-`.focus_previous`, `.minimize` —
+`.focus_previous`, `.minimize`, and `.select_window[0]` … `.select_window[8]`
+for windows 1 … 9 —
 rather than by key; the keys are spelled out in
 `ckv::ui::std_command_keys` for anything that has to name a command as a
 string, and this table exists to make the wording, grouping, and chord
 choices reviewable in one place.
+
+## Chord text follows the keymap
+
+Menus and status lines ask the registry for a command's chord every time they
+draw, and `Application` repaints on the step after any change to it
+(`CommandRegistry::revision()` counts the changes), so a runtime
+`bind_key`/`unbind_key` reaches every surface already on screen. Text an
+application writes itself — a help sentence, a placeholder, a hint — follows
+the same way when it takes the chord from `CommandRegistry::chord_text(id)`,
+which is the bound chord in the display spelling, or empty when nothing is
+bound. The examples never spell a chord in a string literal outside a
+command's `.chord =` declaration; the `example_hygiene` gate rejects one.
 
 ## Design notes
 
@@ -153,6 +175,18 @@ choices reviewable in one place.
   them the way there is for Quit/Close/Zoom/Help/Menu/window-cycling —
   an application binds one itself (`CommandRegistry::bind_key`) if it
   wants one.
+- **Alt+1 … Alt+9 select a window by its number.** `select_window[n - 1]`
+  runs `Desktop::select_by_number(n)`: the n-th window in the desktop's
+  insertion order, the same numbering its window list shows, restoring the
+  window first if it is minimized. A number past the last window does
+  nothing. Naming a window by its digit with Alt held is the convention
+  observed on classic text-mode desktops. No other standard chord uses Alt
+  with a digit, and `MenuBar`'s accelerators take Alt with a menu title's
+  mnemonic letter, so the two never compete. Both encodings a terminal sends
+  for these keys — the legacy ESC prefix and the kitty keyboard protocol —
+  decode to exactly these chords. A focused `TerminalView` forwards Alt+digit
+  to its child program, as a terminal must, so there the window menu or
+  `window_list` is the way to switch.
 - **The chord scheme is this project's own choice**, authored for
   M9/WP-12 with no prior source consulted, per this repository's own
   provenance rule (`AGENTS.md`) — informed by publicly documented,
@@ -209,7 +243,8 @@ choices reviewable in one place.
   command yet (`CommandRegistry::has_handler`), the same guarded pattern
   `menu`'s own default follows. `close` closes the desktop's active
   window (vetoable, `Window::close_request`); `quit` sweeps every
-  window through that same vetoable protocol, front-to-back, and only
+  window through that same vetoable protocol, front-to-back in z-order (the
+  window in front first, whatever order the windows were opened in), and only
   calls `Application::request_quit()` if none of them veto
   (`ARCHITECTURE.md` §5 "application quit sweeps all windows through
   the same protocol"). Modal scoping (`Application::push_modal`)

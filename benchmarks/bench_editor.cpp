@@ -15,7 +15,7 @@
 #include "cvision/widgets/syntax_profile.hpp"
 #include "cvision/widgets/text_editor.hpp"
 
-bool run_editor_benchmarks() {
+bool run_editor_benchmarks(const ckbench::Runner& bench) {
     std::string source;
     for (int line = 0; line < 4000; ++line)
         source += "item" + std::to_string(line) + ": value # deterministic editor benchmark\n";
@@ -35,7 +35,7 @@ bool run_editor_benchmarks() {
     if (yaml == nullptr || !syntax_cache.update(*yaml, syntax_lines).reached_fixed_point) return false;
 
     bool holds = true;
-    ckbench::run("editor_local_replace_4000_lines", 200, [&] {
+    bench.run("editor_local_replace_4000_lines", 200, [&] {
         const auto position = document->position_at_byte(0);
         if (!position) { holds = false; return; }
         const auto result = document->replace(ckv::widgets::DocumentRange{*position, *position}, "x");
@@ -43,7 +43,7 @@ bool run_editor_benchmarks() {
     });
     constexpr std::size_t kLocalRelexLineBudget = 2;
     bool alternate = false;
-    ckbench::run("editor_incremental_highlight_4000_lines", 200, [&] {
+    bench.run("editor_incremental_highlight_4000_lines", 200, [&] {
         syntax_lines.front() = alternate ? "item0: one # deterministic editor benchmark"
                                          : "item0: two # deterministic editor benchmark";
         alternate = !alternate;

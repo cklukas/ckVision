@@ -72,7 +72,12 @@ void GraphicsApp::build_window() {
     auto image = std::make_unique<widgets::ImageView>();
     image->set_bounds(Rect{1, 2, 54, 10});
     image->set_image(demo_image_);
-    image->on_click = [this](const MouseEvent&) { ++image_clicks_; };
+    // Every event carries the cell and, where the terminal reports pixels,
+    // the pixel position; the view maps the latter into the picture.
+    image->on_click = [this](const MouseEvent& event) {
+        ++image_clicks_;
+        last_image_pointer_ = PointerReport{event, image_view_->image_pixel_at(event)};
+    };
     image_view_ = image.get();
     image_page->add_child(std::move(image));
 
@@ -97,7 +102,10 @@ void GraphicsApp::build_window() {
             }
         }
     });
-    canvas->on_click = [this](const MouseEvent&) { ++canvas_clicks_; };
+    canvas->on_click = [this](const MouseEvent& event) {
+        ++canvas_clicks_;
+        last_canvas_pointer_ = PointerReport{event, canvas_->image_pixel_at(event)};
+    };
     canvas_ = canvas.get();
     canvas_page->add_child(std::move(canvas));
 

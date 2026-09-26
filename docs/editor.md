@@ -294,7 +294,8 @@ window is open.
 
 The editor smoke suite also verifies that an active search selection and caret
 survive all four built-in schemes when `Application::set_theme()` repaints
-the retained tree after the theme change.
+the retained tree after the theme change, and pins the Replace dialog under all
+four schemes.
 
 `SyntaxCache` is the deterministic incremental layer behind `TextEditor`.
 It retains each line's incoming state, spans, and outgoing state; after an
@@ -415,6 +416,7 @@ failure instead of silently ignoring the menu command.
 | Open Sample | File submenu | YAML/JSON/Bash detection and plain fallback |
 | Undo/Redo, Cut/Copy/Paste | Edit menu | document transaction and clipboard paths |
 | Find Selection (`Ctrl+F`), Find Next (`F3`) | Search menu and status line | revision-bound literal search |
+| Replace... (`Ctrl+R`) | Search menu | one-at-a-time and all-at-once replacement, each one undo step |
 | Word Wrap (`Alt+W`) | Edit menu | viewport-only reflow and stable logical position |
 | Quit (`Alt+X`) | File menu and status line | application exit routing |
 
@@ -435,6 +437,40 @@ touches it. The shipped example’s Edit and Search menus use
 the same public methods and command enablement predicates.
 
 ![Search selection and highlight](generated/screenshots/editor-search.svg)
+
+**Search → Replace...** (`Ctrl+R`) opens the example's Replace dialog over the
+bottom of the desktop, so the document's first lines, and the match about to
+change, stay in view. It offers the selected text (when the selection is on one
+line) or the current query as **Find**, the last replacement as **Replace
+with**, and the query's **Match case** and **Whole words only** options. Its
+buttons are the registry's commands: **Find Next** is the same `editor.find-next`
+command as `F3`, and **Replace** and **Replace All** are `editor.replace-next`
+and `editor.replace-all`, hidden from menus and enabled only while the dialog is
+open, because they act on what its fields say. Each press first makes the
+fields the editor's query with `set_search_query()`, which keeps the current
+match while it still matches.
+
+**Replace** is the default button, so Enter in either field presses it. It
+replaces the current match — the one Find Next last selected — and selects the
+next, so the reader always sees what the following press will change before it
+changes it; the first press, with no current match yet, only finds one. Each
+replacement is one undo step. **Replace All** asks first, in a confirmation
+opened on top of the still-modal Replace dialog, how many matches it is about
+to change; Yes replaces them all with `replace_all_search_matches()` as one
+transaction, so a single Undo takes every replacement back. No, or Esc, closes
+only the confirmation, and focus returns to where it was in the Replace dialog.
+A press of Find Next, Replace or Replace All that finds nothing says so in a
+notice raised the same way, rather than doing nothing visibly. **Close**, or
+Esc, closes the dialog and returns focus to the editor.
+
+The dialog stays open between presses, which a presented descriptor dialog does
+not: `present_dialog()` closes on its default button. The example therefore
+builds it from the same `DialogDescriptor` with `materialize_dialog()`, puts it
+in a fixed-size `Window` with the dialog roles, sets that window's
+`accept_request` and `cancel_request` itself, and presents it with
+`Desktop::present_modal()`.
+
+![The Replace dialog after its first press has found the selected word](generated/screenshots/editor-replace.svg)
 
 ![Save/Discard/Cancel close confirmation](generated/screenshots/editor-close-confirm.svg)
 

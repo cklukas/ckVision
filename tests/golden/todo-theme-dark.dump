@@ -17,7 +17,7 @@ grid
 |░░░░╔═[■]══════════════════════════════════ TODO — main ════════════════════════════════[_][↑]═╗░░░░|
 |░░░░║┌─To Do (1)─────────────────┐ ┌─Doing (1)─────────────────┐ ┌─Done (1)───────────────────┐║░░░░|
 |░░░░║│• Add your first task      │ │• Open contextual help     │ │• Try move mode             │║░░░░|
-|░░░░║│  Press F2 or Insert       │ │  Press F1 anywhere        │ │  Select a task and press F9│║░░░░|
+|░░░░║│  Tasks > Add task         │ │  Help > Context Help      │ │  Tasks > Move task         │║░░░░|
 |░░░░║│                           │ │                           │ │                            │║░░░░|
 |░░░░║│                           │ │                           │ │                            │║░░░░|
 |░░░░║│                           │ │                           │ │                            │║░░░░|

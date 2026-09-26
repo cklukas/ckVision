@@ -36,16 +36,16 @@ ckv::golden::Document make_document(int cols, int rows) {
 
 }  // namespace
 
-void run_golden_benchmarks() {
+void run_golden_benchmarks(const ckbench::Runner& bench) {
     const ckv::golden::Document doc = make_document(80, 25);
     std::size_t sink = 0;
 
-    ckbench::run("golden_serialize_80x25", 1000, [&] {
+    bench.run("golden_serialize_80x25", 1000, [&] {
         sink += ckv::golden::serialize(doc).size();
     });
 
     const std::string text = ckv::golden::serialize(doc);
-    ckbench::run("golden_parse_80x25", 1000, [&] {
+    bench.run("golden_parse_80x25", 1000, [&] {
         const ckv::golden::ParseResult result = ckv::golden::parse(text);
         if (result) sink += result.document->grid.size();
     });

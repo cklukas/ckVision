@@ -163,6 +163,10 @@ private:
     void ask_for_scratch_directory();
     void save_report_with_dialog(ReportFormat format);
     void install_help();
+    // The text that tells the reader how to start a run names the chord
+    // Run selected is bound to now; this re-states it wherever it is shown.
+    widgets::HelpTopic benchmarks_help_topic() const;
+    void show_run_chord();
 
     void open_latency_plot_window();
     void update_latency_plot();
@@ -264,6 +268,10 @@ private:
 
     std::vector<VolumeReport> volumes_;
     int refresh_count_ = 0;
+
+    ui::CommandId run_command_ = ui::kInvalidCommand;
+    // The registry revision the run hints were last written for.
+    std::uint64_t run_chord_revision_ = 0;
 
     // Declared last, so it is destroyed first: its destructor cancels any
     // run and joins the worker, which must happen before anything the

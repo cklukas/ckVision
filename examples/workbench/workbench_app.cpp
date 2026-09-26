@@ -12,7 +12,9 @@
 #include "cvision/widgets/combo_box.hpp"
 #include "cvision/widgets/common_components.hpp"
 #include "cvision/widgets/flow_view.hpp"
+#include "cvision/widgets/button.hpp"
 #include "cvision/widgets/input_line.hpp"
+#include "cvision/widgets/key_chord_capture.hpp"
 #include "cvision/widgets/label.hpp"
 #include "cvision/widgets/list_view.hpp"
 #include "cvision/widgets/menu.hpp"
@@ -33,19 +35,28 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
 
-    build_chrome();
-    build_window();
-
     // CommandPalette presents the commands that declare themselves
     // browsable, which is the application's own vocabulary rather than
     // the framework's navigation plumbing. Give the workbench's Help tab
     // a genuine app-level action so the example demonstrates that
     // contract directly.
-    app_.commands().declare({.key = "workbench.build-project",
-                             .title = "&Build project",
-                             .category = "Build",
-                             .chord = "F7",
-                             .handler = [] {}});
+    build_command_ = app_.commands().declare({.key = "workbench.build-project",
+                                              .title = "&Build project",
+                                              .category = "Build",
+                                              .chord = "F7",
+                                              .handler = [this] { run_build(); }});
+    console_command_ = app_.commands().declare({.key = "workbench.console",
+                                                .title = "C&onsole",
+                                                .category = "Window",
+                                                .handler = [this] { open_console(); }});
+    keys_command_ = app_.commands().declare({.key = "workbench.keys",
+                                             .title = "&Keys...",
+                                             .category = "Options",
+                                             .handler = [this] { present_keys_dialog(); }});
+
+    build_chrome();
+    build_window();
+
     app_.commands().set_handler(app_.commands().standard().quit, [this] { app_.request_quit(); });
     app_.set_focus(memo_);
 
@@ -58,14 +69,27 @@ WorkbenchApp::WorkbenchApp(ui::Application& app) : app_(app), roles_(ui::intern_
 }
 
 void WorkbenchApp::build_chrome() {
+    const ui::StandardCommands& standard = app_.commands().standard();
     widgets::MenuBarItem file_menu{"&File", {}};
-    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
-        app_.commands().standard().help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{keys_command_}));
     file_menu.items.push_back(widgets::MenuItem::separator());
-    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.quit}));
+    // Every way a desktop's windows are reached by keyboard: by cycling, by
+    // number (Alt+1..Alt+9, the chord each numbered item shows), and by list.
     widgets::MenuBarItem window_menu{"&Window", {}};
-    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().next_window}));
-    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().previous_window}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{console_command_}));
+    window_menu.items.push_back(widgets::MenuItem::separator());
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.next_window}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.previous_window}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.select_window[0]}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.select_window[1]}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.window_list}));
+    window_menu.items.push_back(widgets::MenuItem::separator());
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.zoom}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.close}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.tile}));
+    window_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{standard.cascade}));
 
     desktop_->dock_top(std::make_unique<widgets::MenuBar>(
         std::vector<widgets::MenuBarItem>{std::move(file_menu), std::move(window_menu)}));
@@ -240,6 +264,111 @@ std::unique_ptr<ui::View> WorkbenchApp::build_help_page() {
     tooltip_ = tooltip.get();
     page->add_child(std::move(tooltip));
     return page;
+}
+
+// The build log, in a window of its own. A console reads as a console on a
+// dark ground whatever the desktop around it looks like, so this one window
+// keeps the dark scheme while the application stays classic: the override
+// re-themes the window's whole subtree, frame included, and nothing else.
+void WorkbenchApp::open_console() {
+    if (console_window_ != nullptr) {
+        desktop_->activate(console_window_);
+        return;
+    }
+    auto window = std::make_unique<widgets::Window>("Console");
+    window->set_bounds(Rect{30, 11, 46, 10});
+    window->set_theme_override(ui::make_dark_theme(app_.roles(), roles_));
+    auto text = std::make_unique<widgets::TextView>();
+    text->set_bounds(window->content_rect());
+    console_text_ = text.get();
+    window->set_content(std::move(text));
+    widgets::Window* const opened = window.get();
+    window->on_closed = [this, opened] {
+        console_window_ = nullptr;
+        console_text_ = nullptr;
+        widgets::schedule_self_detach(*opened, app_);
+    };
+    console_window_ = desktop_->add_window(std::move(window));
+    if (console_lines_.empty()) console_lines_.emplace_back("workbench console ready");
+    show_console_lines();
+}
+
+void WorkbenchApp::append_console_line(std::string line) {
+    console_lines_.push_back(std::move(line));
+    show_console_lines();
+}
+
+void WorkbenchApp::show_console_lines() {
+    if (console_text_ == nullptr) return;
+    std::string joined;
+    for (const std::string& line : console_lines_) joined += line + "\n";
+    console_text_->set_text(std::move(joined));
+}
+
+void WorkbenchApp::run_build() {
+    ++builds_run_;
+    append_console_line("build " + std::to_string(builds_run_) + ": ok");
+}
+
+// Rebinding at runtime: one row per command, each a KeyChordCapture showing
+// the chord bound now. Enter starts a capture and the next key pressed
+// becomes the binding; Backspace clears it. The registry is the only record,
+// so the menus, the status line and the command palette show the new chord
+// on the next frame, and the chord works as soon as the dialog closes.
+void WorkbenchApp::present_keys_dialog() {
+    if (keys_dialog_ != nullptr) return;
+    const ui::StandardCommands& standard = app_.commands().standard();
+    const std::vector<std::pair<ui::CommandId, std::string>> commands = {
+        {build_command_, "&Build project"},
+        {console_command_, "C&onsole"},
+        {standard.next_window, "&Next window"},
+        {standard.zoom, "&Zoom"},
+    };
+    auto window = std::make_unique<widgets::Window>("Keys");
+    const int height = static_cast<int>(commands.size()) + 6;
+    const Rect area = desktop_->content_area();
+    window->set_bounds(Rect{area.x + (area.width - 44) / 2, area.y + (area.height - height) / 2, 44, height});
+    window->set_role_override(roles_.dialog_frame, roles_.dialog_background, roles_.dialog_frame,
+                              roles_.dialog_background);
+    window->set_resizable(false);
+    auto content = std::make_unique<ui::View>();
+    key_rows_.clear();
+    for (std::size_t index = 0; index < commands.size(); ++index) {
+        const int row = static_cast<int>(index) + 1;
+        auto label = std::make_unique<widgets::Label>(commands[index].second);
+        label->set_bounds(Rect{2, row, 16, 1});
+        widgets::Label* const label_view = label.get();
+        content->add_child(std::move(label));
+        auto capture = std::make_unique<widgets::KeyChordCapture>();
+        capture->set_bounds(Rect{19, row, 20, 1});
+        capture->set_chord(app_.commands().chord_for_command(commands[index].first));
+        const ui::CommandId command = commands[index].first;
+        capture->on_chord_changed = [this, command](const std::optional<KeyChord>& chord) { rebind(command, chord); };
+        label_view->set_buddy(capture.get());
+        key_rows_.push_back(KeyBindingRow{command, capture.get()});
+        content->add_child(std::move(capture));
+    }
+    auto close = std::make_unique<widgets::Button>("&Close");
+    close->set_bounds(Rect{16, static_cast<int>(commands.size()) + 2, 10, 2});
+    widgets::Window* const dialog = window.get();
+    close->on_press = [dialog] { dialog->close(); };
+    content->add_child(std::move(close));
+    window->set_content(std::move(content));
+    window->cancel_request = [dialog] { dialog->close(); };
+    window->on_closed = [this, dialog] {
+        keys_dialog_ = nullptr;
+        key_rows_.clear();
+        widgets::schedule_self_detach(*dialog, app_);
+    };
+    ui::View* const first = key_rows_.front().capture;
+    keys_dialog_ = desktop_->present_modal(widgets::WindowHandle{std::move(window), first}, app_);
+}
+
+void WorkbenchApp::rebind(ui::CommandId command, const std::optional<KeyChord>& chord) {
+    ui::CommandRegistry& commands = app_.commands();
+    while (const std::optional<KeyChord> bound = commands.chord_for_command(command)) commands.unbind_key(*bound);
+    if (chord) commands.bind_key(*chord, command);
+    for (const KeyBindingRow& row : key_rows_) row.capture->set_chord(commands.chord_for_command(row.command));
 }
 
 }  // namespace ckv::workbench

@@ -269,6 +269,10 @@ void Desktop::on_attached() {
     install_default_handler(standard.cascade, [this] { cascade(); });
     install_default_handler(standard.window_list, [this] { show_window_list(); });
     install_default_handler(standard.terminal_report, [this] { show_terminal_report(); });
+    for (std::size_t index = 0; index < standard.select_window.size(); ++index) {
+        const int number = static_cast<int>(index) + 1;
+        install_default_handler(standard.select_window[index], [this, number] { select_by_number(number); });
+    }
 }
 
 void Desktop::show_window_list() {
@@ -339,17 +343,29 @@ void Desktop::quit_sweep() {
     // not present when the quit request began and are left for the host's
     // imminent shutdown rather than being unexpectedly swept as re-entrant
     // work.
+    //
+    // Front to back is z-order, and z-order is children() order, the last
+    // child painted on top -- not windows_, whose stable insertion order is
+    // the cycling order and stops being z-order the first time an older
+    // window is raised. Asking the newest window first would pass over the
+    // one the reader has in front of them.
     struct WindowAtStart {
         Window* window = nullptr;
         std::weak_ptr<void> liveness;
     };
     std::vector<WindowAtStart> windows_at_start;
     windows_at_start.reserve(windows_.size());
-    for (Window* window : windows_)
-        windows_at_start.push_back(WindowAtStart{window, window->lifetime_token()});
-    for (auto it = windows_at_start.rbegin(); it != windows_at_start.rend(); ++it) {
-        if (it->liveness.expired()) continue;
-        Window* window = it->window;
+    for (auto child = children().rbegin(); child != children().rend(); ++child) {
+        const auto owned = std::find_if(windows_.begin(), windows_.end(),
+                                        [candidate = child->get()](Window* w) {
+                                            return static_cast<ui::View*>(w) == candidate;
+                                        });
+        if (owned != windows_.end())
+            windows_at_start.push_back(WindowAtStart{*owned, (*owned)->lifetime_token()});
+    }
+    for (const WindowAtStart& entry : windows_at_start) {
+        if (entry.liveness.expired()) continue;
+        Window* window = entry.window;
         if (std::find(windows_.begin(), windows_.end(), window) == windows_.end()) continue;
         if (!window->close()) return;  // vetoed: the sweep stops here, quit is cancelled
         if (desktop_liveness.expired()) return;
@@ -1668,13 +1684,11 @@ void Desktop::raise_layer_to_front(ui::View* child) {
 }
 
 void Desktop::on_descendant_invalidated(const ui::View& source, Rect, ui::InvalidationKind kind) {
-    // Windows and popups have independent retained surfaces. Docked chrome
-    // is composed into the base surface, so only it (or its descendants)
-    // invalidates that surface.
-    if (is_descendant_of(source, top_dock_) || is_descendant_of(source, bottom_dock_)) {
-        retained_base_dirty_ = true;
-        return;
-    }
+    // Windows and popups have independent retained surfaces; everything else
+    // this desktop holds -- docked chrome, the content view, any other plain
+    // child -- is painted straight onto the base surface, so its invalidation
+    // is the base's. A plain child that hides, moves, shrinks or stops
+    // drawing part of itself uncovers base cells nothing else would repaint.
     // A popup's own geometry invalidation does not imply its local backing
     // changed: a same-size translation is a layer-position change. Its child
     // invalidations, on the other hand, change popup content and must repaint
@@ -1685,6 +1699,10 @@ void Desktop::on_descendant_invalidated(const ui::View& source, Rect, ui::Invali
             popup_backings_.at(popup).dirty = true;
         return;
     }
+    const ui::View* child = &source;
+    while (child->parent() != nullptr && child->parent() != this) child = child->parent();
+    if (child->parent() == this && dynamic_cast<const Window*>(child) != nullptr) return;
+    retained_base_dirty_ = true;
 }
 
 bool Desktop::child_casts_shadow(const ui::View& child) const {

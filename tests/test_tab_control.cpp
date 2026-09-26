@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/tab_control.hpp"
 
+#include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/label.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -138,4 +141,50 @@ CK_TEST(tab_and_shift_tab_are_left_for_focus_traversal) {
     CK_CHECK(tabs.active_index() == 0);
     CK_CHECK(tabs.on_key(key(Key::Right)));
     CK_CHECK(tabs.active_index() == 1);
+}
+
+CK_TEST(a_scripted_tab_control_switches_pages_by_arrows_mnemonics_and_clicks) {
+    // Application-level script: keys and clicks reach the control through
+    // Application::dispatch, and each step() shows the page they chose.
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* tabs = app.root().add(std::make_unique<TabControl>());
+    tabs->set_bounds(Rect{0, 0, 40, 6});
+    tabs->add_tab("&General", std::make_unique<ckv::widgets::Label>("General page"));
+    tabs->add_tab("&Display", std::make_unique<ckv::widgets::Label>("Display page"));
+    tabs->add_tab("&Advanced", std::make_unique<ckv::widgets::Label>("Advanced page"));
+    app.set_focus(tabs);
+    app.step(0);
+    const auto shown = [&](const std::string& text) {
+        return row_text(app.composed_surface(), 1).find(text) != std::string::npos;
+    };
+    CK_CHECK(shown("General page"));
+
+    CK_CHECK(app.dispatch(key(Key::Right)));
+    app.step(0);
+    CK_CHECK(tabs->active_index() == 1U);
+    CK_CHECK(shown("Display page"));
+    CK_CHECK(!shown("General page"));
+
+    CK_CHECK(app.dispatch(key(Key::Left)));
+    CK_CHECK(app.dispatch(key(Key::Left)));  // wraps from the first to the last
+    app.step(0);
+    CK_CHECK(tabs->active_index() == 2U);
+    CK_CHECK(shown("Advanced page"));
+
+    CK_CHECK(app.dispatch(key(Key::Char, Modifier::Alt, "d")));
+    app.step(0);
+    CK_CHECK(tabs->active_index() == 1U);
+
+    // "General" takes columns 0..9 of the strip ("General" plus three).
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 0},
+                                          std::nullopt, Modifier::None}));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{3, 0}, std::nullopt,
+                                 Modifier::None});
+    app.step(0);
+    CK_CHECK(tabs->active_index() == 0U);
+    CK_CHECK(shown("General page"));
 }

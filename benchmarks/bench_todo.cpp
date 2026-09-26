@@ -5,6 +5,7 @@
 // the named reference machine; deterministic work, size, and redraw budgets
 // below are hard failures on every machine.
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -41,7 +42,14 @@ TodoWorkspace thousand_task_workspace() {
 
 }  // namespace
 
-int main() {
+// Usage: todo_bench [--gate], as cvision_bench.
+int main(int argc, char** argv) {
+    const std::optional<ckbench::Mode> mode = ckbench::mode_from_arguments(argc, argv);
+    if (!mode) {
+        std::fprintf(stderr, "usage: todo_bench [--gate]\n");
+        return 2;
+    }
+    const ckbench::Runner bench(*mode);
     constexpr std::size_t kTaskCount = 1'000;
     constexpr std::size_t kEncodedBytesBudget = 1024U * 1024U;
     constexpr std::size_t kFrameCellsBudget = 140U * 40U;
@@ -55,7 +63,7 @@ int main() {
                         encoded.value->size() <= kEncodedBytesBudget;
 
     std::size_t sink = 0;
-    ckbench::run("todo_codec_encode_1000", 100, [&] {
+    bench.run("todo_codec_encode_1000", 100, [&] {
         const auto result = encode_workspace(workspace);
         if (!result || result.value->size() > kEncodedBytesBudget) {
             budgets_hold = false;
@@ -63,7 +71,7 @@ int main() {
         }
         sink += result.value->size();
     });
-    ckbench::run("todo_codec_decode_1000", 100, [&] {
+    bench.run("todo_codec_decode_1000", 100, [&] {
         const auto result = decode_workspace(*encoded.value);
         if (!result || result.value->snapshot().tasks.size() != kTaskCount) {
             budgets_hold = false;
@@ -73,7 +81,7 @@ int main() {
     });
 
     MemoryTodoRepository repository(workspace);
-    ckbench::run("todo_repository_load_1000", 1'000, [&] {
+    bench.run("todo_repository_load_1000", 1'000, [&] {
         const auto result = repository.load();
         if (!result || result.value->workspace.snapshot().tasks.size() != kTaskCount) {
             budgets_hold = false;
@@ -91,7 +99,7 @@ int main() {
                  {.workspace_description = "in-memory benchmark workspace"});
     app.step(0);
 
-    ckbench::run("todo_refresh_1000_tasks", 50, [&] {
+    bench.run("todo_refresh_1000_tasks", 50, [&] {
         todo.refresh_board();
         std::size_t visible_tasks = 0;
         for (const Lane& lane : todo.controller().workspace()->find_board(BoardId{1})->lanes)
@@ -100,7 +108,7 @@ int main() {
             budgets_hold = false;
         sink += todo.board_view()->lane_count();
     });
-    ckbench::run("todo_steady_board_render", 250, [&] {
+    bench.run("todo_steady_board_render", 250, [&] {
         app.root().invalidate();
         terminal.clear_written();
         app.step(monotonic.now_nanos());
@@ -111,7 +119,7 @@ int main() {
     });
 
     bool in_second_lane = false;
-    ckbench::run("todo_lane_move_commit", 100, [&] {
+    bench.run("todo_lane_move_commit", 100, [&] {
         const auto pending = todo.controller().begin_task_move(TaskId{1});
         const LaneId target = in_second_lane ? LaneId{1} : LaneId{2};
         if (!pending) {
@@ -132,7 +140,7 @@ int main() {
         sink += committed.value->changed ? 1U : 0U;
     });
 
-    ckbench::run("todo_unchanged_revision_poll", 5'000, [&] {
+    bench.run("todo_unchanged_revision_poll", 5'000, [&] {
         terminal.clear_written();
         todo.poll_repository();
         app.step(monotonic.now_nanos());

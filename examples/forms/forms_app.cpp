@@ -43,6 +43,15 @@ FormsApp::FormsApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
                                                             "Accept validates required fields; Escape cancels.",
                                                             {{"forms", "Back to forms"}}});
 
+    // F1 is About here (install_about_help below); the forms topic has a
+    // command of its own, so every surface that mentions it can show the
+    // chord it is bound to rather than one written down beside it.
+    forms_help_command_ = app_.commands().declare({.key = "forms.help",
+                                                    .title = "&Forms help",
+                                                    .category = "Help",
+                                                    .chord = "Shift+F1",
+                                                    .handler = [this] { present_help(); }});
+
     auto desktop = std::make_unique<widgets::Desktop>(app_.root().bounds());
     desktop_ = desktop.get();
     app_.root().add_child(std::move(desktop));
@@ -66,7 +75,7 @@ void FormsApp::build_chrome() {
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));
 
     widgets::MenuBarItem help_menu{"&Help", {}};
-    help_menu.items.push_back(widgets::MenuItem::action("&Forms help", [this] { present_help(); }));
+    help_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{forms_help_command_}));
     help_menu.items.push_back(widgets::MenuItem::separator());
     help_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
         app_.commands().standard().help, "&About..."}));
@@ -78,8 +87,15 @@ void FormsApp::build_chrome() {
     status->set_items({widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().help}},
                        widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().quit}}});
-    status->set_hint_provider([](const std::string& key) {
-        if (key == "forms") return std::string{"F1 opens the forms help topic"};
+    // The hint follows focus, and its chord follows the keymap: it is asked
+    // for each time the line draws, so a rebind shows on the next frame.
+    status->set_hint_provider([this](const std::string& key) {
+        if (key == "forms") {
+            const std::string chord = app_.commands().chord_text(forms_help_command_);
+            return chord.empty() ? std::string{"Help > Forms help opens the forms help topic"}
+                                 : chord + " opens the forms help topic";
+        }
+        if (key == "forms.group") return std::string{"Arrows move within the group; Space chooses"};
         return std::string{};
     });
     desktop_->dock_bottom(std::move(status));
@@ -101,6 +117,7 @@ void FormsApp::build_window() {
 
     auto name_label = std::make_unique<widgets::Label>("&Name:");
     name_label->set_bounds(Rect{1, 4, 8, 1});
+    widgets::Label* const name_label_view = name_label.get();
     content->add_child(std::move(name_label));
 
     auto name = std::make_unique<widgets::InputLine>();
@@ -108,6 +125,8 @@ void FormsApp::build_window() {
     name->set_help_context_key("forms");
     name_input_ = name.get();
     content->add_child(std::move(name));
+    // Alt+N from anywhere in the window lands in the field the label names.
+    name_label_view->set_buddy(name_input_);
 
     auto options = std::make_unique<widgets::CheckGroup>(
         std::vector<std::string>{"&Validate on accept", "&Tri-state option", "&Remember value"});
@@ -115,6 +134,7 @@ void FormsApp::build_window() {
     options->set_bounds(Rect{1, 6, 26, 4});
     options->set_tristate(true);
     options->set_check_state(1, widgets::CheckState::Mixed);
+    options->set_help_context_key("forms.group");
     options_ = options.get();
     content->add_child(std::move(options));
 
@@ -122,6 +142,7 @@ void FormsApp::build_window() {
     mode->set_group_label("Presentation mode");
     mode->set_bounds(Rect{30, 6, 14, 3});
     mode->set_selected(0);
+    mode->set_help_context_key("forms.group");
     mode_ = mode.get();
     content->add_child(std::move(mode));
 

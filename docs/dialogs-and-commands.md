@@ -70,7 +70,7 @@ Apply, Browse…, Reset. A Cancel button is therefore written `ButtonRole::Dismi
 and needs no handler of its own — the role is the behaviour, and a button whose
 only instruction was "not the default" used to be an inert control.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="181-206" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="202-227" -->
 ```cpp
     help->set_bounds(Rect{33, 14, 12, 2});
     help->on_press = [this] { present_help(); };
@@ -241,7 +241,7 @@ currently permitted. Here Step 1 is unavailable until Name has text; entering
 `Ada` produces the enabled state shown below. The predicate is reevaluated from
 the actual control state, so a caller does not manually synchronize a button.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="151-156" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="172-177" -->
 ```cpp
     spin_box_ = spin.get();
     content->add_child(std::move(spin));

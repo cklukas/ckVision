@@ -1,0 +1,22 @@
+ckvision-golden 1
+frame 16 7
+cursor hidden
+styles 1
+0 fg default bg default attrs -
+grid
+|A�[2JB          |
+|C�]52;c;aGk=�D  |
+|E�31mF          |
+|G�H�I�J         |
+|K�L�M           |
+|N�2JO�P         |
+|Q�R�S��T        |
+stylemap
+|0000000000000000|
+|0000000000000000|
+|0000000000000000|
+|0000000000000000|
+|0000000000000000|
+|0000000000000000|
+|0000000000000000|
+end

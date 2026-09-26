@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "cvision/core/terminal_subsession.hpp"
+#include "cvision/ui/command.hpp"
 #include "cvision/ui/view.hpp"
 
 namespace ckv::widgets {
@@ -43,6 +44,17 @@ public:
     void set_parent_escape(KeyChord chord) { parent_escape_ = std::move(chord); }
     const KeyChord& parent_escape() const noexcept { return parent_escape_; }
     std::function<void()> on_parent_escape;
+    // Makes the parent escape a command instead: the view reserves whichever
+    // chord the Application's registry binds to `command` when a key arrives
+    // (CommandRegistry::chord_for_command) and runs the command through
+    // Application::execute_command on its press. A rebind therefore moves the
+    // reserved key with it, and every menu or status item presenting the
+    // command names the key that actually works here. While the command has
+    // no chord the view reserves none. kInvalidCommand, the default, returns
+    // to the fixed chord and on_parent_escape above. Takes effect once the
+    // view is attached under an Application.
+    void set_parent_escape_command(ui::CommandId command) noexcept { parent_escape_command_ = command; }
+    ui::CommandId parent_escape_command() const noexcept { return parent_escape_command_; }
     // Keys offered to the host once the child is gone.
     //
     // A terminal view writes what it is given to its child. When the
@@ -127,10 +139,10 @@ public:
     void set_cell_metrics(PixelSize cell_pixels);
     void draw(scene::Painter& painter) override;
     // In order: on_key_after_exit once the child has exited or failed; the
-    // parent escape chord, always consumed (on_parent_escape fires on its
-    // press only); unmodified PageUp and PageDown on the primary screen,
-    // which page the history by the view's height less one row and are
-    // consumed with their releases; everything else goes to the child as
+    // parent escape chord, always consumed (on_parent_escape, or the parent
+    // escape command, runs on its press only); unmodified PageUp and
+    // PageDown on the primary screen, which page the history by the view's
+    // height less one row and are consumed with their releases; everything else goes to the child as
     // send_key would send it, and is consumed exactly when it produced bytes.
     bool on_key(const KeyEvent& event) override;
     // Releases arrive on their own route (they must never look like a
@@ -195,6 +207,10 @@ private:
 
     core::TerminalSubsession* session_;
     KeyChord parent_escape_{Key::Char, Modifier::Ctrl | Modifier::Alt, " "};
+    ui::CommandId parent_escape_command_ = ui::kInvalidCommand;
+    // Whether `chord` is the parent escape right now: the command's bound
+    // chord when one is set, the fixed chord otherwise.
+    bool is_parent_escape(const KeyChord& chord) const;
     PixelSize cell_pixels_{};
     int scrollback_offset_ = 0;
     // History length at the last change notification. A reader scrolled back

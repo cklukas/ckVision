@@ -3,8 +3,12 @@
 #include "cvision/widgets/canvas.hpp"
 
 #include "cvision/testing/cktest.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
+#include "cvision/term/headless_terminal.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
 
@@ -342,4 +346,73 @@ CK_TEST(without_a_fallback_painter_the_canvas_still_names_itself) {
     Painter painter(s, Rect{0, 0, 20, 3});
     canvas.draw(painter);
     CK_CHECK(s.at(ckv::Point{0, 0}).grapheme() == "[");
+}
+
+// --- Mouse: image-local mapping -----------------------------------------
+
+CK_TEST(image_pixel_at_maps_through_the_terminal_cell_metric_to_the_backing_image_the_canvas_fills) {
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 12}, ckv::term::headless_no_graphics_profile());  // 9 x 18 cells
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    auto owned = std::make_unique<Canvas>();
+    Canvas* const canvas = owned.get();
+    canvas->set_bounds(Rect{2, 1, 10, 4});
+    // A backing image sized by a 2 x 3 metric the application chose, shown
+    // over the terminal's own 9 x 18 cells: 20 x 12 pixels over 90 x 72.
+    canvas->set_cell_metrics(PixelSize{2, 3});
+    // Placed inside a container: a direct child of the root is laid out to fill it.
+    app.root().add_child(std::make_unique<ckv::ui::View>())->add_child(std::move(owned));
+    CK_CHECK(canvas->pixel_size() == (PixelSize{20, 12}));
+    ckv::MouseEvent event{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{2, 1}, ckv::PixelPoint{18, 18},
+                          Modifier::None};
+    CK_CHECK(canvas->image_pixel_at(event) == (ckv::PixelPoint{0, 0}));
+    event.pixel = ckv::PixelPoint{18 + 89, 18 + 71};
+    CK_CHECK(canvas->image_pixel_at(event) == (ckv::PixelPoint{19, 11}));
+    event.pixel = ckv::PixelPoint{18 + 45, 18 + 30};  // floor(45 * 20 / 90), floor(30 * 12 / 72)
+    CK_CHECK(canvas->image_pixel_at(event) == (ckv::PixelPoint{10, 5}));
+    event.pixel = ckv::PixelPoint{18 + 90, 18};
+    CK_CHECK(!canvas->image_pixel_at(event).has_value());
+    event.pixel.reset();
+    CK_CHECK(!canvas->image_pixel_at(event).has_value());
+}
+
+CK_TEST(a_scripted_canvas_redraws_at_its_new_pixel_size_and_forwards_both_coordinate_spaces) {
+    // Application-level script: step() is what draws the canvas, a resize
+    // between two steps redraws it at the new pixel size, and a click
+    // dispatched with pixels arrives at on_click with both of its spaces.
+    ckv::term::HeadlessTerminal term(ckv::Size{20, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* canvas = app.root().add(std::make_unique<Canvas>());
+    canvas->set_bounds(Rect{2, 1, 4, 3});
+    canvas->set_cell_metrics(PixelSize{2, 3});
+    int calls = 0;
+    PixelSize seen;
+    canvas->set_draw_callback([&](ckv::Image& image) {
+        ++calls;
+        seen = image.size();
+    });
+    std::vector<ckv::MouseEvent> clicks;
+    canvas->on_click = [&](const ckv::MouseEvent& event) { clicks.push_back(event); };
+    app.step(0);
+    CK_CHECK(calls == 1);
+    CK_CHECK(seen == (PixelSize{8, 9}));
+    app.step(0);
+    CK_CHECK(calls == 1);  // nothing changed, nothing redrawn
+
+    canvas->set_bounds(Rect{2, 1, 5, 4});
+    app.step(0);
+    CK_CHECK(calls == 2);
+    CK_CHECK(seen == (PixelSize{10, 12}));
+
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{3, 2},
+                                          ckv::PixelPoint{7, 5}, Modifier::None}));
+    CK_CHECK(clicks.size() == 1U);
+    if (!clicks.empty()) {
+        CK_CHECK(clicks[0].cell == (ckv::Point{3, 2}));
+        CK_CHECK(clicks[0].pixel.has_value());
+        if (clicks[0].pixel) CK_CHECK(clicks[0].pixel->x == 7 && clicks[0].pixel->y == 5);
+    }
 }

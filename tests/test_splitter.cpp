@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: MIT
 #include "cvision/widgets/splitter.hpp"
 
+#include "cvision/term/headless_terminal.hpp"
 #include "cvision/testing/cktest.hpp"
+#include "cvision/ui/application.hpp"
 #include "cvision/scene/painter.hpp"
 #include "cvision/scene/surface.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/desktop.hpp"
 
 using ckv::Key;
 using ckv::KeyChord;
@@ -414,4 +417,46 @@ CK_TEST(a_hidden_pane_takes_no_room_and_leaves_no_divider_behind) {
 
     splitter.first()->set_visible(false);
     CK_CHECK(splitter.second()->bounds() == (Rect{0, 0, 21, 5}));
+}
+
+CK_TEST(a_scripted_splitter_moves_its_divider_by_keys_and_by_a_dispatched_drag) {
+    // Application-level script: the splitter holds the focus in a real
+    // Application, on a Desktop that repaints what its panes leave bare;
+    // arrows and a press-move-release on the divider reach it through
+    // dispatch, and step() shows the divider where they left it.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 12});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* desktop = app.root().add(std::make_unique<ckv::widgets::Desktop>(app.root().bounds()));
+    auto* splitter = desktop->add(std::make_unique<Splitter>(
+        Rect{0, 0, 21, 10}, std::make_unique<MinSizedView>(3), std::make_unique<MinSizedView>(3)));
+    int reported = 0;
+    splitter->on_split_moved = [&] { ++reported; };
+    app.set_focus(splitter);
+    app.step(0);
+    const auto divider_at = [&](int x) { return app.composed_surface().at(ckv::Point{x, 4}).grapheme() == "│"; };
+    CK_CHECK(splitter->split_position() == 10);
+    CK_CHECK(divider_at(10));
+
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}}));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Left, Modifier::None, ""}}));
+    app.step(0);
+    CK_CHECK(splitter->split_position() == 8);
+    CK_CHECK(divider_at(8));
+    CK_CHECK(!divider_at(10));
+
+    CK_CHECK(app.dispatch(mouse(ckv::MouseAction::Down, 8, 4)));
+    app.dispatch(mouse(ckv::MouseAction::Move, 15, 4));
+    app.dispatch(mouse(ckv::MouseAction::Up, 15, 4));
+    app.step(0);
+    CK_CHECK(splitter->split_position() == 15);
+    CK_CHECK(divider_at(15));
+    // The drag obeys the second pane's minimum as the keys do.
+    app.dispatch(mouse(ckv::MouseAction::Down, 15, 4));
+    app.dispatch(mouse(ckv::MouseAction::Move, 20, 4));
+    app.dispatch(mouse(ckv::MouseAction::Up, 20, 4));
+    CK_CHECK(splitter->split_position() == 17);
+    CK_CHECK(reported >= 3);
 }

@@ -33,7 +33,7 @@ hard floor.
 | `control` | sets a value of the reader's (D-076) | `focused`, `disabled` | `disabled` differs from `normal` |
 | `text` | shows caller text | `wide`, `narrow` | — |
 | `window` | window chrome | `active`, `inactive` | — |
-| `raster` | draws pictures | `sixel`, `no-graphics` | `sixel` decodes pixels identical across schemes; `no-graphics` leaves the plane empty |
+| `raster` | draws pictures | `sixel`, `no-graphics`, and a symbolic scene dump for every state | `sixel` decodes pixels identical across schemes; `no-graphics` leaves the plane empty; the `sixel` scene records a raster and equals the `no-graphics` scene |
 
 The difference rules are what make a state's name a claim about its picture.
 A `disabled` state that renders exactly like `normal` fails the gate, as does a
@@ -49,6 +49,12 @@ before the matrix was committed.
   line (type, reason);
 - `<Element>/<state>.<scheme>.dump`: the terminal's visible cells after the
   presenter, in the [golden format](../docs/golden-format.md);
+- `<Element>/<state>.<scheme>.scene`: for every state of a raster element, the
+  composed frame before the presenter, captured with
+  `scene::capture_frame(app.compositor(), app.current_cursor())` so that it
+  carries a `raster` record for each visible, occlusion-sliced picture (the
+  symbolic oracle of the golden format's
+  [raster records](../docs/golden-format.md#raster-records-versus-rendered-graphics-captures));
 - `<Element>/<state>.rgba`: the decoded Sixel plane of a raster state, written
   once because the generator fails unless all four schemes decoded the same
   plane.
@@ -70,7 +76,12 @@ build-owned scratch and fails unless:
    both;
 3. every element has every state its traits require, in all four schemes, with
    a decoded plane for each Sixel state;
-4. the difference rules above hold.
+4. the difference rules above hold;
+5. every state of a raster element has a symbolic scene dump in all four
+   schemes, no other element has one, and in every scheme the `sixel` scene
+   records at least one raster and is byte-identical to the `no-graphics`
+   scene. The same script composes the same scene under either profile; only
+   the presenter decides whether pixels cover the fallback (D-080).
 
 It prints the element, state, file, and exemption counts and a manifest
 SHA-256 so hosts can be compared by one line.
@@ -85,6 +96,14 @@ ARM64 179/179, Windows ARM64 166/166. `appearance_matrix` regenerated the same
 manifest, SHA-256
 `a7b48279b05e9b4b95cfa436c3df5466870fc2b8668d68dbfe17e9228bbd4619`, on all
 three hosts.
+
+The symbolic raster scenes then added 92 files: the 23 states of ImageView (4),
+Canvas (4), FlowView (7) and TerminalView (8), in four schemes each. The tree
+is now 1,651 pinned files (1,553 cell dumps, 92 symbolic scenes, six decoded
+Sixel planes, and the catalog), manifest SHA-256
+`fe005c36566b22211c56c875b3fe7babeef603310c4642c53dc90368b1a4e692` on macOS
+ARM64. The three-host record for this manifest is taken with the change that
+lands it.
 
 ## Findings
 

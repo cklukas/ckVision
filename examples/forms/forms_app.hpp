@@ -46,6 +46,8 @@ public:
     widgets::Button* dialog_button() const noexcept { return dialog_button_; }
     widgets::Button* message_button() const noexcept { return message_button_; }
     widgets::Button* help_button() const noexcept { return help_button_; }
+    // The command that opens the forms help topic, from the Help menu or its chord.
+    ui::CommandId forms_help_command() const noexcept { return forms_help_command_; }
 
     void present_profile_dialog();
     void present_info_message();
@@ -67,6 +69,7 @@ private:
 
     ui::Application& app_;
     ui::StandardRoles roles_;
+    ui::CommandId forms_help_command_ = ui::kInvalidCommand;
 
     widgets::Desktop* desktop_ = nullptr;
     widgets::Window* window_ = nullptr;

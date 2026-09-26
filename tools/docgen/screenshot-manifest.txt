@@ -15,6 +15,7 @@ hello-menu-open
 editor-initial
 editor-json
 editor-search
+editor-replace
 editor-close-confirm
 terminal-initial
 terminal-initial-dark

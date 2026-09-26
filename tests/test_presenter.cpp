@@ -639,35 +639,6 @@ CK_TEST(moving_an_active_raster_repaints_its_old_cells_and_removes_stale_virtual
     CK_CHECK(term.display().raster_plane().pixel(18, 0).a == 255);
 }
 
-// --- OSC safety ------------------------------------------------------------------
-
-CK_TEST(sanitize_osc_text_strips_embedded_terminator_bytes) {
-    CK_CHECK(sanitize_osc_text("hello") == "hello");
-    CK_CHECK(sanitize_osc_text(std::string_view("a\x1B" "b\x07" "c")) == "abc");
-}
-
-CK_TEST(sanitize_osc_text_strips_every_c1_string_terminator_and_control) {
-    // ECMA-48 §8.3.143: ST is ESC \ in a 7-bit code and 09/12 in an 8-bit
-    // one, and §8.3.89 admits no other control into a command string. A
-    // UTF-8 receiver meets C1 as the code points U+0080..U+009F, and a lone
-    // 0x9C is not UTF-8 at all — neither may reach the OSC as the byte 0x9C
-    // or as U+009C. CAN and SUB cancel a sequence in progress (xterm control
-    // sequences, "Single-character functions"), so they end a title too.
-    const std::string raw_st = sanitize_osc_text(std::string_view("a\x9C" "b"));
-    CK_CHECK(raw_st.find('\x9C') == std::string::npos);
-    CK_CHECK(raw_st.front() == 'a' && raw_st.back() == 'b');
-    CK_CHECK(sanitize_osc_text(std::string_view("a\xC2\x9C" "b")) == "ab");      // U+009C, ST
-    CK_CHECK(sanitize_osc_text(std::string_view("a\xC2\x9B" "b")) == "ab");      // U+009B, CSI
-    CK_CHECK(sanitize_osc_text(std::string_view("a\x18" "b\x1A" "c\x7F" "d")) == "abcd");
-    CK_CHECK(sanitize_osc_text(std::string_view("tab\there\nnext")) == "tabherenext");
-    // Text is left alone, including characters whose encoding contains a
-    // 0x80..0x9F continuation byte: U+201C is E2 80 9C.
-    CK_CHECK(sanitize_osc_text("\xE2\x80\x9C" "quoted" "\xE2\x80\x9D") == "\xE2\x80\x9C" "quoted" "\xE2\x80\x9D");
-    CK_CHECK(sanitize_osc_text("gr\xC3\xBC\xC3\x9F" "e") == "gr\xC3\xBC\xC3\x9F" "e");
-}
-
-CK_TEST(sanitize_osc_text_empty_input) { CK_CHECK(sanitize_osc_text("").empty()); }
-
 // --- Moving a raster ------------------------------------------------------
 
 namespace {

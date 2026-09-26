@@ -112,6 +112,29 @@ CK_TEST(the_cursor_row_shows_the_full_highlight_only_while_the_list_holds_focus)
     CK_CHECK(surface.at(ckv::Point{0, 0}).style() == f.theme.resolve(f.roles.list_selected_inactive));
 }
 
+CK_TEST(row_text_stops_short_of_the_scrollbar_column_without_splitting_a_wide_glyph) {
+    // WP-30. The bar is a child and paints over the last column after the
+    // rows, so a wide glyph whose second half would lie under it is left out
+    // whole rather than cut in two. Without a bar the column is the text's.
+    Fixture f;
+    auto list = make_list(f);
+    list.set_context(f.ctx());
+    list.on_attached();
+    list.set_items({"AB\xE4\xB8\xAD"});  // AB + U+4E2D: the ideograph needs columns 2 and 3
+    list.set_bounds(Rect{0, 0, 4, 1});
+    ckv::scene::Surface surface(ckv::Size{4, 1}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    ckv::scene::Painter painter(surface, Rect{0, 0, 4, 1});
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{1, 0}).grapheme() == "B");
+    CK_CHECK(surface.at(ckv::Point{2, 0}).grapheme() == " ");
+    CK_CHECK(!surface.at(ckv::Point{3, 0}).is_continuation());
+
+    list.set_scrollbar_policy(ckv::widgets::ScrollbarPolicy::Hidden);
+    list.draw(painter);
+    CK_CHECK(surface.at(ckv::Point{2, 0}).grapheme() == "\xE4\xB8\xAD");
+    CK_CHECK(surface.at(ckv::Point{3, 0}).is_continuation());
+}
+
 CK_TEST(a_cursor_placed_before_layout_is_revealed_once_the_list_has_a_height) {
     // Placed while the list had no size, the cursor is shown when the size
     // arrives — from the top when it fits, rather than scrolled as though
@@ -831,4 +854,57 @@ CK_TEST(a_styled_row_still_shows_the_cursor_and_the_selection) {
     CK_CHECK(surface.at(ckv::Point{0, 0}).style().fg == highlight.fg);
     CK_CHECK(surface.at(ckv::Point{0, 0}).style().bg == highlight.bg);
     list.clear_model();
+}
+
+CK_TEST(a_scripted_list_view_searches_walks_and_activates_by_key_and_by_timed_double_click) {
+    // Application-level script: the list holds the focus in a real
+    // Application; typed letters, arrows, Enter and two presses on one row
+    // reach it through dispatch, timed by the application's own clock.
+    HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock(1'000'000'000);
+    Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* list = app.root().add(std::make_unique<ListView>());
+    list->set_bounds(Rect{0, 0, 12, 4});
+    list->set_items({"apple", "banana", "cherry", "date", "elder", "fig"});
+    std::vector<std::size_t> activated;
+    list->on_activate = [&](std::size_t index) { activated.push_back(index); };
+    app.set_focus(list);
+    app.step(0);
+    const auto row = [&](int y) {
+        std::string out;
+        for (int x = 0; x < 12; ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    };
+
+    CK_CHECK(app.dispatch(key(Key::Char, "c")));
+    CK_CHECK(list->cursor() == 2);
+    CK_CHECK(app.dispatch(key(Key::End)));
+    app.step(0);
+    CK_CHECK(list->cursor() == 5);
+    CK_CHECK(row(3).starts_with("fig"));  // scrolled to keep the cursor in view
+    CK_CHECK(app.dispatch(key(Key::Up)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK((activated == std::vector<std::size_t>{4}));
+
+    CK_CHECK(app.dispatch(key(Key::Home)));
+    app.step(0);
+    const auto press_row = [&](int y) {
+        app.dispatch(click(ckv::Point{1, y}));
+        app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{1, y},
+                                     std::nullopt, Modifier::None});
+    };
+    press_row(1);
+    CK_CHECK(list->cursor() == 1);
+    clock.advance(100'000'000);
+    press_row(1);
+    CK_CHECK((activated == std::vector<std::size_t>{4, 1}));
+    // Too slow a second press only moves the cursor.
+    clock.advance(2'000'000'000);
+    press_row(2);
+    clock.advance(2'000'000'000);
+    press_row(2);
+    CK_CHECK(list->cursor() == 2);
+    CK_CHECK(activated.size() == 2U);
 }

@@ -518,3 +518,52 @@ CK_TEST(backspace_and_delete_over_an_empty_selection_edit_the_text_in_one_undo_s
     CK_CHECK(memo.text() == "abc");
     CK_CHECK(!memo.undo());
 }
+
+CK_TEST(a_scripted_memo_edits_scrolls_copies_and_undoes_through_dispatched_keys) {
+    // Application-level script: text, keys and clipboard chords reach the
+    // memo through Application::dispatch, and step() shows the lines they
+    // leave on screen, including after a page of vertical scrolling.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* memo = app.root().add(std::make_unique<Memo>());
+    memo->set_bounds(Rect{0, 0, 20, 4});
+    app.set_focus(memo);
+    app.step(0);
+
+    CK_CHECK(app.dispatch(ckv::TextEvent{"first line"}));
+    for (int line = 2; line <= 9; ++line) {
+        CK_CHECK(app.dispatch(key(Key::Enter)));
+        CK_CHECK(app.dispatch(ckv::TextEvent{"line " + std::to_string(line)}));
+    }
+    app.step(0);
+    // The caret is on the last line, so the view has scrolled down to it.
+    CK_CHECK(memo->cursor() == (MemoPosition{8, 6}));
+    CK_CHECK(row_text(app.composed_surface(), 3).find("line 9") != std::string::npos);
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") == std::string::npos);
+
+    CK_CHECK(app.dispatch(key(Key::Home, Modifier::Ctrl)));
+    app.step(0);
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") != std::string::npos);
+    CK_CHECK(app.dispatch(key(Key::PageDown)));
+    app.step(0);
+    CK_CHECK(memo->cursor().line > 0);
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") == std::string::npos);
+
+    // Shift selection and the shared clipboard chords.
+    CK_CHECK(app.dispatch(key(Key::Home, Modifier::Ctrl)));
+    CK_CHECK(app.dispatch(key(Key::End, Modifier::Shift)));
+    CK_CHECK(app.dispatch(ctrl_char("c")));
+    CK_CHECK(app.clipboard_text() == "first line");
+
+    // Ctrl+Backspace takes a whole word, and Ctrl+Z puts it back.
+    CK_CHECK(app.dispatch(key(Key::End)));
+    CK_CHECK(app.dispatch(key(Key::Backspace, Modifier::Ctrl)));
+    CK_CHECK(memo->text().starts_with("first \nline 2"));
+    CK_CHECK(app.dispatch(ctrl_char("z")));
+    app.step(0);
+    CK_CHECK(memo->text().starts_with("first line\nline 2"));
+    CK_CHECK(row_text(app.composed_surface(), 0).find("first line") != std::string::npos);
+}

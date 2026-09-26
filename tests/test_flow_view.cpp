@@ -246,3 +246,50 @@ CK_TEST(the_current_link_is_marked_only_while_the_view_holds_the_keyboard) {
     view.draw(painter);
     CK_CHECK(ckv::has_attr(surface.at(ckv::Point{0, 0}).style().attrs, ckv::Attr::Reverse));
 }
+
+CK_TEST(a_scripted_flow_view_scrolls_and_activates_links_by_key_by_click_and_by_wheel) {
+    // Application-level script: keys, clicks and the wheel reach the view
+    // through Application::dispatch, and step() shows where it scrolled to.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* view = app.root().add(std::make_unique<FlowView>());
+    view->set_bounds(Rect{0, 0, 20, 3});
+    FlowDocument document;
+    document.blocks.push_back(FlowBlock{{FlowText{"See ", ckv::Attr{}, std::nullopt},
+                                         FlowText{"docs", ckv::Attr{}, std::string("docs")},
+                                         FlowText{" or ", ckv::Attr{}, std::nullopt},
+                                         FlowText{"faq", ckv::Attr{}, std::string("faq")}}});
+    for (int block = 2; block <= 6; ++block)
+        document.blocks.push_back(FlowBlock{{FlowText{"block " + std::to_string(block), ckv::Attr{}, std::nullopt}}});
+    view->set_document(std::move(document));
+    std::vector<std::string> activated;
+    view->on_link_activate = [&](const std::string& target) { activated.push_back(target); };
+    app.set_focus(view);
+    app.step(0);
+    const auto row = [&](int y) { return row_text(app.composed_surface(), y); };
+    CK_CHECK(row(0).starts_with("See docs or faq"));
+
+    // Tab walks the links and Enter follows the current one.
+    CK_CHECK(app.dispatch(key(Key::Tab)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK((activated == std::vector<std::string>{"faq"}));
+    // A click follows the link under the pointer.
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{5, 0},
+                                          std::nullopt, Modifier::None}));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{5, 0}, std::nullopt,
+                                 Modifier::None});
+    CK_CHECK((activated == std::vector<std::string>{"faq", "docs"}));
+
+    CK_CHECK(app.dispatch(key(Key::End)));
+    app.step(0);
+    CK_CHECK(row(2).starts_with("block 6"));
+    CK_CHECK(row(0).find("docs") == std::string::npos);
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp, ckv::Point{3, 1},
+                                          std::nullopt, Modifier::None}));
+    CK_CHECK(app.dispatch(key(Key::Home)));
+    app.step(0);
+    CK_CHECK(row(0).starts_with("See docs or faq"));
+}

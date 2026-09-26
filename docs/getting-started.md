@@ -16,6 +16,12 @@ tested, and screenshot from the exact same object graphs documented here.
 
 ## Build the library and examples
 
+You need a C++20 compiler, CMake 3.25 or later, and Python 3. A top-level
+configure builds the test suite by default, and its gates run Python scripts,
+so CMake stops without a Python 3 interpreter. To build only the library and
+the examples, configure with `-DCKVISION_BUILD_TESTING=OFF`, which needs no
+Python.
+
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8

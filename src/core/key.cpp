@@ -61,6 +61,9 @@ constexpr std::array<NamedKey, 35> kNamedKeys{{
 }};
 
 
+// The spelling of the space bar's Key::Char chord, both ways.
+constexpr std::string_view kSpaceName = "Space";
+
 struct ModifierToken {
     Modifier flag;
     std::string_view name;
@@ -102,7 +105,12 @@ std::string format(const KeyChord& chord) {
         }
     }
     if (chord.key == Key::Char) {
-        out += chord.text.size() == 1 ? ascii_upper(chord.text) : chord.text;
+        // A space is a key a reader presses, but as text it would vanish
+        // from every hint that shows it; it is spelled by name.
+        if (chord.text == " ")
+            out += kSpaceName;
+        else
+            out += chord.text.size() == 1 ? ascii_upper(chord.text) : chord.text;
     } else {
         out += key_name(chord.key);
     }
@@ -137,6 +145,9 @@ std::optional<KeyChord> KeyChord::parse(std::string_view text) {
         // chord naming one would be a binding that can never fire.
         if (is_standalone_key(*named)) return std::nullopt;
         result.key = *named;
+    } else if (ascii_iequals(remaining, kSpaceName)) {
+        result.key = Key::Char;
+        result.text = " ";
     } else {
         const std::vector<std::string_view> graphemes = text::split_graphemes(remaining);
         // Not a known name, and not a single character either.

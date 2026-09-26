@@ -59,6 +59,7 @@ SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const Ben
     // program. A number nobody can interpret is not information, and the
     // interpretation is what these topics are.
     app_.set_help_provider([this](const std::string& key) {
+        help_.add_topic("sysinfo.benchmarks", benchmarks_help_topic());
         auto presentation = widgets::present_help_viewer(help_, key, app_, *desktop_, roles_);
         presentation.set_completion_handler([](widgets::HelpViewerResult) {});
     });
@@ -120,9 +121,10 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId benchmarks_command = app_.commands().declare(
         {.key = std::string(kBenchmarksWindowKey), .title = "&Benchmarks", .category = "Benchmarks",
          .handler = [this] { open_benchmarks_window(); }});
-    const ui::CommandId run_command = app_.commands().declare(
+    run_command_ = app_.commands().declare(
         {.key = std::string(kRunBenchmarksKey), .title = "&Run selected", .category = "Benchmarks", .chord = "F9",
          .handler = [this] { start_benchmarks(); }});
+    const ui::CommandId run_command = run_command_;
     const ui::CommandId plot_command = app_.commands().declare(
         {.key = std::string(kLatencyPlotKey), .title = "Cache latency &plot", .category = "Benchmarks",
          .handler = [this] { open_latency_plot_window(); }});
@@ -495,7 +497,7 @@ void SysInfoApp::open_benchmarks_window() {
     for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
         labels.emplace_back(descriptor.title);
     auto picker = std::make_unique<widgets::CheckGroup>(std::move(labels));
-    picker->set_group_label("Measure  (F9 runs, Esc cancels)");
+    benchmark_picker_ = picker.get();
     for (std::size_t index = 0; index < benchmark_catalogue().size(); ++index) picker->set_checked(index, true);
     picker->set_help_context_key("sysinfo.benchmarks");
     // The option group's focused colour fills its whole rect, and an item
@@ -504,7 +506,6 @@ void SysInfoApp::open_benchmarks_window() {
     // across the window. Aligned to the start, it is as wide as its longest
     // label and sits ON the page instead of covering it. The same is true
     // of the combo below.
-    benchmark_picker_ = picker.get();
     column->add_item(std::move(picker),
                      ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::Start});
 
@@ -526,7 +527,6 @@ void SysInfoApp::open_benchmarks_window() {
 
 
     auto chart = std::make_unique<BarChartView>();
-    chart->set_placeholder("No measurements yet - press F9 to run.");
     chart->set_help_context_key("sysinfo.benchmarks");
     // Fixed, not Expanding: the chart's paper is its own colour, and a
     // chart stretched to the height of the window is a rectangle of that
@@ -534,6 +534,7 @@ void SysInfoApp::open_benchmarks_window() {
     // reads as a panel ON the page, which is what the tools this follows
     // drew. The slack goes to the item below.
     chart_ = chart.get();
+    show_run_chord();
     column->add_item(std::move(chart), ui::LayoutSpec{ui::SizePolicy::Fixed});
 
     // The chart's counterpart on the page that measures. It holds the same
@@ -956,26 +957,48 @@ void SysInfoApp::install_help() {
                                        "a Canvas in pixels or fall back to cells -- and it is about the terminal, "
                                        "not about the machine.",
                                        {{"sysinfo.benchmarks", "Benchmarks"}}});
-    help_.add_topic("sysinfo.benchmarks",
-                    widgets::HelpTopic{"Benchmarks",
-                                       "Select what to measure, press F9, and press Esc to stop. Each kernel runs "
-                                       "a fixed quantum of work several times and the fastest pass is reported: "
-                                       "the slow passes are the ones something else on the machine interrupted."
-                                       "\n\nThe index is this program's own scale, printed under the chart. Bars "
-                                       "drawn solid were measured here; shaded bars are published ceilings or "
-                                       "perfect results, which nobody measured. An unoptimized build marks every "
-                                       "bar it measured with an asterisk, because its numbers describe the build.",
-                                       {{"sysinfo.integer", "Integer mix"},
-                                        {"sysinfo.float", "Floating point"},
-                                        {"sysinfo.memory-bandwidth", "Memory bandwidth"},
-                                        {"sysinfo.latency", "Cache latency"},
-                                        {"sysinfo.scaling", "Thread scaling"}}});
+    help_.add_topic("sysinfo.benchmarks", benchmarks_help_topic());
     for (const BenchmarkDescriptor& descriptor : benchmark_catalogue())
         help_.add_topic("sysinfo." + std::string(descriptor.key),
                         widgets::HelpTopic{std::string(descriptor.title),
                                            std::string(descriptor.explanation) + "\n\nMeasured in " +
                                                std::string(descriptor.rate_unit) + ".",
                                            {{"sysinfo.benchmarks", "Benchmarks"}}});
+}
+
+widgets::HelpTopic SysInfoApp::benchmarks_help_topic() const {
+    const std::string run = app_.commands().chord_text(run_command_);
+    return widgets::HelpTopic{"Benchmarks",
+                              "Select what to measure, " +
+                                  (run.empty() ? std::string("choose Benchmarks > Run selected")
+                                               : "press " + run) +
+                                  ", and press Esc to stop. Each kernel runs "
+                                  "a fixed quantum of work several times and the fastest pass is reported: "
+                                  "the slow passes are the ones something else on the machine interrupted."
+                                  "\n\nThe index is this program's own scale, printed under the chart. Bars "
+                                  "drawn solid were measured here; shaded bars are published ceilings or "
+                                  "perfect results, which nobody measured. An unoptimized build marks every "
+                                  "bar it measured with an asterisk, because its numbers describe the build.",
+                              {{"sysinfo.integer", "Integer mix"},
+                               {"sysinfo.float", "Floating point"},
+                               {"sysinfo.memory-bandwidth", "Memory bandwidth"},
+                               {"sysinfo.latency", "Cache latency"},
+                               {"sysinfo.scaling", "Thread scaling"}}};
+}
+
+// The picker's caption and the empty chart say which key starts a run. Both
+// are text a widget holds, so they are re-stated whenever the registry has
+// changed since they were written: when the window opens, and on the refresh
+// tick that already keeps everything else on screen current.
+void SysInfoApp::show_run_chord() {
+    run_chord_revision_ = app_.commands().revision();
+    const std::string run = app_.commands().chord_text(run_command_);
+    if (benchmark_picker_ != nullptr)
+        benchmark_picker_->set_group_label(run.empty() ? std::string("Measure  (Esc cancels)")
+                                                       : "Measure  (" + run + " runs, Esc cancels)");
+    if (chart_ != nullptr)
+        chart_->set_placeholder(run.empty() ? std::string("No measurements yet - choose Run selected.")
+                                            : "No measurements yet - press " + run + " to run.");
 }
 
 std::string SysInfoApp::report_text(ReportFormat format) const {
@@ -1012,6 +1035,7 @@ void SysInfoApp::save_report_with_dialog(ReportFormat format) {
 
 void SysInfoApp::refresh() {
     ++refresh_count_;
+    if (app_.commands().revision() != run_chord_revision_) show_run_chord();
     if (system_table_ != nullptr) fill_system_table();
     if (memory_table_ != nullptr) fill_memory_pane();
     if (volumes_table_ != nullptr) fill_volumes_table();

@@ -4,8 +4,15 @@
 // Renders the appearance matrix (appearance_matrix.hpp) into a directory:
 //
 //   <out>/catalog.txt                      what was rendered, and what was exempt
-//   <out>/<Element>/<state>.<scheme>.dump  the terminal's visible cells
-//   <out>/<Element>/<state>.rgba           a Sixel state's decoded pixel plane
+//   <out>/<Element>/<state>.<scheme>.dump   the terminal's visible cells
+//   <out>/<Element>/<state>.<scheme>.scene  a raster element's composed scene,
+//                                           with its `raster` records
+//   <out>/<Element>/<state>.rgba            a Sixel state's decoded pixel plane
+//
+// The `.dump` is what the presenter put on the terminal; the `.scene` is the
+// symbolic oracle one step earlier (docs/golden-format.md), captured from the
+// compositor so that the occlusion-sliced pictures are in it. Every state of
+// a raster-bearing element has one.
 //
 // A Sixel state's picture does not depend on the scheme, so it is written
 // once, and this generator fails unless all four schemes decoded exactly the
@@ -104,6 +111,10 @@ void render(const std::filesystem::path& root, const std::optional<std::filesyst
                 const std::string where = element.name + '/' + state.name + '.' + std::string(scheme_name(scheme));
                 write_text(directory / (state.name + '.' + std::string(scheme_name(scheme)) + ".dump"),
                            visible_cells(display));
+                if (element.traits.raster)
+                    write_text(directory / (state.name + '.' + std::string(scheme_name(scheme)) + ".scene"),
+                               golden::serialize(scene::capture_frame(stage.app().compositor(),
+                                                                      stage.app().current_cursor())));
                 if (previews) {
                     std::filesystem::create_directories(*previews / element.name);
                     write_text(*previews / element.name / (state.name + '.' + std::string(scheme_name(scheme)) + ".svg"),

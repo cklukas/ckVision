@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 
+#include "cvision/core/text.hpp"
 #include "cvision/term/virtual_display.hpp"
 #include "fuzz_common.hpp"
 
@@ -20,5 +21,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     }
     (void)display.finish();
     ckv::fuzz::require(display.pixel_size() == ckv::PixelSize{720, 432});
+    // Whatever the stream, the title the model accepted is one a host could
+    // not have misread: nothing text::sanitize_osc_text would remove.
+    ckv::fuzz::require(ckv::text::sanitize_osc_text(display.window_title()) == display.window_title());
     return 0;
 }

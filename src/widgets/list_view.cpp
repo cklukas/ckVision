@@ -271,6 +271,11 @@ ScrollbarPolicy ListView::scrollbar_policy() const noexcept {
     return scrollbar_ != nullptr ? scrollbar_->policy() : ScrollbarPolicy::Always;
 }
 
+int ListView::text_columns() const noexcept {
+    if (scrollbar_ == nullptr || !scrollbar_->should_show()) return bounds().width;
+    return scrollbar_->bounds().x;
+}
+
 void ListView::on_resized() {
     if (scrollbar_ == nullptr) return;
     scrollbar_->set_bounds(Rect{std::max(0, bounds().width - 1), 0, std::min(1, bounds().width), bounds().height});
@@ -443,7 +448,8 @@ void ListView::draw(scene::Painter& painter) {
             style.attrs |= Attr::Underline;
         if (!enabled) style = accent_style(style, disabled);
         painter.fill(Rect{0, row, bounds().width, 1}, Cell::from_grapheme(" ", style));
-        if (item.id != kInvalidListItemId) painter.draw_text(Point{0, row}, item.text, style);
+        if (item.id != kInvalidListItemId)
+            painter.draw_text(Point{0, row}, text::clip_to_width(item.text, text_columns()), style);
     }
 }
 

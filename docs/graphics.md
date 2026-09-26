@@ -21,7 +21,7 @@ documented cell fallback instead of a blank area.
 The same app gives each view a click callback and switches pages through a
 normal `TabControl`:
 
-<!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="50-105" -->
+<!-- ckvision-snippet source="examples/graphics/graphics_app.cpp" lines="50-113" -->
 ```cpp
 
     auto status = std::make_unique<widgets::StatusLine>();
@@ -48,7 +48,12 @@ void GraphicsApp::build_window() {
     auto image = std::make_unique<widgets::ImageView>();
     image->set_bounds(Rect{1, 2, 54, 10});
     image->set_image(demo_image_);
-    image->on_click = [this](const MouseEvent&) { ++image_clicks_; };
+    // Every event carries the cell and, where the terminal reports pixels,
+    // the pixel position; the view maps the latter into the picture.
+    image->on_click = [this](const MouseEvent& event) {
+        ++image_clicks_;
+        last_image_pointer_ = PointerReport{event, image_view_->image_pixel_at(event)};
+    };
     image_view_ = image.get();
     image_page->add_child(std::move(image));
 
@@ -73,7 +78,10 @@ void GraphicsApp::build_window() {
             }
         }
     });
-    canvas->on_click = [this](const MouseEvent&) { ++canvas_clicks_; };
+    canvas->on_click = [this](const MouseEvent& event) {
+        ++canvas_clicks_;
+        last_canvas_pointer_ = PointerReport{event, canvas_->image_pixel_at(event)};
+    };
     canvas_ = canvas.get();
     canvas_page->add_child(std::move(canvas));
 
@@ -90,6 +98,22 @@ For a Canvas, set cell metrics before drawing so cell and raster geometry agree.
 The callback receives its target image; do not bypass the view to write terminal
 protocol directly. Mouse events reach `on_click`; pixel coordinates are
 available only when the injected terminal capability advertises pixel mouse.
+
+Every event carries its cell, and its pixel position within the terminal's text
+area whenever the terminal reports pixels (SGR-Pixels). To know which pixel of
+the picture the pointer is on, ask the view: `ImageView::image_pixel_at(event)`
+maps the reported pixel through the image's centred anchor and the terminal's
+cell metric, and `Canvas::image_pixel_at(event)` maps it onto the backing image
+the canvas fills — sized by `set_cell_metrics()`, but shown over the terminal's
+own cells. Both are `MouseEvent::image_pixel(area, cell_pixels, image_pixels)`
+for the view's geometry, which an application drawing a picture of its own calls
+directly. The answer is the source pixel the presenter samples at that screen
+pixel, so what the reader points at and what the application hit-tests agree.
+It is empty when the terminal reported cells only — a picture pixel is never
+estimated from a cell — and when the pointer is beside the picture. The Graphics
+example records both coordinate spaces and the mapped pixel for every event its
+two views receive, and its smoke suite drives them with SGR-Pixels reports
+through a `HeadlessTerminal` whose profile has `pixel_mouse` set.
 The HeadlessTerminal captures above test both Sixel and no-graphics profiles
 through Presenter bytes and a virtual display, rather than reading image memory.
 

@@ -85,11 +85,13 @@ public:
     // contract violation: its error() is printed to stderr and the process fails its
     // assertion, in every build type.
     void write(std::string_view bytes) override;
-    void set_title(std::string_view title) override { title_ = std::string(title); }
+    // Writes the same OSC 0 sequence a live backend sends (osc_title_sequence), so
+    // written_bytes() holds exactly what a host would be given and the display checks it.
+    void set_title(std::string_view title) override;
     void bell() override { ++bell_count_; }
-    void write_clipboard(std::string_view text) override {
-        if (caps_.clipboard_write) clipboard_ = std::string(text);
-    }
+    // While clipboard_write is effective, writes the OSC 52 export a live POSIX backend sends
+    // (osc_clipboard_sequence); otherwise does nothing.
+    void write_clipboard(std::string_view text) override;
 
     // --- Scripting interface (tests / recorded scripts) -------------
     // Decodes raw host bytes (keys, mouse reports, probe replies) as if read at `now_nanos`
@@ -140,13 +142,14 @@ public:
     // not touch the display.
     std::string_view written_bytes() const noexcept { return written_; }
     void clear_written() noexcept { written_.clear(); }
-    // The last title set; empty until set_title() is called.
-    const std::string& title() const noexcept { return title_; }
+    // The window title as the host received it (display().window_title()): the last title
+    // set, with every control and malformed byte already removed. Empty until one is set.
+    const std::string& title() const noexcept { return display_.window_title(); }
     // How many times bell() has been called.
     int bell_count() const noexcept { return bell_count_; }
-    // The last text write_clipboard() accepted (only while clipboard_write is effective);
-    // empty until one is accepted.
-    const std::string& clipboard() const noexcept { return clipboard_; }
+    // The last text write_clipboard() exported (only while clipboard_write is effective), as
+    // the host decoded it (display().clipboard_text()); empty until one is exported.
+    const std::string& clipboard() const noexcept { return display_.clipboard_text(); }
     // The screen model fed by write(). The mutable overload lets a test reset or feed it
     // directly; the terminal keeps using the same display afterwards.
     const VirtualDisplay& display() const noexcept { return display_; }
@@ -164,9 +167,7 @@ private:
     InputDecoder decoder_;
     VirtualDisplay display_;
     std::string written_;
-    std::string title_;
     int bell_count_ = 0;
-    std::string clipboard_;
     std::vector<TerminalEvent> pending_events_;
 
     void enqueue_decoded(std::vector<TerminalEvent> decoded);

@@ -3,10 +3,18 @@
 # Performance verification
 
 ckVision treats the machine-independent half of its performance charter as a
-correctness property. `scene_budget_gate` runs `cvision_bench` in CTest and
+correctness property. `scene_budget_gate` runs `cvision_bench --gate` in CTest and
 fails if a warmed compositor touches a cell on an unchanged frame, more than
 one cell after a single-cell content change, or a complete retained Window
-move exceeds its 696-cell / 6,272-byte caps. The instrumented
+move (`retained_window_move`) exceeds its 696-cell / 6,272-byte caps. It
+fails as well if a resize-drag step (`retained_window_resize`) repaints any
+Window other than the resized one, repaints that one other than exactly once,
+or exceeds 532 cells / 4,096 bytes. That benchmark drives the drag as a reader
+does: a press on the resize grip and pointer motion injected through
+`HeadlessTerminal`, alternating a 30x10 window with its 36x13 size beside a
+peer window. 532 cells is the 38x14 rectangle around the larger size and its
+shadow; a measured step touches 528 cells and emits at most 3,737 bytes. The
+instrumented
 `warmed_*allocate_nothing*` tests replace allocation only inside the test
 executable and verify, after warm-up, that compositor, raster-layer movement,
 Presenter, focused and pointer dispatch, traversal, due-timer delivery, and
@@ -14,12 +22,24 @@ posted-work draining perform no ordinary heap allocation. This instrumentation
 is test-only; it does not introduce a library global or alter client allocation
 behavior.
 
+`--gate` runs each benchmark only four times: every iteration checks its
+budgets, so four visits every state an alternating benchmark cycles through,
+and the gate stays fast under Debug and sanitizer builds. The timed run, with
+each benchmark's full iteration count, is `cmake --build build --target
+bench_smoke_run`.
+
 `Application::last_compose_cells_touched()`,
 `Application::last_bytes_emitted()`, `Desktop::last_content_repaints()`, and
 `Window::content_repaint_count()` are the deterministic per-frame counters
 used by interaction tests and benchmarks. A move must repaint no Window
 content and compose only the old/new window rectangles and their shadows; a
-resize may repaint only the resized Window's local backing. The same retained
+resize may repaint only the resized Window's local backing. The pointer paths
+are gated the same way in `test_application_render.cpp`:
+`dragging_a_window_recomposes_without_repainting_its_retained_content` for a
+title-bar drag, and `grip_dragging_a_window_repaints_only_its_retained_subtree`
+for a grip drag. In the grip drag, every press, motion and release step
+repaints the resized window once and its peer never, within a cells-touched
+bound. The same retained
 rule applies to popups: a same-size move is layer composition only, whereas
 their own content invalidation and a resize repaint that popup's backing.
 

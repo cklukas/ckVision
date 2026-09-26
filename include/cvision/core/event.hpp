@@ -83,6 +83,25 @@ struct MouseEvent {
     // only Shift, Alt and Ctrl: mouse reports carry no Super bit.
     Modifier modifiers = Modifier::None;
 
+    // The image-local mapping (D-018): the pixel of a picture `image_pixels` in size, shown
+    // scaled over the frame-absolute cells `area` of a terminal whose cell is `cell_pixels`,
+    // that is on screen at the reported pixel position. It is the source pixel the presenter
+    // samples there, so a click and the picture agree. Empty without a reported pixel
+    // position (it is never estimated from `cell`), when any extent or the metric is not
+    // positive, and when the reported pixel lies outside `area`.
+    std::optional<PixelPoint> image_pixel(Rect area, PixelSize cell_pixels, PixelSize image_pixels) const noexcept {
+        if (!pixel || area.width <= 0 || area.height <= 0 || cell_pixels.width <= 0 || cell_pixels.height <= 0 ||
+            image_pixels.width <= 0 || image_pixels.height <= 0)
+            return std::nullopt;
+        const std::int64_t shown_width = std::int64_t{area.width} * cell_pixels.width;
+        const std::int64_t shown_height = std::int64_t{area.height} * cell_pixels.height;
+        const std::int64_t x = std::int64_t{pixel->x} - std::int64_t{area.x} * cell_pixels.width;
+        const std::int64_t y = std::int64_t{pixel->y} - std::int64_t{area.y} * cell_pixels.height;
+        if (x < 0 || y < 0 || x >= shown_width || y >= shown_height) return std::nullopt;
+        return PixelPoint{static_cast<int>(x * image_pixels.width / shown_width),
+                          static_cast<int>(y * image_pixels.height / shown_height)};
+    }
+
     // Memberwise equality, including whether `pixel` is present.
     friend bool operator==(const MouseEvent&, const MouseEvent&) = default;
 };

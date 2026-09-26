@@ -595,10 +595,39 @@ void TodoApp::build_board_window() {
 }
 
 void TodoApp::install_help() {
+    add_help_topics();
+    app_.set_help_provider([this](const std::string& key) {
+        show_help_topic(key.empty() ? "todo.board" : key);
+    });
+}
+
+std::string TodoApp::key_phrases(const std::vector<std::pair<ui::CommandId, std::string>>& phrases,
+                                 std::string_view separator, std::string_view last_separator) const {
+    std::vector<std::string> bound;
+    for (const auto& [command, phrase] : phrases) {
+        const std::string chord = app_.commands().chord_text(command);
+        if (!chord.empty()) bound.push_back(chord + " " + phrase);
+    }
+    std::string text;
+    for (std::size_t index = 0; index < bound.size(); ++index) {
+        if (index != 0) text += index + 1 == bound.size() ? last_separator : separator;
+        text += bound[index];
+    }
+    return text;
+}
+
+void TodoApp::add_help_topics() {
+    const ui::StandardCommands& standard = app_.commands().standard();
+    const std::string task_keys = key_phrases({{add_task_command_, "adds"},
+                                               {edit_task_command_, "edits"},
+                                               {edit_note_command_, "opens a note"},
+                                               {archive_task_command_, "archives"},
+                                               {move_task_command_, "starts and finishes move mode"}},
+                                              ", ", ", and ");
     help_.add_topic("todo.board", widgets::HelpTopic{
                                       "TODO board",
-                                      "Use Up/Down to select a task and Left/Right to change lanes. F2 adds, F3 edits, "
-                                      "F4 opens a note, F8 archives, and F9 or Enter starts and finishes move mode.",
+                                      "Use Up/Down to select a task and Left/Right to change lanes." +
+                                          (task_keys.empty() ? std::string{} : " " + task_keys + "."),
                                       {{"todo.tasks", "Tasks"}, {"todo.moving", "Moving"},
                                        {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"},
                                        {"todo.keyboard", "Keyboard"}, {"todo.persistence", "Persistence"}}});
@@ -610,9 +639,13 @@ void TodoApp::install_help() {
                                                              {{"todo.board", "Board"}, {"todo.boards", "Boards"}}});
     help_.add_topic("todo.note", widgets::HelpTopic{"Notes", "Note windows are modeless. Editing coalesces for 150 ms and closing flushes pending text.",
                                                      {{"todo.board", "Board"}}});
+    const std::string lane_keys = key_phrases({{lane_actions_command_, "opens lane actions."}}, "", "");
     help_.add_topic("todo.lanes", widgets::HelpTopic{
                                       "Lanes",
-                                      "F7 opens lane actions. Lanes can be renamed, colored, sorted, inserted, merged, or archived. Only Manual sorting permits reordering.",
+                                      (lane_keys.empty() ? std::string{"The Lane menu holds the lane actions."}
+                                                         : lane_keys) +
+                                          " Lanes can be renamed, colored, sorted, inserted, merged, or archived. "
+                                          "Only Manual sorting permits reordering.",
                                       {{"todo.board", "Board"}, {"todo.keyboard", "Keyboard"}}});
     help_.add_topic("todo.boards", widgets::HelpTopic{
                                        "Boards",
@@ -620,25 +653,36 @@ void TodoApp::install_help() {
                                        {{"todo.board", "Board"}, {"todo.persistence", "Persistence"}}});
     help_.add_topic("todo.keyboard", widgets::HelpTopic{
                                          "Keyboard reference",
-                                         "F1 Help; F2 Add; F3 Edit; F4 Note; F5 Zoom; F6 Next window; F7 Lane actions; F8 Archive; F9 Move; F10 Menu. Delete removes permanently. m selects a Board; Esc cancels.",
+                                         key_phrases({{standard.help, "Help"},
+                                                      {add_task_command_, "Add"},
+                                                      {edit_task_command_, "Edit"},
+                                                      {edit_note_command_, "Note"},
+                                                      {standard.zoom, "Zoom"},
+                                                      {standard.next_window, "Next window"},
+                                                      {lane_actions_command_, "Lane actions"},
+                                                      {archive_task_command_, "Archive"},
+                                                      {move_task_command_, "Move"},
+                                                      {standard.menu, "Menu"}},
+                                                     "; ", "; ") +
+                                             ". Delete removes permanently. m selects a Board; Esc cancels.",
                                          {{"todo.board", "Board"}, {"todo.lanes", "Lanes"}, {"todo.boards", "Boards"}}});
-    app_.set_help_provider([this](const std::string& key) {
-        show_help_topic(key.empty() ? "todo.board" : key);
-    });
 }
 
 void TodoApp::show_help_topic(std::string key) {
+    add_help_topics();
     help_viewer_ = widgets::present_help_viewer(help_, std::move(key), app_, *desktop_, roles_);
 }
 
 void TodoApp::show_about() {
+    const std::string help = app_.commands().chord_text(app_.commands().standard().help);
     about_box_ = widgets::present_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Info, "About ckVision TODO",
          ckv::examples::about_text(
              "ckVision TODO " + std::string(ckv::version_string()) + "\n" +
              options_.workspace_description +
-             "\n\nChanges save automatically. F1 opens contextual help."),
+             "\n\nChanges save automatically." +
+             (help.empty() ? std::string{} : " " + help + " opens contextual help.")),
          widgets::MessageBoxButtons::Ok});
     about_box_->set_completion_handler([](widgets::MessageBoxResult) {});
 }

@@ -1,0 +1,16 @@
+ckvision-golden 1
+frame 8 4
+cursor hidden
+styles 1
+0 fg #FFFFFF bg #AA0000 attrs -
+grid
+|80x24   |
+|        |
+|        |
+|        |
+stylemap
+|00000000|
+|00000000|
+|00000000|
+|00000000|
+end

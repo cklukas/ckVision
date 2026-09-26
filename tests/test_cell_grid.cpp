@@ -569,3 +569,50 @@ CK_TEST(a_second_press_on_the_same_cell_within_the_interval_activates) {
     CK_CHECK((model.cursor() == GridPosition{0, 0}));
     CK_CHECK(activated == 2);
 }
+
+CK_TEST(a_scripted_cell_grid_is_walked_selected_and_activated_through_dispatched_input) {
+    // Application-level script: the grid sits in a real Application, and
+    // every key, press, drag and wheel turn reaches it through dispatch. The
+    // clock that times the double click is the application's own.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock(1'000'000'000);
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    MaterializedCellGridModel model = small_table();
+    auto* grid = app.root().add(std::make_unique<CellGrid>());
+    grid->set_bounds(Rect{0, 0, 20, 5});
+    grid->set_model(model);
+    int activated = 0;
+    std::vector<std::string> typed;
+    grid->on_activate = [&] { ++activated; };
+    grid->on_type_ahead = [&](const std::string& text) { typed.push_back(text); };
+    app.set_focus(grid);
+    app.step(0);
+
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Right, Modifier::Shift)));
+    CK_CHECK((model.cursor() == GridPosition{1, 1}));
+    CK_CHECK((model.selection() == GridRange{{1, 0}, {1, 1}}));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK(activated == 1);
+    CK_CHECK(app.dispatch(key(Key::Char, Modifier::None, "q")));
+    CK_CHECK((typed == std::vector<std::string>{"q"}));
+
+    // A press places the cursor, a drag extends from it, and a second press
+    // on the same cell within the interval activates it.
+    CK_CHECK(app.dispatch(mouse(ckv::MouseAction::Down, Point{3, 1})));
+    app.dispatch(mouse(ckv::MouseAction::Move, Point{13, 3}));
+    app.dispatch(mouse(ckv::MouseAction::Up, Point{13, 3}));
+    app.step(0);
+    CK_CHECK((model.selection() == GridRange{{0, 0}, {2, 2}}));
+    clock.advance(100'000'000);
+    app.dispatch(mouse(ckv::MouseAction::Down, Point{13, 3}));
+    app.dispatch(mouse(ckv::MouseAction::Up, Point{13, 3}));
+    clock.advance(100'000'000);
+    app.dispatch(mouse(ckv::MouseAction::Down, Point{13, 3}));
+    app.dispatch(mouse(ckv::MouseAction::Up, Point{13, 3}));
+    app.step(0);
+    CK_CHECK(activated == 2);
+    CK_CHECK((model.cursor() == GridPosition{2, 2}));
+}

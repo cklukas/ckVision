@@ -1,0 +1,31 @@
+ckvision-golden 1
+frame 24 8
+cursor hidden
+styles 7
+0 fg #CDCDCD bg #F5F5F5 attrs -
+1 fg #141414 bg #CDCDCD attrs bold
+2 fg #DC5A5A bg #CDCDCD attrs bold
+3 fg #141414 bg #E1E1E1 attrs bold
+4 fg #141414 bg #E1E1E1 attrs -
+5 fg #141414 bg #CDCDCD attrs -
+6 fg #666666 bg #7A7A7A attrs -
+grid
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+|░╔═[■]══ Help [_][↑]═╗░░|
+|░║Release 0.4       ▲║░░|
+|░║                  █║░░|
+|░║[chart]            ║░░|
+|░║                  ▼║░░|
+|░╚══════════════════─┘░░|
+|░░░░░░░░░░░░░░░░░░░░░░░░|
+stylemap
+|000000000000000000000000|
+|011121111111111211211100|
+|013333333333344444445166|
+|014444444444444444445166|
+|014444444444444444445166|
+|014444444444444444445166|
+|011111111111111111112266|
+|000666666666666666666666|
+raster 1 anchor 2 4 span 8 2 pixels 64 32 hash c3ab07837f0d0a65
+end

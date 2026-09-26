@@ -1482,3 +1482,62 @@ CK_TEST(an_owner_places_the_caret_and_the_selection_goes_with_it) {
     masked.set_cursor(2);
     CK_CHECK(masked.cursor() == 3U);
 }
+
+CK_TEST(a_scripted_input_line_edits_selects_copies_recalls_and_undoes_through_dispatched_keys) {
+    // Application-level script: the field holds the focus in a real
+    // Application and every key reaches it through dispatch. Its history is
+    // the application-scoped registry, shared by key, and what it shows is
+    // read back from the presented frame after step().
+    ckv::term::HeadlessTerminal term(ckv::Size{40, 6});
+    ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    app.history().record("search", "older query");
+    auto* window = app.root().add(std::make_unique<Window>("Find"));
+    window->set_bounds(Rect{0, 0, 40, 6});
+    auto* input = window->content_pane().add(std::make_unique<InputLine>());
+    input->set_bounds(Rect{1, 1, 30, 1});
+    input->set_history(&app.history(), "search");
+    app.set_focus(input);
+    app.step(0);
+    const auto send = [&](Key k, Modifier m = Modifier::None, std::string text = {}) {
+        return app.dispatch(ckv::KeyEvent{KeyChord{k, m, std::move(text)}});
+    };
+    const auto shown = [&] {
+        std::string out;
+        for (int x = 0; x < 40; ++x) out += app.composed_surface().at(Point{x, 2}).grapheme();
+        return out;
+    };
+
+    CK_CHECK(app.dispatch(ckv::TextEvent{"hello brave world"}));
+    // Ctrl+Backspace takes the last word; Ctrl+Left and Shift+End select the
+    // next one back, and Ctrl+C copies it to the application clipboard.
+    CK_CHECK(send(Key::Backspace, Modifier::Ctrl));
+    CK_CHECK(input->text() == "hello brave ");
+    CK_CHECK(send(Key::Left, Modifier::Ctrl));
+    CK_CHECK(send(Key::End, Modifier::Shift));
+    CK_CHECK(send(Key::Char, Modifier::Ctrl, "c"));
+    CK_CHECK(app.clipboard_text() == "brave ");
+    // Insert switches to overwrite, so typing replaces rather than inserts.
+    CK_CHECK(send(Key::Home));
+    CK_CHECK(send(Key::Insert));
+    CK_CHECK(app.dispatch(ckv::TextEvent{"J"}));
+    CK_CHECK(input->text() == "Jello brave ");
+    app.step(0);
+    CK_CHECK(shown().find("Jello brave") != std::string::npos);
+    // Ctrl+Z takes the overwrite back.
+    CK_CHECK(send(Key::Char, Modifier::Ctrl, "z"));
+    CK_CHECK(input->text() == "hello brave ");
+
+    // Up recalls the shared history; Down returns to the live text.
+    CK_CHECK(send(Key::Up));
+    CK_CHECK(input->text() == "older query");
+    app.step(0);
+    CK_CHECK(shown().find("older query") != std::string::npos);
+    CK_CHECK(send(Key::Down));
+    CK_CHECK(input->text() == "hello brave ");
+    input->commit_to_history();
+    CK_CHECK(!app.history().entries("search").empty());
+    CK_CHECK(app.history().entries("search").front() == "hello brave ");
+}

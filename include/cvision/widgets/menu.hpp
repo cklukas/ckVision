@@ -309,7 +309,10 @@ public:
     // opens the highlighted row's submenu, Left closes this menu when it is a
     // submenu, and Esc dismisses it. Right on a row without a submenu, Left on
     // a top-level menu, and every other key are left unhandled so a MenuBar
-    // above can act on them.
+    // above can act on them. While a submenu is open every key goes to the
+    // innermost open menu instead: that is how a context menu, which keeps
+    // the keyboard focus on its root, walks and closes its submenus one level
+    // at a time.
     bool on_key(const KeyEvent& event) override;
     bool on_mouse(const MouseEvent& event) override;
     // Every row in the drop-down invokes or opens something.
@@ -544,8 +547,10 @@ public:
 
     // Replaces the titles. Any open dropdown is closed first, the old
     // Alt+<mnemonic> accelerators are withdrawn and new ones installed (when
-    // attached), and a walk that was past the new last title moves back onto
-    // it. The bar asks its parent to re-lay it out.
+    // attached) unless the titles are the same ones in the same order, in
+    // which case the accelerators already installed are kept, and a walk that
+    // was past the new last title moves back onto it. The bar asks its parent
+    // to re-lay it out.
     void set_menus(std::vector<MenuBarItem> menus);
     const std::vector<MenuBarItem>& menus() const noexcept { return menus_; }
 

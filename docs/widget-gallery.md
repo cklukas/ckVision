@@ -311,7 +311,8 @@ step->set_bounds(Rect{30, 2, 3, 1});
 
 Header: `include/cvision/widgets/canvas.hpp`. Use for deterministic client
 drawn raster content. Set bounds/cell metrics, install a draw callback, and
-use `on_click` for pointer interaction; see [Graphics](graphics.md).
+use `on_click` for pointer interaction; `image_pixel_at()` maps an event's
+reported pixel onto the backing image. See [Graphics](graphics.md).
 
 | Canvas with Sixel graphics | Canvas fallback without terminal graphics |
 | :---: | :---: |
@@ -597,8 +598,8 @@ time->on_change = [](widgets::TimeValue value) { (void)value; };
 ## SpinBox
 
 Header: `include/cvision/widgets/common_components.hpp`. Use for a small
-bounded integer. Set the range before setting the value; arrows and mouse
-controls change it in range.
+bounded integer. Set the range before setting the value; the arrow keys, a
+click on either half of the field and the mouse wheel change it in range.
 
 ![SpinBox numeric input and step controls](generated/screenshots/widget-spinbox.svg)
 
@@ -838,7 +839,7 @@ contextual help. Show it at an explicit point; it is not a focusable dialog.
 The Forms example's exact setup supplies DatePicker, TimePicker, SpinBox,
 Slider, and Wizard with real values and ownership.
 
-<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="119-156" -->
+<!-- ckvision-snippet source="examples/forms/forms_app.cpp" lines="139-177" -->
 ```cpp
     content->add_child(std::move(options));
 
@@ -846,6 +847,7 @@ Slider, and Wizard with real values and ownership.
     mode->set_group_label("Presentation mode");
     mode->set_bounds(Rect{30, 6, 14, 3});
     mode->set_selected(0);
+    mode->set_help_context_key("forms.group");
     mode_ = mode.get();
     content->add_child(std::move(mode));
 
@@ -1278,7 +1280,9 @@ help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result;
 
 Header: `include/cvision/widgets/image_view.hpp`. Use to display an `Image`.
 It renders raster output if the terminal supports it and a cell fallback if it
-does not; [Graphics](graphics.md) shows both captures.
+does not; [Graphics](graphics.md) shows both captures. `on_click` receives
+every mouse event with its cell and any reported pixel, and `image_pixel_at()`
+names the picture pixel under that pixel.
 
 ![ImageView with rendered graphics](generated/screenshots/widget-imageview.svg)
 
@@ -1433,7 +1437,9 @@ command. Focus the control and press Enter or Space to begin capture; the next
 key press becomes its typed `KeyChord`. Escape abandons capture, while
 Backspace or Delete clears a binding. The application owns conflict analysis,
 rebinding, and persistence through its `CommandRegistry`; this widget has no
-keymap or filesystem policy of its own.
+keymap or filesystem policy of its own. The Workbench example's **File → Keys…**
+dialog is a complete rebinding surface built from it: one capture per command,
+each change unbinding the command's chords and binding the captured one.
 
 ![Focused key-chord capture control](generated/screenshots/widget-keychordcapture.svg)
 
@@ -2241,10 +2247,7 @@ term::TerminalSubsession& session = services_.make_subsession
 auto view = std::make_unique<widgets::TerminalView>(session);
 widgets::TerminalView* const terminal_view = view.get();
 view->set_bounds(window->content_rect());
-view->set_parent_escape(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Alt, " "});
-view->on_parent_escape = [this] {
-    if (auto* const menu = dynamic_cast<widgets::MenuBar*>(desktop_->top_dock())) app_.set_focus(menu);
-};
+view->set_parent_escape_command(parent_commands_command_);
 view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
 window->set_content(std::move(view));
 ```
@@ -2938,7 +2941,7 @@ by re-reading the window set as it draws.
 
 The Workbench source shows the text/data family in the exact compiled app:
 
-<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="78-177" -->
+<!-- ckvision-snippet source="examples/workbench/workbench_app.cpp" lines="102-201" -->
 ```cpp
 }
 

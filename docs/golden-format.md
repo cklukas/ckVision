@@ -74,6 +74,27 @@ end
 - At most 62 styles per frame. A later version adds a declared
   multi-character style column width if a real frame ever needs more.
 
+## Script goldens and the presented display
+
+A script golden is the composed frame (`Application::composed_surface()` and
+its cursor) after one step of an event script whose input enters only through
+`HeadlessTerminal` and `Application::step`. Each script has a generator under
+`tools/docgen/generate_*.cpp` that runs the same script and writes the dumps
+into `tests/golden/`; the test compares its own captures with those files, and
+`generated_golden_bytes` regenerates every one of them and compares the bytes
+on each host. A dump may also be a region of the frame: the Layouts container
+suite pins each container family's own rectangle, so a change in one family's
+layout shows up in that family's file alone.
+
+A composed frame says what the application meant to show, not what the
+terminal shows. The resize, window-resize, Layouts, File Browser and
+shrink-storm scripts therefore also check, after every step, that the display
+`HeadlessTerminal` decoded from the bytes actually written equals the composed
+frame cell for cell, so a cell the Presenter left stale after a grow or a
+shrink fails the script even where the golden is right. That comparison runs
+on a TrueColor profile (`headless_no_graphics_profile()`): under a palette
+depth the Presenter rightly writes the nearest index for an RGB style.
+
 ## Raster records versus rendered-graphics captures
 
 The `raster` line is a symbolic scene/compositor oracle. It proves which image
@@ -92,6 +113,15 @@ visible raster slice must be style-preserving blanks—never fallback glyphs—a
 the encoder-produced pixel extent must be fully opaque. The symbolic dump
 remains intentionally diff-friendly; the decoded visual capture tests the
 protocol path it cannot.
+
+A composed frame's `raster` records come from the compositor, not from the
+frame's surface, which holds cells only. For an application, the symbolic
+frame dump is `scene::capture_frame(app.compositor(), app.current_cursor())`:
+one record per visible, occlusion-sliced picture. The appearance matrix
+writes it as `<Element>/<state>.<scheme>.scene` for every state of a
+raster-bearing element, beside that state's post-presenter `.dump`. Its gate
+requires the `sixel` and `no-graphics` scenes to be byte-identical: the
+graphics profile changes what the presenter emits, never the composed scene.
 
 ## Raw terminal-plane companion fixtures
 
@@ -124,6 +154,26 @@ slices reviewable alongside the raw raster plane. The existing small visual
 manifests still pin bounds and hashes as convenient diagnostics; they are not
 the byte-equality oracle.
 
+`generate_event_script_goldens` writes the frames of the event scripts in
+`tools/docgen/event_script.hpp`. An event script is a list of named beats of
+terminal input. Its player injects each event through `HeadlessTerminal`, runs
+`Application::step` for it, and runs one more step once the beat's input is
+consumed, so posted work such as a closed window's detach has run before the
+frame is taken. The generator and the test that owns a script play the same
+beat list, and the test compares the frame of every beat that names a golden
+with the pinned file. The scripts are:
+
+- the M4 form demo (`rootdialog_*.dump`, `tests/test_rootdialog_smoke.cpp`);
+- the M5 close-veto paths (`close_veto_*.dump`,
+  `tests/test_close_veto_scripts.cpp`);
+- the M5 keyboard-only and mouse-only menu scripts (`menu_*.dump`,
+  `tests/test_menu_operability_scripts.cpp`).
+
+Two routes that end on the same frame share one golden. The close control and
+the Close chord both end on `close_veto_refused.dump`, and the keyboard and the
+pointer both open the submenu as `menu_submenu.dump`. `generated_golden_bytes`
+regenerates these frames on every host as well.
+
 ## Virtual-display protocol subset
 
 The virtual display is an intentionally bounded test decoder, not a general
@@ -132,6 +182,15 @@ to emit: ECMA-48 CUP (`CSI H` and `CSI f`), SGR (`CSI m`), ED/EL (`CSI J` and
 `CSI K`), SU/SD (`CSI S` and `CSI T`), and private cursor and synchronized
 output modes (`CSI ?25 h/l`, `CSI ?2026 h/l`). It handles printable UTF-8
 graphemes and rejects every other C0, ESC, CSI, and DCS form.
+
+Its OSC forms are the three a session sends outside its frames, each ended by
+BEL or `ESC \`: OSC 22 (pointer shape), OSC 0 (window title, kept as
+`window_title()`), and OSC 52 on selection `c` (clipboard export, kept decoded
+as `clipboard_text()`). It holds them to the
+[OSC emission safety](terminal-host-integration.md#osc-emission-safety)
+contract: a title carrying any control code point, `DEL`, or malformed UTF-8,
+and a clipboard payload that is not strict RFC 4648 base64, invalidate the
+capture. Every other OSC is rejected.
 
 SGR is the one control it reads sub-parameters in, because it is the one the
 Presenter writes them in: `4:0`–`4:5` for the shape of an underline, `58` and

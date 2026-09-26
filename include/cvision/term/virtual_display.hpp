@@ -24,7 +24,7 @@ namespace ckv::term {
 
 // A strict model of the screen a host would show for a byte stream. It understands exactly
 // the subset ckVision emits (cursor addressing and style, SGR, erase, scroll, DEC modes 25
-// and 2026, DSR, OSC 22 and Sixel) and treats anything else as an error rather than skipping
+// and 2026, DSR, OSC 0, 22 and 52, and Sixel) and treats anything else as an error rather than skipping
 // it, so an emitter that drifts from the model is caught instead of silently tolerated. The
 // first error latches: error() keeps its message and every later feed() fails until clear()
 // or resize().
@@ -60,6 +60,15 @@ public:
     // -- which vocabulary was chosen and which degradation was applied are
     // exactly the things a test needs to be able to see.
     const std::string& pointer_shape_name() const noexcept { return pointer_shape_name_; }
+    // The window title the stream last set with OSC 0, as the host would show it; empty until
+    // one is set. A title holding any control code point, DEL, or malformed UTF-8 is refused
+    // as an error: a host could read such a byte as the sequence's end or as a new control,
+    // and ckVision's emitters never send one (docs/terminal-host-integration.md).
+    const std::string& window_title() const noexcept { return window_title_; }
+    // The text the stream last exported to the clipboard with OSC 52 on selection `c`,
+    // decoded from its base64 payload; empty until one arrives. A payload that is not strict
+    // RFC 4648 base64, or names another selection, is refused as an error.
+    const std::string& clipboard_text() const noexcept { return clipboard_text_; }
 
     // Whether any pixel of the visible raster plane is non-transparent, that is whether a
     // Sixel image is currently on screen. Scans the whole plane.
@@ -89,7 +98,8 @@ public:
     void set_cell_pixels(PixelSize cell_pixels);
     // Blanks both planes, homes the cursor with the default cursor state and style, resets
     // the parser and the Sixel colour registers, and clears a latched error. The last
-    // pointer shape name is kept.
+    // pointer shape name, window title and clipboard text are kept: they are host state
+    // outside the screen.
     void clear();
 
 private:
@@ -152,6 +162,8 @@ private:
     std::string control_buffer_;
     std::string error_;
     std::string pointer_shape_name_;
+    std::string window_title_;
+    std::string clipboard_text_;
     SixelPalette sixel_palette_;
 };
 

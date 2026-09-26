@@ -3,6 +3,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include "cvision/core/image.hpp"
 #include "cvision/ui/application.hpp"
@@ -20,6 +21,14 @@ namespace ckv::graphics {
 
 class GraphicsApp {
 public:
+    // The last mouse event a picture received, in both of its coordinate
+    // spaces as the terminal reported them, and the picture pixel it points
+    // at: what an application that draws or hit-tests in a picture works with.
+    struct PointerReport {
+        MouseEvent event;
+        std::optional<PixelPoint> image_pixel;
+    };
+
     explicit GraphicsApp(ui::Application& app);
 
     widgets::Desktop& desktop() noexcept { return *desktop_; }
@@ -29,6 +38,8 @@ public:
     widgets::Canvas* canvas() const noexcept { return canvas_; }
     int image_clicks() const noexcept { return image_clicks_; }
     int canvas_clicks() const noexcept { return canvas_clicks_; }
+    const std::optional<PointerReport>& last_image_pointer() const noexcept { return last_image_pointer_; }
+    const std::optional<PointerReport>& last_canvas_pointer() const noexcept { return last_canvas_pointer_; }
     const std::shared_ptr<const Image>& demo_image() const noexcept { return demo_image_; }
 
 private:
@@ -46,6 +57,8 @@ private:
     widgets::Canvas* canvas_ = nullptr;
     int image_clicks_ = 0;
     int canvas_clicks_ = 0;
+    std::optional<PointerReport> last_image_pointer_;
+    std::optional<PointerReport> last_canvas_pointer_;
     std::shared_ptr<const Image> demo_image_;
 };
 

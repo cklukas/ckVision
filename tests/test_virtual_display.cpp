@@ -126,7 +126,8 @@ CK_TEST(virtual_display_rejects_sub_parameters_on_controls_that_have_none) {
 
 CK_TEST(virtual_display_rejects_unsupported_output_instead_of_silently_ignoring_it) {
     VirtualDisplay display(Size{2, 2});
-    CK_CHECK(!display.write("\x1B]0;title\x07"));
+    // OSC 2 sets the window title alone; ckVision emits OSC 0 and never OSC 2.
+    CK_CHECK(!display.write("\x1B]2;title\x07"));
     CK_CHECK(!display.valid());
     CK_CHECK(!display.error().empty());
 }

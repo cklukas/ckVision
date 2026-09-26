@@ -390,7 +390,64 @@ CK_TEST(chord_for_command_returns_nullopt_after_its_only_chord_is_unbound) {
     CK_CHECK(!reg.chord_for_command(open).has_value());
 }
 
+CK_TEST(chord_text_spells_the_bound_chord_through_the_formatter_and_is_empty_when_unbound) {
+    CommandRegistry reg;
+    const CommandId open = declare_open(reg, "Open", "File", "Ctrl+O");
+    CK_CHECK(reg.chord_text(open) == "Ctrl+O");
+    reg.set_chord_formatter([](const KeyChord& chord) { return "<" + ckv::format(chord) + ">"; });
+    CK_CHECK(reg.chord_text(open) == "<Ctrl+O>");
+    reg.unbind_key(ctrl_o());
+    CK_CHECK(reg.chord_text(open).empty());
+    CK_CHECK(reg.chord_text(kInvalidCommand).empty());
+}
+
+CK_TEST(revision_moves_on_every_change_a_surface_shows_and_not_on_a_no_op) {
+    CommandRegistry reg;
+    auto moved = [&reg, last = reg.revision()]() mutable {
+        const bool changed = reg.revision() != last;
+        last = reg.revision();
+        return changed;
+    };
+    const CommandId open = declare_open(reg, "Open", "File", "Ctrl+O");
+    CK_CHECK(moved());
+    reg.bind_key(ctrl_o(), open);  // already bound to it: nothing to show
+    CK_CHECK(!moved());
+    const KeyChord f2{Key::F2, Modifier::None, ""};
+    reg.bind_key(f2, open);
+    CK_CHECK(moved());
+    reg.unbind_key(f2);
+    CK_CHECK(moved());
+    reg.unbind_key(f2);  // not bound: nothing changed
+    CK_CHECK(!moved());
+    reg.set_chord_formatter([](const KeyChord& chord) { return ckv::format(chord); });
+    CK_CHECK(moved());
+    declare_open(reg, "&Open...", "File", "Ctrl+O");  // a re-declaration retitles it
+    CK_CHECK(moved());
+    reg.withdraw(open);
+    CK_CHECK(moved());
+    CK_CHECK(reg.find(open) == nullptr);
+    CK_CHECK(reg.chord_text(open).empty());
+    CK_CHECK(!moved());  // a query is not a change
+}
+
 // --- The standard set (M9/WP-12) -------------------------------------------
+
+CK_TEST(the_standard_set_selects_windows_one_to_nine_on_alt_digits) {
+    CommandRegistry reg;
+    const auto& select = reg.standard().select_window;
+    for (std::size_t index = 0; index < select.size(); ++index) {
+        const std::string digit(1, static_cast<char>('1' + index));
+        const auto* info = reg.find(select[index]);
+        CK_CHECK(info != nullptr);
+        CK_CHECK(info->key == ckv::ui::std_command_keys::kSelectWindow[index]);
+        CK_CHECK(info->title == "Window &" + digit);
+        CK_CHECK(info->visibility == CommandVisibility::Hidden);
+        const KeyChord alt_digit{Key::Char, Modifier::Alt, digit};
+        CK_CHECK(reg.command_for_key(alt_digit) == select[index]);
+        CK_CHECK(KeyChord::parse("Alt+" + digit) == alt_digit);
+        CK_CHECK(reg.chord_text(select[index]) == "Alt+" + digit);
+    }
+}
 
 CK_TEST(every_standard_command_is_declared_with_a_title_by_the_constructor) {
     CommandRegistry reg;
@@ -469,15 +526,17 @@ CK_TEST(two_registries_assign_the_same_ids_to_the_same_declaration_order) {
 CK_TEST(all_holds_exactly_the_standard_set_for_a_freshly_constructed_registry) {
     CommandRegistry reg;
     const auto all = reg.all();
-    CK_CHECK(all.size() == 17);
+    CK_CHECK(all.size() == 26);
     CK_CHECK(all.front().id == reg.standard().quit);
     // A new standard command is declared at the END of the constructor, so
     // every command declared before it keeps the id it has always been
     // assigned — which is what lets two registries built the same way still
     // agree, and what keeps a persisted key resolving to the same command.
-    // kMinimize (U4-j) is the most recent one to arrive that way.
-    CK_CHECK(all.back().id == reg.standard().minimize);
-    CK_CHECK(all[all.size() - 2U].id == reg.standard().tile_grid);
+    // The nine select_window commands are the most recent to arrive that
+    // way, after kMinimize (U4-j).
+    CK_CHECK(all.back().id == reg.standard().select_window[8]);
+    CK_CHECK(all[all.size() - 9U].id == reg.standard().select_window[0]);
+    CK_CHECK(all[all.size() - 10U].id == reg.standard().minimize);
 }
 
 CK_TEST(all_returns_every_declared_command_in_declaration_order) {

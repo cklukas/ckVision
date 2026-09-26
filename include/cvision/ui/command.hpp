@@ -12,6 +12,7 @@
 // reasoning behind each — in docs/standard-commands.md.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -169,7 +170,9 @@ struct CommandDescriptor {
 // help = F1, menu = F10, next_window = F6, previous_window =
 // Shift+F6, zoom = F5, close = Alt+F3, quit = Alt+X (already the
 // convention every example independently used before this landed),
-// focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029).
+// focus_next = Tab, focus_previous = Shift+Tab (M9/WP-13, D-029),
+// select_window[0..8] = Alt+1..Alt+9 (the observed classic-desktop
+// convention for naming a window by its number).
 // tile/tile_horizontally/tile_vertically/tile_grid/cascade/window_list/
 // terminal_report/minimize get NO default chord — there is no comparably
 // strong, widely-recognized single-key convention for them; an
@@ -207,7 +210,8 @@ struct CommandDescriptor {
 //     a stale handler.
 //   - quit, close, zoom, minimize, next_window, previous_window, tile,
 //     tile_horizontally, tile_vertically, tile_grid, cascade,
-//     window_list and terminal_report are installed by Desktop::on_attached()
+//     window_list, terminal_report and every select_window entry are
+//     installed by Desktop::on_attached()
 //     under that same has_handler rule — a Desktop is exactly the
 //     thing that owns the windows they act on, and knows the one
 //     cycling order they all share. An application that claims one
@@ -254,6 +258,10 @@ struct StandardCommands {
     // reached from a menu or a key, which is the route a reader has when
     // the window they mean is the one they are working in.
     CommandId minimize = kInvalidCommand;
+    // Activating a window by its number (Desktop::select_by_number):
+    // select_window[0] names window 1 and select_window[8] window 9, in the
+    // Desktop's insertion order — the numbers its window list shows.
+    std::array<CommandId, 9> select_window{};
 };
 
 // The keys the standard set is declared under. Spelled out so a
@@ -282,6 +290,11 @@ inline constexpr std::string_view kWindowList = "ckv.window.list";
 inline constexpr std::string_view kFocusNext = "ckv.focus.next";
 inline constexpr std::string_view kFocusPrevious = "ckv.focus.previous";
 inline constexpr std::string_view kMinimize = "ckv.window.minimize";
+// StandardCommands::select_window's keys, entry for entry: kSelectWindow[0] names window 1.
+inline constexpr std::array<std::string_view, 9> kSelectWindow{
+    "ckv.window.select.1", "ckv.window.select.2", "ckv.window.select.3",
+    "ckv.window.select.4", "ckv.window.select.5", "ckv.window.select.6",
+    "ckv.window.select.7", "ckv.window.select.8", "ckv.window.select.9"};
 }  // namespace std_command_keys
 
 // Instance-owned (D-008). Enablement is a per-command predicate, and named
@@ -415,6 +428,20 @@ public:
     // unaffected: this is display spelling, not a syntax.
     void set_chord_formatter(std::function<std::string(const KeyChord&)> formatter);
     std::string format_chord(const KeyChord& chord) const;
+    // The chord bound to `id` right now (chord_for_command) in that display
+    // spelling, or empty when nothing is bound. This is the text a menu hint,
+    // a status item or an application's own help sentence shows for the
+    // command, so a runtime rebind reaches every one of them alike.
+    std::string chord_text(CommandId id) const;
+
+    // Counts every change to what a surface shows for a command: a
+    // declaration, re-declaration or withdrawal, a chord bound or unbound,
+    // and a new chord formatter. Application compares it once per frame and
+    // repaints when it has moved, which is how a runtime rebind reaches the
+    // menus and status lines already on screen; anything else that keeps
+    // chord text of its own compares it the same way. The value itself
+    // means nothing beyond "different from before".
+    std::uint64_t revision() const noexcept { return revision_; }
 
     // Handler dispatch (M9/WP-10 — moved here from Application, whose
     // set_command_handler/execute_command now just forward, so
@@ -447,6 +474,7 @@ private:
     std::vector<std::pair<ContextScopeId, std::string>> active_contexts_;
     std::function<std::string(const KeyChord&)> chord_formatter_;
     StandardCommands standard_;
+    std::uint64_t revision_ = 0;
     ContextScopeId next_context_scope_id_ = 1;
     std::int32_t next_command_id_ = 1;
 };

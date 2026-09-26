@@ -599,10 +599,11 @@ private:
 };
 
 // A one-row integer field drawn as "< 42 >". Up or Right steps the value up,
-// Down or Left steps it down, and a left click on the right half of the field
-// steps up, on the left half down. Where the field is too narrow the arrows
-// are dropped first, and a number that still does not fit is elided, never
-// cut.
+// Down or Left steps it down, a left click on the right half of the field
+// steps up, on the left half down, and the wheel steps up when turned away
+// from the reader and down when turned toward. Where the field is too narrow
+// the arrows are dropped first, and a number that still does not fit is
+// elided, never cut.
 //
 // Resolves "ckv.input.normal", "ckv.input.focused" and "ckv.input.disabled"
 // on attach.

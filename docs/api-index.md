@@ -166,6 +166,7 @@ your host. [Platform services](platform-services.md) covers the boundary.
 | `include/cvision/term/file_trace_sink.hpp` | `FileTraceSink`, the live file or stderr sink for a graphics trace | [Graphics](graphics.md) |
 | `include/cvision/term/headless_terminal.hpp` | deterministic `HeadlessTerminal` test host | [Terminal host integration](terminal-host-integration.md) |
 | `include/cvision/term/input_decoder.hpp` | `InputDecoder` and capability-update policy | [Input decoder](input-decoder.md) |
+| `include/cvision/term/osc_sequences.hpp` | the window-title (OSC 0) and clipboard-export (OSC 52) sequences every VT backend sends | [Terminal host integration](terminal-host-integration.md#osc-emission-safety) |
 | `include/cvision/term/pointer_shape_names.hpp` | pointer-shape protocol names and support map | [Terminal capability profiles](terminal-profiles.md) |
 | `include/cvision/term/posix_clock.hpp` | `PosixClock` | [Platform services](platform-services.md) |
 | `include/cvision/term/posix_filesystem.hpp` | `PosixFileSystem` | [Platform services](platform-services.md) |

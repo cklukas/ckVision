@@ -132,6 +132,11 @@ void Canvas::draw(scene::Painter& painter) {
                        });
 }
 
+std::optional<PixelPoint> Canvas::image_pixel_at(const MouseEvent& event) const noexcept {
+    if (context().app == nullptr || image_ == nullptr) return std::nullopt;
+    return event.image_pixel(absolute_bounds(), context().app->terminal_cell_pixels(), image_->size());
+}
+
 bool Canvas::on_mouse(const MouseEvent& event) {
     if (on_click) on_click(event);
     return true;

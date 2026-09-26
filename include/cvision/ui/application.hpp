@@ -134,13 +134,20 @@ public:
     // comment). kHardFloorSize itself is still large enough to render.
     bool terminal_too_small() const noexcept;
 
-    // The full composed Surface (raster regions included) and cursor
-    // state behind current_frame() — for golden-dump testing
-    // (scene::capture() needs a Surface, not just a FrameView) and the
-    // same documentation-tooling use case current_frame() itself
-    // exists for. Not part of the interactive rendering path.
+    // The composed Surface and cursor state behind current_frame() — for
+    // golden-dump testing (scene::capture() needs a Surface, not just a
+    // FrameView) and the same documentation-tooling use case
+    // current_frame() itself exists for. Not part of the interactive
+    // rendering path. The surface holds the frame's cells only: the
+    // pictures in the frame are compositor().visible_rasters().
     const scene::Surface& composed_surface() const noexcept { return compositor_.frame(); }
     CursorState current_cursor() const noexcept { return compositor_.cursor(); }
+    // The compositor that produced composed_surface(), for the same tooling:
+    // scene::capture_frame(app.compositor(), app.current_cursor()) is the
+    // frame's symbolic golden dump with a `raster` record for every visible,
+    // occlusion-sliced picture, which a capture of composed_surface() alone
+    // cannot contain. Not part of the interactive rendering path.
+    const scene::Compositor& compositor() const noexcept { return compositor_; }
 
     // How a cast shadow offsets, and how it restyles what it falls on.
     // The default halves each channel, which reads as a soft dimming
@@ -709,6 +716,10 @@ private:
     static bool is_ancestor_of(const View& ancestor, const View& descendant) noexcept;
     bool in_modal_scope(const View& view) const noexcept;
     void restore_modal_focus_if_needed();
+    // Repaints the whole tree when commands_.revision() has moved since the
+    // last check: every surface that shows a command's chord or title
+    // composes it while drawing, so a rebind reaches them by redrawing.
+    void repaint_if_commands_changed();
     void apply_deferred_focus_request();
 
     View* topmost_view_at(Point absolute_point) noexcept;
@@ -773,6 +784,7 @@ private:
     RoleRegistry roles_;
     Theme theme_{roles_};
     CommandRegistry commands_;
+    std::uint64_t painted_command_revision_ = 0;
     // Owned child sessions. A slot may be empty: releasing one from inside a
     // change notification cannot erase from a vector a loop is walking, so it
     // empties the slot and the next step() compacts.

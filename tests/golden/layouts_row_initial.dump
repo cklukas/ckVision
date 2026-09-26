@@ -1,0 +1,15 @@
+ckvision-golden 1
+frame 30 3
+cursor hidden
+styles 2
+0 fg #FFFFFF bg #0000AA attrs bold
+1 fg #000000 bg #C8C8C8 attrs -
+grid
+|                              |
+|Row expands with margins      |
+|                              |
+stylemap
+|000000000000000000000000000000|
+|111011111111111111111111000000|
+|000000000000000000000000000000|
+end

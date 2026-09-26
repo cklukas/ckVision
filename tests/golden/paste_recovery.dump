@@ -1,0 +1,22 @@
+ckvision-golden 1
+frame 24 6
+cursor hidden
+styles 3
+0 fg default bg default attrs -
+1 fg #55FFFF bg #0000AA attrs -
+2 fg #55FFFF bg #0000AA attrs reverse
+grid
+|                        |
+|                        |
+| safe�[201~�            |
+|                        |
+|                        |
+|                        |
+stylemap
+|000000000000000000000000|
+|000000000000000000000000|
+|011111111111211111111110|
+|000000000000000000000000|
+|000000000000000000000000|
+|000000000000000000000000|
+end

@@ -131,6 +131,9 @@ private:
     int input_fd_;
     Capabilities observed_caps_;
     Capabilities caps_;
+    // The state the session's D-024 ledger enters and restores: the initial profile, with
+    // the kitty stack entry this session currently holds on the host.
+    Capabilities session_caps_;
     CapabilityOverrides overrides_;
     InputDecoder decoder_;
     Size last_size_;
@@ -175,6 +178,9 @@ private:
     // all-keys-as-escape-codes without associated text (D-055).
     void negotiate_kitty_enhancements();
     void maybe_demote_kitty_keyboard();
+    // Records `flags` as this session's kitty stack entry and republishes its enter and
+    // restore ledger, so suspend, resume, a crash and a normal exit all agree with the host.
+    void record_kitty_stack_entry(int flags);
 };
 
 }  // namespace ckv::term

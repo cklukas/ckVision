@@ -396,9 +396,13 @@ TodoWorkspace TodoWorkspace::empty() {
 ModelResult<TodoWorkspace> TodoWorkspace::guided(const AuditStamp& stamp) {
     WorkspaceSnapshot snapshot = empty().snapshot();
     snapshot.next_task_id = 4;
-    snapshot.tasks = {guided_task(TaskId{1}, "Add your first task", "Press F2 or Insert", stamp),
-                      guided_task(TaskId{2}, "Open contextual help", "Press F1 anywhere", stamp),
-                      guided_task(TaskId{3}, "Try move mode", "Select a task and press F9", stamp)};
+    // The guidance is saved with the workspace and outlives any keymap, so
+    // it names the menu entry rather than a key: a key written into a task
+    // would still be advertised after the reader had rebound it. The menus
+    // and the status line show whatever chord each command has now.
+    snapshot.tasks = {guided_task(TaskId{1}, "Add your first task", "Tasks > Add task", stamp),
+                      guided_task(TaskId{2}, "Open contextual help", "Help > Context Help", stamp),
+                      guided_task(TaskId{3}, "Try move mode", "Tasks > Move task", stamp)};
     snapshot.boards.front().lanes[0].task_ids = {TaskId{1}};
     snapshot.boards.front().lanes[1].task_ids = {TaskId{2}};
     snapshot.boards.front().lanes[2].task_ids = {TaskId{3}};

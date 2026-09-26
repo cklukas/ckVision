@@ -135,6 +135,23 @@ CK_TEST(legacy_alt_key_encoding) {
     CK_CHECK(has_modifier(as_key(events[0]).chord.modifiers, Modifier::Alt));
 }
 
+CK_TEST(alt_digits_decode_to_the_chords_the_standard_window_selection_binds) {
+    // Legacy ESC-prefix and kitty CSI-u (Alt is modifier value 3) must both
+    // reach the Alt+1..Alt+9 that select_window is bound to.
+    for (char digit = '1'; digit <= '9'; ++digit) {
+        const auto expected = KeyChord::parse(std::string("Alt+") + digit);
+        CK_CHECK(expected.has_value());
+        const auto legacy = decode_all(std::string("\x1B") + digit);
+        CK_CHECK(legacy.size() == 1);
+        CK_CHECK(as_key(legacy[0]).chord == *expected);
+        Capabilities caps = baseline_capabilities();
+        caps.keyboard_protocol = KeyboardProtocol::Kitty;
+        const auto kitty = decode_all("\x1B[" + std::to_string(static_cast<int>(digit)) + ";3u", caps);
+        CK_CHECK(kitty.size() == 1);
+        CK_CHECK(as_key(kitty[0]).chord == *expected);
+    }
+}
+
 CK_TEST(double_escape_resolves_the_first_as_escape_immediately) {
     const auto events = decode_all(std::string_view("\x1B\x1B" "A", 3));
     CK_CHECK(events.size() == 2);
@@ -643,6 +660,13 @@ CK_TEST(bracketed_paste_sanitizes_hostile_control_bytes) {
     CK_CHECK(events.size() == 1);
     CK_CHECK(as_text(events[0]).from_paste);
     CK_CHECK(as_text(events[0]).text == "a\xEF\xBF\xBD" "b");  // BEL replaced with U+FFFD
+}
+
+CK_TEST(bracketed_paste_replaces_delete_which_a_line_discipline_reads_as_erase) {
+    const auto events = decode_all(std::string_view("\x1B[200~rm -rf x\x7F\x7F" "tmp\x1B[201~"));
+    CK_CHECK(events.size() == 1);
+    CK_CHECK(as_text(events[0]).from_paste);
+    CK_CHECK(as_text(events[0]).text == "rm -rf x\xEF\xBF\xBD\xEF\xBF\xBD" "tmp");
 }
 
 CK_TEST(bracketed_paste_preserves_tab_and_newline) {

@@ -65,4 +65,13 @@ std::string sanitize_display_text(std::string_view text);
 // malformed UTF-8, is replaced with U+FFFD exactly as above.
 std::string sanitize_clipboard_text(std::string_view text);
 
+// Makes `text` safe to embed in an OSC command string: a window title or a
+// hyperlink target (ARCHITECTURE.md §12: every OSC emission escapes or rejects
+// terminator bytes). Every C0 and C1 control code point, DEL included, is
+// dropped (ESC, BEL, CAN, SUB and U+009C ST among them), and malformed UTF-8,
+// a lone 0x9C included, becomes U+FFFD. The result is well-formed UTF-8 in
+// which no 7-bit, 8-bit or UTF-8 spelling of a string terminator survives.
+// docs/terminal-host-integration.md#osc-emission-safety lists every emitter.
+std::string sanitize_osc_text(std::string_view text);
+
 }  // namespace ckv::text

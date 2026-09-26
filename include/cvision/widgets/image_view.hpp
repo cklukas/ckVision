@@ -23,6 +23,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "cvision/core/image.hpp"
 #include "cvision/ui/theme.hpp"
@@ -73,6 +74,13 @@ public:
     // discarding the pixel field on the way through, not a second event
     // path.
     std::function<void(const MouseEvent&)> on_click;
+
+    // The image pixel `event` points at, mapped the way this view shows the
+    // image: through image_anchor() and the attached Application's cell
+    // metric (MouseEvent::image_pixel). Empty when the terminal reported no
+    // pixel position, when there is no image, no Application or no measured
+    // cell metric, and when the pointer is not over the image.
+    std::optional<PixelPoint> image_pixel_at(const MouseEvent& event) const noexcept;
 
     void draw(scene::Painter& painter) override;
     // Consumes every mouse event, whether or not on_click is set.

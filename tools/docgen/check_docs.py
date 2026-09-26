@@ -1,6 +1,10 @@
 # Copyright (c) 2026 C. Klukas. All rights reserved.
 # SPDX-License-Identifier: MIT
-"""Enforce the client-documentation coverage, link, and screenshot contract."""
+"""Enforce the client-documentation coverage, link, and screenshot contract.
+
+The link check (--links) also requires every test case a page cites to exist
+as a CK_TEST in tests/; cited_test_cases() states which citations count.
+"""
 
 from __future__ import annotations
 
@@ -64,9 +68,92 @@ def gallery_sections(text: str) -> dict[str, str]:
     return sections
 
 
+def divergent_width_errors(root: pathlib.Path) -> list[str]:
+    """The D-019 divergence table in text-width.md names exactly the suite's cases.
+
+    tests/test_text_width_divergent.cpp is the machine-enumerable marker for
+    the known terminal-divergent width classes, and the page promises to list
+    the same set; a case added to one and not the other breaks that promise.
+    """
+    suite = root / "tests/test_text_width_divergent.cpp"
+    page = root / "docs/text-width.md"
+    if not suite.is_file() or not page.is_file():
+        return ["tests/test_text_width_divergent.cpp and docs/text-width.md are required"]
+    cases = re.findall(r"^CK_TEST\((\w+)\)", suite.read_text(encoding="utf-8"), re.MULTILINE)
+    listed = re.findall(r"^\| `(\w+)` \|", page.read_text(encoding="utf-8"), re.MULTILINE)
+    errors = [f"text-width.md does not list the D-019 divergent case {name}"
+              for name in cases if name not in listed]
+    errors += [f"text-width.md lists {name}, which is not a case of test_text_width_divergent.cpp"
+               for name in listed if name not in cases]
+    errors += [f"text-width.md lists the D-019 divergent case {name} more than once"
+               for name in sorted(set(listed)) if listed.count(name) > 1]
+    return errors
+
+
 def markdown_links(text: str) -> list[str]:
     prose_only = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
     return re.findall(r'!?\[[^\]]*\]\(([^)]+)\)', prose_only)
+
+
+# A test case name as a page cites it: a backticked lowercase snake_case
+# identifier. The shape alone is not enough to call something a test
+# (`set_vertical_scrollbar_policy` has it too), so cited_test_cases() only
+# looks where a page states that it is naming a test.
+CITED_NAME = r'`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`'
+TEST_SOURCE = r'`(?:[\w./-]*/)?test_\w+\.cpp`'
+INLINE_CITATION = re.compile(TEST_SOURCE + r':?\s*(' + CITED_NAME + r'(?:\s*[,;]\s*' + CITED_NAME + r')*)')
+
+
+def test_case_names(root: pathlib.Path) -> set[str]:
+    """Every `CK_TEST(name)` defined in a C++ source under tests/."""
+    names: set[str] = set()
+    for source in sorted((root / "tests").rglob("*.cpp")):
+        names.update(re.findall(r'\bCK_TEST\((\w+)\)', source.read_text(encoding="utf-8")))
+    return names
+
+
+def cited_test_cases(text: str) -> list[tuple[int, str]]:
+    """The test case names a page cites, each once with its 1-based line number.
+
+    Exactly two citation forms count, so an API name mentioned in prose is
+    never taken for a test:
+
+    * every backticked snake_case name in the cells of a Markdown table
+      column whose header cell reads `Test` or `Tests`, as in the example
+      pages' "What's verified" tables;
+    * the backticked snake_case names that directly follow a backticked
+      `test_*.cpp` source, after an optional colon, as a comma- or
+      semicolon-separated list that may wrap onto following lines:
+      `test_x.cpp`: `first`; `second`.
+
+    File names never match, because a cited name may not contain a dot or a
+    slash. Fenced code blocks are skipped.
+    """
+    # Blank out fenced blocks but keep their newlines, so line numbers hold.
+    prose = re.sub(r'```.*?```', lambda block: "\n" * block.group(0).count("\n"), text, flags=re.DOTALL)
+    cited: dict[tuple[int, str], None] = {}
+    test_column: int | None = None
+    lines = prose.splitlines()
+    for number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            test_column = None
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        following = lines[number].strip() if number < len(lines) else ""
+        if re.fullmatch(r'\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*', following):
+            # A header row: the next line is the delimiter row.
+            test_column = next((index for index, cell in enumerate(cells)
+                                if cell.lower() in ("test", "tests")), None)
+        elif test_column is not None and test_column < len(cells):
+            for name in re.findall(CITED_NAME, cells[test_column]):
+                cited[(number, name)] = None
+    for citation in INLINE_CITATION.finditer(prose):
+        list_start = citation.start(1)
+        for name in re.finditer(CITED_NAME, citation.group(1)):
+            number = prose.count("\n", 0, list_start + name.start()) + 1
+            cited[(number, name.group(1))] = None
+    return list(cited)
 
 
 def main() -> int:
@@ -112,6 +199,7 @@ def main() -> int:
                     errors.append(f"widget-gallery.md omits section for public type {name}")
             if "<!-- ckvision-snippet " not in gallery_text:
                 errors.append("widget-gallery.md has no source-backed code snippet")
+            errors.extend(divergent_width_errors(root))
             # A widget that draws must be shown drawing. The gallery
             # promises "a picture of it running" for every such type, and a
             # promise nothing checks is how this page came to list fifty
@@ -141,6 +229,15 @@ def main() -> int:
                     continue
                 if not (page.parent / target_path).resolve().is_file():
                     errors.append(f"{page.relative_to(root)} has missing local link: {target}")
+        # A cited test that was renamed or deleted leaves a page claiming
+        # evidence that no longer runs. Every name cited as a test (see
+        # cited_test_cases for the exact rule) must be a CK_TEST in tests/.
+        defined_tests = test_case_names(root)
+        for page in sorted(docs.glob("*.md")):
+            for number, name in cited_test_cases(page_text[page]):
+                if name not in defined_tests:
+                    errors.append(f"{page.relative_to(root)}:{number} cites test case {name}, "
+                                  "which no CK_TEST in tests/ defines")
 
     if arguments.screenshots:
         manifest = root / "tools/docgen/screenshot-manifest.txt"

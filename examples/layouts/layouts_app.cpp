@@ -75,20 +75,26 @@ void LayoutsApp::build_window() {
 
     ui::AnchorPane& pane = window->content_pane();
 
+    // ckvision-doc: layouts-bands
+    // Cross-axis placement is per child: the Row centres its label vertically
+    // and keeps a one-row margin above its text; the Column right-aligns its
+    // label and keeps a one-column margin either side of its paragraph.
     auto row = std::make_unique<ui::Row>(Rect{1, 1, 30, 3});
     row->set_spacing(1);
     row_ = row.get();
-    row->add_item(std::make_unique<widgets::Label>("Row"), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    row->add_item(std::make_unique<widgets::Label>("Row"),
+                  ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::Center});
     row->add_item(std::make_unique<widgets::StaticText>("expands with margins"),
-                  ui::LayoutSpec{ui::SizePolicy::Expanding, 1, ui::Alignment::Fill, 0, 0});
+                  ui::LayoutSpec{ui::SizePolicy::Expanding, 1, ui::Alignment::Fill, 1, 0});
     pane.add_item(std::move(row), ui::Anchors{true, true, true, false});
 
     auto column = std::make_unique<ui::Column>(Rect{33, 1, 18, 7});
     column->set_spacing(1);
     column_ = column.get();
-    column->add_item(std::make_unique<widgets::Label>("Column"), ui::LayoutSpec{ui::SizePolicy::Fixed});
+    column->add_item(std::make_unique<widgets::Label>("Column"),
+                     ui::LayoutSpec{ui::SizePolicy::Fixed, 1, ui::Alignment::End});
     column->add_item(std::make_unique<widgets::StaticText>("wrapped static text participates in height-for-width"),
-                     ui::LayoutSpec{ui::SizePolicy::Expanding});
+                     ui::LayoutSpec{ui::SizePolicy::Expanding, 1, ui::Alignment::Fill, 1, 1});
     pane.add_item(std::move(column), ui::Anchors{false, true, true, false});
 
     auto grid = std::make_unique<ui::Grid>(Rect{1, 5, 30, 5}, 2, 3);
@@ -98,7 +104,9 @@ void LayoutsApp::build_window() {
     grid->add_item(std::make_unique<widgets::Label>("A"), ui::GridSpec{0, 2, 1, 1, ui::Alignment::Center});
     grid->add_item(std::make_unique<widgets::Label>("span"), ui::GridSpec{1, 0, 1, 3, ui::Alignment::Center});
     pane.add_item(std::move(grid), ui::Anchors{true, true, true, false});
+    // ckvision-doc-end: layouts-bands
 
+    // ckvision-doc: layouts-edges
     auto dock = std::make_unique<ui::Dock>(Rect{1, 11, 30, 5});
     dock_ = dock.get();
     dock->add_item(std::make_unique<widgets::Label>("Dock top"), ui::DockEdge::Top);
@@ -124,6 +132,7 @@ void LayoutsApp::build_window() {
     anchored->set_bounds(Rect{58, 15, 8, 1});
     anchored_label_ = anchored.get();
     pane.add_item(std::move(anchored), ui::Anchors{false, false, true, true});
+    // ckvision-doc-end: layouts-edges
 
     window_ = desktop_->add_window(std::move(window));
 }

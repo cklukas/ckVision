@@ -220,18 +220,31 @@ replace those same dispositions during a live ckVision terminal session.
   resumed terminal to emit a capability-change event. `Application` handles
   that event by invalidating and fully re-presenting the frame. The PTY
   acceptance test compares the pre-suspend and resumed presenter frame bytes
-  exactly; session-entry and probe traffic are deliberately outside that
-  frame comparison. If the tty changed size while stopped, its resize event
+  exactly. Separate PTY tests stop a session with a real job-control
+  `SIGTSTP` and compare its resumed entry sequence with the one it sent at
+  start-up, byte for byte: the alternate screen (1049), the kitty keyboard
+  push, SGR any-motion mouse (1003/1006) with pixel mode (1016), bracketed
+  paste (2004), focus reports (1004) and colour-scheme notifications (2031).
+  A probing session's resumed probe traffic, including its synchronized-output
+  query (2026), must match its start-up probe traffic as well. The entry and
+  restore sequences are one ledger, so a kitty keyboard entry the session
+  adopted at runtime is popped before the alternate screen is left (kitty
+  keeps one stack per screen) and pushed again, in the same place, on resume.
+  If the tty changed size while stopped, its resize event
   precedes the capability event in that same poll batch, so the very first
   resumed frame uses the new dimensions. The PTY suite separately creates two
   live sessions, simulates the restored post-stop terminal state, and verifies
   that one continuation signal re-enters raw mode and the correct entry
   sequence for both before each reports its own capability change.
-- Its fatal-signal restoration handler restores every registered terminal
-  session before the process terminates. The PTY gate verifies both the
-  alternate-screen restore bytes and the original canonical/echo mode flags
-  for two simultaneously live sessions. This is process cleanup, not an
-  application-level signal-routing mechanism.
+- Its fatal-signal restoration handler (`SIGSEGV`, `SIGBUS`, `SIGFPE`,
+  `SIGILL` and `SIGABRT`) restores every registered terminal session before
+  the process terminates. The PTY gate verifies both the alternate-screen
+  restore bytes and the original canonical/echo mode flags for two
+  simultaneously live sessions. For each of `SIGSEGV`, `SIGBUS`, `SIGFPE` and
+  `SIGILL`, it also verifies that a child dying by that signal writes exactly
+  the restore ledger an ordinary exit writes, and nothing after it: the
+  library has no diagnostic of its own for a plain fatal signal. This is
+  process cleanup, not an application-level signal-routing mechanism.
 
 Ordinary C++ scope exit, including exception unwinding, uses the same terminal
 restore path before control reaches the caller's catch handler. The PTY suite
@@ -240,15 +253,17 @@ checks the restoration sequence precedes that handler's observable output.
 Application event, draw, timer, posted-work, command, focus, and loop-predicate
 callbacks are noexcept-in-effect. A callback exception is a contract violation:
 the POSIX backend restores every live terminal session, writes a fixed diagnostic
-to stderr, and terminates with `SIGABRT`. The PTY suite verifies that every
-session-restore byte precedes that diagnostic. Backends that own terminal state
+to stderr, and terminates with `SIGABRT`. The PTY suite points the child's
+stderr at the same PTY its session writes to, so restore bytes and diagnostic
+arrive as one ordered stream, and verifies that every session-restore byte
+precedes the diagnostic. Backends that own terminal state
 must implement the same ordering through `Terminal::terminate_after_callback_failure`.
 
 An always-on `CKV_ASSERT` uses the same POSIX D-024 path. Its expression,
 source path, and line are published as immutable metadata before `SIGABRT`; the
 fatal handler restores every session and then prints the complete assertion
-diagnostic to stderr. The PTY suite proves this ordering independently from the
-callback-failure case.
+diagnostic to stderr. The PTY suite proves this ordering on the same single
+channel, independently from the callback-failure case.
 
 ## Diagnostics
 
@@ -259,7 +274,10 @@ destruction, it first ends the attached terminal session and only then emits
 the buffered `trace`, `debug`, `info`, `warning`, or `error` lines through the
 terminal backend's diagnostic channel. Therefore neither ordinary diagnostics
 nor an injected observer require an application to write stderr while the
-alternate screen is active. `HeadlessTerminal` deliberately keeps that final
+alternate screen is active. The PTY suite checks that order for
+`PosixTerminal` on one channel: the child's stderr is the PTY its session
+writes to, and every restore byte arrives before the diagnostic.
+`HeadlessTerminal` deliberately keeps that final
 emission in-memory; tests use an injected sink to inspect it without host I/O.
 `RecordingTerminal` records each post-restore diagnostic as an ordinary terminal
 operation. `ReplayTerminal` retains its replayed diagnostic bytes in memory and
@@ -270,6 +288,55 @@ an actual raw-PTY key batch and a forwarded output operation are then replayed
 solely from the captured initial state and operation stream. This complements
 the deterministic headless application round trip; replay itself never opens
 or borrows the original terminal session.
+
+## OSC emission safety
+
+Three operating-system commands leave ckVision with caller-supplied text in
+them: the window title, the clipboard export, and a `TextView`'s hyperlink
+export. Each is an OSC command string, which ends at ST — `ESC \` in a 7-bit
+code, the single byte 0x9C in an 8-bit one (ECMA-48 §8.3.143) — and which the
+xterm control-sequences reference also ends at BEL. CAN and SUB cancel a
+sequence in progress, and ECMA-48 §8.3.89 admits no other control into a
+command string. Text that carried any of these could end the string early and
+have the rest read as new controls: a second title, a clipboard write, a
+screen erase. ARCHITECTURE.md §12 therefore requires every emission to reject
+or escape them, and `text::sanitize_osc_text` is where that happens:
+
+- It drops every C0 control (ESC, BEL, CAN, SUB, tab and line feed among
+  them), DEL, and every C1 control code point (U+0080–U+009F, which include
+  U+009C ST and U+009B CSI as a UTF-8 host meets them).
+- It replaces malformed UTF-8, including a lone 0x9C or 0x9B byte, with
+  U+FFFD, whose encoding has no byte below 0xA0. A character whose encoding
+  merely contains such a byte as a continuation (U+201C is E2 80 9C) is kept.
+
+The result is well-formed UTF-8 in which no 7-bit, 8-bit, or UTF-8 spelling of
+a terminator or introducer survives. The emitters are:
+
+- **Window title (OSC 0).** `Terminal::set_title` sends
+  `osc_title_sequence(title)` (`cvision/term/osc_sequences.hpp`):
+  `OSC 0 ; <sanitized title> BEL`. `PosixTerminal`, `WindowsTerminal` and
+  `HeadlessTerminal` all send exactly these bytes. A title is one line, so its
+  tab and line breaks are dropped too.
+- **Clipboard export (OSC 52).** `PosixTerminal` and `HeadlessTerminal` send
+  `osc_clipboard_sequence(text)`: `OSC 52 ; c ; <base64> BEL`, and only while
+  `Capabilities::clipboard_write` is set. The payload is RFC 4648 base64,
+  whose alphabet has no control byte, so the text needs no stripping and
+  arrives on the clipboard unchanged, tabs and line breaks included. Clipboard
+  import stays an input event marked as paste, sanitized by the input decoder.
+  `WindowsTerminal` exports through the native clipboard instead.
+- **Hyperlinks (OSC 8).** `TextView::osc8_text` wraps each linked span as
+  `OSC 8 ; ; <target> ST <text> OSC 8 ; ; ST`. Targets pass through
+  `text::sanitize_osc_text`; link and plain text keep their line breaks and
+  otherwise get the same treatment, line by line, so exported text can never
+  carry a control sequence of its own either.
+
+`HeadlessTerminal`'s display models OSC 0 and OSC 52 strictly and invalidates
+the capture for a title holding any control or malformed byte, or a payload
+that is not strict base64. The pinned bytes for a hostile title (ESC `\`,
+BEL, a raw 0x9C, U+009C, CAN, SUB, DEL, a line break and a nested OSC 0) and
+for hostile clipboard text are checked through `set_title` and
+`write_clipboard` on `HeadlessTerminal`, through `RecordingTerminal`, and on a
+live `PosixTerminal` over a real PTY.
 
 ## Multi-application boundary
 

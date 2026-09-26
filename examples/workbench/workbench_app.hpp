@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "cvision/ui/application.hpp"
 #include "cvision/ui/history.hpp"
@@ -17,6 +18,7 @@ class CommandPalette;
 class ComboBox;
 class FlowView;
 class InputLine;
+class KeyChordCapture;
 class ListView;
 class Memo;
 class NotificationCenter;
@@ -59,9 +61,35 @@ public:
     widgets::Tooltip* tooltip() const noexcept { return tooltip_; }
     const std::optional<std::string>& last_link() const noexcept { return last_link_; }
 
+    // The application's own commands: run a build, open (or bring forward)
+    // the console window, and present the key bindings dialog.
+    ui::CommandId build_command() const noexcept { return build_command_; }
+    ui::CommandId console_command() const noexcept { return console_command_; }
+    ui::CommandId keys_command() const noexcept { return keys_command_; }
+    int builds_run() const noexcept { return builds_run_; }
+    // The console window while it is open, else nullptr.
+    widgets::Window* console_window() const noexcept { return console_window_; }
+    // The Keys dialog while it is open, else nullptr.
+    widgets::Window* keys_dialog() const noexcept { return keys_dialog_; }
+
 private:
+    // One row of the Keys dialog: a command and the control editing its chord.
+    struct KeyBindingRow {
+        ui::CommandId command = ui::kInvalidCommand;
+        widgets::KeyChordCapture* capture = nullptr;
+    };
+
     void build_chrome();
     void build_window();
+    void open_console();
+    void append_console_line(std::string line);
+    void show_console_lines();
+    void run_build();
+    void present_keys_dialog();
+    // Makes `chord` the command's only binding (or leaves it unbound), then
+    // shows every row of the Keys dialog what is bound now: a chord taken
+    // from another command has moved, and that row says so.
+    void rebind(ui::CommandId command, const std::optional<KeyChord>& chord);
     std::unique_ptr<ui::View> build_text_page();
     std::unique_ptr<ui::View> build_data_page();
     std::unique_ptr<ui::View> build_help_page();
@@ -90,6 +118,16 @@ private:
     widgets::NotificationCenter* notifications_ = nullptr;
     widgets::Tooltip* tooltip_ = nullptr;
     std::optional<std::string> last_link_;
+
+    ui::CommandId build_command_ = ui::kInvalidCommand;
+    ui::CommandId console_command_ = ui::kInvalidCommand;
+    ui::CommandId keys_command_ = ui::kInvalidCommand;
+    int builds_run_ = 0;
+    widgets::Window* console_window_ = nullptr;
+    widgets::TextView* console_text_ = nullptr;
+    std::vector<std::string> console_lines_;
+    widgets::Window* keys_dialog_ = nullptr;
+    std::vector<KeyBindingRow> key_rows_;
 };
 
 }  // namespace ckv::workbench

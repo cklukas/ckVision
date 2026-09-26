@@ -263,6 +263,15 @@ int Table::column_at_x(int local_x) const noexcept {
     return -1;
 }
 
+int Table::data_columns() const noexcept {
+    if (scrollbar_ == nullptr || !scrollbar_->should_show()) return bounds().width;
+    return scrollbar_->bounds().x;
+}
+
+int Table::shown_cell_width(std::size_t column) const noexcept {
+    return std::max(0, std::min(columns_[column].width, data_columns() - column_start_x(column)));
+}
+
 void Table::on_resized() {
     if (scrollbar_ == nullptr) return;
     const int data_height = std::max(0, bounds().height - 1);
@@ -523,7 +532,7 @@ std::optional<CursorState> Table::cursor_state() const {
     if (visible_row < 0 || visible_row >= bounds().height - 1) return std::nullopt;
     const std::size_t column = static_cast<std::size_t>(cursor_column_);
     const int x = column_start_x(column);
-    const int width = columns_[column].width;
+    const int width = shown_cell_width(column);
     if (x >= bounds().width || width <= 0) return std::nullopt;
     const int caret = std::min(text::text_width(edit_text_), width - 1);
     const Rect absolute = absolute_bounds();
@@ -558,8 +567,7 @@ void Table::draw(scene::Painter& painter) {
     const std::size_t count = model_row_count();
     for (int visible_row = 0; visible_row < data_height; ++visible_row) {
         const int display_row = top + visible_row;
-        painter.fill(Rect{0, visible_row + 1, std::max(0, bounds().width - 1), 1},
-                     Cell::from_grapheme(" ", normal_style));
+        painter.fill(Rect{0, visible_row + 1, data_columns(), 1}, Cell::from_grapheme(" ", normal_style));
         if (display_row < 0 || static_cast<std::size_t>(display_row) >= count) continue;
         const TableRowId row_id = row_id_at(static_cast<std::size_t>(display_row));
         for (std::size_t column = 0; column < columns_.size(); ++column) {
@@ -586,8 +594,9 @@ void Table::draw(scene::Painter& painter) {
                 shown = edit_text_;
                 style = theme.resolve(editing_role_);
             }
-            painter.fill(Rect{x, visible_row + 1, columns_[column].width, 1}, Cell::from_grapheme(" ", style));
-            painter.draw_text(Point{x, visible_row + 1}, text::clip_to_width(shown, columns_[column].width), style);
+            const int cell_width = shown_cell_width(column);
+            painter.fill(Rect{x, visible_row + 1, cell_width, 1}, Cell::from_grapheme(" ", style));
+            painter.draw_text(Point{x, visible_row + 1}, text::clip_to_width(shown, cell_width), style);
         }
     }
 }

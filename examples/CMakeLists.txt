@@ -80,6 +80,20 @@ if(UNIX)
     install(TARGETS ckvision_forms RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# Root Dialog: the M4 form demo -- a materialized descriptor dialog mounted
+# directly as the Application root, with no Desktop or Window around it.
+add_library(rootdialog_app STATIC rootdialog/rootdialog_app.cpp)
+target_link_libraries(rootdialog_app PRIVATE ckvision::cvision)
+target_include_directories(rootdialog_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/rootdialog)
+ckvision_strict(rootdialog_app)
+
+if(UNIX)
+    add_executable(ckvision_rootdialog rootdialog/main.cpp)
+    target_link_libraries(ckvision_rootdialog PRIVATE rootdialog_app ckvision::cvision)
+    ckvision_strict(ckvision_rootdialog)
+    install(TARGETS ckvision_rootdialog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 add_library(workbench_app STATIC workbench/workbench_app.cpp)
 target_link_libraries(workbench_app PRIVATE ckvision::cvision)
 target_include_directories(workbench_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/workbench)

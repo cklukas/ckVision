@@ -44,6 +44,7 @@ add_library(cvision
     src/term/headless_terminal.cpp
     src/term/input_decoder.cpp
     src/term/capability_report.cpp
+    src/term/osc_sequences.cpp
     src/term/presenter.cpp
     src/term/file_trace_sink.cpp
     src/term/sixel_decoder.cpp

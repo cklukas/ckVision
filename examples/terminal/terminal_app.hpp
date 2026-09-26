@@ -35,6 +35,7 @@ public:
     // for any command declared by any other party.
     static constexpr std::string_view kNewTerminalKey = "terminal.new-terminal";
     static constexpr std::string_view kNewSixelDemoKey = "terminal.new-sixel-demo";
+    static constexpr std::string_view kParentCommandsKey = "terminal.parent-commands";
 
     explicit TerminalApp(ui::Application& app, TerminalAppServices services = {});
 
@@ -42,6 +43,7 @@ public:
     // callers that already hold this object.
     ui::CommandId new_terminal_command() const noexcept { return new_terminal_command_; }
     ui::CommandId new_sixel_demo_command() const noexcept { return new_sixel_demo_command_; }
+    ui::CommandId parent_commands_command() const noexcept { return parent_commands_command_; }
 
     // Opens an independent interactive shell in a new modeless desktop window
     // and makes that shell the keyboard focus.
@@ -61,6 +63,7 @@ private:
     TerminalAppServices services_;
     ui::CommandId new_terminal_command_ = ui::kInvalidCommand;
     ui::CommandId new_sixel_demo_command_ = ui::kInvalidCommand;
+    ui::CommandId parent_commands_command_ = ui::kInvalidCommand;
     widgets::Desktop* desktop_ = nullptr;
     widgets::ClockView* clock_ = nullptr;
     void open_calendar();

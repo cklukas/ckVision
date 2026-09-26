@@ -203,6 +203,25 @@ CK_TEST(cell_style_hook_receives_the_underlying_row_index_not_the_display_index)
     CK_CHECK(seen_underlying_indices[0] == 1);  // Alice is underlying index 1, drawn first (sorted)
 }
 
+CK_TEST(data_cells_stop_short_of_the_scrollbar_column_without_splitting_a_wide_glyph) {
+    // WP-30. The data rows keep their last column for the scrollbar, which
+    // paints over it after them; a cell reaching into that column is cut at a
+    // cluster boundary before it, never inside a wide glyph.
+    Fixture f;
+    auto table = make_table(f);
+    table.set_context(f.ctx());
+    table.on_attached();
+    table.set_columns({TableColumn{"AB", 4, 3}});
+    table.set_rows({{"AB\xE4\xB8\xAD"}});  // AB + U+4E2D: the ideograph needs columns 2 and 3
+    table.set_bounds(Rect{0, 0, 4, 2});
+    Surface s(ckv::Size{4, 2}, ckv::Cell::from_grapheme(".", ckv::Style{}));
+    Painter painter(s, Rect{0, 0, 4, 2});
+    table.draw(painter);
+    CK_CHECK(s.at(ckv::Point{1, 1}).grapheme() == "B");
+    CK_CHECK(s.at(ckv::Point{2, 1}).grapheme() == " ");
+    CK_CHECK(!s.at(ckv::Point{3, 1}).is_continuation());
+}
+
 // --- Keyboard navigation -----------------------------------------------
 
 CK_TEST(down_arrow_moves_the_cursor_row) {
@@ -650,4 +669,58 @@ CK_TEST(columns_may_change_freely_while_no_rows_are_materialized) {
     table.set_columns({TableColumn{"Value", 8, 3}});
     CK_CHECK(table.columns().size() == 1);
     table.clear_model();
+}
+
+CK_TEST(a_scripted_table_sorts_on_a_header_click_and_edits_a_typed_cell_from_the_keyboard) {
+    // Application-level script: the header click and every key reach the
+    // table through Application::dispatch, and step() shows the rows as the
+    // sort and the committed edit left them.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* table = app.root().add(std::make_unique<Table>());
+    table->set_bounds(Rect{0, 0, 30, 6});
+    table->set_columns({TableColumn{"Name", 10, 3},
+                        TableColumn{"Qty", 6, 3, ckv::widgets::TableCellType::Integer, true}});
+    table->set_rows({{"Pear", "3"}, {"Apple", "7"}, {"Fig", "1"}});
+    app.set_focus(table);
+    app.step(0);
+    const auto row = [&](int y) {
+        std::string out;
+        for (int x = 0; x < 30; ++x) out += app.composed_surface().at(ckv::Point{x, y}).grapheme();
+        return out;
+    };
+    CK_CHECK(row(1).starts_with("Pear"));
+
+    CK_CHECK(app.dispatch(click(ckv::Point{2, 0})));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{2, 0}, std::nullopt,
+                                 Modifier::None});
+    app.step(0);
+    CK_CHECK(table->sort_column() == 0);
+    CK_CHECK(row(1).starts_with("Apple"));
+    CK_CHECK(row(3).starts_with("Pear"));
+
+    // Typing on a cell starts an edit that replaces it; Enter commits it
+    // through the column's Integer type.
+    CK_CHECK(app.dispatch(key(Key::Home)));
+    CK_CHECK(app.dispatch(key(Key::Right)));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "1"}}));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "2"}}));
+    CK_CHECK(table->editing());
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    app.step(0);
+    CK_CHECK(!table->editing());
+    CK_CHECK(table->row(0)[1] == "12");
+    CK_CHECK(row(1).find("12") != std::string::npos);
+
+    // A value the type refuses keeps the edit open; Escape abandons it.
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK(app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::None, "x"}}));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK(table->editing());
+    CK_CHECK(app.dispatch(key(Key::Escape)));
+    CK_CHECK(!table->editing());
+    CK_CHECK(table->row(0)[1] == "12");
 }

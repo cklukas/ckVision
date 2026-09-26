@@ -17,8 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include "cvision/term/osc_sequences.hpp"
 #include "cvision/term/pointer_shape_names.hpp"
-#include "cvision/term/presenter.hpp"
 
 namespace ckv::term {
 namespace {
@@ -368,9 +368,7 @@ void WindowsTerminal::write_all(std::string_view bytes) const {
 }
 
 void WindowsTerminal::write(std::string_view bytes) { write_all(bytes); }
-void WindowsTerminal::set_title(std::string_view title) {
-    write_all("\x1B]0;" + sanitize_osc_text(title) + "\x07");
-}
+void WindowsTerminal::set_title(std::string_view title) { write_all(osc_title_sequence(title)); }
 void WindowsTerminal::bell() { write_all("\x07"); }
 
 void WindowsTerminal::write_clipboard(std::string_view text) {

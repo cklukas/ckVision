@@ -10,7 +10,11 @@ and ckVision alone presents the composed parent frame.
 
 The runnable POSIX example is `ckvision_terminal`. It launches the reader's own
 interactive shell — `$SHELL`, falling back to `/bin/sh` — and reserves
-`Ctrl+Alt+Space` to return command focus to the parent application. Its child
+`Ctrl+Alt+Space` to return command focus to the parent application. That
+chord belongs to an ordinary command, **Parent commands**, which each terminal
+names through `TerminalView::set_parent_escape_command`: the view reserves
+whatever chord the command is bound to when a key arrives, and the status line
+shows the same binding, so rebinding the command moves both. Its child
 environment names only `TERM` and `COLORTERM`; the prompt, `PATH` and
 everything else arrive from that shell's own startup files, so a window here
 looks like a window in any other terminal on the machine. Choose **File → New

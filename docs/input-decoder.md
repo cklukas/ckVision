@@ -79,8 +79,9 @@ is deliberately deferred, and why — the same discipline as
   other profile consumes the complete report without exposing its payload as
   keyboard text.
 - **Bracketed paste** (`CSI 200~` ... `CSI 201~`): delivered as one
-  atomic, sanitized `TextEvent` (D-040's paste rule: C0 stripped except
-  tab/newline, C1 and malformed bytes replaced with U+FFFD). An end marker is
+  atomic, sanitized `TextEvent` (D-040's paste rule: every C0 control but
+  tab and newline, DEL, C1 and malformed bytes replaced with U+FFFD; DEL
+  because a line discipline reads it as erase). An end marker is
   a candidate for 50 ms: bytes arriving before that quiet boundary remain
   paste text, never ordinary key/mouse/OSC input. The one protocol exception
   is a tail consisting solely of valid kitty key-release events after the

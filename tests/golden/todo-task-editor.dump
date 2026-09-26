@@ -29,10 +29,10 @@ grid
 |░░░░┌─[■]────────────────────────────────── TODO — main ────────────────────────────────[_][↑]─┐░░░░|
 |░░░░│┌─To Do (1)─────────────────┐ ┌─Doing (1)─────────────────┐ ┌─Done (1)───────────────────┐│░░░░|
 |░░░░││• Add your first task╔═[■]════════════ Edit task ═════════════[↑]═╗ove mode             ││░░░░|
-|░░░░││  Press F2 or Insert ║                                            ║t a task and press F9││░░░░|
+|░░░░││  Tasks > Add task   ║                                            ║ > Move task         ││░░░░|
 |░░░░││                     ║ Title:    Add your first task              ║                     ││░░░░|
 |░░░░││                     ║                                            ║                     ││░░░░|
-|░░░░││                     ║ Details:  Press F2 or Insert               ║                     ││░░░░|
+|░░░░││                     ║ Details:  Tasks > Add task                 ║                     ││░░░░|
 |░░░░││                     ║                                            ║                     ││░░░░|
 |░░░░││                     ║ Due:      — no date —                    ▾ ║                     ││░░░░|
 |░░░░││                     ║                                            ║                     ││░░░░|

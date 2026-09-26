@@ -64,7 +64,8 @@ enum class MinimizedWindowPlacement {
 // D-029): on_attached() installs itself as kClose/kQuit/kZoom/
 // kMinimize/kNextWindow/kPreviousWindow/kTile/kTileHorizontally/
 // kTileVertically/kTileGrid/kCascade/kWindowList/kTerminalReport's default
-// handler — but ONLY for whichever of those nothing has claimed yet
+// handler, and as every kSelectWindow entry's (select_by_number) — but
+// ONLY for whichever of those nothing has claimed yet
 // (CommandRegistry::has_handler), the same guarded-install/guarded-
 // cleanup pattern MenuBar's own kMenu default established (M9/WP-13):
 // an application that wires its own handler for any of these before
@@ -528,7 +529,8 @@ public:
     void activate_previous();
 
     // 1-based index into windows()' insertion order (matching the
-    // classic "Alt+1".."Alt+9" window-select convention). Out-of-range
+    // classic "Alt+1".."Alt+9" window-select convention, which is what
+    // the standard select_window commands bind it to). Out-of-range
     // n is a harmless no-op, not an error — a stale keybinding from a
     // since-closed window must not crash the application. The numbering
     // counts minimized windows, because it counts windows() and that is
@@ -845,8 +847,9 @@ private:
     // kQuit's default handler: sweeps every window through the same
     // vetoable close() protocol clicking each one's own close control
     // would (ARCHITECTURE.md §5 "application quit sweeps all windows
-    // through the same protocol"), front-to-back so a topmost "are you
-    // sure" dialog a window's own close_request opens gets seen first;
+    // through the same protocol"), front-to-back in z-order (not
+    // windows()' insertion order) so a topmost "are you sure" dialog a
+    // window's own close_request opens gets seen first;
     // the FIRST veto stops the sweep entirely (quit is cancelled — not
     // "close everything that didn't veto, then quit anyway"). Only
     // calls Application::request_quit() if every starting window's close()

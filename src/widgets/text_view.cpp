@@ -11,10 +11,23 @@
 namespace ckv::widgets {
 
 namespace {
+// Link text is document content and may span lines, so each '\n' is kept
+// and every line gets the guarantee a link target gets: no C0 or C1 control,
+// no DEL, no malformed byte (text::sanitize_osc_text). A byte-wise C0 filter
+// is not enough — it lets a lone 0x9C (ST to an 8-bit host) or U+009B (CSI)
+// through, and either one turns exported text back into control data.
+// Splitting on the byte 0x0A is safe: UTF-8 never uses it inside a sequence.
 std::string without_controls(std::string_view text) {
     std::string out;
-    for (unsigned char ch : text) {
-        if (ch == '\n' || (ch >= 0x20 && ch != 0x7f)) out.push_back(static_cast<char>(ch));
+    out.reserve(text.size());
+    for (std::size_t start = 0;;) {
+        const std::size_t line_end = text.find('\n', start);
+        out += text::sanitize_osc_text(text.substr(start, line_end == std::string_view::npos
+                                                             ? std::string_view::npos
+                                                             : line_end - start));
+        if (line_end == std::string_view::npos) break;
+        out += '\n';
+        start = line_end + 1;
     }
     return out;
 }
@@ -161,7 +174,7 @@ std::string TextView::osc8_text() const {
     for (const auto& span : spans_) {
         if (span.link_target) {
             out += "\x1b]8;;";
-            out += without_controls(*span.link_target);
+            out += text::sanitize_osc_text(*span.link_target);
             out += "\x1b\\";
             out += without_controls(span.text);
             out += "\x1b]8;;\x1b\\";

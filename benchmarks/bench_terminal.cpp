@@ -66,7 +66,7 @@ std::string sixel_workload() {
 
 }  // namespace
 
-bool run_terminal_benchmarks() {
+bool run_terminal_benchmarks(const ckbench::Runner& bench) {
     const ckv::term::TerminalCapabilityProfile profile = [] {
         auto value = ckv::term::embedded_xterm_sixel_profile();
         value.cells = ckv::Size{120, 40};
@@ -79,7 +79,7 @@ bool run_terminal_benchmarks() {
     bool budgets_hold = true;
     std::size_t sink = 0;
 
-    ckbench::run("terminal_scrollback_flood", 4, [&] {
+    bench.run("terminal_scrollback_flood", 4, [&] {
         ckv::term::TerminalEmulator emulator(profile, options);
         emulator.feed_output(flood);
         const auto snapshot = emulator.snapshot();
@@ -93,7 +93,7 @@ bool run_terminal_benchmarks() {
 
     ckv::term::TerminalEmulator resized(profile, options);
     resized.feed_output("ready");
-    ckbench::run("terminal_repeated_resize", 500, [&] {
+    bench.run("terminal_repeated_resize", 500, [&] {
         const int width = sink % 2U == 0U ? 120 : 96;
         const int height = sink % 3U == 0U ? 40 : 32;
         resized.resize(ckv::Size{width, height}, profile.cell_pixels);
@@ -153,7 +153,7 @@ bool run_terminal_benchmarks() {
         }
         const std::size_t full = history_lines * static_cast<std::size_t>(profile.cells.width);
         if (emulator.scrollback().size() != full) budgets_hold = false;
-        ckbench::run(name, 2000, [&] {
+        bench.run(name, 2000, [&] {
             emulator.feed_output("one more line, and the oldest one leaves\r\n");
             sink += emulator.cells().size();
         });
@@ -163,7 +163,7 @@ bool run_terminal_benchmarks() {
     steady_scroll("terminal_steady_scroll_full_history_1k", 1000);
     steady_scroll("terminal_steady_scroll_full_history_10k", 10000);
 
-    ckbench::run("terminal_snapshot_with_history", 2000, [&] {
+    bench.run("terminal_snapshot_with_history", 2000, [&] {
         loaded.feed_output(tick_mutation);
         const auto snapshot = loaded.snapshot();
         sink += snapshot.cell_buffer.size() + snapshot.scrollback.size();
@@ -175,7 +175,7 @@ bool run_terminal_benchmarks() {
     // independently of any cell. Before status() the only answer available was
     // a snapshot — so the copy U0-b removed came straight back through the
     // fields around it.
-    ckbench::run("terminal_status_scalars_only", 2000, [&] {
+    bench.run("terminal_status_scalars_only", 2000, [&] {
         loaded.feed_output(tick_mutation);
         const ckv::core::TerminalStatus status = loaded.status();
         sink += static_cast<std::size_t>(status.cursor.position.x);
@@ -185,7 +185,7 @@ bool run_terminal_benchmarks() {
     ckv::core::TerminalSnapshotOptions lean;
     lean.include_scrollback = false;
     lean.include_rasters = false;
-    ckbench::run("terminal_snapshot_grid_only", 2000, [&] {
+    bench.run("terminal_snapshot_grid_only", 2000, [&] {
         loaded.feed_output(tick_mutation);
         const auto snapshot = loaded.snapshot(lean);
         sink += snapshot.cell_buffer.size();
@@ -200,7 +200,7 @@ bool run_terminal_benchmarks() {
     // which is correct behaviour and the wrong starting point for measuring a
     // steady-state tick.
     loaded.clear_damage();
-    ckbench::run("terminal_damage_and_borrowed_cells", 2000, [&] {
+    bench.run("terminal_damage_and_borrowed_cells", 2000, [&] {
         loaded.feed_output(tick_mutation);
         // What WP-4b will do: ask what changed, read only those rows out of the
         // borrowed grid, and say it has caught up. No copy of anything the host
@@ -225,7 +225,7 @@ bool run_terminal_benchmarks() {
         if (touched > static_cast<std::size_t>(profile.cells.width)) budgets_hold = false;
     });
 
-    ckbench::run("terminal_large_sixel_payload", 8, [&] {
+    bench.run("terminal_large_sixel_payload", 8, [&] {
         ckv::term::TerminalEmulator emulator(profile, options);
         emulator.set_raster_identity(52);
         emulator.feed_output(sixel);
@@ -240,7 +240,7 @@ bool run_terminal_benchmarks() {
     // Sixel, which is the owning thread's per-frame cost for animated raster
     // content and therefore what an animation's frame rate is bounded by.
     const ckv::Image frame = animation_frame(ckv::PixelSize{722, 608});
-    ckbench::run("sixel_encode_animation_frame", 20, [&] {
+    bench.run("sixel_encode_animation_frame", 20, [&] {
         const std::string encoded = ckv::term::encode_sixel(frame, 256);
         sink += encoded.size();
         if (encoded.size() < 1024U || encoded.compare(0, 2, "\x1bP") != 0) budgets_hold = false;

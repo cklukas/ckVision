@@ -194,6 +194,45 @@ CK_TEST(terminal_view_keeps_parent_escape_out_of_child_input) {
     CK_CHECK(session.take_pending_input().empty());
 }
 
+CK_TEST(a_parent_escape_command_reserves_its_bound_chord_and_follows_a_rebind) {
+    ckv::term::HeadlessTerminal terminal(ckv::Size{80, 24});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(terminal, clock);
+    int runs = 0;
+    const ckv::ui::CommandId parent = app.commands().declare(
+        {.key = "test.parent", .title = "Parent", .chord = "Ctrl+Alt+Space", .handler = [&runs] { ++runs; }});
+    ckv::term::TerminalEmulator session;
+    auto owned = std::make_unique<ckv::widgets::TerminalView>(session);
+    ckv::widgets::TerminalView* const view = owned.get();
+    view->set_fills_root(false);
+    view->set_bounds(ckv::Rect{0, 0, 20, 5});
+    view->set_parent_escape_command(parent);
+    app.root().add_child(std::move(owned));
+    app.set_focus(view);
+    const ckv::KeyChord ctrl_alt_space{ckv::Key::Char, ckv::Modifier::Ctrl | ckv::Modifier::Alt, " "};
+    const ckv::KeyChord f12{ckv::Key::F12, ckv::Modifier::None, ""};
+
+    app.dispatch(ckv::KeyEvent{ctrl_alt_space});
+    CK_CHECK(runs == 1);
+    CK_CHECK(session.take_pending_input().empty());
+
+    // Rebound: the old chord is the child's again, and the new one is reserved.
+    app.commands().unbind_key(ctrl_alt_space);
+    app.commands().bind_key(f12, parent);
+    app.dispatch(ckv::KeyEvent{ctrl_alt_space});
+    CK_CHECK(runs == 1);
+    CK_CHECK(!session.take_pending_input().empty());
+    app.dispatch(ckv::KeyEvent{f12});
+    CK_CHECK(runs == 2);
+    CK_CHECK(session.take_pending_input().empty());
+
+    // Unbound, nothing is reserved at all.
+    app.commands().unbind_key(f12);
+    app.dispatch(ckv::KeyEvent{f12});
+    CK_CHECK(runs == 2);
+    CK_CHECK(session.take_pending_input() == "\x1b[24~");
+}
+
 CK_TEST(terminal_view_encodes_control_meta_and_modified_navigation_for_the_private_child) {
     ckv::term::TerminalEmulator session;
     ckv::widgets::TerminalView view(session);

@@ -214,6 +214,43 @@ CK_TEST(terminal_example_public_menu_path_survives_all_builtin_themes) {
     }
 }
 
+
+// The way out of a focused terminal is a command: the status line names the
+// chord it is bound to, the terminal reserves exactly that chord, and a
+// runtime rebind moves both.
+CK_TEST(the_parent_commands_escape_is_a_rebindable_command_named_on_the_status_line) {
+    Fixture f;
+    f.app.step(0);
+    const auto status = [&f] {
+        std::string row;
+        const ckv::FrameView frame = f.terminal.display().frame();
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, frame.size().height - 1}).grapheme();
+        return row;
+    };
+    const auto press = [&f](ckv::KeyChord chord) {
+        f.terminal.inject_event(ckv::KeyEvent{std::move(chord)});
+        f.app.step(0);
+    };
+    auto* const terminal = dynamic_cast<ckv::widgets::TerminalView*>(f.app.focused());
+    CK_CHECK(terminal != nullptr);
+    if (terminal == nullptr) return;
+    CK_CHECK(status().find("Ctrl+Alt+Space Parent commands") != std::string::npos);
+
+    const ckv::KeyChord ctrl_alt_space{ckv::Key::Char, ckv::Modifier::Ctrl | ckv::Modifier::Alt, " "};
+    press(ctrl_alt_space);
+    CK_CHECK(dynamic_cast<ckv::widgets::MenuBar*>(f.app.focused()) != nullptr);
+
+    f.app.commands().unbind_key(ctrl_alt_space);
+    f.app.commands().bind_key(ckv::KeyChord{ckv::Key::F12, ckv::Modifier::None, ""},
+                              f.example.parent_commands_command());
+    f.app.set_focus(terminal);
+    f.app.step(0);
+    CK_CHECK(status().find("F12 Parent commands") != std::string::npos);
+    CK_CHECK(status().find("Ctrl+Alt+Space") == std::string::npos);
+    press(ckv::KeyChord{ckv::Key::F12, ckv::Modifier::None, ""});
+    CK_CHECK(dynamic_cast<ckv::widgets::MenuBar*>(f.app.focused()) != nullptr);
+}
+
 #endif
 
 CK_TEST(the_sixel_demo_child_actually_delivers_a_picture_of_useful_size) {

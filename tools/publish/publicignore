@@ -19,7 +19,7 @@ plans/
 
 # Release acceptance checklist — an internal QA artifact, and the only docs
 # page that links into plans/. (docs/coverage.md deliberately stays: the
-# doc_widget_coverage CTest gate reads it.)
+# doc_widget_coverage and interaction_script_coverage CTest gates read it.)
 docs/release-audit.md
 
 # CTest scratch output, committed by accident.

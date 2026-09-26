@@ -96,7 +96,7 @@ CK_TEST(image_content_hash_is_deterministic_and_content_sensitive) {
 
 // --- Golden fixture suites --------------------------------------------------
 
-CK_TEST(golden_box_and_junctions_clipping_and_junction_merging) {
+CK_TEST(golden_box_title_and_full_width_hline_merge_into_tee_junctions) {
     Surface s(Size{12, 6});
     Painter p(s, Rect{0, 0, 12, 6});
     const Style normal{Color::default_color(), Color::default_color(), Attr{}};
@@ -108,6 +108,48 @@ CK_TEST(golden_box_and_junctions_clipping_and_junction_merging) {
 
     expect_round_trip(capture(s, CursorState{true, Point{2, 4}, CursorShape::Block}),
                        "golden/box_and_junctions.dump");
+}
+
+CK_TEST(golden_translated_clipped_painter_cuts_every_primitive_at_the_clip_edges) {
+    // The M2 clipping golden. A child Painter is translated to origin (2,1)
+    // and asks for local clip {1,1,12,12}; the parent allows only
+    // {0,0,12,9}, so the effective absolute clip is {3,2,9,7}: its left and
+    // top edges come from the child's own request, its right and bottom
+    // edges from the parent. Everything below is drawn in the child's local
+    // coordinates, and each primitive crosses at least one clip edge.
+    Surface s(Size{14, 10});
+    const Style outside{Color::default_color(), Color::default_color(), Attr{}};
+    const Style ink{Color::rgb(255, 255, 255), Color::rgb(0, 0, 128), Attr{}};
+    const Style lines{Color::rgb(255, 255, 0), Color::rgb(0, 0, 128), Attr{}};
+    Painter(s, Rect{0, 0, 14, 10}).fill(Rect{0, 0, 14, 10}, Cell::from_grapheme(".", outside));
+
+    const Painter parent(s, Rect{0, 0, 12, 9});
+    Painter child = parent.translated(Point{2, 1}, Rect{1, 1, 12, 12});
+    CK_CHECK(child.clip() == (Rect{3, 2, 9, 7}));
+
+    // Row 2: a fill whose rect starts above and left of the clip keeps only
+    // its two cells inside it.
+    child.fill(Rect{-1, 0, 4, 2}, Cell::from_grapheme("#", ink));
+    // Row 3: a wide glyph straddling the left edge is not drawn at all, and
+    // neither is its half inside the clip; the text after it still lands in
+    // place. At the right edge the glyph that would straddle it ends the run.
+    child.draw_text(Point{0, 2}, "\xE4\xB8\xAD" "ab", ink);   // 中ab from absolute column 2
+    child.draw_text(Point{8, 2}, "y\xE4\xB8\xAD" "z", ink);   // y中z from absolute column 10
+    // Row 4: a combining cluster outside the left edge is dropped whole, one
+    // on the first and one on the last clip column are drawn whole, and the
+    // cluster past the right edge is dropped whole.
+    child.draw_text(Point{0, 3}, "e\xCC\x81" "e\xCC\x81", ink);  // éé from absolute column 2
+    child.draw_text(Point{9, 3}, "e\xCC\x81" "e\xCC\x81", ink);  // éé from absolute column 11
+    // Rows 5-8: a box whose left edge and bottom lie outside the clip keeps
+    // its visible top run and right edge; its hidden corners are not drawn.
+    child.draw_box(Rect{-2, 4, 8, 6}, LineStyle::Single, lines);
+    // A vline on the last clip column, crossed by an hline that runs on past
+    // the right edge: both crossings merge into four-way junctions, and the
+    // one on the clip edge keeps the direction of the part the clip hides.
+    child.vline(Point{9, 5}, 5, LineStyle::Single, lines);
+    child.hline(Point{4, 6}, 12, LineStyle::Single, lines);
+
+    expect_round_trip(capture(s), "golden/painter_clipping.dump");
 }
 
 CK_TEST(golden_shadow_dims_the_desktop_in_an_l_shaped_footprint) {

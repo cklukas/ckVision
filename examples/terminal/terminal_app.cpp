@@ -97,6 +97,19 @@ TerminalApp::TerminalApp(ui::Application& app, TerminalAppServices services)
         .category = "File",
         .handler = [this] { (void)new_sixel_demo(); },
     });
+    // A focused terminal hands every key to its child, so the way back to
+    // this application's own commands is one reserved chord. It is an
+    // ordinary command: the status line names whatever chord it is bound to,
+    // and each terminal reserves exactly that chord (set_parent_escape_command).
+    parent_commands_command_ = app_.commands().declare(ui::CommandDescriptor{
+        .key = std::string(kParentCommandsKey),
+        .title = "&Parent commands",
+        .category = "Window",
+        .chord = "Ctrl+Alt+Space",
+        .handler = [this] {
+            if (auto* const menu = dynamic_cast<widgets::MenuBar*>(desktop_->top_dock())) app_.set_focus(menu);
+        },
+    });
 
     // Keep theme changes in the ordinary command/menu path so a running
     // terminal and its contained graphics demonstrate live repainting.
@@ -171,7 +184,7 @@ TerminalApp::TerminalApp(ui::Application& app, TerminalAppServices services)
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().menu}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().next_window}},
                    widgets::StatusLineItem{widgets::CommandPresentation{app_.commands().standard().previous_window}},
-                   widgets::StatusLineItem{"Ctrl+Alt+Space: parent commands"},
+                   widgets::StatusLineItem{widgets::CommandPresentation{parent_commands_command_}},
                }});
     desktop_ = &shell.desktop();
 
@@ -361,10 +374,7 @@ widgets::Window* TerminalApp::open_terminal(term::TerminalLaunchSpec launch, std
     auto view = std::make_unique<widgets::TerminalView>(session);
     widgets::TerminalView* const terminal_view = view.get();
     view->set_bounds(window->content_rect());
-    view->set_parent_escape(KeyChord{Key::Char, Modifier::Ctrl | Modifier::Alt, " "});
-    view->on_parent_escape = [this] {
-        if (auto* const menu = dynamic_cast<widgets::MenuBar*>(desktop_->top_dock())) app_.set_focus(menu);
-    };
+    view->set_parent_escape_command(parent_commands_command_);
     view->on_selection_copy = [this](std::string text) { app_.set_clipboard_text(std::move(text)); };
     window->set_content(std::move(view));
     // ckvision-doc-end: terminalview

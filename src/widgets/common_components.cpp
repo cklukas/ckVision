@@ -1280,6 +1280,16 @@ bool SpinBox::on_key(const KeyEvent& event) {
     return false;
 }
 bool SpinBox::on_mouse(const MouseEvent& event) {
+    // The wheel steps the value the way the date picker's segments step:
+    // away from the reader is up.
+    if (event.action == MouseAction::Wheel && event.button == MouseButton::WheelUp) {
+        adjust(1);
+        return true;
+    }
+    if (event.action == MouseAction::Wheel && event.button == MouseButton::WheelDown) {
+        adjust(-1);
+        return true;
+    }
     if (event.action != MouseAction::Down || event.button != MouseButton::Left) return false;
     adjust(event.cell.x - absolute_bounds().x >= bounds().width / 2 ? 1 : -1);
     return true;
@@ -1582,9 +1592,9 @@ void CommandPalette::draw(scene::Painter& painter) {
         const int title_columns = std::max(0, text_columns - 1);
         draw_mnemonic(painter, Point{kInset + 1, row}, parsed, title_columns, style,
                       index == highlighted_ ? selected_mnemonic : mnemonic);
-        const auto chord = context().app->commands().chord_for_command(commands[index].id);
-        if (!chord) continue;
-        const std::string annotation = "  (" + context().app->commands().format_chord(*chord) + ")";
+        const std::string chord = context().app->commands().chord_text(commands[index].id);
+        if (chord.empty()) continue;
+        const std::string annotation = "  (" + chord + ")";
         const int title_width = text::text_width(parsed.display);
         const int annotation_columns = title_columns - title_width;
         if (annotation_columns <= 0) continue;

@@ -163,3 +163,12 @@ CK_TEST(format_on_key_none_aborts) {
         format(KeyChord{Key::None, Modifier::None, ""});  // must abort
     });
 }
+
+CK_TEST(the_space_bar_is_spelled_space_both_ways) {
+    const KeyChord ctrl_alt_space{Key::Char, Modifier::Ctrl | Modifier::Alt, " "};
+    CK_CHECK(format(ctrl_alt_space) == "Ctrl+Alt+Space");
+    CK_CHECK(KeyChord::parse("Ctrl+Alt+Space") == ctrl_alt_space);
+    CK_CHECK(KeyChord::parse("space") == (KeyChord{Key::Char, Modifier::None, " "}));
+    // The literal character still parses, for anything that wrote it that way.
+    CK_CHECK(KeyChord::parse("Ctrl+Alt+ ") == ctrl_alt_space);
+}

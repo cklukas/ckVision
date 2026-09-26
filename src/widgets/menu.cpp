@@ -409,9 +409,9 @@ std::optional<std::string> DropdownMenu::item_chord_hint(const MenuItem& item) c
     // CommandPresentation::chord): the menu advertises the way this
     // application actually reaches the command.
     if (!item.presentation().chord.empty()) return item.presentation().chord;
-    const auto chord = context().app->commands().chord_for_command(command);
-    if (!chord) return std::nullopt;
-    return context().app->commands().format_chord(*chord);
+    std::string chord = context().app->commands().chord_text(command);
+    if (chord.empty()) return std::nullopt;
+    return chord;
 }
 
 ui::CommandId DropdownMenu::item_command(const MenuItem& item) const noexcept {
@@ -455,6 +455,14 @@ SizeHint DropdownMenu::vertical_size_hint() const {
 }
 
 bool DropdownMenu::on_key(const KeyEvent& event) {
+    // A context menu keeps the keyboard focus on its root while a submenu
+    // takes the pointer capture, exactly as a menu bar keeps it on the bar.
+    // The key belongs to the innermost open menu, where the reader's
+    // highlight is: spent here it would move a row they are no longer
+    // looking at, close their submenu on the way past, and make Esc close
+    // the whole chain instead of one level. A bar routes to the innermost
+    // menu itself, so it never reaches this with a submenu open.
+    if (child_menu_ != nullptr) return innermost_menu()->on_key(event);
     switch (event.chord.key) {
         case Key::Up: {
             close_submenu(true);
@@ -699,9 +707,16 @@ MenuBar::~MenuBar() {
 
 void MenuBar::set_menus(std::vector<MenuBarItem> menus) {
     close_dropdown();
-    remove_menu_accelerators();
+    // The accelerators are a function of the titles alone -- each one's
+    // mnemonic and its position -- so a bar rebuilt around the same titles
+    // (an application refreshing item marks or enablement) keeps the ones it
+    // has. Withdrawing and re-declaring identical commands would change the
+    // registry, and every surface showing commands would repaint for nothing.
+    const bool same_titles = std::equal(menus_.begin(), menus_.end(), menus.begin(), menus.end(),
+                                        [](const MenuBarItem& a, const MenuBarItem& b) { return a.label == b.label; });
+    if (!same_titles) remove_menu_accelerators();
     menus_ = std::move(menus);
-    install_menu_accelerators();
+    if (!same_titles) install_menu_accelerators();
     layout_trailing_view();
     if (menus_.empty()) {
         highlighted_ = 0;

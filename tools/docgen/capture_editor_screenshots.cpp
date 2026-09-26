@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <utility>
 
 #include "cvision/term/headless_terminal.hpp"
 #include "editor_app.hpp"
@@ -60,5 +62,24 @@ int main(int argc, char** argv) {
     (void)close_editor.window()->close();
     close_app.step(0);
     write_svg(out_dir, "editor-close-confirm", close_terminal.display());
+
+    // Search > Replace... (Ctrl+R) with "name" selected, a replacement typed,
+    // and the first press of Replace having found the match it will change.
+    ckv::term::HeadlessTerminal replace_terminal(ckv::Size{80, 24}, ckv::term::headless_no_graphics_profile());
+    ckv::ManualClock replace_clock;
+    ckv::ui::Application replace_app(replace_terminal, replace_clock);
+    ckv::editor_example::EditorApp replace_editor(replace_app);
+    replace_app.step(0);
+    const auto press = [&replace_terminal, &replace_app](ckv::Key key, ckv::Modifier modifiers, std::string text) {
+        replace_terminal.inject_event(ckv::KeyEvent{ckv::KeyChord{key, modifiers, std::move(text)}});
+        replace_app.step(0);
+    };
+    for (int index = 0; index < 4; ++index) press(ckv::Key::Right, ckv::Modifier::Shift, "");
+    press(ckv::Key::Char, ckv::Modifier::Ctrl, "r");
+    press(ckv::Key::Tab, ckv::Modifier::None, "");
+    replace_terminal.inject_bytes("title", 0);
+    replace_app.step(0);
+    press(ckv::Key::Enter, ckv::Modifier::None, "");
+    write_svg(out_dir, "editor-replace", replace_terminal.display());
     return 0;
 }

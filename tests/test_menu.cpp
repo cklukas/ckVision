@@ -9,6 +9,8 @@
 #include "cvision/term/headless_terminal.hpp"
 #include "cvision/ui/context.hpp"
 #include "cvision/ui/standard_roles.hpp"
+#include "cvision/widgets/application_shell.hpp"
+#include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/window.hpp"
 
 using ckv::Key;
@@ -902,10 +904,10 @@ CK_TEST(menu_bar_routes_item_mnemonics_to_its_open_dropdown) {
         std::vector<MenuBarItem>{ {"&File", {MenuItem::command(open_command)}} });
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
-    CK_CHECK(bar->on_key(key(Key::Enter)));
+    CK_CHECK(mf.app.dispatch(key(Key::Enter)));
     CK_CHECK(mf.desktop.popups().size() == 1U);
 
-    CK_CHECK(bar->on_key(key(Key::Char, "o")));
+    CK_CHECK(mf.app.dispatch(key(Key::Char, "o")));
     CK_CHECK(opened);
     CK_CHECK(mf.desktop.popups().empty());
 }
@@ -932,11 +934,11 @@ CK_TEST(left_and_right_move_the_highlighted_menu_and_wrap) {
         std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {}}, {"&Edit", {}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
-    CK_CHECK(bar->on_key(key(Key::Right)));
-    CK_CHECK(bar->on_key(key(Key::Right)));  // wraps back to menu 0
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));  // wraps back to menu 0
     // No direct accessor for highlighted_ — verified indirectly via
     // which menu Enter opens next.
-    bar->on_key(key(Key::Enter));
+    mf.app.dispatch(key(Key::Enter));
     CK_CHECK(mf.desktop.popups().size() == 1);
 }
 
@@ -947,7 +949,7 @@ CK_TEST(mnemonic_letter_opens_the_matching_top_level_menu) {
                                   {"&Edit", {MenuItem::action("&Copy", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
-    CK_CHECK(bar->on_key(key(Key::Char, "e")));
+    CK_CHECK(mf.app.dispatch(key(Key::Char, "e")));
     CK_CHECK(mf.desktop.popups().size() == 1);
 }
 
@@ -1069,7 +1071,7 @@ CK_TEST(a_context_menu_keeps_its_frame_inside_the_desktop_at_the_bottom_right_ed
     CK_CHECK(bounds.y >= 0);
     CK_CHECK(bounds.right() <= mf.desktop.bounds().width);
     CK_CHECK(bounds.bottom() <= mf.desktop.bounds().height);
-    CK_CHECK(menu->on_key(key(Key::Escape)));
+    CK_CHECK(mf.app.dispatch(key(Key::Escape)));
     CK_CHECK(mf.desktop.popups().empty());
 }
 
@@ -1091,12 +1093,12 @@ CK_TEST(f10_restarts_top_level_mnemonic_navigation_after_a_previous_menu) {
     MenuBarFixture mf;
     auto bar_owned = std::make_unique<MenuBar>(std::vector<MenuBarItem>{{"&File", {MenuItem::action("Open", {})}},
          {"&Appearance", {MenuItem::action("Colors", {})}}});
-    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
-    mf.app.commands().execute(standard(mf.app).menu);
-    CK_CHECK(bar->on_key(key(Key::Right)));
+    CK_CHECK(mf.desktop.add_child(std::move(bar_owned)) != nullptr);
+    CK_CHECK(mf.app.dispatch(key(Key::F10)));
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));
 
-    mf.app.commands().execute(standard(mf.app).menu);
-    CK_CHECK(bar->on_key(key(Key::Char, "a")));
+    CK_CHECK(mf.app.dispatch(key(Key::F10)));
+    CK_CHECK(mf.app.dispatch(key(Key::Char, "a")));
     CK_CHECK(mf.desktop.popups().size() == 1);
     if (mf.desktop.popups().size() != 1) return;
     const auto* popup = dynamic_cast<const DropdownMenu*>(mf.desktop.popups().front());
@@ -1179,11 +1181,10 @@ CK_TEST(an_items_on_activate_that_reopens_another_menu_does_not_crash_the_activa
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     *bar_holder = bar;
     bar->activate();
-    bar->on_key(key(Key::Enter));  // opens File's dropdown
+    mf.app.dispatch(key(Key::Enter));  // opens File's dropdown
     CK_CHECK(mf.desktop.popups().size() == 1);
 
-    auto* dropdown = static_cast<DropdownMenu*>(mf.desktop.popups()[0]);
-    dropdown->on_key(key(Key::Enter));  // activates the item, which reopens Edit's (empty) dropdown
+    mf.app.dispatch(key(Key::Enter));  // activates the item, which reopens Edit's (empty) dropdown
     CK_CHECK(true);  // reaching this line without a crash/ASan report IS the assertion
 }
 
@@ -1210,7 +1211,7 @@ CK_TEST(a_popup_removed_by_something_other_than_the_bar_still_lets_the_bar_recov
     // the highlight without trying to reopen a dropdown for a menu
     // that no longer exists (there's only one menu, so this also
     // implicitly checks no crash from operating on the stale pointer).
-    CK_CHECK(bar->on_key(key(Key::Right)));
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));
     CK_CHECK(mf.desktop.popups().empty());  // still no (stale) dropdown reopened
 }
 
@@ -1222,12 +1223,15 @@ CK_TEST(right_arrow_opens_a_nested_submenu_and_escape_closes_one_level) {
 
     CK_CHECK(mf.desktop.popups().size() == 1);
     CK_CHECK(mf.app.input_capture() == root);
-    CK_CHECK(root->on_key(key(Key::Right)));
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));
     CK_CHECK(mf.desktop.popups().size() == 2);
 
+    // The keyboard focus stays on the root; the key still reaches the
+    // submenu, and Escape there closes that one level only.
     auto* child = static_cast<DropdownMenu*>(mf.desktop.popups()[1]);
     CK_CHECK(mf.app.input_capture() == child);
-    CK_CHECK(child->on_key(key(Key::Escape)));
+    CK_CHECK(mf.app.focused() == root);
+    CK_CHECK(mf.app.dispatch(key(Key::Escape)));
     CK_CHECK(mf.desktop.popups().size() == 1);
     CK_CHECK(mf.desktop.popups()[0] == root);
     CK_CHECK(mf.app.input_capture() == root);
@@ -1241,11 +1245,11 @@ CK_TEST(activating_a_nested_leaf_closes_the_whole_menu_chain_before_running_it) 
                                   CK_CHECK(mf.app.input_capture() == nullptr);
                                   ran = true;
                               })});
-    DropdownMenu* root = show_context_menu({more}, ckv::Point{2, 2}, mf.app, mf.desktop);
-    CK_CHECK(root->on_key(key(Key::Right)));
-    auto* child = static_cast<DropdownMenu*>(mf.desktop.popups()[1]);
+    CK_CHECK(show_context_menu({more}, ckv::Point{2, 2}, mf.app, mf.desktop) != nullptr);
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));
+    CK_CHECK(mf.desktop.popups().size() == 2U);
 
-    CK_CHECK(child->on_key(key(Key::Enter)));
+    CK_CHECK(mf.app.dispatch(key(Key::Enter)));
     CK_CHECK(ran);
 }
 
@@ -1577,7 +1581,8 @@ CK_TEST(show_context_menu_self_removes_and_clears_capture_on_escape) {
     MenuBarFixture mf;
     auto* popup = ckv::widgets::show_context_menu({MenuItem::action("&Copy", {})},
                                                     ckv::Point{10, 10}, mf.app, mf.desktop);
-    popup->on_key(key(Key::Escape));
+    CK_CHECK(mf.app.input_capture() == popup);
+    CK_CHECK(mf.app.dispatch(key(Key::Escape)));
     CK_CHECK(mf.desktop.popups().empty());
     CK_CHECK(mf.app.input_capture() == nullptr);
 }
@@ -1665,7 +1670,8 @@ CK_TEST(show_context_menu_activating_an_item_closes_it_and_runs_the_action) {
     bool ran = false;
     auto* popup = ckv::widgets::show_context_menu({MenuItem::action("&Copy", [&] { ran = true; })},
                                                     ckv::Point{10, 10}, mf.app, mf.desktop);
-    popup->on_key(key(Key::Enter));
+    CK_CHECK(mf.app.input_capture() == popup);
+    CK_CHECK(mf.app.dispatch(key(Key::Enter)));
     CK_CHECK(ran);
     CK_CHECK(mf.desktop.popups().empty());
 }
@@ -1744,6 +1750,26 @@ CK_TEST(menu_accelerators_are_withdrawn_when_the_menus_are_replaced) {
     CK_CHECK(mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "f"}).has_value());
 }
 
+CK_TEST(rebuilding_the_same_menu_titles_keeps_the_accelerators_and_leaves_the_registry_alone) {
+    MenuBarFixture mf;
+    auto bar_owned = std::make_unique<MenuBar>(
+        std::vector<MenuBarItem>{{"&File", {MenuItem::action("&Open", {})}}, {"&Help", {}}});
+    MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
+    bar->set_bounds(Rect{0, 0, 30, 1});
+    const auto help = mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "h"});
+    CK_CHECK(help.has_value());
+    const std::uint64_t revision = mf.app.commands().revision();
+
+    // New items under the same titles: the accelerators are what they were,
+    // so nothing a surface shows has changed and nothing need repaint for it.
+    bar->set_menus({{"&File", {MenuItem::action("&Open", {}), MenuItem::action("&Close", {})}}, {"&Help", {}}});
+    CK_CHECK(mf.app.commands().revision() == revision);
+    CK_CHECK(mf.app.commands().command_for_key(KeyChord{Key::Char, Modifier::Alt, "h"}) == help);
+    CK_CHECK(mf.app.dispatch(ckv::KeyEvent{KeyChord{Key::Char, Modifier::Alt, "f"}}));
+    const auto* dropdown = dynamic_cast<const DropdownMenu*>(mf.desktop.popups().front());
+    CK_CHECK(dropdown != nullptr && dropdown->items().size() == 2u);
+}
+
 // --- Press-drag menu opening ------------------------------------------
 //
 // Pressing on a menu title opens it with nothing selected: the pointer is
@@ -1783,7 +1809,7 @@ CK_TEST(a_keyboard_opened_menu_selects_its_first_item_at_once) {
 
     // No pointer is involved, so there is no other indicator of position.
     bar->activate();
-    bar->on_key(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
+    mf.app.dispatch(ckv::KeyEvent{KeyChord{Key::Down, Modifier::None, ""}});
     auto* dropdown = dynamic_cast<DropdownMenu*>(mf.desktop.popups().front());
     CK_CHECK(dropdown != nullptr);
     if (dropdown == nullptr) return;
@@ -1870,9 +1896,9 @@ CK_TEST(home_and_end_act_on_the_submenu_the_reader_is_standing_in) {
     const MenuItem more = MenuItem::submenu(
         "&More", {MenuItem::action("&A", {}), MenuItem::action("&B", {}), MenuItem::action("&C", {})});
     DropdownMenu* root = show_context_menu({more}, ckv::Point{2, 2}, mf.app, mf.desktop);
-    CK_CHECK(root->on_key(key(Key::Right)));
+    CK_CHECK(mf.app.dispatch(key(Key::Right)));
     auto* child = static_cast<DropdownMenu*>(mf.desktop.popups()[1]);
-    child->on_key(key(Key::End));
+    CK_CHECK(mf.app.dispatch(key(Key::End)));
     CK_CHECK(child->highlighted() == 2);   // the submenu moved
     CK_CHECK(root->highlighted() == 0);    // and the parent did not
 }
@@ -1885,8 +1911,8 @@ CK_TEST(the_menu_bar_ends_are_its_first_and_last_menu) {
         {"&Help", {MenuItem::action("c", {})}}});
     MenuBar* bar = static_cast<MenuBar*>(mf.desktop.add_child(std::move(bar_owned)));
     bar->activate();
-    CK_CHECK(bar->on_key(key(Key::End)));
-    bar->on_key(key(Key::Enter));
+    CK_CHECK(mf.app.dispatch(key(Key::End)));
+    mf.app.dispatch(key(Key::Enter));
     CK_CHECK(mf.desktop.popups().size() == 1);
     CK_CHECK(static_cast<DropdownMenu*>(mf.desktop.popups()[0])->items()[0].label() == "c");
 }
@@ -2099,4 +2125,292 @@ CK_TEST(a_popup_wider_than_its_desktop_is_narrowed_to_it_and_elides_its_labels) 
     CK_CHECK(row_text(surface, 2) == "│ Quit     │");
     CK_CHECK(menu->on_key(key(Key::Escape)));
     CK_CHECK(desktop.popups().empty());
+}
+
+// --- End-to-end scripts: the whole menu system through public input ------
+//
+// Two Application-level scripts drive a menu bar, its dropdowns, a nested
+// submenu, a checkable and a disabled row and a context menu -- one by
+// keyboard alone, one by mouse alone. ApplicationShell mounts a real Desktop
+// in the root and docks the bar, and every event takes the path a terminal's
+// input takes: HeadlessTerminal::inject_event, then Application::step.
+
+namespace {
+
+struct MenuScript {
+    ckv::term::HeadlessTerminal term{ckv::Size{60, 16}};
+    ManualClock clock;
+    Application app{term, clock};
+    StandardRoles roles = intern_standard_roles(app.roles());
+    std::vector<std::string> log;
+    bool wrap = false;
+    ckv::widgets::ApplicationShell shell;
+    ckv::widgets::Window* window = nullptr;
+    ckv::widgets::InputLine* field = nullptr;
+
+    MenuScript() : shell(app, options()) {
+        window = shell.desktop().add_window(std::make_unique<ckv::widgets::Window>("Draft"));
+        window->set_bounds(Rect{30, 6, 28, 6});
+        field = window->content_pane().add(std::make_unique<ckv::widgets::InputLine>());
+        field->set_bounds(Rect{1, 1, 20, 1});
+        app.set_focus(field);
+        app.step(0);
+    }
+
+    ckv::widgets::ApplicationShellOptions options() {
+        const CommandId closing = app.commands().declare({.key = "test.close", .title = "&Close"});
+        app.commands().set_enabled_predicate(closing, [] { return false; });
+        return ckv::widgets::ApplicationShellOptions{
+            .theme = make_classic_theme(app.roles(), roles),
+            .menus = {
+                {"&File",
+                 {MenuItem::submenu("&New", {MenuItem::action("&Sheet", [this] { log.push_back("sheet"); }),
+                                             MenuItem::action("&Text", [this] { log.push_back("text"); })}),
+                  MenuItem::separator(), MenuItem::command(closing),
+                  MenuItem::action("&Wrap", [this] { wrap = !wrap; }).with_mark_provider([this] {
+                      return wrap ? MenuMark::Checked : MenuMark::Unchecked;
+                  })}},
+                {"&Edit", {MenuItem::action("&Undo", [this] { log.push_back("undo"); })}},
+            }};
+    }
+
+    std::vector<MenuItem> context_items() {
+        return {MenuItem::submenu("&More", {MenuItem::action("&Deep", [this] { log.push_back("deep"); })}),
+                MenuItem::action("&Copy", [this] { log.push_back("copy"); })};
+    }
+
+    void inject(ckv::term::TerminalEvent event) {
+        term.inject_event(std::move(event));
+        app.step(0);
+    }
+    void press(Key k, Modifier modifiers = Modifier::None, std::string text = {}) {
+        inject(ckv::KeyEvent{KeyChord{k, modifiers, std::move(text)}});
+    }
+    void pointer(ckv::MouseAction action, ckv::Point at, ckv::MouseButton button = ckv::MouseButton::Left) {
+        inject(ckv::MouseEvent{action, button, at, std::nullopt, Modifier::None});
+    }
+
+    std::size_t popups() { return shell.desktop().popups().size(); }
+    bool bar_active() { return shell.menu_bar()->active(); }
+
+    // Where `label` is drawn on the presented frame, searched row by row.
+    std::optional<ckv::Point> find(std::string_view label) const {
+        const Surface& frame = app.composed_surface();
+        for (int y = 0; y < frame.size().height; ++y)
+            for (int x = 0; x + static_cast<int>(label.size()) <= frame.size().width; ++x) {
+                bool match = true;
+                for (std::size_t i = 0; i < label.size() && match; ++i)
+                    match = frame.at(ckv::Point{x + static_cast<int>(i), y}).grapheme() == label.substr(i, 1);
+                if (match) return ckv::Point{x, y};
+            }
+        return std::nullopt;
+    }
+    std::string row_of(std::string_view label) const {
+        const auto at = find(label);
+        return at ? row_text(app.composed_surface(), at->y) : std::string{};
+    }
+};
+
+}  // namespace
+
+CK_TEST(the_whole_menu_system_is_operable_by_keyboard_alone) {
+    MenuScript s;
+    // The application's own keyboard context-menu command, as the header
+    // prescribes: Shift+F10 opens a menu at the focused view.
+    const CommandId context = s.app.commands().declare(
+        {.key = "test.context", .title = "Context menu", .chord = "Shift+F10", .handler = [&s] {
+             show_context_menu_for_focus(s.context_items(), s.app, s.shell.desktop());
+         }});
+    (void)context;
+    const CommandId save = s.app.commands().declare(
+        {.key = "test.save", .title = "Save", .chord = "Ctrl+S", .handler = [&s] { s.log.push_back("save"); }});
+    (void)save;
+    s.inject(ckv::TextEvent{"draft"});
+
+    // F10 enters the bar, Down drops File on its first row, Right opens the
+    // nested submenu, and Enter on its second row runs it and ends the walk.
+    s.press(Key::F10);
+    CK_CHECK(s.bar_active());
+    s.press(Key::Down);
+    CK_CHECK(s.popups() == 1U);
+    CK_CHECK(s.find("Sheet") == std::nullopt);
+    s.press(Key::Right);
+    CK_CHECK(s.popups() == 2U);
+    CK_CHECK(s.find("Sheet").has_value());
+    s.press(Key::Escape);  // one level: the submenu alone
+    CK_CHECK(s.popups() == 1U);
+    CK_CHECK(s.bar_active());
+    s.press(Key::Right);
+    s.press(Key::Down);
+    s.press(Key::Enter);
+    CK_CHECK((s.log == std::vector<std::string>{"text"}));
+    CK_CHECK(s.popups() == 0U);
+    CK_CHECK(!s.bar_active());
+    // Activation never took the reader's unsaved field away.
+    CK_CHECK(s.app.focused() == s.field);
+    CK_CHECK(s.field->text() == "draft");
+
+    // A disabled row is shown and can be stood on, but Enter there does
+    // nothing; the checkable row toggles and says so the next time.
+    s.press(Key::F10);
+    s.press(Key::Down);
+    s.press(Key::Down);
+    CK_CHECK(s.find("Close").has_value());
+    s.press(Key::Enter);
+    CK_CHECK(s.popups() == 1U);
+    CK_CHECK(s.log.size() == 1U);
+    s.press(Key::Down);
+    const std::string unchecked = s.row_of("Wrap");
+    s.press(Key::Enter);
+    CK_CHECK(s.wrap);
+    CK_CHECK(s.popups() == 0U);
+    s.press(Key::F10);
+    s.press(Key::Down);
+    CK_CHECK(s.row_of("Wrap") != unchecked);
+
+    // Escape from a top-level dropdown leaves the menu system, and the reader
+    // is back where they were.
+    s.press(Key::Escape);
+    CK_CHECK(s.popups() == 0U);
+    CK_CHECK(!s.bar_active());
+    CK_CHECK(s.app.focused() == s.field);
+    // Navigation over the bar wraps; Enter drops the menu reached; a row's
+    // mnemonic runs it.
+    s.press(Key::F10);
+    s.press(Key::Right);
+    s.press(Key::Right);
+    s.press(Key::Left);
+    s.press(Key::Enter);
+    CK_CHECK(s.find("Undo").has_value());
+    s.press(Key::Char, Modifier::None, "u");
+    CK_CHECK((s.log == std::vector<std::string>{"text", "undo"}));
+    CK_CHECK(!s.bar_active());
+
+    // Alt and a title's mnemonic open that menu directly; Escape leaves the
+    // reader where they were.
+    s.press(Key::Char, Modifier::Alt, "e");
+    CK_CHECK(s.popups() == 1U);
+    CK_CHECK(s.find("Undo").has_value());
+    s.press(Key::Escape);
+    CK_CHECK(s.popups() == 0U);
+    CK_CHECK(!s.bar_active());
+    CK_CHECK(s.app.focused() == s.field);
+
+    // An accelerator fires without opening any menu.
+    s.press(Key::Char, Modifier::Ctrl, "s");
+    CK_CHECK(s.log.back() == "save");
+    CK_CHECK(s.popups() == 0U);
+
+    // Shift+F10: a context menu with its own submenu, closed a level at a
+    // time, then a row run from it.
+    s.press(Key::F10, Modifier::Shift);
+    CK_CHECK(s.popups() == 1U);
+    s.press(Key::Right);
+    CK_CHECK(s.popups() == 2U);
+    CK_CHECK(s.find("Deep").has_value());
+    s.press(Key::Down);  // the submenu's own row, not its parent's
+    CK_CHECK(s.popups() == 2U);
+    s.press(Key::Escape);
+    CK_CHECK(s.popups() == 1U);
+    s.press(Key::Down);
+    s.press(Key::Enter);
+    CK_CHECK(s.log.back() == "copy");
+    CK_CHECK(s.popups() == 0U);
+    CK_CHECK(s.app.focused() == s.field);
+    CK_CHECK(s.field->text() == "draft");
+}
+
+namespace {
+// The part of a window an application answers a right-click on. What the
+// click MEANS is the host's; the library supplies the menu.
+class ContextArea final : public ckv::ui::View {
+public:
+    explicit ContextArea(MenuScript& script) : script_(script) {}
+    bool on_mouse(const ckv::MouseEvent& event) override {
+        if (event.action != ckv::MouseAction::Down || event.button != ckv::MouseButton::Right) return false;
+        show_context_menu(script_.context_items(), event.cell, script_.app, script_.shell.desktop());
+        return true;
+    }
+
+private:
+    MenuScript& script_;
+};
+}  // namespace
+
+CK_TEST(the_whole_menu_system_is_operable_by_mouse_alone) {
+    MenuScript s;
+    auto* area = s.window->content_pane().add(std::make_unique<ContextArea>(s));
+    area->set_bounds(Rect{1, 2, 20, 2});
+    s.app.step(0);
+    const auto file = s.find("File");
+    const auto edit = s.find("Edit");
+    CK_CHECK(file.has_value() && edit.has_value());
+    if (!file || !edit) return;
+
+    // A press on a title drops its menu; the release over the title leaves
+    // it open. The pointer moving onto another title switches menus.
+    s.pointer(ckv::MouseAction::Down, *file);
+    CK_CHECK(s.popups() == 1U);
+    s.pointer(ckv::MouseAction::Up, *file);
+    CK_CHECK(s.popups() == 1U);
+    s.pointer(ckv::MouseAction::Move, *edit, ckv::MouseButton::None);
+    CK_CHECK(s.find("Undo").has_value());
+    s.pointer(ckv::MouseAction::Move, *file, ckv::MouseButton::None);
+    CK_CHECK(s.find("Undo") == std::nullopt);
+
+    // Hovering the row with children opens them; a click in the submenu runs
+    // the row and closes the whole chain.
+    const auto fresh = s.find("New");
+    CK_CHECK(fresh.has_value());
+    if (!fresh) return;
+    s.pointer(ckv::MouseAction::Move, ckv::Point{fresh->x + 1, fresh->y}, ckv::MouseButton::None);
+    CK_CHECK(s.popups() == 2U);
+    const auto text = s.find("Text");
+    CK_CHECK(text.has_value());
+    if (!text) return;
+    s.pointer(ckv::MouseAction::Move, *text, ckv::MouseButton::None);
+    s.pointer(ckv::MouseAction::Down, *text);
+    s.pointer(ckv::MouseAction::Up, *text);
+    CK_CHECK((s.log == std::vector<std::string>{"text"}));
+    CK_CHECK(s.popups() == 0U);
+
+    // Press on the title, drag down onto the checkable row, release there.
+    s.pointer(ckv::MouseAction::Down, *file);
+    const auto wrap = s.find("Wrap");
+    CK_CHECK(wrap.has_value());
+    if (!wrap) return;
+    s.pointer(ckv::MouseAction::Move, *wrap);
+    s.pointer(ckv::MouseAction::Up, *wrap);
+    CK_CHECK(s.wrap);
+    CK_CHECK(s.popups() == 0U);
+
+    // A disabled row takes the click and does nothing; a press outside every
+    // menu of the chain closes them all.
+    s.pointer(ckv::MouseAction::Down, *file);
+    s.pointer(ckv::MouseAction::Up, *file);
+    const auto closing = s.find("Close");
+    CK_CHECK(closing.has_value());
+    if (!closing) return;
+    s.pointer(ckv::MouseAction::Down, *closing);
+    s.pointer(ckv::MouseAction::Up, *closing);
+    CK_CHECK(s.log.size() == 1U);
+    s.pointer(ckv::MouseAction::Down, ckv::Point{5, 14});
+    s.pointer(ckv::MouseAction::Up, ckv::Point{5, 14});
+    CK_CHECK(s.popups() == 0U);
+    CK_CHECK(s.log.size() == 1U);
+
+    // A right-click opens the host's context menu at the pointer; a click on
+    // one of its rows runs it.
+    const ckv::Rect at = area->absolute_bounds();
+    s.pointer(ckv::MouseAction::Down, ckv::Point{at.x + 2, at.y}, ckv::MouseButton::Right);
+    s.pointer(ckv::MouseAction::Up, ckv::Point{at.x + 2, at.y}, ckv::MouseButton::Right);
+    CK_CHECK(s.popups() == 1U);
+    const auto copy = s.find("Copy");
+    CK_CHECK(copy.has_value());
+    if (!copy) return;
+    s.pointer(ckv::MouseAction::Move, *copy, ckv::MouseButton::None);
+    s.pointer(ckv::MouseAction::Down, *copy);
+    s.pointer(ckv::MouseAction::Up, *copy);
+    CK_CHECK(s.log.back() == "copy");
+    CK_CHECK(s.popups() == 0U);
 }

@@ -8,9 +8,11 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cvision/core/ascii.hpp"
+#include "cvision/core/base64.hpp"
 #include "cvision/core/text.hpp"
 #include "cvision/term/sixel_decoder.hpp"
 
@@ -274,6 +276,14 @@ bool VirtualDisplay::handle_osc(std::string_view body) {
     // this display has no pointer to draw, and what a headless verification
     // wants to know is which name the host was given.
     //
+    // OSC 0 and OSC 52 are the title and clipboard export a session sends
+    // outside its frames (osc_sequences.hpp). They are modelled strictly:
+    // the parser above already refused every C0 byte inside the string, and
+    // a title is refused here for anything else a host could read as a
+    // control — DEL, a C1 code point, or a malformed byte such as a lone
+    // 0x9C, which an 8-bit host reads as ST. A clipboard payload must be
+    // strict base64 on the one selection ckVision writes.
+    //
     // Every other OSC is refused, matching this parser's posture everywhere
     // else — it models exactly what ckVision emits, so an unmodelled
     // sequence means the emitter and the model have drifted apart, and
@@ -284,6 +294,26 @@ bool VirtualDisplay::handle_osc(std::string_view body) {
         pointer_shape_name_ = body.size() > kPointerShapePrefix.size()
                                   ? std::string(body.substr(kPointerShapePrefix.size()))
                                   : std::string();
+        return true;
+    }
+    constexpr std::string_view kTitlePrefix = "0;";
+    if (body.substr(0, kTitlePrefix.size()) == kTitlePrefix) {
+        const std::string_view title = body.substr(kTitlePrefix.size());
+        if (text::sanitize_osc_text(title) != title) {
+            fail("OSC 0 title carries a control or malformed UTF-8");
+            return false;
+        }
+        window_title_ = std::string(title);
+        return true;
+    }
+    constexpr std::string_view kClipboardPrefix = "52;c;";
+    if (body.substr(0, kClipboardPrefix.size()) == kClipboardPrefix) {
+        std::string decoded;
+        if (!base64::decode(body.substr(kClipboardPrefix.size()), decoded)) {
+            fail("OSC 52 clipboard payload is not strict base64");
+            return false;
+        }
+        clipboard_text_ = std::move(decoded);
         return true;
     }
     fail("unsupported OSC sequence in virtual display");

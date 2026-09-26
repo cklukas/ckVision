@@ -770,3 +770,122 @@ CK_TEST(the_benchmark_window_pages_one_topic_at_a_time) {
     CK_CHECK(f.run_command(SysInfoApp::kPreviousPageKey));
     CK_CHECK(f.sysinfo.benchmark_page() == pages - 1);
 }
+
+namespace {
+bool screen_contains(const ckv::term::HeadlessTerminal& term, std::string_view needle) {
+    const ckv::FrameView frame = term.display().frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        std::string row;
+        for (int x = 0; x < frame.size().width; ++x) row += frame.at(ckv::Point{x, y}).grapheme();
+        if (row.find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
+}  // namespace
+
+CK_TEST(the_save_report_dialog_is_driven_by_keys_through_the_injected_filesystem_and_writes_the_chosen_path) {
+    // A script, not a call: every key reaches the application through the
+    // terminal and Application::step, the file dialog lists what the
+    // injected filesystem holds, and the report is written where the reader
+    // chose.
+    ckv::term::HeadlessTerminal term{ckv::Size{80, 24}};
+    ManualClock clock;
+    Application app{term, clock};
+    FixedSystemProbe probe;
+    FixedBenchmarkRunner runner;
+    ckv::MemoryFileSystem files;
+    files.add_directory("/home/reader/reports/archive");
+    files.add_file("/home/reader/notes.txt", "notes");
+    SysInfoApp sysinfo{app, probe, runner, files, "/home/reader"};
+    app.step(0);
+    const auto press = [&term, &app](Key key, Modifier modifiers = Modifier::None, std::string text = {}) {
+        term.inject_event(ckv::KeyEvent{KeyChord{key, modifiers, std::move(text)}});
+        app.step(0);
+    };
+    const ckv::ui::View* const before = app.focused();
+
+    // Report > Save as text..., by its menu and item mnemonics.
+    press(Key::Char, Modifier::Alt, "r");
+    press(Key::Char, Modifier::None, "t");
+    CK_CHECK(app.is_modal());
+    CK_CHECK(screen_contains(term, "Save File"));
+    CK_CHECK(screen_contains(term, "reports/"));
+    CK_CHECK(screen_contains(term, "notes.txt"));
+
+    // The listing has the focus: ".." then the directories. Down and Enter
+    // walk into reports/ and on into archive/, and Enter on ".." comes back.
+    press(Key::Down);
+    press(Key::Enter);
+    CK_CHECK(screen_contains(term, "/home/reader/reports"));
+    CK_CHECK(screen_contains(term, "archive/"));
+    CK_CHECK(!screen_contains(term, "notes.txt"));
+    press(Key::Down);
+    press(Key::Enter);
+    CK_CHECK(screen_contains(term, "/home/reader/reports/archive"));
+    press(Key::Home);
+    press(Key::Enter);
+    CK_CHECK(screen_contains(term, "archive/"));
+
+    // Shift+Tab reaches the path field, which holds the directory shown; the
+    // reader adds a file name to it and accepts with Enter.
+    press(Key::Tab, Modifier::Shift);
+    press(Key::End);
+    term.inject_bytes("/weekly.txt", 0);
+    app.step(0);
+    press(Key::Enter);
+    app.step(0);
+
+    const std::string chosen = "/home/reader/reports/weekly.txt";
+    CK_CHECK(sysinfo.last_saved_report() == chosen);
+    const std::optional<ckv::FileReadResult> written = files.read_file(chosen);
+    CK_CHECK(written.has_value());
+    CK_CHECK(written.has_value() && written->contents == sysinfo.report_text(ckv::sysinfo::ReportFormat::Text));
+    // The application says where it wrote, then gives the focus back.
+    CK_CHECK(screen_contains(term, "Report saved"));
+    CK_CHECK(screen_contains(term, chosen));
+    press(Key::Enter);
+    app.step(0);
+    CK_CHECK(!app.is_modal());
+    CK_CHECK(app.focused() == before);
+}
+
+// The run hints are rendered from the keymap, not written down: rebinding
+// Run selected changes the picker's caption and the empty chart's
+// placeholder on the next refresh tick, and the help topic the next time it
+// is shown -- and the new chord starts a run.
+CK_TEST(sysinfo_run_hints_follow_a_runtime_rebind_of_run_selected) {
+    Fixture f;
+    const auto on_screen = [&f](std::string_view needle) { return screen_contains(f.term, needle); };
+    CK_CHECK(f.run_command(SysInfoApp::kBenchmarksWindowKey));
+    f.app.step(0);
+    CK_CHECK(f.sysinfo.benchmark_picker()->group_label() == "Measure  (F9 runs, Esc cancels)");
+    CK_CHECK(on_screen("Measure  (F9 runs, Esc cancels)"));
+    CK_CHECK(f.sysinfo.chart()->placeholder() == "No measurements yet - press F9 to run.");
+
+    const ckv::ui::CommandId run = *f.app.commands().id_for(std::string(SysInfoApp::kRunBenchmarksKey));
+    f.app.commands().unbind_key(ckv::KeyChord{ckv::Key::F9, ckv::Modifier::None, ""});
+    f.app.commands().bind_key(ckv::KeyChord{ckv::Key::F12, ckv::Modifier::None, ""}, run);
+    f.tick();
+    CK_CHECK(f.sysinfo.benchmark_picker()->group_label() == "Measure  (F12 runs, Esc cancels)");
+    CK_CHECK(on_screen("Measure  (F12 runs, Esc cancels)"));
+    CK_CHECK(f.sysinfo.chart()->placeholder() == "No measurements yet - press F12 to run.");
+    CK_CHECK(!on_screen("F9"));
+
+    // The help topic is written when it is shown, with the chord bound then.
+    f.term.inject_event(ckv::KeyEvent{ckv::KeyChord{ckv::Key::F1, ckv::Modifier::None, ""}});
+    f.app.step(0);
+    CK_CHECK(on_screen("Select what to measure, press F12, and press Esc"));
+    f.term.inject_event(ckv::KeyEvent{ckv::KeyChord{ckv::Key::Escape, ckv::Modifier::None, ""}});
+    f.app.step(0);
+
+    // The new chord starts a run: the held worker enters the runner. Once
+    // released it goes on to the rest of the selection, so the run is let
+    // finish rather than counted mid-flight.
+    f.runner.hold();
+    f.term.inject_event(ckv::KeyEvent{ckv::KeyChord{ckv::Key::F12, ckv::Modifier::None, ""}});
+    f.app.step(0);
+    f.runner.wait_until_entered(1);
+    CK_CHECK(f.runner.runs() >= 1);
+    f.runner.release();
+    f.sysinfo.benchmarks().wait_until_idle();
+}

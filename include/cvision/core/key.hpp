@@ -94,9 +94,10 @@ struct KeyChord {
     // "Ctrl+Shift+F10", "Esc", "Enter" — modifier names (any of
     // "Ctrl"/"Alt"/"Shift"/"Super", case-insensitive, in any order,
     // one "+"-joined prefix each) followed by either a name from
-    // key_name()'s table or a single printable character, which
-    // becomes a Key::Char chord (lowercased, matching how printable
-    // chords are represented everywhere else in the library). Returns
+    // key_name()'s table, "Space" (the space bar's Key::Char " "), or a
+    // single printable character, which becomes a Key::Char chord
+    // (lowercased, matching how printable chords are represented
+    // everywhere else in the library). Returns
     // nullopt for anything that doesn't parse — an unknown modifier
     // token, an empty or multi-character trailing segment that isn't
     // a known key name, a standalone key (which no binding can ever
@@ -107,7 +108,9 @@ struct KeyChord {
 // The inverse of KeyChord::parse: renders `chord` back to its
 // canonical spelling ("Alt+G", "Esc", "F10"). A single-letter
 // Key::Char chord is upper-cased for display ("Alt+G", not
-// "Alt+g") — purely cosmetic, parse() still accepts either case.
+// "Alt+g") — purely cosmetic, parse() still accepts either case — and
+// the space bar's is spelled "Space" ("Ctrl+Alt+Space"), since a space
+// would be invisible in every hint that shows it.
 // CKV_ASSERT if chord.key is Key::None (never a real, displayable
 // binding) — callers render a chord hint only when one exists.
 std::string format(const KeyChord& chord);

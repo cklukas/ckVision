@@ -154,9 +154,9 @@ public:
     // diff and may be capability-gated independently.
     virtual void write(std::string_view bytes) = 0;
 
-    // Sets the host window or tab title. Live backends send OSC 0 with every control character
-    // dropped and malformed UTF-8 replaced (sanitize_osc_text), so the text cannot end the
-    // sequence early.
+    // Sets the host window or tab title. VT backends send osc_title_sequence(title): OSC 0 with
+    // every control character dropped and malformed UTF-8 replaced (text::sanitize_osc_text),
+    // so the text cannot end the sequence early or smuggle in another one.
     virtual void set_title(std::string_view title) = 0;
     // Rings the host's bell (BEL); what the person notices is the host's choice.
     virtual void bell() = 0;

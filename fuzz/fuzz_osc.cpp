@@ -4,13 +4,13 @@
 #include <cstdint>
 #include <string>
 
+#include "cvision/core/text.hpp"
 #include "cvision/core/utf8.hpp"
-#include "cvision/term/presenter.hpp"
 #include "fuzz_common.hpp"
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const std::string input = ckv::fuzz::decode_seed_escapes(data, size);
-    const std::string escaped = ckv::term::sanitize_osc_text(input);
+    const std::string escaped = ckv::text::sanitize_osc_text(input);
     ckv::fuzz::require(!ckv::fuzz::contains_terminal_control(escaped));
     // The whole contract: well-formed UTF-8 holding no C0 or C1 control code
     // point, so no 7-bit, 8-bit or UTF-8 spelling of a terminator survives.

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "cvision/core/assert.hpp"
+#include "cvision/term/osc_sequences.hpp"
 
 namespace ckv::term {
 
@@ -41,6 +42,12 @@ void HeadlessTerminal::write(std::string_view bytes) {
         std::fprintf(stderr, "ckVision headless display refused output: %s\n",
                      display_.error().c_str());
     CKV_ASSERT(display_.valid());
+}
+
+void HeadlessTerminal::set_title(std::string_view title) { write(osc_title_sequence(title)); }
+
+void HeadlessTerminal::write_clipboard(std::string_view text) {
+    if (caps_.clipboard_write) write(osc_clipboard_sequence(text));
 }
 
 void HeadlessTerminal::inject_event(TerminalEvent event) {

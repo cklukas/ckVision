@@ -59,6 +59,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_minimized_window_stub.cpp
     test_mnemonic.cpp
     test_option_group.cpp
+    test_osc_emission.cpp
     test_paged_strip.cpp
     test_popup_list.cpp
     test_overlay.cpp
@@ -92,8 +93,10 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_text_view.cpp
     test_text_editor.cpp
     test_text_width.cpp
+    test_text_width_divergent.cpp
     test_unicode_grapheme_break.cpp
     test_theme.cpp
+    test_theme_override_golden.cpp
     test_tree_view.cpp
     test_utf8.cpp
     test_version.cpp
@@ -101,6 +104,7 @@ set(CKVISION_PORTABLE_TEST_SOURCES
     test_virtual_display_visual_golden.cpp
     test_view.cpp
     test_window_activation_golden.cpp
+    test_window_resize_golden.cpp
     test_wp35.cpp
     test_wp36.cpp
     test_widgets.cpp
@@ -256,6 +260,21 @@ if(TARGET forms_app)
     target_link_libraries(cvision_tests PRIVATE forms_app)
 endif()
 
+# The event scripts (tools/docgen/event_script.hpp) are shared with the
+# generator that writes their pinned frames; the M4 form demo's script plays
+# the shipped examples/rootdialog object graph.
+if(TARGET docgen_event_scripts)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES
+        test_rootdialog_smoke.cpp
+        test_close_veto_scripts.cpp
+        test_menu_operability_scripts.cpp)
+    target_sources(cvision_tests PRIVATE
+        test_rootdialog_smoke.cpp
+        test_close_veto_scripts.cpp
+        test_menu_operability_scripts.cpp)
+    target_link_libraries(cvision_tests PRIVATE docgen_event_scripts rootdialog_app)
+endif()
+
 if(TARGET workbench_app)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_workbench_smoke.cpp)
     target_sources(cvision_tests PRIVATE test_workbench_smoke.cpp)
@@ -326,6 +345,14 @@ if(UNIX AND TARGET terminal_app)
     target_link_libraries(cvision_tests PRIVATE terminal_app)
 endif()
 
+# The widget width sweeps are rendered by the same docgen library that
+# generates their pinned goldens.
+if(TARGET docgen_clip_sweep)
+    list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_clip_sweep_golden.cpp)
+    target_sources(cvision_tests PRIVATE test_clip_sweep_golden.cpp)
+    target_link_libraries(cvision_tests PRIVATE docgen_clip_sweep)
+endif()
+
 if(TARGET docgen_frame_svg)
     list(APPEND CKVISION_PORTABLE_TEST_SOURCES test_frame_svg.cpp)
     target_sources(cvision_tests PRIVATE test_frame_svg.cpp)
@@ -370,13 +397,17 @@ foreach(test_source IN LISTS CKVISION_PORTABLE_TEST_SOURCES)
            test_source STREQUAL "test_virtual_display_visual_golden.cpp")
             list(APPEND test_labels visual)
         endif()
-    elseif(test_source MATCHES "smoke")
+    elseif(test_source MATCHES "smoke|_scripts\\.cpp$")
         set(test_labels "script;portable")
     endif()
     if(test_source STREQUAL "test_presenter.cpp")
         list(APPEND test_labels raw-byte)
     elseif(test_source STREQUAL "test_golden_capture.cpp")
         list(APPEND test_labels symbolic-scene)
+    elseif(test_source STREQUAL "test_text_width_divergent.cpp")
+        # D-019: every case in this suite is a known terminal-divergent
+        # width class; `ctest -L d019` runs exactly that set.
+        list(APPEND test_labels d019)
     elseif(test_source STREQUAL "test_virtual_display.cpp" OR
            test_source STREQUAL "test_virtual_display_visual_golden.cpp")
         list(APPEND test_labels visual-protocol)
@@ -528,17 +559,30 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 if(TARGET generate_hello_golden AND TARGET generate_editor_goldens AND
    TARGET generate_window_activation_goldens AND TARGET generate_root_resize_goldens AND
    TARGET generate_desktop_dialog_goldens AND TARGET generate_window_z_order_golden AND
-   TARGET generate_terminal_plane_goldens)
+   TARGET generate_shrink_storm_goldens AND TARGET generate_window_resize_goldens AND
+   TARGET generate_layouts_goldens AND TARGET generate_filebrowser_goldens AND
+   TARGET generate_clip_sweep_goldens AND TARGET generate_hostile_content_goldens AND
+   TARGET generate_event_script_goldens AND TARGET generate_theme_override_goldens AND
+   TARGET generate_forms_goldens AND TARGET generate_terminal_plane_goldens)
     add_test(NAME generated_golden_bytes
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_generated_goldens.py
             --fixtures ${CMAKE_CURRENT_SOURCE_DIR}/golden
             --scratch ${CMAKE_BINARY_DIR}/test-artifacts/generated-goldens
             --generator "generate_hello_golden=$<TARGET_FILE:generate_hello_golden>"
             --generator "generate_editor_goldens=$<TARGET_FILE:generate_editor_goldens>"
+            --generator "generate_forms_goldens=$<TARGET_FILE:generate_forms_goldens>"
             --generator "generate_window_activation_goldens=$<TARGET_FILE:generate_window_activation_goldens>"
             --generator "generate_root_resize_goldens=$<TARGET_FILE:generate_root_resize_goldens>"
             --generator "generate_desktop_dialog_goldens=$<TARGET_FILE:generate_desktop_dialog_goldens>"
+            --generator "generate_shrink_storm_goldens=$<TARGET_FILE:generate_shrink_storm_goldens>"
+            --generator "generate_window_resize_goldens=$<TARGET_FILE:generate_window_resize_goldens>"
+            --generator "generate_layouts_goldens=$<TARGET_FILE:generate_layouts_goldens>"
+            --generator "generate_filebrowser_goldens=$<TARGET_FILE:generate_filebrowser_goldens>"
             --generator "generate_window_z_order_golden=$<TARGET_FILE:generate_window_z_order_golden>"
+            --generator "generate_clip_sweep_goldens=$<TARGET_FILE:generate_clip_sweep_goldens>"
+            --generator "generate_hostile_content_goldens=$<TARGET_FILE:generate_hostile_content_goldens>"
+            --generator "generate_event_script_goldens=$<TARGET_FILE:generate_event_script_goldens>"
+            --generator "generate_theme_override_goldens=$<TARGET_FILE:generate_theme_override_goldens>"
             --generator "generate_terminal_plane_goldens=$<TARGET_FILE:generate_terminal_plane_goldens>")
     set_tests_properties(generated_golden_bytes PROPERTIES
         LABELS "golden;visual;raw-byte;portable;script" TIMEOUT 60)
@@ -573,6 +617,9 @@ set_tests_properties(hello_line_budget PROPERTIES LABELS "script;budget" TIMEOUT
 add_test(NAME example_hygiene
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_example_hygiene.py)
 set_tests_properties(example_hygiene PROPERTIES LABELS "script;api" TIMEOUT 30)
+add_test(NAME example_hygiene_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_example_hygiene.py --self-test)
+set_tests_properties(example_hygiene_self_test PROPERTIES LABELS "script;api" TIMEOUT 30)
 
 add_test(NAME doc_snippet_check
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/extract_snippets.py
@@ -613,6 +660,20 @@ add_test(NAME doc_api_comments_self_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_api_comments.py
             --self-test)
 set_tests_properties(doc_api_comments_self_test PROPERTIES LABELS "script;documentation" TIMEOUT 30)
+
+# WP-38: every public view type is driven by at least one Application-level
+# interaction script -- a named CK_TEST that reaches it and sends events
+# through dispatch, inject_event or step, never its handlers directly. The map
+# is the "Interaction scripts" table in docs/coverage.md; the self-test proves
+# the checker still rejects each way a row can be wrong.
+add_test(NAME interaction_script_coverage
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_interaction_scripts.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(interaction_script_coverage PROPERTIES LABELS "script;documentation" TIMEOUT 30)
+add_test(NAME interaction_script_coverage_self_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/docgen/check_interaction_scripts.py
+            --self-test)
+set_tests_properties(interaction_script_coverage_self_test PROPERTIES LABELS "script;documentation" TIMEOUT 30)
 
 # D-012/WP-23: scan every tracked and non-ignored text artifact for
 # prohibited source-fidelity claims, and separately prove that the checker

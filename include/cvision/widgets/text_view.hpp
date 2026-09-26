@@ -121,10 +121,11 @@ public:
     bool activate_current_link();
     // The content for a terminal that understands OSC 8 hyperlinks: each
     // linked span wrapped as ESC ] 8 ; ; target ST, text, ESC ] 8 ; ; ST, the
-    // rest as plain text. Attributes are not exported. C0 controls other than
-    // '\n', and DEL, are removed from text and targets so the output can
-    // never carry a control sequence of its own. Deterministic: the same
-    // content always yields the same bytes.
+    // rest as plain text. Attributes are not exported. Every C0 and C1
+    // control and DEL is removed from targets, and from text except '\n', and
+    // malformed UTF-8 becomes U+FFFD (text::sanitize_osc_text), so the output
+    // can never carry a control sequence or a string terminator of its own.
+    // Deterministic: the same content always yields the same bytes.
     std::string osc8_text() const;
 
     // Fired with the link's target when a link is activated: Enter on the

@@ -4,8 +4,9 @@
 // WP-24's literal resize acceptance: one desktop is driven only through
 // HeadlessTerminal::resize and Application::step, then its composed frame is
 // pinned after each resize. Geometry assertions make the individual policies
-// explicit; the frame-size assertions prove a shrink has no stale cells beyond
-// the terminal's current grid.
+// explicit. After every step the terminal's presented display must equal the
+// composed frame cell for cell, so a stale cell the Presenter left behind on
+// a grow or a shrink fails the script even where the composed golden is right.
 #include <fstream>
 #include <sstream>
 
@@ -17,6 +18,7 @@
 #include "cvision/ui/standard_roles.hpp"
 #include "cvision/widgets/desktop.hpp"
 #include "cvision/widgets/window.hpp"
+#include "presented_frame.hpp"
 
 using ckv::ManualClock;
 using ckv::Rect;
@@ -42,7 +44,7 @@ std::string capture(const Application& app) {
 }
 
 struct ResizeScript {
-    ckv::term::HeadlessTerminal term{Size{80, 24}};
+    ckv::term::HeadlessTerminal term{Size{80, 24}, ckv::term::headless_no_graphics_profile()};
     ManualClock clock;
     Application app{term, clock};
     ckv::ui::StandardRoles roles = intern_standard_roles(app.roles());
@@ -77,6 +79,7 @@ struct ResizeScript {
     std::string resize_and_capture(Size size) {
         term.resize(size);
         CK_CHECK(app.step(0));
+        CK_CHECK(cktest_support::presented_equals_composed(term, app));
         return capture(app);
     }
 };
@@ -93,6 +96,10 @@ void check_reachable(const Window& window, Rect area) {
 
 CK_TEST(headless_resize_script_pins_each_step_and_covers_root_window_policies) {
     ResizeScript script;
+    // The first frame at 80x24 is presented before any resize, so each
+    // resize below is diffed against a screen the terminal already shows.
+    script.app.step(0);
+    CK_CHECK(cktest_support::presented_equals_composed(script.term, script.app));
 
     const std::string grown = script.resize_and_capture(Size{120, 40});
     const Rect grown_content{0, 1, 120, 38};
@@ -115,4 +122,16 @@ CK_TEST(headless_resize_script_pins_each_step_and_covers_root_window_policies) {
     CK_CHECK(script.app.current_frame().size() == (Size{40, 10}));
     CK_CHECK(script.term.display().size() == (Size{40, 10}));
     CK_CHECK(shrunk == read_file("golden/root_resize_shrink.dump"));
+
+    // Growing back after the shrink is where cells outside the small grid
+    // would survive if the Presenter trusted its previous frame.
+    const std::string regrown = script.resize_and_capture(Size{80, 24});
+    const Rect regrown_content{0, 1, 80, 22};
+    CK_CHECK(script.desktop->bounds() == (Rect{0, 0, 80, 24}));
+    CK_CHECK(script.desktop->top_dock()->bounds() == (Rect{0, 0, 80, 1}));
+    CK_CHECK(script.desktop->bottom_dock()->bounds() == (Rect{0, 23, 80, 1}));
+    CK_CHECK(script.zoomed->bounds() == regrown_content);
+    CK_CHECK(script.filling->bounds() == regrown_content);
+    check_reachable(*script.ordinary, regrown_content);
+    CK_CHECK(regrown == read_file("golden/root_resize_regrow.dump"));
 }

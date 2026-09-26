@@ -1049,3 +1049,46 @@ CK_TEST(the_cursor_row_wears_the_full_highlight_only_while_the_tree_holds_the_ke
     tree.draw(painter);
     CK_CHECK(surface.at(ckv::Point{2, 0}).style() == f.theme.resolve(f.roles.list_selected));
 }
+
+CK_TEST(a_scripted_tree_view_expands_walks_and_activates_through_dispatched_input) {
+    // Application-level script: the tree holds the focus in a real
+    // Application; keys and a click on the twisty reach it through dispatch,
+    // and step() shows the rows each expansion reveals or hides.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 8});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* tree = app.root().add(std::make_unique<TreeView>());
+    tree->set_bounds(Rect{0, 0, 20, 5});
+    tree->set_roots(sample_forest());
+    std::vector<std::string> activated;
+    tree->on_activate = [&](TreeNode& node) { activated.push_back(node.label); };
+    app.set_focus(tree);
+    app.step(0);
+    const auto shows = [&](int y, std::string_view label) {
+        return row_text(app.composed_surface(), y).find(label) != std::string::npos;
+    };
+    CK_CHECK(shows(0, "parent"));
+    CK_CHECK(shows(1, "leaf"));
+
+    CK_CHECK(app.dispatch(key(Key::Right)));  // expands without moving
+    app.step(0);
+    CK_CHECK(shows(1, "child1"));
+    CK_CHECK(shows(3, "leaf"));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Down)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK((activated == std::vector<std::string>{"child2"}));
+
+    // A press on the parent's twisty collapses it again.
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{0, 0},
+                                          std::nullopt, Modifier::None}));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{0, 0}, std::nullopt,
+                                 Modifier::None});
+    app.step(0);
+    CK_CHECK(tree->selected()->label == "parent");
+    CK_CHECK(!tree->selected()->expanded);
+    CK_CHECK(shows(1, "leaf"));
+    CK_CHECK(!shows(2, "child2"));
+}

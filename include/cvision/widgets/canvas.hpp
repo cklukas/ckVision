@@ -109,6 +109,15 @@ public:
     // and any pixel position the host reported are available.
     std::function<void(const MouseEvent&)> on_click;  // see ImageView's own note: forwards the full dual-space event
 
+    // The backing-image pixel `event` points at: the backing image fills the
+    // canvas, so this maps the reported pixel position through the canvas's
+    // cells and the attached Application's cell metric — the terminal's, not
+    // the one set_cell_metrics() sized the backing image by
+    // (MouseEvent::image_pixel). Empty when the terminal reported no pixel
+    // position, when there is no backing image, no Application or no
+    // measured cell metric, and when the pointer is not over the canvas.
+    std::optional<PixelPoint> image_pixel_at(const MouseEvent& event) const noexcept;
+
     void draw(scene::Painter& painter) override;
     // Consumes every mouse event, whether or not on_click is set.
     bool on_mouse(const MouseEvent& event) override;

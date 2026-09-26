@@ -4,6 +4,7 @@
 // End-to-end evidence for the shipped editor example. The test drives its
 // public application path against HeadlessTerminal, the same object graph as
 // the interactive executable and documentation capture tool.
+#include <optional>
 #include <string>
 #include <string_view>
 #include <fstream>
@@ -13,7 +14,9 @@
 #include "cvision/core/golden.hpp"
 #include "cvision/scene/golden_capture.hpp"
 #include "cvision/term/headless_terminal.hpp"
+#include "cvision/widgets/button.hpp"
 #include "cvision/widgets/desktop.hpp"
+#include "cvision/widgets/input_line.hpp"
 #include "cvision/widgets/minimized_window_stub.hpp"
 #include "cvision/widgets/menu.hpp"
 #include "cvision/widgets/text_editor.hpp"
@@ -47,6 +50,53 @@ std::string read_file(const char* path) {
     std::ostringstream buffer;
     buffer << in.rdbuf();
     return buffer.str();
+}
+
+// Event scripts: every key and mouse report goes in through the terminal and
+// reaches the example by Application::step, the way a host's input does.
+void press(Fixture& fixture, ckv::Key key, ckv::Modifier modifiers = ckv::Modifier::None,
+           std::string text = {}) {
+    fixture.term.inject_event(ckv::KeyEvent{ckv::KeyChord{key, modifiers, std::move(text)}});
+    fixture.app.step(0);
+}
+
+void type(Fixture& fixture, std::string_view text) {
+    fixture.term.inject_bytes(text, 0);
+    fixture.app.step(0);
+}
+
+void mouse(Fixture& fixture, ckv::MouseAction action, ckv::MouseButton button, Point cell) {
+    fixture.term.inject_event(ckv::MouseEvent{action, button, cell, std::nullopt, ckv::Modifier::None});
+    fixture.app.step(0);
+}
+
+// Where `needle` starts on screen, cell by cell, or nothing.
+std::optional<Point> find_on_screen(const ckv::term::VirtualDisplay& display, std::string_view needle) {
+    const ckv::FrameView frame = display.frame();
+    for (int y = 0; y < frame.size().height; ++y) {
+        for (int x = 0; x + static_cast<int>(needle.size()) <= frame.size().width; ++x) {
+            bool matches = true;
+            for (std::size_t index = 0; index < needle.size() && matches; ++index)
+                matches = frame.at(Point{x + static_cast<int>(index), y}).grapheme() == needle.substr(index, 1);
+            if (matches) return Point{x, y};
+        }
+    }
+    return std::nullopt;
+}
+
+// The text of screen row `y`.
+std::string screen_row(const ckv::term::VirtualDisplay& display, int y) {
+    const ckv::FrameView frame = display.frame();
+    std::string row;
+    for (int x = 0; x < frame.size().width; ++x) row += frame.at(Point{x, y}).grapheme();
+    return row;
+}
+
+// Whether `view` lies inside `ancestor`'s subtree.
+bool is_within(const ckv::ui::View* view, const ckv::ui::View* ancestor) {
+    for (; view != nullptr; view = view->parent())
+        if (view == ancestor) return true;
+    return false;
 }
 
 std::string capture(const Fixture& fixture) {
@@ -417,4 +467,227 @@ CK_TEST(the_editor_example_requires_an_explicit_save_discard_or_cancel_choice_be
     f.app.step(0);
     CK_CHECK(!f.app.is_modal());
     CK_CHECK(!f.editor.document()->modified());
+}
+
+CK_TEST(the_editor_example_replace_script_replaces_the_current_match_and_undo_redo_restore_it) {
+    Fixture f;
+    f.app.step(0);
+    for (int index = 0; index < 4; ++index) press(f, ckv::Key::Right, ckv::Modifier::Shift);
+    // Search > Replace... by its chord, with "name" selected.
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "r");
+    CK_CHECK(f.editor.replace_window() != nullptr);
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(display_contains(f.term.display(), "Replace with:"));
+    auto* const find = dynamic_cast<ckv::widgets::InputLine*>(f.app.focused());
+    CK_CHECK(find != nullptr);
+    if (find == nullptr) return;
+    CK_CHECK(find->text() == "name");
+
+    press(f, ckv::Key::Tab);
+    type(f, "title");
+    // The first Replace only finds: the reader sees the match before it changes.
+    press(f, ckv::Key::Enter);
+    CK_CHECK(f.editor.document()->text().starts_with("name: ckVision"));
+    CK_CHECK(f.editor.editor()->selection().has_value());
+    CK_CHECK(f.editor.document()->text(*f.editor.editor()->selection()) == "name");
+    press(f, ckv::Key::Enter);
+    CK_CHECK(f.editor.document()->text().starts_with("title: ckVision"));
+    CK_CHECK(f.editor.document()->modified());
+    CK_CHECK(f.editor.replace_window() != nullptr);
+    // That was the only match, and the press says there is no next one.
+    CK_CHECK(display_contains(f.term.display(), "\"name\" does not occur in config.yaml."));
+    CK_CHECK(!is_within(f.app.focused(), f.editor.replace_window()));
+    press(f, ckv::Key::Enter);
+    f.app.step(0);
+    CK_CHECK(!display_contains(f.term.display(), "does not occur"));
+    CK_CHECK(dynamic_cast<ckv::widgets::InputLine*>(f.app.focused()) != nullptr);
+    CK_CHECK(is_within(f.app.focused(), f.editor.replace_window()));
+
+    press(f, ckv::Key::Escape);
+    f.app.step(0);
+    CK_CHECK(f.editor.replace_window() == nullptr);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.app.focused() == f.editor.editor());
+
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "z");
+    CK_CHECK(f.editor.document()->text().starts_with("name: ckVision"));
+    CK_CHECK(!f.editor.document()->can_undo());
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "y");
+    CK_CHECK(f.editor.document()->text().starts_with("title: ckVision"));
+    CK_CHECK(display_contains(f.term.display(), "title: ckVision"));
+}
+
+CK_TEST(the_editor_example_replace_all_asks_from_inside_the_replace_dialog_and_undoes_in_one_step) {
+    Fixture f;
+    f.app.step(0);
+    const std::string original = f.editor.document()->text();
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "r");
+    ckv::widgets::Window* const dialog = f.editor.replace_window();
+    CK_CHECK(dialog != nullptr);
+    if (dialog == nullptr) return;
+    type(f, "able");
+    press(f, ckv::Key::Tab);
+    type(f, "ABLE");
+    auto* const replacement = dynamic_cast<ckv::widgets::InputLine*>(f.app.focused());
+    CK_CHECK(replacement != nullptr);
+    if (replacement == nullptr) return;
+
+    // Replace All by its mnemonic: a confirmation, modal on top of the modal
+    // Replace dialog, stating what it is about to do.
+    press(f, ckv::Key::Char, ckv::Modifier::Alt, "a");
+    CK_CHECK(display_contains(f.term.display(), "Replace 2 matches of \"able\" with \"ABLE\"?"));
+    CK_CHECK(f.app.focused() != nullptr);
+    CK_CHECK(!is_within(f.app.focused(), dialog));
+    const ckv::ui::View* const confirmation_focus = f.app.focused();
+
+    // Events are scoped to the innermost modal. Typing reaches neither the
+    // Replace dialog's field nor the document; a background accelerator
+    // (Alt+X, Quit) is not honoured; a click on the Replace dialog's field
+    // is not delivered and moves no focus.
+    type(f, "zz");
+    press(f, ckv::Key::Char, ckv::Modifier::Alt, "x");
+    CK_CHECK(!f.app.quit_requested());
+    const Point replacement_cell{replacement->absolute_bounds().x + 1, replacement->absolute_bounds().y};
+    mouse(f, ckv::MouseAction::Down, ckv::MouseButton::Left, replacement_cell);
+    mouse(f, ckv::MouseAction::Up, ckv::MouseButton::Left, replacement_cell);
+    CK_CHECK(f.app.focused() == confirmation_focus);
+    CK_CHECK(replacement->text() == "ABLE");
+    CK_CHECK(f.editor.document()->text() == original);
+
+    // Esc answers No and closes only the confirmation. The Replace dialog is
+    // still modal, and the focus is back where it was when the question was
+    // asked: the field the mnemonic was pressed in.
+    press(f, ckv::Key::Escape);
+    f.app.step(0);
+    CK_CHECK(f.editor.replace_window() == dialog);
+    CK_CHECK(f.app.is_modal());
+    CK_CHECK(f.editor.document()->text() == original);
+    CK_CHECK(f.app.focused() == replacement);
+
+    // Asked again, this time from the button itself, and answered Yes (the
+    // confirmation's default button): every match goes.
+    press(f, ckv::Key::Tab);
+    press(f, ckv::Key::Tab);
+    press(f, ckv::Key::Tab);
+    press(f, ckv::Key::Tab);
+    press(f, ckv::Key::Tab);
+    auto* const replace_all = dynamic_cast<ckv::widgets::Button*>(f.app.focused());
+    CK_CHECK(replace_all != nullptr && replace_all->text() == "Replace &All");
+    press(f, ckv::Key::Enter);
+    CK_CHECK(display_contains(f.term.display(), "Replace 2 matches"));
+    CK_CHECK(!is_within(f.app.focused(), dialog));
+    press(f, ckv::Key::Enter);
+    f.app.step(0);
+    CK_CHECK(f.editor.document()->text().find("enABLEd: true") != std::string::npos);
+    CK_CHECK(f.editor.document()->text().find("stABLE editor") != std::string::npos);
+    CK_CHECK(f.editor.document()->text().find("able") == std::string::npos);
+    CK_CHECK(f.editor.replace_window() == dialog);
+    CK_CHECK(f.app.focused() == replace_all);
+
+    // Esc closes the Replace dialog, and the focus returns one level further,
+    // to the editor.
+    press(f, ckv::Key::Escape);
+    f.app.step(0);
+    CK_CHECK(f.editor.replace_window() == nullptr);
+    CK_CHECK(!f.app.is_modal());
+    CK_CHECK(f.app.focused() == f.editor.editor());
+
+    // One transaction: one Undo takes both replacements back, one Redo
+    // replays both.
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "z");
+    CK_CHECK(f.editor.document()->text() == original);
+    CK_CHECK(!f.editor.document()->can_undo());
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "y");
+    CK_CHECK(f.editor.document()->text().find("enABLEd: true") != std::string::npos);
+    CK_CHECK(f.editor.document()->text().find("stABLE editor") != std::string::npos);
+}
+
+CK_TEST(the_editor_example_replace_dialog_matches_its_pinned_visual_contract) {
+    Fixture f;
+    f.app.step(0);
+    for (int index = 0; index < 4; ++index) press(f, ckv::Key::Right, ckv::Modifier::Shift);
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "r");
+    press(f, ckv::Key::Tab);
+    type(f, "title");
+    press(f, ckv::Key::Enter);
+    CK_CHECK(capture(f) == read_file("golden/editor_replace.dump"));
+    check_scheme_frame(f, "editor.scheme.dark", "golden/editor_replace_dark.dump");
+    check_scheme_frame(f, "editor.scheme.light", "golden/editor_replace_light.dump");
+    check_scheme_frame(f, "editor.scheme.mono", "golden/editor_replace_mono.dump");
+    CK_CHECK(f.editor.replace_window() != nullptr);
+}
+
+CK_TEST(the_editor_example_mouse_wheel_scrolls_the_text_without_moving_the_caret) {
+    Fixture f;
+    f.app.step(0);
+    // A document longer than the window, pasted the way a terminal delivers a
+    // paste, then the caret back at the top.
+    std::string lines;
+    for (int line = 1; line <= 30; ++line) lines += "line " + std::string(line < 10 ? "0" : "") + std::to_string(line) + "\n";
+    f.term.inject_event(ckv::TextEvent{lines, true});
+    f.app.step(0);
+    press(f, ckv::Key::Home, ckv::Modifier::Ctrl);
+    const ckv::Rect text = f.editor.editor()->absolute_bounds();
+    CK_CHECK(screen_row(f.term.display(), text.y).find("line 01") != std::string::npos);
+
+    const Point over_text{text.x + text.width / 2, text.y + 4};
+    for (int notch = 0; notch < 3; ++notch) mouse(f, ckv::MouseAction::Wheel, ckv::MouseButton::WheelDown, over_text);
+    CK_CHECK(screen_row(f.term.display(), text.y).find("line 04") != std::string::npos);
+    CK_CHECK(!display_contains(f.term.display(), "line 01"));
+    CK_CHECK(f.editor.editor()->status().line == 1U);
+    CK_CHECK(display_contains(f.term.display(), "Ln 1, Col 1"));
+
+    mouse(f, ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp, over_text);
+    CK_CHECK(screen_row(f.term.display(), text.y).find("line 03") != std::string::npos);
+}
+
+CK_TEST(the_editor_example_double_click_selects_the_clicked_word) {
+    Fixture f;
+    f.app.step(0);
+    const auto word = find_on_screen(f.term.display(), "ckVision");
+    CK_CHECK(word.has_value());
+    if (!word) return;
+    // A host that recognizes a double click reports it as one event; the
+    // library never infers one from timing.
+    mouse(f, ckv::MouseAction::DoubleClick, ckv::MouseButton::Left, Point{word->x + 3, word->y});
+    CK_CHECK(f.editor.editor()->selection().has_value());
+    CK_CHECK(f.editor.document()->text(*f.editor.editor()->selection()) == "ckVision");
+    press(f, ckv::Key::Char, ckv::Modifier::Ctrl, "c");
+    CK_CHECK(f.app.clipboard_text() == "ckVision");
+}
+
+CK_TEST(the_editor_example_drag_selects_text_with_the_mouse) {
+    Fixture f;
+    f.app.step(0);
+    const auto from = find_on_screen(f.term.display(), "version");
+    const auto to = find_on_screen(f.term.display(), "0.1");
+    CK_CHECK(from.has_value() && to.has_value());
+    if (!from || !to) return;
+    mouse(f, ckv::MouseAction::Down, ckv::MouseButton::Left, *from);
+    mouse(f, ckv::MouseAction::Move, ckv::MouseButton::Left, Point{to->x + 1, to->y});
+    mouse(f, ckv::MouseAction::Move, ckv::MouseButton::Left, Point{to->x + 3, to->y});
+    mouse(f, ckv::MouseAction::Up, ckv::MouseButton::Left, Point{to->x + 3, to->y});
+    CK_CHECK(f.editor.editor()->selection().has_value());
+    CK_CHECK(f.editor.document()->text(*f.editor.editor()->selection()) == "version: 0.1");
+    // The drag left the caret at its end, and the frame says where that is.
+    CK_CHECK(display_contains(f.term.display(), "Ln 2, Col 13"));
+}
+
+CK_TEST(the_editor_example_window_resizes_by_its_grip_and_the_text_reflows) {
+    Fixture f;
+    f.app.step(0);
+    ckv::widgets::Window* const window = f.editor.window();
+    const ckv::Rect before = window->bounds();
+    const int editor_width = f.editor.editor()->bounds().width;
+    const Point grip{before.x + before.width - 1, before.y + before.height - 1};
+    mouse(f, ckv::MouseAction::Down, ckv::MouseButton::Left, grip);
+    mouse(f, ckv::MouseAction::Move, ckv::MouseButton::Left, Point{grip.x - 20, grip.y - 4});
+    mouse(f, ckv::MouseAction::Up, ckv::MouseButton::Left, Point{grip.x - 20, grip.y - 4});
+    CK_CHECK(window->bounds() == (ckv::Rect{before.x, before.y, before.width - 20, before.height - 4}));
+    CK_CHECK(f.editor.editor()->bounds().width == editor_width - 20);
+    // Word wrap follows the narrower viewport, and the position overlay
+    // stays on the moved bottom edge.
+    const auto status = find_on_screen(f.term.display(), "Ln 1, Col 1");
+    CK_CHECK(status.has_value() && status->y == before.y + before.height - 5);
+    CK_CHECK(display_contains(f.term.display(), "description: This is a"));
 }

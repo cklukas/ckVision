@@ -514,6 +514,13 @@ std::string TerminalView::encode_key(const KeyEvent& event, bool application_cur
     }
 }
 
+bool TerminalView::is_parent_escape(const KeyChord& chord) const {
+    if (parent_escape_command_ == ui::kInvalidCommand) return chord == parent_escape_;
+    if (context().app == nullptr) return false;
+    const std::optional<KeyChord> bound = context().app->commands().chord_for_command(parent_escape_command_);
+    return bound && chord == *bound;
+}
+
 bool TerminalView::on_key(const KeyEvent& event) {
     // Before anything else, and only once there is no child to write to: a
     // host may claim keys in a window whose program has ended, where every
@@ -526,11 +533,16 @@ bool TerminalView::on_key(const KeyEvent& event) {
             on_key_after_exit(event))
             return true;
     }
-    if (event.chord == parent_escape_) {
+    if (is_parent_escape(event.chord)) {
         // The one chord the child never sees, and it is claimed on the press:
         // letting the matching release through would deliver half a chord to
         // a program that was told nothing about the other half.
-        if (event.action == KeyAction::Press && on_parent_escape) on_parent_escape();
+        if (event.action == KeyAction::Press) {
+            if (parent_escape_command_ != ui::kInvalidCommand)
+                (void)context().app->execute_command(parent_escape_command_);
+            else if (on_parent_escape)
+                on_parent_escape();
+        }
         return true;
     }
     const core::TerminalStatus status = session_->status();

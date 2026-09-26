@@ -26,7 +26,9 @@ off against the bundle produced by [Client handoff](client-handoff.md).
 
 The public API is indexed by header and client task in the
 [API index](api-index.md); its widget coverage is checked by
-`doc_widget_coverage`. The [example coverage matrix](../plans/example-coverage.md)
+`doc_widget_coverage`, and `interaction_script_coverage` checks that every
+public view type is driven by an Application-level
+[interaction script](coverage.md#interaction-scripts). The [example coverage matrix](../plans/example-coverage.md)
 maps every example surface to its interaction and visual evidence.
 
 ## Evidence rerun on 2026-08-13

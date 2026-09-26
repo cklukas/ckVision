@@ -134,6 +134,22 @@ CK_TEST(osc8_text_wraps_link_spans_and_strips_control_bytes) {
     CK_CHECK(view.osc8_text() == "See \x1b]8;;https://example.test/\x1b\\Docs\x1b]8;;\x1b\\\n");
 }
 
+CK_TEST(osc8_text_strips_c1_terminators_and_malformed_bytes_from_targets_and_text) {
+    // ST is 09/12 to an 8-bit host and U+009C to a UTF-8 one (ECMA-48
+    // §8.3.143); a lone 0x9B is CSI to an 8-bit host. None may survive into
+    // the target, where it would end the OSC early, or into the text, where
+    // it would start a control sequence of its own.
+    Fixture f;
+    auto view = make_view(f);
+    view.set_spans({TextSpan{"a\x9B" "2J\xC2\x9C" "b\tc\n", static_cast<ckv::Attr>(0),
+                             std::string("https://x.test/\xC2\x9C\x1B]8;;evil\x07\x9C")}});
+
+    CK_CHECK(view.osc8_text() ==
+             "\x1b]8;;https://x.test/]8;;evil\xEF\xBF\xBD\x1b\\"
+             "a\xEF\xBF\xBD" "2Jbc\n"
+             "\x1b]8;;\x1b\\");
+}
+
 // --- Scrolling: keyboard -------------------------------------------------
 
 CK_TEST(down_arrow_scrolls_by_one_line) {
@@ -409,4 +425,45 @@ CK_TEST(a_click_finds_the_link_under_the_pointer_after_a_horizontal_scroll) {
     CK_CHECK(activated.empty());
     CK_CHECK(click(6));   // "L", the first cell of the link
     CK_CHECK(activated == "target");
+}
+
+CK_TEST(a_scripted_text_view_scrolls_and_follows_links_through_dispatched_input) {
+    // Application-level script: the view holds the focus in a real
+    // Application; keys, a click and the wheel reach it through dispatch, and
+    // step() shows the lines each scroll brings into view.
+    ckv::term::HeadlessTerminal term(ckv::Size{30, 6});
+    ckv::ManualClock clock;
+    ckv::ui::Application app(term, clock);
+    const StandardRoles roles = intern_standard_roles(app.roles());
+    app.theme() = make_classic_theme(app.roles(), roles);
+    auto* view = app.root().add(std::make_unique<TextView>());
+    view->set_bounds(Rect{0, 0, 20, 3});
+    view->set_spans({TextSpan{"Go ", static_cast<ckv::Attr>(0), std::nullopt},
+                     TextSpan{"home", static_cast<ckv::Attr>(0), std::string("home")},
+                     TextSpan{" or ", static_cast<ckv::Attr>(0), std::nullopt},
+                     TextSpan{"away", static_cast<ckv::Attr>(0), std::string("away")},
+                     TextSpan{"\nline 2\nline 3\nline 4\nline 5\nline 6", static_cast<ckv::Attr>(0), std::nullopt}});
+    std::vector<std::string> activated;
+    view->on_link_activate = [&](const std::string& target) { activated.push_back(target); };
+    app.set_focus(view);
+    app.step(0);
+    const auto row = [&](int y) { return row_text(app.composed_surface(), y); };
+    CK_CHECK(row(0).starts_with("Go home or away"));
+
+    CK_CHECK(app.dispatch(key(Key::Tab)));
+    CK_CHECK(app.dispatch(key(Key::Enter)));
+    CK_CHECK((activated == std::vector<std::string>{"away"}));
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Down, ckv::MouseButton::Left, ckv::Point{4, 0},
+                                          std::nullopt, Modifier::None}));
+    app.dispatch(ckv::MouseEvent{ckv::MouseAction::Up, ckv::MouseButton::Left, ckv::Point{4, 0}, std::nullopt,
+                                 Modifier::None});
+    CK_CHECK((activated == std::vector<std::string>{"away", "home"}));
+
+    CK_CHECK(app.dispatch(key(Key::PageDown)));
+    app.step(0);
+    CK_CHECK(row(0).starts_with("line 4"));
+    CK_CHECK(app.dispatch(ckv::MouseEvent{ckv::MouseAction::Wheel, ckv::MouseButton::WheelUp, ckv::Point{2, 1},
+                                          std::nullopt, Modifier::None}));
+    app.step(0);
+    CK_CHECK(row(0).starts_with("line 3"));
 }

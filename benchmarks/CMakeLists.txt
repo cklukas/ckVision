@@ -9,8 +9,10 @@ add_custom_target(bench_smoke_run
     COMMENT "ckVision benchmark smoke")
 
 # Unlike printed benchmark targets, the deterministic budget gates below are
-# CTest failures when their checked work, size, or redraw limits regress.
-add_test(NAME scene_budget_gate COMMAND cvision_bench)
+# CTest failures when their checked work, size, or redraw limits regress. They
+# run in --gate mode, which executes each benchmark only as often as its
+# checks need (ckbench::kGateIterations); bench_smoke_run is the timed run.
+add_test(NAME scene_budget_gate COMMAND cvision_bench --gate)
 # What these gates assert is deterministic rather than wall-clock based, so they
 # stay meaningful under a sanitizer; only their runtime changes, and ASan/TSan
 # make it an order of magnitude slower. The ceiling follows the instrumentation
@@ -30,7 +32,7 @@ if(TARGET todo_app)
     ckvision_strict(todo_bench)
 
     add_custom_target(todo_bench_run COMMAND todo_bench COMMENT "ckVision TODO benchmarks")
-    add_test(NAME todo_benchmark_smoke COMMAND todo_bench)
+    add_test(NAME todo_benchmark_smoke COMMAND todo_bench --gate)
     set_tests_properties(todo_benchmark_smoke PROPERTIES LABELS "benchmark;budget;example"
         TIMEOUT ${ckvision_benchmark_gate_timeout})
 endif()
