@@ -1779,3 +1779,26 @@ The exact test PIDs and scheduled task were removed, and `cktest` retained
 
 The VM's previously recorded `ForceV2=0` attempt failed before `cmd.exe` or
 ckVision could start, so the **real legacy-console refusal row remains Open**.
+
+## Installed legacy Console Host capability and repeated launch — 2026-09-26
+
+The Windows 11 ARM64 VM initially reported the optional
+`Microsoft.Windows.Console.Legacy~~~~` capability as `NotPresent`, and
+`C:\Windows\System32\conhostv1.dll` was absent. An elevated Windows servicing
+task installed the capability from `11:34:26Z` to `11:42:55Z`. Its result
+reported `Installed`, `RestartNeeded=false`, and a 307,200-byte
+`conhostv1.dll`; the task completed successfully. The current Gallery Release
+executable was copied to a directory readable by the signed-in `cktest`
+account and verified against SHA-256
+`280DACEEB8F235540C91F64339458EF32DA6FE509217BF2F0C5C6B6A7A3C94AD`.
+
+With `cktest`'s `ForceV2` temporarily set to `0`, the signed-in scheduled-task
+launch still returned `0x80070057` before `cmd.exe` or Gallery started. No
+Gallery stdout, stderr, or exit record was created, and no test console
+process remained. The task was removed and `ForceV2=1` was verified restored.
+The exact installation and launch reports are retained in the external-drive
+workspace at `/Volumes/PRO-BLADE/tmp/ckvision-wp37-legacy-host-audit-20260926`
+and its guest task directory. Installing the missing component resolved one
+host prerequisite but did not provide a usable legacy console in this ARM VM.
+The **live legacy-console refusal row remains Open**; this attempt did not
+execute ckVision's refusal path.

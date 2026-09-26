@@ -2972,6 +2972,9 @@ two-outer-Application GUI isolation route is also **Done**. The real
 legacy-console refusal route and final cross-platform release audit are **Open**.
 The named VM does not start a usable `ForceV2=0` legacy host; the matched
 normal/legacy launch results are in [Windows evidence](windows-wp37-evidence.md).
+Installing its previously absent legacy-console Windows capability succeeded,
+but a new signed-in launch still failed with `0x80070057` before ckVision ran;
+`ForceV2=1` was restored and the live refusal row stays Open.
 Supported macOS/Linux sanitizer gates, the nine Linux fuzz corpora, and the
 three-host benchmark gates are **Done**; the installed Windows ARM64 MSVC
 toolchain rejects ASan instrumentation and that limitation is recorded in
