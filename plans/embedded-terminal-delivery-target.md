@@ -126,14 +126,16 @@ not promote the complete WP-50 package or WP-37 release matrix.
 | Resource-limit recovery | **Done** | Live 4.2 MiB Sixel rejection followed by valid image, peer input, close, and normal-demo restoration; native 128-byte limit case passed |
 | Portable contained-scene goldens | **Done** | Contained-scene files, including child text over a partially erased picture, remain byte-identical within the current 95-file cell/RGBA/symbolic manifest on macOS, Linux, and Windows |
 
-**WP-50 overall: In progress.** The installed Windows Terminal Stable and
-Preview hosts do not advertise SGR pixel-mouse mode 1016; the native private
-ConPTY path passes when that capability is supplied, but a real capable-host
-gesture is still unverified. A signed-in mintty 3.8.3 `-P on` trial delivered a
-real held drag only as SGR cell coordinates; its exact record is in
-[WP-37 Windows evidence](windows-wp37-evidence.md). The broader
-degraded-host and release acceptance matrix remains for WP-37/WP-38. A completed named scenario above is not a
-reason to rerun it without a code change or a concrete regression risk.
+**WP-50 overall: Done.** Its ConPTY adapter, named live scenarios, contained
+graphics and fallback, child lifecycle, alternate buffer, simultaneous
+sessions, and platform-independent cells/pixels satisfy the package's stated
+acceptance criteria. The installed Windows Terminal Stable and Preview hosts
+do not advertise SGR pixel-mouse mode 1016; the native private ConPTY path
+passes when that capability is supplied, but a real capable-host gesture is
+still unverified. A signed-in mintty 3.8.3 `-P on` trial delivered a real held
+drag only as SGR cell coordinates; its exact record is in
+[WP-37 Windows evidence](windows-wp37-evidence.md). Capable-host pixel mouse,
+legacy-host refusal, and the global release matrix remain WP-37/WP-38 work.
 
 ## Current evidence map
 
@@ -147,7 +149,7 @@ the public path it exercises:
 | WP-47 | `tests/test_terminal_view.cpp`, `tests/terminal_redraw_contract.cpp`, and the nested-child cases in `tests/test_posix_terminal_subsession.cpp` |
 | WP-48 | `tests/test_virtual_display_visual_golden.cpp`, `tests/test_terminal_view.cpp`, `tests/test_virtual_display.cpp`, `tests/fixtures/snake.six`, the outer pixel-containment assertion in the retained-window case, and paired raw RGBA/cell goldens for real TerminalView move, resize, overlap, shadow/union/restore, clear, repaint, close, NoGraphics, and five-stage resize sequences |
 | WP-49 | `examples/terminal`, `docs/embedded-terminal.md`, `tools/docgen/capture_terminal_screenshots.cpp` (shell, full-screen, nested, menu, and Sixel captures), and the `terminal_visual_capture` CTest |
-| WP-50 | `src/term/windows_terminal_subsession.cpp`, `tests/test_windows_terminal_subsession.cpp`, and `tests/windows_terminal_child.cpp` provide the in-progress native adapter and passing inbox/modern ConPTY suites; `tools/docgen/generate_terminal_plane_goldens.cpp` and six `contained_pair_*` fixtures pin simultaneous child rasters, individual close, and replacement on all three platforms. [Named Windows evidence](windows-wp50-evidence.md) records live Preview lifecycle and private-host failure/recovery, Console Host fallback, no-enhanced-reply plain-VT ConPTY, and the repaired Sixel Demo prompt placement. True pixel mouse and the remaining matrix/release rows stay open. |
+| WP-50 | `src/term/windows_terminal_subsession.cpp`, `tests/test_windows_terminal_subsession.cpp`, and `tests/windows_terminal_child.cpp` provide the completed native adapter and passing inbox/modern ConPTY suites; `tools/docgen/generate_terminal_plane_goldens.cpp` and six `contained_pair_*` fixtures pin simultaneous child rasters, individual close, and replacement on all three platforms. [Named Windows evidence](windows-wp50-evidence.md) records live Preview lifecycle and private-host failure/recovery, Console Host fallback, no-enhanced-reply plain-VT ConPTY, and the repaired Sixel Demo prompt placement. True pixel mouse and the remaining matrix/release rows stay open under WP-37/WP-38. |
 
 The map is an audit aid, not a substitute for the complete release matrix:
 the final global gate still requires the named Windows host evidence for WP-50.

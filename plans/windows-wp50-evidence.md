@@ -1820,3 +1820,22 @@ paths, hashes, timings, and gate logs are retained in
 This is a three-host headless product-path result, not a new signed-in visual
 observation. True capable-host pixel input and the larger WP-37/WP-38 release
 matrix remain open.
+
+## WP-50 acceptance audit — 2026-09-26
+
+WP-50's two [acceptance bullets](corrective-assurance.md#wp-50--windows-conpty-child-sessions-and-embedded-terminal-matrix)
+are now **Done**. The named Windows 11 ARM64 VM, Windows Terminal versions,
+capability report, native ConPTY results, and declared no-graphics/plain-VT
+degraded behavior are recorded above. Signed-in runs exercised nested ckVision,
+alternate buffer, simultaneous sessions, Sixel containment and fallback,
+host and child resize, individual close and abrupt child loss, and payload-limit
+recovery. Windows hosted suites cover the WP-46–WP-49 containment and lifecycle
+contracts, including the native inbox and modern ConPTY variants; the current
+portable 95-file child cell/RGBA manifest matches macOS, Linux ARM64, and
+Windows ARM64. The latest code-changing build passed 177/177, 177/177, and
+164/164 full tests, with zero warnings and both provenance gates on each host.
+
+The real capable-host pixel-mouse gesture and usable legacy Console Host
+refusal are [WP-37 host rows](windows-m7-traceability.md), and the full
+state/scheme and global release audit belongs to WP-38. Those open downstream
+rows do not change WP-50's completed package status or close M7/M11.

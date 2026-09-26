@@ -100,7 +100,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 51 | WP-70 — The status line's hint on an empty desktop | 0.1 pw | **Implementation complete — gate pending** | WP-69 | D-069: with nothing focused the hint resolves from `Application::root()`'s help-context key; a focused view's own key, or any ancestor's, outranks it |
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
-| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **In progress — native child adapter, all seven named signed-in Windows scenarios, child text-over-raster fix, and 95 portable golden files Done; capable-host pixel mouse and global acceptance matrix Open** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
+| 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
 | 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 95 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, and three-host benchmark gates Done; true pixel mouse and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 95-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
@@ -112,12 +112,12 @@ never the acceptance criteria silently.
 
 The dependency order deliberately puts correctness, lifetime, security, and
 architecture before convenience work. WP-45…WP-49 now have current-host
-implementation evidence; WP-50 and the outer-backend portion of WP-37 are in progress on the named Windows ARM64 VM after the
+implementation evidence; WP-50 is Done and the outer-backend portion of WP-37 remains in progress on the named Windows ARM64 VM after the
 editor/file-workflow implementation packages. WP-39…WP-44 remain in the
 queue until WP-37/WP-38 complete their cross-platform and release-audit gates.
 The WP-37 outer backend began before WP-50 acceptance so the Windows
-contained-terminal example can run under a real host; WP-37 acceptance still
-depends on the unfinished WP-50 interactive matrix.
+contained-terminal example can run under a real host; WP-37 consumes the
+completed WP-50 interactive matrix.
 A package may be split into reviewable
 commits, but its queue row stays `In progress` until every acceptance item is
 met. New findings discovered while implementing a package are added to that
@@ -2905,14 +2905,18 @@ acceptance is still required. This package uses [embedded-terminal-architecture.
   Windows, with byte-identical platform-independent cells/pixels where the
   declared profiles match.
 
-**Current WP-50 status (2026-09-25):** In progress overall. The requested
+**Current WP-50 status (2026-09-26): Done.** The requested
 signed-in Windows Terminal scenarios—nested ckVision, contained Sixel and its
 no-graphics fallback, resize, close/child loss, and resource recovery—are
 **Done** with named-host evidence. The portable 95-file three-platform
 golden manifest is also **Done**. The exact row-by-row status is in
 [embedded-terminal-delivery-target.md](embedded-terminal-delivery-target.md#wp-50-named-windows-scenario-status--2026-09-25).
-True live pixel mouse on a capable Windows host and the remaining WP-37/WP-38
-acceptance matrix remain open; they do not reopen the finished rows.
+The native ConPTY adapter, alternate buffer, simultaneous sessions, lifecycle,
+and declared degraded child profiles are covered by the recorded Windows
+fixtures and live runs. The package's two acceptance bullets are satisfied by
+the named host/capability record and the Windows containment and lifecycle
+evidence. True live pixel mouse on a capable Windows host and the remaining
+release matrix are separate WP-37/WP-38 obligations; they do not reopen WP-50.
 
 ### WP-37 — Windows backend and three-platform matrix
 
