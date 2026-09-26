@@ -71,6 +71,8 @@ void GalleryApp::build_menu_bar() {
     widgets::MenuBarItem file_menu{"&File", {}};
     file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
         app_.commands().standard().help, "&About..."}));
+    file_menu.items.push_back(widgets::MenuItem::command(widgets::CommandPresentation{
+        app_.commands().standard().terminal_report}));
     file_menu.items.push_back(widgets::MenuItem::separator());
     file_menu.items.push_back(
         widgets::MenuItem::command(widgets::CommandPresentation{app_.commands().standard().quit}));

@@ -111,7 +111,7 @@ std::vector<CapabilityReportEntry> capability_report(const Capabilities& caps, S
         {"Color scheme", scheme_text(caps.color_scheme), "OSC 10/11"},
         {"Scheme notifications", yes_no(caps.color_scheme_notifications), "DEC 2031 (DECRQM)"},
         {"Mouse protocol", mouse_text(caps.mouse_protocol), "host profile"},
-        {"Pixel mouse", yes_no(caps.pixel_mouse), "DEC 1016 (DECRQM) + XTWINOPS 16"},
+        {"Pixel mouse", yes_no(caps.pixel_mouse), "DEC 1016 (DECRQM or direct SGR report) + cell metric"},
         {"Keyboard protocol", keyboard_text(caps.keyboard_protocol), "host profile"},
         {"Key release events", key_release_text(caps), "CSI > u push, CSI ? u readback"},
         {"SIXEL graphics", yes_no(caps.sixel_graphics), "DA1 (CSI c), parameter 4"},

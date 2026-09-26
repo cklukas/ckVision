@@ -101,7 +101,7 @@ dependent row's package prerequisite; `Blocked` does not.
 | 52 | WP-71 — A list's keyboard search as a typed prefix | 0.1 pw | **Implementation complete — gate pending** | WP-70 | D-070: letters typed within a second form one prefix; the same letter again steps on; a miss drops the prefix; modified letters are chords; providers answer through `find_prefix` |
 | 53 | WP-72 — An SQL syntax profile | 0.2 pw | **Implementation complete — gate pending** | WP-71 | D-071: SQL joins the standard profiles; quoted names and bound parameters painted as names, a word before `(` a call, block comment and unclosed text carried across lines |
 | 54 | WP-50 — Windows ConPTY child sessions and embedded-terminal matrix | 4–8 pw | **Done — native child adapter, all seven named signed-in Windows scenarios, degraded child profiles, and 95 portable golden files verified; capable-host pixel mouse and global release matrix remain WP-37/WP-38 work** | WP-49 and Windows host | Windows terminal containment; [architecture](embedded-terminal-architecture.md), [delivery target](embedded-terminal-delivery-target.md) |
-| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 95 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, and live WezTerm pixel-mouse transport Done; pixel-aware Gallery interaction and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
+| 55 | WP-37 — Windows backend and three-platform matrix | 2–4 pw | **In progress — live keyboard/cell mouse, clipboard, Sixel/fallback, editor input/search/Save, plain-VT ConPTY, strict Windows 164/164, 95 byte-identical three-platform goldens, Mac/Linux sanitizer gates, Linux fuzz corpora, three-host benchmark gates, and live WezTerm pixel-mouse transport plus Gallery interaction Done; literal Windows Terminal pixel mode and legacy-console refusal (VM host launch failed) Open** | WP-50 and Windows host | M7; Windows portions of global gates, including editor and terminal view |
 | 56 | WP-38 — Golden, script, reference, and release-gate closure | 3–5 pw | **In progress — M7 traceability, installed-header API index, Editor/terminal appearance slice, and 95-file three-host manifest Done; full M0–M11 matrix, reference depth, and release audit Open** | WP-37 for final closure | M0–M11 global gates |
 
 Corrective work is currently estimated at roughly **92–149 focused
@@ -2959,11 +2959,12 @@ native clipboard export/import, the editor's Unicode input/highlighting/search
 and injected Save/reopen workflow, plain-VT ConPTY degradation, live
 two-outer-Application isolation, and the 95-file byte-identical portable
 golden manifest on macOS, Linux, and Windows.
-Live SGR pixel-mouse **transport is Done** in the signed-in WezTerm Windows
-session: a delayed beyond-grid report establishes mode 1016, and a held drag
-delivers pixel coordinates on down, motion, and up; see the
-[host evidence](windows-wp37-evidence.md). Pixel-aware Gallery interaction
-remains **Open**. The installed Windows Terminal hosts do not advertise mode
+Live SGR pixel-mouse **transport and Gallery interaction are Done** in the
+signed-in WezTerm Windows session: a delayed beyond-grid report establishes
+mode 1016, a held drag delivers pixel coordinates on down, motion, and up,
+and the Gallery's live Terminal Report shows `Pixel mouse: yes` alongside
+pixel-bearing dispatched input; see the [host evidence](windows-wp37-evidence.md).
+The installed Windows Terminal hosts do not advertise mode
 1016, and earlier mintty, raw iTerm-to-Windows ConPTY, and Contour trials did
 not provide a usable pixel GUI route. Native two-Application isolation across
 independent private ConPTY hosts is **Done**. The separate live

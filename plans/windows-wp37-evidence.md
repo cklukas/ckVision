@@ -1720,3 +1720,36 @@ Linux ARM64 177/177, Windows ARM64 164/164. Both provenance gates and the
 transport is Done** on this capable Windows GUI. The literal M7 Gallery pixel
 interaction and real legacy-console refusal remain Open; the installed
 Windows Terminal Stable/Preview hosts still lack mode 1016.
+
+## Live Gallery pixel capability report — 2026-09-26
+
+Gallery now exposes Desktop's existing standard Terminal Report from its File
+menu. The report's source text lists either a positive DECRQM 1016 reply or a
+direct beyond-grid SGR report together with a cell metric as valid pixel-mode
+evidence. The source-backed widget screenshot was regenerated to match it.
+
+The named Windows ARM64 Release build started at `10:25:32Z` and ended at
+`10:25:41Z` (9.8 s, zero warnings). Its `ckvision_gallery.exe`, modified at
+`10:25:40Z`, had SHA-256
+`FA9C5510B672C643A7FBAAEB6C3E9F2DD169FE464A40F2B78C15A3B6830D263C`.
+That exact output was copied into the external-drive-backed guest test area
+and launched under the signed-in `LIMA\cktest` desktop. Live Gallery PID 2476
+and WezTerm GUI PID 6072 resolved to the intended executable paths.
+
+QMP clicks opened File → Terminal Report in the actual Gallery window. The
+dialog showed `Pixel mouse: yes`, a `10×22 px` reported cell metric, and
+`Mouse events seen 8 last cell=(10,3) pixel=(102,77)`: a pixel-bearing event
+had reached the Gallery's own dispatch path before it built the report. The
+actual framebuffer is preserved as
+![Live Windows Gallery Terminal Report](evidence/wp37-gallery-pixel-report-20260926.png)
+with SHA-256
+`07B803CDB5A49EDEEF5DA1ECE93AB9E81F54A243CFA2BA33B6DDB773715A5546`.
+The report was closed and Gallery exited normally through File → Quit; only
+the verified WezTerm GUI process needed explicit cleanup afterward.
+
+Mac and Linux ARM64 strict builds passed 177/177 tests each; Windows ARM64
+passed 164/164. All three had zero build warnings, both provenance gates, and
+the 95-file generated-golden check green. **Gallery pixel interaction is
+Done on this capable Windows host.** Windows Terminal Stable/Preview still
+report no mode 1016, and the real legacy-console refusal path remains Open,
+so literal M7 and WP-37 remain In progress.

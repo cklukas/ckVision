@@ -181,7 +181,9 @@ reaches past those headers.
 - **Menu bar** (`File`, `Window`) bound to real `ui::CommandRegistry`
   commands, activated via F10 (a bound command, not a MenuBar special
   case — see `include/cvision/widgets/menu.hpp`'s own file comment for
-  why), with Esc restoring whatever was focused before activation.
+  why), with Esc restoring whatever was focused before activation. File →
+  Terminal Report opens the standard live capability and mouse-dispatch
+  dialog, including whether this host actually established pixel mouse.
 - **Controls window**: a `Label` with a mnemonic, an `InputLine`, and a
   default `Button` — Tab traversal, typed text, and a click all reach
   their target through the ordinary focus/dispatch machinery
