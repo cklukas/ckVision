@@ -314,15 +314,15 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
     return WindowHandle{std::move(window), suggests ? static_cast<ui::View*>(path_field_ptr) : list_ptr};
 }
 
-FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                             const FileSystem& fs, ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
                                             const StandardStrings& strings) {
-    return present_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
-                               strings);
+    return present_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
+                                     strings);
 }
 
-FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                             const FileSystem& fs, FileDialogOptions options,
                                             ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
@@ -343,16 +343,16 @@ FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string init
     return std::move(parts.presentation);
 }
 
-FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                  const StandardStrings& strings) {
-    return exec_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
-                            strings);
+FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                        ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                        const StandardStrings& strings) {
+    return exec_modal_file_dialog(mode, std::move(initial_directory), fs, FileDialogOptions{}, app, desktop, roles,
+                                  strings);
 }
 
-FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  FileDialogOptions options, ui::Application& app, Desktop& desktop,
-                                  const ui::StandardRoles& roles, const StandardStrings& strings) {
+FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                        FileDialogOptions options, ui::Application& app, Desktop& desktop,
+                                        const ui::StandardRoles& roles, const StandardStrings& strings) {
     std::optional<FileDialogResult> result;
     auto handle = make_file_dialog(mode, std::move(initial_directory), fs, std::move(options), roles, app, app.focused(),
                                    [&result](FileDialogResult value) { result = std::move(value); }, strings);

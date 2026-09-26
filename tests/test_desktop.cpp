@@ -2299,7 +2299,7 @@ CK_TEST(exec_modal_survives_a_posted_callback_that_destroys_its_desktop) {
 }
 
 CK_TEST(exec_modal_host_quit_force_detaches_the_open_window_without_a_close_veto) {
-    // A host shutdown request can arrive while an exec_* call is blocked.
+    // A host shutdown request can arrive while an exec_modal call is blocked.
     // It must end the pump and cannot leave an ordinary window attached but
     // silently modeless. This is intentionally not a user close request, so
     // a content veto must never run.

@@ -59,7 +59,7 @@ struct DateDialogResult {
     friend bool operator==(const DateDialogResult&, const DateDialogResult&) = default;
 };
 
-// The handle present_date_dialog returns; see DialogPresentation.
+// The handle present_modal_date_dialog returns; see DialogPresentation.
 using DateDialogPresentation = DialogPresentation<DateDialogResult>;
 
 // Presents a modal date dialog on `desktop` without starting a nested loop.
@@ -75,9 +75,9 @@ using DateDialogPresentation = DialogPresentation<DateDialogResult>;
 // stands in its description panel. Escape or Cancel dismisses.
 // The window's title is `strings.select_date_title`; the buttons are
 // `strings.ok` and `strings.cancel`.
-[[nodiscard]] DateDialogPresentation present_date_dialog(ui::Application& app, Desktop& desktop,
-                                                         const ui::StandardRoles& roles, DateDialogOptions options,
-                                                         const StandardStrings& strings = english_standard_strings());
+[[nodiscard]] DateDialogPresentation present_modal_date_dialog(
+    ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles, DateDialogOptions options,
+    const StandardStrings& strings = english_standard_strings());
 
 // What the time dialog opens on and how it shows the time.
 struct TimeDialogOptions {
@@ -101,15 +101,15 @@ struct TimeDialogResult {
     friend bool operator==(const TimeDialogResult&, const TimeDialogResult&) = default;
 };
 
-// The handle present_time_dialog returns; see DialogPresentation.
+// The handle present_modal_time_dialog returns; see DialogPresentation.
 using TimeDialogPresentation = DialogPresentation<TimeDialogResult>;
 
 // Presents a modal time dialog: a TimePicker, which takes the focus, over OK
 // and Cancel. Enter or OK accepts with the time set; Escape or Cancel
 // dismisses. Without seconds shown, the accepted time's seconds are zero.
 // The window's title is `strings.select_time_title`.
-[[nodiscard]] TimeDialogPresentation present_time_dialog(ui::Application& app, Desktop& desktop,
-                                                         const ui::StandardRoles& roles, TimeDialogOptions options,
-                                                         const StandardStrings& strings = english_standard_strings());
+[[nodiscard]] TimeDialogPresentation present_modal_time_dialog(
+    ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles, TimeDialogOptions options,
+    const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets

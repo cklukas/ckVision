@@ -152,7 +152,7 @@ CK_TEST(the_move_size_mode_draws_its_frame_in_the_moving_role_and_stops_at_the_d
 CK_TEST(ctrl_f5_moves_a_modal_dialog_and_leaves_it_modal) {
     Script s;
     Window* document = s.document("Notes", Rect{2, 1, 30, 10});
-    auto presentation = ckv::widgets::present_message_box(
+    auto presentation = ckv::widgets::present_modal_message_box(
         s.app, *s.desktop, s.roles,
         ckv::widgets::MessageBoxDescriptor{ckv::widgets::MessageBoxKind::Info, "Saved", "notes.md was saved.",
                                            ckv::widgets::MessageBoxButtons::Ok});

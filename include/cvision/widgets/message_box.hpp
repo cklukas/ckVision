@@ -111,7 +111,7 @@ struct MessageBoxDescriptor {
 // steal focus to a still-detached view, silently swallowing input
 // meant for whatever UI is currently on screen. Desktop::present_modeless
 // attaches the returned handle and focuses its initial_focus (the default
-// button) in one call; present_message_box is the ordinary modal path.
+// button) in one call; present_modal_message_box is the ordinary modal path.
 // Attaching through Desktop's generic View API is equally window-management-
 // safe when a caller needs a more custom flow.
 WindowHandle make_message_box(const MessageBoxDescriptor& descriptor, const ui::StandardRoles& roles,
@@ -131,7 +131,7 @@ using MessageBoxPresentation = DialogPresentation<MessageBoxResult>;
 // returned handle is the sole result-observation path; applications
 // normally retain it and register a completion handler from the command
 // handler that presented the box.
-[[nodiscard]] MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
+[[nodiscard]] MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& desktop,
                                                           const ui::StandardRoles& roles,
                                                           const MessageBoxDescriptor& descriptor,
                                                           const StandardStrings& strings = english_standard_strings());
@@ -159,10 +159,10 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
 // Esc's) result once it closes — no nested native loop, built entirely
 // over Application::step(). Focus restores to whatever was focused
 // before the call, matching make_message_box's own restore_focus_to
-// contract. The non-blocking convenience is present_message_box; a caller
+// contract. The non-blocking convenience is present_modal_message_box; a caller
 // needing a modeless box explicitly combines make_message_box with
 // Desktop::present_modeless.
-MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
+MessageBoxResult exec_modal_message_box(ui::Application& app, Desktop& desktop,
                                    const ui::StandardRoles& roles,
                                    const MessageBoxDescriptor& descriptor,
                                    const StandardStrings& strings = english_standard_strings());

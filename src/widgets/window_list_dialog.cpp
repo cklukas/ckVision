@@ -291,7 +291,7 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
     return WindowHandle{std::move(window), list_ptr};
 }
 
-WindowListDialogPresentation present_window_list_dialog(Desktop& desktop, ui::Application& app,
+WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app,
                                                          const ui::StandardRoles& roles,
                                                          const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<WindowListDialogResult>;

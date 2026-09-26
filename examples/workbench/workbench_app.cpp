@@ -401,7 +401,7 @@ void WorkbenchApp::rebind(ui::CommandId command, const std::optional<KeyChord>& 
 // installs the edited theme -- set_theme repaints every surface -- and saves
 // its text; cancelling leaves everything as it was.
 void WorkbenchApp::edit_theme() {
-    dialogs_.await(widgets::present_theme_editor(app_.theme(), app_, *desktop_, roles_),
+    dialogs_.await(widgets::present_modal_theme_editor(app_.theme(), app_, *desktop_, roles_),
                    [this](widgets::ThemeEditorResult result) {
                        if (!result.theme) return;
                        app_.set_theme(*result.theme);
@@ -434,7 +434,7 @@ void WorkbenchApp::load_theme() {
 // ckvision-doc-end: workbench-edit-theme
 
 void WorkbenchApp::report_theme_file(std::string message) {
-    dialogs_.await(widgets::present_message_box(
+    dialogs_.await(widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Error, "Theme", std::move(message),
                                       widgets::MessageBoxButtons::Ok}));

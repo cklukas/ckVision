@@ -116,7 +116,7 @@ CK_TEST(a_descriptor_dialog_field_recalls_and_records_a_shared_history_key) {
     ckv::widgets::FieldDescriptor field{"&Find:", "", nullptr};
     field.history_key = "find";
     ckv::widgets::DialogDescriptor descriptor{"Find", {field}, {{"OK", ckv::widgets::ButtonRole::Accept, nullptr}}};
-    auto presentation = ckv::widgets::present_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
+    auto presentation = ckv::widgets::present_modal_dialog(std::move(descriptor), f.app, *f.desktop, f.roles);
     f.app.step(0);
     auto* field_input = dynamic_cast<ckv::widgets::InputLine*>(f.app.focused());
     CK_CHECK(field_input != nullptr);
@@ -140,8 +140,8 @@ CK_TEST(file_dialogs_naming_one_recent_locations_key_share_it_through_the_applic
 
     // Accepting one dialog, from its path field, records the directory it
     // was showing in the application's list under the key...
-    auto first = ckv::widgets::present_file_dialog(ckv::widgets::FileDialogMode::Open, "/home/docs", fs, options,
-                                                   f.app, *f.desktop, f.roles);
+    auto first = ckv::widgets::present_modal_file_dialog(ckv::widgets::FileDialogMode::Open, "/home/docs", fs, options,
+                                                         f.app, *f.desktop, f.roles);
     f.app.step(0);
     ckv::widgets::InputLine* const path = SharingFixture::find_descendant<ckv::widgets::InputLine>(f.app.root());
     CK_CHECK(path != nullptr);

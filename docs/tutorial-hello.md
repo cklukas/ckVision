@@ -37,7 +37,7 @@ Application                         host owns this
     `-- Desktop                     HelloApp inserts and transfers ownership
         |-- MenuBar                 ApplicationShell docks it at the top
         |-- StatusLine              ApplicationShell docks it at the bottom
-        `-- transient message box   present_message_box adds/removes it modally
+        `-- transient message box   present_modal_message_box adds/removes it modally
             `-- Ok button
 ```
 
@@ -142,7 +142,7 @@ window pointer, so close/removal remains owned by the presentation API.
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.
 void HelloApp::greeting_box() {
-    auto greeting = widgets::present_message_box(app_, *desktop_, roles_,
+    auto greeting = widgets::present_modal_message_box(app_, *desktop_, roles_,
                                                   {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
                                                    widgets::MessageBoxButtons::Ok});
     greeting.set_completion_handler([](widgets::MessageBoxResult) {});

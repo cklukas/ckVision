@@ -30,9 +30,9 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::ui::View;
 using ckv::widgets::Desktop;
-using ckv::widgets::exec_message_box;
+using ckv::widgets::exec_modal_message_box;
 using ckv::widgets::make_message_box;
-using ckv::widgets::present_message_box;
+using ckv::widgets::present_modal_message_box;
 using ckv::widgets::Window;
 using ckv::widgets::MessageBoxButtons;
 using ckv::widgets::MessageBoxDescriptor;
@@ -459,9 +459,9 @@ CK_TEST(generic_desktop_attachment_of_a_message_box_preserves_window_management_
     CK_CHECK(app.focused() == background_focus);
 }
 
-// --- present_message_box (D-038's non-blocking modal path) ----------------
+// --- present_modal_message_box (D-038's non-blocking modal path) ----------------
 
-CK_TEST(present_message_box_scopes_input_immediately_and_completes_after_detach) {
+CK_TEST(present_modal_message_box_scopes_input_immediately_and_completes_after_detach) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -480,7 +480,7 @@ CK_TEST(present_message_box_scopes_input_immediately_and_completes_after_detach)
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
                                            MessageBoxButtons::Ok};
-    auto presentation = present_message_box(app, *desktop, roles, descriptor);
+    auto presentation = present_modal_message_box(app, *desktop, roles, descriptor);
     std::optional<MessageBoxResult> completion;
     bool modal_was_gone_at_completion = false;
     presentation.set_completion_handler([&](MessageBoxResult result) {
@@ -504,7 +504,7 @@ CK_TEST(present_message_box_scopes_input_immediately_and_completes_after_detach)
     CK_CHECK(desktop->windows().empty());
 }
 
-CK_TEST(present_message_box_external_detach_uses_the_documented_escape_result) {
+CK_TEST(present_modal_message_box_external_detach_uses_the_documented_escape_result) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -516,7 +516,7 @@ CK_TEST(present_message_box_external_detach_uses_the_documented_escape_result) {
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
                                            MessageBoxButtons::OkCancel};
-    auto presentation = present_message_box(app, *desktop, roles, descriptor);
+    auto presentation = present_modal_message_box(app, *desktop, roles, descriptor);
     Window* const box = desktop->windows().back();
     std::unique_ptr<Window> detached = desktop->remove_window(box);
 
@@ -533,7 +533,7 @@ CK_TEST(present_message_box_external_detach_uses_the_documented_escape_result) {
     CK_CHECK(completion_count == 1);
 }
 
-CK_TEST(present_message_box_quit_sweep_completes_with_its_escape_result_after_detach) {
+CK_TEST(present_modal_message_box_quit_sweep_completes_with_its_escape_result_after_detach) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -544,7 +544,7 @@ CK_TEST(present_message_box_quit_sweep_completes_with_its_escape_result_after_de
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?",
                                            MessageBoxButtons::OkCancel};
-    auto presentation = present_message_box(app, *desktop, roles, descriptor);
+    auto presentation = present_modal_message_box(app, *desktop, roles, descriptor);
 
     CK_CHECK(app.execute_command(standard(app).quit));
     CK_CHECK(app.quit_requested());
@@ -566,7 +566,7 @@ CK_TEST(a_vetoed_presented_message_box_remains_modal_until_a_later_close_succeed
     auto* desktop = app.root().add(
         std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
-    auto presentation = present_message_box(
+    auto presentation = present_modal_message_box(
         app, *desktop, roles,
         MessageBoxDescriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?", MessageBoxButtons::OkCancel});
     Window* const box = desktop->windows().back();
@@ -602,7 +602,7 @@ CK_TEST(a_vetoed_presented_message_box_also_vetoes_its_quit_sweep) {
     auto* desktop = app.root().add(
         std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
-    auto presentation = present_message_box(
+    auto presentation = present_modal_message_box(
         app, *desktop, roles,
         MessageBoxDescriptor{ckv::widgets::MessageBoxKind::Confirm, "Confirm", "Proceed?", MessageBoxButtons::OkCancel});
     Window* const box = desktop->windows().back();
@@ -626,7 +626,7 @@ CK_TEST(a_message_box_completion_handler_can_present_a_nested_modal_after_outer_
 
     const MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
                                            MessageBoxButtons::Ok};
-    auto outer = present_message_box(app, *desktop, roles, descriptor);
+    auto outer = present_modal_message_box(app, *desktop, roles, descriptor);
     std::optional<ckv::widgets::MessageBoxPresentation> inner;
     outer.set_completion_handler([&](MessageBoxResult result) {
         CK_CHECK(result == MessageBoxResult::Ok);
@@ -635,7 +635,7 @@ CK_TEST(a_message_box_completion_handler_can_present_a_nested_modal_after_outer_
         // being detached. Completion must never expose that soon-to-die
         // pointer to a nested presentation as its focus-restore target.
         CK_CHECK(app.focused() == nullptr);
-        inner.emplace(present_message_box(app, *desktop, roles, descriptor));
+        inner.emplace(present_modal_message_box(app, *desktop, roles, descriptor));
     });
 
     app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}});
@@ -651,10 +651,10 @@ CK_TEST(a_message_box_completion_handler_can_present_a_nested_modal_after_outer_
     CK_CHECK(desktop->windows().empty());
 }
 
-// --- exec_message_box (M9/WP-15, D-021's blocking convenience) -------------
+// --- exec_modal_message_box (M9/WP-15, D-021's blocking convenience) -------------
 //
 // Unlike the tests above, these need `app`'s OWN theme/roles actually
-// styled (not a separate Fixture's) — exec_message_box's pump calls
+// styled (not a separate Fixture's) — exec_modal_message_box's pump calls
 // step(), which paints the box for real, and a real paint resolves
 // roles through context().theme — the theme that propagated from
 // `app.root()` when the box attached, not whatever Fixture happens to
@@ -662,7 +662,7 @@ CK_TEST(a_message_box_completion_handler_can_present_a_nested_modal_after_outer_
 // `app.theme() = make_classic_theme(app.roles(), roles)` dance in its
 // own constructor; these tests just do it inline.
 
-CK_TEST(exec_message_box_returns_the_pressed_result_in_a_headless_script) {
+CK_TEST(exec_modal_message_box_returns_the_pressed_result_in_a_headless_script) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -674,18 +674,18 @@ CK_TEST(exec_message_box_returns_the_pressed_result_in_a_headless_script) {
 
     MessageBoxDescriptor descriptor{ckv::widgets::MessageBoxKind::Info, "Info", "Done.",
                                      MessageBoxButtons::Ok};
-    // exec_message_box blocks until the box closes — nothing can inject
+    // exec_modal_message_box blocks until the box closes — nothing can inject
     // the dismissing key from outside a single-threaded call, so it's
     // queued via post() ahead of time and drains during the pump's own
     // first step() call, exactly like a headless script would arrange.
     app.post([&app] { app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}); });
 
-    const MessageBoxResult result = exec_message_box(app, *desktop, roles, descriptor);
+    const MessageBoxResult result = exec_modal_message_box(app, *desktop, roles, descriptor);
     CK_CHECK(result == MessageBoxResult::Ok);
     CK_CHECK(desktop->windows().empty());  // closed and self-detached, not left lingering
 }
 
-CK_TEST(exec_message_box_returns_the_escape_result_when_dismissed_via_esc) {
+CK_TEST(exec_modal_message_box_returns_the_escape_result_when_dismissed_via_esc) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -699,11 +699,11 @@ CK_TEST(exec_message_box_returns_the_escape_result_when_dismissed_via_esc) {
                                      MessageBoxButtons::OkCancel};
     app.post([&app] { app.dispatch(ckv::KeyEvent{KeyChord{Key::Escape, Modifier::None, ""}}); });
 
-    const MessageBoxResult result = exec_message_box(app, *desktop, roles, descriptor);
+    const MessageBoxResult result = exec_modal_message_box(app, *desktop, roles, descriptor);
     CK_CHECK(result == MessageBoxResult::Cancel);
 }
 
-CK_TEST(exec_message_box_restores_focus_to_whatever_was_focused_before_the_call) {
+CK_TEST(exec_modal_message_box_restores_focus_to_whatever_was_focused_before_the_call) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -721,11 +721,11 @@ CK_TEST(exec_message_box_restores_focus_to_whatever_was_focused_before_the_call)
                                      MessageBoxButtons::Ok};
     app.post([&app] { app.dispatch(ckv::KeyEvent{KeyChord{Key::Enter, Modifier::None, ""}}); });
 
-    exec_message_box(app, *desktop, roles, descriptor);
+    exec_modal_message_box(app, *desktop, roles, descriptor);
     CK_CHECK(app.focused() == invoker);
 }
 
-CK_TEST(exec_message_box_host_quit_returns_fallback_and_detaches_the_open_box) {
+CK_TEST(exec_modal_message_box_host_quit_returns_fallback_and_detaches_the_open_box) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -739,7 +739,7 @@ CK_TEST(exec_message_box_host_quit_returns_fallback_and_detaches_the_open_box) {
                                      MessageBoxButtons::YesNoCancel};
     app.post([&app] { app.request_quit(); });
 
-    const MessageBoxResult result = exec_message_box(app, *desktop, roles, descriptor);
+    const MessageBoxResult result = exec_modal_message_box(app, *desktop, roles, descriptor);
     CK_CHECK(result == MessageBoxResult::Cancel);
     CK_CHECK(app.quit_requested());
     CK_CHECK(desktop->windows().empty());
@@ -765,7 +765,7 @@ Window* open_about(Application& app, Desktop& desktop, const StandardRoles& role
                    const char* message) {
     MessageBoxDescriptor descriptor{MessageBoxKind::Info, "About", message, MessageBoxButtons::Ok};
     descriptor.emphasized_leading_lines = 1;
-    auto presentation = present_message_box(app, desktop, roles, descriptor);
+    auto presentation = present_modal_message_box(app, desktop, roles, descriptor);
     presentation.set_completion_handler([](MessageBoxResult) {});
     return desktop.active_window();
 }

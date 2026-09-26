@@ -670,12 +670,12 @@ void TodoApp::add_help_topics() {
 
 void TodoApp::show_help_topic(std::string key) {
     add_help_topics();
-    help_viewer_ = widgets::present_help_viewer(help_, std::move(key), app_, *desktop_, roles_);
+    help_viewer_ = widgets::present_modeless_help_viewer(help_, std::move(key), app_, *desktop_, roles_);
 }
 
 void TodoApp::show_about() {
     const std::string help = app_.commands().chord_text(app_.commands().standard().help);
-    about_box_ = widgets::present_message_box(
+    about_box_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Info, "About ckVision TODO",
          ckv::examples::about_text(
@@ -699,7 +699,7 @@ void TodoApp::present_welcome() {
     descriptor.fields.push_back(std::move(choice));
     descriptor.buttons.push_back({"&Start", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Quit", widgets::ButtonRole::Dismiss, nullptr});
-    welcome_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    welcome_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     welcome_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted) {
             request_quit();
@@ -840,7 +840,7 @@ void TodoApp::present_task_dialog(bool editing) {
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
     const std::optional<TaskId> task_id = task ? std::optional<TaskId>(task->id) : std::nullopt;
     const std::string note = initial.note;
-    task_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    task_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     task_dialog_->set_completion_handler([this, editing, task_id, note](widgets::DialogResult result) {
         if (result.accepted) accept_task_dialog(editing, task_id, note, result);
     });
@@ -927,7 +927,7 @@ void TodoApp::present_archive_confirmation() {
     if (task == nullptr) return;
     const TaskId task_id = task->id;
     const Task original = *task;
-    archive_confirmation_ = widgets::present_message_box(
+    archive_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Confirm, "Archive task", "Archive ‘" + task->title + "’?",
          widgets::MessageBoxButtons::YesNo});
@@ -962,7 +962,7 @@ void TodoApp::present_delete_confirmation() {
     if (task == nullptr) return;
     const TaskId task_id = task->id;
     const Task original = *task;
-    delete_confirmation_ = widgets::present_message_box(
+    delete_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Delete task permanently",
          "Permanently delete ‘" + task->title + "’? This does not create an archive.",
@@ -1249,7 +1249,7 @@ void TodoApp::present_lane_actions() {
     descriptor.fields.push_back(radio_field("&Action", std::move(labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_actions_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_actions_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_actions_dialog_->set_completion_handler(
         [this, captured_actions = std::move(actions)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
@@ -1280,7 +1280,7 @@ void TodoApp::present_lane_rename() {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Rename", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, lane_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1319,7 +1319,7 @@ void TodoApp::present_lane_color() {
     descriptor.fields.push_back(combo_field("&Color:", strings(kColorNames), color_selection(lane->color)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, lane_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.selected.empty()) return;
         const std::optional<TodoColor> color = color_from_selection(result.selected[0]);
@@ -1356,7 +1356,7 @@ void TodoApp::present_lane_sort() {
     descriptor.fields.push_back(combo_field("&Sort by:", strings(kSortNames), static_cast<int>(lane->sort)));
     descriptor.buttons.push_back({"&Apply", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.selected.empty() || result.selected[0] < 0 || result.selected[0] > 5) return;
         set_lane_sort(static_cast<SortMode>(result.selected[0]));
@@ -1384,7 +1384,7 @@ void TodoApp::present_lane_insert(bool before_active) {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Insert", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler([this, board_id, before](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1433,7 +1433,7 @@ void TodoApp::present_lane_merge() {
     descriptor.fields.push_back(combo_field("Merge &into:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Merge", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    lane_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    lane_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     lane_edit_dialog_->set_completion_handler(
         [this, captured_source_id = *source_id, source_original,
          captured_targets = std::move(targets)](widgets::DialogResult result) {
@@ -1477,7 +1477,7 @@ void TodoApp::present_lane_archive() {
     if (lane == nullptr) return;
     const LaneId lane_id = lane->id;
     const Lane original = *lane;
-    lane_confirmation_ = widgets::present_message_box(
+    lane_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Archive lane",
          "Archive all " + std::to_string(lane->task_ids.size()) + " task(s) in ‘" + lane->title +
@@ -1573,7 +1573,7 @@ void TodoApp::present_board_manager() {
     descriptor.fields.push_back(radio_field("&Action", std::move(action_labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_manager_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_manager_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_manager_dialog_->set_completion_handler(
         [this, captured_boards = std::move(boards),
          captured_actions = std::move(actions)](widgets::DialogResult result) {
@@ -1611,7 +1611,7 @@ void TodoApp::present_board_action_source(bool rename, bool merge) {
     descriptor.fields.push_back(combo_field("&Board:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Continue", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_action_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_action_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_action_dialog_->set_completion_handler(
         [this, rename, merge, captured_boards = std::move(boards)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
@@ -1633,7 +1633,7 @@ void TodoApp::present_new_board() {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Create", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1674,7 +1674,7 @@ void TodoApp::present_board_rename(BoardId board_id) {
         [](const std::string& value) { return !value.empty() && value.size() <= TodoLimits::max_name_bytes; }});
     descriptor.buttons.push_back({"&Rename", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler([this, board_id, original](widgets::DialogResult result) {
         if (!result.accepted || result.values.empty()) return;
         const std::string name = result.values[0];
@@ -1721,7 +1721,7 @@ void TodoApp::present_board_merge(BoardId source_id) {
     descriptor.fields.push_back(combo_field("Merge &into:", std::move(labels), 0));
     descriptor.buttons.push_back({"&Merge", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
-    board_edit_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    board_edit_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     board_edit_dialog_->set_completion_handler(
         [this, source_id, source_original, captured_targets = std::move(targets)](widgets::DialogResult result) {
             if (!result.accepted || result.selected.empty() || result.selected[0] < 0 ||
@@ -1764,7 +1764,7 @@ void TodoApp::present_board_archive(BoardId board_id) {
     const Board original = *board;
     std::size_t task_count = 0;
     for (const Lane& lane : board->lanes) task_count += lane.task_ids.size();
-    board_confirmation_ = widgets::present_message_box(
+    board_confirmation_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Warning, "Archive Board",
          "Archive all " + std::to_string(task_count) + " task(s) in ‘" + board->name + "’ and remove the board?",
@@ -2040,7 +2040,7 @@ void TodoApp::refresh_status_items() {
 
 void TodoApp::show_error(std::string title, const ControllerError& error) {
     set_status(error.diagnostic);
-    message_box_ = widgets::present_message_box(
+    message_box_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         {widgets::MessageBoxKind::Error, std::move(title), error.diagnostic, widgets::MessageBoxButtons::Ok});
     message_box_->set_completion_handler([](widgets::MessageBoxResult) {});
@@ -2091,7 +2091,7 @@ void TodoApp::present_conflict_resolution() {
         radio_field("&Resolution", {"Retry my change over the latest workspace", "Use the external version"}, 0));
     descriptor.buttons.push_back({"&Resolve", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back({"&Later", widgets::ButtonRole::Dismiss, nullptr});
-    conflict_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    conflict_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     conflict_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.selected.size() < 3 || result.selected[2] < 0) {
             set_status("Conflict kept pending; use File → Resolve conflict when ready.");

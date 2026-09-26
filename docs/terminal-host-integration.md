@@ -118,8 +118,8 @@ timers, or posted work, `run_until` returns `false` without invoking `done`
 again. A host shutdown policy can therefore not accidentally turn into a
 successful dialog or task completion callback.
 
-The blocking standard-dialog helpers (`exec_dialog`, `exec_message_box`,
-`exec_file_dialog`, and `exec_directory_picker`) treat that interruption as
+The blocking standard-dialog helpers (`exec_modal_dialog`, `exec_modal_message_box`,
+`exec_modal_file_dialog`, and `exec_modal_directory_picker`) treat that interruption as
 deterministic cancellation. If their dialog is still attached, they detach it
 and remove its modal scope before returning the factory's cancellation fallback.
 This is a host shutdown path, so it deliberately does not invoke the dialog's

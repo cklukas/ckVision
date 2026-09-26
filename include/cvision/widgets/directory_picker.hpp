@@ -40,7 +40,7 @@ struct DirectoryPickerResult {
     std::string path;  // full path; meaningful only when accepted
 };
 
-// The handle present_directory_picker returns; see DialogPresentation.
+// The handle present_modal_directory_picker returns; see DialogPresentation.
 using DirectoryPickerPresentation = DialogPresentation<DirectoryPickerResult>;
 
 // `root_path` must be an existing directory in `fs` (degrades to a
@@ -66,7 +66,7 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 // Presents the picker modally without a nested loop. Completion occurs
 // after detachment; selecting a directory wins, while close, external
 // detach, and quit resolve to {false, ""}.
-[[nodiscard]] DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
+[[nodiscard]] DirectoryPickerPresentation present_modal_directory_picker(const FileSystem& fs, std::string root_path,
                                                                     ui::Application& app, Desktop& desktop,
                                                                     const ui::StandardRoles& roles,
                                                                     const StandardStrings& strings = english_standard_strings());
@@ -74,11 +74,11 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and
 // timers where a nested dispatch pump would be unsafe. The non-blocking
-// present_directory_picker is the handler-safe alternative. A quit request
+// present_modal_directory_picker is the handler-safe alternative. A quit request
 // that ends the outer pump resolves to the same cancelled result as Esc.
-DirectoryPickerResult exec_directory_picker(const FileSystem& fs, std::string root_path,
-                                            ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles,
-                                            const StandardStrings& strings = english_standard_strings());
+DirectoryPickerResult exec_modal_directory_picker(const FileSystem& fs, std::string root_path,
+                                                  ui::Application& app, Desktop& desktop,
+                                                  const ui::StandardRoles& roles,
+                                                  const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets

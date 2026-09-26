@@ -89,7 +89,7 @@ struct FileDialogResult {
     std::string path;  // full path; meaningful only when accepted
 };
 
-// The handle present_file_dialog returns; see DialogPresentation.
+// The handle present_modal_file_dialog returns; see DialogPresentation.
 using FileDialogPresentation = DialogPresentation<FileDialogResult>;
 
 // `initial_directory` must exist as a directory in `fs` (a dialog
@@ -129,14 +129,14 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // Presents a file dialog modally without a nested loop. Completion
 // occurs only after detachment; an accepted result wins, while close,
 // external detach, and quit resolve to {false, ""}.
-[[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, ui::Application& app,
                                                           Desktop& desktop, const ui::StandardRoles& roles,
                                                           const StandardStrings& strings = english_standard_strings());
 
-// present_file_dialog shaped by `options` (see the options overload of
+// present_modal_file_dialog shaped by `options` (see the options overload of
 // make_file_dialog). `fs` must outlive the dialog; `strings` is copied.
-[[nodiscard]] FileDialogPresentation present_file_dialog(FileDialogMode mode, std::string initial_directory,
+[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode, std::string initial_directory,
                                                           const FileSystem& fs, FileDialogOptions options,
                                                           ui::Application& app, Desktop& desktop,
                                                           const ui::StandardRoles& roles,
@@ -145,17 +145,17 @@ WindowHandle make_file_dialog(FileDialogMode mode, std::string initial_directory
 // Blocking convenience for an application that owns the outer loop. It uses
 // Desktop::exec_modal and therefore rejects calls from handlers, posts, and
 // timers where a nested dispatch pump would be unsafe. The non-blocking
-// present_file_dialog is the handler-safe alternative. A quit request that
+// present_modal_file_dialog is the handler-safe alternative. A quit request that
 // ends the outer pump resolves to the same cancelled result as Esc.
-FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                  const StandardStrings& strings = english_standard_strings());
+FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                        ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                        const StandardStrings& strings = english_standard_strings());
 
-// exec_file_dialog shaped by `options` (see the options overload of
+// exec_modal_file_dialog shaped by `options` (see the options overload of
 // make_file_dialog).
-FileDialogResult exec_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
-                                  FileDialogOptions options, ui::Application& app, Desktop& desktop,
-                                  const ui::StandardRoles& roles,
-                                  const StandardStrings& strings = english_standard_strings());
+FileDialogResult exec_modal_file_dialog(FileDialogMode mode, std::string initial_directory, const FileSystem& fs,
+                                        FileDialogOptions options, ui::Application& app, Desktop& desktop,
+                                        const ui::StandardRoles& roles,
+                                        const StandardStrings& strings = english_standard_strings());
 
 }  // namespace ckv::widgets

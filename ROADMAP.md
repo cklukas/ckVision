@@ -329,7 +329,7 @@ once; no hand-encoded chord text and no `static_cast<widgets::` in
 `examples/`; one command can intentionally present as `Exit` in a File menu
 and `Quit` in a status line without a duplicate handler or a hand callback;
 modal versus modeless presentation is explicit at every call site; typed
-non-blocking completion, blocking `exec_message_box`, quit-sweep integration,
+non-blocking completion, blocking `exec_modal_message_box`, quit-sweep integration,
 and runtime rebinding re-rendering menus/status lines all covered by scripts.
 The application-shell helper is exercised by a one-screen example without
 hiding ownership or loop control. `docs/hello-example.md` records the example's

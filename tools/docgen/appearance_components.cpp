@@ -779,14 +779,14 @@ void add_wizard(Catalog& catalog) {
         view.set_labels(std::move(labels));
         view.next();
     });
-    // Presented in a dialog window of its own, as present_wizard does.
+    // Presented in a dialog window of its own, as present_modal_wizard does.
     state(e, "presented", Size{40, 12}, [](Stage& s) {
         auto view = std::make_unique<widgets::Wizard>();
         view->set_pages({widgets::WizardPage{"Choose a name", {}}, widgets::WizardPage{"Confirm", {}}});
         auto name = std::make_unique<widgets::InputLine>();
         name->set_text("Ledger");
         view->set_page_content(0, std::move(name));
-        static_cast<void>(widgets::present_wizard(std::move(view), "Set up", s.app(), s.desktop(), s.roles()));
+        static_cast<void>(widgets::present_modal_wizard(std::move(view), "Set up", s.app(), s.desktop(), s.roles()));
     });
 }
 

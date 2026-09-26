@@ -974,7 +974,7 @@ MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor) {
             button->set_default(bd.role == ButtonRole::Accept);
             // What a Dismiss button does beyond its own handler needs a window
             // to do it to, so it is wired by whoever hosts this tree in one
-            // (wire_dialog_window, present_dialog). Materializing alone leaves
+            // (wire_dialog_window, present_modal_dialog). Materializing alone leaves
             // a dialog that has no window to close.
             button->on_press = bd.on_press;
             auto* button_ptr =
@@ -1075,7 +1075,7 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
     };
 }
 
-DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::Application& app,
+DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
                                              Desktop& desktop, const ui::StandardRoles& roles) {
     using Access = detail::DialogPresentationAccess<DialogResult>;
     auto parts = Access::make();
@@ -1091,8 +1091,8 @@ DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::App
     return std::move(parts.presentation);
 }
 
-DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
-                         Desktop& desktop, const ui::StandardRoles& roles) {
+DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
+                               Desktop& desktop, const ui::StandardRoles& roles) {
     BuiltDescriptorDialog built = build_descriptor_dialog(std::move(descriptor), roles, app, app.focused(), desktop);
     const std::shared_ptr<DescriptorDialogCompletion> completion = built.completion;
     desktop.exec_modal(app, std::move(built.handle));

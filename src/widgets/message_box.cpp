@@ -221,12 +221,12 @@ void install_about_help(ui::Application& app, Desktop& desktop, const ui::Standa
             // than the symmetry is worth. The button keeps its centred
             // placement, since a lone button is not a line of prose.
             descriptor.button_alignment = ui::Alignment::Center;
-            auto presentation = present_message_box(app, *desktop_ptr, roles, descriptor);
+            auto presentation = present_modal_message_box(app, *desktop_ptr, roles, descriptor);
             presentation.set_completion_handler([](MessageBoxResult) {});
         });
 }
 
-MessageBoxPresentation present_message_box(ui::Application& app, Desktop& desktop,
+MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& desktop,
                                             const ui::StandardRoles& roles,
                                             const MessageBoxDescriptor& descriptor,
                                             const StandardStrings& strings) {
@@ -245,7 +245,7 @@ MessageBoxPresentation present_message_box(ui::Application& app, Desktop& deskto
     return std::move(parts.presentation);
 }
 
-MessageBoxResult exec_message_box(ui::Application& app, Desktop& desktop,
+MessageBoxResult exec_modal_message_box(ui::Application& app, Desktop& desktop,
                                    const ui::StandardRoles& roles,
                                    const MessageBoxDescriptor& descriptor,
                                    const StandardStrings& strings) {

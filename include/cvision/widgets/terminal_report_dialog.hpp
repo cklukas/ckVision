@@ -33,7 +33,7 @@ namespace ckv::widgets {
 // The report asks nothing, so it has one outcome: it was closed, whether by
 // Close, Enter, Esc, the close control, external detach or quit.
 enum class TerminalReportDialogResult { Closed };
-// The handle present_terminal_report_dialog returns; see DialogPresentation.
+// The handle present_modal_terminal_report_dialog returns; see DialogPresentation.
 using TerminalReportDialogPresentation = DialogPresentation<TerminalReportDialogResult>;
 
 // What the dialog cannot observe through the Application: how many SGR
@@ -62,7 +62,7 @@ WindowHandle make_terminal_report_dialog(Desktop& desktop, const ui::StandardRol
 // Presents the report modally without a nested loop. Completion occurs
 // only after detachment; close, external detach, and quit all resolve to
 // Closed because this dialog returns no separate selection value.
-[[nodiscard]] TerminalReportDialogPresentation present_terminal_report_dialog(
+[[nodiscard]] TerminalReportDialogPresentation present_modal_terminal_report_dialog(
     Desktop& desktop, ui::Application& app, const ui::StandardRoles& roles,
     TerminalReportDialogOptions options = {},
     const StandardStrings& strings = english_standard_strings());

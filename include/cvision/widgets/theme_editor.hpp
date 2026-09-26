@@ -31,7 +31,7 @@ struct ThemeEditorResult {
     // the reader never touched resolves exactly as it did before.
     std::optional<ui::Theme> theme;
 };
-// The handle present_theme_editor returns; see DialogPresentation.
+// The handle present_modal_theme_editor returns; see DialogPresentation.
 using ThemeEditorPresentation = DialogPresentation<ThemeEditorResult>;
 
 // Builds the theme editor window, unattached. It edits a copy of `theme`; the
@@ -81,7 +81,7 @@ WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& 
 // loop. Completion occurs only after detachment; an accepted theme wins,
 // while Cancel, close, external detach and quit resolve to an empty result.
 // `strings` is copied.
-[[nodiscard]] ThemeEditorPresentation present_theme_editor(const ui::Theme& theme, ui::Application& app,
+[[nodiscard]] ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app,
                                                             Desktop& desktop, const ui::StandardRoles& roles,
                                                             const StandardStrings& strings = english_standard_strings());
 

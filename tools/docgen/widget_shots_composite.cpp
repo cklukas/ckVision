@@ -73,7 +73,7 @@ void shot_message_box(const std::filesystem::path& dir) {
         widgets::MessageBoxButtons::YesNoCancel};
 
     widgets::MessageBoxPresentation box =
-        widgets::present_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+        widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
     box.set_completion_handler([](widgets::MessageBoxResult result) {
         (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
     });
@@ -119,7 +119,7 @@ void shot_descriptor_dialog(const std::filesystem::path& dir) {
     };
 
     widgets::DescriptorDialogPresentation dialog =
-        widgets::present_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
     dialog.set_completion_handler([](widgets::DialogResult result) {
         (void)result;  // .accepted, plus one value per field
     });
@@ -139,7 +139,7 @@ void shot_file_dialog(const std::filesystem::path& dir) {
                        widgets::FileDialogFilter{"All files", {}}};
     options.active_filter = 0;
 
-    widgets::FileDialogPresentation picker = widgets::present_file_dialog(
+    widgets::FileDialogPresentation picker = widgets::present_modal_file_dialog(
         widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
         stage.roles());
     picker.set_completion_handler([](widgets::FileDialogResult result) {
@@ -156,7 +156,7 @@ void shot_directory_picker(const std::filesystem::path& dir) {
     MemoryFileSystem fs = demo_filesystem();
 
     // ckvision-doc: directorypicker
-    widgets::DirectoryPickerPresentation picker = widgets::present_directory_picker(
+    widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
         fs, "/project", stage.app(), stage.desktop(), stage.roles());
     picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
         (void)result;  // {accepted, path}
@@ -181,7 +181,7 @@ void shot_help_viewer(const std::filesystem::path& dir) {
                                           {{"layout", "Layout guide"}, {"themes", "Themes"}}});
     provider.add_topic("layout", widgets::HelpTopic{"Layout guide", {{"Row, Column, Grid, Dock."}}, {}});
 
-    widgets::HelpViewerPresentation help = widgets::present_help_viewer(
+    widgets::HelpViewerPresentation help = widgets::present_modeless_help_viewer(
         provider, "gallery", stage.app(), stage.desktop(), stage.roles());
     help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
     // ckvision-doc-end: helpviewer
@@ -201,7 +201,7 @@ void shot_window_list_dialog(const std::filesystem::path& dir) {
 
     // ckvision-doc: windowlistdialog
     widgets::WindowListDialogPresentation list =
-        widgets::present_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+        widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
     list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
     // ckvision-doc-end: windowlistdialog
 
@@ -216,7 +216,7 @@ void shot_theme_editor(const std::filesystem::path& dir) {
 
     // ckvision-doc: themeeditor
     widgets::ThemeEditorPresentation editor =
-        widgets::present_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
     editor.set_completion_handler([&app = stage.app()](widgets::ThemeEditorResult result) {
         if (result.theme) app.set_theme(*result.theme);
     });
@@ -233,7 +233,7 @@ void shot_terminal_report_dialog(const std::filesystem::path& dir) {
     widgets::TerminalReportDialogOptions options;
     options.mouse_reports_decoded = [] { return std::size_t{0}; };
 
-    widgets::TerminalReportDialogPresentation report = widgets::present_terminal_report_dialog(
+    widgets::TerminalReportDialogPresentation report = widgets::present_modal_terminal_report_dialog(
         stage.desktop(), stage.app(), stage.roles(), options);
     report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
     // ckvision-doc-end: terminalreportdialog
@@ -257,7 +257,7 @@ void shot_wizard(const std::filesystem::path& dir) {
     });
     wizard->set_page_content(0, std::move(name));
     widgets::WizardPresentation setup =
-        widgets::present_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
+        widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
     setup.set_completion_handler([](widgets::WizardOutcome outcome) {
         (void)outcome;  // Finished: read the pages' fields; Cancelled: nothing happened
     });
@@ -277,7 +277,7 @@ void shot_date_dialog(const std::filesystem::path& dir) {
     options.maximum = widgets::DateValue{2026, 8, 28};
     options.labels.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};  // any language's
     widgets::DateDialogPresentation due =
-        widgets::present_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+        widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
     due.set_completion_handler([](widgets::DateDialogResult result) {
         if (result.accepted) (void)result.date;
     });
@@ -298,7 +298,7 @@ void shot_time_dialog(const std::filesystem::path& dir) {
     options.labels.am = "AM";  // the host's words for the two halves of the day
     options.labels.pm = "PM";
     widgets::TimeDialogPresentation alarm =
-        widgets::present_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+        widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
     alarm.set_completion_handler([](widgets::TimeDialogResult result) {
         if (result.accepted) (void)result.time;
     });

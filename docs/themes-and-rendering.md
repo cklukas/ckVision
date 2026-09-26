@@ -122,7 +122,7 @@ global palette.
 
 ## The theme editor
 
-`present_theme_editor` is the standard dialog that lets a reader restyle an
+`present_modal_theme_editor` is the standard dialog that lets a reader restyle an
 application. It enumerates the roles of the theme's flat role table — every
 role the registry holds, the application's own and a third party's alike,
 sorted by name so that each family (`ckv.window.*`, `ckv.button.*`) reads as
@@ -163,7 +163,7 @@ is there but is not a theme.
 // installs the edited theme -- set_theme repaints every surface -- and saves
 // its text; cancelling leaves everything as it was.
 void WorkbenchApp::edit_theme() {
-    dialogs_.await(widgets::present_theme_editor(app_.theme(), app_, *desktop_, roles_),
+    dialogs_.await(widgets::present_modal_theme_editor(app_.theme(), app_, *desktop_, roles_),
                    [this](widgets::ThemeEditorResult result) {
                        if (!result.theme) return;
                        app_.set_theme(*result.theme);

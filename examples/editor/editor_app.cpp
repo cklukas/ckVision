@@ -239,7 +239,7 @@ void EditorApp::request_open_sample(std::string path) {
             show_file_error("Could not open " + document_name(path) + ". The current document remains open.");
         return;
     }
-    open_confirmation_.emplace(widgets::present_message_box(
+    open_confirmation_.emplace(widgets::present_modal_message_box(
         application_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Save changes",
                                       "Save changes to " + document_name(file_controller_.path()) + " before opening " +
@@ -262,7 +262,7 @@ void EditorApp::request_open_sample(std::string path) {
 
 void EditorApp::show_file_error(std::string message) {
     if (file_error_ || window_ == nullptr) return;
-    file_error_.emplace(widgets::present_message_box(
+    file_error_.emplace(widgets::present_modal_message_box(
         application_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Error, "File operation failed",
                                       std::move(message), widgets::MessageBoxButtons::Ok}));
@@ -271,7 +271,7 @@ void EditorApp::show_file_error(std::string message) {
 
 void EditorApp::request_close() {
     if (window_ == nullptr || !document_->modified() || close_confirmation_) return;
-    close_confirmation_.emplace(widgets::present_message_box(
+    close_confirmation_.emplace(widgets::present_modal_message_box(
         application_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Save changes",
                                       "Save changes to " + document_name(file_controller_.path()) + "?",
@@ -338,7 +338,7 @@ void EditorApp::show_replace_dialog() {
         if (replace_window_ != nullptr) (void)replace_window_->close();
     }});
 
-    // Materialized and hosted here rather than through present_dialog: a
+    // Materialized and hosted here rather than through present_modal_dialog: a
     // presented descriptor dialog closes on its default button, and this one
     // stays open while the reader replaces one match after another.
     widgets::MaterializedDialog dialog = widgets::materialize_dialog(descriptor);
@@ -417,7 +417,7 @@ void EditorApp::request_replace_all() {
     // One question before a change the reader cannot watch happen, stating
     // its extent. It is raised from inside the Replace dialog, so it is modal
     // on top of a modal, and answering it returns the focus there.
-    replace_prompt_.emplace(widgets::present_message_box(
+    replace_prompt_.emplace(widgets::present_modal_message_box(
         application_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Confirm, "Replace All",
                                       "Replace " + std::to_string(count) + (count == 1U ? " match" : " matches") +
@@ -437,7 +437,7 @@ void EditorApp::report_no_match() {
     // A press that finds nothing says so: silence cannot be told apart from
     // a press that never arrived.
     const std::string& query = editor_->search_query().text;
-    replace_prompt_.emplace(widgets::present_message_box(
+    replace_prompt_.emplace(widgets::present_modal_message_box(
         application_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Info, "Replace",
                                       query.empty() ? std::string("Type the text to find first.")

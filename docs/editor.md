@@ -470,7 +470,7 @@ notice raised the same way, rather than doing nothing visibly. **Close**, or
 Esc, closes the dialog and returns focus to the editor.
 
 The dialog stays open between presses, which a presented descriptor dialog does
-not: `present_dialog()` closes on its default button. The example therefore
+not: `present_modal_dialog()` closes on its default button. The example therefore
 builds it from the same `DialogDescriptor` with `materialize_dialog()`, puts it
 in a fixed-size `Window` with the dialog roles, sets that window's
 `accept_request` and `cancel_request` itself, and presents it with

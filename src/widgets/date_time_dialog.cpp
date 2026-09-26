@@ -143,8 +143,8 @@ DialogPresentation<Result> present(std::unique_ptr<Window> window, ui::View* ini
 
 }  // namespace
 
-DateDialogPresentation present_date_dialog(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                           DateDialogOptions options, const StandardStrings& strings) {
+DateDialogPresentation present_modal_date_dialog(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                                 DateDialogOptions options, const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<DateDialogResult>;
     auto parts = Access::make();
     auto window = dialog_window(strings.select_date_title, roles);
@@ -240,8 +240,8 @@ DateDialogPresentation present_date_dialog(ui::Application& app, Desktop& deskto
                                      DateDialogResult{}, app, desktop);
 }
 
-TimeDialogPresentation present_time_dialog(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
-                                           TimeDialogOptions options, const StandardStrings& strings) {
+TimeDialogPresentation present_modal_time_dialog(ui::Application& app, Desktop& desktop, const ui::StandardRoles& roles,
+                                                 TimeDialogOptions options, const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<TimeDialogResult>;
     auto parts = Access::make();
     auto window = dialog_window(strings.select_time_title, roles);

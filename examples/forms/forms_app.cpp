@@ -235,14 +235,14 @@ widgets::DialogDescriptor FormsApp::make_profile_dialog_descriptor() {
 // ckvision-doc-end: forms-profile-descriptor
 
 void FormsApp::present_profile_dialog() {
-    profile_dialog_ = widgets::present_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);
+    profile_dialog_ = widgets::present_modal_dialog(make_profile_dialog_descriptor(), app_, *desktop_, roles_);
     profile_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         last_dialog_result_ = std::move(result);
     });
 }
 
 void FormsApp::present_info_message() {
-    message_box_ = widgets::present_message_box(
+    message_box_ = widgets::present_modal_message_box(
         app_, *desktop_, roles_,
         widgets::MessageBoxDescriptor{widgets::MessageBoxKind::Info, "Forms",
                                       "Info dialog uses caller-supplied standard strings.",
@@ -255,7 +255,7 @@ void FormsApp::present_info_message() {
 
 void FormsApp::present_help() {
     help_viewer_ =
-        widgets::present_help_viewer(help_provider_, "forms", app_, *desktop_, roles_, teaching_strings());
+        widgets::present_modeless_help_viewer(help_provider_, "forms", app_, *desktop_, roles_, teaching_strings());
 }
 
 }  // namespace ckv::forms

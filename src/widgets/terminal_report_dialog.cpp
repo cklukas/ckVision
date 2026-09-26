@@ -154,11 +154,11 @@ WindowHandle make_terminal_report_dialog(Desktop& desktop, const ui::StandardRol
     return WindowHandle{std::move(window), viewport_ptr};
 }
 
-TerminalReportDialogPresentation present_terminal_report_dialog(Desktop& desktop,
-                                                                ui::Application& app,
-                                                                const ui::StandardRoles& roles,
-                                                                TerminalReportDialogOptions options,
-                                                                const StandardStrings& strings) {
+TerminalReportDialogPresentation present_modal_terminal_report_dialog(Desktop& desktop,
+                                                                      ui::Application& app,
+                                                                      const ui::StandardRoles& roles,
+                                                                      TerminalReportDialogOptions options,
+                                                                      const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<TerminalReportDialogResult>;
     auto parts = Access::make();
     auto handle =

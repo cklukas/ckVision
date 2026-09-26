@@ -13,6 +13,10 @@ been rebound, so the only literal allowed to name a chord is a command's own
 `.chord =` declaration. Every other hint asks the registry
 (CommandRegistry::chord_text) for the chord bound right now.
 
+And every library presentation call names its modality (DECISIONS.md D-087):
+`present_modal_*`, `present_modeless_*` or `exec_modal_*`, never a bare
+`present_<family>` whose modality only the reference states.
+
   check_example_hygiene.py              check every source under examples/
   check_example_hygiene.py --self-test  prove each rule rejects what it should
                                         and accepts what it should
@@ -65,6 +69,32 @@ _LEXEME = re.compile(r'''
 ''', re.VERBOSE | re.DOTALL)
 
 
+# D-087: a presentation call states its modality in its name. These are the
+# only spellings that do; `exec_` is always modal, because it blocks.
+MODALITY_STATED = re.compile(r"(?:present_modal|present_modeless|exec_modal)(?:_\w+)?")
+# A call that is the library's by the way it is reached: through the widgets
+# namespace, or on a Desktop (`desktop.`, `desktop_->`, `stage.desktop().`).
+QUALIFIED_PRESENTATION = re.compile(
+    r"(?:\bwidgets::|\b\w*desktop\w*\s*(?:\(\s*\))?\s*(?:\.|->)\s*)(?P<name>(?:present|exec)_\w+)\s*\(")
+# An unqualified call. It is the library's when what follows `present_` or
+# `exec_` is one of the library's presentation families; an example's own
+# helper (`present_lane_insert`) names no library family and is left alone.
+UNQUALIFIED_PRESENTATION = re.compile(r"(?<![\w:.>])(?P<name>(?:present|exec)_(?P<rest>\w+))\s*\(")
+# How the library declares a presentation function, which is where the family
+# set comes from: `present_modal_message_box(` declares the family
+# `message_box`, so an unqualified `present_message_box(` reaches for it.
+LIBRARY_PRESENTATION = re.compile(r"\b(?:present_modal|present_modeless|exec_modal)_(?P<family>\w+)\s*\(")
+
+
+def presentation_families(root: Path) -> set[str]:
+    """Every presentation family a library header under include/cvision declares."""
+    families: set[str] = set()
+    for header in sorted((root / "include" / "cvision").rglob("*.hpp")):
+        families.update(match.group("family")
+                        for match in LIBRARY_PRESENTATION.finditer(header.read_text(encoding="utf-8")))
+    return families
+
+
 def string_literals(text: str):
     """Yield (offset, contents) for every string literal outside comments."""
     for match in _LEXEME.finditer(text):
@@ -74,8 +104,26 @@ def string_literals(text: str):
             yield match.start(), match.group("text")
 
 
-def check_sources(sources: list[tuple[str, str]]) -> list[str]:
-    """Every hygiene failure in `sources`, a list of (display path, text)."""
+def code_only(text: str) -> str:
+    """`text` with every comment and literal blanked, keeping offsets and lines."""
+    return _LEXEME.sub(lambda match: re.sub(r"[^\n]", " ", match.group(0)), text)
+
+
+def unstated_modality(text: str, families: set[str]):
+    """Yield (offset, name) for each library presentation call that does not
+    name its modality."""
+    code = code_only(text)
+    for match in QUALIFIED_PRESENTATION.finditer(code):
+        if MODALITY_STATED.fullmatch(match.group("name")) is None:
+            yield match.start("name"), match.group("name")
+    for match in UNQUALIFIED_PRESENTATION.finditer(code):
+        if match.group("rest") in families:
+            yield match.start("name"), match.group("name")
+
+
+def check_sources(sources: list[tuple[str, str]], families: set[str]) -> list[str]:
+    """Every hygiene failure in `sources`, a list of (display path, text);
+    `families` are the library's presentation families."""
     failures: list[str] = []
     ids: dict[str, str] = {}
     chords: dict[str, str] = {}
@@ -101,14 +149,24 @@ def check_sources(sources: list[tuple[str, str]]) -> list[str]:
             line = text.count("\n", 0, offset) + 1
             failures.append(f"{rel}:{line}: forbidden hand-encoded chord text \"{found.group(0)}\" in a "
                             "string literal; show CommandRegistry::chord_text for the command instead")
+        for offset, name in unstated_modality(text, families):
+            line = text.count("\n", 0, offset) + 1
+            failures.append(f"{rel}:{line}: forbidden unstated presentation modality in {name}(); call "
+                            "present_modal_*, present_modeless_* or exec_modal_* (D-087)")
     return failures
 
 
 def check_root(root: Path) -> list[str]:
+    families = presentation_families(root)
+    if not families:
+        # Without the family set the unqualified half of the modality rule
+        # would pass everything; a gate that cannot see the library fails.
+        return [f"{root / 'include' / 'cvision'}: no presentation functions declared; "
+                "the modality rule has nothing to check against"]
     examples = root / "examples"
     paths = sorted(examples.glob("*.hpp")) + sorted(examples.glob("*/*.cpp")) + sorted(examples.glob("*/*.hpp"))
     return check_sources([(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
-                          for path in paths])
+                          for path in paths], families)
 
 
 def report(failures: list[str]) -> int:
@@ -138,6 +196,13 @@ REJECTED = [
     ("hand-encoded chord text", 'const char* raw = R"(press Alt+X)";\n'),
     ("hand-encoded chord text", 'const char* wide = u8"F1 opens help";\n'),
     ("hand-encoded chord text", 'const std::string text = "Choose " "Save " "(Ctrl+S)";\n'),
+    ("unstated presentation modality", 'auto box = widgets::present_message_box(app, desktop, roles, info);\n'),
+    ("unstated presentation modality", 'auto help = ckv::widgets::present_help_viewer(help_, "intro", app_, *desktop_, roles_);\n'),
+    ("unstated presentation modality", 'const auto file = widgets::exec_file_dialog(mode, "/", fs, app, desktop, roles);\n'),
+    ("unstated presentation modality", 'desktop_->present_window(std::move(handle), app_);\n'),
+    ("unstated presentation modality", 'stage.desktop().present_dialog(std::move(handle), stage.app());\n'),
+    ("unstated presentation modality", 'using namespace ckv::widgets;\nauto box = present_message_box(app, desktop, roles, info);\n'),
+    ("unstated presentation modality", 'const auto answer = exec_message_box (app, desktop, roles, info);\n'),
 ]
 
 ACCEPTED = [
@@ -149,13 +214,38 @@ ACCEPTED = [
     'const char* plain = "An F16 jet, 0xF1, Shift and Alt on their own, a CtrlX, and F0.";\n',
     'const char quote = \'"\'; const char* after = "no chord here";\n',
     'bind(Key::F2, {}, add_task_command_);\n',
+    'auto box = widgets::present_modal_message_box(app, desktop, roles, info);\n',
+    'auto help = widgets::present_modeless_help_viewer(help_, "intro", app_, *desktop_, roles_);\n',
+    'const auto file = ckv::widgets::exec_modal_file_dialog(mode, "/", fs, app, desktop, roles);\n',
+    'keys_ = desktop_->present_modal(widgets::WindowHandle{std::move(window), first}, app_);\n',
+    'desktop.present_modeless(std::move(handle), app);\n',
+    'const auto result = stage.desktop().exec_modal(app, std::move(handle));\n',
+    'void TodoApp::present_lane_insert(bool before) { present_lane_insert(true); present_help(); }\n',
+    'board->on_open = [this] { this->present_message_box_for_board(); };\n',
+    '// widgets::present_message_box(...) is how this read before D-087.\n',
+    'const char* note = "desktop->present_dialog(handle)";\n',
 ]
+
+# The library header the self-test's family set comes from: one modal family
+# with both spellings, one modeless family.
+LIBRARY_FIXTURE = """\
+[[nodiscard]] MessageBoxPresentation present_modal_message_box(ui::Application& app, Desktop& desktop);
+MessageBoxResult exec_modal_message_box(ui::Application& app, Desktop& desktop);
+[[nodiscard]] FileDialogPresentation present_modal_file_dialog(FileDialogMode mode);
+[[nodiscard]] HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider);
+"""
 
 
 def self_test() -> int:
     problems: list[str] = []
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
+        header = root / "include" / "cvision" / "widgets" / "presentation.hpp"
+        header.parent.mkdir(parents=True, exist_ok=True)
+        header.write_text(LIBRARY_FIXTURE, encoding="utf-8")
+        families = presentation_families(root)
+        if families != {"message_box", "file_dialog", "help_viewer"}:
+            problems.append(f"library presentation families misread: {sorted(families)}")
         expected: list[tuple[str, str]] = []
         for index, (rule, source) in enumerate(REJECTED):
             path = root / "examples" / "rejected" / f"case_{index}.cpp"

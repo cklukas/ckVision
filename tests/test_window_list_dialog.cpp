@@ -28,7 +28,7 @@ using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::Desktop;
 using ckv::widgets::make_window_list_dialog;
-using ckv::widgets::present_window_list_dialog;
+using ckv::widgets::present_modal_window_list_dialog;
 using ckv::widgets::Window;
 
 namespace {
@@ -204,7 +204,7 @@ CK_TEST(a_desktop_with_no_windows_produces_a_dialog_that_does_not_crash_on_enter
     CK_CHECK(true);
 }
 
-CK_TEST(present_window_list_dialog_completes_after_modal_detachment) {
+CK_TEST(present_modal_window_list_dialog_completes_after_modal_detachment) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -213,7 +213,7 @@ CK_TEST(present_window_list_dialog_completes_after_modal_detachment) {
     auto* desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
     desktop->add_window(make_window("Workspace"));
 
-    auto presentation = present_window_list_dialog(*desktop, app, roles);
+    auto presentation = present_modal_window_list_dialog(*desktop, app, roles);
     std::optional<ckv::widgets::WindowListDialogResult> completion;
     presentation.set_completion_handler(
         [&](ckv::widgets::WindowListDialogResult result) { completion = result; });
@@ -248,7 +248,7 @@ struct Presented {
         app.theme() = make_classic_theme(app.roles(), roles);
         desktop = app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
         for (const char* title : titles) desktop->add_window(make_window(title));
-        presentation.emplace(present_window_list_dialog(*desktop, app, roles));
+        presentation.emplace(present_modal_window_list_dialog(*desktop, app, roles));
         list = dynamic_cast<ckv::widgets::ListView*>(app.focused());
         app.step(0);
     }

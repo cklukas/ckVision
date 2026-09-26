@@ -142,7 +142,7 @@ WindowHandle make_directory_picker(const FileSystem& fs, std::string root_path, 
     return WindowHandle{std::move(window), tree_ptr};
 }
 
-DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::string root_path,
+DirectoryPickerPresentation present_modal_directory_picker(const FileSystem& fs, std::string root_path,
                                                       ui::Application& app, Desktop& desktop,
                                                       const ui::StandardRoles& roles,
                                                       const StandardStrings& strings) {
@@ -163,10 +163,10 @@ DirectoryPickerPresentation present_directory_picker(const FileSystem& fs, std::
     return std::move(parts.presentation);
 }
 
-DirectoryPickerResult exec_directory_picker(const FileSystem& fs, std::string root_path,
-                                            ui::Application& app, Desktop& desktop,
-                                            const ui::StandardRoles& roles,
-                                            const StandardStrings& strings) {
+DirectoryPickerResult exec_modal_directory_picker(const FileSystem& fs, std::string root_path,
+                                                  ui::Application& app, Desktop& desktop,
+                                                  const ui::StandardRoles& roles,
+                                                  const StandardStrings& strings) {
     std::optional<DirectoryPickerResult> result;
     auto handle = make_directory_picker(
         fs, std::move(root_path), roles, app, app.focused(),

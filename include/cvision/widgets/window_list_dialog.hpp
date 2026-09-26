@@ -27,7 +27,7 @@ namespace ckv::widgets {
 // The dialog's only outcome. Activating a window is its effect, not its
 // answer, so an activation and a plain close both complete as Closed.
 enum class WindowListDialogResult { Closed };
-// The handle present_window_list_dialog returns; see DialogPresentation.
+// The handle present_modal_window_list_dialog returns; see DialogPresentation.
 using WindowListDialogPresentation = DialogPresentation<WindowListDialogResult>;
 
 // Lists `desktop`'s windows() (stable insertion/cycling order, the
@@ -62,7 +62,7 @@ WindowHandle make_window_list_dialog(Desktop& desktop, const ui::StandardRoles& 
 // Presents the list modally without a nested loop. Completion occurs only
 // after detachment; activation, close, external detach, and quit all resolve
 // to Closed because this dialog returns no separate selection value.
-[[nodiscard]] WindowListDialogPresentation present_window_list_dialog(Desktop& desktop, ui::Application& app,
+[[nodiscard]] WindowListDialogPresentation present_modal_window_list_dialog(Desktop& desktop, ui::Application& app,
                                                                        const ui::StandardRoles& roles,
                                                                        const StandardStrings& strings = english_standard_strings());
 

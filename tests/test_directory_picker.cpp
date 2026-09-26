@@ -23,8 +23,8 @@ using ckv::ui::RoleRegistry;
 using ckv::ui::StandardRoles;
 using ckv::ui::Theme;
 using ckv::widgets::make_directory_picker;
-using ckv::widgets::exec_directory_picker;
-using ckv::widgets::present_directory_picker;
+using ckv::widgets::exec_modal_directory_picker;
+using ckv::widgets::present_modal_directory_picker;
 using ckv::widgets::Window;
 
 namespace {
@@ -236,7 +236,7 @@ CK_TEST(closing_restores_focus_to_the_view_that_invoked_the_picker) {
     CK_CHECK(app.focused() == invoker);
 }
 
-CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
+CK_TEST(present_modal_directory_picker_completes_after_its_modal_window_detaches) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -247,7 +247,7 @@ CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
     auto* desktop = app.root().add(std::move(desktop_owned));
     auto fs = sample_fs();
 
-    auto presentation = present_directory_picker(fs, "/a", app, *desktop, roles);
+    auto presentation = present_modal_directory_picker(fs, "/a", app, *desktop, roles);
     std::optional<ckv::widgets::DirectoryPickerResult> completion;
     presentation.set_completion_handler(
         [&](ckv::widgets::DirectoryPickerResult result) { completion = std::move(result); });
@@ -266,7 +266,7 @@ CK_TEST(present_directory_picker_completes_after_its_modal_window_detaches) {
     CK_CHECK(!app.is_modal());
 }
 
-CK_TEST(exec_directory_picker_returns_the_modal_result_without_leaving_a_window_attached) {
+CK_TEST(exec_modal_directory_picker_returns_the_modal_result_without_leaving_a_window_attached) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -278,21 +278,21 @@ CK_TEST(exec_directory_picker_returns_the_modal_result_without_leaving_a_window_
     auto fs = sample_fs();
 
     app.post([desktop] { desktop->windows().back()->accept_request(); });
-    const auto accepted = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    const auto accepted = exec_modal_directory_picker(fs, "/a", app, *desktop, roles);
     CK_CHECK(accepted.accepted);
     CK_CHECK(accepted.path == "/a");
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 
     app.post([desktop] { desktop->windows().back()->cancel_request(); });
-    const auto cancelled = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    const auto cancelled = exec_modal_directory_picker(fs, "/a", app, *desktop, roles);
     CK_CHECK(!cancelled.accepted);
     CK_CHECK(cancelled.path.empty());
     CK_CHECK(desktop->windows().empty());
     CK_CHECK(!app.is_modal());
 }
 
-CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
+CK_TEST(exec_modal_directory_picker_host_quit_returns_cancellation_and_detaches_the_open_dialog) {
     ckv::term::HeadlessTerminal term(ckv::Size{80, 24});
     ManualClock clock;
     Application app(term, clock);
@@ -304,7 +304,7 @@ CK_TEST(exec_directory_picker_host_quit_returns_cancellation_and_detaches_the_op
     auto fs = sample_fs();
     app.post([&app] { app.request_quit(); });
 
-    const auto result = exec_directory_picker(fs, "/a", app, *desktop, roles);
+    const auto result = exec_modal_directory_picker(fs, "/a", app, *desktop, roles);
     CK_CHECK(!result.accepted);
     CK_CHECK(result.path.empty());
     CK_CHECK(app.quit_requested());

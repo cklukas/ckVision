@@ -85,7 +85,7 @@ CK_TEST(a_date_dialog_opens_on_its_day_and_accepts_the_day_the_arrows_reach) {
     Script s;
     DateDialogOptions options;
     options.initial = DateValue{2026, 8, 19};
-    DateDialogPresentation presentation = present_date_dialog(s.app, *s.desktop, s.roles, options);
+    DateDialogPresentation presentation = present_modal_date_dialog(s.app, *s.desktop, s.roles, options);
     std::optional<DateDialogResult> answer;
     presentation.set_completion_handler([&](DateDialogResult result) { answer = result; });
     s.app.step(0);
@@ -103,7 +103,7 @@ CK_TEST(a_date_dialog_opens_on_its_day_and_accepts_the_day_the_arrows_reach) {
 
 CK_TEST(escape_dismisses_a_date_dialog_without_an_answer) {
     Script s;
-    DateDialogPresentation presentation = present_date_dialog(s.app, *s.desktop, s.roles, DateDialogOptions{});
+    DateDialogPresentation presentation = present_modal_date_dialog(s.app, *s.desktop, s.roles, DateDialogOptions{});
     std::optional<DateDialogResult> answer;
     presentation.set_completion_handler([&](DateDialogResult result) { answer = result; });
     s.app.step(0);
@@ -118,7 +118,7 @@ CK_TEST(a_typed_year_moves_the_calendar_and_a_refused_one_vetoes_the_accept_with
     Script s;
     DateDialogOptions options;
     options.initial = DateValue{2024, 2, 29};
-    DateDialogPresentation presentation = present_date_dialog(s.app, *s.desktop, s.roles, options);
+    DateDialogPresentation presentation = present_modal_date_dialog(s.app, *s.desktop, s.roles, options);
     std::optional<DateDialogResult> answer;
     presentation.set_completion_handler([&](DateDialogResult result) { answer = result; });
     s.app.step(0);
@@ -173,7 +173,7 @@ CK_TEST(picking_a_month_in_the_date_dialog_moves_the_selection_there) {
     Script s;
     DateDialogOptions options;
     options.initial = DateValue{2026, 1, 31};
-    DateDialogPresentation presentation = present_date_dialog(s.app, *s.desktop, s.roles, options);
+    DateDialogPresentation presentation = present_modal_date_dialog(s.app, *s.desktop, s.roles, options);
     s.app.step(0);
     auto* month = find_in<ComboBox>(*s.desktop->windows().back());
     CK_CHECK(month != nullptr);
@@ -198,7 +198,7 @@ CK_TEST(a_date_dialog_speaks_the_language_of_its_tables_and_reads_no_locale) {
     strings.select_date_title = "Datum wählen";
     strings.ok = "OK";
     strings.cancel = "Abbrechen";
-    DateDialogPresentation presentation = present_date_dialog(s.app, *s.desktop, s.roles, options, strings);
+    DateDialogPresentation presentation = present_modal_date_dialog(s.app, *s.desktop, s.roles, options, strings);
     s.app.step(0);
     CK_CHECK(s.shows("Datum wählen"));
     CK_CHECK(s.shows("März"));
@@ -213,7 +213,7 @@ CK_TEST(a_date_dialog_does_not_let_the_reader_leave_its_range) {
     options.initial = DateValue{2026, 8, 30};
     options.maximum = DateValue{2026, 8, 31};
     options.today = DateValue{2026, 8, 19};
-    DateDialogPresentation presentation = present_date_dialog(s.app, *s.desktop, s.roles, options);
+    DateDialogPresentation presentation = present_modal_date_dialog(s.app, *s.desktop, s.roles, options);
     std::optional<DateDialogResult> answer;
     presentation.set_completion_handler([&](DateDialogResult result) { answer = result; });
     s.app.step(0);
@@ -228,7 +228,7 @@ CK_TEST(a_time_dialog_sets_its_time_with_the_arrows_and_answers_it_on_enter) {
     Script s;
     TimeDialogOptions options;
     options.initial = TimeValue{9, 41, 7};
-    TimeDialogPresentation presentation = present_time_dialog(s.app, *s.desktop, s.roles, options);
+    TimeDialogPresentation presentation = present_modal_time_dialog(s.app, *s.desktop, s.roles, options);
     std::optional<TimeDialogResult> answer;
     presentation.set_completion_handler([&](TimeDialogResult result) { answer = result; });
     s.app.step(0);
@@ -251,7 +251,7 @@ CK_TEST(a_time_dialog_on_the_twelve_hour_face_uses_its_tables_meridiem_and_hides
     options.hour_format = HourFormat::TwelveHour;
     options.labels.am = "vorm.";
     options.labels.pm = "nachm.";
-    TimeDialogPresentation presentation = present_time_dialog(s.app, *s.desktop, s.roles, options);
+    TimeDialogPresentation presentation = present_modal_time_dialog(s.app, *s.desktop, s.roles, options);
     std::optional<TimeDialogResult> answer;
     presentation.set_completion_handler([&](TimeDialogResult result) { answer = result; });
     s.app.step(0);
@@ -265,7 +265,7 @@ CK_TEST(a_time_dialog_on_the_twelve_hour_face_uses_its_tables_meridiem_and_hides
 
 CK_TEST(cancel_and_a_host_quit_complete_the_time_dialog_unanswered) {
     Script s;
-    TimeDialogPresentation presentation = present_time_dialog(s.app, *s.desktop, s.roles, TimeDialogOptions{});
+    TimeDialogPresentation presentation = present_modal_time_dialog(s.app, *s.desktop, s.roles, TimeDialogOptions{});
     std::optional<TimeDialogResult> answer;
     presentation.set_completion_handler([&](TimeDialogResult result) { answer = result; });
     s.app.step(0);
@@ -283,7 +283,7 @@ CK_TEST(cancel_and_a_host_quit_complete_the_time_dialog_unanswered) {
     CK_CHECK((answer == TimeDialogResult{}));
 
     // A dialog still up when its window is taken away answers the same.
-    TimeDialogPresentation second = present_time_dialog(s.app, *s.desktop, s.roles, TimeDialogOptions{});
+    TimeDialogPresentation second = present_modal_time_dialog(s.app, *s.desktop, s.roles, TimeDialogOptions{});
     s.app.step(0);
     std::unique_ptr<ckv::ui::View> removed = s.desktop->remove_child(s.desktop->windows().back());
     CK_CHECK(second.completed());

@@ -3059,7 +3059,7 @@ CK_TEST(a_presented_wizard_completes_typed_and_without_blocking) {
         return wizard;
     };
 
-    WizardPresentation finished = present_wizard(make(), "Set up", s.app, *desktop, roles);
+    WizardPresentation finished = present_modal_wizard(make(), "Set up", s.app, *desktop, roles);
     std::optional<WizardOutcome> first;
     finished.set_completion_handler([&](WizardOutcome outcome) { first = outcome; });
     s.app.step(0);
@@ -3071,13 +3071,13 @@ CK_TEST(a_presented_wizard_completes_typed_and_without_blocking) {
     CK_CHECK(first == WizardOutcome::Finished);
     CK_CHECK(!s.app.is_modal());
 
-    WizardPresentation cancelled = present_wizard(make(), "Set up", s.app, *desktop, roles);
+    WizardPresentation cancelled = present_modal_wizard(make(), "Set up", s.app, *desktop, roles);
     s.app.step(0);
     CK_CHECK(s.press(Key::Escape));
     CK_CHECK((cancelled.result() == std::optional<WizardOutcome>{WizardOutcome::Cancelled}));
 
     // Taken away from outside, it completes as cancelled too.
-    WizardPresentation removed = present_wizard(make(), "Set up", s.app, *desktop, roles);
+    WizardPresentation removed = present_modal_wizard(make(), "Set up", s.app, *desktop, roles);
     s.app.step(0);
     std::unique_ptr<ckv::ui::View> gone = desktop->remove_child(desktop->windows().back());
     CK_CHECK((removed.result() == std::optional<WizardOutcome>{WizardOutcome::Cancelled}));

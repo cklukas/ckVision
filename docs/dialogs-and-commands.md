@@ -11,9 +11,10 @@ description: Commands, menu/status presentation, modal dialogs, validation, help
 
 Declare a command once under a namespaced key, give it a title/chord/handler,
 and render it through `CommandPresentation` in menus, toolbars, and status
-lines. Use a standard presentation function for modal dialogs. This preserves
-one execution path, one source of enablement, and typed completion rather than
-scattered callbacks.
+lines. Use a standard presentation function for dialogs; its name states the
+modality (`present_modal_message_box`, `exec_modal_file_dialog`,
+`present_modeless_help_viewer`). This preserves one execution path, one source
+of enablement, and typed completion rather than scattered callbacks.
 
 ## Command presentation
 
@@ -206,7 +207,7 @@ selection updates the same typed `DateValue` returned by the dialog.
 
 ## Standard message boxes and strings
 
-`present_message_box` owns the modal window and returns a typed presentation.
+`present_modal_message_box` owns the modal window and returns a typed presentation.
 `StandardStrings` supplies application-local wording without global locale
 state. The Forms app changes Ok/Cancel to `Accept`/`Dismiss`. A descriptor may
 also carry immutable raster artwork with a requested cell size and explicit
@@ -264,7 +265,7 @@ const widgets::InputLine* name_field = name.get();
 wizard->set_pages({widgets::WizardPage{"Name", [name_field] { return !name_field->text().empty(); }},
                    widgets::WizardPage{"Confirm", {}}});
 wizard->set_page_content(0, std::move(name));
-pending_.await(widgets::present_wizard(std::move(wizard), "New project", app, desktop, roles),
+pending_.await(widgets::present_modal_wizard(std::move(wizard), "New project", app, desktop, roles),
                [](widgets::WizardOutcome outcome) {
                    if (outcome == widgets::WizardOutcome::Finished) { /* create it */ }
                });
@@ -289,7 +290,7 @@ content->add_child(std::move(wizard));
 
 ## Date and time dialogs
 
-`present_date_dialog` and `present_time_dialog` are the standard ways to ask
+`present_modal_date_dialog` and `present_modal_time_dialog` are the standard ways to ask
 for one date or one time. The date dialog offers a month picker and an
 editable year field over a CalendarView; the time dialog a TimePicker. Each
 completes with a typed result — `DateDialogResult` or `TimeDialogResult`,
@@ -304,7 +305,7 @@ widgets::DateDialogOptions options;
 options.initial = due_date;
 options.today = injected_today();
 options.labels = german_labels();  // "März", "Mo Di Mi …"
-pending_.await(widgets::present_date_dialog(app, desktop, roles, std::move(options), german_strings),
+pending_.await(widgets::present_modal_date_dialog(app, desktop, roles, std::move(options), german_strings),
                [this](widgets::DateDialogResult answer) {
                    if (answer.accepted) set_due_date(answer.date);
                });

@@ -49,11 +49,12 @@ private:
 }
 
 // The caller's handle on one non-blocking standard-dialog presentation, typed
-// by the dialog family's result. Only the family's `present_*` function creates
-// one. The dialog records its result while it is on screen; the presentation
-// completes exactly once, after the dialog's Window has detached, with the
-// recorded result or — when none was recorded (close control, external
-// detach, quit) — the family's documented fallback. Move-only; a moved-from
+// by the dialog family's result. Only the family's `present_modal_*` or
+// `present_modeless_*` function creates one. The dialog records its result
+// while it is on screen; the presentation completes exactly once, after the
+// dialog's Window has detached, with the recorded result or — when none was
+// recorded (close control, external detach, quit) — the family's documented
+// fallback. Move-only; a moved-from
 // handle reports no completion and must not register a handler.
 template <class Result>
 class [[nodiscard]] DialogPresentation {
@@ -83,7 +84,7 @@ public:
     // presentation retains across a modal interval — "a saved focus
     // target is a per-instance lifetime capability, never an unchecked
     // raw pointer" — applied to the completion handler; and it is the
-    // rule `Desktop::show_window_list` already hand-rolls, by capturing
+    // rule `Desktop::present_modal_window_list` already hand-rolls, by capturing
     // the presentation's own shared_ptr inside its handler to hold it
     // open. A caller that wants the completion keeps the presentation; a
     // caller that drops it has declined the completion, which is what
@@ -194,7 +195,7 @@ private:
 
 namespace detail {
 
-// Library-internal: how a dialog family's `present_*` function builds a
+// Library-internal: how a dialog family's presentation function builds a
 // DialogPresentation and drives its shared state. Not for application use.
 template <class Result>
 struct DialogPresentationAccess {
@@ -205,7 +206,7 @@ struct DialogPresentationAccess {
     // A fresh handle for the caller plus a second reference to the same state
     // for the factory, which keeps it alive until the Window detaches.
     struct Parts {
-        // Returned to the caller of `present_*`.
+        // Returned to the caller of the family's presentation function.
         Presentation presentation;
         // Retained by the dialog's own callbacks.
         std::shared_ptr<State> state;

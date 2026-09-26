@@ -59,10 +59,15 @@ LayoutsApp::LayoutsApp(ui::Application& app) : app_(app), roles_(ui::intern_stan
 ## Modal versus modeless surfaces
 
 Windows on a Desktop are modeless: users may activate, move, resize, tile, and
-cycle them. A standard dialog presentation is modal: input is scoped to the
-dialog subtree until it completes, then focus returns to the invoking view.
-Use a dialog result/completion callback instead of making the caller own a
-dialog window. See [dialogs and commands](dialogs-and-commands.md).
+cycle them. Every presentation call states its modality in its name.
+`Desktop::present_modal` and `Desktop::present_modeless` place any window;
+the standard families are `present_modal_<family>` (non-blocking) and
+`exec_modal_<family>` (blocking), plus `present_modeless_<family>` for a family
+that stays beside the other windows, such as `present_modeless_help_viewer`.
+A modal presentation scopes input to the dialog subtree until it completes,
+then focus returns to the invoking view. Use a dialog result/completion
+callback instead of making the caller own a dialog window. See
+[dialogs and commands](dialogs-and-commands.md).
 
 ## Paint and data flow
 

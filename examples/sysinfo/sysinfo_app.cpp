@@ -60,7 +60,7 @@ SysInfoApp::SysInfoApp(ui::Application& app, const SystemProbe& probe, const Ben
     // interpretation is what these topics are.
     app_.set_help_provider([this](const std::string& key) {
         help_.add_topic("sysinfo.benchmarks", benchmarks_help_topic());
-        auto presentation = widgets::present_help_viewer(help_, key, app_, *desktop_, roles_);
+        auto presentation = widgets::present_modeless_help_viewer(help_, key, app_, *desktop_, roles_);
         presentation.set_completion_handler([](widgets::HelpViewerResult) {});
     });
 }
@@ -96,7 +96,7 @@ void SysInfoApp::build_chrome() {
     const ui::CommandId about_command = app_.commands().declare(
         {.key = "sysinfo.about", .title = "&About ckVision SysInfo", .category = "Help",
          .handler = [this] {
-             auto presentation = widgets::present_message_box(
+             auto presentation = widgets::present_modal_message_box(
                  app_, *desktop_, roles_,
                  {widgets::MessageBoxKind::Info, "About ckVision SysInfo",
                   ckv::examples::about_text(
@@ -731,7 +731,7 @@ void SysInfoApp::ask_for_scratch_directory() {
     descriptor.buttons.push_back(widgets::ButtonDescriptor{"O&K", widgets::ButtonRole::Accept, nullptr});
     descriptor.buttons.push_back(widgets::ButtonDescriptor{"&Cancel", widgets::ButtonRole::Dismiss, nullptr});
 
-    pending_scratch_dialog_ = widgets::present_dialog(std::move(descriptor), app_, *desktop_, roles_);
+    pending_scratch_dialog_ = widgets::present_modal_dialog(std::move(descriptor), app_, *desktop_, roles_);
     pending_scratch_dialog_->set_completion_handler([this](widgets::DialogResult result) {
         if (!result.accepted || result.values.size() < 2 || result.values[1].empty()) {
             if (benchmark_progress_ != nullptr) benchmark_progress_->set_label("no directory chosen");
@@ -1018,12 +1018,12 @@ bool SysInfoApp::save_report(const std::string& path, ReportFormat format) {
 void SysInfoApp::save_report_with_dialog(ReportFormat format) {
     // Non-blocking, from a command handler: the dialog is presented and
     // this returns, and the write happens when the reader has chosen.
-    pending_save_ = widgets::present_file_dialog(widgets::FileDialogMode::Save, report_directory_, files_, app_,
-                                                 *desktop_, roles_);
+    pending_save_ = widgets::present_modal_file_dialog(widgets::FileDialogMode::Save, report_directory_, files_, app_,
+                                                       *desktop_, roles_);
     pending_save_->set_completion_handler([this, format](widgets::FileDialogResult result) {
         if (!result.accepted || result.path.empty()) return;
         const bool written = save_report(result.path, format);
-        pending_message_ = widgets::present_message_box(
+        pending_message_ = widgets::present_modal_message_box(
             app_, *desktop_, roles_,
             {written ? widgets::MessageBoxKind::Info : widgets::MessageBoxKind::Error,
              written ? "Report saved" : "Report not saved",

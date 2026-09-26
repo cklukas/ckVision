@@ -155,7 +155,7 @@ void GalleryApp::build_controls_window() {
             widgets::MessageBoxKind::Info, "Greeting",
             name_input->text().empty() ? "Hello, stranger!" : "Hello, " + name_input->text() + "!",
             widgets::MessageBoxButtons::Ok};
-        auto presentation = widgets::present_message_box(*app_ptr, *desktop, roles_, descriptor);
+        auto presentation = widgets::present_modal_message_box(*app_ptr, *desktop, roles_, descriptor);
         presentation.set_completion_handler([](widgets::MessageBoxResult) {});
     };
     content->add_child(std::move(greet));

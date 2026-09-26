@@ -153,7 +153,7 @@ public:
     // Explicit non-blocking modal presentation (D-038): attaches and
     // focuses like present_modeless, but pushes the Window onto the
     // Application modal stack before returning. The scope ends when
-    // the Window detaches; standard-dialog present_* helpers provide
+    // the Window detaches; standard-dialog present_modal_* helpers provide
     // typed completion rather than exposing this raw observer. Returns
     // nullptr if a focus callback synchronously detaches or destroys the
     // new window before this operation returns.
@@ -195,14 +195,14 @@ public:
     // detached), popping the modal scope before returning. If a host
     // request_quit() interrupts that pump while the window is still
     // attached, it force-detaches the window instead of consulting its
-    // vetoable user-close protocol; factory-level exec_* helpers then
+    // vetoable user-close protocol; factory-level exec_modal_* helpers then
     // return their documented cancellation fallback. If arbitrary pump
     // work removes this Desktop, the call returns after the detach path
     // has removed its exact modal scope; it never dereferences the former
     // Desktop or modal Window. Doesn't
     // interpret WHAT closed the window or produce any result of its
-    // own: exec_message_box (and any future exec_dialog/
-    // exec_file_dialog) captures its own typed result through the SAME
+    // own: exec_modal_message_box (and any future exec_modal_dialog/
+    // exec_modal_file_dialog) captures its own typed result through the SAME
     // on_result-style callback its factory already accepts — into a
     // local read back after this call returns.
     void exec_modal(ui::Application& app, WindowHandle handle);
@@ -922,7 +922,7 @@ private:
     // kCascade, rather than copied into every application. Presenting it is a
     // no-op while one is already open, and while this Desktop has no
     // Application (nothing to present into).
-    void show_window_list();
+    void present_modal_window_list();
     // kTerminalReport's default handler: presents make_terminal_report_dialog
     // over this Desktop. What the report reads lives on the Application —
     // capabilities, cell grid, mouse-dispatch counters — but presenting it
@@ -932,7 +932,7 @@ private:
     // this handler shows the report without that one line. Presenting is a
     // no-op while one is already open, and while this Desktop has no
     // Application.
-    void show_terminal_report();
+    void present_modal_terminal_report();
     // kCommandPalette's default handler: show_command_palette over this
     // Desktop, listing what the view focused at that moment allows. The
     // palette is a popup, and a Desktop is where popups float. A no-op while

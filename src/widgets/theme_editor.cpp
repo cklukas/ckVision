@@ -518,8 +518,8 @@ WindowHandle make_theme_editor(const ui::Theme& theme, const ui::StandardRoles& 
     return WindowHandle{std::move(window), table_ptr};
 }
 
-ThemeEditorPresentation present_theme_editor(const ui::Theme& theme, ui::Application& app, Desktop& desktop,
-                                             const ui::StandardRoles& roles, const StandardStrings& strings) {
+ThemeEditorPresentation present_modal_theme_editor(const ui::Theme& theme, ui::Application& app, Desktop& desktop,
+                                                   const ui::StandardRoles& roles, const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<ThemeEditorResult>;
     auto parts = Access::make();
     auto handle = make_theme_editor(

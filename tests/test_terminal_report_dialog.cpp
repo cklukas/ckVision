@@ -27,7 +27,7 @@ using ckv::ui::make_classic_theme;
 using ckv::ui::StandardRoles;
 using ckv::widgets::Desktop;
 using ckv::widgets::make_terminal_report_dialog;
-using ckv::widgets::present_terminal_report_dialog;
+using ckv::widgets::present_modal_terminal_report_dialog;
 using ckv::widgets::ScrollbarPolicy;
 using ckv::widgets::TerminalReportDialogOptions;
 using ckv::widgets::TerminalReportDialogResult;
@@ -165,11 +165,11 @@ CK_TEST(escape_closes_and_restores_focus_to_the_view_that_invoked_it) {
     CK_CHECK(f.app.focused() == invoker);
 }
 
-CK_TEST(present_terminal_report_dialog_completes_after_modal_detachment) {
+CK_TEST(present_modal_terminal_report_dialog_completes_after_modal_detachment) {
     Fixture f;
     auto* desktop = f.app.root().add(std::make_unique<Desktop>(Rect{0, 0, 80, 24}));
 
-    auto presentation = present_terminal_report_dialog(*desktop, f.app, f.roles);
+    auto presentation = present_modal_terminal_report_dialog(*desktop, f.app, f.roles);
     std::optional<TerminalReportDialogResult> completion;
     presentation.set_completion_handler(
         [&](TerminalReportDialogResult result) { completion = result; });
@@ -194,7 +194,7 @@ CK_TEST(the_standard_command_presents_one_report_at_a_time_over_the_desktop) {
     CK_CHECK(f.app.commands().execute(command));
     CK_CHECK(f.app.is_modal());
     // A second execution while the report is up presents no second dialog;
-    // the command still runs (harmlessly), the way show_window_list holds.
+    // the command still runs (harmlessly), the way present_modal_window_list holds.
     CK_CHECK(f.app.commands().execute(command));
 
     f.app.dispatch(key(Key::Escape));

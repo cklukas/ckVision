@@ -1597,7 +1597,7 @@ struct WizardLabels {
 // Escape cancels. Keys a page's own controls leave unused reach the wizard
 // the same way, so Enter in a page's last field moves on. A left click on a
 // navigation control does what its key does. Finishing and cancelling end
-// the flow through on_complete, typed by WizardOutcome; present_wizard turns
+// the flow through on_complete, typed by WizardOutcome; present_modal_wizard turns
 // that into a typed, non-blocking DialogPresentation.
 //
 // Each page may have content of its own (set_page_content), which the wizard
@@ -1643,7 +1643,7 @@ public:
     // returns false, doing nothing, while on_complete is empty.
     bool cancel();
     // The end of the flow, finished or cancelled; see WizardOutcome. Escape
-    // is not consumed while this is empty. present_wizard sets it: a caller
+    // is not consumed while this is empty. present_modal_wizard sets it: a caller
     // of that function leaves it alone and awaits the presentation.
     std::function<void(WizardOutcome)> on_complete;
 
@@ -1696,9 +1696,9 @@ using WizardPresentation = DialogPresentation<WizardOutcome>;
 // on_complete; the caller reads each page's own controls once the
 // presentation completes with Finished, and must keep what the page
 // callbacks capture alive until then.
-[[nodiscard]] WizardPresentation present_wizard(std::unique_ptr<Wizard> wizard, std::string title,
-                                                ui::Application& app, Desktop& desktop,
-                                                const ui::StandardRoles& roles);
+[[nodiscard]] WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::string title,
+                                                      ui::Application& app, Desktop& desktop,
+                                                      const ui::StandardRoles& roles);
 
 // How serious a notification is. It chooses the mark drawn before the text --
 // "i", "!" or "x" -- and that mark's colour, from the "ckv.message.info.text",

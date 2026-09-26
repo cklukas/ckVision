@@ -1025,7 +1025,7 @@ only the current page's shows, and the focus moves with the page when it was
 inside the page being left.
 
 The flow ends through `on_complete`, typed by `WizardOutcome`: `Finished` on
-the last page, `Cancelled` by Escape or Cancel. `present_wizard` presents a
+the last page, `Cancelled` by Escape or Cancel. `present_modal_wizard` presents a
 wizard modally in a dialog window of its own and returns a
 `WizardPresentation` — a `DialogPresentation<WizardOutcome>` that completes
 once, after the window has gone, with `Cancelled` when the window was closed
@@ -1048,7 +1048,7 @@ wizard->set_pages({
 });
 wizard->set_page_content(0, std::move(name));
 widgets::WizardPresentation setup =
-    widgets::present_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_wizard(std::move(wizard), "Set up", stage.app(), stage.desktop(), stage.roles());
 setup.set_completion_handler([](widgets::WizardOutcome outcome) {
     (void)outcome;  // Finished: read the pages' fields; Cancelled: nothing happened
 });
@@ -1377,7 +1377,7 @@ descriptor.buttons = {
 };
 
 widgets::DescriptorDialogPresentation dialog =
-    widgets::present_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_dialog(std::move(descriptor), stage.app(), stage.desktop(), stage.roles());
 dialog.set_completion_handler([](widgets::DialogResult result) {
     (void)result;  // .accepted, plus one value per field
 });
@@ -1387,7 +1387,7 @@ dialog.set_completion_handler([](widgets::DialogResult result) {
 ## MaterializedDialog
 
 Header: `include/cvision/widgets/dialog.hpp`. The materialized view/result of
-a descriptor; normally use `present_dialog` instead of manually managing it.
+a descriptor; normally use `present_modal_dialog` instead of manually managing it.
 
 Its tree always has the same shape: the fields inside a ScrollViewport
 (`content_viewport`), and the button row that viewport's sibling, below it.
@@ -1411,7 +1411,7 @@ varies, and it is recomputed from the height the dialog actually has:
 Horizontal scrolling is off: a form whose left column has scrolled away is not
 a view of that form.
 
-A dialog opened with `present_dialog`/`exec_dialog` takes its own recommended
+A dialog opened with `present_modal_dialog`/`exec_modal_dialog` takes its own recommended
 height, clamped to what the desktop can show, and re-answers that on every
 desktop resize: a terminal that shrinks below the form turns the dialog into a
 scrolling one, and a terminal that grows again gives its full height back. A
@@ -1444,7 +1444,7 @@ Header: `include/cvision/widgets/dialog_presentation.hpp`. The dialogs an owner
 is waiting on. A presentation delivers its completion only while it is kept, so
 an application that asks many questions hands each presentation to one
 `PendingDialogs` member with what to do with the answer —
-`pending.await(present_dialog(...), on_answer)` —
+`pending.await(present_modal_dialog(...), on_answer)` —
 instead of keeping an optional member per dialog. Each is released as its
 answer arrives, before the answer runs, so a completion may present the next
 dialog of a chain; destroying the set withdraws every answer still outstanding.
@@ -1453,7 +1453,7 @@ dialog of a chain; destroying the set withdraws every answer still outstanding.
 
 Header: `include/cvision/widgets/dialog_presentation.hpp`. Internal access
 surface for typed presentations; clients consume the typed aliases returned by
-the standard `present_*` functions.
+the standard `present_modal_*` and `present_modeless_*` functions.
 
 ## DirectoryPickerResult
 
@@ -1467,7 +1467,7 @@ The compiled scene below is the source of this figure.
 
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="directorypicker" -->
 ```cpp
-widgets::DirectoryPickerPresentation picker = widgets::present_directory_picker(
+widgets::DirectoryPickerPresentation picker = widgets::present_modal_directory_picker(
     fs, "/project", stage.app(), stage.desktop(), stage.roles());
 picker.set_completion_handler([](widgets::DirectoryPickerResult result) {
     (void)result;  // {accepted, path}
@@ -1505,7 +1505,7 @@ options.filters = {widgets::FileDialogFilter{"Markdown", {".md"}},
                    widgets::FileDialogFilter{"All files", {}}};
 options.active_filter = 0;
 
-widgets::FileDialogPresentation picker = widgets::present_file_dialog(
+widgets::FileDialogPresentation picker = widgets::present_modal_file_dialog(
     widgets::FileDialogMode::Open, "/project", fs, options, stage.app(), stage.desktop(),
     stage.roles());
 picker.set_completion_handler([](widgets::FileDialogResult result) {
@@ -1551,7 +1551,7 @@ Header: `include/cvision/widgets/help_viewer.hpp`. Deterministic in-memory
 provider suitable for small applications and tests; Forms uses it. Its search
 matches a topic's key, title, body text, cross-link keys and see-also labels.
 
-In the viewer (`make_help_viewer`, `present_help_viewer`) Tab moves from the
+In the viewer (`make_help_viewer`, `present_modeless_help_viewer`) Tab moves from the
 index to the prose, where it walks the cross-links in reading order before
 moving on to Back and Close; Enter or a click follows a link. Following a link
 or choosing a topic in the index shows that topic from its top and remembers
@@ -1573,7 +1573,7 @@ provider.add_topic("gallery",
                                       {{"layout", "Layout guide"}, {"themes", "Themes"}}});
 provider.add_topic("layout", widgets::HelpTopic{"Layout guide", {{"Row, Column, Grid, Dock."}}, {}});
 
-widgets::HelpViewerPresentation help = widgets::present_help_viewer(
+widgets::HelpViewerPresentation help = widgets::present_modeless_help_viewer(
     provider, "gallery", stage.app(), stage.desktop(), stage.roles());
 help.set_completion_handler([](widgets::HelpViewerResult result) { (void)result; });
 ```
@@ -2076,7 +2076,7 @@ Memo cursor and selection APIs.
 ## MessageBoxDescriptor
 
 Header: `include/cvision/widgets/message_box.hpp`. A kind/title/message/button
-set record for `present_message_box`; use a completion handler for its typed
+set record for `present_modal_message_box`; use a completion handler for its typed
 result. It may additionally carry immutable raster artwork, requested cell
 dimensions, a minimum content width, and explicit graphic/text/button
 alignment for a deliberate identity presentation while ordinary alerts retain
@@ -2095,7 +2095,7 @@ widgets::MessageBoxDescriptor descriptor{
     widgets::MessageBoxButtons::YesNoCancel};
 
 widgets::MessageBoxPresentation box =
-    widgets::present_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
+    widgets::present_modal_message_box(stage.app(), stage.desktop(), stage.roles(), descriptor);
 box.set_completion_handler([](widgets::MessageBoxResult result) {
     (void)result;  // Yes, No, or Cancel -- arrives after the box detaches
 });
@@ -2659,7 +2659,7 @@ plain-text form for a bug report. Desktop installs it behind the standard
 `terminal_report` command, so an application need only place that command in
 a menu; an application whose terminal can count decoded SGR mouse reports (a
 POSIX host) presents the dialog itself through
-`present_terminal_report_dialog` and passes
+`present_modal_terminal_report_dialog` and passes
 `TerminalReportDialogOptions::mouse_reports_decoded`.
 
 ![Terminal capability report dialog](generated/screenshots/widget-terminalreportdialog.svg)
@@ -2671,7 +2671,7 @@ The compiled scene below is the source of this figure.
 widgets::TerminalReportDialogOptions options;
 options.mouse_reports_decoded = [] { return std::size_t{0}; };
 
-widgets::TerminalReportDialogPresentation report = widgets::present_terminal_report_dialog(
+widgets::TerminalReportDialogPresentation report = widgets::present_modal_terminal_report_dialog(
     stage.desktop(), stage.app(), stage.roles(), options);
 report.set_completion_handler([](widgets::TerminalReportDialogResult result) { (void)result; });
 ```
@@ -2690,7 +2690,7 @@ has no byte stream of its own to count.
 
 Header: `include/cvision/widgets/date_time_dialog.hpp`. The standard modal date
 dialog: a month picker and an editable year field over a CalendarView, OK and
-Cancel. `present_date_dialog` returns a `DateDialogPresentation` that completes
+Cancel. `present_modal_date_dialog` returns a `DateDialogPresentation` that completes
 once, after the window has gone. Every word it shows comes from the options'
 [DateTimeLabels](#datetimelabels) table and from `StandardStrings`
 (`select_date_title`, `ok`, `cancel`); nothing is read from a clock or a
@@ -2710,7 +2710,7 @@ options.today = widgets::DateValue{2026, 8, 9};  // the host's today, never a cl
 options.maximum = widgets::DateValue{2026, 8, 28};
 options.labels.weekday_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};  // any language's
 widgets::DateDialogPresentation due =
-    widgets::present_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+    widgets::present_modal_date_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
 due.set_completion_handler([](widgets::DateDialogResult result) {
     if (result.accepted) (void)result.date;
 });
@@ -2734,7 +2734,7 @@ close control, an external detach or a quit — when `date` means nothing.
 ## Time dialog
 
 Header: `include/cvision/widgets/date_time_dialog.hpp`. The standard modal time
-dialog: a TimePicker over OK and Cancel, presented by `present_time_dialog`,
+dialog: a TimePicker over OK and Cancel, presented by `present_modal_time_dialog`,
 which returns a `TimeDialogPresentation`. Its title is `StandardStrings`'
 `select_time_title`, and on the twelve-hour face the meridiem words are the
 options' labels.
@@ -2752,7 +2752,7 @@ options.hour_format = widgets::HourFormat::TwelveHour;
 options.labels.am = "AM";  // the host's words for the two halves of the day
 options.labels.pm = "PM";
 widgets::TimeDialogPresentation alarm =
-    widgets::present_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
+    widgets::present_modal_time_dialog(stage.app(), stage.desktop(), stage.roles(), std::move(options));
 alarm.set_completion_handler([](widgets::TimeDialogResult result) {
     if (result.accepted) (void)result.time;
 });
@@ -3165,7 +3165,7 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="windowlistdialog" -->
 ```cpp
 widgets::WindowListDialogPresentation list =
-    widgets::present_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
+    widgets::present_modal_window_list_dialog(stage.desktop(), stage.app(), stage.roles());
 list.set_completion_handler([](widgets::WindowListDialogResult result) { (void)result; });
 ```
 <!-- /ckvision-snippet -->
@@ -3190,7 +3190,7 @@ The compiled scene below is the source of this figure.
 <!-- ckvision-snippet source="tools/docgen/widget_shots_composite.cpp" region="themeeditor" -->
 ```cpp
 widgets::ThemeEditorPresentation editor =
-    widgets::present_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
+    widgets::present_modal_theme_editor(stage.app().theme(), stage.app(), stage.desktop(), stage.roles());
 editor.set_completion_handler([&app = stage.app()](widgets::ThemeEditorResult result) {
     if (result.theme) app.set_theme(*result.theme);
 });

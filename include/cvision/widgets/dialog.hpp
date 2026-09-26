@@ -247,7 +247,7 @@ struct ButtonDescriptor {
     ButtonRole role = ButtonRole::Neutral;
     // Optional, and copied into the materialized button. Neutral: the whole
     // effect of a press. Once the dialog is hosted by wire_dialog_window or
-    // present_dialog, Accept runs it only after the fields validate and the
+    // present_modal_dialog, Accept runs it only after the fields validate and the
     // descriptor's check passes, just before the dialog closes, and Dismiss
     // runs it just before the dialog is dismissed.
     std::function<void()> on_press;
@@ -270,9 +270,9 @@ struct DialogVeto {
 // A whole descriptor dialog: fields top to bottom, then a button row. It must
 // have at least one field or one button, and at most one Accept button.
 struct DialogDescriptor {
-    // The caption of the window present_dialog and exec_dialog create.
+    // The caption of the window present_modal_dialog and exec_modal_dialog create.
     // wire_dialog_window leaves the caller's window title alone.
-    std::string title;  // the hosting window's caption under present_dialog/exec_dialog
+    std::string title;  // the hosting window's caption under present_modal_dialog/exec_modal_dialog
     // The fields, top to bottom; each index is also that field's index in
     // MaterializedDialog's and DialogResult's parallel vectors.
     std::vector<FieldDescriptor> fields;
@@ -403,7 +403,7 @@ struct DialogResult {
     friend bool operator==(const DialogResult&, const DialogResult&) = default;
 };
 
-// The handle present_dialog returns. It completes after the dialog's window
+// The handle present_modal_dialog returns. It completes after the dialog's window
 // detaches: with the accepted DialogResult, or with a default-constructed
 // (not accepted) one for Esc, a Dismiss button, the close control, external
 // detach, or quit.
@@ -414,7 +414,7 @@ using DescriptorDialogPresentation = DialogPresentation<DialogResult>;
 // to their controls as mnemonic buddies and beside-labels share one column
 // width; the Accept button is made the default button. Each button gets the
 // descriptor's on_press unchanged: closing on Accept or Dismiss, and
-// validation, are wired only by wire_dialog_window or present_dialog.
+// validation, are wired only by wire_dialog_window or present_modal_dialog.
 // Asserts that the descriptor has a field or a button and at most one Accept
 // button.
 MaterializedDialog materialize_dialog(const DialogDescriptor& descriptor);
@@ -452,7 +452,7 @@ bool validate_dialog(MaterializedDialog& dialog, const DialogDescriptor& descrip
 // `window` itself; a typical caller keeps `descriptor` alive for the
 // window's whole lifetime (e.g. as a member) rather than a local.
 // The content scrolls and pins its buttons exactly as it does under
-// present_dialog (see this file's header) — that is a property of the
+// present_modal_dialog (see this file's header) — that is a property of the
 // materialized tree, not of the presentation. What this function does not
 // do is re-fit `window` to the desktop on a terminal resize: the window is
 // the caller's, and so is its geometry policy.
@@ -471,14 +471,14 @@ void wire_dialog_window(Window& window, MaterializedDialog dialog, const DialogD
 // grows again gives the dialog its full height back. A `resizable` descriptor
 // is left alone after it opens — once the reader has a resize grip, the size
 // is theirs.
-[[nodiscard]] DescriptorDialogPresentation present_dialog(DialogDescriptor descriptor, ui::Application& app,
+[[nodiscard]] DescriptorDialogPresentation present_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
                                                            Desktop& desktop, const ui::StandardRoles& roles);
 
-// Outer-loop-only blocking counterpart to present_dialog. It delegates to
+// Outer-loop-only blocking counterpart to present_modal_dialog. It delegates to
 // Desktop::exec_modal, so calling it from a handler, posted callback, or timer
 // is rejected before a nested pump starts. A host quit returns `{false, {}}`.
-// Same sizing and resize behaviour as present_dialog.
-DialogResult exec_dialog(DialogDescriptor descriptor, ui::Application& app,
-                         Desktop& desktop, const ui::StandardRoles& roles);
+// Same sizing and resize behaviour as present_modal_dialog.
+DialogResult exec_modal_dialog(DialogDescriptor descriptor, ui::Application& app,
+                               Desktop& desktop, const ui::StandardRoles& roles);
 
 }  // namespace ckv::widgets

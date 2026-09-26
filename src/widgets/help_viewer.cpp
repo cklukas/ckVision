@@ -294,10 +294,10 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
     return WindowHandle{std::move(window), index_list_ptr};
 }
 
-HelpViewerPresentation present_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
-                                           ui::Application& app, Desktop& desktop,
-                                           const ui::StandardRoles& roles,
-                                           const StandardStrings& strings) {
+HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider, std::string initial_topic_key,
+                                                    ui::Application& app, Desktop& desktop,
+                                                    const ui::StandardRoles& roles,
+                                                    const StandardStrings& strings) {
     using Access = detail::DialogPresentationAccess<HelpViewerResult>;
     auto parts = Access::make();
     auto handle = make_help_viewer(provider, std::move(initial_topic_key), roles, app, app.focused(), strings);

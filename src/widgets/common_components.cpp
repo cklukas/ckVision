@@ -3419,8 +3419,8 @@ void Wizard::on_attached() {
     if (disabled_role_ == ui::kInvalidRole) disabled_role_ = context().roles->find("ckv.label.disabled");
 }
 
-WizardPresentation present_wizard(std::unique_ptr<Wizard> wizard, std::string title, ui::Application& app,
-                                  Desktop& desktop, const ui::StandardRoles& roles) {
+WizardPresentation present_modal_wizard(std::unique_ptr<Wizard> wizard, std::string title, ui::Application& app,
+                                        Desktop& desktop, const ui::StandardRoles& roles) {
     CKV_ASSERT(wizard != nullptr);
     using Access = detail::DialogPresentationAccess<WizardOutcome>;
     auto parts = Access::make();

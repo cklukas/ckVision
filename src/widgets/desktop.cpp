@@ -274,8 +274,8 @@ void Desktop::on_attached() {
     install_default_handler(standard.tile_vertically, [this] { tile_vertically(); });
     install_default_handler(standard.tile_grid, [this] { tile_grid(); });
     install_default_handler(standard.cascade, [this] { cascade(); });
-    install_default_handler(standard.window_list, [this] { show_window_list(); });
-    install_default_handler(standard.terminal_report, [this] { show_terminal_report(); });
+    install_default_handler(standard.window_list, [this] { present_modal_window_list(); });
+    install_default_handler(standard.terminal_report, [this] { present_modal_terminal_report(); });
     install_default_handler(standard.command_palette, [this] { show_command_palette(); });
     for (std::size_t index = 0; index < standard.select_window.size(); ++index) {
         const int number = static_cast<int>(index) + 1;
@@ -283,7 +283,7 @@ void Desktop::on_attached() {
     }
 }
 
-void Desktop::show_window_list() {
+void Desktop::present_modal_window_list() {
     if (app_ == nullptr) return;
     // One at a time. The command stays reachable by its key while the list is
     // up, and a second modal list over the first would hide the very thing it
@@ -295,12 +295,12 @@ void Desktop::show_window_list() {
     // is a child of ours, so our own destruction detaches it and completes the
     // presentation — at a point where `this` is already partly gone.
     auto presentation = std::make_shared<WindowListDialogPresentation>(
-        present_window_list_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
+        present_modal_window_list_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
     presentation->set_completion_handler(
         [state, presentation](WindowListDialogResult) { state->open = false; });
 }
 
-void Desktop::show_terminal_report() {
+void Desktop::present_modal_terminal_report() {
     if (app_ == nullptr) return;
     // One at a time, for the same reason as the window list: a second modal
     // report over the first would hide the evidence it was asked to show.
@@ -308,9 +308,9 @@ void Desktop::show_terminal_report() {
     if (state->open) return;
     state->open = true;
     // Held by the completion handler rather than by this Desktop — see
-    // show_window_list above.
+    // present_modal_window_list above.
     auto presentation = std::make_shared<TerminalReportDialogPresentation>(
-        present_terminal_report_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
+        present_modal_terminal_report_dialog(*this, *app_, ui::intern_standard_roles(app_->roles())));
     presentation->set_completion_handler(
         [state, presentation](TerminalReportDialogResult) { state->open = false; });
 }

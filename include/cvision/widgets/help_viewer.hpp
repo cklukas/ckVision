@@ -31,7 +31,7 @@ class Desktop;
 // selection — so Closed covers the Close button, Escape, an external detach
 // and application quit alike.
 enum class HelpViewerResult { Closed };
-// The completion handle present_help_viewer returns (see DialogPresentation).
+// The completion handle present_modeless_help_viewer returns (see DialogPresentation).
 using HelpViewerPresentation = DialogPresentation<HelpViewerResult>;
 
 // One run of a topic's prose. A run with a topic key is a cross-link: the
@@ -140,7 +140,7 @@ WindowHandle make_help_viewer(const HelpProvider& provider, std::string initial_
 // nested loop. Completion occurs only after detachment; close, external
 // detach, and quit all resolve to Closed because the viewer returns no
 // separate selection value. `provider` must outlive the window; `strings` is copied.
-[[nodiscard]] HelpViewerPresentation present_help_viewer(const HelpProvider& provider,
+[[nodiscard]] HelpViewerPresentation present_modeless_help_viewer(const HelpProvider& provider,
                                                           std::string initial_topic_key, ui::Application& app,
                                                           Desktop& desktop, const ui::StandardRoles& roles,
                                                           const StandardStrings& strings = english_standard_strings());

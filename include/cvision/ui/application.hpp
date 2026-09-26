@@ -643,7 +643,7 @@ public:
     // `done()` invocation; a host shutdown therefore cannot be reported
     // as normal completion. This is the shared primitive
     // run() itself is built on (done = []{ return false; }, so only
-    // quit_requested() ends it) and that every widgets::exec_* modal
+    // quit_requested() ends it) and that every widgets::exec_modal_*
     // convenience (M9/WP-15, D-021) uses to block without a nested
     // native loop — neither duplicates run()'s own step-cadence logic,
     // and neither hangs forever if a quit is requested while blocked.
@@ -676,7 +676,7 @@ public:
     // "nested modality") scopes correctly to the innermost one without
     // either side needing to know about the other.
     //
-    // widgets::exec_modal (and every exec_* built on it) is the
+    // widgets::exec_modal (and every exec_modal_* built on it) is the
     // sanctioned way most applications reach this — push/pop is public
     // because D-021 makes the modal push itself, not just its blocking
     // wrapper, part of the decided design; an application with its own

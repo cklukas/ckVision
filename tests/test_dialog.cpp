@@ -848,7 +848,7 @@ CK_TEST(a_presented_dialog_scrolls_when_the_terminal_shrinks_and_recovers_when_i
 
     // Eight one-row fields (15 rows with their gaps), the blank row, the
     // two-row button row, and three rows of window chrome: 21.
-    auto presentation = ckv::widgets::present_dialog(form_with(8), app, *desktop, app_roles);
+    auto presentation = ckv::widgets::present_modal_dialog(form_with(8), app, *desktop, app_roles);
     CK_CHECK(desktop->windows().size() == 1);
     Window* const window = desktop->windows().back();
     ScrollViewport* const viewport = find_viewport(*window);
@@ -906,7 +906,7 @@ CK_TEST(a_description_panel_shows_the_focused_fields_description_and_keeps_the_l
 
     CK_CHECK(materialize_dialog(descriptor).field_description != nullptr);
 
-    auto presentation = ckv::widgets::present_dialog(descriptor, app, *desktop, app_roles);
+    auto presentation = ckv::widgets::present_modal_dialog(descriptor, app, *desktop, app_roles);
     app.step(0);
     const auto frame = [&app] {
         std::string out;
@@ -965,7 +965,7 @@ CK_TEST(a_checked_form_stays_open_on_a_veto_with_the_field_marked_focused_and_th
     // A check brings a panel to give its reasons in.
     CK_CHECK(materialize_dialog(descriptor).field_description != nullptr);
 
-    auto presentation = ckv::widgets::present_dialog(descriptor, app, *desktop, app_roles);
+    auto presentation = ckv::widgets::present_modal_dialog(descriptor, app, *desktop, app_roles);
     app.step(0);
     const auto frame = [&app] {
         std::string out;

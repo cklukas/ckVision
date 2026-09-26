@@ -44,7 +44,7 @@ HelloApp::HelloApp(ui::Application& app) : app_(app), roles_(ui::intern_standard
 // A command handler presents the typed, non-blocking standard dialog and
 // returns; completion is intentionally observed without retaining a Window.
 void HelloApp::greeting_box() {
-    auto greeting = widgets::present_message_box(app_, *desktop_, roles_,
+    auto greeting = widgets::present_modal_message_box(app_, *desktop_, roles_,
                                                   {widgets::MessageBoxKind::Info, "Hello, World!", "How are you?",
                                                    widgets::MessageBoxButtons::Ok});
     greeting.set_completion_handler([](widgets::MessageBoxResult) {});
